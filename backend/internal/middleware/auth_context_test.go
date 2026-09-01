@@ -14,7 +14,7 @@ func TestAuthContextMiddleware_WithAPIKey(t *testing.T) {
 	// generate an API key for user
 	key := sm.GenerateAPIKey("user-api", "tenant-123", []string{"admin"})
 
-	handler := AuthContextMiddleware(sm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthContextMiddleware(sm, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid, ok := identity.ActorIDFromContext(r.Context())
 		if !ok || uid == "" {
 			w.WriteHeader(http.StatusUnauthorized)
@@ -44,7 +44,7 @@ func TestAuthContextMiddleware_WithJWT(t *testing.T) {
 		t.Fatalf("failed to sign token: %v", err)
 	}
 
-	handler := AuthContextMiddleware(sm)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := AuthContextMiddleware(sm, nil)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		uid, ok := identity.ActorIDFromContext(r.Context())
 		if !ok || uid == "" {
 			w.WriteHeader(http.StatusUnauthorized)

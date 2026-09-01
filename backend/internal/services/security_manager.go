@@ -601,6 +601,7 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		Roles:         roles,
 		IdpGroups:     idpGroups,
 		IssuedAt:      time.Now(),
+		Issuer:        getStringClaim(mc, "iss"),
 	}, nil
 }
 
@@ -614,6 +615,11 @@ type JWTClaims struct {
 	Roles         []string
 	IdpGroups     []string
 	IssuedAt      time.Time
+	// Issuer is the token's "iss" claim — populated for externally-issued
+	// (RS256/Keycloak) tokens, empty for internally-signed (HS256) ones.
+	// Used by ValidateIssuerTenant to confirm the issuing IDP is actually
+	// registered for the tenant(s) the token claims.
+	Issuer string
 }
 
 func parseStringListClaim(value interface{}) []string {

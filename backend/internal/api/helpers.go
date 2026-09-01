@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -17,6 +18,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -24,29 +26,79 @@ import (
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
-// refreshKeycloakJWKS fetches the current Keycloak JWKS document and loads
-// every RSA signing key into secMgr, keyed by "kid". Called at startup and on
-// a periodic timer so a Keycloak key rotation is picked up without a
-// backend restart — see security_manager.go's ValidateToken, which now
+// refreshAllTrustedKeys fetches RSA signing keys from every trusted source —
+// the single legacy KEYCLOAK_JWKS_URL (if set; the dev/single-tenant path)
+// plus every issuer registered in the tenant IDP registry (the multi-tenant/
+// multi-realm production path) — merges them, and loads the union into
+// secMgr in one call. Deliberately a single SetRSAPublicKeys call: calling
+// it from two independent refresh loops would let whichever fires last
+// silently clobber the other's keys (SetRSAPublicKeys replaces the whole
+// set, it doesn't merge) — see security_manager.go's ValidateToken, which
 // selects the key by the token's own "kid" header rather than trusting
 // whichever key happened to be fetched first.
-func refreshKeycloakJWKS(secMgr *services.SecurityManager, jwksURL string) error {
+func refreshAllTrustedKeys(ctx context.Context, secMgr *services.SecurityManager, jwksURL string, registry security.IssuerRegistry) error {
+	merged := make(map[string]*rsa.PublicKey)
+	var errs []string
+
+	if jwksURL != "" {
+		keys, err := fetchKeycloakJWKS(jwksURL)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("legacy KEYCLOAK_JWKS_URL: %v", err))
+		} else {
+			for kid, key := range keys {
+				merged[kid] = key
+			}
+		}
+	}
+
+	if registry != nil {
+		keys, err := security.FetchAllTrustedKeys(ctx, registry)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("tenant IDP registry: %v", err))
+		} else {
+			for kid, key := range keys {
+				if _, exists := merged[kid]; !exists {
+					merged[kid] = key
+				}
+			}
+		}
+	}
+
+	if len(merged) == 0 {
+		if len(errs) > 0 {
+			return fmt.Errorf("no usable RSA keys loaded: %s", strings.Join(errs, "; "))
+		}
+		return nil // nothing configured yet (no JWKS URL, empty registry) — not an error
+	}
+
+	secMgr.SetRSAPublicKeys(merged)
+	log.Printf("[INFO] Loaded %d trusted RS256 key(s) (legacy JWKS URL + tenant IDP registry)", len(merged))
+	if len(errs) > 0 {
+		log.Printf("[WARN] Some key sources failed during refresh: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+// fetchKeycloakJWKS fetches and parses the RSA signing keys from a single
+// JWKS endpoint. Honors SKIP_TLS_VERIFY for local/dev Keycloak instances
+// with self-signed certs.
+func fetchKeycloakJWKS(jwksURL string) (map[string]*rsa.PublicKey, error) {
 	tr := &http.Transport{}
 	if os.Getenv("SKIP_TLS_VERIFY") == "true" {
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
-	client := &http.Client{Transport: tr, Timeout: 10 * 1e9}
+	client := &http.Client{Transport: tr, Timeout: 10 * time.Second}
 	resp, err := client.Get(jwksURL)
 	if err != nil {
-		return fmt.Errorf("fetch JWKS: %w", err)
+		return nil, fmt.Errorf("fetch JWKS: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("read JWKS response: %w", err)
+		return nil, fmt.Errorf("read JWKS response: %w", err)
 	}
 
 	var jwks struct {
@@ -59,7 +111,7 @@ func refreshKeycloakJWKS(secMgr *services.SecurityManager, jwksURL string) error
 		} `json:"keys"`
 	}
 	if err := json.Unmarshal(body, &jwks); err != nil {
-		return fmt.Errorf("parse JWKS: %w", err)
+		return nil, fmt.Errorf("parse JWKS: %w", err)
 	}
 
 	keys := make(map[string]*rsa.PublicKey)
@@ -86,12 +138,9 @@ func refreshKeycloakJWKS(secMgr *services.SecurityManager, jwksURL string) error
 	}
 
 	if len(keys) == 0 {
-		return fmt.Errorf("JWKS response contained no usable RSA keys")
+		return nil, fmt.Errorf("JWKS response contained no usable RSA keys")
 	}
-
-	secMgr.SetRSAPublicKeys(keys)
-	log.Printf("[INFO] Loaded %d Keycloak RS256 key(s) from JWKS", len(keys))
-	return nil
+	return keys, nil
 }
 
 // TenantContext represents extracted tenant context

@@ -16,12 +16,17 @@ import (
 // into the request context. If validation fails the request continues but no
 // actor is set (handlers should enforce auth as needed).
 //
+// idpRegistry, when non-nil, additionally enforces that an externally-issued
+// token's IDP is actually registered for the tenant(s) it claims (see
+// services.ValidateIssuerTenant) — pass nil to skip this check (e.g. in a
+// test harness with no tenant_identity_providers configured).
+//
 // Impersonation token detection: the middleware first attempts to parse the
 // Bearer token as a platform-internal impersonation context token (HMAC-SHA256).
 // If it matches, the request context is populated with the TARGET tenant_id as
 // the concrete tenant identifier — meaning all downstream RLS, ABAC, and
 // BuildContext logic runs identically to a normal tenant-scoped request.
-func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) http.Handler {
+func AuthContextMiddleware(secMgr *services.SecurityManager, idpRegistry security.IssuerRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if secMgr != nil {
@@ -92,6 +97,31 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 
 					// ── Standard JWT validation ──────────────────────────────
 					if jclaims, err := secMgr.ValidateToken(rawToken); err == nil {
+						// Full tenant isolation for externally-issued tokens: confirm
+						// the signing IDP is actually registered for the tenant(s)
+						// the token claims (see services.ValidateIssuerTenant). A
+						// valid signature alone only proves "a registered IDP signed
+						// this" — not that this is the IDP this tenant trusts, which
+						// matters once a tenant can have more than one registered
+						// realm (M&A) or an issuer is deliberately cross-tenant
+						// (super-admin / professional-services). No-op for internal
+						// HS256 tokens (jclaims.Issuer is empty for those).
+						//
+						// issuerTrustedTenants, when non-nil, is the full set of
+						// tenants this token's issuer is registered for — used below
+						// to constrain the global-admin X-Tenant-ID-header path so a
+						// cross-tenant-realm admin can only select a tenant their
+						// issuer actually covers, not an arbitrary UUID.
+						var issuerTrustedTenants []string
+						if idpRegistry != nil {
+							trusted, err := services.ValidateIssuerTenant(r.Context(), idpRegistry, jclaims)
+							if err != nil {
+								logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] issuer/tenant validation failed: %v", err)
+								next.ServeHTTP(w, r)
+								return
+							}
+							issuerTrustedTenants = trusted
+						}
 						uid := jclaims.UserID
 						if uid != "" {
 							// Inject UserID into headers for legacy handlers that rely on it
@@ -130,13 +160,33 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 								// token can never reach this branch and cannot spoof a tenant via the
 								// header. Still parsed as a UUID to reject malformed/injected values.
 								headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-								if parsed, err := uuid.Parse(headerTenant); err == nil {
+								parsed, parseErr := uuid.Parse(headerTenant)
+								// When this token came from a registered external issuer,
+								// issuerTrustedTenants is that issuer's full registered set —
+								// a cross-tenant-realm admin may only select a tenant their
+								// issuer actually covers, not an arbitrary UUID. Internal
+								// (HS256) global-admin tokens have issuerTrustedTenants == nil
+								// and keep the prior, unconstrained behavior.
+								allowedByIssuer := issuerTrustedTenants == nil
+								if !allowedByIssuer && parseErr == nil {
+									for _, t := range issuerTrustedTenants {
+										if t == parsed.String() {
+											allowedByIssuer = true
+											break
+										}
+									}
+								}
+								if parseErr == nil && allowedByIssuer {
 									tenantID = parsed.String()
 									r.Header.Set("X-Tenant-ID", tenantID)
 									tenantIDs = []string{tenantID}
 									logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Global admin token lacks tenant claim; trusting X-Tenant-ID header: tenant=%s user=%s", tenantID, uid)
 								} else {
-									logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin token lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
+									if parseErr == nil && !allowedByIssuer {
+										logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin selected tenant=%s not in issuer's registered set; rejecting: user=%s", headerTenant, uid)
+									} else {
+										logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin token lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
+									}
 									r.Header.Del("X-Tenant-ID")
 								}
 							} else if len(tenantIDs) == 0 {

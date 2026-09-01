@@ -45,7 +45,7 @@ func TestAPIKeyAuth_ValidKey_Authenticated(t *testing.T) {
 	// Register a valid key
 	sm.RegisterAPIKey("valid-key-12345", userID, []string{tenantID}, []string{"GLOBAL_OPS"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok, "AuthInfo should be in context")
@@ -65,7 +65,7 @@ func TestAPIKeyAuth_ValidKey_Authenticated(t *testing.T) {
 func TestAPIKeyAuth_InvalidKey_Unauthenticated(t *testing.T) {
 	sm := newTestSecurityManager()
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		// When invalid key, context should not have AuthInfo
@@ -92,7 +92,7 @@ func TestAPIKeyAuth_RevokedKey_Rejected(t *testing.T) {
 	sm.RegisterAPIKey(key, userID, []string{tenantID}, []string{"GLOBAL_OPS"})
 	sm.RevokeAPIKey(key)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		require.False(t, ok, "Revoked key should not authenticate")
@@ -116,7 +116,7 @@ func TestAPIKeyAuth_WrongTenant_ProperlyScoped(t *testing.T) {
 	// Key only allows access to allowedTenantID
 	sm.RegisterAPIKey("scoped-key-123", userID, []string{allowedTenantID}, []string{"TENANT_ADMIN"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -143,7 +143,7 @@ func TestAPIKeyAuth_WrongRole_PassesThrough(t *testing.T) {
 	// Key has restricted role (not admin)
 	sm.RegisterAPIKey("user-key-123", userID, []string{tenantID}, []string{"USER"})
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -179,7 +179,7 @@ func TestJWTAuth_ValidToken_Authenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -199,7 +199,7 @@ func TestJWTAuth_ValidToken_Authenticated(t *testing.T) {
 func TestJWTAuth_InvalidToken_Rejected(t *testing.T) {
 	sm := newTestSecurityManager()
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, ok := security.AuthInfoFromContext(r.Context())
 		require.False(t, ok, "Invalid token should not authenticate")
@@ -229,7 +229,7 @@ func TestJWTAuth_MissingRoles_StillAuthenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
@@ -261,7 +261,7 @@ func TestJWTAuth_MissingTenantIDs_StillAuthenticated(t *testing.T) {
 	}
 	token := signTestToken(sm, claims)
 
-	mw := AuthContextMiddleware(sm)
+	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
