@@ -135,6 +135,24 @@ func (m *DataIntegrityManager) GetWaterMark(ctx context.Context, tableName, tena
 	return &wm, nil
 }
 
+// safeIdentifierRE matches SQL identifiers considered safe for direct
+// interpolation into query text. tableName, tenantID, datasourceID, and the
+// hot/cold schema names all end up in fmt.Sprintf-built SQL below (some
+// paths, like StarRocks EXPORT/DELETE DDL, don't support bind placeholders
+// for identifiers at all) — and tenantID/datasourceID in particular are
+// caller-influenceable, typically sourced from HTTP request context or JWT
+// claims upstream rather than a hardcoded catalog.
+var safeIdentifierRE = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]{0,127}$`)
+
+// validateIdentifier rejects any value that isn't a bare alphanumeric/underscore
+// identifier before it is interpolated into SQL text via fmt.Sprintf.
+func validateIdentifier(kind, value string) error {
+	if !safeIdentifierRE.MatchString(value) {
+		return fmt.Errorf("invalid %s %q: must match %s", kind, value, safeIdentifierRE.String())
+	}
+	return nil
+}
+
 // ============================================================================
 // BULLETPROOF QUERY BUILDER
 // ============================================================================
@@ -182,6 +200,22 @@ type TierQuery struct {
 func (m *DataIntegrityManager) BuildSafeQuery(ctx context.Context, q *TierQuery) (string, []interface{}, error) {
 	if q.TenantID == "" {
 		return "", nil, fmt.Errorf("zero-tolerance violation: tenant_id is required for tier routing")
+	}
+
+	if err := validateIdentifier("table_name", q.TableName); err != nil {
+		return "", nil, err
+	}
+	if err := validateIdentifier("tenant_id", q.TenantID); err != nil {
+		return "", nil, err
+	}
+	if err := validateIdentifier("datasource_id", q.DatasourceID); err != nil {
+		return "", nil, err
+	}
+	if err := validateIdentifier("hot_schema", m.hotSchema(q)); err != nil {
+		return "", nil, err
+	}
+	if err := validateIdentifier("cold_schema", m.coldSchema(q)); err != nil {
+		return "", nil, err
 	}
 
 	// Get the authoritative watermark
@@ -615,6 +649,16 @@ type IntegrityMigrationResult struct {
 // 5. Delete from hot tier
 // 6. Set state to STABLE
 func (m *DataIntegrityManager) MigrateWithValidation(ctx context.Context, tableName, tenantID, datasourceID string, newCutoff time.Time) (*IntegrityMigrationResult, error) {
+	if err := validateIdentifier("table_name", tableName); err != nil {
+		return nil, err
+	}
+	if err := validateIdentifier("tenant_id", tenantID); err != nil {
+		return nil, err
+	}
+	if err := validateIdentifier("datasource_id", datasourceID); err != nil {
+		return nil, err
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -852,6 +896,16 @@ func (m *DataIntegrityManager) deleteFromHot(ctx context.Context, tableName, ten
 
 // ValidateNoOverlap checks there's no data overlap between hot and cold
 func (m *DataIntegrityManager) ValidateNoOverlap(ctx context.Context, tableName, tenantID, datasourceID string) error {
+	if err := validateIdentifier("table_name", tableName); err != nil {
+		return err
+	}
+	if err := validateIdentifier("tenant_id", tenantID); err != nil {
+		return err
+	}
+	if err := validateIdentifier("datasource_id", datasourceID); err != nil {
+		return err
+	}
+
 	wm, err := m.GetWaterMark(ctx, tableName, tenantID, datasourceID)
 	if err != nil {
 		return err
@@ -892,6 +946,16 @@ func (m *DataIntegrityManager) ValidateNoOverlap(ctx context.Context, tableName,
 
 // ValidateTotalRowCount ensures no data was lost or duplicated
 func (m *DataIntegrityManager) ValidateTotalRowCount(ctx context.Context, tableName, tenantID, datasourceID string, expectedTotal int64) error {
+	if err := validateIdentifier("table_name", tableName); err != nil {
+		return err
+	}
+	if err := validateIdentifier("tenant_id", tenantID); err != nil {
+		return err
+	}
+	if err := validateIdentifier("datasource_id", datasourceID); err != nil {
+		return err
+	}
+
 	hotCount, err := m.countRows(ctx, "semantic_hot", tableName, tenantID, datasourceID, nil, nil)
 	if err != nil {
 		return err
