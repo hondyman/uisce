@@ -1,27 +1,49 @@
-// Shared Card component
 import React from "react";
-import "./Card.css";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import Paper from "@mui/material/Paper";
 
 export function Card({
   title,
   subtitle,
   children,
-  className = ""
 }: {
   title?: React.ReactNode;
   subtitle?: React.ReactNode;
   children: React.ReactNode;
-  className?: string;
 }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   return (
-    <div className={`card ${className}`}>
+    <Paper
+      elevation={0}
+      sx={{
+        border: 1,
+        borderColor: 'divider',
+        overflow: 'hidden',
+      }}
+    >
       {(title || subtitle) && (
-        <div className="card-header">
-          {title && <div className="card-title">{title}</div>}
-          {subtitle && <div className="card-subtitle">{subtitle}</div>}
-        </div>
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: isDark ? '#1f2937' : '#f9fafb' }}>
+          {title && (
+            typeof title === 'string' ? (
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>{title}</Typography>
+            ) : (
+              <Box>{title}</Box>
+            )
+          )}
+          {subtitle && (
+            typeof subtitle === 'string' ? (
+              <Typography variant="body2" color="text.secondary">{subtitle}</Typography>
+            ) : (
+              <Box>{subtitle}</Box>
+            )
+          )}
+        </Box>
       )}
-      <div className="card-body">{children}</div>
-    </div>
+      <Box sx={{ p: 2 }}>{children}</Box>
+    </Paper>
   );
 }

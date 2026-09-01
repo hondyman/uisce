@@ -40,6 +40,8 @@ type FieldDefinition struct {
 	CreatedBy       string    `db:"created_by" json:"createdBy"`
 	LastModifiedAt  time.Time `db:"last_modified_at" json:"lastModifiedAt"`
 	LastModifiedBy  string    `db:"last_modified_by" json:"lastModifiedBy"`
+	Masked          bool      `db:"masked" json:"masked,omitempty"`
+	MaskingPattern  string    `db:"masking_pattern" json:"maskingPattern,omitempty"`
 }
 
 // SubtypeDefinition represents a subtype within a BO
@@ -105,6 +107,8 @@ type BusinessObjectDefinition struct {
 	GrainNodeID          sql.NullString `db:"grain_node_id" json:"grainNodeId,omitempty"`                   // Dimensional granularity anchor
 	CoreReferenceBOID    sql.NullString `db:"core_reference_bo_id" json:"coreReferenceBoId,omitempty"`       // Reference to master gold copy BO
 	Status               string         `db:"status" json:"status,omitempty"`                               // DRAFT, IN_REVIEW, APPROVED, PUBLISHED, DEPRECATED
+	StiDiscriminatorColumn sql.NullString `db:"sti_discriminator_column" json:"stiDiscriminatorColumn,omitempty"`
+	ActiveSubtypeFilter    sql.NullString `db:"active_subtype_filter" json:"activeSubtypeFilter,omitempty"`
 }
 
 // MarshalJSON handles custom JSON marshaling for BusinessObjectDefinition to properly serialize sql.NullString fields

@@ -2,6 +2,23 @@ import { useEffect, useState } from "react";
 import { JITRequestPanel } from "./JITRequestPanel";
 import { AccessExplanation } from "./AccessExplanation";
 import apiClient from "./utils/apiClient";
+import {
+  Box,
+  Typography,
+  TextField,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  Paper,
+  Modal,
+  List,
+  ListItem,
+  ListItemText,
+} from "@mui/material";
 
 export interface MicroBundle {
   id: string;
@@ -31,91 +48,132 @@ export function MicroBundleCatalog() {
   );
 
   return (
-    <div className="p-4">
-      <h2 className="text-xl font-bold mb-2">Micro-Bundle Catalog</h2>
-      <div className="flex gap-2 mb-4">
-        <input
+    <Box sx={{ p: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+        Micro-Bundle Catalog
+      </Typography>
+      <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+        <TextField
+          size="small"
           placeholder="Domain"
           value={filter.domain}
           onChange={(e) => setFilter({ ...filter, domain: e.target.value })}
-          className="border px-2 py-1 rounded"
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 1,
+            },
+          }}
         />
-        <input
+        <TextField
+          size="small"
           placeholder="Permission"
           value={filter.permission}
           onChange={(e) => setFilter({ ...filter, permission: e.target.value })}
-          className="border px-2 py-1 rounded"
+          sx={{
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 1,
+            },
+          }}
         />
-      </div>
-      <table className="w-full border mb-4">
-        <thead>
-          <tr className="bg-gray-100">
-            <th>Name</th>
-            <th>Domain</th>
-            <th>Claims</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((b) => (
-            <tr key={b.id}>
-              <td>{b.name}</td>
-              <td>{b.domain}</td>
-              <td>{b.claims.length}</td>
-              <td>
-                <button
-                  className="text-blue-600 underline"
-                  onClick={() => setSelected(b)}
-                >
-                  Details
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {selected && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-lg max-w-lg w-full relative">
-            <button
-              className="absolute top-2 right-2 text-gray-500"
-              onClick={() => setSelected(null)}
-            >
-              ×
-            </button>
-            <h3 className="text-lg font-bold mb-2">{selected.name}</h3>
-            <p className="mb-2">{selected.description}</p>
-            <div className="mb-2">
-              <strong>Claims:</strong>
-              <ul className="list-disc ml-6">
-                {selected.claims.map((c) => (
-                  <li key={JSON.stringify(c)}>{JSON.stringify(c)}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="mb-2">
-              <strong>Version:</strong> {selected.version}
-            </div>
-            <div className="mb-2">
-              <strong>Usage Example:</strong> <code>GET /api/micro-bundles/{selected.id}</code>
-            </div>
-            <div className="mb-2">
-              <strong>Expiry Policy:</strong> JIT add-ons expire per policy (see below)
-            </div>
-            <button
-              className="bg-blue-600 text-white px-4 py-2 rounded mt-2"
-              onClick={() => {
-                setShowJIT(true);
-                setSelected(null);
-              }}
-            >
-              Request JIT Add-On
-            </button>
-          </div>
-        </div>
-      )}
+      </Box>
+      <TableContainer component={Paper} sx={{ mb: 2, border: "1px solid", borderColor: "divider" }}>
+        <Table>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: "#f5f5f5" }}>
+              <TableCell>Name</TableCell>
+              <TableCell>Domain</TableCell>
+              <TableCell>Claims</TableCell>
+              <TableCell></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filtered.map((b) => (
+              <TableRow key={b.id}>
+                <TableCell>{b.name}</TableCell>
+                <TableCell>{b.domain}</TableCell>
+                <TableCell>{b.claims.length}</TableCell>
+                <TableCell>
+                  <Button
+                    size="small"
+                    onClick={() => setSelected(b)}
+                    sx={{ color: "primary.main", textDecoration: "underline" }}
+                  >
+                    Details
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+      <Modal open={!!selected} onClose={() => setSelected(null)}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            width: 500,
+            bgcolor: "background.paper",
+            p: 3,
+            borderRadius: 2,
+            boxShadow: 24,
+          }}
+        >
+          <Button
+            onClick={() => setSelected(null)}
+            sx={{ position: "absolute", top: 8, right: 8 }}
+          >
+            ×
+          </Button>
+          <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+            {selected?.name}
+          </Typography>
+          <Typography sx={{ mb: 2 }}>{selected?.description}</Typography>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Claims:
+            </Typography>
+            <List dense>
+              {selected?.claims.map((c, i) => (
+                <ListItem key={i} sx={{ py: 0 }}>
+                  <ListItemText primary={JSON.stringify(c)} />
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Version:{" "}
+            </Typography>
+            {selected?.version}
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Usage Example:{" "}
+            </Typography>
+            <code>GET /api/micro-bundles/{selected?.id}</code>
+          </Box>
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              Expiry Policy:{" "}
+            </Typography>
+            JIT add-ons expire per policy (see below)
+          </Box>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setShowJIT(true);
+              setSelected(null);
+            }}
+            sx={{ mt: 1 }}
+          >
+            Request JIT Add-On
+          </Button>
+        </Box>
+      </Modal>
       {showJIT && <JITRequestPanel onClose={() => setShowJIT(false)} />}
       <AccessExplanation />
-    </div>
+    </Box>
   );
 }

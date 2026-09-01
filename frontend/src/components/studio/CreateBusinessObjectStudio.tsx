@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Box, Typography, TextField, Button, Paper, Chip, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import {
   Sparkles,
   Layers,
@@ -145,91 +146,121 @@ export const CreateBusinessObjectStudio: React.FC<{
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#030914] text-slate-100 border border-slate-800 rounded-xl overflow-hidden font-sans">
-      {/* Studio Header */}
-      <div className="p-6 bg-[#071526] border-b border-slate-800 flex items-center justify-between">
-        <div>
-          <h2 className="text-base font-bold text-slate-100 flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-cyan-400" />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#030914', color: '#f1f5f9', border: '1px solid #1e293b', borderRadius: 2, overflow: 'hidden', fontFamily: 'sans-serif' }}>
+      <Box sx={{ p: 3, bgcolor: '#071526', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Sparkles size={20} style={{ color: '#22d3ee' }} />
             Single-Screen Business Object Studio
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', mt: 0.5, display: 'block' }}>
             Auto-discover tables, primary keys, relationships, and mapped semantic terms in one unified canvas.
-          </p>
-        </div>
-        <button
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
           onClick={handleSaveAndPublish}
           disabled={isSubmitting}
-          className="px-5 py-2.5 bg-gradient-to-r from-cyan-500 to-emerald-400 text-slate-950 font-bold rounded-lg shadow hover:opacity-95 text-xs flex items-center gap-2 disabled:opacity-50 transition"
+          startIcon={<Send size={16} />}
+          sx={{
+            px: 3,
+            py: 1.5,
+            background: 'linear-gradient(to right, #06b6d4, #34d399)',
+            '&:hover': { opacity: 0.95 },
+            color: '#0f172a',
+            fontWeight: 700,
+            fontSize: '0.75rem',
+            borderRadius: 1,
+            textTransform: 'none',
+            disabled: { opacity: 0.5 },
+          }}
         >
-          <Send className="w-4 h-4" /> Save & Publish Business Object
-        </button>
-      </div>
+          Save & Publish Business Object
+        </Button>
+      </Box>
 
       {statusMsg && (
-        <div className="bg-emerald-500/20 border-b border-emerald-500/40 px-6 py-2 text-xs text-emerald-300 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" /> {statusMsg}
-        </div>
+        <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.2)', borderBottom: '1px solid rgba(16, 185, 129, 0.4)', px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 1, color: '#6ee7b7', fontSize: '0.75rem' }}>
+          <CheckCircle2 size={16} style={{ color: '#34d399' }} /> {statusMsg}
+        </Box>
       )}
 
-      {/* Main Studio Canvas */}
-      <div className="p-6 space-y-6 flex-1 overflow-y-auto">
-        {/* Top Definition Section */}
-        <div className="p-5 bg-slate-900/60 border border-slate-800 rounded-xl space-y-4">
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3, flex: 1, overflowY: 'auto' }}>
+        <Paper sx={{ p: 2.5, bgcolor: 'rgba(30, 41, 59, 0.6)', border: '1px solid #1e293b', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             1. Semantic Contract Definition
-          </span>
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1 block">BO Name</label>
-              <input
-                type="text"
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#94a3b8', display: 'block', mb: 0.5 }}>BO Name</Typography>
+              <TextField
+                fullWidth
+                size="small"
                 value={boName}
                 onChange={(e) => setBoName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 font-semibold"
+                sx={{
+                  '& .MuiOutlinedInput-root': { bgcolor: '#020617', borderColor: '#1e293b', '& fieldset': { borderColor: '#1e293b' } },
+                  '& input': { color: '#f1f5f9', fontSize: '0.75rem', fontWeight: 600 },
+                }}
               />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1 block">BO Key</label>
-              <input
-                type="text"
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#94a3b8', display: 'block', mb: 0.5 }}>BO Key</Typography>
+              <TextField
+                fullWidth
+                size="small"
                 value={boKey}
                 onChange={(e) => setBoKey(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono"
+                sx={{
+                  '& .MuiOutlinedInput-root': { bgcolor: '#020617', borderColor: '#1e293b', '& fieldset': { borderColor: '#1e293b' } },
+                  '& input': { color: '#f1f5f9', fontSize: '0.75rem', fontFamily: 'monospace' },
+                }}
               />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1 block">BO Type</label>
-              <select
-                value={boType}
-                onChange={(e) => setBoType(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100"
-              >
-                <option value="ENTITY">ENTITY</option>
-                <option value="FACT">FACT</option>
-                <option value="DIMENSION">DIMENSION</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1 block">Level 3 Classification</label>
-              <input
-                type="text"
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#94a3b8', display: 'block', mb: 0.5 }}>BO Type</Typography>
+              <FormControl fullWidth size="small">
+                <Select
+                  value={boType}
+                  onChange={(e) => setBoType(e.target.value)}
+                  sx={{
+                    bgcolor: '#020617',
+                    color: '#f1f5f9',
+                    fontSize: '0.75rem',
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1e293b' },
+                  }}
+                >
+                  <MenuItem value="ENTITY">ENTITY</MenuItem>
+                  <MenuItem value="FACT">FACT</MenuItem>
+                  <MenuItem value="DIMENSION">DIMENSION</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box>
+              <Typography variant="caption" sx={{ fontWeight: 600, color: '#94a3b8', display: 'block', mb: 0.5 }}>Level 3 Classification</Typography>
+              <TextField
+                fullWidth
+                size="small"
                 disabled
                 value="Sales > Client > Client Entity"
-                className="w-full bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-400"
+                sx={{
+                  '& .MuiOutlinedInput-root': { bgcolor: 'rgba(2, 6, 23, 0.6)', borderColor: '#1e293b', '& fieldset': { borderColor: '#1e293b' } },
+                  '& input': { color: '#94a3b8', fontSize: '0.75rem' },
+                }}
               />
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Paper>
 
-        {/* Multi-Backend Binding Cards */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-              <Layers className="w-4 h-4 text-cyan-400" />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Layers size={16} style={{ color: '#22d3ee' }} />
               2. Backend Bindings & Scoped Term Discovery
-            </span>
-            <button
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
               onClick={() =>
                 setBindings([
                   ...bindings,
@@ -243,84 +274,97 @@ export const CreateBusinessObjectStudio: React.FC<{
                   },
                 ])
               }
-              className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs text-slate-300 flex items-center gap-1.5 transition"
+              startIcon={<Plus size={14} />}
+              sx={{
+                p: 1,
+                bgcolor: '#0f172a',
+                borderColor: '#1e293b',
+                color: '#cbd5e1',
+                fontSize: '0.75rem',
+                textTransform: 'none',
+                '&:hover': { bgcolor: '#1e293b' },
+              }}
             >
-              <Plus className="w-3.5 h-3.5" /> Add Backend Binding
-            </button>
-          </div>
+              Add Backend Binding
+            </Button>
+          </Box>
 
           {bindings.map((b, idx) => (
-            <div
+            <Paper
               key={idx}
-              className="p-5 bg-slate-900/40 border border-slate-800 rounded-xl space-y-4"
+              sx={{ p: 2.5, bgcolor: 'rgba(30, 41, 59, 0.4)', border: '1px solid #1e293b', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}
             >
-              <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`p-1.5 rounded-lg flex items-center gap-1 text-xs font-bold ${
-                      b.isDefault
-                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                        : 'bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    <Star className="w-3.5 h-3.5" />
-                    {b.isDefault ? 'Default Golden Binding' : `Binding ${idx + 1}`}
-                  </span>
-                  <span className="text-xs font-mono text-slate-300">{b.backendId}</span>
-                </div>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1.5, borderBottom: '1px solid #1e293b' }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Chip
+                    icon={<Star size={14} />}
+                    label={b.isDefault ? 'Default Golden Binding' : `Binding ${idx + 1}`}
+                    size="small"
+                    sx={{
+                      bgcolor: b.isDefault ? 'rgba(245, 158, 11, 0.2)' : '#1e293b',
+                      color: b.isDefault ? '#fbbf24' : '#94a3b8',
+                      fontWeight: 700,
+                      fontSize: '0.75rem',
+                      border: b.isDefault ? '1px solid rgba(245, 158, 11, 0.4)' : 'none',
+                      '& .MuiChip-icon': { color: b.isDefault ? '#fbbf24' : '#94a3b8' },
+                    }}
+                  />
+                  <Typography variant="caption" sx={{ fontFamily: 'monospace', color: '#cbd5e1' }}>{b.backendId}</Typography>
+                </Box>
 
-                <div className="flex items-center gap-2">
-                  <select
-                    onChange={(e) => handleSelectDrivingTable(idx, e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-100"
+                <FormControl size="small" sx={{ minWidth: 180 }}>
+                  <Select
+                    native
+                    onChange={(e) => handleSelectDrivingTable(idx, e.target.value as string)}
+                    sx={{
+                      bgcolor: '#020617',
+                      color: '#f1f5f9',
+                      fontSize: '0.75rem',
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: '#1e293b' },
+                    }}
                   >
                     <option value="">Select Driving Table...</option>
                     <option value="tbl-customers-node">Customers (Postgres Alpha)</option>
                     <option value="tbl-orders-node">Orders (Postgres Alpha)</option>
-                  </select>
-                </div>
-              </div>
+                  </Select>
+                </FormControl>
+              </Box>
 
               {b.tableName && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', color: '#94a3b8' }}>
                     <span>
-                      Driving Table: <strong className="text-cyan-400 font-mono">{b.tableName}</strong>
-                      {' '}| Related Discovered: <strong className="text-slate-200">{b.relatedTables.join(', ') || 'None'}</strong>
+                      Driving Table: <strong style={{ color: '#22d3ee', fontFamily: 'monospace' }}>{b.tableName}</strong>
+                      {' '}| Related Discovered: <strong style={{ color: '#e2e8f0' }}>{b.relatedTables.join(', ') || 'None'}</strong>
                     </span>
-                    <span className="text-emerald-400 font-bold">{b.fields.length} Terms Auto-Mapped</span>
-                  </div>
+                    <span style={{ color: '#34d399', fontWeight: 700 }}>{b.fields.length} Terms Auto-Mapped</span>
+                  </Box>
 
-                  {/* Scoped Field Mapping Grid */}
-                  <div className="divide-y divide-slate-800/80 border border-slate-800 rounded-lg bg-slate-950/60 overflow-hidden">
+                  <Box sx={{ border: '1px solid #1e293b', borderRadius: 1, bgcolor: 'rgba(2, 6, 23, 0.6)', overflow: 'hidden' }}>
                     {b.fields.map((f, fIdx) => (
-                      <div
+                      <Box
                         key={fIdx}
-                        className="p-3 flex items-center justify-between text-xs font-mono"
+                        sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.75rem', fontFamily: 'monospace', borderBottom: fIdx < b.fields.length - 1 ? '1px solid rgba(30, 41, 59, 0.8)' : 'none' }}
                       >
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span className="text-slate-200 font-semibold">{f.fieldName}</span>
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                            {f.fieldRole}
-                          </span>
-                        </div>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <CheckCircle2 size={14} style={{ color: '#34d399' }} />
+                          <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{f.fieldName}</span>
+                          <Chip label={f.fieldRole} size="small" sx={{ bgcolor: '#1e293b', color: '#94a3b8', fontSize: '0.625rem', height: 18 }} />
+                        </Box>
 
-                        <div className="flex items-center gap-4">
-                          <span className="text-slate-400">{b.tableName}.{f.fieldName}</span>
-                          <span className="text-[10px] text-cyan-400 font-sans font-bold">
-                            {f.bindingRequirement}
-                          </span>
-                        </div>
-                      </div>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <span style={{ color: '#94a3b8' }}>{b.tableName}.{f.fieldName}</span>
+                          <Chip label={f.bindingRequirement} size="small" sx={{ bgcolor: 'rgba(34, 211, 238, 0.2)', color: '#22d3ee', fontSize: '0.625rem', height: 18, fontWeight: 700, fontFamily: 'sans-serif' }} />
+                        </Box>
+                      </Box>
                     ))}
-                  </div>
-                </div>
+                  </Box>
+                </Box>
               )}
-            </div>
+            </Paper>
           ))}
-        </div>
-      </div>
-    </div>
+        </Box>
+      </Box>
+    </Box>
   );
 };

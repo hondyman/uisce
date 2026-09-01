@@ -58,7 +58,7 @@ import {
   Layers as SubtypeIcon,
   Apps as AppsIcon,
   TableChart as TableChartIcon,
-  AccountTree as AccountTreeIcon,
+
   AddLink as AddLinkIcon,
   Functions as FunctionsIcon,
   ImportExport as ImportExportIcon,
@@ -75,8 +75,8 @@ import { TableSortLabel } from '@mui/material';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../hooks/useNotification';
-import { useBusinessEntitySemanticLayer } from '../hooks/useBusinessEntitySemanticLayer';
-import SemanticAssetsTab from '../components/entity/SemanticAssetsTab';
+
+
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import { FieldSelectionWizard } from '../components/BusinessObjectManager/FieldSelectionWizard';
 import { semanticTermToField, EnhancedSemanticTerm, useEnhancedSemanticTerms } from '../hooks/useEnhancedSemanticTerms';
@@ -85,7 +85,7 @@ import { BusinessObjectRelationshipWizard } from '../components/BusinessObjectMa
 import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
 import { CalcFieldModal } from '../components/CalcFieldModal';
 import { ValidationRuleScopeSelector, type ValidationRuleScope } from '../components/ValidationRules/ValidationRuleScopeSelector';
-import { BOLineageGraphTab } from '../components/BusinessObjectManager/BOLineageGraphTab';
+
 import { BOPendingBanner } from '../components/BusinessObjectManager/BOPendingBanner';
 import { BOExportImportWizard } from '../components/BusinessObjectManager/BOExportImportWizard';
 import { fetchEntitySchema } from '../api/entitySchema';
@@ -96,7 +96,7 @@ import { normalizeName } from '../utils/nameFormatting';
 import { dedupeFields } from '../utils/dedupeFields';
 import apiClient from '../utils/apiClient';
 import type { Entity, Field, HierarchyNode } from '../types/entity-schema';
-import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
+
 import {
   FieldDeleteConfirmDialog,
   DeleteObjectConfirmDialog,
@@ -309,15 +309,7 @@ export default function BusinessObjectDetailsPage() {
   const [fieldWizardOpen, setFieldWizardOpen] = useState(false);
   const [addingFields, setAddingFields] = useState(false);
 
-  // Initialize semantic layer
-  const semanticLayer = useBusinessEntitySemanticLayer({
-    tenantId,
-    datasourceId,
-    businessEntityId: businessObject?.id || '',
-    businessEntityName: businessObject?.name || '',
-    semanticTermIds: [],
-    sourceTableNames: [],
-  });
+
 
   // Helper to build headers with authentication
   const getAuthHeaders = (additionalHeaders: Record<string, string> = {}): Record<string, string> => {
@@ -1924,9 +1916,6 @@ export default function BusinessObjectDetailsPage() {
               }
             />
             <Tab label="Related Objects" />
-            <Tab label="Graph" icon={<AccountTreeIcon />} iconPosition="start" />
-            <Tab label="Semantic Model" />
-            <Tab label="Lineage" icon={<AccountTreeIcon />} iconPosition="start" />
           </Tabs>
 
           {/* Main Content Area with Sidebar */}
@@ -2016,23 +2005,36 @@ export default function BusinessObjectDetailsPage() {
 
               {/* Bindings Tab */}
               {activeTab === 1 && (
-                <BindingsTab bindings={bindings} businessObject={businessObject} />
+                <BindingsTab
+                  bindings={bindings}
+                  businessObject={businessObject}
+                  selectedSubtypeKey={selectedNode?.type === 'subtype' ? (selectedNode.subtypeKey ?? null) : null}
+                />
               )}
 
 
               {/* Live Query Explorer Tab */}
               {activeTab === 2 && (
-                <LiveQueryTab businessObject={businessObject} />
+                <LiveQueryTab
+                  businessObject={businessObject}
+                  selectedSubtypeKey={selectedNode?.type === 'subtype' ? (selectedNode.subtypeKey ?? null) : null}
+                />
               )}
 
               {/* Records & ORM CRUD Tab */}
               {activeTab === 3 && (
-                <RecordsCrudTab businessObject={businessObject} />
+                <RecordsCrudTab
+                  businessObject={businessObject}
+                  selectedSubtypeKey={selectedNode?.type === 'subtype' ? (selectedNode.subtypeKey ?? null) : null}
+                />
               )}
 
               {/* Workday Delta Tab */}
               {activeTab === 4 && (
-                <BODeltaTab businessObject={businessObject} />
+                <BODeltaTab
+                  businessObject={businessObject}
+                  selectedSubtypeKey={selectedNode?.type === 'subtype' ? (selectedNode.subtypeKey ?? null) : null}
+                />
               )}
 
               {/* Governance & Workflows Tab */}
@@ -2047,7 +2049,11 @@ export default function BusinessObjectDetailsPage() {
                   businessObjectName={businessObject?.name}
                   selectedNodeType={selectedNode?.type}
                   selectedNodeName={selectedNode?.type === 'subtype' ? selectedNode.subtypeKey : undefined}
-                  fields={selectedNode?.type === 'subtype' ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.fields || []) : fields}
+                  fields={selectedNode?.type === 'subtype'
+                    ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.subtypeFields
+                       || businessObject?.subtypes?.[selectedNode.subtypeKey!]?.fields
+                       || [])
+                    : fields}
                   rules={validationRules as any}
                   onRulesUpdate={setValidationRules as any}
                   onAddRule={handleAddRule}
@@ -2063,52 +2069,6 @@ export default function BusinessObjectDetailsPage() {
                   onAddRelationship={() => setRelationshipWizardOpen(true)}
                   onViewChange={setRelatedObjectsView}
                 />
-              )}
-
-              {/* Graph Tab */}
-              {activeTab === 8 && (
-                <Box sx={{ height: '70vh', p: 2 }}>
-                  <BOLineageGraphTab boId={id || ''} />
-                </Box>
-              )}
-
-              {/* Semantic Model Tab */}
-              {activeTab === 9 && (
-                <Box sx={{ p: 3 }}>
-                  <SemanticAssetsTab
-                    boId={id}
-                    semanticAssets={semanticLayer.semanticAssets}
-                    isLoading={semanticLayer.assetsLoading || semanticLayer.modelGenerationLoading}
-                    error={semanticLayer.modelError}
-                    onGenerateCoreModel={async () => { await semanticLayer.generateCoreModel(); }}
-                    onCreateCustomModel={async (name) => { await semanticLayer.createCustomModel(name); }}
-                    onGenerateCoreView={async () => { await semanticLayer.generateCoreView(); }}
-                    onCreateCustomView={async (name) => { await semanticLayer.createCustomView(name); }}
-                    businessEntityName={selectedNode?.type === 'subtype' ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey || '') : (businessObject?.displayName || 'Business Object')}
-                    selectedNodeType={selectedNode?.type}
-                    selectedNodeName={selectedNode?.type === 'subtype' ? selectedNode.subtypeKey : businessObject?.key}
-                    hierarchyNodes={[]}
-                  />
-                </Box>
-              )}
-
-              {/* Lineage & Impact Tab */}
-              {activeTab === 10 && (
-
-                <Box sx={{ p: 3 }}>
-                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                     Lineage
-                   </Typography>
-                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                     Visualize upstream dependencies and downstream impact using dynamic analysis.
-                   </Typography>
-                   
-                   <UnifiedLineageTab 
-                      nodeType="business_object" 
-                      nodeId={businessObject?.id || id || ''}
-                      initialDirection="both"
-                   />
-                </Box>
               )}
             </Paper>
             </Box>

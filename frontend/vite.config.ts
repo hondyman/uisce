@@ -35,7 +35,7 @@ export default defineConfig({
   },
   optimizeDeps: {},
   build: {
-    chunkSizeWarningLimit: 5000,
+    chunkSizeWarningLimit: 6000,
     rollupOptions: {
       output: {
         manualChunks(id) {

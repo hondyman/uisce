@@ -1,7 +1,7 @@
 import React from "react";
 import { Card, Table, Spinner } from "../";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../api";
+import { api } from "@/admin-v2/api";
 
 export function TeamManager() {
   const { data: teams, isLoading } = useQuery({

@@ -1,6 +1,6 @@
 // React Query hooks for usage analytics
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../api";
+import { api } from "@/admin-v2/api";
 import {
   DailyUsage,
   APIKeyUsage,
@@ -10,7 +10,7 @@ import {
   EndpointUsage,
   TopTenant,
   RecentError
-} from "../types";
+} from "@/admin-v2/types";
 
 // ============================================================================
 // TENANT USAGE

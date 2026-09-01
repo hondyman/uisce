@@ -215,8 +215,6 @@ export function serializeForBackend(def: BuilderDefinition): Record<string, unkn
 export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDefinition {
   const schemaVersion = (raw._schemaVersion as number | undefined) || 1;
 
-  // Handle ReportLayout schema (the actual shape stored in report_definitions.definition)
-  // This is the DB format: { metadata, parameters, dataBindings, layout: { body: { sections: [] } } }
   const reportLayoutSections = (raw as any)?.layout?.body?.sections;
   if (Array.isArray(reportLayoutSections) && reportLayoutSections.length > 0) {
     const elements: BuilderElement[] = [];
@@ -358,16 +356,29 @@ export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDef
         elements.push({
           id: el.id,
           type: 'table',
-          section: section.id,
+          section: 'body',
           position: el.position,
           size: el.size,
           properties: {
             name: section.title || 'Table',
             columns: newColumns,
             totals: el.totals || createDefaultTotalsConfig(),
-            banding: el.banding || createDefaultBandingConfig(),
-            freezePane: el.freezePane,
-            pagination: el.pagination || createDefaultPaginationConfig(),
+            banding: (() => {
+              const b = createDefaultBandingConfig();
+              if (typeof el.banding === 'string') {
+                if (el.banding === 'none') { b.bandedRows = false; b.bandedColumns = false; }
+                else if (el.banding === 'column') { b.bandedRows = false; b.bandedColumns = true; }
+                else { b.bandedRows = true; b.bandedColumns = false; }
+                return b;
+              }
+              return el.banding || b;
+            })(),
+            freezePane: typeof el.freezePane === 'object'
+              ? { ...createDefaultFreezePaneConfig(), ...el.freezePane }
+              : createDefaultFreezePaneConfig(),
+            pagination: typeof el.pagination === 'object'
+              ? { ...createDefaultPaginationConfig(), ...el.pagination }
+              : createDefaultPaginationConfig(),
             conditionalRules: el.conditionalRules || [],
             namedStyles: el.namedStyles || [],
           },
@@ -376,7 +387,7 @@ export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDef
         elements.push({
           id: el.id,
           type: el.type,
-          section: section.id,
+          section: 'body',
           position: el.position,
           size: el.size,
           properties: {

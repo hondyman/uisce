@@ -1,4 +1,8 @@
 import React from "react";
+import { useTheme } from "@mui/material";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import Alert from "@mui/material/Alert";
 import type { DisclosureBanner as DisclosureBannerType } from "../schema";
 import { AlertTriangle, Info, X } from "lucide-react";
 
@@ -7,54 +11,48 @@ interface DisclosureBannerWidgetProps {
 }
 
 export function DisclosureBannerWidget({ def }: DisclosureBannerWidgetProps) {
+  const theme = useTheme();
   const [dismissed, setDismissed] = React.useState(false);
 
   if (dismissed && def.dismissible) {
     return null;
   }
 
+  const severity = getVariantSeverity(def.variant || "");
+
   return (
-    <div className={`rounded-lg p-4 ${getVariantStyles(def.variant || "")}`}>
-      <div className="flex items-start gap-3">
-        <div className="flex-shrink-0">
-          <VariantIcon variant={def.variant || ""} />
-        </div>
-
-        <div className="flex-1 text-sm">{def.content}</div>
-
-        {def.dismissible && (
-          <button
+    <Alert
+      severity={severity}
+      variant="filled"
+      sx={{ borderRadius: 1 }}
+      icon={def.variant === "warning" ? <AlertTriangle size={20} /> : <Info size={20} />}
+      action={
+        def.dismissible && (
+          <IconButton
+            size="small"
             onClick={() => setDismissed(true)}
-            className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+            sx={{ 
+              color: severity === 'warning' ? 'warning.dark' : 'info.dark',
+              '&:hover': { color: severity === 'warning' ? 'warning.main' : 'info.main' }
+            }}
           >
-            <X className="w-5 h-5" />
-          </button>
-        )}
-      </div>
-    </div>
+            <X size={20} />
+          </IconButton>
+        )
+      }
+    >
+      {def.content}
+    </Alert>
   );
 }
 
-function VariantIcon({ variant }: { variant: string }) {
-  const iconClass = "w-5 h-5";
-
+function getVariantSeverity(variant: string): "warning" | "info" | "error" | "success" {
   switch (variant) {
     case "warning":
-      return <AlertTriangle className={`${iconClass} text-yellow-600`} />;
+      return "warning";
     case "legal":
-      return <Info className={`${iconClass} text-blue-600`} />;
+      return "info";
     default:
-      return <Info className={`${iconClass} text-gray-600`} />;
-  }
-}
-
-function getVariantStyles(variant: string) {
-  switch (variant) {
-    case "warning":
-      return "bg-yellow-50 border border-yellow-200 text-yellow-900";
-    case "legal":
-      return "bg-blue-50 border border-blue-200 text-blue-900";
-    default:
-      return "bg-gray-50 border border-gray-200 text-gray-900";
+      return "info";
   }
 }

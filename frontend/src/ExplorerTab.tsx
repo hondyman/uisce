@@ -25,6 +25,12 @@ import SnapshotDiffViewer from './SnapshotDiffViewer';
 import CommentsPanel from './CommentsPanel';
 import AccessDeniedExplanation from './AccessDeniedExplanation';
 import SemanticQueryInput from './SemanticQueryInput';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import Modal from '@mui/material/Modal';
 
 /* eslint-disable no-unused-vars */
 interface ExplorerTabProps {
@@ -38,18 +44,14 @@ interface ExplorerTabProps {
 /* eslint-enable no-unused-vars */
 
 export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, onOpenWorkbook, onStartTour }: ExplorerTabProps) {
-  // Use views prop to avoid unnecessary fetches and to satisfy the linter when
-  // the prop is provided by a parent component. Mark other optional callback
-  // props as used to suppress unused-variable diagnostics until they're wired up.
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   void onOpenSavedQuery;
   void onOpenWorkbook;
   void onStartTour;
-  void views; // mark views prop as intentionally unused in favor of visibleViews
+  void views;
   const [activeResultTab, setActiveResultTab] = useState('grid');
-  // Accept either a frontend ViewMeta or a richer SemanticViewMeta depending on
-  // where the data originated. This keeps compatibility with the parent
-  // `views: ViewMeta[]` while allowing the component to accept SemanticViewMeta
-  // objects from API calls.
   const [selectedSemanticView, setSelectedSemanticView] = useState<SemanticViewMeta | ViewMeta | null>(null);
   const [currentSavedQuery, setCurrentSavedQuery] = useState<FullSavedQuery | null>(null);
   const [currentWorkbook, setCurrentWorkbook] = useState<FullWorkbook | null>(null);
@@ -58,11 +60,9 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
   const [requestAccessModelId, setRequestAccessModelId] = useState<string | null>(null);
   const [semanticDiffTarget, setSemanticDiffTarget] = useState<{ viewName: string; from: number; to: number } | null>(null);
   const [deniedDecision, setDeniedDecision] = useState<{ decisionId: string; reason: string } | null>(null);
-  // NEW: State for claims and visible views
   const [claims, setClaims] = useState<SemanticModelClaim[]>([]);
   const [visibleViews, setVisibleViews] = useState<SemanticViewMeta[]>([]);
 
-  // Helpers to safely extract id/name/title from view objects without unsafe casts
   const getViewIdentifierSafe = (v: SemanticViewMeta | ViewMeta | null | undefined): string | undefined => {
     if (!v) return undefined;
     const r = v as unknown as Record<string, unknown>;
@@ -84,11 +84,10 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
     return id ? String(id).slice(0, 8) : '';
   };
 
-  const tenantId = "acme_corp"; // Mock tenant ID
+  const tenantId = "acme_corp";
   const datasourceId = "mock-datasource-id";
-  const currentUser = "patrick"; // Using a user with mock claims
+  const currentUser = "patrick";
 
-  // NEW: Fetch claims and views on load
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -103,9 +102,8 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
 
         setClaims(userClaims);
         setVisibleViews(filteredViews);
-        } catch (error) {
+      } catch (error) {
         devError("Failed to fetch views or claims:", error);
-        // Handle error state in UI if necessary
       }
     };
     fetchData();
@@ -113,9 +111,8 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
 
   const handleExecuteSemanticQuery = useCallback(async (query: SemanticQuery, view: SemanticViewMeta | ViewMeta) => {
     if (!selectedSemanticView) return;
-    setDeniedDecision(null); // Clear previous denial
+    setDeniedDecision(null);
 
-    // Pre-flight check using the real-time evaluation engine
     const assetId = getViewIdentifierSafe(view) || '';
     const accessCheck = await evaluateAccess({
       user_id: currentUser,
@@ -130,8 +127,8 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
       return;
     }
 
-  const viewIdentifier = getViewIdentifier(view) || getViewIdentifierSafe(view) || '';
-  const res = await executeSemanticQuery(viewIdentifier, query);
+    const viewIdentifier = getViewIdentifier(view) || getViewIdentifierSafe(view) || '';
+    const res = await executeSemanticQuery(viewIdentifier, query);
     onChange({
       result: { rows: res.rows, columns: res.columns, page: res.page },
       compile: { sql: res.sql, graphql: res.graphql, explain: res.explain },
@@ -139,15 +136,12 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
       viz: { type: 'auto' }
     });
     setActiveResultTab('grid');
-  }, [onChange, selectedSemanticView, currentUser, tenantId, setDeniedDecision]);
+  }, [onChange, selectedSemanticView, currentUser, tenantId]);
 
   const handleNLQ = async (viewName: string, query: SemanticQuery) => {
-    // When a natural language query is translated, we need to ensure the
-    // corresponding semantic view is selected.
-    // MODIFIED: Use visibleViews instead of fetching all views
-  const view = visibleViews.find(v => getViewIdentifierSafe(v) === viewName);
+    const view = visibleViews.find(v => getViewIdentifierSafe(v) === viewName);
     if (view) {
-  setSelectedSemanticView(view as SemanticViewMeta | ViewMeta);
+      setSelectedSemanticView(view as SemanticViewMeta | ViewMeta);
       const queryState: QueryState = {
         measures: query.metrics,
         dimensions: query.dimensions,
@@ -162,46 +156,37 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
   };
 
   const handleSelectTemplate = async (templateMeta: QueryTemplateMeta) => {
-    // 1. Fetch full template
     const fullTemplate = await getQueryTemplate(templateMeta.id);
-
-    // 2. Find and select the semantic view
-    // MODIFIED: Use visibleViews instead of fetching all views
-  const view = visibleViews.find(v => getViewIdentifierSafe(v) === fullTemplate.semantic_view);
+    const view = visibleViews.find(v => getViewIdentifierSafe(v) === fullTemplate.semantic_view);
     if (!view) {
       devWarn(`Template view "${fullTemplate.semantic_view}" not found.`);
       return;
     }
-  setSelectedSemanticView(view as SemanticViewMeta | ViewMeta);
+    setSelectedSemanticView(view as SemanticViewMeta | ViewMeta);
 
-    // 3. Construct the new query state from the template
     const newQuery: SemanticQuery = {
       dimensions: fullTemplate.default_dimensions || [],
       metrics: fullTemplate.default_metrics || [],
-      // Ensure required_filters is an array of filter objects when present
       filters: Array.isArray(fullTemplate.required_filters)
         ? (fullTemplate.required_filters as Array<{ field: string; op: string; values: string[] }>)
         : [],
-      order: [], // Templates could define a default order in the future
+      order: [],
       limit: 100,
     };
 
-    // 4. Update the tab state and execute the query
-  const queryState: QueryState = {
-    measures: newQuery.metrics,
-    dimensions: newQuery.dimensions,
-    filters: newQuery.filters || [],
-    order: newQuery.order || [],
-    limit: newQuery.limit,
-    offset: 0,
+    const queryState: QueryState = {
+      measures: newQuery.metrics,
+      dimensions: newQuery.dimensions,
+      filters: newQuery.filters || [],
+      order: newQuery.order || [],
+      limit: newQuery.limit,
+      offset: 0,
+    };
+    onChange({ query: queryState });
+    await handleExecuteSemanticQuery(newQuery, view as SemanticViewMeta | ViewMeta);
   };
-  onChange({ query: queryState });
-  await handleExecuteSemanticQuery(newQuery, view as SemanticViewMeta | ViewMeta);
-  };
-
 
   const handleLoadWorkbook = async (workbookId: string) => {
-    // In a real app, you'd fetch the workbook. Here we use a mock.
     const mockWorkbook: FullWorkbook = {
       id: workbookId,
       name: 'Q3 Sales Dashboard',
@@ -216,11 +201,10 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
   };
 
   const handleCompareSnapshot = (snapshotId: string) => {
-    const currentSnapshotId = "current-state-id-mock"; // In a real app, you'd generate or fetch this
+    const currentSnapshotId = "current-state-id-mock";
     setDiffTarget({ snapshotId, compareToId: currentSnapshotId });
   };
 
-  // NEW: Handler to open the access request modal and log the denied attempt
   const handleRequestAccess = (assetType: 'dimensions' | 'metrics') => {
     if (selectedSemanticView) {
       const modelId = getViewIdentifierSafe(selectedSemanticView) || '';
@@ -230,30 +214,69 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
     }
   };
 
-  // NEW: Helper to get claims for the currently selected view
   const getClaimsForSelectedView = () => {
     if (!selectedSemanticView) return [];
     const id = getViewIdentifierSafe(selectedSemanticView) || '';
     return claims.filter(c => c.model_id === id);
   };
 
+  const resultTabs = [
+    { id: 'grid', label: 'Grid', disabled: false },
+    { id: 'viz', label: 'Visualization', disabled: !tab.result },
+    { id: 'sql', label: 'SQL', disabled: !tab.compile },
+    { id: 'graphql', label: 'GraphQL', disabled: !tab.compile },
+    { id: 'explain', label: 'Explain', disabled: !tab.explain },
+    { id: 'diff', label: 'Preview Diff', disabled: !tab.savedId },
+  ];
+
   return (
-    <div className="explorer-tab">
-    <aside className="explorer-sidebar">
-      <SemanticViewPicker datasourceId={datasourceId} onSelect={setSelectedSemanticView} views={visibleViews} />
-        <HistoryPanel onLoadQuery={() => { /* TODO: Adapt for semantic queries */ }} />
+    <Box sx={{ display: 'flex', height: '100%', width: '100%' }}>
+      <Box
+        component="aside"
+        sx={{
+          width: 280,
+          borderRight: '1px solid',
+          borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          overflowY: 'auto',
+          p: 2,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 2,
+        }}
+      >
+        <SemanticViewPicker datasourceId={datasourceId} onSelect={setSelectedSemanticView} views={visibleViews} />
+        <HistoryPanel onLoadQuery={() => {}} />
         {selectedSemanticView && (
           <SemanticVersionPanel viewName={getViewIdentifierSafe(selectedSemanticView) || ''} onCompare={(from, to) => setSemanticDiffTarget({ viewName: getViewIdentifierSafe(selectedSemanticView) || '', from, to })} />
         )}
-        <div className="admin-panel">
-          <h4>Governance Tools</h4>
-          <button onClick={() => setShowSimulationPanel(true)}>Simulate Claims</button>
-        </div>
+        <Box
+          sx={{
+            p: 2,
+            borderRadius: 1,
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+            Governance Tools
+          </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => setShowSimulationPanel(true)}
+            fullWidth
+          >
+            Simulate Claims
+          </Button>
+        </Box>
         <ReviewerInbox reviewerId="current_reviewer" />
-      </aside>
-      <main className="explorer-main">
+      </Box>
+
+      <Box
+        component="main"
+        sx={{ flex: 1, overflow: 'auto', p: 2 }}
+      >
         {selectedSemanticView ? (
-          <div className="semantic-workspace">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}>
             {deniedDecision && (
               <AccessDeniedExplanation
                 reason={deniedDecision.reason}
@@ -266,93 +289,181 @@ export default function ExplorerTab({ tab, views, onChange, onOpenSavedQuery, on
                 }}
               />
             )}
-            <div className="query-input-area">
+            <Box sx={{ p: 2, borderRadius: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
               <SemanticQueryInput onQuery={handleNLQ} currentDatasource={datasourceId} currentUser={currentUser} />
-            </div>
-                <SemanticQueryComposer
+            </Box>
+            <SemanticQueryComposer
               view={selectedSemanticView}
               claims={getClaimsForSelectedView()}
               onExecute={(q) => selectedSemanticView && handleExecuteSemanticQuery(q, selectedSemanticView)}
               onRequestAccess={handleRequestAccess}
             />
-            <div className="results-area">
-              <div className="results-main-panel">
-                <div className="results-tabs">
-                  <button onClick={() => setActiveResultTab('grid')} className={activeResultTab === 'grid' ? 'active' : ''}>Grid</button>
-                  <button onClick={() => setActiveResultTab('viz')} className={activeResultTab === 'viz' ? 'active' : ''} disabled={!tab.result}>Visualization</button>
-                  <button onClick={() => setActiveResultTab('sql')} className={activeResultTab === 'sql' ? 'active' : ''} disabled={!tab.compile}>SQL</button>
-                  <button onClick={() => setActiveResultTab('graphql')} className={activeResultTab === 'graphql' ? 'active' : ''} disabled={!tab.compile}>GraphQL</button>
-                  <button onClick={() => setActiveResultTab('explain')} className={activeResultTab === 'explain' ? 'active' : ''} disabled={!tab.explain}>Explain</button>
-                  <button onClick={() => setActiveResultTab('diff')} className={activeResultTab === 'diff' ? 'active' : ''} disabled={!tab.savedId}>Preview Diff</button>
-                </div>
-                <div className="results-content">
-                  {activeResultTab === 'grid' && <ResultsGrid rows={tab.result?.rows || []} columns={tab.result?.columns || []} page={tab.result?.page as PageInfo} onPageChange={() => { /* TODO */ }} />}
-                  {activeResultTab === 'viz' && tab.result && <VisualizationPanel rows={tab.result.rows} columns={tab.result.columns} viz={tab.viz || { type: 'auto' }} onCrossFilter={f => onChange({ query: { ...tab.query, filters: [ ...(tab.query.filters || []), f ], offset: 0 } })} />}
-                  {activeResultTab === 'sql' && <SQLTab sql={tab.compile?.sql} />}
-                  {activeResultTab === 'graphql' && <GraphQLTab graphql={tab.compile?.graphql} />}
-                  {activeResultTab === 'explain' && <ExplainTab explain={tab.compile?.explain} />}
-                  {activeResultTab === 'diff' && tab.savedId && <PreviewDiffTab savedId={tab.savedId} />}
-                </div>
-              </div>
-              <aside className="results-sidebar">
-                <InsightsPanel result={tab.result} />
-                {currentSavedQuery && (
-                  <CommentsPanel assetId={currentSavedQuery.id} assetType="query" />
-                )}
-                {currentWorkbook && (
-                  <SnapshotPanel dashboardId={currentWorkbook.id} onCompare={handleCompareSnapshot} />
-                )}
-                {selectedSemanticView && (
-                  <button onClick={() => setRequestAccessModelId(getViewIdentifierSafe(selectedSemanticView) || '')}>
-                    Request Access to {getViewDisplayTitle(selectedSemanticView)}
-                  </button>)
-                }
-              </aside>
-            </div>
-          </div>
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                {resultTabs.map(tabItem => (
+                  <Button
+                    key={tabItem.id}
+                    size="small"
+                    variant={activeResultTab === tabItem.id ? 'contained' : 'outlined'}
+                    onClick={() => setActiveResultTab(tabItem.id)}
+                    disabled={tabItem.disabled}
+                  >
+                    {tabItem.label}
+                  </Button>
+                ))}
+              </Box>
+              <Paper sx={{ flex: 1, p: 2, overflow: 'auto' }}>
+                {activeResultTab === 'grid' && <ResultsGrid rows={tab.result?.rows || []} columns={tab.result?.columns || []} page={tab.result?.page as PageInfo} onPageChange={() => {}} />}
+                {activeResultTab === 'viz' && tab.result && <VisualizationPanel rows={tab.result.rows} columns={tab.result.columns} viz={tab.viz || { type: 'auto' }} onCrossFilter={f => onChange({ query: { ...tab.query, filters: [...(tab.query.filters || []), f], offset: 0 } })} />}
+                {activeResultTab === 'sql' && <SQLTab sql={tab.compile?.sql} />}
+                {activeResultTab === 'graphql' && <GraphQLTab graphql={tab.compile?.graphql} />}
+                {activeResultTab === 'explain' && <ExplainTab explain={tab.compile?.explain} />}
+                {activeResultTab === 'diff' && tab.savedId && <PreviewDiffTab savedId={tab.savedId} />}
+              </Paper>
+            </Box>
+            <Box
+              component="aside"
+              sx={{
+                width: 300,
+                borderLeft: '1px solid',
+                borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+                p: 2,
+                overflowY: 'auto',
+              }}
+            >
+              <InsightsPanel result={tab.result} />
+              {currentSavedQuery && (
+                <CommentsPanel assetId={currentSavedQuery.id} assetType="query" />
+              )}
+              {currentWorkbook && (
+                <SnapshotPanel dashboardId={currentWorkbook.id} onCompare={handleCompareSnapshot} />
+              )}
+              {selectedSemanticView && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setRequestAccessModelId(getViewIdentifierSafe(selectedSemanticView) || '')}
+                  sx={{ mt: 2 }}
+                >
+                  Request Access to {getViewDisplayTitle(selectedSemanticView)}
+                </Button>
+              )}
+            </Box>
+          </Box>
         ) : (
-          <div className="explorer-placeholder">
-            <h2>Welcome to the Explorer</h2>
-            <div className="query-input-area placeholder-input">
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h5" sx={{ mb: 3 }}>
+              Welcome to the Explorer
+            </Typography>
+            <Box sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
               <SemanticQueryInput onQuery={handleNLQ} currentDatasource={datasourceId} currentUser={currentUser} />
-            </div>
-            <p>Select a Semantic View, load a dashboard, or start from a template below.</p>
-            <button onClick={() => handleLoadWorkbook('wb-123')}>Load Demo Dashboard</button>
+            </Box>
+            <Typography sx={{ mb: 2, color: 'text.secondary' }}>
+              Select a Semantic View, load a dashboard, or start from a template below.
+            </Typography>
+            <Button
+              variant="contained"
+              onClick={() => handleLoadWorkbook('wb-123')}
+              sx={{ mb: 3 }}
+            >
+              Load Demo Dashboard
+            </Button>
             <QueryTemplateBrowser datasourceId={datasourceId} onSelect={handleSelectTemplate} />
-          </div>
+          </Box>
         )}
-        {showSimulationPanel && (
-          <div className="modal-overlay" onClick={() => setShowSimulationPanel(false)}>
-            <div className="modal-content wide" onClick={e => e.stopPropagation()}>
-              <ClaimSimulationPanel availableModels={[{id: 'd1b6a5e0-9a9a-4b1a-8b0a-1b1b1b1b1b1b', name: 'orders_view'}]} />
-              <button onClick={() => setShowSimulationPanel(false)}>Close</button>
-            </div>
-          </div>
-        )}
-        {requestAccessModelId && (
-          <RequestAccessModal modelId={requestAccessModelId} onClose={() => setRequestAccessModelId(null)} />
-        )}
-        {diffTarget && (
-          <div className="modal-overlay" onClick={() => setDiffTarget(null)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <SnapshotDiffViewer snapshotId={diffTarget.snapshotId} compareToId={diffTarget.compareToId} />
-              <button onClick={() => setDiffTarget(null)}>Close</button>
-            </div>
-          </div>
-        )}
-        {semanticDiffTarget && (
-          <div className="modal-overlay" onClick={() => setSemanticDiffTarget(null)}>
-            <div className="modal-content" onClick={e => e.stopPropagation()}>
-              <SemanticDiffViewer
-                viewName={semanticDiffTarget.viewName}
-                fromVersion={semanticDiffTarget.from}
-                toVersion={semanticDiffTarget.to}
-              />
-              <button onClick={() => setSemanticDiffTarget(null)}>Close</button>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+      </Box>
+
+      <Modal open={showSimulationPanel} onClose={() => setShowSimulationPanel(false)}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 800,
+            bgcolor: 'background.paper',
+            p: 3,
+            borderRadius: 2,
+            maxHeight: '80vh',
+            overflow: 'auto',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Claim Simulation</Typography>
+            <Button onClick={() => setShowSimulationPanel(false)}>Close</Button>
+          </Box>
+          <ClaimSimulationPanel availableModels={[{id: 'd1b6a5e0-9a9a-4b1a-8b0a-1b1b1b1b1b1b', name: 'orders_view'}]} />
+        </Box>
+      </Modal>
+
+      <Modal open={!!requestAccessModelId} onClose={() => setRequestAccessModelId(null)}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 500,
+            bgcolor: 'background.paper',
+            p: 3,
+            borderRadius: 2,
+          }}
+        >
+          <RequestAccessModal modelId={requestAccessModelId || ''} onClose={() => setRequestAccessModelId(null)} />
+        </Box>
+      </Modal>
+
+      <Modal open={!!diffTarget} onClose={() => setDiffTarget(null)}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 800,
+            bgcolor: 'background.paper',
+            p: 3,
+            borderRadius: 2,
+            maxHeight: '80vh',
+            overflow: 'auto',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Snapshot Diff</Typography>
+            <Button onClick={() => setDiffTarget(null)}>Close</Button>
+          </Box>
+          {diffTarget && <SnapshotDiffViewer snapshotId={diffTarget.snapshotId} compareToId={diffTarget.compareToId} />}
+        </Box>
+      </Modal>
+
+      <Modal open={!!semanticDiffTarget} onClose={() => setSemanticDiffTarget(null)}>
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 800,
+            bgcolor: 'background.paper',
+            p: 3,
+            borderRadius: 2,
+            maxHeight: '80vh',
+            overflow: 'auto',
+          }}
+        >
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Version Diff</Typography>
+            <Button onClick={() => setSemanticDiffTarget(null)}>Close</Button>
+          </Box>
+          {semanticDiffTarget && (
+            <SemanticDiffViewer
+              viewName={semanticDiffTarget.viewName}
+              fromVersion={semanticDiffTarget.from}
+              toVersion={semanticDiffTarget.to}
+            />
+          )}
+        </Box>
+      </Modal>
+    </Box>
   );
 }

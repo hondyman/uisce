@@ -16,6 +16,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     { path: "/admin/api-keys", label: "API Keys", icon: "🔑" },
     { path: "/admin/telemetry/etl-runs", label: "ETL Telemetry", icon: "⏱️" },
     { path: "/admin/telemetry/wasm-registry", label: "WASM Registry", icon: "📦" },
+    { path: "/admin/chat-history", label: "Chat History", icon: "💬" },
   ];
 
   const isActive = (path: string) => {

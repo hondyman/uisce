@@ -72,7 +72,7 @@ import {
 } from '@mui/icons-material';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { CoreIcon } from '../../../../components/common/CoreCustomIcons';
+import { CoreIcon, SubtypeScopeIcon } from '../../../../components/common/CoreCustomIcons';
 import { useTenant } from '../../../../contexts/TenantContext';
 import { useNotification } from '../../../../hooks/useNotification';
 import { previewQuery, executeQuery } from '../../../../features/query-builder/services/queryBuilderApi';
@@ -82,6 +82,7 @@ import { dedupeFields } from '../../../../utils/dedupeFields';
 
 interface LiveQueryTabProps {
   businessObject: any;
+  selectedSubtypeKey?: string | null;
 }
 
 export type AggFunc = 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT' | 'COUNT DISTINCT' | 'STDDEV' | 'VALUE';
@@ -189,10 +190,17 @@ function sanitizeDriverTableName(rawTable?: string): string {
   return `public."${clean.replace(/"/g, '')}"`;
 }
 
-export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
+export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTabProps) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id || 'master-gold-copy';
   const notification = useNotification();
+
+  // Subtype Palette and SQL Scope State
+  const [activePaletteSubtype, setActivePaletteSubtype] = useState<string | null>(selectedSubtypeKey || null);
+
+  useEffect(() => {
+    setActivePaletteSubtype(selectedSubtypeKey || null);
+  }, [selectedSubtypeKey]);
 
   // Query State
   const [dimensions, setDimensions] = useState<DimensionItem[]>([]);
@@ -318,14 +326,24 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
     return () => { isMounted = false; };
   }, [businessObject]);
 
-  // Extract all fields from the Business Object
+  // Extract all fields from the Business Object (with subtype-aware grouping)
   const fields = useMemo(() => {
-    return dedupeFields([
+    const base = dedupeFields([
       ...(businessObject?.coreFields || []),
       ...(businessObject?.customFields || []),
       ...(businessObject?.config?.fields || []),
     ]);
-  }, [businessObject]);
+    if (!activePaletteSubtype || !businessObject?.subtypes?.[activePaletteSubtype]) {
+      return base.map((f: any) => ({ ...f, _subtypeAssigned: false }));
+    }
+    const stFields = businessObject.subtypes[activePaletteSubtype].subtypeFields || [];
+    const stKeys = new Set(stFields.map((f: any) => f.key || f.technicalName || f.name));
+    const inherited = base.filter((f: any) => !stKeys.has(f.key || f.technicalName || f.name));
+    return [
+      ...stFields.map((f: any) => ({ ...f, _subtypeAssigned: true })),
+      ...inherited.map((f: any) => ({ ...f, _subtypeAssigned: false })),
+    ];
+  }, [businessObject, activePaletteSubtype]);
 
   // Helper to determine field data type category
   const getFieldKind = (typeStr?: string): 'number' | 'date' | 'uuid' | 'bool' | 'string' => {
@@ -432,10 +450,14 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       }
     });
 
-    // 2. WHERE Clauses (with ABAC Tenant Isolation Guardrail)
+    // 2. WHERE Clauses (with ABAC Tenant Isolation & STI Subtype Guardrail)
     const whereClauses: string[] = [];
     if (tenantId) {
       whereClauses.push(`t0."tenant_id" = '${tenantId}'`);
+    }
+
+    if (activePaletteSubtype) {
+      whereClauses.push(`t0."subtype_code" = '${activePaletteSubtype}' /* STI Partial Index: idx_${businessObject?.key || 'bo'}_${activePaletteSubtype}_subtype */`);
     }
 
     filters.forEach(f => {
@@ -485,7 +507,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
 
     const whereSQL = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join(' AND ')}` : '';
 
-    const engineComment = `-- [Engine: ${resolvedEngineTier.label}] [Dialect: ${resolvedEngineTier.dialect}]\n-- [CBO Routing: ${resolvedEngineTier.reason}]\n-- [ABAC Persona: ${userRole.toUpperCase()} | Dynamic Masking: ${isMaskedPersona ? 'ACTIVE (PII Redacted)' : 'UNMASKED (Full Clearance)'}]\n\n`;
+    const engineComment = `-- [Engine: ${resolvedEngineTier.label}] [Dialect: ${resolvedEngineTier.dialect}]\n-- [CBO Routing: ${resolvedEngineTier.reason}]\n-- [ABAC Persona: ${userRole.toUpperCase()} | Dynamic Masking: ${isMaskedPersona ? 'ACTIVE (PII Redacted)' : 'UNMASKED (Full Clearance)'}]${activePaletteSubtype ? `\n-- [STI Subtype Filter: ${activePaletteSubtype}]` : ''}\n\n`;
 
     // Two-Pass CTE Compilation if Governed Calculations are present or Masking is active
     if (hasCalculations || isMaskedPersona) {
@@ -501,12 +523,17 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
         cteSelectCols.push(`CAST('ACC-****-' || RIGHT(t0."account_number", 4) AS VARCHAR) AS "account_number_masked"`);
       }
 
-      return `${engineComment}WITH layer_0 AS (\n    -- Pass 1: Compile Governed Semantic Calculation AST & ABAC Masking Policies\n    SELECT\n        ${cteSelectCols.join(',\n        ')}\n    FROM ${driverTable} t0\n    WHERE t0."tenant_id" = '${tenantId}'\n)\n-- Pass 2: Wrap with Ad-hoc Exploratory Dimensions, Rollups & Aggregations\nSELECT\n    ${outerSelectClauses.join(',\n    ')}\nFROM layer_0 t0${whereSQL.replace(`t0."tenant_id" = '${tenantId}' AND `, '').replace(`\nWHERE t0."tenant_id" = '${tenantId}'`, '')}${groupBySQL}${orderBySQL}\nLIMIT ${limit};`;
+      const cteWhere = [
+        `t0."tenant_id" = '${tenantId}'`,
+        ...(activePaletteSubtype ? [`t0."subtype_code" = '${activePaletteSubtype}'`] : [])
+      ];
+
+      return `${engineComment}WITH layer_0 AS (\n    -- Pass 1: Compile Governed Semantic Calculation AST & ABAC Masking Policies\n    SELECT\n        ${cteSelectCols.join(',\n        ')}\n    FROM ${driverTable} t0\n    WHERE ${cteWhere.join(' AND ')}\n)\n-- Pass 2: Wrap with Ad-hoc Exploratory Dimensions, Rollups & Aggregations\nSELECT\n    ${outerSelectClauses.join(',\n    ')}\nFROM layer_0 t0${whereSQL.replace(`t0."tenant_id" = '${tenantId}' AND `, '').replace(`\nWHERE t0."tenant_id" = '${tenantId}'`, '')}${groupBySQL}${orderBySQL}\nLIMIT ${limit};`;
     }
 
     // Single-Pass SQL Pushdown
     return `${engineComment}SELECT\n    ${outerSelectClauses.join(',\n    ')}\nFROM ${driverTable} t0${whereSQL}${groupBySQL}${orderBySQL}\nLIMIT ${limit};`;
-  }, [dimensions, measures, timeDimensions, filters, sorts, limit, businessObject, tenantId, resolvedEngineTier, userRole, enableDynamicMasking]);
+  }, [dimensions, measures, timeDimensions, filters, sorts, limit, businessObject, tenantId, resolvedEngineTier, userRole, enableDynamicMasking, activePaletteSubtype]);
 
   const evaluateCost = useCallback(async () => {
     if (!businessObject?.id || (!dimensions.length && !measures.length && !timeDimensions.length)) {
@@ -1157,6 +1184,32 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                     </IconButton>
                   </Tooltip>
                 </Stack>
+
+                {/* Subtype Scope Pills Filter */}
+                {Object.keys(businessObject?.subtypes || {}).length > 0 && (
+                  <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    <Chip
+                      label="All Fields"
+                      size="small"
+                      variant={!activePaletteSubtype ? 'filled' : 'outlined'}
+                      color={!activePaletteSubtype ? 'primary' : 'default'}
+                      onClick={() => setActivePaletteSubtype(null)}
+                      sx={{ fontSize: '0.65rem', height: 20, cursor: 'pointer', fontWeight: 600 }}
+                    />
+                    {Object.entries(businessObject.subtypes).map(([key, st]: any) => (
+                      <Chip
+                        key={key}
+                        label={st.displayName || key}
+                        size="small"
+                        variant={activePaletteSubtype === key ? 'filled' : 'outlined'}
+                        color={activePaletteSubtype === key ? 'primary' : 'default'}
+                        onClick={() => setActivePaletteSubtype(key)}
+                        sx={{ fontSize: '0.65rem', height: 20, cursor: 'pointer', fontWeight: 600 }}
+                      />
+                    ))}
+                  </Box>
+                )}
+
                 <TextField
                   fullWidth
                   size="small"
@@ -1294,6 +1347,8 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                           justifyContent: 'space-between',
                           bgcolor: isDim ? 'primary.50' : isMeas ? 'success.50' : isTime ? 'warning.50' : 'background.paper',
                           borderColor: isDim ? 'primary.main' : isMeas ? 'success.main' : isTime ? 'warning.main' : 'divider',
+                          borderLeft: activePaletteSubtype ? (f._subtypeAssigned ? '3px solid' : '1px solid') : undefined,
+                          borderLeftColor: activePaletteSubtype ? (f._subtypeAssigned ? 'primary.main' : 'divider') : undefined,
                           transition: 'all 0.15s ease',
                           '&:hover': { bgcolor: 'action.hover' },
                         }}
@@ -1324,7 +1379,10 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                           </Typography>
                         </Box>
 
-                        <Stack direction="row" spacing={0.5}>
+                        <Stack direction="row" spacing={0.5} alignItems="center">
+                          {activePaletteSubtype && (
+                            <SubtypeScopeIcon isAssigned={f._subtypeAssigned} fontSize={15} />
+                          )}
                           {/* Dimension Toggle Button (Blue) */}
                           <Tooltip title={isDim ? 'Remove Dimension' : 'Add Dimension'}>
                             <Button
@@ -1667,6 +1725,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                               </TableCell>
                               {(executeResult.columns || []).map((col: any, cIdx: number) => {
                                 const colName = typeof col === 'string' ? col : col?.name || '';
+                                const cellVal = row[colName];
                                 return (
                                   <TableCell
                                     key={cIdx}
@@ -1682,7 +1741,11 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
                                     }}
                                     title="Double-click to drill down into constituent records"
                                   >
-                                    {String(row[colName] !== undefined ? row[colName] : '')}
+                                    {colName === 'subtype_code' && cellVal ? (
+                                      <Chip label={String(cellVal)} size="small" color="secondary" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />
+                                    ) : (
+                                      String(cellVal !== undefined ? cellVal : '')
+                                    )}
                                   </TableCell>
                                 );
                               })}

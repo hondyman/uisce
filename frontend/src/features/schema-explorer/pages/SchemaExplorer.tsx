@@ -12,6 +12,7 @@ import ReactFlow, {
   BackgroundVariant,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { useTheme } from '@mui/material';
 import { useTenant } from '../../../contexts/TenantContext';
 import { useApiQuery } from '../../../hooks/useApiQuery';
 import useBlockableNavigate from '../../../components/RouteBlocker/useBlockableNavigate';
@@ -77,18 +78,18 @@ const TABLE_TYPE = '49a50271-ae58-4d3e-ae1c-2f5b89d89192';
 const COLUMN_TYPE = 'a64c1011-16e8-4ddf-b447-363bf8e15c9a';
 
 // ─────────────────────────────────────────────
-// Theme tokens
+// Theme tokens - will be set based on theme mode
 // ─────────────────────────────────────────────
-const C = {
-  bg: '#0A0C12',
-  sidebar: '#0F1117',
-  panel: '#13161E',
-  border: 'rgba(255,255,255,0.07)',
+const getThemeColors = (isDark: boolean) => ({
+  bg: isDark ? '#0A0C12' : '#F8FAFC',
+  sidebar: isDark ? '#0F1117' : '#F1F5F9',
+  panel: isDark ? '#13161E' : '#FFFFFF',
+  border: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)',
   accent: '#6366F1',
-  accentDim: 'rgba(99,102,241,0.15)',
+  accentDim: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
   accentGlow: '0 0 20px rgba(99,102,241,0.4)',
-  text: '#E2E8F0',
-  textMuted: '#8892A4',
+  text: isDark ? '#E2E8F0' : '#0F172A',
+  textMuted: isDark ? '#8892A4' : '#64748B',
   success: '#10B981',
   warning: '#F59E0B',
   danger: '#EF4444',
@@ -97,7 +98,9 @@ const C = {
   blue: '#60A5FA',
   orange: '#FB923C',
   green: '#4ADE80',
-};
+});
+
+const C = getThemeColors(true);
 
 const TYPE_COLOR: Record<string, string> = {
   uuid: C.purple,
@@ -315,6 +318,10 @@ const RelationshipDialog: React.FC<{
 // Main SchemaExplorerPage
 // ─────────────────────────────────────────────
 const SchemaExplorerPage: React.FC = () => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const C = getThemeColors(isDark);
+  
   const [searchParams] = useSearchParams();
   const navigate = useBlockableNavigate();
   const { tenant: scopedTenant, datasource: contextDatasource } = useTenant();

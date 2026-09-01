@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Modal } from "./Modal";
 import { ErrorBanner, Spinner, SuccessBanner } from "./Feedback";
 import { useCreateTenant } from "../hooks/useTenants";
-import type { CreateTenantRequest } from "../types";
+import type { CreateTenantRequest } from "@/admin-v2/types";
 import "./CreateTenantModal.css";
 
 export interface CreateTenantModalProps {

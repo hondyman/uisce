@@ -1,9 +1,9 @@
-// API Keys Page - API key management interface
-
 import React, { useState } from "react";
 import { useAPIKeys } from "../hooks/useAdmin";
 import { APIKey } from "../types";
-import "./APIKeysPage.css";
+import { Box, Button, Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from "@mui/material";
+import { CircularProgress } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 
 const getAdminHeaders = () => {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
@@ -13,6 +13,7 @@ const getAdminHeaders = () => {
 };
 
 export const APIKeysPage: React.FC = () => {
+  const theme = useTheme();
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -95,32 +96,51 @@ export const APIKeysPage: React.FC = () => {
   const currentPage = Math.floor(offset / limit) + 1;
 
   return (
-    <div className="api-keys-page">
-      <div className="page-header">
-        <h1>API Keys</h1>
-        <button className="btn btn-primary" onClick={handleCreateClick}>
-          + New API Key
-        </button>
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Box
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          mb: 3,
+        }}
+      >
+        <Box>
+          <Typography variant="h4" component="h1" sx={{ fontWeight: 600, mb: 0 }}>
+            API Keys
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Manage authentication tokens
+          </Typography>
+        </Box>
+        <Button
+          variant="contained"
+          onClick={() => setShowCreateForm(true)}
+          sx={{ textTransform: "none" }}
+        >
+          + Create Key
+        </Button>
+      </Box>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && (
+        <Box sx={{ p: 3, bgcolor: "error.light", color: "error.dark" }}>
+          {error}
+        </Box>
+      )}
 
       {/* Create Form Modal */}
       {showCreateForm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
+        <Box sx={{ p: 3 }}>
+          <Box sx={{ bg: "background.paper", px: 4, py: 4, borderRadius: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
               <h2>Create New API Key</h2>
-              <button
-                className="modal-close"
-                onClick={() => setShowCreateForm(false)}
-              >
+              <button sx={{ color: "text.secondary" }} onClick={() => setShowCreateForm(false)}>
                 ✕
               </button>
-            </div>
-            <form onSubmit={handleCreateKey} className="api-key-form">
-              <div className="form-group">
-                <label htmlFor="name">API Key Name *</label>
+            </Box>
+            <form sx={{ display: "flex", flexDirection: "column", gap: 3 }} onSubmit={handleCreateKey}>
+              <div sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <label htmlFor="name" sx={{ fontWeight: 500, mb: 1 }}>API Key Name *</label>
                 <input
                   id="name"
                   type="text"
@@ -132,8 +152,8 @@ export const APIKeysPage: React.FC = () => {
                 />
               </div>
 
-              <div className="form-group">
-                <label htmlFor="tenant_ids">Tenant IDs *</label>
+              <div sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <label htmlFor="tenant_ids" sx={{ fontWeight: 500, mb: 1 }}>Tenant IDs *</label>
                 <textarea
                   id="tenant_ids"
                   name="tenant_ids"
@@ -143,16 +163,16 @@ export const APIKeysPage: React.FC = () => {
                   rows={3}
                   required
                 />
-                <small>
+                <small sx={{ color: "text.secondary", fontSize: "0.75rem" }}>
                   Leave empty for global access. Multiple UUIDs: comma-separated.
                 </small>
               </div>
 
-              <div className="form-group">
+              <div sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
                 <label>Roles</label>
-                <div className="checkbox-group">
+                <div sx={{ display: "flex", gap: 3 }}>
                   {["USER", "TENANT_ADMIN", "GLOBAL_OPS"].map((role) => (
-                    <label key={role} className="checkbox-label">
+                    <label key={role} sx={{ display: "flex", alignItems: "center", gap: 1, userSelect: "none" }}>
                       <input
                         type="checkbox"
                         value={role}
@@ -165,112 +185,122 @@ export const APIKeysPage: React.FC = () => {
                 </div>
               </div>
 
-              <div className="form-actions">
+              <div sx={{ display: "flex", justifyContent: "flex-end", gap: 2, mt: 4 }}>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  sx={{
+                    variant: "outlined",
+                    color: "text.secondary",
+                    "&:hover": { opacity: 0.7 },
+                    "&:disabled": { opacity: 0.5 },
+                  }}
                   onClick={() => setShowCreateForm(false)}
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary">
-                  Create API Key
-                </button>
+                <button type="submit" sx={{ variant: "contained" }}>Create API Key</button>
               </div>
             </form>
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
 
       {/* API Keys Table */}
-      <div className="api-keys-table-container">
-        {loading && <div className="loading">Loading API keys...</div>}
+      <Box sx={{ mt: 3 }}>
+        {loading && (
+          <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+            <CircularProgress size="medium" />
+          </Box>
+        )}
 
         {!loading && keys.length === 0 && (
-          <div className="empty-state">
+          <Box sx={{ p: 4, textAlign: "center", color: "text.secondary" }}>
             <p>No API keys found. Create one to get started.</p>
-          </div>
+          </Box>
         )}
 
         {!loading && keys.length > 0 && (
-          <table className="api-keys-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Tenant IDs</th>
-                <th>Roles</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {keys.map((key: APIKey) => (
-                <tr
-                  key={key.id}
-                  className={key.is_revoked ? "revoked" : ""}
-                >
-                  <td className="name-col">
-                    <strong>{key.name}</strong>
-                  </td>
-                  <td className="tenant-ids-col">
-                    {key.tenant_ids?.length === 0 ? (
-                      <span className="badge badge-global">Global</span>
-                    ) : (
-                      <span className="badge badge-scoped">
-                        {key.tenant_ids?.length || 0} tenant(s)
-                      </span>
-                    )}
-                  </td>
-                  <td className="roles-col">
-                    {key.roles?.map((role) => (
-                      <span key={role} className="role-tag">
-                        {role}
-                      </span>
-                    ))}
-                  </td>
-                  <td className="status-col">
-                    {key.is_revoked ? (
-                      <span className="badge badge-revoked">Revoked</span>
-                    ) : (
-                      <span className="badge badge-active">Active</span>
-                    )}
-                  </td>
-                  <td className="created-col">
-                    {new Date(key.created_at).toLocaleDateString()}
-                  </td>
-                  <td className="actions-col">
-                    <button className="link-btn">Usage</button>
-                    <button className="link-btn">Revoke</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Tenant IDs</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Roles</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
+                  <TableCell sx={{ fontWeight: 600, textAlign: "right" }}>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {keys.map((key: APIKey) => (
+                  <TableRow key={key.id} sx={{ '&:hover': { bgc: "grey.50" } }}>
+                    <TableCell>
+                      <strong>{key.name}</strong>
+                    </TableCell>
+                    <TableCell>
+                      {key.tenant_ids?.length === 0 ? (
+                        <Chip label="Global" size="small" sx={{ bgcolor: "grey.100", color: "grey.800" }} />
+                      ) : (
+                        <Chip label={`${key.tenant_ids.length} tenant(s)`} size="small" sx={{ bgcolor: "grey.100", color: "grey.800" }} />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {key.roles?.length > 0 ? (
+                        <div sx={{ display: "flex", gap: 2 }}>
+                          {key.roles.map((role) => (
+                            <span key={role} sx={{ display: "inline-block", px: 3, py: 1, borderRadius: 12, fontSize: "0.75rem" }}>
+                              {role}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span sx={{ color: "text.secondary" }}>—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {key.is_revoked ? (
+                        <Chip label="Revoked" size="small" sx={{ bgcolor: "error.light", color: "error.dark" }} />
+                      ) : (
+                        <Chip label="Active" size="small" sx={{ bgcolor: "success.light", color: "success.dark" }} />
+                      )}
+                    </TableCell>
+                    <TableCell>{new Date(key.created_at).toLocaleDateString()}</TableCell>
+                    <TableCell align="right" sx={{ fontSize: "0.875rem" }}>
+                      <Button variant="outlined" size="small">Usage</Button>
+                      <Button variant="outlined" size="small">Revoke</Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-      </div>
+      </Box>
 
       {/* Pagination */}
       {pageCount > 1 && (
-        <div className="pagination">
-          <button
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", mt: 2, gap: 2 }}>
+          <Button
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - limit))}
+            variant="outlined"
+            size="small"
           >
             Previous
-          </button>
-          <span className="page-info">
-            Page {currentPage} of {pageCount} ({total} total)
-          </span>
-          <button
+          </Button>
+          <span>Page {currentPage} of {pageCount} ({total} total)</span>
+          <Button
             disabled={offset + limit >= total}
             onClick={() => setOffset(offset + limit)}
+            variant="outlined"
+            size="small"
           >
             Next
-          </button>
-        </div>
+          </Button>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 };
 

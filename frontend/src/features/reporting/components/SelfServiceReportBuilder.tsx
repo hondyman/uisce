@@ -35,6 +35,7 @@ import {
   Tabs,
   Tab,
   LinearProgress,
+  Checkbox,
   alpha,
 } from '@mui/material';
 import {
@@ -43,6 +44,8 @@ import {
   ViewColumn as FieldIcon,
   Functions as MeasureIcon,
   CheckCircle as CheckIcon,
+  AccountTree as RelatedObjectsIcon,
+  Warning as WarningIcon,
   ArrowBack as BackIcon,
   ArrowForward as ForwardIcon,
   Add as AddIcon,
@@ -86,6 +89,15 @@ import { useNavigate } from 'react-router-dom';
 // Premium Workday/Tableau-level experience
 // ============================================================================
 
+export interface RelatedObjectSource {
+  id: string;
+  name: string;
+  displayName: string;
+  cardinality: '1:1' | '1:N' | 'M:1' | 'M:N';
+  joinType: 'LEFT' | 'INNER' | 'FULL';
+  fields: Field[];
+}
+
 interface DataSource {
   id: string;
   name: string;
@@ -94,6 +106,7 @@ interface DataSource {
   type: 'business_object' | 'semantic_model';
   icon: 'customer' | 'order' | 'product' | 'employee' | 'analytics' | 'performance';
   fields: Field[];
+  relatedObjects?: RelatedObjectSource[];
   measures?: Measure[];
   rowCount?: number;
 }
@@ -107,6 +120,8 @@ interface Field {
   isForeignKey?: boolean;
   isRequired?: boolean;
   description?: string;
+  sourceObjectName?: string;
+  sourceCardinality?: '1:1' | '1:N' | 'M:1' | 'M:N';
 }
 
 interface Measure {
@@ -202,6 +217,22 @@ const SAMPLE_DATA_SOURCES: DataSource[] = [
       { id: 'f8', name: 'phone', label: 'Phone', type: 'string' },
       { id: 'f9', name: 'fax', label: 'Fax', type: 'string' },
     ],
+    relatedObjects: [
+      {
+        id: 'rel_cust_orders',
+        name: 'orders',
+        displayName: 'Customer Orders',
+        cardinality: '1:N',
+        joinType: 'LEFT',
+        fields: [
+          { id: 'rel_f10', name: 'order_id', label: 'Order ID', type: 'number', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+          { id: 'rel_f13', name: 'order_date', label: 'Order Date', type: 'date', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+          { id: 'rel_f16', name: 'freight', label: 'Freight Amount', type: 'currency', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+          { id: 'rel_f17', name: 'ship_name', label: 'Ship Name', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+          { id: 'rel_f18', name: 'ship_city', label: 'Ship City', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+        ],
+      },
+    ],
   },
   {
     id: 'ds_orders',
@@ -222,6 +253,31 @@ const SAMPLE_DATA_SOURCES: DataSource[] = [
       { id: 'f17', name: 'ship_name', label: 'Ship Name', type: 'string' },
       { id: 'f18', name: 'ship_city', label: 'Ship City', type: 'string' },
       { id: 'f19', name: 'ship_country', label: 'Ship Country', type: 'string' },
+    ],
+    relatedObjects: [
+      {
+        id: 'rel_order_cust',
+        name: 'customers',
+        displayName: 'Customer Details',
+        cardinality: 'M:1',
+        joinType: 'LEFT',
+        fields: [
+          { id: 'rel_f2_o', name: 'company_name', label: 'Customer Company', type: 'string', sourceObjectName: 'Customer Details', sourceCardinality: 'M:1' },
+          { id: 'rel_f3_o', name: 'contact_name', label: 'Customer Contact', type: 'string', sourceObjectName: 'Customer Details', sourceCardinality: 'M:1' },
+          { id: 'rel_f7_o', name: 'country', label: 'Customer Country', type: 'string', sourceObjectName: 'Customer Details', sourceCardinality: 'M:1' },
+        ],
+      },
+      {
+        id: 'rel_order_prod',
+        name: 'products',
+        displayName: 'Line Item Products',
+        cardinality: 'M:N',
+        joinType: 'LEFT',
+        fields: [
+          { id: 'rel_f21_o', name: 'product_name', label: 'Product Name', type: 'string', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:N' },
+          { id: 'rel_f25_o', name: 'units_in_stock', label: 'Units in Stock', type: 'number', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:N' },
+        ],
+      },
     ],
   },
   {
@@ -366,6 +422,30 @@ export const WorldClassReportBuilder: React.FC = () => {
     setPreviewData(mockData);
   };
 
+  const [includedRelatedIds, setIncludedRelatedIds] = useState<string[]>([]);
+
+  const handleToggleRelatedObject = (relId: string) => {
+    setIncludedRelatedIds(prev =>
+      prev.includes(relId) ? prev.filter(id => id !== relId) : [...prev, relId]
+    );
+  };
+
+  const allEligibleFields = useMemo(() => {
+    if (!config.dataSource) return [];
+    const baseFields = config.dataSource.fields.map(f => ({ ...f, sourceObjectName: config.dataSource?.displayName }));
+    const relatedFields: Field[] = [];
+    (config.dataSource.relatedObjects || [])
+      .filter(ro => includedRelatedIds.includes(ro.id))
+      .forEach(ro => {
+        relatedFields.push(...ro.fields);
+      });
+    return [...baseFields, ...relatedFields];
+  }, [config.dataSource, includedRelatedIds]);
+
+  const hasFanOutColumn = useMemo(() => {
+    return config.columns.some(col => col.field.sourceCardinality === '1:N' || col.field.sourceCardinality === 'M:N');
+  }, [config.columns]);
+
   const handleSelectDataSource = (source: DataSource) => {
     setConfig(prev => ({
       ...prev,
@@ -374,6 +454,7 @@ export const WorldClassReportBuilder: React.FC = () => {
       measures: [],
       filters: [],
     }));
+    setIncludedRelatedIds([]);
     setActiveStep(1);
   };
 
@@ -400,10 +481,10 @@ export const WorldClassReportBuilder: React.FC = () => {
   };
 
   const handleAddFilter = () => {
-    if (!config.dataSource || config.dataSource.fields.length === 0) return;
+    if (allEligibleFields.length === 0) return;
     const newFilter: FilterCondition = {
       id: `filter_${Date.now()}`,
-      field: config.dataSource.fields[0],
+      field: allEligibleFields[0],
       operator: 'equals',
       value: '',
     };
@@ -700,17 +781,114 @@ export const WorldClassReportBuilder: React.FC = () => {
                         </Box>
                       </Box>
 
+                      {/* Related Objects & Cardinality Selector */}
+                      {config.dataSource.relatedObjects && config.dataSource.relatedObjects.length > 0 && (
+                        <Paper variant="outlined" sx={{ p: 2, mb: 2.5, bgcolor: '#070E1B', borderColor: 'rgba(20, 184, 166, 0.3)', borderRadius: 2 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <RelatedObjectsIcon sx={{ color: '#14B8A6', fontSize: 20 }} />
+                              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#fff' }}>
+                                Related Business Objects (Cardinality & Joins)
+                              </Typography>
+                            </Box>
+                            <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                              Select related entities to unlock their fields for this report
+                            </Typography>
+                          </Box>
+
+                          <Grid container spacing={1.5}>
+                            {config.dataSource.relatedObjects.map((rel) => {
+                              const isIncluded = includedRelatedIds.includes(rel.id);
+                              return (
+                                <Grid key={rel.id} size={{ xs: 12, md: 6 }}>
+                                  <Box
+                                    sx={{
+                                      p: 1.5,
+                                      borderRadius: 1.5,
+                                      border: '1px solid',
+                                      borderColor: isIncluded ? '#14B8A6' : '#1E293B',
+                                      bgcolor: isIncluded ? 'rgba(20, 184, 166, 0.08)' : '#050D1A',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'space-between',
+                                      cursor: 'pointer',
+                                    }}
+                                    onClick={() => handleToggleRelatedObject(rel.id)}
+                                  >
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                                      <Checkbox
+                                        checked={isIncluded}
+                                        size="small"
+                                        sx={{ p: 0, color: '#64748B', '&.Mui-checked': { color: '#14B8A6' } }}
+                                      />
+                                      <Box>
+                                        <Typography variant="body2" fontWeight="bold" sx={{ color: '#fff' }}>
+                                          {rel.displayName}
+                                        </Typography>
+                                        <Typography variant="caption" sx={{ color: '#64748B' }}>
+                                          {rel.joinType} JOIN • {rel.fields.length} fields
+                                        </Typography>
+                                      </Box>
+                                    </Box>
+
+                                    <Chip
+                                      size="small"
+                                      label={
+                                        rel.cardinality === '1:N'
+                                          ? '1:N ⚠️ Fan-Out'
+                                          : rel.cardinality === 'M:1'
+                                          ? 'M:1 Lookup'
+                                          : rel.cardinality === 'M:N'
+                                          ? 'M:N Bridge'
+                                          : '1:1 Single'
+                                      }
+                                      sx={{
+                                        fontWeight: 'bold',
+                                        fontSize: '10px',
+                                        height: 22,
+                                        bgcolor:
+                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
+                                            ? 'rgba(245, 158, 11, 0.2)'
+                                            : 'rgba(20, 184, 166, 0.2)',
+                                        color:
+                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
+                                            ? '#FCD34D'
+                                            : '#5EEAD4',
+                                        border: '1px solid',
+                                        borderColor:
+                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
+                                            ? 'rgba(245, 158, 11, 0.4)'
+                                            : 'rgba(20, 184, 166, 0.4)',
+                                      }}
+                                    />
+                                  </Box>
+                                </Grid>
+                              );
+                            })}
+                          </Grid>
+                        </Paper>
+                      )}
+
+                      {hasFanOutColumn && (
+                        <Alert severity="warning" sx={{ mb: 2, fontSize: '12px' }}>
+                          <strong>⚠️ Multivalued (1:N) Expansion Detected:</strong> One or more fields from related 1:N entities are selected. Live query aggregations (SUM, AVG, COUNT) or explicit grouping are recommended to prevent duplicate row counting.
+                        </Alert>
+                      )}
+
                       <Grid container spacing={2}>
                         {/* Available Fields */}
-                        <Grid   size={{ xs: 12, md: 6 }}>
-                          <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
-                            <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Paper variant="outlined" sx={{ height: 420, overflow: 'hidden' }}>
+                            <Box sx={{ p: 1.5, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between' }}>
                               <Typography variant="subtitle2" fontWeight="bold">
                                 Available Fields
                               </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {allEligibleFields.length} available
+                              </Typography>
                             </Box>
                             <List sx={{ height: 'calc(100% - 48px)', overflow: 'auto' }}>
-                              {config.dataSource.fields.map(field => (
+                              {allEligibleFields.map(field => (
                                 <ListItemButton
                                   key={field.id}
                                   onClick={() => handleToggleField(field)}
@@ -724,9 +902,23 @@ export const WorldClassReportBuilder: React.FC = () => {
                                     {getFieldTypeIcon(field.type)}
                                   </ListItemIcon>
                                   <ListItemText
+                                    slotProps={{ primary: { component: 'div' }, secondary: { component: 'div' } }}
                                     primary={
-                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                        {field.label}
+                                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                                        <span>{field.label}</span>
+                                        {field.sourceCardinality && (
+                                          <Chip
+                                            size="small"
+                                            label={`${field.sourceObjectName} (${field.sourceCardinality})`}
+                                            sx={{
+                                              height: 18,
+                                              fontSize: '9px',
+                                              fontWeight: 600,
+                                              bgcolor: field.sourceCardinality === '1:N' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(20, 184, 166, 0.15)',
+                                              color: field.sourceCardinality === '1:N' ? '#D97706' : '#0D9488',
+                                            }}
+                                          />
+                                        )}
                                         {field.isPrimaryKey && <KeyIcon sx={{ fontSize: 14, color: 'warning.main' }} />}
                                         {field.isForeignKey && <LinkIcon sx={{ fontSize: 14, color: 'info.main' }} />}
                                       </Box>
@@ -743,8 +935,8 @@ export const WorldClassReportBuilder: React.FC = () => {
 
                         {/* Measures (for semantic models) */}
                         {config.dataSource.type === 'semantic_model' && config.dataSource.measures && (
-                          <Grid   size={{ xs: 12, md: 6 }}>
-                            <Paper variant="outlined" sx={{ height: 400, overflow: 'hidden' }}>
+                          <Grid size={{ xs: 12, md: 6 }}>
+                            <Paper variant="outlined" sx={{ height: 420, overflow: 'hidden' }}>
                               <Box sx={{ p: 1.5, bgcolor: 'secondary.50', borderBottom: 1, borderColor: 'divider' }}>
                                 <Typography variant="subtitle2" fontWeight="bold" color="secondary.main">
                                   Measures
@@ -765,6 +957,7 @@ export const WorldClassReportBuilder: React.FC = () => {
                                       <MeasureIcon color="secondary" />
                                     </ListItemIcon>
                                     <ListItemText
+                                      slotProps={{ primary: { component: 'div' }, secondary: { component: 'div' } }}
                                       primary={measure.label}
                                       secondary={`${measure.aggregation} • ${measure.format}`}
                                       primaryTypographyProps={{ fontWeight: isMeasureSelected(measure.id) ? 'bold' : 'normal' }}
@@ -826,14 +1019,14 @@ export const WorldClassReportBuilder: React.FC = () => {
                           {config.filters.map((filter, index) => (
                             <Paper key={filter.id} variant="outlined" sx={{ p: 2 }}>
                               <Grid container spacing={2} alignItems="center">
-                                <Grid   size={{ xs: 12, sm: 3 }}>
+                                <Grid size={{ xs: 12, sm: 3 }}>
                                   <FormControl fullWidth size="small">
                                     <InputLabel>Field</InputLabel>
                                     <Select
                                       value={filter.field.id}
                                       label="Field"
                                       onChange={(e) => {
-                                        const newField = config.dataSource?.fields.find(f => f.id === e.target.value);
+                                        const newField = allEligibleFields.find(f => f.id === e.target.value);
                                         if (newField) {
                                           setConfig(prev => ({
                                             ...prev,
@@ -844,13 +1037,15 @@ export const WorldClassReportBuilder: React.FC = () => {
                                         }
                                       }}
                                     >
-                                      {config.dataSource?.fields.map(f => (
-                                        <MenuItem key={f.id} value={f.id}>{f.label}</MenuItem>
+                                      {allEligibleFields.map(f => (
+                                        <MenuItem key={f.id} value={f.id}>
+                                          {f.sourceObjectName ? `${f.sourceObjectName} • ${f.label}` : f.label}
+                                        </MenuItem>
                                       ))}
                                     </Select>
                                   </FormControl>
                                 </Grid>
-                                <Grid   size={{ xs: 12, sm: 3 }}>
+                                <Grid size={{ xs: 12, sm: 3 }}>
                                   <FormControl fullWidth size="small">
                                     <InputLabel>Operator</InputLabel>
                                     <Select

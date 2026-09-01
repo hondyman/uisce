@@ -9,6 +9,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { MantineProvider } from '@mantine/core';
 import { ThemeProvider } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
 import { createUisceTheme } from './theme';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import App from './App.tsx';
@@ -71,6 +72,7 @@ function AppWithTheme() {
       <MantineProvider>
         <ColorModeContext.Provider value={colorMode}>
           <ThemeProvider theme={theme}>
+            <CssBaseline enableColorScheme />
             <QueryClientProvider client={queryClient}>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <AuthProvider>

@@ -9,16 +9,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
 // Handler handles HTTP requests for reporting
 type Handler struct {
-	service *Service
+	service       *Service
+	filterHandler *FilterHandler
 }
 
 // NewHandler creates a new reporting handler
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, db *sqlx.DB) *Handler {
+	return &Handler{service: service, filterHandler: NewFilterHandler(db)}
 }
 
 // RegisterRoutes registers the reporting routes
@@ -65,6 +67,18 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	// Provisioning
 	r.Post("/reports/provision", h.ProvisionReports)
 	r.Get("/reports/packages", h.ListPackages)
+
+	// Report Filters
+	r.Route("/reports/{id}/filters", func(r chi.Router) {
+		r.Get("/", h.filterHandler.GetFilters)
+		r.Post("/", h.filterHandler.UpsertFilters)
+	})
+
+	// Tenant Defaults & Calendars
+	r.Route("/tenants/{tenantId}", func(r chi.Router) {
+		r.Get("/defaults", h.filterHandler.GetTenantDefaults)
+		r.Get("/calendars", h.filterHandler.ListTenantCalendars)
+	})
 }
 
 // ============================================================================

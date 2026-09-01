@@ -1,4 +1,5 @@
 import React from "react";
+import { useTheme, Box, Typography } from "@mui/material";
 import type { CardComponent } from "../schema";
 import { TrendingUp, TrendingDown, Minus, AlertCircle, Info } from "lucide-react";
 
@@ -7,72 +8,90 @@ interface CardWidgetProps {
 }
 
 export function CardWidget({ def }: CardWidgetProps) {
+  const theme = useTheme();
   const Icon = getIconComponent(def.icon);
 
   return (
-    <div
-      className={`bg-white rounded-lg shadow p-6 ${getVariantStyles(def.variant || "")} ${
-        def.className || ""
-      }`}
+    <Box
+      sx={{
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        boxShadow: 1,
+        p: 3,
+        ...getVariantStyles(def.variant || "", theme),
+        ...(def.className ? { className: def.className } : {}),
+      }}
     >
-      <div className="flex items-center justify-between">
-        <div className="flex-1">
-          {def.title && <h4 className="text-sm font-medium text-gray-600 mb-1">{def.title}</h4>}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box sx={{ flex: 1 }}>
+          {def.title && (
+            <Typography variant="body2" sx={{ color: 'grey.600', mb: 0.5 }}>
+              {def.title}
+            </Typography>
+          )}
           
-          <div className="text-3xl font-bold text-gray-900 mb-2">{def.value}</div>
+          <Typography variant="h4" sx={{ fontWeight: 700, color: 'grey.900', mb: 1 }}>
+            {def.value}
+          </Typography>
 
-          {def.metric && <p className="text-xs text-gray-500">{def.metric}</p>}
+          {def.metric && (
+            <Typography variant="caption" sx={{ color: 'grey.500' }}>
+              {def.metric}
+            </Typography>
+          )}
 
           {def.trend && (
-            <div className={`flex items-center mt-2 text-sm ${getTrendColor(def.trend.direction)}`}>
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, fontSize: '0.875rem', color: getTrendColor(def.trend.direction, theme) }}>
               <TrendIcon direction={def.trend.direction} />
-              <span className="ml-1">{def.trend.value}</span>
-            </div>
+              <Typography variant="body2" sx={{ ml: 0.5, color: 'inherit' }}>
+                {def.trend.value}
+              </Typography>
+            </Box>
           )}
-        </div>
+        </Box>
 
         {Icon && (
-          <div className="ml-4">
-            <Icon className="w-12 h-12 text-gray-400" />
-          </div>
+          <Box sx={{ ml: 2 }}>
+            <Icon size={48} style={{ color: theme.palette.grey[400] }} />
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 
 function TrendIcon({ direction }: { direction: "up" | "down" | "flat" }) {
   switch (direction) {
     case "up":
-      return <TrendingUp className="w-4 h-4" />;
+      return <TrendingUp size={16} />;
     case "down":
-      return <TrendingDown className="w-4 h-4" />;
+      return <TrendingDown size={16} />;
     case "flat":
-      return <Minus className="w-4 h-4" />;
+      return <Minus size={16} />;
   }
 }
 
-function getTrendColor(direction: "up" | "down" | "flat") {
+function getTrendColor(direction: "up" | "down" | "flat", theme: any) {
   switch (direction) {
     case "up":
-      return "text-green-600";
+      return theme.palette.success.main;
     case "down":
-      return "text-red-600";
+      return theme.palette.error.main;
     case "flat":
-      return "text-gray-600";
+      return theme.palette.grey[600];
   }
 }
 
-function getVariantStyles(variant: string) {
+function getVariantStyles(variant: string, theme: any) {
   switch (variant) {
     case "kpi":
-      return "border-l-4 border-blue-500";
+      return { borderLeft: `4px solid ${theme.palette.primary.main}` };
     case "alert":
-      return "border-l-4 border-red-500 bg-red-50";
+      return { borderLeft: `4px solid ${theme.palette.error.main}`, bgcolor: theme.palette.error.light };
     case "info":
-      return "border-l-4 border-gray-300";
+      return { borderLeft: `4px solid ${theme.palette.grey[300]}` };
     default:
-      return "";
+      return {};
   }
 }
 

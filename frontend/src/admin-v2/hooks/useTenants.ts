@@ -1,7 +1,7 @@
 // React Query hooks for tenant management
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
-import { Tenant, CreateTenantRequest, UpdateTenantRequest } from "../types";
+import { api } from "@/admin-v2/api";
+import { Tenant, CreateTenantRequest, UpdateTenantRequest } from "@/admin-v2/types";
 
 // ============================================================================
 // QUERIES

@@ -112,12 +112,21 @@ func (h *QueryBuilderHandler) decodeAndAuthorize(w http.ResponseWriter, r *http.
 		return nil, nil, false
 	}
 
-	// The security context datasource is authoritative; ensure it matches the
-	// binding the user selected. A mismatch means the user is trying to query a
-	// datasource outside their scope.
-	if !stringsEqual(secCtx.DatasourceID, qd.Context.BindingID) {
-		h.writeError(w, fmt.Errorf("binding scope mismatch"), http.StatusForbidden)
-		return nil, nil, false
+	// GSIFI: non-global-admins must have their requested BO+binding in the JWT allowlist.
+	if !secCtx.IsGlobalAdmin && len(secCtx.AllowedBindings) > 0 {
+		allowed := false
+		for _, b := range secCtx.AllowedBindings {
+			if b.TenantID == secCtx.TenantID && b.BOID == qd.Context.BOID {
+				if b.BackendID == qd.Context.BindingID || b.BindingID == qd.Context.BindingID || b.BackendID == "" {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			h.writeError(w, fmt.Errorf("binding not authorized for tenant %s", secCtx.TenantID), http.StatusForbidden)
+			return nil, nil, false
+		}
 	}
 
 	_ = ctx
@@ -141,11 +150,4 @@ func (h *QueryBuilderHandler) writeError(w http.ResponseWriter, err error, statu
 		"error":   http.StatusText(status),
 		"details": err.Error(),
 	})
-}
-
-func stringsEqual(a, b string) bool {
-	if a == "" || b == "" {
-		return true
-	}
-	return a == b
 }

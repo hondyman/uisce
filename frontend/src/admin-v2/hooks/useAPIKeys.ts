@@ -1,7 +1,7 @@
 // React Query hooks for API key management
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "../api";
-import { APIKey, CreateAPIKeyRequest, APIKeyUsage } from "../types";
+import { api } from "@/admin-v2/api";
+import { APIKey, CreateAPIKeyRequest, APIKeyUsage } from "@/admin-v2/types";
 
 // ============================================================================
 // QUERIES

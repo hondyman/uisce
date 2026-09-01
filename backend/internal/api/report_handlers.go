@@ -7,20 +7,28 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/reports"
+	"github.com/hondyman/uisce/backend/internal/reporting"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
 type ReportHandler struct {
-	service *reports.ReportService
+	service       *reports.ReportService
+	reportingRepo *reporting.Repository
 }
 
-func NewReportHandler(service *reports.ReportService) *ReportHandler {
-	return &ReportHandler{service: service}
+func NewReportHandler(service *reports.ReportService, db *sqlx.DB) *ReportHandler {
+	return &ReportHandler{
+		service:       service,
+		reportingRepo: reporting.NewRepository(db),
+	}
 }
 
 func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/v1/reports", func(r chi.Router) {
 		r.Get("/", h.ListTemplates)
 		r.Post("/", h.CreateTemplate)
+		r.Get("/by-key/{key}", h.GetTemplateByKey)
 		r.Get("/{id}", h.GetTemplate)
 		r.Put("/{id}", h.UpdateTemplate)
 		r.Delete("/{id}", h.DeleteTemplate)
@@ -106,4 +114,51 @@ func (h *ReportHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *ReportHandler) GetTemplateByKey(w http.ResponseWriter, r *http.Request) {
+	key := chi.URLParam(r, "key")
+	if key == "" {
+		http.Error(w, "key is required", http.StatusBadRequest)
+		return
+	}
+
+	tenantID, datasourceID := getReportingTenantContext(r)
+
+	def, err := h.reportingRepo.GetDefinitionByKey(r.Context(), tenantID, datasourceID, key)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if def == nil {
+		http.Error(w, "report not found", http.StatusNotFound)
+		return
+	}
+
+	template, err := h.service.GetTemplate(r.Context(), def.ID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if template == nil {
+		http.Error(w, "report template not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(template)
+}
+
+func getReportingTenantContext(r *http.Request) (uuid.UUID, uuid.UUID) {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	var tenantID uuid.UUID
+	if claims != nil && claims.TenantID != "" {
+		tenantID, _ = uuid.Parse(claims.TenantID)
+	}
+	if tenantID == uuid.Nil {
+		tenantIDStr := r.Header.Get("X-Tenant-ID")
+		tenantID, _ = uuid.Parse(tenantIDStr)
+	}
+	datasourceIDStr := r.Header.Get("X-Tenant-Datasource-ID")
+	datasourceID, _ := uuid.Parse(datasourceIDStr)
+	return tenantID, datasourceID
 }

@@ -3,9 +3,10 @@
  * Real-time monitoring of job executions with logs, progress tracking, and resubmit capability
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useTheme } from '@mui/material';
 import * as schedulerService from '../services/schedulerService';
 import {
   JobExecution,
@@ -19,9 +20,19 @@ import '../styles/SchedulerDashboard.css';
 // ============================================================================
 
 export function ExecutionDetailPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { executionId } = useParams<{ executionId: string }>();
+  
+  const C = useMemo(() => ({
+    bg: isDark ? '#0A0C12' : '#F8FAFC',
+    panel: isDark ? '#13161E' : '#FFFFFF',
+    border: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)',
+    text: isDark ? '#E2E8F0' : '#0F172A',
+    textMuted: isDark ? '#8892A4' : '#64748B',
+  }), [isDark]);
   
   const [execution, setExecution] = useState<JobExecution | null>(null);
   const [logs, setLogs] = useState<ExecutionLog[]>([]);

@@ -17,7 +17,7 @@ func NewSemanticReportingHandler(db *sqlx.DB) *SemanticReportingHandler {
 	renderer := reporting.NewRenderer()
 	repo := reporting.NewRepository(db)
 	svc := reporting.NewService(repo, renderer)
-	handler := reporting.NewHandler(svc)
+	handler := reporting.NewHandler(svc, db)
 
 	return &SemanticReportingHandler{
 		handler: handler,

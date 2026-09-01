@@ -16,6 +16,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Collapse,
   Divider,
   CircularProgress,
   Alert,
@@ -33,18 +34,22 @@ import {
   Hub as TierIcon,
   CloudQueue as CloudIcon,
   ContentCopy as CopyIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
 } from '@mui/icons-material';
 import { fetchAPI } from '../../../../api';
 import { useNotification } from '../../../../hooks/useNotification';
+import { SubtypeAssignedIcon, SubtypeInheritedIcon } from '../../../../components/common/CoreCustomIcons';
 
 const MAX_FIELDS_DISPLAY = 10;
 
 interface BindingsTabProps {
   bindings: any[];
   businessObject?: any;
+  selectedSubtypeKey?: string | null;
 }
 
-export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
+export function BindingsTab({ bindings, businessObject, selectedSubtypeKey }: BindingsTabProps) {
   const notification = useNotification();
   const [subTab, setSubTab] = useState(0);
 
@@ -54,6 +59,9 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
   const [multiBackend, setMultiBackend] = useState<any>(null);
   const [artifacts, setArtifacts] = useState<any>(null);
   const [loadingArtifacts, setLoadingArtifacts] = useState(false);
+
+  // Controls whether the "Core / Inherited Fields" section is expanded
+  const [inheritedExpanded, setInheritedExpanded] = useState(false);
 
   const boId = businessObject?.id || businessObject?.key;
 
@@ -86,6 +94,26 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
     notification.success(`Copied ${label} to clipboard!`);
   };
 
+  // Derive subtype-specific fields and the core/inherited field set
+  const activeSubtype =
+    selectedSubtypeKey && businessObject?.subtypes?.[selectedSubtypeKey]
+      ? businessObject.subtypes[selectedSubtypeKey]
+      : null;
+
+  const subtypeFields: any[] = activeSubtype?.subtypeFields || [];
+
+  // Keys already rendered in the subtype section — used to exclude from inherited
+  const subtypeFieldKeys = new Set(
+    subtypeFields.map((f: any) => f.key || f.fieldName || f.name)
+  );
+
+  const inheritedFields = activeSubtype
+    ? bindings.filter((b: any) => {
+        const key = b.key || b.fieldName || b.name;
+        return !subtypeFieldKeys.has(key);
+      })
+    : bindings;
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header Bar */}
@@ -94,7 +122,7 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
           <Stack direction="row" spacing={1.5} alignItems="center">
             <StorageIcon color="primary" />
             <Typography variant="h6" sx={{ fontWeight: 700 }}>
-              Polymorphic Storage Bindings & Dynamic Scope
+              Polymorphic Storage Bindings &amp; Dynamic Scope
             </Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -111,9 +139,37 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
         )}
       </Stack>
 
+      {/* Subtype Context Banner */}
+      {selectedSubtypeKey && activeSubtype && (() => {
+        const stFields = activeSubtype.subtypeFields || [];
+        return (
+          <Box
+            sx={{
+              mb: 2,
+              p: 1.5,
+              borderRadius: 1,
+              bgcolor: 'primary.dark',
+              border: '1px solid',
+              borderColor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+            }}
+          >
+            <Chip label="SUBTYPE" size="small" color="primary" />
+            <Typography variant="body2" sx={{ fontWeight: 700, color: 'primary.contrastText' }}>
+              {activeSubtype.displayName || selectedSubtypeKey}
+            </Typography>
+            <Typography variant="body2" color="primary.light">
+              — {stFields.length} subtype-specific field{stFields.length !== 1 ? 's' : ''} + inherited core fields
+            </Typography>
+          </Box>
+        );
+      })()}
+
       <Tabs value={subTab} onChange={(_, val) => setSubTab(val)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Multi-Tier Storage Planes" icon={<TierIcon />} iconPosition="start" />
-        <Tab label="Dynamic Scope & Auto-Discovery" icon={<GraphIcon />} iconPosition="start" />
+        <Tab label="Dynamic Scope &amp; Auto-Discovery" icon={<GraphIcon />} iconPosition="start" />
         <Tab label="Zero-Code Artifacts (OpenAPI)" icon={<CodeIcon />} iconPosition="start" />
       </Tabs>
 
@@ -193,6 +249,113 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
               </Grid>
             ))}
           </Grid>
+
+          {/* Bindings Field Table — subtype-aware */}
+          {activeSubtype ? (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'action.hover' }}>
+                    <TableCell sx={{ fontWeight: 700 }}>Field Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Scope</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Physical Column</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {/* Section header: Subtype-Specific Fields */}
+                  <TableRow sx={{ bgcolor: 'primary.dark' }}>
+                    <TableCell colSpan={4}>
+                      <Typography variant="caption" sx={{ fontWeight: 800, color: 'primary.contrastText', textTransform: 'uppercase', letterSpacing: 1 }}>
+                        Subtype-Specific Fields (ASSIGNED)
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+
+                  {subtypeFields.map((f: any, idx: number) => (
+                    <TableRow key={`assigned-${idx}`} hover>
+                      <TableCell sx={{ fontWeight: 600 }}>{f.displayName || f.fieldName || f.name}</TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
+                        {f.dataType || f.type || '—'}
+                      </TableCell>
+                      <TableCell align="center">
+                        <SubtypeAssignedIcon fontSize={18} />
+                      </TableCell>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                        {f.physicalColumn || f.columnName || '—'}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+
+                  {/* Section header: Core / Inherited Fields (collapsible toggle row) */}
+                  <TableRow
+                    sx={{ bgcolor: 'action.selected', cursor: 'pointer' }}
+                    onClick={() => setInheritedExpanded((prev) => !prev)}
+                  >
+                    <TableCell colSpan={4}>
+                      <Stack direction="row" alignItems="center" spacing={1}>
+                        {inheritedExpanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+                        <Typography variant="caption" sx={{ fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1 }}>
+                          Core / Inherited Fields (INHERITED)
+                        </Typography>
+                        <Chip
+                          label={`${inheritedFields.length}`}
+                          size="small"
+                          variant="outlined"
+                          sx={{ fontSize: '0.65rem', height: 18 }}
+                        />
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+
+                  {/* Collapsible inherited rows */}
+                  {inheritedExpanded &&
+                    inheritedFields.map((f: any, idx: number) => (
+                      <TableRow key={`inherited-${idx}`} hover>
+                        <TableCell sx={{ fontWeight: 600 }}>{f.displayName || f.fieldName || f.name}</TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
+                          {f.dataType || f.type || '—'}
+                        </TableCell>
+                        <TableCell align="center">
+                          <SubtypeInheritedIcon fontSize={18} />
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                          {f.physicalColumn || f.columnName || '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            /* Fallback: flat bindings table when no subtype is active */
+            bindings.length > 0 && (
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableHead>
+                    <TableRow sx={{ bgcolor: 'action.hover' }}>
+                      <TableCell sx={{ fontWeight: 700 }}>Field Name</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Physical Column</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {bindings.map((b: any, idx: number) => (
+                      <TableRow key={idx} hover>
+                        <TableCell sx={{ fontWeight: 600 }}>{b.displayName || b.fieldName || b.name}</TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary' }}>
+                          {b.dataType || b.type || '—'}
+                        </TableCell>
+                        <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                          {b.physicalColumn || b.columnName || '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )
+          )}
         </Stack>
       )}
 

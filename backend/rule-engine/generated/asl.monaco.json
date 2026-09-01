@@ -585,10 +585,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "modelProvider": {
-          "documentation": "",
-          "type": "any"
         }
       }
     },
@@ -1313,6 +1309,218 @@
         }
       }
     },
+    "BOAIAnomalyDetectRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SampleSize": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BOAIAnomalyDetectResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Anomalies": {
+          "documentation": "",
+          "type": "BODataAnomaly[]"
+        },
+        "DataQualityScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Recommendations": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Summary": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAIExplainDeltaRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAIExplainDeltaResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BreakingChanges": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "GovernanceRisks": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "ImpactScore": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MarkdownNarrative": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedActions": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Summary": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAINLQRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Query": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAINLQResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Dimensions": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "Explanation": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Filters": {
+          "documentation": "",
+          "type": "NLQFilterItem[]"
+        },
+        "GeneratedSQL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Limit": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Measures": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "QueryDef": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "SortBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SortOrder": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAISynthesizeRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Category": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IncludeCalc": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "IncludeRules": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Prompt": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TableID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TableName": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOAISynthesizeResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Category": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "PrimaryKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Reasoning": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedCalculatedFields": {
+          "documentation": "",
+          "type": "SynthesizedCalculatedField[]"
+        },
+        "SuggestedDisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedDriverTable": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "documentation": "",
+          "type": "FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedRules": {
+          "documentation": "",
+          "type": "SynthesizedRule[]"
+        }
+      }
+    },
     "BOAdvisorResponse": {
       "documentation": "BOAdvisorResponse is the API response for BO-level advisor.",
       "kind": "interface",
@@ -1328,6 +1536,36 @@
         "Workload": {
           "documentation": "",
           "type": "BOWorkloadProfile"
+        }
+      }
+    },
+    "BOArtifactGenerationResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "BOKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CubeJSSchemaJS": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OpenAPISpecJSON": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RESTEndpointURL": {
+          "documentation": "",
+          "type": "string"
+        },
+        "StarRocksMVDDL": {
+          "documentation": "",
+          "type": "string"
         }
       }
     },
@@ -1380,6 +1618,728 @@
         "eventPublisher": {
           "documentation": "",
           "type": "EventPublisher"
+        }
+      }
+    },
+    "BOCrudRecordRequest": {
+      "documentation": "BOCrudRecordRequest represents a request to create or update a physical record via BO",
+      "kind": "interface",
+      "properties": {
+        "Record": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "SubtypeKey": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BODataAnomaly": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "AnomalyType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Field": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SampleCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BODataQualitySentinelResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DistinctRatios": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "DriftProposals": {
+          "documentation": "",
+          "type": "SchemaDriftProposal[]"
+        },
+        "FinancialVerifications": {
+          "documentation": "",
+          "type": "FinancialPatternResult[]"
+        },
+        "NullDrift": {
+          "documentation": "",
+          "type": "Record\u003cstring, float64\u003e"
+        },
+        "OverallQualityScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SampleStrategy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SentinelSummary": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TotalSampledRows": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BODeltaFieldDiff": {
+      "documentation": "BODeltaFieldDiff represents the diff of a field between Core and Custom",
+      "kind": "interface",
+      "properties": {
+        "CoreField": {
+          "documentation": "",
+          "type": "FieldDefinition"
+        },
+        "CustomField": {
+          "documentation": "",
+          "type": "FieldDefinition"
+        },
+        "FieldKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FieldName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Overrides": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BODeltaResponse": {
+      "documentation": "BODeltaResponse represents the Workday-style delta comparison between tenant BO and gold copy Core BO",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CoreID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CustomCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FieldsDelta": {
+          "documentation": "",
+          "type": "BODeltaFieldDiff[]"
+        },
+        "InheritedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "IsCore": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Key": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "OverriddenCount": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BODriftRepairPatchRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Action": {
+          "documentation": "",
+          "type": "string"
+        },
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Note": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProposalID": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BODriftRepairPatchResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Message": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProposalID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOEventTrigger": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ActionType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Enabled": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Event": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Target": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOFieldEligibilityItem": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "DataType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EligibilityLevel": {
+          "documentation": "",
+          "type": "BOFieldEligibilityLevel"
+        },
+        "FieldKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "FieldName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "GateReason": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MissingInputs": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "PhysicalColumn": {
+          "documentation": "",
+          "type": "string"
+        },
+        "PhysicalTable": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ResolutionPath": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ResolutionStatus": {
+          "documentation": "",
+          "type": "BOFieldResolutionStatus"
+        },
+        "Role": {
+          "documentation": "",
+          "type": "FieldRole"
+        }
+      }
+    },
+    "BOLineageImpactSimulationRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        }
+      }
+    },
+    "BOLineageImpactSimulationResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "BlastRadiusScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "HighestSeverity": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ImpactedAssets": {
+          "documentation": "",
+          "type": "ImpactedAsset[]"
+        },
+        "IsBreakingChange": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "SimulationReport": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TotalImpacted": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BOMultiBackendConfiguration": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ActiveTier": {
+          "documentation": "",
+          "type": "StorageTier"
+        },
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Bindings": {
+          "documentation": "",
+          "type": "MultiBackendBinding[]"
+        },
+        "WatermarkDate": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "BOPromotionProposal": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CreatedAt": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CreatedBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "ReviewerNote": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SourceTenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOPublishGateValidationResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CanPublish": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "GateSummary": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MissingDependencies": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "UnresolvedFields": {
+          "documentation": "",
+          "type": "BOFieldEligibilityItem[]"
+        }
+      }
+    },
+    "BOQueryCostEvaluationRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EstimatedLimit": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Filters": {
+          "documentation": "",
+          "type": "BORecordFilter[]"
+        },
+        "SelectedFields": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "TargetDialect": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOQueryCostEvaluationResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "ComplexityScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "CostBand": {
+          "documentation": "",
+          "type": "QueryCostBand"
+        },
+        "EstimatedDurationMs": {
+          "documentation": "",
+          "type": "number"
+        },
+        "EstimatedRowsScanned": {
+          "documentation": "",
+          "type": "number"
+        },
+        "IsForbidden": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "PreAggregationTips": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "RequiresPartitionScan": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "SuggestedMaterializedView": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Violations": {
+          "documentation": "",
+          "type": "string[]"
+        }
+      }
+    },
+    "BORecordFilter": {
+      "documentation": "BORecordFilter represents a filter applied to physical records",
+      "kind": "interface",
+      "properties": {
+        "Field": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Operator": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Value": {
+          "documentation": "",
+          "type": "any"
+        }
+      }
+    },
+    "BORecordQueryRequest": {
+      "documentation": "BORecordQueryRequest represents a request to query physical records through a Business Object",
+      "kind": "interface",
+      "properties": {
+        "AsOfTransactionTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "AsOfValidTime": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Filters": {
+          "documentation": "",
+          "type": "BORecordFilter[]"
+        },
+        "Limit": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Page": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Search": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SortBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SortDir": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SubtypeKey": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BORecordQueryResponse": {
+      "documentation": "BORecordQueryResponse represents the paginated result of querying physical records",
+      "kind": "interface",
+      "properties": {
+        "Columns": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "DatasourceID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DriverTable": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ExecutionTimeMs": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Limit": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Page": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Rows": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e[]"
+        },
+        "Total": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BOScopeDiscoveryResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "BlockingIssues": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "CalculatedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DirectCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DrivingNodeID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DrivingTableName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EligibleFields": {
+          "documentation": "",
+          "type": "BOFieldEligibilityItem[]"
+        },
+        "IsPublishReady": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "ManualCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "RelatedCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "TotalDiscovered": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
+    "BOWorkflowActionRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Action": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Proposal": {
+          "documentation": "",
+          "type": "BOPromotionProposal"
+        },
+        "ReviewerNote": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Trigger": {
+          "documentation": "",
+          "type": "BOEventTrigger"
+        }
+      }
+    },
+    "BOWorkflowExecution": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "EndTime": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Error": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "StartTime": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TriggeredBy": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Workflow": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "BOWorkflowStatusResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "EventTriggers": {
+          "documentation": "",
+          "type": "BOEventTrigger[]"
+        },
+        "IsCore": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Key": {
+          "documentation": "",
+          "type": "string"
+        },
+        "LifecycleStatus": {
+          "documentation": "",
+          "type": "BOWorkflowLifecycleStatus"
+        },
+        "PendingProposals": {
+          "documentation": "",
+          "type": "BOPromotionProposal[]"
+        },
+        "RecentExecutions": {
+          "documentation": "",
+          "type": "BOWorkflowExecution[]"
         }
       }
     },
@@ -1694,6 +2654,14 @@
           "type": "any"
         }
       }
+    },
+    "BindingRequirement": {
+      "kind": "enum",
+      "values": [
+        "BACKEND_SPECIFIC",
+        "OPTIONAL",
+        "REQUIRED"
+      ]
     },
     "BrokenReference": {
       "documentation": "",
@@ -2359,9 +3327,25 @@
       "documentation": "BusinessObjectDefinition represents a complete Business Object",
       "kind": "interface",
       "properties": {
+        "BOTypeID": {
+          "documentation": "Core Identity Triple \u0026 Semantic Governance (Feature 1)",
+          "type": "any"
+        },
+        "Bindings": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e[]"
+        },
+        "BusinessKeyNodeID": {
+          "documentation": "",
+          "type": "any"
+        },
         "Category": {
           "documentation": "",
           "type": "string"
+        },
+        "ClassificationNodeID": {
+          "documentation": "",
+          "type": "any"
         },
         "CloneParentDisplayName": {
           "documentation": "",
@@ -2384,6 +3368,10 @@
           "type": "FieldDefinition[]"
         },
         "CoreID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "CoreReferenceBOID": {
           "documentation": "",
           "type": "any"
         },
@@ -2423,6 +3411,10 @@
           "documentation": "",
           "type": "boolean"
         },
+        "GrainNodeID": {
+          "documentation": "",
+          "type": "any"
+        },
         "HistoryMode": {
           "documentation": "",
           "type": "HistoryMode"
@@ -2459,6 +3451,10 @@
           "documentation": "",
           "type": "string"
         },
+        "ModelID": {
+          "documentation": "",
+          "type": "string"
+        },
         "Name": {
           "documentation": "",
           "type": "string"
@@ -2466,6 +3462,14 @@
         "ParentID": {
           "documentation": "",
           "type": "any"
+        },
+        "SemanticIDNodeID": {
+          "documentation": "",
+          "type": "any"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
         },
         "Subtypes": {
           "documentation": "",
@@ -2702,10 +3706,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "hasura": {
-          "documentation": "",
-          "type": "HasuraClient"
         },
         "rules": {
           "documentation": "",
@@ -3725,26 +4725,18 @@
       }
     },
     "Connection": {
-      "documentation": "Connection represents a unified datasource connection",
+      "documentation": "Connection represents a datasource connection from tenant_connections table",
       "kind": "interface",
       "properties": {
-        "APIKey": {
-          "documentation": "",
-          "type": "string"
-        },
-        "BaseURL": {
-          "documentation": "",
-          "type": "string"
-        },
         "CreatedAt": {
           "documentation": "",
           "type": "any"
         },
-        "Database": {
+        "DSN": {
           "documentation": "",
           "type": "string"
         },
-        "Host": {
+        "DatabaseType": {
           "documentation": "",
           "type": "string"
         },
@@ -3752,27 +4744,7 @@
           "documentation": "",
           "type": "string"
         },
-        "IsActive": {
-          "documentation": "",
-          "type": "boolean"
-        },
-        "Metadata": {
-          "documentation": "",
-          "type": "Record\u003cstring, any\u003e"
-        },
         "Name": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Password": {
-          "documentation": "",
-          "type": "string"
-        },
-        "Port": {
-          "documentation": "",
-          "type": "number"
-        },
-        "Schema": {
           "documentation": "",
           "type": "string"
         },
@@ -3780,17 +4752,9 @@
           "documentation": "",
           "type": "string"
         },
-        "Type": {
-          "documentation": "",
-          "type": "string"
-        },
         "UpdatedAt": {
           "documentation": "",
           "type": "any"
-        },
-        "Username": {
-          "documentation": "",
-          "type": "string"
         }
       }
     },
@@ -4238,11 +5202,19 @@
           "documentation": "",
           "type": "string"
         },
+        "CloneFromKeySnake": {
+          "documentation": "",
+          "type": "string"
+        },
         "Config": {
           "documentation": "",
           "type": "Record\u003cstring, any\u003e"
         },
         "DatasourceID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DatasourceIDSnake": {
           "documentation": "",
           "type": "string"
         },
@@ -4254,11 +5226,23 @@
           "documentation": "",
           "type": "string"
         },
+        "DisplayNameSnake": {
+          "documentation": "",
+          "type": "string"
+        },
         "DriverTableID": {
           "documentation": "",
           "type": "string"
         },
+        "DriverTableIDSnake": {
+          "documentation": "",
+          "type": "string"
+        },
         "DriverTableName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DriverTableNameSnake": {
           "documentation": "",
           "type": "string"
         },
@@ -4282,11 +5266,19 @@
           "documentation": "",
           "type": "string"
         },
+        "ParentIDSnake": {
+          "documentation": "",
+          "type": "string"
+        },
         "Status": {
           "documentation": "",
           "type": "string"
         },
         "TechnicalName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TechnicalNameSnake": {
           "documentation": "",
           "type": "string"
         }
@@ -4413,10 +5405,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "hasuraClient": {
-          "documentation": "",
-          "type": "HasuraClient"
         },
         "httpClient": {
           "documentation": "",
@@ -6811,10 +7799,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "hasura": {
-          "documentation": "",
-          "type": "HasuraClient"
         }
       }
     },
@@ -6976,6 +7960,40 @@
         "Term": {
           "documentation": "",
           "type": "string"
+        }
+      }
+    },
+    "FinancialPatternResult": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "FieldName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "InvalidCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "PassRate": {
+          "documentation": "",
+          "type": "number"
+        },
+        "PatternType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SampleCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SampleErrors": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "ValidCount": {
+          "documentation": "",
+          "type": "number"
         }
       }
     },
@@ -7469,6 +8487,88 @@
         }
       }
     },
+    "GraphRAGContextRequest": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOIDOrKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IncludeEdges": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "MaxDepth": {
+          "documentation": "",
+          "type": "number"
+        },
+        "UserQuery": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "GraphRAGContextResponse": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BOKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "MatchedNodes": {
+          "documentation": "",
+          "type": "GraphRAGNode[]"
+        },
+        "PromptContext": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ResolvedIntent": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantScoped": {
+          "documentation": "",
+          "type": "boolean"
+        }
+      }
+    },
+    "GraphRAGNode": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "NodeType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Properties": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Similarity": {
+          "documentation": "",
+          "type": "number"
+        }
+      }
+    },
     "GroupByProfile": {
       "documentation": "GroupByProfile represents usage stats for a specific grain.",
       "kind": "interface",
@@ -7501,10 +8601,6 @@
       "properties": {
         "db": {
           "documentation": "",
-          "type": "any"
-        },
-        "semanticService": {
-          "documentation": "Dependency on SemanticModelService to get asset metadata like certification status.",
           "type": "any"
         }
       }
@@ -7762,6 +8858,36 @@
           "type": "string"
         },
         "ScriptVersion": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "ImpactedAsset": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "AssetID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "AssetName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "AssetType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Details": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ImpactLevel": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Relationship": {
           "documentation": "",
           "type": "string"
         }
@@ -8270,6 +9396,14 @@
       "documentation": "JWTClaims represents JWT token claims",
       "kind": "interface",
       "properties": {
+        "AllowedBindings": {
+          "documentation": "",
+          "type": "any[]"
+        },
+        "AllowedDatasources": {
+          "documentation": "",
+          "type": "string[]"
+        },
         "IssuedAt": {
           "documentation": "",
           "type": "any"
@@ -8296,7 +9430,15 @@
       "documentation": "JWTManager handles JWT token operations",
       "kind": "interface",
       "properties": {
+        "mu": {
+          "documentation": "",
+          "type": "any"
+        },
         "refreshDuration": {
+          "documentation": "",
+          "type": "any"
+        },
+        "rsaPublicKey": {
           "documentation": "",
           "type": "any"
         },
@@ -8859,6 +10001,48 @@
           "type": "string"
         },
         "PromptTemplate": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "LakehouseMaintenanceReport": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BytesCompacted": {
+          "documentation": "",
+          "type": "number"
+        },
+        "CompactedFilesCount": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DurationMs": {
+          "documentation": "",
+          "type": "number"
+        },
+        "ExecutedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "ManifestsRewritten": {
+          "documentation": "",
+          "type": "number"
+        },
+        "SnapshotsExpired": {
+          "documentation": "",
+          "type": "number"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Table": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TenantID": {
           "documentation": "",
           "type": "string"
         }
@@ -9613,6 +10797,44 @@
         }
       }
     },
+    "MultiBackendBinding": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "BackendName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "CoveragePercentage": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DatasourceID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IsActive": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "PhysicalTarget": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Requirement": {
+          "documentation": "",
+          "type": "BindingRequirement"
+        },
+        "StorageTier": {
+          "documentation": "",
+          "type": "StorageTier"
+        }
+      }
+    },
     "MultiUpgradeOverviewResponse": {
       "documentation": "",
       "kind": "interface",
@@ -9620,6 +10842,24 @@
         "Versions": {
           "documentation": "",
           "type": "UpgradeOverviewResponse[]"
+        }
+      }
+    },
+    "NLQFilterItem": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Field": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Operator": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Value": {
+          "documentation": "",
+          "type": "any"
         }
       }
     },
@@ -10171,9 +11411,9 @@
       "documentation": "OAuthAuditService handles recording of audit events",
       "kind": "interface",
       "properties": {
-        "hasuraClient": {
+        "db": {
           "documentation": "",
-          "type": "HasuraClient"
+          "type": "any"
         }
       }
     },
@@ -11064,10 +12304,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "hasuraClient": {
-          "documentation": "",
-          "type": "HasuraClient"
         }
       }
     },
@@ -13836,10 +15072,6 @@
         "db": {
           "documentation": "",
           "type": "any"
-        },
-        "hasuraClient": {
-          "documentation": "",
-          "type": "HasuraClient"
         }
       }
     },
@@ -14099,6 +15331,48 @@
           "type": "string"
         },
         "Table": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "SchemaDriftProposal": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "AutoRepairScript": {
+          "documentation": "",
+          "type": "string"
+        },
+        "BOID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ConfidenceScore": {
+          "documentation": "",
+          "type": "number"
+        },
+        "DetectedAt": {
+          "documentation": "",
+          "type": "any"
+        },
+        "DriftType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ProposalID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SourceColumn": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Status": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TargetColumn": {
           "documentation": "",
           "type": "string"
         }
@@ -15073,6 +16347,15 @@
         }
       }
     },
+    "StorageTier": {
+      "kind": "enum",
+      "values": [
+        "API_FEDERATION",
+        "TIER_1_POSTGRES",
+        "TIER_2_STARROCKS",
+        "TIER_3_ICEBERG"
+      ]
+    },
     "SubtypeDefinition": {
       "documentation": "SubtypeDefinition represents a subtype within a BO",
       "kind": "interface",
@@ -15143,6 +16426,58 @@
         }
       }
     },
+    "SynthesizedCalculatedField": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DisplayName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Formula": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Type": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "SynthesizedRule": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Description": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Field": {
+          "documentation": "",
+          "type": "string"
+        },
+        "RuleName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Script": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Severity": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "Table": {
       "documentation": "Table represents a table within a schema.",
       "kind": "interface",
@@ -15152,6 +16487,74 @@
           "type": "Column[]"
         },
         "Name": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "TableColumnIntrospection": {
+      "documentation": "TableColumnIntrospection represents an introspected database column",
+      "kind": "interface",
+      "properties": {
+        "DataType": {
+          "documentation": "",
+          "type": "string"
+        },
+        "DefaultValue": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ForeignTable": {
+          "documentation": "",
+          "type": "string"
+        },
+        "IsForeignKey": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "IsNullable": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "IsPrimaryKey": {
+          "documentation": "",
+          "type": "boolean"
+        },
+        "Name": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "TableIntrospectionResponse": {
+      "documentation": "TableIntrospectionResponse represents the result of introspecting a table for BO creation",
+      "kind": "interface",
+      "properties": {
+        "Columns": {
+          "documentation": "",
+          "type": "TableColumnIntrospection[]"
+        },
+        "QualifiedPath": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "documentation": "",
+          "type": "FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "documentation": "",
+          "type": "string"
+        },
+        "SuggestedName": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TableID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "TableName": {
           "documentation": "",
           "type": "string"
         }
@@ -16635,6 +18038,50 @@
         }
       }
     },
+    "UisceASTNode": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Attributes": {
+          "documentation": "",
+          "type": "Record\u003cstring, any\u003e"
+        },
+        "Children": {
+          "documentation": "",
+          "type": "UisceASTNode[]"
+        },
+        "NodeType": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
+    "UisceSemanticAST": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Dialects": {
+          "documentation": "",
+          "type": "string[]"
+        },
+        "GeneratedSQL": {
+          "documentation": "",
+          "type": "Record\u003cstring, string\u003e"
+        },
+        "RootNode": {
+          "documentation": "",
+          "type": "UisceASTNode"
+        },
+        "TenantID": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Version": {
+          "documentation": "",
+          "type": "string"
+        }
+      }
+    },
     "UpdateBusinessObjectRequest": {
       "documentation": "UpdateBusinessObjectRequest represents a request to update a BO",
       "kind": "interface",
@@ -16908,12 +18355,34 @@
       }
     },
     "UpgradeService": {
-      "documentation": "UpgradeService provides methods for upgrading semantic models.",
+      "documentation": "",
       "kind": "interface",
       "properties": {
         "DB": {
           "documentation": "",
           "type": "any"
+        }
+      }
+    },
+    "UpgradeSimulation": {
+      "documentation": "",
+      "kind": "interface",
+      "properties": {
+        "Diff": {
+          "documentation": "",
+          "type": "patchDiff"
+        },
+        "FromVersion": {
+          "documentation": "",
+          "type": "string"
+        },
+        "ToVersion": {
+          "documentation": "",
+          "type": "string"
+        },
+        "Warnings": {
+          "documentation": "",
+          "type": "string[]"
         }
       }
     },
@@ -17708,6 +19177,10 @@
           "type": "CatalogService"
         },
         "db": {
+          "documentation": "",
+          "type": "any"
+        },
+        "goldcopyResolver": {
           "documentation": "",
           "type": "any"
         }

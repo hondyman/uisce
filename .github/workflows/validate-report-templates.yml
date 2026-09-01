@@ -1,0 +1,62 @@
+name: Validate Report & Booklet Templates (GitOps CI)
+
+on:
+  push:
+    paths:
+      - 'backend/internal/reporting/**'
+      - 'backend/internal/finops/**'
+      - 'backend/internal/compliance/**'
+      - 'frontend/src/components/reporting/**'
+      - 'frontend/src/components/governance/**'
+      - 'backend/db/migrations/**'
+  pull_request:
+    paths:
+      - 'backend/internal/reporting/**'
+      - 'backend/internal/finops/**'
+      - 'backend/internal/compliance/**'
+      - 'frontend/src/components/reporting/**'
+      - 'frontend/src/components/governance/**'
+      - 'backend/db/migrations/**'
+
+jobs:
+  validate-go-reporting:
+    name: Backend Reporting & Booklet Compiler CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: backend/go.sum
+
+      - name: Run Backend Unit Tests (Reporting, FinOps, Compliance)
+        working-directory: backend
+        run: |
+          go test -v -race ./internal/reporting/...
+          go test -v -race ./internal/finops/...
+          go test -v -race ./internal/compliance/...
+
+  validate-frontend-reporting:
+    name: Frontend Visual Studio & Components CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript & Vite Build Validation
+        working-directory: frontend
+        run: npm run build

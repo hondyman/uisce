@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // ProfileService implements the core security profile repository and enrichment.
@@ -80,7 +81,7 @@ func (s *ProfileService) EnrichSubjectAttributes(ctx context.Context, tenantID u
 	`
 
 	var role, clearance string
-	err := s.db.QueryRowContext(ctx, query, tenantID, idpGroups).Scan(&role, &clearance)
+	err := s.db.QueryRowContext(ctx, query, tenantID, pq.Array(idpGroups)).Scan(&role, &clearance)
 	if err == sql.ErrNoRows {
 		return "unassigned_operator", "L1", nil
 	} else if err != nil {

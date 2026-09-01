@@ -140,9 +140,12 @@ func (r *Renderer) renderHTML(ctx context.Context, layout *ReportLayout, data ma
 		.header { border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 30px; }
 		.section { margin-bottom: 30px; }
 		.section-title { font-size: 18px; font-weight: bold; margin-bottom: 15px; color: #333; }
-		table { width: 100%; border-collapse: collapse; }
+		table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
 		th, td { padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
 		th { background-color: #f5f5f5; font-weight: bold; }
+		thead { display: table-header-group; }
+		tfoot { display: table-footer-group; }
+		tr { page-break-inside: avoid; break-inside: avoid; }
 		.kpi-card { display: inline-block; padding: 20px; margin: 10px; background: #f8f9fa; border-radius: 8px; min-width: 150px; }
 		.kpi-title { font-size: 12px; color: #666; }
 		.kpi-value { font-size: 24px; font-weight: bold; color: #333; }
@@ -357,9 +360,17 @@ func renderHTMLSummary(buf *strings.Builder, section ReportSection, data *CubeRe
 }
 
 func renderHTMLTable(buf *strings.Builder, section ReportSection, data *CubeResult, params map[string]interface{}, conditionalStyles map[string]ConditionalStyle) {
-	buf.WriteString("<table>\n<thead>\n<tr>\n")
+	var pagination PaginationConfig
+	if section.Pagination != nil {
+		json.Unmarshal(section.Pagination, &pagination)
+	}
 
-	// Header row
+	if pagination.Mode == "paginate" {
+		renderHTMLTablePaginated(buf, section, data, params, conditionalStyles, pagination)
+		return
+	}
+
+	buf.WriteString("<table>\n<thead>\n<tr>\n")
 	for _, col := range section.Columns {
 		alignment := col.Alignment
 		if alignment == "" {
@@ -369,50 +380,158 @@ func renderHTMLTable(buf *strings.Builder, section ReportSection, data *CubeResu
 	}
 	buf.WriteString("</tr>\n</thead>\n<tbody>\n")
 
-	// Data rows
 	if data != nil {
 		for _, row := range data.Data {
-			buf.WriteString("<tr>\n")
-			for _, col := range section.Columns {
-				key := col.Dimension
-				if key == "" {
-					key = col.Measure
-				}
-
-				value := row[key]
-				formattedValue := formatValue(value, col.Format)
-
-				// Apply conditional styling
-				style := ""
-				if col.ConditionalStyle != "" {
-					if cs, ok := conditionalStyles[col.ConditionalStyle]; ok {
-						if numVal, ok := toFloat64(value); ok {
-							if numVal > 0 {
-								for k, v := range cs.Positive {
-									style += fmt.Sprintf("%s: %s; ", k, v)
-								}
-							} else if numVal < 0 {
-								for k, v := range cs.Negative {
-									style += fmt.Sprintf("%s: %s; ", k, v)
-								}
-							}
-						}
-					}
-				}
-
-				alignment := col.Alignment
-				if alignment == "" {
-					alignment = "left"
-				}
-				style += fmt.Sprintf("text-align: %s;", alignment)
-
-				buf.WriteString(fmt.Sprintf("<td style=\"%s\">%s</td>\n", style, formattedValue))
-			}
-			buf.WriteString("</tr>\n")
+			renderTableRow(buf, section, row, conditionalStyles)
 		}
 	}
 
 	buf.WriteString("</tbody>\n</table>\n")
+}
+
+type PaginationConfig struct {
+	Mode                  string `json:"mode"`
+	RowsPerPage           int    `json:"rowsPerPage"`
+	RepeatHeadersOnEachPage bool `json:"repeatHeadersOnEachPage"`
+	PageTotalEnabled      bool   `json:"pageTotalEnabled"`
+	PageTotalPosition     string `json:"pageTotalPosition"`
+	PageTotalLabel       string `json:"pageTotalLabel"`
+}
+
+func renderHTMLTablePaginated(buf *strings.Builder, section ReportSection, data *CubeResult, params map[string]interface{}, conditionalStyles map[string]ConditionalStyle, pagination PaginationConfig) {
+	rowsPerPage := pagination.RowsPerPage
+	if rowsPerPage <= 0 {
+		rowsPerPage = 20
+	}
+	pageTotalLabel := pagination.PageTotalLabel
+	if pageTotalLabel == "" {
+		pageTotalLabel = "Page Total"
+	}
+
+	if data == nil || len(data.Data) == 0 {
+		buf.WriteString("<table>\n<thead>\n<tr>\n")
+		for _, col := range section.Columns {
+			buf.WriteString(fmt.Sprintf("<th>%s</th>\n", col.Label))
+		}
+		buf.WriteString("</tr>\n</thead>\n<tbody>\n</tbody>\n</table>\n")
+		return
+	}
+
+	chunks := chunkSlice(data.Data, rowsPerPage)
+	for chunkIdx, chunk := range chunks {
+		if chunkIdx > 0 {
+			buf.WriteString("<!-- page break -->\n")
+		}
+
+		buf.WriteString("<table>\n")
+		if pagination.RepeatHeadersOnEachPage || chunkIdx == 0 {
+			buf.WriteString("<thead>\n<tr>\n")
+			for _, col := range section.Columns {
+				alignment := col.Alignment
+				if alignment == "" {
+					alignment = "left"
+				}
+				buf.WriteString(fmt.Sprintf("<th style=\"text-align: %s;\">%s</th>\n", alignment, col.Label))
+			}
+			buf.WriteString("</tr>\n</thead>\n")
+		}
+
+		if pagination.PageTotalEnabled && pagination.PageTotalPosition == "top" {
+			buf.WriteString("<tfoot>\n<tr>\n")
+			buf.WriteString(fmt.Sprintf("<td colspan=\"%d\" style=\"font-weight: bold; background-color: #f0f0f0;\">%s</td>\n", len(section.Columns), pageTotalLabel))
+			for _, col := range section.Columns[1:] {
+				val := sumColumn(chunk, col)
+				buf.WriteString(fmt.Sprintf("<td style=\"font-weight: bold; text-align: right;\">%s</td>\n", formatValue(val, col.Format)))
+			}
+			buf.WriteString("</tr>\n</tfoot>\n")
+		}
+
+		buf.WriteString("<tbody>\n")
+		for _, row := range chunk {
+			renderTableRow(buf, section, row, conditionalStyles)
+		}
+		buf.WriteString("</tbody>\n")
+
+		if pagination.PageTotalEnabled && pagination.PageTotalPosition != "top" {
+			buf.WriteString("<tfoot>\n<tr>\n")
+			buf.WriteString(fmt.Sprintf("<td colspan=\"%d\" style=\"font-weight: bold; background-color: #f0f0f0;\">%s</td>\n", len(section.Columns), pageTotalLabel))
+			for _, col := range section.Columns[1:] {
+				val := sumColumn(chunk, col)
+				buf.WriteString(fmt.Sprintf("<td style=\"font-weight: bold; text-align: right;\">%s</td>\n", formatValue(val, col.Format)))
+			}
+			buf.WriteString("</tr>\n</tfoot>\n")
+		}
+
+		buf.WriteString("</table>\n")
+	}
+}
+
+func chunkSlice(rows []map[string]interface{}, size int) [][]map[string]interface{} {
+	var chunks [][]map[string]interface{}
+	for i := 0; i < len(rows); i += size {
+		end := i + size
+		if end > len(rows) {
+			end = len(rows)
+		}
+		chunks = append(chunks, rows[i:end])
+	}
+	return chunks
+}
+
+func sumColumn(rows []map[string]interface{}, col TableColumn) interface{} {
+	key := col.Dimension
+	if key == "" {
+		key = col.Measure
+	}
+	if key == "" {
+		return 0
+	}
+	var total float64
+	for _, row := range rows {
+		if v, ok := toFloat64(row[key]); ok {
+			total += v
+		}
+	}
+	return total
+}
+
+func renderTableRow(buf *strings.Builder, section ReportSection, row map[string]interface{}, conditionalStyles map[string]ConditionalStyle) {
+	buf.WriteString("<tr>\n")
+	for _, col := range section.Columns {
+		key := col.Dimension
+		if key == "" {
+			key = col.Measure
+		}
+
+		value := row[key]
+		formattedValue := formatValue(value, col.Format)
+
+		style := ""
+		if col.ConditionalStyle != "" {
+			if cs, ok := conditionalStyles[col.ConditionalStyle]; ok {
+				if numVal, ok := toFloat64(value); ok {
+					if numVal > 0 {
+						for k, v := range cs.Positive {
+							style += fmt.Sprintf("%s: %s; ", k, v)
+						}
+					} else if numVal < 0 {
+						for k, v := range cs.Negative {
+							style += fmt.Sprintf("%s: %s; ", k, v)
+						}
+					}
+				}
+			}
+		}
+
+		alignment := col.Alignment
+		if alignment == "" {
+			alignment = "left"
+		}
+		style += fmt.Sprintf("text-align: %s;", alignment)
+
+		buf.WriteString(fmt.Sprintf("<td style=\"%s\">%s</td>\n", style, formattedValue))
+	}
+	buf.WriteString("</tr>\n")
 }
 
 func renderHTMLChart(buf *strings.Builder, section ReportSection, data *CubeResult, params map[string]interface{}) {

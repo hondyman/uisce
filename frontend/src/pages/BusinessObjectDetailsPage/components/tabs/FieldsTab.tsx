@@ -33,6 +33,7 @@ import {
 import { Menu, MenuItem, ListItemIcon, ListItemText } from '@mui/material';
 import { useState } from 'react';
 import type { Field } from '../../../types/entity-schema';
+import { SubtypeScopeIcon } from '../../../../components/common/CoreCustomIcons';
 
 type SortConfig = { key: string; direction: 'asc' | 'desc' };
 
@@ -261,14 +262,8 @@ export function FieldsTab({
                     </Stack>
                   </TableCell>
                   {selectedNode?.type === 'subtype' && (
-                    <TableCell>
-                      <Chip
-                        label={isInherited ? 'Inherited' : 'Assigned'}
-                        size="small"
-                        variant="filled"
-                        color={isInherited ? 'default' : 'primary'}
-                        sx={{ fontWeight: 600, fontSize: '0.7rem' }}
-                      />
+                    <TableCell align="center">
+                      <SubtypeScopeIcon isInherited={isInherited} fontSize={18} />
                     </TableCell>
                   )}
                   <TableCell>

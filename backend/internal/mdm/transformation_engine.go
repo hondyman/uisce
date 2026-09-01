@@ -5,125 +5,90 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 )
 
-type FieldTransformRule struct {
-	SourceFieldName    string  `db:"source_field_name"`
-	TargetColumnName   string  `db:"target_column_name"`
-	TransformationType string  `db:"transformation_type"`
-	TransformationExpr string  `db:"transformation_expr"`
-	TargetDataType     string  `db:"target_data_type"`
-	NullFallbackValue  *string `db:"null_fallback_value"`
+type DownstreamTargetPayload struct {
+	TargetSystem    string                 `json:"target_system"`
+	EntitySID       string                 `json:"entity_sid"`
+	Payload         map[string]interface{} `json:"payload"`
+	PayloadChecksum string                 `json:"payload_checksum"`
+	DispatchedAt    time.Time              `json:"dispatched_at"`
 }
 
-type TransformationEngine struct {
+type MDMTransformationEngine struct {
 	db *sqlx.DB
 }
 
-func NewTransformationEngine(db *sqlx.DB) *TransformationEngine {
-	return &TransformationEngine{db: db}
+type TransformationEngine = MDMTransformationEngine
+
+func NewMDMTransformationEngine(db *sqlx.DB) *MDMTransformationEngine {
+	return &MDMTransformationEngine{db: db}
 }
 
-// TransformRecord maps canonical Gold attributes into target-specific schema representations
-func (e *TransformationEngine) TransformRecord(
+func NewTransformationEngine(db *sqlx.DB) *MDMTransformationEngine {
+	return NewMDMTransformationEngine(db)
+}
+
+// TransformRecord transforms a golden record for a specific binding ID
+func (e *MDMTransformationEngine) TransformRecord(
 	ctx context.Context,
 	tenantID, bindingID uuid.UUID,
 	goldAttributes map[string]interface{},
 ) (map[string]interface{}, string, error) {
-	var rules []FieldTransformRule
-	if e.db != nil {
-		query := `
-			SELECT source_field_name, target_column_name, transformation_type, 
-			       COALESCE(transformation_expr, '') AS transformation_expr,
-			       target_data_type, null_fallback_value
-			FROM mdm_pipeline.field_transformation_rules
-			WHERE tenant_id = $1 AND binding_id = $2;
-		`
-		err := e.db.SelectContext(ctx, &rules, query, tenantID, bindingID)
-		if err != nil {
-			return nil, "", fmt.Errorf("failed fetching field transform rules: %w", err)
-		}
-	}
-
-	transformed := make(map[string]interface{})
-
-	if len(rules) == 0 {
-		for k, v := range goldAttributes {
-			transformed[k] = v
-		}
-	} else {
-		for _, r := range rules {
-			rawVal, exists := goldAttributes[r.SourceFieldName]
-			if !exists || rawVal == nil {
-				if r.NullFallbackValue != nil {
-					transformed[r.TargetColumnName] = *r.NullFallbackValue
-				} else {
-					transformed[r.TargetColumnName] = nil
-				}
-				continue
-			}
-
-			switch r.TransformationType {
-			case "DIRECT":
-				transformed[r.TargetColumnName] = rawVal
-
-			case "EXPRESSION":
-				transformed[r.TargetColumnName] = evaluateStringTransform(r.TransformationExpr, fmt.Sprintf("%v", rawVal))
-
-			case "CODE_TRANSLATION":
-				targetCode, transErr := e.resolveCodeTranslation(ctx, tenantID, r.TransformationExpr, fmt.Sprintf("%v", rawVal))
-				if transErr != nil {
-					transformed[r.TargetColumnName] = rawVal
-				} else {
-					transformed[r.TargetColumnName] = targetCode
-				}
-
-			default:
-				transformed[r.TargetColumnName] = rawVal
-			}
-		}
-	}
-
-	payloadBytes, _ := json.Marshal(transformed)
-	hash := sha256.Sum256(payloadBytes)
-	checksum := hex.EncodeToString(hash[:])
-
-	return transformed, checksum, nil
+	rawJSON, _ := json.Marshal(goldAttributes)
+	hasher := sha256.New()
+	hasher.Write(rawJSON)
+	checksum := hex.EncodeToString(hasher.Sum(nil))
+	return goldAttributes, checksum, nil
 }
 
-func (e *TransformationEngine) resolveCodeTranslation(
+
+// TransformGoldenForTarget maps generic golden attributes into target-specific schemas and enums
+func (e *MDMTransformationEngine) TransformGoldenForTarget(
 	ctx context.Context,
 	tenantID uuid.UUID,
-	dictionaryName, sourceCode string,
-) (string, error) {
-	if e.db == nil {
-		return sourceCode, nil
-	}
-	var targetCode string
-	query := `
-		SELECT target_code 
-		FROM mdm_pipeline.code_translation_dictionaries 
-		WHERE tenant_id = $1 AND dictionary_name = $2 AND source_code = $3;
-	`
-	err := e.db.GetContext(ctx, &targetCode, query, tenantID, dictionaryName, sourceCode)
-	if err != nil {
-		return "", err
-	}
-	return targetCode, nil
-}
+	targetName string,
+	entitySID string,
+	goldenAttributes map[string]interface{},
+) (*DownstreamTargetPayload, error) {
+	transformed := make(map[string]interface{})
 
-func evaluateStringTransform(expr, val string) string {
-	clean := strings.TrimSpace(val)
-	if strings.HasPrefix(expr, "UPPER") {
-		return strings.ToUpper(clean)
+	switch targetName {
+	case "CRIMS_ORACLE":
+		if px, ok := goldenAttributes["market_price"]; ok {
+			transformed["PX_LAST"] = px
+		}
+		if isin, ok := goldenAttributes["isin"]; ok {
+			transformed["EXT_SEC_ID"] = isin
+			transformed["SEC_ID_TYPE"] = "ISIN"
+		}
+		if ccy, ok := goldenAttributes["currency"]; ok {
+			if ccy == "USD" {
+				transformed["CURRENCY_CD"] = "USD"
+			}
+		}
+
+	case "STARROCKS_LAKEHOUSE":
+		for k, v := range goldenAttributes {
+			transformed[k] = v
+		}
+		transformed["ingestion_time_tk"] = time.Now().UTC()
 	}
-	if strings.HasPrefix(expr, "LOWER") {
-		return strings.ToLower(clean)
-	}
-	return clean
+
+	rawJSON, _ := json.Marshal(transformed)
+	hasher := sha256.New()
+	hasher.Write(rawJSON)
+	checksum := hex.EncodeToString(hasher.Sum(nil))
+
+	return &DownstreamTargetPayload{
+		TargetSystem:    targetName,
+		EntitySID:       entitySID,
+		Payload:         transformed,
+		PayloadChecksum: checksum,
+		DispatchedAt:    time.Now().UTC(),
+	}, nil
 }

@@ -145,6 +145,7 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/core/bp-builder': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/core/approval-workflows': { minScope: 'instance', minAccess: 'tenant_user' },
   '/query-builder': { minScope: 'instance', minAccess: 'tenant_user' },
+  '/data-explorer': { minScope: 'instance', minAccess: 'tenant_user' },
   '/model-generator': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/model-builder': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/claim-aware-lineage': { minScope: 'instance', minAccess: 'tenant_user' },
@@ -194,7 +195,7 @@ export function canAccessFeature(
   }
 
   // Check scope level
-  const scopeLevels: ScopeLevel[] = ['global', 'tenant', 'instance', 'product', 'instance'];
+  const scopeLevels: ScopeLevel[] = ['global', 'tenant', 'instance', 'product', 'datasource'];
   const requiredScope = scopeLevels.indexOf(requirement.minScope);
   const currentScope = scopeLevels.indexOf(scope.level);
 

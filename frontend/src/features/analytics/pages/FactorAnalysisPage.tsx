@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
 import { FactorExposureChart } from '../../../components/analytics/FactorExposureChart';
 import { AttributionTable } from '../../../components/analytics/AttributionTable';
 
-// Mock API calls for now - in real app, use fetch/axios calling the Go backend
 const fetchExposure = async (portfolioID: string) => {
-  // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 500));
-  // In production: const res = await fetch(`/api/analytics/factors/exposure/${portfolioID}`); return res.json();
   return {
     portfolio_id: portfolioID,
     betas: {
@@ -21,7 +22,6 @@ const fetchExposure = async (portfolioID: string) => {
 
 const fetchAttribution = async (portfolioID: string) => {
   await new Promise(resolve => setTimeout(resolve, 500));
-  // In production: const res = await fetch(`/api/analytics/factors/attribution/${portfolioID}`); return res.json();
   return {
     TotalReturn: 0.045,
     AlphaContribution: 0.012,
@@ -35,13 +35,13 @@ const fetchAttribution = async (portfolioID: string) => {
 };
 
 export const FactorAnalysisPage: React.FC = () => {
+  const theme = useTheme();
   const { portfolioID } = useParams<{ portfolioID: string }>();
   const [exposure, setExposure] = useState<any>(null);
   const [attribution, setAttribution] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Default to a demo portfolio if no ID provided
     const pid = portfolioID || "demo-portfolio-001";
     
     Promise.all([
@@ -54,24 +54,26 @@ export const FactorAnalysisPage: React.FC = () => {
     });
   }, [portfolioID]);
 
-  if (loading) return <div className="p-8">Loading analytics...</div>;
+  if (loading) return <Box sx={{ p: 4, color: theme.palette.text.primary }}>Loading analytics...</Box>;
 
   return (
-    <div className="p-8 bg-gray-50 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6">Factor Analytics: {portfolioID || "Demo Portfolio"}</h1>
+    <Box sx={{ p: 4, bgcolor: theme.palette.background.paper, minHeight: '100vh' }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>
+        Factor Analytics: {portfolioID || "Demo Portfolio"}
+      </Typography>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white p-6 rounded-lg shadow">
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 4 }}>
+        <Paper sx={{ p: 3 }}>
           <FactorExposureChart betas={exposure.betas} />
-          <div className="mt-4 text-sm text-gray-500 text-center">
+          <Box sx={{ mt: 2, textAlign: 'center', fontSize: '0.875rem', color: theme.palette.text.secondary }}>
             R-Squared: {(exposure.r_squared * 100).toFixed(1)}%
-          </div>
-        </div>
+          </Box>
+        </Paper>
 
-        <div className="bg-white p-6 rounded-lg shadow">
+        <Paper sx={{ p: 3 }}>
           <AttributionTable data={attribution} />
-        </div>
-      </div>
-    </div>
+        </Paper>
+      </Box>
+    </Box>
   );
 };

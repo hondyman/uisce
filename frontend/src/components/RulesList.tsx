@@ -8,6 +8,11 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import RuleCard from './RuleCard';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface RulesListProps {
   rules: any[];
@@ -33,7 +38,9 @@ const RulesList: React.FC<RulesListProps> = ({
   searchTerm = '',
   sortBy = 'name',
 }) => {
+  const theme = useTheme();
   const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
+  const isDark = theme.palette.mode === 'dark';
 
   // Memoize filtered and sorted rules
   const displayedRules = useMemo(() => {
@@ -94,48 +101,76 @@ const RulesList: React.FC<RulesListProps> = ({
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="animate-spin inline-block w-8 h-8 border-4 border-gray-300 dark:border-gray-600 border-t-blue-600 rounded-full"></div>
-        <p className="text-gray-600 dark:text-gray-400 mt-4">Loading rules...</p>
-      </div>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <CircularProgress size={32} sx={{ display: 'inline-block' }} />
+        <Typography sx={{ color: isDark ? 'grey.400' : 'grey.600', mt: 2 }}>
+          Loading rules...
+        </Typography>
+      </Box>
     );
   }
 
   if (rules.length === 0) {
     return (
-      <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-        <ErrorOutlineIcon sx={{ fontSize: 48 }} className="mx-auto mb-4" color="disabled" />
-        <p className="text-gray-600 dark:text-gray-400 mb-4">No validation rules yet</p>
-        <button
+      <Box
+        sx={{
+          textAlign: 'center',
+          py: 6,
+          border: '2px dashed',
+          borderColor: isDark ? 'grey.600' : 'grey.300',
+          borderRadius: 2,
+        }}
+      >
+        <ErrorOutlineIcon sx={{ fontSize: 48, mx: 'auto', mb: 2, color: 'grey.500' }} />
+        <Typography sx={{ color: isDark ? 'grey.400' : 'grey.600', mb: 2 }}>
+          No validation rules yet
+        </Typography>
+        <Button
+          variant="contained"
           onClick={onCreateNew}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          sx={{
+            backgroundColor: '#2563eb',
+            '&:hover': { backgroundColor: '#1d4ed8' },
+            color: 'white',
+            borderRadius: '8px',
+          }}
         >
           Create First Rule
-        </button>
-      </div>
+        </Button>
+      </Box>
     );
   }
 
   if (displayedRules.length === 0) {
     return (
-      <div className="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
-        <ErrorOutlineIcon sx={{ fontSize: 48 }} className="mx-auto mb-4" color="disabled" />
-        <p className="text-gray-600 dark:text-gray-400 mb-4">No rules match your filters</p>
-        <p className="text-sm text-gray-500 dark:text-gray-500">
+      <Box
+        sx={{
+          textAlign: 'center',
+          py: 6,
+          border: '2px dashed',
+          borderColor: isDark ? 'grey.600' : 'grey.300',
+          borderRadius: 2,
+        }}
+      >
+        <ErrorOutlineIcon sx={{ fontSize: 48, mx: 'auto', mb: 2, color: 'grey.500' }} />
+        <Typography sx={{ color: isDark ? 'grey.400' : 'grey.600', mb: 2 }}>
+          No rules match your filters
+        </Typography>
+        <Typography variant="body2" sx={{ color: isDark ? 'grey.500' : 'grey.500' }}>
           {searchTerm && `Search: "${searchTerm}"`}
           {filterType && filterType !== 'ALL' && ` • Type: ${filterType}`}
-        </p>
-      </div>
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="text-sm text-gray-600 dark:text-gray-400">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Typography variant="body2" sx={{ color: isDark ? 'grey.400' : 'grey.600' }}>
         Showing {displayedRules.length} of {rules.length} rules
-      </div>
+      </Typography>
 
-      <div className="grid gap-4">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {displayedRules.map((rule) => (
           <RuleCard
             key={rule.id}
@@ -145,8 +180,8 @@ const RulesList: React.FC<RulesListProps> = ({
             isDeleting={deletingRuleId === rule.id}
           />
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };
 

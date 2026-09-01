@@ -1,9 +1,26 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTheme } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import Paper from "@mui/material/Paper";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
+import Chip from "@mui/material/Chip";
 import { observabilityApi, RuleLineage } from "../../api/observabilityApi";
 import { format } from "date-fns";
 
 export function RuleLineageExplorerPage() {
+  const theme = useTheme();
   const [ruleId, setRuleId] = useState("");
   const [tenantId, setTenantId] = useState("");
   const [status, setStatus] = useState("");
@@ -11,135 +28,135 @@ export function RuleLineageExplorerPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["rule-lineage", ruleId, tenantId, status],
     queryFn: () => observabilityApi.getRuleLineage(ruleId, { tenant_id: tenantId || undefined, status: status || undefined }),
-    enabled: !!ruleId // Only fetch if we have a Rule ID
+    enabled: !!ruleId
   });
 
   const getStatusBadge = (runStatus: string) => {
     switch (runStatus) {
       case "PASS":
-        return <span className="px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-800">PASS</span>;
+        return <Chip label="PASS" size="small" sx={{ bgcolor: 'success.light', color: 'success.dark', fontWeight: 700, fontSize: '0.75rem' }} />;
       case "FAIL":
-        return <span className="px-2 py-1 text-xs font-bold rounded bg-red-100 text-red-800">FAIL</span>;
+        return <Chip label="FAIL" size="small" sx={{ bgcolor: 'error.light', color: 'error.dark', fontWeight: 700, fontSize: '0.75rem' }} />;
       case "WARNING":
-        return <span className="px-2 py-1 text-xs font-bold rounded bg-yellow-100 text-yellow-800">WARNING</span>;
+        return <Chip label="WARNING" size="small" sx={{ bgcolor: 'warning.light', color: 'warning.dark', fontWeight: 700, fontSize: '0.75rem' }} />;
       default:
-        return <span className="px-2 py-1 text-xs font-bold rounded bg-gray-100 text-gray-800">{runStatus}</span>;
+        return <Chip label={runStatus} size="small" sx={{ bgcolor: 'grey.100', color: 'grey.800', fontWeight: 700, fontSize: '0.75rem' }} />;
     }
   };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Rule Lineage Trace</h1>
-          <p className="text-sm text-gray-500 mt-1">Explore historical executions and semantic evaluation lineage for Compliance Rules.</p>
-        </div>
-      </div>
+    <Box sx={{ p: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: 'grey.900' }}>
+            Rule Lineage Trace
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'grey.500', mt: 0.5 }}>
+            Explore historical executions and semantic evaluation lineage for Compliance Rules.
+          </Typography>
+        </Box>
+      </Box>
 
-      <div className="mb-6 flex gap-4 p-4 bg-white rounded-lg shadow-sm border border-gray-200">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Rule ID (Required)</label>
-          <input
-            type="text"
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-72 font-mono"
-            placeholder="UUID of the rule..."
-            value={ruleId}
-            onChange={(e) => setRuleId(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tenant ID</label>
-          <input
-            type="text"
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-48 font-mono"
-            placeholder="Optional"
-            value={tenantId}
-            onChange={(e) => setTenantId(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Outcome</label>
-          <select
-            className="border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm px-3 py-2 border w-40"
+      <Paper sx={{ mb: 3, p: 2, display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+        <TextField
+          label="Rule ID (Required)"
+          placeholder="UUID of the rule..."
+          value={ruleId}
+          onChange={(e) => setRuleId(e.target.value)}
+          size="small"
+          sx={{ width: 288, '& input': { fontFamily: 'monospace' } }}
+        />
+        <TextField
+          label="Tenant ID"
+          placeholder="Optional"
+          value={tenantId}
+          onChange={(e) => setTenantId(e.target.value)}
+          size="small"
+          sx={{ width: 192, '& input': { fontFamily: 'monospace' } }}
+        />
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <InputLabel>Outcome</InputLabel>
+          <Select
             value={status}
+            label="Outcome"
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="">All</option>
-            <option value="PASS">Pass</option>
-            <option value="FAIL">Fail</option>
-            <option value="WARNING">Warning</option>
-          </select>
-        </div>
-      </div>
+            <MenuItem value="">All</MenuItem>
+            <MenuItem value="PASS">Pass</MenuItem>
+            <MenuItem value="FAIL">Fail</MenuItem>
+            <MenuItem value="WARNING">Warning</MenuItem>
+          </Select>
+        </FormControl>
+      </Paper>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
+      <Paper sx={{ overflow: 'hidden' }}>
         {!ruleId ? (
-          <div className="p-8 text-center text-gray-500">Please enter a Rule ID to view execution lineage.</div>
+          <Box sx={{ p: 4, textAlign: 'center', color: 'grey.500' }}>Please enter a Rule ID to view execution lineage.</Box>
         ) : isLoading ? (
-          <div className="p-8 text-center text-gray-500">Fetching lineage traces...</div>
+          <Box sx={{ p: 4, textAlign: 'center', color: 'grey.500' }}>Fetching lineage traces...</Box>
         ) : error ? (
-          <div className="p-8 text-center text-red-500">Error loading rule lineage.</div>
+          <Box sx={{ p: 4, textAlign: 'center', color: 'error.main' }}>Error loading rule lineage.</Box>
         ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Portfolio / Target</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Outcome</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Metric vs Threshold</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">WASM Perf</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Semantics Hit</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {data?.lineage?.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
-                    No traces found for this Rule ID.
-                  </td>
-                </tr>
-              ) : (
-                data?.lineage?.map((trace: RuleLineage) => (
-                  <tr key={trace.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {format(new Date(trace.valuation_date), "MMM d, yyyy")}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <div className="font-mono text-xs mb-1" title="Portfolio ID">{trace.portfolio_id.split('-')[0]}</div>
-                      {trace.security_id && <div className="font-mono text-xs text-blue-600" title="Security Focus">{trace.security_id.split('-')[0]}</div>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(trace.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                       {(trace.metric_value !== undefined && trace.threshold_value !== undefined) ? (
-                         <div className="flex items-center gap-2">
-                           <span className={`text-sm font-mono ${trace.status === 'FAIL' ? 'text-red-600 font-bold' : 'text-gray-900'}`}>{trace.metric_value}</span>
-                           <span className="text-gray-400 text-xs">/</span>
-                           <span className="text-sm font-mono text-gray-500">{trace.threshold_value}</span>
-                         </div>
-                       ) : <span className="text-gray-400">-</span>}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{trace.duration_ms} ms</div>
-                      <div className="text-xs text-gray-400 font-mono" title="WASM Engine Version">{trace.wasm_version_id.split('-')[0]}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
-                       <div className="flex flex-wrap gap-1">
-                          {trace.semantic_terms_used?.length > 0 ? trace.semantic_terms_used.map(term => (
-                            <span key={term} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-100 rounded text-xs">
-                              {term}
-                            </span>
-                          )) : <span className="text-gray-400">None mapped</span>}
-                       </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Date</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Portfolio / Target</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Outcome</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Metric vs Threshold</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>WASM Perf</TableCell>
+                  <TableCell sx={{ fontWeight: 600, color: 'grey.500', fontSize: '0.75rem' }}>Semantics Hit</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data?.lineage?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ p: 4, textAlign: 'center', color: 'grey.500', fontSize: '0.875rem' }}>
+                      No traces found for this Rule ID.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  data?.lineage?.map((trace: RuleLineage) => (
+                    <TableRow key={trace.id} hover sx={{ '&:hover': { bgcolor: 'grey.50' } }}>
+                      <TableCell sx={{ fontWeight: 500, color: 'grey.900', fontSize: '0.875rem' }}>
+                        {format(new Date(trace.valuation_date), "MMM d, yyyy")}
+                      </TableCell>
+                      <TableCell sx={{ color: 'grey.500', fontSize: '0.875rem' }}>
+                        <Box sx={{ fontFamily: 'monospace', fontSize: '0.75rem', mb: 0.5 }} title="Portfolio ID">{trace.portfolio_id.split('-')[0]}</Box>
+                        {trace.security_id && <Box sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'primary.main' }} title="Security Focus">{trace.security_id.split('-')[0]}</Box>}
+                      </TableCell>
+                      <TableCell>
+                        {getStatusBadge(trace.status)}
+                      </TableCell>
+                      <TableCell>
+                         {(trace.metric_value !== undefined && trace.threshold_value !== undefined) ? (
+                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                             <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: trace.status === 'FAIL' ? 'error.main' : 'grey.900', fontWeight: trace.status === 'FAIL' ? 700 : 400 }}>{trace.metric_value}</Box>
+                             <Box component="span" sx={{ color: 'grey.400', fontSize: '0.75rem' }}>/</Box>
+                             <Box component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'grey.500' }}>{trace.threshold_value}</Box>
+                           </Box>
+                         ) : <Box sx={{ color: 'grey.400' }}>-</Box>}
+                      </TableCell>
+                      <TableCell>
+                        <Box sx={{ fontSize: '0.875rem', color: 'grey.900' }}>{trace.duration_ms} ms</Box>
+                        <Box sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'grey.400' }} title="WASM Engine Version">{trace.wasm_version_id.split('-')[0]}</Box>
+                      </TableCell>
+                      <TableCell sx={{ color: 'grey.500', fontSize: '0.875rem' }}>
+                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                            {trace.semantic_terms_used?.length > 0 ? trace.semantic_terms_used.map(term => (
+                              <Chip key={term} label={term} size="small" sx={{ bgcolor: 'primary.light', color: 'primary.dark', border: '1px solid', borderColor: 'primary.200', fontSize: '0.75rem' }} />
+                            )) : <Box sx={{ color: 'grey.400' }}>None mapped</Box>}
+                         </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   );
 }

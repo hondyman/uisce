@@ -1,4 +1,18 @@
 import { useEffect, useState } from "react";
+import {
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  CircularProgress,
+} from "@mui/material";
 
 interface JITGrantAuditEvent {
   id: string;
@@ -10,6 +24,7 @@ interface JITGrantAuditEvent {
 }
 
 export function JITAuditDashboard() {
+  const theme = useTheme();
   const [events, setEvents] = useState<JITGrantAuditEvent[]>([]);
   const [userId, setUserId] = useState("");
   const [bundleId, setBundleId] = useState("");
@@ -43,61 +58,67 @@ export function JITAuditDashboard() {
   };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">JIT Audit & Compliance Dashboard</h2>
-      <div className="flex gap-4 mb-4">
-        <input
-          placeholder="Filter by User ID"
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
+        JIT Audit & Compliance Dashboard
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+        <TextField
+          label="Filter by User ID"
           value={userId}
           onChange={e => setUserId(e.target.value)}
-          className="border px-2 py-1 rounded"
+          size="small"
+          sx={{ minWidth: 200 }}
         />
-        <input
-          placeholder="Filter by Bundle ID"
+        <TextField
+          label="Filter by Bundle ID"
           value={bundleId}
           onChange={e => setBundleId(e.target.value)}
-          className="border px-2 py-1 rounded"
+          size="small"
+          sx={{ minWidth: 200 }}
         />
-        <button
-          className="bg-blue-600 text-white px-4 py-1 rounded"
+        <Button
+          variant="contained"
           onClick={exportCSV}
           disabled={!events.length}
         >
           Export CSV
-        </button>
-      </div>
+        </Button>
+      </Box>
       {loading ? (
-        <div className="text-gray-500">Loading audit events...</div>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+          <CircularProgress />
+        </Box>
       ) : !events.length ? (
-        <div className="text-gray-500">No audit events found.</div>
+        <Typography color="text.secondary">No audit events found.</Typography>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border rounded shadow-sm">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="px-3 py-2 text-left">ID</th>
-                <th className="px-3 py-2 text-left">Grant ID</th>
-                <th className="px-3 py-2 text-left">User ID</th>
-                <th className="px-3 py-2 text-left">Event Type</th>
-                <th className="px-3 py-2 text-left">Reason</th>
-                <th className="px-3 py-2 text-left">Occurred At</th>
-              </tr>
-            </thead>
-            <tbody>
+        <TableContainer component={Paper} sx={{ borderRadius: 1, boxShadow: 1 }}>
+          <Table>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: theme.palette.grey[100] }}>
+                <TableCell sx={{ fontWeight: 600 }}>ID</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Grant ID</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>User ID</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Event Type</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Reason</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Occurred At</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {events.map(e => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2">{e.id}</td>
-                  <td className="px-3 py-2">{e.grantId}</td>
-                  <td className="px-3 py-2">{e.userId}</td>
-                  <td className="px-3 py-2">{e.eventType}</td>
-                  <td className="px-3 py-2">{e.reason}</td>
-                  <td className="px-3 py-2">{e.occurredAt}</td>
-                </tr>
+                <TableRow key={e.id} hover>
+                  <TableCell>{e.id}</TableCell>
+                  <TableCell>{e.grantId}</TableCell>
+                  <TableCell>{e.userId}</TableCell>
+                  <TableCell>{e.eventType}</TableCell>
+                  <TableCell>{e.reason}</TableCell>
+                  <TableCell>{e.occurredAt}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableBody>
+          </Table>
+        </TableContainer>
       )}
-    </div>
+    </Box>
   );
 }

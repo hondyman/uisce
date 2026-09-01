@@ -156,7 +156,7 @@ func TestGetBusinessObjectHandler_AttachesChildren(t *testing.T) {
 	child := &models.BusinessObjectDefinition{ID: "child1", Key: "child_key", Name: "Child", ParentID: sql.NullString{String: "parent1", Valid: true}, CustomFields: []models.FieldDefinition{{Key: "f1", Name: "Field 1"}}}
 
 	svc := &fakeService{parent: parent, list: []*models.BusinessObjectDefinition{child}}
-	h := httpapi.NewBusinessObjectHandler(svc, &mockResolver{}, nil)
+	h := httpapi.NewBusinessObjectHandler(svc, &mockResolver{}, nil, nil)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -186,7 +186,7 @@ func TestListBusinessObjects_UsesNewDatasourceHeader(t *testing.T) {
 		captured = secCtx.DatasourceID
 		return f.list, nil
 	}
-	h := httpapi.NewBusinessObjectHandler(f, &mockResolver{}, nil)
+	h := httpapi.NewBusinessObjectHandler(f, &mockResolver{}, nil, nil)
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 

@@ -1,8 +1,11 @@
 package boresolver
 
 import (
+	"context"
+	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -207,5 +210,77 @@ func TestResolvePolymorphicField(t *testing.T) {
 	assert.Equal(t, "get_json_string(t1.tenant_extensions, '$.loyalty_score')", coldTransExpr)
 }
 
+func TestBOSQLGenerator_MultiPhaseFanOutMitigation(t *testing.T) {
+	ctx := context.Background()
+	tenantID := uuid.New()
+	generator, _ := NewBOSQLGenerator(nil, "postgres")
 
+	req := MultiPhaseSQLRequest{
+		TenantID:      tenantID,
+		RootBOKey:     "customer",
+		RootTableName: "public.customers",
+		SelectedFields: []FieldSelection{
+			{
+				FieldKey:     "customer_id",
+				SourceType:   "DIRECT",
+				Cardinality:  "1:1",
+				Aggregation:  "NONE",
+				TechnicalCol: "customer_id",
+				Alias:        "customer_id",
+			},
+			{
+				FieldKey:     "credit_limit",
+				SourceType:   "DIRECT",
+				Cardinality:  "1:1",
+				Aggregation:  "NONE",
+				TechnicalCol: "credit_limit",
+				Alias:        "credit_limit",
+			},
+			{
+				FieldKey:     "total_freight",
+				SourceType:   "RELATED",
+				RelatedBOKey: "order",
+				Cardinality:  "1:N",
+				Aggregation:  "SUM",
+				TechnicalCol: "freight_amount",
+				Alias:        "total_freight",
+			},
+		},
+		Relationships: []JoinDefinition{
+			{
+				RelatedBOKey:  "order",
+				TableName:     "public.orders",
+				Cardinality:   "1:N",
+				JoinType:      "LEFT",
+				ParentJoinKey: "customer_id",
+				ChildJoinKey:  "customer_id",
+			},
+		},
+	}
 
+	resp, err := generator.GenerateOptimalSQL(ctx, req)
+	if err != nil {
+		t.Fatalf("SQL generation failed: %v", err)
+	}
+
+	// 1. Assert Multi-Phase CTE Strategy Triggered
+	if !resp.IsMultiPhase {
+		t.Errorf("expected IsMultiPhase = true for 1:N aggregated relation, got false")
+	}
+
+	// 2. Assert CTE Names Contain Pre-Aggregation Blocks
+	if !strings.Contains(resp.SQLQuery, "WITH") || !strings.Contains(resp.SQLQuery, "cte_order_agg") {
+		t.Errorf("expected SQL to contain 'cte_order_agg' CTE, got: %s", resp.SQLQuery)
+	}
+
+	// 3. Assert Rule 7 Tenant Scoping in Both CTEs
+	tenantCount := strings.Count(resp.SQLQuery, tenantID.String())
+	if tenantCount < 2 {
+		t.Errorf("Rule 7 violation: expected tenant_id in both CTEs (at least 2 occurrences), found %d", tenantCount)
+	}
+
+	// 4. Assert Group By Foreign Key on Child Table
+	if !strings.Contains(resp.SQLQuery, "GROUP BY r1.customer_id") {
+		t.Errorf("expected child CTE to group by foreign key 'r1.customer_id'")
+	}
+}

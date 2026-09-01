@@ -11,6 +11,7 @@ import ReactFlow, {
   MiniMap,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { Box } from '@mui/material';
 
 interface APIEndpoint {
   id: string;
@@ -41,7 +42,6 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
   const initialNodes: Node[] = useMemo(() => {
     const nodes: Node[] = [];
 
-    // Add API nodes
     apis.forEach((api, index) => {
       nodes.push({
         id: api.id,
@@ -61,7 +61,6 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
       });
     });
 
-    // Add business term nodes
     businessTerms.forEach((term, index) => {
       nodes.push({
         id: term.id,
@@ -87,7 +86,6 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
   const initialEdges: Edge[] = useMemo(() => {
     const edges: Edge[] = [];
 
-    // Create edges between APIs and business terms
     apis.forEach((api) => {
       api.businessTerms.forEach((termId) => {
         const term = businessTerms.find(t => t.id === termId);
@@ -105,11 +103,9 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
       });
     });
 
-    // Create edges between APIs and their dependencies
     apis.forEach((api) => {
       api.dependencies.forEach((dep, index) => {
         const depNodeId = `dep-${dep}`;
-        // Add dependency node if it doesn't exist
         if (!initialNodes.find(n => n.id === depNodeId)) {
           initialNodes.push({
             id: depNodeId,
@@ -160,7 +156,16 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
   );
 
   return (
-    <div className="w-full h-full border border-gray-300 rounded-lg">
+    <Box
+      sx={{
+        width: '100%',
+        height: '100%',
+        border: '1px solid',
+        borderColor: 'grey.300',
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -175,7 +180,7 @@ const LineageGraph: React.FC<LineageGraphProps> = ({ apis, businessTerms, onNode
         <Background />
         <MiniMap />
       </ReactFlow>
-    </div>
+    </Box>
   );
 };
 

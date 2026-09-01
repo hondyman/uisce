@@ -1,17 +1,24 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import Paper from '@mui/material/Paper';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export function PluginMarketplacePanel({ kernel }: { kernel?: any }) {
+  const theme = useTheme();
   const [plugins, setPlugins] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const isDark = theme.palette.mode === 'dark';
+
   useEffect(() => {
-    // Load available plugins
     loadPlugins()
   }, [])
 
   const loadPlugins = async () => {
     try {
-      // Mock plugin data - in real implementation, this would fetch from a server
       const mockPlugins = [
         {
           id: "advanced-linter",
@@ -53,7 +60,6 @@ export function PluginMarketplacePanel({ kernel }: { kernel?: any }) {
 
   const installPlugin = async (plugin: any) => {
     try {
-      // Mock installation
       await new Promise(resolve => setTimeout(resolve, 1000))
 
       setPlugins(plugins.map(p =>
@@ -69,7 +75,6 @@ export function PluginMarketplacePanel({ kernel }: { kernel?: any }) {
 
   const uninstallPlugin = async (plugin: any) => {
     try {
-      // Mock uninstallation
       await new Promise(resolve => setTimeout(resolve, 500))
 
       setPlugins(plugins.map(p =>
@@ -85,47 +90,68 @@ export function PluginMarketplacePanel({ kernel }: { kernel?: any }) {
 
   if (loading) {
     return (
-      <div className="panel plugin-marketplace-panel">
-        <h3>Plugin Marketplace</h3>
-        <div className="loading">Loading plugins...</div>
-      </div>
+      <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+          Plugin Marketplace
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+          <CircularProgress size="small" />
+          <Typography variant="body2" sx={{ ml: 1 }}>Loading plugins...</Typography>
+        </Box>
+      </Paper>
     )
   }
 
   return (
-    <div className="panel plugin-marketplace-panel">
-      <h3>Plugin Marketplace</h3>
+    <Paper sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+        Plugin Marketplace
+      </Typography>
 
-      <div className="plugin-grid">
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 2, overflow: 'auto' }}>
         {plugins.map(plugin => (
-          <div key={plugin.id} className="plugin-card">
-            <div className="plugin-header">
-              <h4>{plugin.name}</h4>
-              <span className="plugin-version">v{plugin.version}</span>
-            </div>
+          <Paper
+            key={plugin.id}
+            variant="outlined"
+            sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                {plugin.name}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                v{plugin.version}
+              </Typography>
+            </Box>
 
-            <p className="plugin-description">{plugin.description}</p>
+            <Typography variant="body2" sx={{ color: 'text.secondary', flex: 1 }}>
+              {plugin.description}
+            </Typography>
 
-            <div className="plugin-actions">
+            <Box sx={{ mt: 1 }}>
               {plugin.installed ? (
-                <button
-                  className="btn btn-secondary"
+                <Button
+                  variant="outlined"
+                  size="small"
+                  fullWidth
                   onClick={() => uninstallPlugin(plugin)}
                 >
                   Uninstall
-                </button>
+                </Button>
               ) : (
-                <button
-                  className="btn btn-primary"
+                <Button
+                  variant="contained"
+                  size="small"
+                  fullWidth
                   onClick={() => installPlugin(plugin)}
                 >
                   Install
-                </button>
+                </Button>
               )}
-            </div>
-          </div>
+            </Box>
+          </Paper>
         ))}
-      </div>
-    </div>
+      </Box>
+    </Paper>
   )
 }

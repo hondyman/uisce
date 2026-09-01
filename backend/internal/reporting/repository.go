@@ -132,11 +132,10 @@ func (r *Repository) GetDefinition(ctx context.Context, id uuid.UUID) (*ReportDe
 //	}
 func (r *Repository) GetDefinitionByKey(ctx context.Context, tenantID, datasourceID uuid.UUID, reportKey string) (*ReportDefinition, error) {
 	var def ReportDefinition
-	query := `
-		SELECT * FROM report_definitions 
-		WHERE tenant_id = $1 AND tenant_datasource_id = $2 AND report_key = $3 AND is_current = true`
+	query := `SELECT * FROM report_definitions WHERE tenant_id = $1 AND report_key = $2 AND is_current = true`
+	args := []interface{}{tenantID, reportKey}
 
-	err := r.db.GetContext(ctx, &def, query, tenantID, datasourceID, reportKey)
+	err := r.db.GetContext(ctx, &def, query, args...)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

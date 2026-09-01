@@ -1,87 +1,141 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getIndexMonitorSnapshot } from './api';
 import { IndexMonitorSnapshot, IndexJob, AssetFreshness } from './types';
-import './IndexMonitorDashboard.css';
 import MetricBreakdown from './MetricBreakdown';
+import { useTheme } from '@mui/material/styles';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Chip from '@mui/material/Chip';
+import LinearProgress from '@mui/material/LinearProgress';
 
-// Re-usable components from GovernanceOverview
-const MetricCard = ({ title, value, warning = false }: { title: string; value: number | string; warning?: boolean }) => (
-  <div className={`metric-card ${warning ? 'warning' : ''}`}>
-    <div className="metric-value">{value}</div>
-    <div className="metric-title">{title}</div>
-  </div>
-);
+const MetricCard = ({ title, value, warning = false }: { title: string; value: number | string; warning?: boolean }) => {
+  const theme = useTheme();
+  return (
+    <Paper
+      sx={{
+        p: 2,
+        textAlign: 'center',
+        backgroundColor: warning ? 'warning.light' : 'background.paper',
+        border: warning ? '2px solid' : '1px solid',
+        borderColor: warning ? 'warning.main' : 'divider',
+      }}
+    >
+      <Typography variant="h4" sx={{ fontWeight: 600, color: warning ? 'warning.dark' : 'text.primary' }}>
+        {value}
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        {title}
+      </Typography>
+    </Paper>
+  );
+};
 
-const ProgressBar = ({ title, percent }: { title: string; percent: number }) => (
-  <div className="progress-bar-card">
-    <div className="progress-bar-title">{title}</div>
-    <div className="progress-bar-container">
-      <div className="progress-bar-fill" data-progress-percent={percent}>
-        {percent.toFixed(1)}%
-      </div>
-    </div>
-  </div>
-);
+const ProgressBar = ({ title, percent }: { title: string; percent: number }) => {
+  return (
+    <Paper sx={{ p: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+        <Typography variant="body2" fontWeight={500}>{title}</Typography>
+        <Typography variant="body2">{percent.toFixed(1)}%</Typography>
+      </Box>
+      <LinearProgress variant="determinate" value={percent} sx={{ height: 8, borderRadius: 4 }} />
+    </Paper>
+  );
+};
 
-// New sub-components for this dashboard
-const JobTimeline = ({ jobs }: { jobs: IndexJob[] }) => (
-  <div className="job-timeline">
-    <h4>Recent Indexing Jobs</h4>
-    <table className="governance-table">
-      <thead>
-        <tr>
-          <th>Status</th>
-          <th>Job Type</th>
-          <th>Triggered By</th>
-          <th>Assets Affected</th>
-          <th>Timestamp</th>
-        </tr>
-      </thead>
-      <tbody>
-        {jobs.map(job => (
-          <tr key={job.id}>
-            <td><span className={`status-badge status-${job.status}`}>{job.status}</span></td>
-            <td>{job.job_type}</td>
-            <td>{job.triggered_by}</td>
-            <td>{job.affected_assets > 0 ? job.affected_assets : '-'}</td>
-            <td>{new Date(job.started_at).toLocaleString()}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-);
+const JobTimeline = ({ jobs }: { jobs: IndexJob[] }) => {
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'completed': return 'success';
+      case 'failed': return 'error';
+      case 'running': return 'info';
+      case 'pending': return 'warning';
+      default: return 'default';
+    }
+  };
 
-const StaleAssetList = ({ assets }: { assets: AssetFreshness[] }) => (
-  <div className="stale-asset-list">
-    <h4>Stale Assets (Not Indexed in &gt;7 Days)</h4>
-    {assets.length === 0 ? (
-      <p>No stale assets found. ✅</p>
-    ) : (
-      <table className="governance-table">
-        <thead>
-          <tr>
-            <th>Asset Name</th>
-            <th>Type</th>
-            <th>Last Indexed</th>
-            <th>Certified</th>
-          </tr>
-        </thead>
-        <tbody>
-          {assets.map(asset => (
-            <tr key={asset.asset_id}>
-              <td>{asset.asset_name}</td>
-              <td>{asset.asset_type}</td>
-              <td>{new Date(asset.last_indexed_at).toLocaleDateString()}</td>
-              <td>{asset.certified ? '✅' : '❌'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </div>
-);
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        Recent Indexing Jobs
+      </Typography>
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Status</TableCell>
+              <TableCell>Job Type</TableCell>
+              <TableCell>Triggered By</TableCell>
+              <TableCell>Assets Affected</TableCell>
+              <TableCell>Timestamp</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {jobs.map(job => (
+              <TableRow key={job.id}>
+                <TableCell>
+                  <Chip
+                    label={job.status}
+                    color={getStatusColor(job.status) as 'success' | 'error' | 'info' | 'warning' | 'default'}
+                    size="small"
+                  />
+                </TableCell>
+                <TableCell>{job.job_type}</TableCell>
+                <TableCell>{job.triggered_by}</TableCell>
+                <TableCell>{job.affected_assets > 0 ? job.affected_assets : '-'}</TableCell>
+                <TableCell>{new Date(job.started_at).toLocaleString()}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+};
 
+const StaleAssetList = ({ assets }: { assets: AssetFreshness[] }) => {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+        Stale Assets (Not Indexed in &gt;7 Days)
+      </Typography>
+      {assets.length === 0 ? (
+        <Paper sx={{ p: 2, textAlign: 'center' }}>
+          <Typography>No stale assets found. ✅</Typography>
+        </Paper>
+      ) : (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Asset Name</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Last Indexed</TableCell>
+                <TableCell>Certified</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {assets.map(asset => (
+                <TableRow key={asset.asset_id}>
+                  <TableCell>{asset.asset_name}</TableCell>
+                  <TableCell>{asset.asset_type}</TableCell>
+                  <TableCell>{new Date(asset.last_indexed_at).toLocaleDateString()}</TableCell>
+                  <TableCell>{asset.certified ? '✅' : '❌'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+};
 
 export default function IndexMonitorDashboard() {
   const [snapshot, setSnapshot] = useState<IndexMonitorSnapshot | null>(null);
@@ -104,9 +158,9 @@ export default function IndexMonitorDashboard() {
     fetchSnapshot();
   }, [fetchSnapshot]);
 
-  if (loading) return <div>Loading index monitor...</div>;
-  if (error) return <div className="error-text">Error: {error}</div>;
-  if (!snapshot) return <div>No index data available.</div>;
+  if (loading) return <Box sx={{ p: 4 }}>Loading index monitor...</Box>;
+  if (error) return <Box sx={{ p: 4, color: 'error.main' }}>Error: {error}</Box>;
+  if (!snapshot) return <Box sx={{ p: 4 }}>No index data available.</Box>;
 
   const timeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -125,7 +179,7 @@ export default function IndexMonitorDashboard() {
   };
 
   return (
-    <div className="index-monitor-dashboard">
+    <Box sx={{ p: 3 }}>
       <ProgressBar title="Semantic Health Score" percent={snapshot.semantic_health_score} />
       <MetricBreakdown
         certified={snapshot.certified_coverage}
@@ -134,13 +188,20 @@ export default function IndexMonitorDashboard() {
         audit={snapshot.audit_completeness}
         risk={snapshot.risk_exposure}
       />
-      <div className="metrics-grid">
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+          gap: 2,
+          mb: 3,
+        }}
+      >
         <MetricCard title="Last Full Refresh" value={timeAgo(snapshot.last_full_refresh)} />
         <MetricCard title="Certified Coverage" value={`${snapshot.certified_coverage.toFixed(1)}%`} />
         <MetricCard title="Unindexed Assets" value={snapshot.unindexed_asset_count} warning={snapshot.unindexed_asset_count > 0} />
-      </div>
+      </Box>
       <JobTimeline jobs={snapshot.recent_jobs} />
       <StaleAssetList assets={snapshot.stale_assets} />
-    </div>
+    </Box>
   );
 }

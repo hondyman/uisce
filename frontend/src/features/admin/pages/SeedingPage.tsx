@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTheme } from '@mui/material/styles';
 import { useTenant } from '../../../contexts/TenantContext';
 import * as adminSeed from '../../../api/adminSeed';
 import { Download, Trash2, Zap, CheckCircle } from 'lucide-react';
 
 const SeedingPage: React.FC = () => {
   const { tenant, datasource } = useTenant();
+  const { mode } = useTheme();
   const [tenantId, setTenantId] = useState('');
   const [datasourceId, setDatasourceId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -93,48 +95,94 @@ const SeedingPage: React.FC = () => {
     } finally { setLoading(false); }
   };
 
+  const bgColor = mode === 'dark' ? '#111827' : '#f9fafb';
+  const textColor = mode === 'dark' ? '#f9fafb' : '#111827';
+  const borderColor = mode === 'dark' ? '#374151' : '#e5e7eb';
+
   return (
-    <div className="min-h-screen p-6">
-      <h1 className="text-2xl font-bold mb-2">Seeding Console</h1>
-      <p className="text-sm text-gray-600 mb-4">Run seeding operations for validation rules, approval rules and assignments. Tenant scope is required.</p>
+    <Box sx={{ bg: bgColor, color: textColor }}>
+      <h1 sx={{ fontSize: '2xl', fontWeight: 700, mb: 2 }}>Seeding Console</h1>
+      <p sx={{ fontSize: 'sm', color: 'text.secondary', mb: 4 }}>
+        Run seeding operations for validation rules, approval rules and assignments. Tenant scope is required.
+      </p>
 
       {toast && (
-        <div className={`mb-4 p-3 rounded ${toast.type === 'success' ? 'bg-green-50' : 'bg-red-50'}`}>
+        <Box sx={{ mb: 4, p: 3, borderRadius: 1 }}>
           {toast.message}
-        </div>
+        </Box>
       )}
 
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 4, mb: 6 }}>
         <div>
-          <label className="block text-sm font-medium mb-1">Tenant ID</label>
-          <input value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="w-full p-2 border rounded" />
+          <label sx={{ display: 'block', fontSize: 'sm', fontWeight: 500, mb: 1 }}>Tenant ID</label>
+          <input
+            value={tenantId}
+            onChange={(e) => setTenantId(e.target.value)}
+            sx={{ width: '100', p: 2, borderRadius: 1, border: `1px solid ${borderColor}` }}
+          />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-1">Datasource ID</label>
-          <input value={datasourceId} onChange={(e) => setDatasourceId(e.target.value)} className="w-full p-2 border rounded" />
+          <label sx={{ display: 'block', fontSize: 'sm', fontWeight: 500, mb: 1 }}>Datasource ID</label>
+          <input
+            value={datasourceId}
+            onChange={(e) => setDatasourceId(e.target.value)}
+            sx={{ width: '100', p: 2, borderRadius: 1, border: `1px solid ${borderColor}` }}
+          />
         </div>
       </div>
 
-      <div className="flex gap-3 mb-6">
-        <button onClick={handleSeedAll} disabled={loading || !tenantId} className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2">
-          <Download className="w-4 h-4" /> Seed All
+      <div sx={{ display: 'flex', gap: 3, mb: 6 }}>
+        <button
+          onClick={handleSeedAll}
+          disabled={loading || !tenantId}
+          sx={{
+            px: 4, py: 2, borderRadius: 1, color: 'white',
+            display: 'flex', items: 'center', gap: 2, fontSize: 'sm',
+            background: mode === 'dark' ? '#10b981' : '#10b981'
+          }}
+        >
+          <Download sx={{ width: 4, height: 4 }} /> Seed All
         </button>
-        <button onClick={handleSeedValidation} disabled={loading || !tenantId || !datasourceId} className="px-4 py-2 bg-blue-600 text-white rounded flex items-center gap-2">
-          <Zap className="w-4 h-4" /> Seed Validation Rules
+        <button
+          onClick={handleSeedValidation}
+          disabled={loading || !tenantId || !datasourceId}
+          sx={{
+            px: 4, py: 2, borderRadius: 1, color: 'white',
+            display: 'flex', items: 'center', gap: 2, fontSize: 'sm',
+            background: mode === 'dark' ? '#3b82f6' : '#3b82f6'
+          }}
+        >
+          <Zap sx={{ width: 4, height: 4 }} /> Seed Validation Rules
         </button>
-        <button onClick={handleSeedApproval} disabled={loading || !tenantId} className="px-4 py-2 bg-purple-600 text-white rounded flex items-center gap-2">
-          <CheckCircle className="w-4 h-4" /> Seed Approval Rules
+        <button
+          onClick={handleSeedApproval}
+          disabled={loading || !tenantId}
+          sx={{
+            px: 4, py: 2, borderRadius: 1, color: 'white',
+            display: 'flex', items: 'center', gap: 2, fontSize: 'sm',
+            background: mode === 'dark' ? '#a855f7' : '#a855f7'
+          }}
+        >
+          <CheckCircle sx={{ width: 4, height: 4 }} /> Seed Approval Rules
         </button>
-        <button onClick={handleClear} disabled={loading || !tenantId} className="px-4 py-2 bg-red-600 text-white rounded flex items-center gap-2">
-          <Trash2 className="w-4 h-4" /> Clear Seed
+        <button
+          onClick={handleClear}
+          disabled={loading || !tenantId}
+          sx={{
+            px: 4, py: 2, borderRadius: 1, color: 'white',
+            display: 'flex', items: 'center', gap: 2, fontSize: 'sm',
+            background: mode === 'dark' ? '#dc2626' : '#dc2626'
+          }}
+        >
+          <Trash2 sx={{ width: 4, height: 4 }} /> Clear Seed
         </button>
       </div>
 
-      <div className="bg-white p-4 rounded border">
-        <h2 className="font-semibold mb-2">Result</h2>
-        <pre className="text-xs whitespace-pre-wrap">{JSON.stringify(result, null, 2) || 'No results yet'}</pre>
-      </div>
-    </div>
+      <Box sx={{ bg: 'white', p: 4, borderRadius: 1, border: `1px solid ${borderColor}` }}>
+        <h2 sx={{ fontWeight: 500, mb: 2 }}>Result</h2>
+        <pre sx={{ fontSize: 'xs', whitePre: 'wrap' }}>{JSON.stringify(result, null, 2) || 'No results yet'}</pre>
+      </Box>
+    </Box>
   );
 };
 

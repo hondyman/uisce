@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Box, Typography, TextField, Button, Paper, Chip, Select, MenuItem, FormControl, InputLabel } from '@mui/material';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -125,183 +126,184 @@ export const MDMExceptionWorkbench: React.FC<{ tenantId: string }> = ({ tenantId
   });
 
   return (
-    <div className="flex flex-col h-full bg-[#030914] text-slate-100 border border-slate-800 rounded-xl overflow-hidden font-sans">
-      {/* Top Banner / Triage HUD */}
-      <div className="flex items-center justify-between px-6 py-4 bg-[#071526] border-b border-slate-800">
-        <div>
-          <h2 className="text-base font-bold text-slate-100 tracking-wide flex items-center gap-2">
-            <ShieldAlert className="w-5 h-5 text-amber-400" />
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: '#030914', color: '#f1f5f9', border: '1px solid #1e293b', borderRadius: 2, overflow: 'hidden', fontFamily: 'sans-serif' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 2, bgcolor: '#071526', borderBottom: '1px solid #1e293b' }}>
+        <Box>
+          <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#f1f5f9', letterSpacing: '-0.025em', display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ShieldAlert size={20} style={{ color: '#fbbf24' }} />
             MDM Data Stewardship & Exception Workbench
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#94a3b8', mt: 0.5, display: 'block' }}>
             Resolve price tolerance breaches, vendor feed collisions, and checksum anomalies across 8 master domains.
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        {/* Global Filters */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
-            <Layers className="w-3.5 h-3.5 text-cyan-400" />
-            <select
-              value={selectedDomain}
-              onChange={(e) => setSelectedDomain(e.target.value)}
-              className="bg-transparent text-slate-200 outline-none cursor-pointer"
-            >
-              <option value="ALL">All Master Domains</option>
-              <option value="PRICING">Pricing & Curves</option>
-              <option value="SECURITY">Security Master</option>
-              <option value="CORP_ACTION">Corporate Actions</option>
-              <option value="ISSUER">Legal Entity & Issuer</option>
-              <option value="FUND">Fund & Vehicle Master</option>
-            </select>
-          </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#0f172a', border: '1px solid #1e293b', borderRadius: 1, px: 1.5, py: 0.75, fontSize: '0.75rem' }}>
+            <Layers size={14} style={{ color: '#22d3ee' }} />
+            <FormControl size="small" sx={{ minWidth: 140, '& .MuiSelect-select': { py: 0.5, color: '#e2e8f0' } }}>
+              <Select
+                value={selectedDomain}
+                onChange={(e) => setSelectedDomain(e.target.value)}
+                sx={{ bgcolor: 'transparent', color: '#e2e8f0', fontSize: '0.75rem', '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
+              >
+                <option value="ALL">All Master Domains</option>
+                <option value="PRICING">Pricing & Curves</option>
+                <option value="SECURITY">Security Master</option>
+                <option value="CORP_ACTION">Corporate Actions</option>
+                <option value="ISSUER">Legal Entity & Issuer</option>
+                <option value="FUND">Fund & Vehicle Master</option>
+              </Select>
+            </FormControl>
+          </Box>
 
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-            <select
-              value={selectedAnomaly}
-              onChange={(e) => setSelectedAnomaly(e.target.value)}
-              className="bg-transparent text-slate-200 outline-none cursor-pointer"
-            >
-              <option value="ALL">All Anomaly Types</option>
-              <option value="PRICE_TOLERANCE_BREACH">Price Breach (&gt;10%)</option>
-              <option value="CHECKSUM_FAILURE">Checksum Failure</option>
-              <option value="UNRESOLVED_XREF">Unresolved XREF</option>
-              <option value="STALE_FEED">Stale Feed</option>
-            </select>
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, bgcolor: '#0f172a', border: '1px solid #1e293b', borderRadius: 1, px: 1.5, py: 0.75, fontSize: '0.75rem' }}>
+            <AlertTriangle size={14} style={{ color: '#fbbf24' }} />
+            <FormControl size="small" sx={{ minWidth: 140, '& .MuiSelect-select': { py: 0.5, color: '#e2e8f0' } }}>
+              <Select
+                value={selectedAnomaly}
+                onChange={(e) => setSelectedAnomaly(e.target.value)}
+                sx={{ bgcolor: 'transparent', color: '#e2e8f0', fontSize: '0.75rem', '& .MuiOutlinedInput-notchedOutline': { border: 'none' } }}
+              >
+                <option value="ALL">All Anomaly Types</option>
+                <option value="PRICE_TOLERANCE_BREACH">Price Breach (&gt;10%)</option>
+                <option value="CHECKSUM_FAILURE">Checksum Failure</option>
+                <option value="UNRESOLVED_XREF">Unresolved XREF</option>
+                <option value="STALE_FEED">Stale Feed</option>
+              </Select>
+            </FormControl>
+          </Box>
 
-          <button
+          <Button
             onClick={fetchExceptions}
-            className="p-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-300 transition"
+            variant="outlined"
+            size="small"
+            sx={{ p: 1, bgcolor: '#0f172a', borderColor: '#1e293b', color: '#cbd5e1', '&:hover': { bgcolor: '#1e293b' } }}
             title="Refresh Exceptions"
           >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
+            <RefreshCw size={14} />
+          </Button>
+        </Box>
+      </Box>
 
       {notification && (
-        <div className="bg-emerald-500/20 border-b border-emerald-500/40 px-6 py-2 text-xs text-emerald-300 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+        <Box sx={{ bgcolor: 'rgba(16, 185, 129, 0.2)', borderBottom: '1px solid rgba(16, 185, 129, 0.4)', px: 3, py: 1, display: 'flex', alignItems: 'center', gap: 1, color: '#6ee7b7', fontSize: '0.75rem' }}>
+          <CheckCircle2 size={16} style={{ color: '#34d399' }} />
           {notification}
-        </div>
+        </Box>
       )}
 
-      {/* Main Split Layout */}
-      <div className="grid grid-cols-12 flex-1 overflow-hidden">
-        {/* Left Column: Exceptions Queue List (4 Columns) */}
-        <div className="col-span-4 border-r border-slate-800 overflow-y-auto bg-[#050e1d]/60">
-          <div className="p-3 bg-slate-900/40 border-b border-slate-800/80 text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex justify-between">
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', flex: 1, overflow: 'hidden' }}>
+        <Box sx={{ gridColumn: 'span 4', borderRight: '1px solid #1e293b', overflowY: 'auto', bgcolor: 'rgba(5, 14, 29, 0.6)' }}>
+          <Box sx={{ p: 1.5, bgcolor: 'rgba(30, 41, 59, 0.4)', borderBottom: '1px solid rgba(30, 41, 59, 0.8)', display: 'flex', justifyContent: 'space-between', fontSize: '0.6875rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
             <span>Open Break Queue</span>
-            <span className="text-amber-400 font-mono">{filteredExceptions.length} Items</span>
-          </div>
+            <span style={{ color: '#fbbf24', fontFamily: 'monospace' }}>{filteredExceptions.length} Items</span>
+          </Box>
 
-          <div className="divide-y divide-slate-800/60">
+          <Box sx={{ borderBottom: '1px solid rgba(30, 41, 59, 0.6)' }}>
             {filteredExceptions.map((item) => {
               const isSelected = selectedException?.exceptionId === item.exceptionId;
               return (
-                <div
+                <Box
                   key={item.exceptionId}
                   onClick={() => setSelectedException(item)}
-                  className={`p-4 cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-cyan-500/10 border-l-4 border-cyan-400'
-                      : 'hover:bg-slate-900/40'
-                  }`}
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    bgcolor: isSelected ? 'rgba(34, 211, 238, 0.1)' : 'transparent',
+                    borderLeft: isSelected ? '4px solid #22d3ee' : '4px solid transparent',
+                    '&:hover': { bgcolor: 'rgba(30, 41, 59, 0.4)' },
+                  }}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="text-xs font-mono font-bold text-slate-200 block">
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <Box>
+                      <Typography variant="caption" sx={{ fontFamily: 'monospace', fontWeight: 700, color: '#e2e8f0', display: 'block' }}>
                         {item.masterEntitySid}
-                      </span>
-                      <span className="text-[11px] text-slate-400 mt-0.5 block">
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#94a3b8', mt: 0.5, display: 'block', fontSize: '0.6875rem' }}>
                         {item.entityName || item.fieldName}
-                      </span>
-                    </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        (item.maxDeviationPct || 0) > 10
-                          ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                          : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      }`}
-                    >
-                      Δ {(item.maxDeviationPct || 0).toFixed(1)}%
-                    </span>
-                  </div>
+                      </Typography>
+                    </Box>
+                    <Chip
+                      label={`Δ ${(item.maxDeviationPct || 0).toFixed(1)}%`}
+                      size="small"
+                      sx={{
+                        bgcolor: (item.maxDeviationPct || 0) > 10 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)',
+                        color: (item.maxDeviationPct || 0) > 10 ? '#f87171' : '#fbbf24',
+                        fontWeight: 700,
+                        fontSize: '0.625rem',
+                        height: 20,
+                        borderRadius: 'full',
+                        border: `1px solid ${(item.maxDeviationPct || 0) > 10 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(245, 158, 11, 0.3)'}`,
+                      }}
+                    />
+                  </Box>
 
-                  <div className="flex items-center gap-2 mt-3 text-[10px] text-slate-400">
-                    <span className="px-1.5 py-0.5 bg-slate-800 rounded font-semibold text-slate-300">
-                      {item.domainKey}
-                    </span>
-                    <span className="font-mono">{item.fieldName}</span>
-                    <span className="ml-auto flex items-center gap-1 text-slate-400">
-                      <Clock className="w-3 h-3" />
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, fontSize: '0.625rem', color: '#94a3b8' }}>
+                    <Chip label={item.domainKey} size="small" sx={{ bgcolor: '#1e293b', color: '#cbd5e1', fontWeight: 600, fontSize: '0.625rem', height: 18 }} />
+                    <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{item.fieldName}</Typography>
+                    <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Clock size={12} />
                       {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  </div>
-                </div>
+                    </Box>
+                  </Box>
+                </Box>
               );
             })}
 
             {filteredExceptions.length === 0 && (
-              <div className="p-12 text-center text-slate-400 text-xs">
+              <Box sx={{ p: 6, textAlign: 'center', color: '#94a3b8', fontSize: '0.75rem' }}>
                 No active breaks found in the selected domain.
-              </div>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Box>
 
-        {/* Right Column: Multi-Vendor Inspection & Action Pane (8 Columns) */}
         {selectedException ? (
-          <div className="col-span-8 overflow-y-auto p-6 space-y-6 bg-[#030914]">
-            {/* Entity Header Card */}
-            <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800 flex items-center justify-between">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                    {selectedException.domainKey}
-                  </span>
-                  <h3 className="text-base font-bold text-slate-100 font-mono">
+          <Box sx={{ gridColumn: 'span 8', overflowY: 'auto', p: 3, bgcolor: '#030914', display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Paper sx={{ p: 2, bgcolor: 'rgba(30, 41, 59, 0.6)', border: '1px solid #1e293b', borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Chip label={selectedException.domainKey} size="small" sx={{ bgcolor: 'rgba(34, 211, 238, 0.2)', color: '#22d3ee', fontWeight: 700, fontSize: '0.75rem', border: '1px solid rgba(34, 211, 238, 0.3)' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: '#f1f5f9', fontFamily: 'monospace' }}>
                     {selectedException.masterEntitySid}
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Evaluating field: <span className="text-slate-200 font-semibold">{selectedException.fieldName}</span>
-                  {' '} | Anomaly: <span className="text-amber-400 font-semibold">{selectedException.anomalyType}</span>
-                </p>
-              </div>
+                  </Typography>
+                </Box>
+                <Typography variant="caption" sx={{ color: '#94a3b8', mt: 0.5, display: 'block' }}>
+                  Evaluating field: <span style={{ color: '#e2e8f0', fontWeight: 600 }}>{selectedException.fieldName}</span>
+                  {' '}| Anomaly: <span style={{ color: '#fbbf24', fontWeight: 600 }}>{selectedException.anomalyType}</span>
+                </Typography>
+              </Box>
 
-              <div className="text-right">
-                <span className="text-[10px] text-slate-400 block uppercase font-semibold">Max Deviation</span>
-                <span className="text-xl font-bold font-mono text-red-400">
+              <Box sx={{ textAlign: 'right' }}>
+                <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', textTransform: 'uppercase', fontWeight: 600, fontSize: '0.625rem' }}>Max Deviation</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#f87171' }}>
                   +{(selectedException.maxDeviationPct || 0).toFixed(2)}%
-                </span>
-              </div>
-            </div>
+                </Typography>
+              </Box>
+            </Paper>
 
-            {/* AI Data Steward Copilot Recommendation Card */}
             {selectedException.aiDiagnosis && (
-              <div className="p-4 bg-gradient-to-r from-purple-950/30 via-slate-900/60 to-purple-950/20 border border-purple-500/40 rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <Bot className="w-4 h-4 text-purple-400" />
+              <Paper sx={{ p: 2, background: 'linear-gradient(to right, rgba(88, 28, 135, 0.3), rgba(30, 41, 59, 0.6), rgba(88, 28, 135, 0.2))', border: '1px solid rgba(168, 85, 247, 0.4)', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: '#c4b5fd', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Bot size={16} style={{ color: '#c4b5fd' }} />
                     MCP AI Data Steward Copilot Recommendation
-                  </span>
-                  <span className="px-2 py-0.5 bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] rounded-full font-bold">
-                    Confidence: {(selectedException.aiDiagnosis.confidenceScore * 100).toFixed(0)}%
-                  </span>
-                </div>
+                  </Typography>
+                  <Chip label={`Confidence: ${(selectedException.aiDiagnosis.confidenceScore * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: 'rgba(168, 85, 247, 0.2)', color: '#c4b5fd', border: '1px solid rgba(168, 85, 247, 0.4)', fontWeight: 700, fontSize: '0.625rem', borderRadius: 'full' }} />
+                </Box>
 
-                <p className="text-xs text-slate-200 leading-relaxed font-sans">
+                <Typography variant="body2" sx={{ color: '#e2e8f0', lineHeight: 1.6, fontFamily: 'sans-serif' }}>
                   {selectedException.aiDiagnosis.rationale}
-                </p>
+                </Typography>
 
-                <div className="flex items-center justify-between pt-2 border-t border-purple-500/20">
-                  <span className="text-xs text-purple-200">
-                    Suggested Action: <strong className="text-white font-mono">{selectedException.aiDiagnosis.recommendation}</strong>
-                  </span>
-                  <button
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pt: 1, borderTop: '1px solid rgba(168, 85, 247, 0.2)' }}>
+                  <Typography variant="caption" sx={{ color: '#e9d5ff' }}>
+                    Suggested Action: <strong style={{ color: '#fff', fontFamily: 'monospace' }}>{selectedException.aiDiagnosis.recommendation}</strong>
+                  </Typography>
+                  <Button
+                    variant="contained"
                     onClick={() =>
                       handleApplyOverride(
                         selectedException.aiDiagnosis!.winningVendor,
@@ -310,53 +312,70 @@ export const MDMExceptionWorkbench: React.FC<{ tenantId: string }> = ({ tenantId
                       )
                     }
                     disabled={isSubmitting}
-                    className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-lg shadow transition flex items-center gap-1.5 disabled:opacity-50"
+                    startIcon={<Sparkles size={14} />}
+                    sx={{
+                      px: 2,
+                      py: 0.75,
+                      bgcolor: '#9333ea',
+                      '&:hover': { bgcolor: '#a855f7' },
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: '0.75rem',
+                      borderRadius: 1,
+                      textTransform: 'none',
+                      disabled: { opacity: 0.5 },
+                    }}
                   >
-                    <Sparkles className="w-3.5 h-3.5" />
                     1-Click Apply AI Fix
-                  </button>
-                </div>
-              </div>
+                  </Button>
+                </Box>
+              </Paper>
             )}
 
-            {/* Side-by-Side Competing Vendor Feed Grid */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Database className="w-4 h-4 text-cyan-400" />
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Database size={16} style={{ color: '#22d3ee' }} />
                 Competing Multi-Source Vendor Payloads
-              </h4>
+              </Typography>
 
-              <div className="grid grid-cols-3 gap-4">
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
                 {(selectedException.competingValues || []).map((feed) => {
                   const isWinningCandidate = selectedException.aiDiagnosis?.winningVendor === feed.vendor;
                   return (
-                    <div
+                    <Paper
                       key={feed.vendor}
-                      className={`p-4 rounded-xl border transition-all flex flex-col justify-between ${
-                        isWinningCandidate
-                          ? 'bg-slate-900/80 border-cyan-500/60 shadow-lg shadow-cyan-950/30'
-                          : 'bg-slate-900/40 border-slate-800'
-                      }`}
+                      sx={{
+                        p: 2,
+                        borderRadius: 2,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        bgcolor: isWinningCandidate ? 'rgba(30, 41, 59, 0.8)' : 'rgba(30, 41, 59, 0.4)',
+                        border: '1px solid',
+                        borderColor: isWinningCandidate ? 'rgba(34, 211, 238, 0.6)' : '#1e293b',
+                        boxShadow: isWinningCandidate ? '0 10px 15px -3px rgba(34, 211, 238, 0.1)' : 'none',
+                      }}
                     >
-                      <div>
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-                          <span className="text-xs font-bold text-slate-100 uppercase tracking-wide">
+                      <Box>
+                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pb: 1, borderBottom: '1px solid #1e293b' }}>
+                          <Typography variant="caption" sx={{ fontWeight: 700, color: '#f1f5f9', textTransform: 'uppercase' }}>
                             {feed.vendor}
-                          </span>
-                          <span className="text-[10px] text-cyan-400 font-mono">
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#22d3ee', fontFamily: 'monospace', fontSize: '0.625rem' }}>
                             {((feed.confidence || 0.9) * 100).toFixed(0)}% Trust
-                          </span>
-                        </div>
+                          </Typography>
+                        </Box>
 
-                        <div className="my-4 text-center">
-                          <span className="text-[10px] text-slate-400 block uppercase font-medium">Reported Value</span>
-                          <span className="text-2xl font-bold font-mono text-slate-100">
+                        <Box sx={{ my: 2, textAlign: 'center' }}>
+                          <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', textTransform: 'uppercase', fontWeight: 500 }}>Reported Value</Typography>
+                          <Typography variant="h5" sx={{ fontWeight: 700, fontFamily: 'monospace', color: '#f1f5f9' }}>
                             {typeof feed.value === 'number' ? `$${feed.value.toFixed(2)}` : String(feed.value)}
-                          </span>
-                        </div>
-                      </div>
+                          </Typography>
+                        </Box>
+                      </Box>
 
-                      <button
+                      <Button
+                        variant="contained"
                         onClick={() =>
                           handleApplyOverride(
                             feed.vendor,
@@ -365,69 +384,94 @@ export const MDMExceptionWorkbench: React.FC<{ tenantId: string }> = ({ tenantId
                           )
                         }
                         disabled={isSubmitting}
-                        className={`w-full py-2 text-xs font-bold rounded-lg transition flex items-center justify-center gap-1.5 ${
-                          isWinningCandidate
-                            ? 'bg-[#F5A623] hover:bg-amber-400 text-slate-950'
-                            : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-                        }`}
+                        startIcon={<CheckCircle2 size={14} />}
+                        sx={{
+                          width: '100%',
+                          py: 1,
+                          bgcolor: isWinningCandidate ? '#F5A623' : '#1e293b',
+                          '&:hover': { bgcolor: isWinningCandidate ? '#fbbf24' : '#334155' },
+                          color: isWinningCandidate ? '#0f172a' : '#e2e8f0',
+                          fontWeight: 700,
+                          fontSize: '0.75rem',
+                          borderRadius: 1,
+                          textTransform: 'none',
+                        }}
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
                         Accept {feed.vendor}
-                      </button>
-                    </div>
+                      </Button>
+                    </Paper>
                   );
                 })}
-              </div>
-            </div>
+              </Box>
+            </Box>
 
-            {/* Manual Custom Override & Reason Form */}
-            <div className="p-4 bg-slate-900/50 rounded-xl border border-slate-800 space-y-4">
-              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-                <Sliders className="w-4 h-4 text-amber-400" />
+            <Paper sx={{ p: 2, bgcolor: 'rgba(30, 41, 59, 0.5)', border: '1px solid #1e293b', borderRadius: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: '#cbd5e1', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Sliders size={16} style={{ color: '#fbbf24' }} />
                 Manual Data Steward Override & Audit Reason
-              </h4>
+              </Typography>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 mb-1.5 block">Custom Field Value</label>
-                  <input
-                    type="text"
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#cbd5e1', display: 'block', mb: 0.5 }}>Custom Field Value</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
                     value={customValue}
                     onChange={(e) => setCustomValue(e.target.value)}
                     placeholder="Enter explicit golden value..."
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100 font-mono"
+                    sx={{
+                      '& .MuiOutlinedInput-root': { bgcolor: '#020617', '& fieldset': { borderColor: '#1e293b' } },
+                      '& input': { color: '#f1f5f9', fontSize: '0.75rem', fontFamily: 'monospace' },
+                    }}
                   />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-300 mb-1.5 block">Steward Override Rationale</label>
-                  <input
-                    type="text"
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ fontWeight: 600, color: '#cbd5e1', display: 'block', mb: 0.5 }}>Steward Override Rationale</Typography>
+                  <TextField
+                    fullWidth
+                    size="small"
                     value={overrideReason}
                     onChange={(e) => setOverrideReason(e.target.value)}
                     placeholder="e.g. Verified with trading desk, IDC feed shifted decimal"
-                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-100"
+                    sx={{
+                      '& .MuiOutlinedInput-root': { bgcolor: '#020617', '& fieldset': { borderColor: '#1e293b' } },
+                      '& input': { color: '#f1f5f9', fontSize: '0.75rem' },
+                    }}
                   />
-                </div>
-              </div>
+                </Box>
+              </Box>
 
-              <div className="flex justify-end pt-2">
-                <button
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', pt: 1 }}>
+                <Button
+                  variant="contained"
                   onClick={() => handleApplyOverride('MANUAL_STEWARD', customValue, overrideReason)}
                   disabled={isSubmitting || !customValue || !overrideReason}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-[#F5A623] text-slate-950 font-bold rounded-lg shadow hover:opacity-95 text-xs flex items-center gap-1.5 disabled:opacity-40 transition"
+                  startIcon={<Send size={14} />}
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    background: 'linear-gradient(to right, #f59e0b, #F5A623)',
+                    '&:hover': { opacity: 0.95 },
+                    color: '#0f172a',
+                    fontWeight: 700,
+                    fontSize: '0.75rem',
+                    borderRadius: 1,
+                    textTransform: 'none',
+                    disabled: { opacity: 0.4 },
+                  }}
                 >
-                  <Send className="w-3.5 h-3.5" />
                   Commit Manual Override & Signal Workflow
-                </button>
-              </div>
-            </div>
-          </div>
+                </Button>
+              </Box>
+            </Paper>
+          </Box>
         ) : (
-          <div className="col-span-8 flex items-center justify-center text-slate-400 text-xs bg-[#030914]">
+          <Box sx={{ gridColumn: 'span 8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '0.75rem', bgcolor: '#030914' }}>
             Select an open exception from the left queue to review vendor feeds and apply break overrides.
-          </div>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };
