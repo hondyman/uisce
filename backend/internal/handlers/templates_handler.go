@@ -101,8 +101,16 @@ func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Set RLS context using set_config function
-	if _, err := h.db.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	// Start transaction so the RLS context set below persists through the insert
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Set RLS context within transaction
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context: %v", err)
 		http.Error(w, fmt.Sprintf(`{"error":"Failed to set tenant context: %v"}`, err), http.StatusInternalServerError)
 		return
@@ -123,7 +131,7 @@ func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 	`
 
 	var createdAt string
-	err := h.db.QueryRowContext(ctx, query,
+	err = tx.QueryRowContext(ctx, query,
 		templateID, tenantID, req.BusinessObject, req.Name,
 		req.Description, req.Category, stepsJSON, schemaJSON,
 		req.IsPublic, userID,
@@ -131,6 +139,12 @@ func (h *TemplateHandler) CreateTemplate(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		fmt.Printf("Error creating template: %v\n", err)
+		http.Error(w, `{"error":"Failed to create template"}`, http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing transaction: %v", err)
 		http.Error(w, `{"error":"Failed to create template"}`, http.StatusInternalServerError)
 		return
 	}
@@ -173,8 +187,16 @@ func (h *TemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Set RLS context using set_config function
-	if _, err := h.db.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	// Start transaction so the RLS context set below persists through the query
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// Set RLS context within transaction
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context in ListTemplates: %v", err)
 	}
 
@@ -214,7 +236,7 @@ func (h *TemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 
 	query += " ORDER BY name ASC"
 
-	rows, err := h.db.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"Query failed: %s"}`, err.Error()), http.StatusInternalServerError)
 		return
@@ -240,6 +262,11 @@ func (h *TemplateHandler) ListTemplates(w http.ResponseWriter, r *http.Request) 
 		json.Unmarshal(schemaJSON, &t.ParameterSchema)
 
 		templates = append(templates, t)
+	}
+	rows.Close()
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing transaction in ListTemplates: %v", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -345,7 +372,7 @@ func (h *TemplateHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request)
 	defer tx.Rollback()
 
 	// Set RLS context within transaction
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context in UpdateTemplate: %v", err)
 		http.Error(w, `{"error":"Failed to set tenant context"}`, http.StatusForbidden)
 		return
@@ -454,7 +481,7 @@ func (h *TemplateHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request)
 	defer tx.Rollback()
 
 	// Set RLS context within transaction
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context in DeleteTemplate: %v", err)
 		http.Error(w, `{"error":"Failed to set tenant context"}`, http.StatusForbidden)
 		return
@@ -520,7 +547,15 @@ func (h *TemplateHandler) GetTemplatePreview(w http.ResponseWriter, r *http.Requ
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := h.db.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	// Start transaction so the RLS context set below persists through the query
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context in PreviewTemplate: %v", err)
 	}
 
@@ -534,7 +569,7 @@ func (h *TemplateHandler) GetTemplatePreview(w http.ResponseWriter, r *http.Requ
 	var t RuleTemplate
 	var stepsJSON, schemaJSON []byte
 
-	err := h.db.QueryRowContext(ctx, query, templateID, tenantID).Scan(
+	err = tx.QueryRowContext(ctx, query, templateID, tenantID).Scan(
 		&t.ID, &t.Name, &t.Description, &t.Category, &stepsJSON, &schemaJSON,
 	)
 	if err == sql.ErrNoRows {
@@ -543,6 +578,10 @@ func (h *TemplateHandler) GetTemplatePreview(w http.ResponseWriter, r *http.Requ
 	} else if err != nil {
 		http.Error(w, `{"error":"Failed to fetch template"}`, http.StatusInternalServerError)
 		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing transaction in PreviewTemplate: %v", err)
 	}
 
 	json.Unmarshal(stepsJSON, &t.BaseRuleSteps)
@@ -595,7 +634,15 @@ func (h *TemplateHandler) InstantiateTemplate(w http.ResponseWriter, r *http.Req
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := h.db.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	// Start transaction so the RLS context set below persists through all queries
+	tx, err := h.db.BeginTx(ctx, nil)
+	if err != nil {
+		http.Error(w, `{"error":"Failed to start transaction"}`, http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context in InstantiateTemplate: %v", err)
 	}
 
@@ -609,7 +656,7 @@ func (h *TemplateHandler) InstantiateTemplate(w http.ResponseWriter, r *http.Req
 	var stepsJSON, schemaJSON []byte
 	var businessObject string
 
-	err := h.db.QueryRowContext(ctx, templateQuery, templateID, tenantID).Scan(
+	err = tx.QueryRowContext(ctx, templateQuery, templateID, tenantID).Scan(
 		&stepsJSON, &businessObject, &schemaJSON,
 	)
 	if err == sql.ErrNoRows {
@@ -643,7 +690,7 @@ func (h *TemplateHandler) InstantiateTemplate(w http.ResponseWriter, r *http.Req
 		RETURNING id
 	`
 
-	err = h.db.QueryRowContext(ctx, insertQuery,
+	err = tx.QueryRowContext(ctx, insertQuery,
 		ruleID, tenantID, businessObject, req.RuleName,
 		fmt.Sprintf("Created from template: %s", templateID), userID,
 	).Scan(&ruleID)
@@ -660,7 +707,13 @@ func (h *TemplateHandler) InstantiateTemplate(w http.ResponseWriter, r *http.Req
 		VALUES ($1, $2, $3, $4)
 	`
 	paramsJSON, _ := json.Marshal(req.Parameters)
-	h.db.ExecContext(ctx, usageSQL, templateID, ruleID, paramsJSON, userID)
+	tx.ExecContext(ctx, usageSQL, templateID, ruleID, paramsJSON, userID)
+
+	if err := tx.Commit(); err != nil {
+		log.Printf("Error committing transaction in InstantiateTemplate: %v", err)
+		http.Error(w, `{"error":"Failed to create rule"}`, http.StatusInternalServerError)
+		return
+	}
 
 	rule := Rule{
 		ID:             ruleID,

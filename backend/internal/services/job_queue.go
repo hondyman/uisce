@@ -142,7 +142,7 @@ func (q *PostgresJobQueue) Dequeue(ctx context.Context, batchSize int) ([]*model
 		SET status = $1
 		WHERE id IN (
 			SELECT id FROM edm.async_jobs
-			WHERE status = $2 AND tenant_id = CAST(current_setting('app.current_tenant_id') AS UUID)
+			WHERE status = $2 AND tenant_id = CAST(current_setting('uisce.current_tenant') AS UUID)
 			ORDER BY priority DESC, created_at ASC
 			LIMIT $3
 		)
@@ -198,7 +198,7 @@ func (q *PostgresJobQueue) GetJobStatus(ctx context.Context, jobID string) (*mod
 	}
 
 	// Set RLS context
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		return nil, fmt.Errorf("failed to set RLS context: %w", err)
 	}
 
@@ -249,7 +249,7 @@ func (q *PostgresJobQueue) GetJobProgress(ctx context.Context, jobID string) (*m
 	}
 
 	// Set RLS context
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		return nil, fmt.Errorf("failed to set RLS context: %w", err)
 	}
 
@@ -287,7 +287,7 @@ func (q *PostgresJobQueue) UpdateJobStatus(ctx context.Context, jobID string, st
 		UPDATE edm.async_jobs
 		SET status = $1, 
 		    completed_at = CASE WHEN $1 IN ('completed', 'failed', 'cancelled') THEN NOW() ELSE completed_at END
-		WHERE id = $2 AND tenant_id = CAST(current_setting('app.current_tenant_id') AS UUID)
+		WHERE id = $2 AND tenant_id = CAST(current_setting('uisce.current_tenant') AS UUID)
 	`
 
 	result, err := q.db.ExecContext(ctx, query, status, jobID)
@@ -356,7 +356,7 @@ func (q *PostgresJobQueue) CancelJob(ctx context.Context, jobID string) error {
 	query := `
 		UPDATE edm.async_jobs
 		SET status = $1, completed_at = NOW()
-		WHERE id = $2 AND tenant_id = CAST(current_setting('app.current_tenant_id') AS UUID)
+		WHERE id = $2 AND tenant_id = CAST(current_setting('uisce.current_tenant') AS UUID)
 		AND status IN ('queued', 'running')
 	`
 

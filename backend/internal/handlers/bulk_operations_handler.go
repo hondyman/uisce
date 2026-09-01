@@ -132,7 +132,7 @@ func (h *BulkOperationsHandler) BulkCreateTemplates(w http.ResponseWriter, r *ht
 	defer tx.Rollback()
 
 	// Set RLS context
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		log.Printf("Error setting RLS context: %v", err)
 		http.Error(w, `{"error":"Failed to set tenant context"}`, http.StatusForbidden)
 		return
@@ -302,7 +302,7 @@ func (h *BulkOperationsHandler) BulkPublishTemplates(w http.ResponseWriter, r *h
 	defer tx.Rollback()
 
 	// Set RLS context
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		http.Error(w, `{"error":"Failed to set tenant context"}`, http.StatusForbidden)
 		return
 	}
@@ -477,7 +477,7 @@ func (h *BulkOperationsHandler) BulkPromoteRules(w http.ResponseWriter, r *http.
 	defer tx.Rollback()
 
 	// Set RLS context
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.current_tenant_id', $1, false)", tenantID); err != nil {
+	if _, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID); err != nil {
 		http.Error(w, `{"error":"Failed to set tenant context"}`, http.StatusForbidden)
 		return
 	}
