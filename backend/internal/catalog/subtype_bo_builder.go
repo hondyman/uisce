@@ -61,13 +61,13 @@ func (b *SubtypeBOBuilder) BuildForTenant(ctx context.Context, db *sql.DB, tenan
 
 	boTypeID := "06bb774c-8666-4ab1-84eb-4f4d439ac84c"
 
-	seenParents := make(map[string]bool)
+	seenParents := make(map[string]string)
 	for _, row := range rows {
 		pKey := parentKey(row.RootObject)
-		if seenParents[pKey] {
+		if seenParents[pKey] != "" {
 			continue
 		}
-		seenParents[pKey] = true
+		seenParents[pKey] = row.RootObject
 
 		clsNodeID := uuid.New()
 		bkNodeID := uuid.New()
@@ -148,6 +148,59 @@ func (b *SubtypeBOBuilder) BuildForTenant(ctx context.Context, db *sql.DB, tenan
 			"STI root object for "+row.RootObject+" — subtypes managed via oms.subtype_registry")
 		if err != nil {
 			return fmt.Errorf("failed upserting parent BO %s: %w", pKey, err)
+		}
+	}
+
+	// -----------------------------------------------------------------------
+	// [REGRESSION FIX] Populate CoreFields for each parent BO.
+	// Parent BOs were previously left with no business_object_fields entries.
+	// The fix: for each parent, compute the union of all field names across
+	// its child subtypes (from field_allowlist) and insert them as parent
+	// fields with inherits_defaults=true and subtype_scope=NULL.
+	// -----------------------------------------------------------------------
+	parentFieldSets := make(map[string]map[string]bool)
+	for _, row := range rows {
+		pKey := parentKey(row.RootObject)
+		if parentFieldSets[pKey] == nil {
+			parentFieldSets[pKey] = make(map[string]bool)
+		}
+		for _, f := range row.FieldAllowlist {
+			parentFieldSets[pKey][f] = true
+		}
+	}
+
+	for pKey, fields := range parentFieldSets {
+		var parentBOID *string
+		_ = tx.QueryRowContext(ctx, `
+			SELECT id::text FROM business_objects
+			WHERE tenant_id = $1 AND bo_key = $2
+			LIMIT 1
+		`, tenantID, pKey).Scan(&parentBOID)
+
+		if parentBOID == nil {
+			continue
+		}
+
+		for fieldName := range fields {
+			_, err := tx.ExecContext(ctx, `
+				INSERT INTO business_object_fields
+					(id, tenant_id, bo_id, term_node_id, field_name, field_role,
+					 aggregation_type, binding_requirement, eligibility_source,
+					 subtype_scope, is_exposed, inherits_defaults,
+					 created_at, updated_at)
+				VALUES ($1, $2, $3, NULL, $4, 'DIMENSION',
+				        'NONE', 'REQUIRED', 'DIRECT',
+				        NULL, true, true,
+				        NOW(), NOW())
+				ON CONFLICT (tenant_id, bo_id, field_name) DO UPDATE
+					SET inherits_defaults = true,
+					    subtype_scope    = NULL,
+					    field_role       = EXCLUDED.field_role,
+					    updated_at       = NOW()
+			`, uuid.New(), tenantID, *parentBOID, fieldName)
+			if err != nil {
+				return fmt.Errorf("failed upserting parent BO field %s.%s: %w", pKey, fieldName, err)
+			}
 		}
 	}
 
@@ -278,8 +331,6 @@ func (b *SubtypeBOBuilder) BuildForTenant(ctx context.Context, db *sql.DB, tenan
 			}
 		}
 	}
-
-	_ = seenParents
 
 	return tx.Commit()
 }
