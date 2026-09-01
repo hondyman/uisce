@@ -30,5 +30,5 @@ CREATE TABLE IF NOT EXISTS page_definitions (
 -- (which fire on actual runtime traffic to an already-saved endpoint).
 INSERT INTO trigger_types (id, key, label, description, category)
 VALUES
-    (gen_random_uuid(), 'api_endpoint_save', 'API Endpoint Saved', 'Fires after an API Studio endpoint definition is created or updated.', 'api')
+    (gen_random_uuid(), 'api_endpoint_save', 'API Endpoint Saved', 'Fires after an API Studio endpoint definition is created or updated.', 'event')
 ON CONFLICT (key) DO NOTHING;
