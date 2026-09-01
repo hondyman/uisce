@@ -3,26 +3,145 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/cbo"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
 
 type BOCRUDHandler struct {
-	db      *sqlx.DB
-	trigger *TriggerEngine
+	db              *sqlx.DB
+	trigger         *TriggerEngine
+	entitlementRepo *cbo.DBEntitlementRepository
 }
 
 func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
-	return &BOCRUDHandler{db: db, trigger: trigger}
+	return &BOCRUDHandler{db: db, trigger: trigger, entitlementRepo: cbo.NewDBEntitlementRepository(db)}
+}
+
+// boCRUDIdentifierPattern restricts entitlement-policy-supplied column names
+// to safe SQL identifiers before they're interpolated into a WHERE clause —
+// mirrors cbo_adapter.go's filterIdentifierPattern.
+var boCRUDIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// boEntitlementContext is the result of evaluating this BO's entitlement
+// policies (see cbo.EntitlementPolicy / semantic.bo_entitlement_policies)
+// for the current caller: an optional row-scoping condition and the set of
+// fields to strip from responses. It's the same policy table and semantics
+// cbo.Planner enforces for API Studio's REST/GraphQL runtime — evaluated
+// here directly (BO CRUD doesn't route through the CBO planner) so record
+// access is entitled consistently regardless of whether it's reached
+// through a page, this direct CRUD API, or Studio-published endpoints.
+type boEntitlementContext struct {
+	rowFilterColumn string
+	rowFilterValue  string
+	maskedFields    map[string][]string
+}
+
+// evaluateBOEntitlements fetches policies for boKey and enforces the role
+// gate, returning cbo.ErrEntitlementDenied if the caller doesn't satisfy it.
+func (h *BOCRUDHandler) evaluateBOEntitlements(ctx context.Context, r *http.Request, tenantID uuid.UUID, boKey string) (*boEntitlementContext, error) {
+	ec := &boEntitlementContext{}
+	if h.entitlementRepo == nil {
+		return ec, nil
+	}
+
+	policies, err := h.entitlementRepo.GetPoliciesForBO(ctx, &tenantID, boKey)
+	if err != nil || len(policies) == 0 {
+		return ec, nil
+	}
+
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	callerRoles := make(map[string]bool)
+	var organizationID, userID string
+	if claims != nil {
+		for _, role := range claims.Roles {
+			callerRoles[role] = true
+		}
+		organizationID = claims.OrganizationID
+		userID = claims.UserID
+	}
+
+	ec.maskedFields = make(map[string][]string)
+	for _, policy := range policies {
+		if len(policy.RequiredRoles) > 0 {
+			satisfied := false
+			for _, role := range policy.RequiredRoles {
+				if callerRoles[role] {
+					satisfied = true
+					break
+				}
+			}
+			if !satisfied {
+				return nil, cbo.ErrEntitlementDenied
+			}
+		}
+
+		if policy.FilterColumn != "" && boCRUDIdentifierPattern.MatchString(policy.FilterColumn) {
+			var claimValue string
+			switch policy.RowFilterClaim {
+			case "tenant_id":
+				claimValue = tenantID.String()
+			case "organization_id":
+				claimValue = organizationID
+			case "user_id":
+				claimValue = userID
+			}
+			if claimValue != "" {
+				// Only one row-filter binding is applied if multiple
+				// policies declare one; combining independent policies'
+				// row filters with AND is not yet supported.
+				ec.rowFilterColumn = policy.FilterColumn
+				ec.rowFilterValue = claimValue
+			}
+		}
+
+		for field, roles := range policy.MaskedFields {
+			ec.maskedFields[field] = append(ec.maskedFields[field], roles...)
+		}
+	}
+
+	return ec, nil
+}
+
+// maskBORecordFields strips fields from each record when the caller holds
+// none of the roles the field's entitlement policy requires.
+func maskBORecordFields(records []map[string]interface{}, maskedFields map[string][]string, r *http.Request) {
+	if len(maskedFields) == 0 || len(records) == 0 {
+		return
+	}
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	roleSet := make(map[string]bool)
+	if claims != nil {
+		for _, role := range claims.Roles {
+			roleSet[role] = true
+		}
+	}
+	for field, allowedRoles := range maskedFields {
+		allowed := false
+		for _, role := range allowedRoles {
+			if roleSet[role] {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			continue
+		}
+		for _, record := range records {
+			delete(record, field)
+		}
+	}
 }
 
 // resolveWritableColumns returns the set of real column names for drivingTable,
@@ -223,6 +342,16 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	if err != nil {
+		if errors.Is(err, cbo.ErrEntitlementDenied) {
+			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed evaluating entitlements: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
@@ -257,10 +386,15 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
 		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
 			// Defends against updating a record that doesn't belong to this subtype.
-			extraWhere = fmt.Sprintf(" AND %s = $%d", col, argIdx)
+			extraWhere += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
 			argIdx++
 		}
+	}
+	if ec.rowFilterColumn != "" {
+		extraWhere += fmt.Sprintf(" AND %s = $%d", ec.rowFilterColumn, argIdx)
+		args = append(args, ec.rowFilterValue)
+		argIdx++
 	}
 
 	updateSQL := fmt.Sprintf(`
@@ -290,6 +424,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 
 	// Clean byte arrays or UUIDs for JSON serialization
 	cleanScanResult(result)
+	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
 
 	h.emitBORowEvent("row_update", tenantID, actorFromRequest(r), boKey, recordID, result)
 
@@ -314,12 +449,27 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	if err != nil {
+		if errors.Is(err, cbo.ErrEntitlementDenied) {
+			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed evaluating entitlements: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	subtype := r.URL.Query().Get("subtype")
 	if subtype != "" {
 		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
 			// Force the discriminator value server-side, overriding whatever the client sent.
 			payload[col] = subtype
 		}
+	}
+	if ec.rowFilterColumn != "" {
+		// Force the entitled scoping value server-side, same as subtype above —
+		// a caller must not be able to create a record outside their own scope.
+		payload[ec.rowFilterColumn] = ec.rowFilterValue
 	}
 
 	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
@@ -370,6 +520,7 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 	}
 
 	cleanScanResult(result)
+	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
 
 	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
 	h.emitBORowEvent("row_insert", tenantID, actorFromRequest(r), boKey, newRecordID, result)
@@ -391,13 +542,30 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	if err != nil {
+		if errors.Is(err, cbo.ErrEntitlementDenied) {
+			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed evaluating entitlements: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	args := []interface{}{tenantID, recordID}
 	extraWhere := ""
+	argIdx := 3
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
 		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
-			extraWhere = fmt.Sprintf(" AND %s = $3", col)
+			extraWhere += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
+			argIdx++
 		}
+	}
+	if ec.rowFilterColumn != "" {
+		extraWhere += fmt.Sprintf(" AND %s = $%d", ec.rowFilterColumn, argIdx)
+		args = append(args, ec.rowFilterValue)
+		argIdx++
 	}
 
 	selectSQL := fmt.Sprintf(`
@@ -425,6 +593,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 	}
 
 	cleanScanResult(result)
+	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
@@ -438,6 +607,16 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		return
+	}
+
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	if err != nil {
+		if errors.Is(err, cbo.ErrEntitlementDenied) {
+			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed evaluating entitlements: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -473,6 +652,11 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 			argIdx++
 		}
 	}
+	if ec.rowFilterColumn != "" {
+		whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", ec.rowFilterColumn, argIdx))
+		args = append(args, ec.rowFilterValue)
+		argIdx++
+	}
 
 	query := fmt.Sprintf(`
 		SELECT * FROM %s
@@ -497,6 +681,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 			records = append(records, item)
 		}
 	}
+	maskBORecordFields(records, ec.maskedFields, r)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -519,8 +704,25 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2`, boMeta.DrivingTable, boMeta.KeyColumn)
-	res, err := h.db.ExecContext(r.Context(), deleteSQL, tenantID, recordID)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	if err != nil {
+		if errors.Is(err, cbo.ErrEntitlementDenied) {
+			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
+			return
+		}
+		http.Error(w, fmt.Sprintf("failed evaluating entitlements: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	deleteArgs := []interface{}{tenantID, recordID}
+	extraWhere := ""
+	if ec.rowFilterColumn != "" {
+		extraWhere = fmt.Sprintf(" AND %s = $3", ec.rowFilterColumn)
+		deleteArgs = append(deleteArgs, ec.rowFilterValue)
+	}
+
+	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2%s`, boMeta.DrivingTable, boMeta.KeyColumn, extraWhere)
+	res, err := h.db.ExecContext(r.Context(), deleteSQL, deleteArgs...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed deleting record: %v", err), http.StatusInternalServerError)
 		return

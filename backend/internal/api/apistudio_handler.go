@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/apistudio"
+	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/semantic"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
@@ -84,6 +87,118 @@ func (h *APIStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/endpoints/{id}", h.HandleGetEndpoint)
 		r.Post("/endpoints/{id}/deprecate", h.HandleDeprecateEndpoint)
 		r.Post("/endpoints/{id}/retire", h.HandleRetireEndpoint)
+		r.Get("/openapi", h.HandleGetOpenAPI)
+		r.Get("/sdk/{lang}", h.HandleDownloadSDK)
+	})
+}
+
+// HandleGetOpenAPI returns a schema-complete OpenAPI 3.0 spec for every
+// published REST endpoint, suitable for a client generator
+// (openapi-generator, oapi-codegen) rather than being informational-only.
+func (h *APIStudioHandler) HandleGetOpenAPI(w http.ResponseWriter, r *http.Request) {
+	tenantID := extractTenantUUIDFromRequest(r)
+	env := r.URL.Query().Get("env")
+	if env == "" {
+		env = "default"
+	}
+
+	eps, err := h.repo.ListEndpoints(r.Context(), env, tenantID.String())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed listing endpoints: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	spec, err := apistudio.GenerateOpenAPI(env, tenantID.String(), eps)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed generating OpenAPI spec: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(spec))
+}
+
+// HandleDownloadSDK generates and returns a client SDK for the requested
+// language, derived from the same endpoint definitions as HandleGetOpenAPI.
+func (h *APIStudioHandler) HandleDownloadSDK(w http.ResponseWriter, r *http.Request) {
+	tenantID := extractTenantUUIDFromRequest(r)
+	env := r.URL.Query().Get("env")
+	if env == "" {
+		env = "default"
+	}
+	lang := chi.URLParam(r, "lang")
+
+	eps, err := h.repo.ListEndpoints(r.Context(), env, tenantID.String())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed listing endpoints: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	var sdk string
+	switch lang {
+	case "typescript":
+		sdk = apistudio.GenerateTypeScriptSDK(env, tenantID.String(), eps)
+		w.Header().Set("Content-Disposition", "attachment; filename=api-client.ts")
+	case "python":
+		sdk = apistudio.GeneratePythonSDK(env, tenantID.String(), eps)
+		w.Header().Set("Content-Disposition", "attachment; filename=api_client.py")
+	default:
+		http.Error(w, fmt.Sprintf("unsupported SDK language %q (supported: typescript, python)", lang), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	_, _ = w.Write([]byte(sdk))
+}
+
+// APIRuntimeMountPrefix is where the dynamic REST execution engine is
+// mounted. Endpoint paths configured in API Studio are stored relative to
+// this prefix (see apistudio/sdk.go's generated client baseUrl and
+// apistudio.APIRuntime.SetMountPrefix).
+const APIRuntimeMountPrefix = "/api/runtime"
+
+// ODataMountPrefix is where the read-only OData v4 surface (Excel /
+// Power Query) is mounted — see apistudio.ODataHandler.
+const ODataMountPrefix = "/odata"
+
+// RegisterAPIRuntimeRoutes mounts the dynamic BO-query execution engines —
+// the REST runtime (backend/internal/apistudio.APIRuntime) and the OData
+// v4 read surface (apistudio.ODataHandler) — that resolve and run the
+// endpoints defined through API Studio. It assembles the CBO planner stack
+// (SemanticGraphService + cbo.Planner with its DB-backed repositories)
+// since no other part of the live server constructs one yet.
+//
+// Both engines enforce entitlement policies (semantic.bo_entitlement_policies
+// — role gate, row filter, field masking) via cbo.Planner.Plan, plus
+// Postgres RLS tenant isolation via apistudio.withTenantScopedQuery.
+// Platform-wide RBAC (ABACEngine.Evaluate) remains a stubbed no-op outside
+// this BO entitlement path — see trigger_engine.go.
+func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Client) {
+	graphService := analytics.NewSemanticGraphService(db)
+	resolver := analytics.NewBOContextResolver(db, graphService)
+
+	planner := cbo.NewPlanner(
+		analytics.NewSemanticRepoAdapter(resolver),
+		cbo.NewDBPreAggRepository(db),
+		cbo.NewDBEntitlementRepository(db),
+		cbo.NewDBTelemetryRepository(db),
+		cbo.NewDBSLOProvider(db),
+	)
+	resolver.SetPlanner(planner)
+
+	repo := apistudio.NewRepository(db)
+
+	rt := apistudio.NewAPIRuntime(repo, resolver, db, redisClient)
+	rt.SetMountPrefix(APIRuntimeMountPrefix)
+	r.Route(APIRuntimeMountPrefix, func(sr chi.Router) {
+		sr.HandleFunc("/*", rt.ServeHTTP)
+	})
+
+	odata := apistudio.NewODataHandler(repo, resolver, db, redisClient)
+	odata.SetMountPrefix(ODataMountPrefix)
+	r.Route(ODataMountPrefix, func(sr chi.Router) {
+		sr.HandleFunc("/*", odata.ServeHTTP)
+		sr.HandleFunc("/", odata.ServeHTTP)
 	})
 }
 

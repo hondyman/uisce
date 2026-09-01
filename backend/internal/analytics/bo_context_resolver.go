@@ -498,6 +498,10 @@ type BOSQLRequest struct {
 	Region string `json:"region,omitempty"`
 	// Optional snapshot the caller may provide
 	Snapshot *audit.SemanticSnapshot `json:"snapshot,omitempty"`
+	// CallerRoles / CallerOrganizationID carry the caller's JWT claims
+	// through to the CBO planner for entitlement evaluation.
+	CallerRoles          []string `json:"caller_roles,omitempty"`
+	CallerOrganizationID string   `json:"caller_organization_id,omitempty"`
 }
 
 // ResolveQuery resolves a BO query using the CBO planner
@@ -510,17 +514,19 @@ func (r *BOContextResolver) ResolveQuery(ctx context.Context, req BOSQLRequest) 
 
 	// Build PlanContext
 	pc := cbo.PlanContext{
-		Env:           req.Env,
-		TenantID:      req.TenantID,
-		DatasourceID:  req.DatasourceID,
-		BOName:        req.BOName,
-		Filters:       req.Filters,
-		GroupBy:       req.GroupBy,
-		Measures:      req.Measures,
-		CurrentUserID: req.CurrentUserID,
-		RequestedAt:   time.Now(),
-		Region:        req.Region,
-		Snapshot:      req.Snapshot,
+		Env:                  req.Env,
+		TenantID:             req.TenantID,
+		DatasourceID:         req.DatasourceID,
+		BOName:               req.BOName,
+		Filters:              req.Filters,
+		GroupBy:              req.GroupBy,
+		Measures:             req.Measures,
+		CurrentUserID:        req.CurrentUserID,
+		RequestedAt:          time.Now(),
+		Region:               req.Region,
+		Snapshot:             req.Snapshot,
+		CallerRoles:          req.CallerRoles,
+		CallerOrganizationID: req.CallerOrganizationID,
 	}
 
 	// Plan the query
@@ -537,6 +543,7 @@ func (r *BOContextResolver) ResolveQuery(ctx context.Context, req BOSQLRequest) 
 		Cost:                plan.Cost,
 		CandidatesEvaluated: plan.CandidatesEvaluated,
 		PlanningTimeMs:      plan.PlanningTimeMs,
+		MaskedFields:        plan.MaskedFields,
 	}
 
 	return plan.SQL, meta, nil
