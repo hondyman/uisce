@@ -13,6 +13,7 @@ import {
   CircularProgress,
   Chip,
   Radio,
+  Checkbox,
   Tooltip,
 } from '@mui/material';
 import {
@@ -34,8 +35,8 @@ export interface UnifiedBOPickerModalProps {
   title?: string;
   subtitle?: string;
   context?: 'report' | 'query' | 'page';
-  onPick?: (bo: BusinessObjectSummary, bindingId?: string, selectedRelatedBOs?: string[], bindingDetails?: any, selectedSubtypeKey?: string | null) => void;
-  onSelect?: (bo: BusinessObjectSummary, bindingId?: string, selectedRelatedBOs?: string[], bindingDetails?: any, selectedSubtypeKey?: string | null) => void;
+  onPick?: (bo: BusinessObjectSummary, bindingId?: string, selectedRelatedBOs?: string[], bindingDetails?: any, selectedSubtypeKey?: string | null, selectedSubtypeKeys?: string[]) => void;
+  onSelect?: (bo: BusinessObjectSummary, bindingId?: string, selectedRelatedBOs?: string[], bindingDetails?: any, selectedSubtypeKey?: string | null, selectedSubtypeKeys?: string[]) => void;
   businessObjects?: BusinessObjectSummary[];
   selectedBoId?: string;
   savedQueries?: SavedExplorerQuery[];
@@ -59,6 +60,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
   onDeleteSaved = () => {},
 }) => {
   const theme = useExplorerTheme();
+  const allowMultiSubtype = context === 'page';
   const [search, setSearch] = useState('');
   const [businessObjects, setBusinessObjects] = useState<BusinessObjectSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,6 +75,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
   const [availableRelatedBOs, setAvailableRelatedBOs] = useState<any[]>([]);
   const [selectedRelatedBOs, setSelectedRelatedBOs] = useState<string[]>([]);
   const [selectedSubtypeKey, setSelectedSubtypeKey] = useState<string | null>(null);
+  const [selectedSubtypeKeys, setSelectedSubtypeKeys] = useState<string[]>([]);
 
   useEffect(() => {
     if (!open) {
@@ -82,6 +85,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
       setAvailableRelatedBOs([]);
       setSelectedRelatedBOs([]);
       setSelectedSubtypeKey(null);
+      setSelectedSubtypeKeys([]);
       return;
     }
 
@@ -112,6 +116,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
   const handleSelectBO = async (bo: BusinessObjectSummary) => {
     setSelectedBO(bo);
     setSelectedSubtypeKey(null);
+    setSelectedSubtypeKeys([]);
     setBoDetailsLoading(true);
     try {
       const res = await fetchJSON<any>(`/api/business-objects/${encodeURIComponent(bo.id)}/with_bindings`).catch(() => null);
@@ -127,63 +132,16 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
         ];
       }
       const rawBO = res?.businessObject || res?.bo || res || bo;
-      let subtypes = rawBO?.subtypes || bo?.subtypes || {};
-
-      // Provide standard STI subtypes if not returned by backend
-      if (!subtypes || Object.keys(subtypes).length === 0) {
-        const boIdLower = (bo.id || bo.name || '').toLowerCase();
-        if (boIdLower.includes('account')) {
-          subtypes = {
-            institutional: { name: 'institutional', displayName: 'Institutional Account', description: 'Institutional custody & prime trading accounts', subtypeFields: [{ name: 'sponsor_id', displayName: 'Sponsor ID' }, { name: 'mandate_type', displayName: 'Mandate Type' }, { name: 'clearing_broker_code', displayName: 'Clearing Broker Code' }] },
-            retail_wealth: { name: 'retail_wealth', displayName: 'Retail Wealth', description: 'Private wealth high-net-worth accounts', subtypeFields: [{ name: 'advisor_id', displayName: 'Advisor ID' }, { name: 'suitability_tier', displayName: 'Suitability Tier' }, { name: 'tax_residence_country', displayName: 'Tax Residence' }] },
-            sma: { name: 'sma', displayName: 'SMA (Separately Managed)', description: 'Separately managed multi-strategy accounts', subtypeFields: [{ name: 'model_portfolio_id', displayName: 'Model Portfolio ID' }, { name: 'rebalance_frequency', displayName: 'Rebalance Frequency' }] },
-            trust_estate: { name: 'trust_estate', displayName: 'Trust & Estate', description: 'Fiduciary trust and estate planning accounts', subtypeFields: [{ name: 'trustee_name', displayName: 'Trustee Name' }, { name: 'fiduciary_tax_id', displayName: 'Fiduciary Tax ID' }] },
-            corporate_treasury: { name: 'corporate_treasury', displayName: 'Corporate Treasury', description: 'Operating cash, liquidity and hedging accounts', subtypeFields: [{ name: 'treasury_center_code', displayName: 'Treasury Center' }, { name: 'sweep_account_num', displayName: 'Sweep Account' }] },
-          };
-        } else if (boIdLower.includes('trade_order')) {
-          subtypes = {
-            block_parent: { name: 'block_parent', displayName: 'Block Parent Order', description: 'Parent block order for allocation', subtypeFields: [{ name: 'allocation_rule', displayName: 'Allocation Rule' }] },
-            dma_execution: { name: 'dma_execution', displayName: 'DMA Direct Market Access', description: 'Direct algorithmic market routing', subtypeFields: [{ name: 'algo_strategy', displayName: 'Algo Strategy' }, { name: 'route_venue', displayName: 'Route Venue' }] },
-            otc_bilateral: { name: 'otc_bilateral', displayName: 'OTC Bilateral', description: 'Off-exchange bilateral negotiated trade', subtypeFields: [{ name: 'counterparty_id', displayName: 'Counterparty ID' }, { name: 'isda_master_date', displayName: 'ISDA Date' }] },
-          };
-        } else if (boIdLower.includes('alternative_investment') || boIdLower.includes('altinv')) {
-          subtypes = {
-            private_equity: { name: 'private_equity', displayName: 'Private Equity', description: 'Direct buyout and growth equity funds', subtypeFields: [{ name: 'vintage_year', displayName: 'Vintage Year' }, { name: 'gp_commitment', displayName: 'GP Commitment' }] },
-            venture_capital: { name: 'venture_capital', displayName: 'Venture Capital', description: 'Early and late stage VC portfolios', subtypeFields: [{ name: 'series_stage', displayName: 'Series Stage' }, { name: 'lead_investor', displayName: 'Lead Investor' }] },
-            real_estate: { name: 'real_estate', displayName: 'Real Estate Fund', description: 'Commercial & residential property equity', subtypeFields: [{ name: 'property_sector', displayName: 'Property Sector' }, { name: 'loan_to_value', displayName: 'LTV Ratio' }] },
-            hedge_fund: { name: 'hedge_fund', displayName: 'Hedge Fund', description: 'Absolute return and market neutral strategies', subtypeFields: [{ name: 'high_water_mark', displayName: 'High Water Mark' }, { name: 'hurdle_rate', displayName: 'Hurdle Rate' }] },
-          };
-        } else if (boIdLower.includes('settlement')) {
-          subtypes = {
-            dividend: { name: 'dividend', displayName: 'Dividend Distribution', description: 'Equity cash and scrip dividend flows', subtypeFields: [{ name: 'record_date', displayName: 'Record Date' }, { name: 'withholding_tax', displayName: 'Withholding Tax' }] },
-            coupon_fixed_income: { name: 'coupon_fixed_income', displayName: 'Fixed Income Coupon', description: 'Bond and debt regular coupon schedules', subtypeFields: [{ name: 'coupon_rate', displayName: 'Coupon Rate' }, { name: 'accrued_interest', displayName: 'Accrued Interest' }] },
-            capital_call: { name: 'capital_call', displayName: 'LP Capital Call', description: 'Private fund LP drawdown notice', subtypeFields: [{ name: 'notice_date', displayName: 'Notice Date' }, { name: 'call_percentage', displayName: 'Call %' }] },
-          };
-        }
-      }
-
-      let rels = res?.related_bos || res?.relatedBOs || rawBO?.relatedBOs || bo?.relatedBOs || [];
-      if (!Array.isArray(rels) || rels.length === 0) {
-        const boIdLower = (bo.id || bo.name || '').toLowerCase();
-        if (boIdLower.includes('account')) {
-          rels = [
-            { boName: 'Customer', edge: 'OWNED_BY', description: 'Master account owner & corporate entity' },
-            { boName: 'Position', edge: 'HOLDS', description: 'Current asset portfolio holdings' },
-            { boName: 'TradeOrder', edge: 'TRANSACTED_IN', description: 'Executed transaction ledger' },
-            { boName: 'Settlement', edge: 'SETTLED_TO', description: 'Cash ledger settlements' },
-          ];
-        } else if (boIdLower.includes('trade_order')) {
-          rels = [
-            { boName: 'Account', edge: 'BOOKED_TO', description: 'Booking portfolio account' },
-            { boName: 'Security', edge: 'TARGETS', description: 'Underlying traded security instrument' },
-            { boName: 'Personnel', edge: 'EXECUTED_BY', description: 'Executing trader / portfolio manager' },
-          ];
-        }
-      }
+      const subtypes = rawBO?.subtypes || bo?.subtypes || {};
+      const rels = res?.related_bos || res?.relatedBOs || rawBO?.relatedBOs || bo?.relatedBOs || [];
+      const fields = res?.fields || rawBO?.fields || bo?.fields || [];
+      const coreFields = rawBO?.coreFields || rawBO?.core_fields || bo?.coreFields || bo?.core_fields || (res?.fields ? res.fields : []);
 
       setSelectedBO({
         ...bo,
         ...rawBO,
+        fields,
+        coreFields,
         subtypes,
         relatedBOs: rels,
       });
@@ -217,8 +175,9 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
       (b) => (b.bindingId || b.id) === selectedBindingId
     ) || availableBindings[0];
 
-    if (onPick) onPick(selectedBO, selectedBindingId, selectedRelatedBOs, chosenBinding, selectedSubtypeKey);
-    if (onSelect) onSelect(selectedBO, selectedBindingId, selectedRelatedBOs, chosenBinding, selectedSubtypeKey);
+    const keysArg = allowMultiSubtype ? selectedSubtypeKeys : (selectedSubtypeKey ? [selectedSubtypeKey] : []);
+    if (onPick) onPick(selectedBO, selectedBindingId, selectedRelatedBOs, chosenBinding, selectedSubtypeKey, keysArg);
+    if (onSelect) onSelect(selectedBO, selectedBindingId, selectedRelatedBOs, chosenBinding, selectedSubtypeKey, keysArg);
     onClose();
   };
 
@@ -457,7 +416,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
                         Subtype Scope
                       </Typography>
                       <Chip
-                        label="STI Partial-Index Routing"
+                        label={allowMultiSubtype ? 'Select One or More' : 'STI Partial-Index Routing'}
                         size="small"
                         color="info"
                         variant="outlined"
@@ -465,45 +424,58 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
                       />
                     </Stack>
                     <Stack spacing={0.5}>
-                      <Paper
-                        onClick={() => setSelectedSubtypeKey(null)}
-                        sx={{
-                          p: 1.25,
-                          cursor: 'pointer',
-                          borderRadius: 2,
-                          border: `2px solid ${selectedSubtypeKey === null ? theme.accent : theme.border}`,
-                          bgcolor:
-                            selectedSubtypeKey === null
-                              ? theme.isDark
-                                ? 'rgba(59,130,246,0.1)'
-                                : 'rgba(59,130,246,0.05)'
-                              : theme.background,
-                          transition: 'all 0.15s',
-                          '&:hover': { borderColor: theme.accent },
-                        }}
-                      >
-                        <Stack direction="row" alignItems="center" gap={1}>
-                          <Radio
-                            size="small"
-                            checked={selectedSubtypeKey === null}
-                            sx={{ p: 0, color: theme.textMuted, '&.Mui-checked': { color: theme.accent } }}
-                          />
-                          <Box>
-                            <Typography variant="body2" fontWeight={700} sx={{ color: theme.text }}>
-                              All Subtypes (Core Only)
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: theme.textMuted }}>
-                              Baseline fields only · Full table scan · No subtype-specific joins
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Paper>
+                      {!allowMultiSubtype && (
+                        <Paper
+                          onClick={() => setSelectedSubtypeKey(null)}
+                          sx={{
+                            p: 1.25,
+                            cursor: 'pointer',
+                            borderRadius: 2,
+                            border: `2px solid ${selectedSubtypeKey === null ? theme.accent : theme.border}`,
+                            bgcolor:
+                              selectedSubtypeKey === null
+                                ? theme.isDark
+                                  ? 'rgba(59,130,246,0.1)'
+                                  : 'rgba(59,130,246,0.05)'
+                                : theme.background,
+                            transition: 'all 0.15s',
+                            '&:hover': { borderColor: theme.accent },
+                          }}
+                        >
+                          <Stack direction="row" alignItems="center" gap={1}>
+                            <Radio
+                              size="small"
+                              checked={selectedSubtypeKey === null}
+                              sx={{ p: 0, color: theme.textMuted, '&.Mui-checked': { color: theme.accent } }}
+                            />
+                            <Box>
+                              <Typography variant="body2" fontWeight={700} sx={{ color: theme.text }}>
+                                All Subtypes (Core Only)
+                              </Typography>
+                              <Typography variant="caption" sx={{ color: theme.textMuted }}>
+                                Baseline fields only · Full table scan · No subtype-specific joins
+                              </Typography>
+                            </Box>
+                          </Stack>
+                        </Paper>
+                      )}
                       {Object.entries(selectedBO.subtypes).map(([subKey, subDef]: [string, any]) => {
-                        const isSelected = selectedSubtypeKey === subKey;
+                        const isSelected = allowMultiSubtype
+                          ? selectedSubtypeKeys.includes(subKey)
+                          : selectedSubtypeKey === subKey;
+                        const toggle = () => {
+                          if (allowMultiSubtype) {
+                            setSelectedSubtypeKeys((prev) =>
+                              prev.includes(subKey) ? prev.filter((k) => k !== subKey) : [...prev, subKey]
+                            );
+                          } else {
+                            setSelectedSubtypeKey(subKey);
+                          }
+                        };
                         return (
                           <Paper
                             key={subKey}
-                            onClick={() => setSelectedSubtypeKey(subKey)}
+                            onClick={toggle}
                             sx={{
                               p: 1.25,
                               cursor: 'pointer',
@@ -519,11 +491,19 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
                             }}
                           >
                             <Stack direction="row" alignItems="center" gap={1}>
-                              <Radio
-                                size="small"
-                                checked={isSelected}
-                                sx={{ p: 0, color: theme.textMuted, '&.Mui-checked': { color: theme.accent } }}
-                              />
+                              {allowMultiSubtype ? (
+                                <Checkbox
+                                  size="small"
+                                  checked={isSelected}
+                                  sx={{ p: 0, color: theme.textMuted, '&.Mui-checked': { color: theme.accent } }}
+                                />
+                              ) : (
+                                <Radio
+                                  size="small"
+                                  checked={isSelected}
+                                  sx={{ p: 0, color: theme.textMuted, '&.Mui-checked': { color: theme.accent } }}
+                                />
+                              )}
                               <Box sx={{ flex: 1 }}>
                                 <Typography variant="body2" fontWeight={700} sx={{ color: theme.text }}>
                                   {subDef?.displayName || subDef?.name || subKey}
@@ -544,10 +524,16 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
                         );
                       })}
                     </Stack>
-                    {selectedSubtypeKey !== null && (
+                    {!allowMultiSubtype && selectedSubtypeKey !== null && (
                       <Alert severity="info" sx={{ borderRadius: 2, fontSize: '0.72rem', mt: 0.5 }}>
                         <strong>STI pushdown active:</strong> Query will route through the{' '}
                         <code>WHERE t0.subtype_code = '{selectedSubtypeKey}'</code> partial index.
+                      </Alert>
+                    )}
+                    {allowMultiSubtype && selectedSubtypeKeys.length > 0 && (
+                      <Alert severity="info" sx={{ borderRadius: 2, fontSize: '0.72rem', mt: 0.5 }}>
+                        <strong>{selectedSubtypeKeys.length} subtype{selectedSubtypeKeys.length > 1 ? 's' : ''} selected:</strong>{' '}
+                        {selectedSubtypeKeys.join(', ')}
                       </Alert>
                     )}
                   </Box>
@@ -761,7 +747,7 @@ export const UnifiedBOPickerModal: React.FC<UnifiedBOPickerModalProps> = ({
             variant="contained"
             color="primary"
             onClick={handleConfirm}
-            disabled={!selectedBO}
+            disabled={!selectedBO || (allowMultiSubtype && Boolean(selectedBO?.subtypes) && Object.keys(selectedBO.subtypes).length > 0 && selectedSubtypeKeys.length === 0)}
             sx={{ textTransform: 'none', fontWeight: 700, px: 3, borderRadius: 2 }}
           >
             {context === 'page' ? 'Confirm & Create Page' : context === 'report' ? 'Confirm & Create Report' : 'Confirm & Create Query Tab'}

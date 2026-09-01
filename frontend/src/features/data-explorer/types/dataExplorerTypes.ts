@@ -238,6 +238,13 @@ export interface BusinessObjectSummary {
   defaultBindingId?: string;
   fieldCount?: number;
   updatedAt?: string;
+  // Populated on-demand by UnifiedBOPickerModal from the BO's `with_bindings`
+  // detail response — not part of the summary list payload.
+  subtypes?: Record<string, any>;
+  relatedBOs?: any[];
+  fields?: any[];
+  coreFields?: any[];
+  core_fields?: any[];
 }
 
 export const EXPLORER_ACCENT = '#f9f506';
