@@ -30,6 +30,13 @@ type PlanContext struct {
 	SLO           *QuerySLO              `json:"slo,omitempty"`
 	RequestedAt   time.Time              `json:"requested_at"`
 
+	// CallerRoles / CallerOrganizationID carry the caller's JWT claims for
+	// entitlement evaluation (role gate + row filter binding) in Plan().
+	// TenantID and CurrentUserID above double as the tenant_id/user_id
+	// row-filter claim sources.
+	CallerRoles          []string `json:"caller_roles,omitempty"`
+	CallerOrganizationID string   `json:"caller_organization_id,omitempty"`
+
 	// Region — required for all runtime operations per region-spec
 	Region string `json:"region,omitempty"`
 
@@ -83,6 +90,11 @@ type PlannedQuery struct {
 	CandidatesEvaluated int                 `json:"candidates_evaluated"`
 	SLOSatisfied        bool                `json:"slo_satisfied"`
 	PlanningTimeMs      float64             `json:"planning_time_ms"`
+
+	// MaskedFields is the merged field-masking map from every entitlement
+	// policy evaluated for this BO (fieldName -> roles allowed to see it),
+	// for the caller (apistudio's runtime) to apply against result rows.
+	MaskedFields map[string][]string `json:"masked_fields,omitempty"`
 }
 
 // UsePreAgg returns true if this plan uses a pre-aggregation (should route to StarRocks)
@@ -98,6 +110,7 @@ type QueryPlanMetadata struct {
 	Cost                PlanCost            `json:"cost"`
 	CandidatesEvaluated int                 `json:"candidates_evaluated"`
 	PlanningTimeMs      float64             `json:"planning_time_ms"`
+	MaskedFields        map[string][]string `json:"masked_fields,omitempty"`
 }
 
 // PreAggDescriptor describes a pre-aggregation for planning

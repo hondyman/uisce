@@ -3,11 +3,18 @@ package cbo
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+// entitlementIdentifierPattern restricts EntitlementPolicy.FilterColumn to
+// safe SQL identifiers before it is injected as a query filter — policy rows
+// are admin-configured but still shouldn't be trusted as raw SQL text.
+var entitlementIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // SemanticRepository resolves BO and pre-agg SQL
 type SemanticRepository interface {
@@ -33,15 +40,47 @@ type EntitlementRepository interface {
 	GetPoliciesForBO(ctx context.Context, tenantID *uuid.UUID, boName string) ([]EntitlementPolicy, error)
 }
 
-// EntitlementPolicy represents an entitlement policy
+// EntitlementPolicy represents an entitlement policy: a role gate, an
+// optional row filter, and optional field masking, all keyed to a Business
+// Object so they apply uniformly regardless of access path (REST, GraphQL,
+// and — once wired — any other consumer of cbo.Planner).
 type EntitlementPolicy struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	BOName       string    `json:"bo_name"`
-	Strategy     string    `json:"strategy"` // "join", "prefilter", "inline"
-	OverheadMs   float64   `json:"overhead_ms"`
-	FilterColumn string    `json:"filter_column,omitempty"`
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	BOName     string    `json:"bo_name"`
+	Strategy   string    `json:"strategy"` // "join", "prefilter", "inline" — cost-model hint only
+	OverheadMs float64   `json:"overhead_ms"`
+
+	// RequiredRoles: caller must hold at least one of these JWT roles to
+	// access the BO at all. Empty = no role restriction.
+	RequiredRoles []string `json:"required_roles,omitempty"`
+
+	// Row filter: when both are set, "<RowFilterColumn> = <claim value>" is
+	// injected into every query against this BO. RowFilterClaim must be one
+	// of allowedRowFilterClaims — never an arbitrary caller-supplied value —
+	// and RowFilterColumn goes through the same identifier whitelist as
+	// user-supplied filters (see cbo_adapter.go's filterIdentifierPattern).
+	FilterColumn   string `json:"filter_column,omitempty"`
+	RowFilterClaim string `json:"row_filter_claim,omitempty"`
+
+	// MaskedFields: fieldName -> roles allowed to see it. A field listed
+	// here is stripped from every response row unless the caller holds at
+	// least one of the listed roles.
+	MaskedFields map[string][]string `json:"masked_fields,omitempty"`
 }
+
+// allowedRowFilterClaims is the fixed set of caller claims a row filter may
+// bind to. Deliberately not a free-form claim name to avoid turning policy
+// configuration into an injection vector.
+var allowedRowFilterClaims = map[string]bool{
+	"tenant_id":       true,
+	"organization_id": true,
+	"user_id":         true,
+}
+
+// ErrEntitlementDenied is returned by Plan when the caller's roles don't
+// satisfy an EntitlementPolicy.RequiredRoles gate for the requested BO.
+var ErrEntitlementDenied = errors.New("cbo: caller does not satisfy entitlement policy for this business object")
 
 // SLOProvider provides SLO constraints for planning
 type SLOProvider interface {
@@ -84,6 +123,11 @@ func NewPlanner(
 func (p *Planner) Plan(ctx context.Context, pc PlanContext) (PlannedQuery, error) {
 	startTime := time.Now()
 
+	maskedFields, err := p.applyEntitlements(ctx, &pc)
+	if err != nil {
+		return PlannedQuery{}, err
+	}
+
 	// Get SLO if not provided
 	if pc.SLO == nil && p.sloProvider != nil {
 		pc.SLO = p.sloProvider.ForBO(ctx, pc.Env, pc.TenantID, pc.BOName)
@@ -110,7 +154,7 @@ func (p *Planner) Plan(ctx context.Context, pc PlanContext) (PlannedQuery, error
 	if err != nil {
 		log.Printf("[planner] Error generating candidates: %v", err)
 		// Fall back to base plan
-		return p.fallbackPlan(ctx, pc, startTime)
+		return p.fallbackPlan(ctx, pc, startTime, maskedFields)
 	}
 
 	// Estimate costs for each candidate
@@ -133,12 +177,13 @@ func (p *Planner) Plan(ctx context.Context, pc PlanContext) (PlannedQuery, error
 	// Select best plan that satisfies SLO
 	best := p.selectBestPlan(scoredCandidates, pc.SLO)
 	if best == nil {
-		return p.fallbackPlan(ctx, pc, startTime)
+		return p.fallbackPlan(ctx, pc, startTime, maskedFields)
 	}
 
 	best.CandidatesEvaluated = len(candidates)
 	best.SLOSatisfied = p.satisfiesSLO(pc.SLO, best.Cost)
 	best.PlanningTimeMs = float64(time.Since(startTime).Microseconds()) / 1000.0
+	best.MaskedFields = maskedFields
 
 	// Record telemetry
 	p.logTelemetry(ctx, pc, best, startTime)
@@ -147,6 +192,90 @@ func (p *Planner) Plan(ctx context.Context, pc PlanContext) (PlannedQuery, error
 		best.PlanType, best.Cost.EstimatedLatencyMs, best.CandidatesEvaluated, best.SLOSatisfied)
 
 	return *best, nil
+}
+
+// applyEntitlements fetches entitlement policies for pc.BOName, enforces the
+// role gate (returning ErrEntitlementDenied if the caller doesn't satisfy
+// it), and merges any row-filter conditions into pc.Filters in place. It
+// returns the merged field-masking map for the caller (apistudio's runtime)
+// to apply against result rows after execution.
+func (p *Planner) applyEntitlements(ctx context.Context, pc *PlanContext) (map[string][]string, error) {
+	if p.entitlementRepo == nil {
+		return nil, nil
+	}
+
+	policies, err := p.entitlementRepo.GetPoliciesForBO(ctx, pc.TenantID, pc.BOName)
+	if err != nil || len(policies) == 0 {
+		return nil, nil
+	}
+
+	callerRoles := make(map[string]bool, len(pc.CallerRoles))
+	for _, role := range pc.CallerRoles {
+		callerRoles[role] = true
+	}
+
+	maskedFields := make(map[string][]string)
+	var rowFilters map[string]interface{}
+
+	for _, policy := range policies {
+		if len(policy.RequiredRoles) > 0 {
+			satisfied := false
+			for _, role := range policy.RequiredRoles {
+				if callerRoles[role] {
+					satisfied = true
+					break
+				}
+			}
+			if !satisfied {
+				return nil, ErrEntitlementDenied
+			}
+		}
+
+		if policy.FilterColumn != "" && allowedRowFilterClaims[policy.RowFilterClaim] &&
+			entitlementIdentifierPattern.MatchString(policy.FilterColumn) {
+			var claimValue string
+			switch policy.RowFilterClaim {
+			case "tenant_id":
+				if pc.TenantID != nil {
+					claimValue = pc.TenantID.String()
+				}
+			case "organization_id":
+				claimValue = pc.CallerOrganizationID
+			case "user_id":
+				claimValue = pc.CurrentUserID
+			}
+			if claimValue != "" {
+				if rowFilters == nil {
+					rowFilters = make(map[string]interface{})
+				}
+				rowFilters[policy.FilterColumn] = claimValue
+			}
+		}
+
+		for field, roles := range policy.MaskedFields {
+			maskedFields[field] = append(maskedFields[field], roles...)
+		}
+	}
+
+	if len(rowFilters) > 0 {
+		// Entitlement-enforced filters take precedence over any
+		// caller-supplied filter of the same name — a caller must not be
+		// able to widen their own row scoping via a query param that
+		// happens to share the entitled column's name.
+		merged := make(map[string]interface{}, len(pc.Filters)+len(rowFilters))
+		for k, v := range pc.Filters {
+			merged[k] = v
+		}
+		for k, v := range rowFilters {
+			merged[k] = v
+		}
+		pc.Filters = merged
+	}
+
+	if len(maskedFields) == 0 {
+		return nil, nil
+	}
+	return maskedFields, nil
 }
 
 // logTelemetry logs the planning result and semantic event
@@ -470,7 +599,7 @@ func (p *Planner) satisfiesSLO(slo *QuerySLO, cost PlanCost) bool {
 }
 
 // fallbackPlan returns a simple base plan when planning fails
-func (p *Planner) fallbackPlan(ctx context.Context, pc PlanContext, startTime time.Time) (PlannedQuery, error) {
+func (p *Planner) fallbackPlan(ctx context.Context, pc PlanContext, startTime time.Time, maskedFields map[string][]string) (PlannedQuery, error) {
 	sql := p.buildDefaultSQL(pc)
 
 	return PlannedQuery{
@@ -486,6 +615,7 @@ func (p *Planner) fallbackPlan(ctx context.Context, pc PlanContext, startTime ti
 		CandidatesEvaluated: 0,
 		SLOSatisfied:        false,
 		PlanningTimeMs:      float64(time.Since(startTime).Microseconds()) / 1000.0,
+		MaskedFields:        maskedFields,
 	}, nil
 }
 

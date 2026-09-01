@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // DBPreAggRepository implements PreAggRepository using SQL
@@ -115,12 +116,52 @@ func NewDBEntitlementRepository(db *sqlx.DB) *DBEntitlementRepository {
 	return &DBEntitlementRepository{db: db}
 }
 
-// GetPoliciesForBO lists entitlement policies for a BO
+// GetPoliciesForBO lists entitlement policies for a BO, scoped to the
+// caller's tenant plus any tenant-wide (tenant_id IS NULL) policies.
 func (r *DBEntitlementRepository) GetPoliciesForBO(ctx context.Context, tenantID *uuid.UUID, boName string) ([]EntitlementPolicy, error) {
-	// For now, return a default policy
-	// In future, table semantic.entitlements could store this
+	query := `
+		SELECT id, name, strategy, required_roles, row_filter_column, row_filter_claim, masked_fields
+		FROM semantic.bo_entitlement_policies
+		WHERE bo_name = $2
+		  AND (tenant_id = $1 OR tenant_id IS NULL)
+	`
 
-	// Placeholder: Look for a special entitlement config or default to JOIN
-	// We return empty list which defaults to JOIN in planner
-	return []EntitlementPolicy{}, nil
+	var tid uuid.UUID
+	if tenantID != nil {
+		tid = *tenantID
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, tid, boName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var policies []EntitlementPolicy
+	for rows.Next() {
+		var pol EntitlementPolicy
+		var requiredRoles pq.StringArray
+		var filterColumn, rowFilterClaim *string
+		var maskedFieldsRaw []byte
+
+		if err := rows.Scan(&pol.ID, &pol.Name, &pol.Strategy, &requiredRoles, &filterColumn, &rowFilterClaim, &maskedFieldsRaw); err != nil {
+			continue
+		}
+
+		pol.BOName = boName
+		pol.RequiredRoles = []string(requiredRoles)
+		if filterColumn != nil {
+			pol.FilterColumn = *filterColumn
+		}
+		if rowFilterClaim != nil {
+			pol.RowFilterClaim = *rowFilterClaim
+		}
+		if len(maskedFieldsRaw) > 0 {
+			_ = json.Unmarshal(maskedFieldsRaw, &pol.MaskedFields)
+		}
+
+		policies = append(policies, pol)
+	}
+
+	return policies, rows.Err()
 }
