@@ -1711,8 +1711,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Initialize refactored handlers
 		pageDesignerHandler := NewPageDesignerLayoutHandler(sqlxDB)
 		pageDesignerHandler.RegisterRoutes(r)
+		// boCrudGatewayHandler is registered on /v1 only (below) — registerBOCRUDRoutes
+		// above already mounted BOCRUDHandler's routes directly on r (with a real
+		// TriggerEngine); mounting it again here on r would double-Mount "/bo" and
+		// panic chi at startup. The /v1-prefixed mount is still needed: a large
+		// number of frontend pages call /api/v1/bo/... directly.
 		boCrudGatewayHandler := NewBOCRUDHandler(sqlxDB, nil)
-		boCrudGatewayHandler.RegisterRoutes(r)
 		autoPageCompilerHandler := NewAutoPageHandler(sqlxDB)
 		autoPageCompilerHandler.RegisterRoutes(r)
 
