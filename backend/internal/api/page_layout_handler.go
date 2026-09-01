@@ -10,22 +10,26 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
-// PageRegistryEntry represents a declarative PageSpec blueprint stored in public.page_registry
+// PageRegistryEntry represents a declarative PageSpec blueprint stored in public.page_registry.
+// The db tags map onto the table's real column names (display_label, default_layout, ...);
+// the json tags keep the external API contract (title, layout_spec) that the frontend expects.
 type PageRegistryEntry struct {
-	ID          string          `json:"id" db:"id"`
-	TenantID    string          `json:"tenant_id" db:"tenant_id"`
-	PageKey     string          `json:"page_key" db:"page_key"`
-	Title       string          `json:"title" db:"title"`
-	Description *string         `json:"description,omitempty" db:"description"`
-	LayoutSpec  json.RawMessage `json:"layout_spec" db:"layout_spec"`
-	IsGoldCopy  bool            `json:"is_gold_copy" db:"is_gold_copy"`
-	IsActive    bool            `json:"is_active" db:"is_active"`
-	CreatedAt   time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at" db:"updated_at"`
+	ID               string          `json:"id" db:"id"`
+	TenantID         string          `json:"tenant_id" db:"tenant_id"`
+	PageKey          string          `json:"page_key" db:"page_key"`
+	BusinessObjectID string          `json:"business_object_id" db:"business_object_id"`
+	BOBindingID      *string         `json:"bo_binding_id,omitempty" db:"bo_binding_id"`
+	Title            string          `json:"title" db:"display_label"`
+	Description      *string         `json:"description,omitempty" db:"description"`
+	Icon             *string         `json:"icon,omitempty" db:"icon"`
+	LayoutSpec       json.RawMessage `json:"layout_spec" db:"default_layout"`
+	IsActive         bool            `json:"is_active" db:"is_active"`
+	CreatedAt        time.Time       `json:"created_at" db:"created_at"`
+	UpdatedAt        time.Time       `json:"updated_at" db:"updated_at"`
 }
 
 type PageDesignerLayoutHandler struct {
@@ -66,12 +70,10 @@ func (h *PageDesignerLayoutHandler) GetPage(w http.ResponseWriter, r *http.Reque
 	}
 
 	var entry PageRegistryEntry
-	// Query prioritizing tenant-specific blueprint, falling back to Gold Copy baseline
 	query := `
-		SELECT id, tenant_id, page_key, title, description, layout_spec, is_gold_copy, is_active, created_at, updated_at
+		SELECT id, tenant_id, page_key, business_object_id, bo_binding_id, display_label, description, icon, default_layout, is_active, created_at, updated_at
 		FROM public.page_registry
-		WHERE page_key = $1 AND is_active = TRUE AND (tenant_id = $2 OR is_gold_copy = TRUE)
-		ORDER BY CASE WHEN tenant_id = $2 THEN 0 ELSE 1 END, created_at DESC
+		WHERE page_key = $1 AND is_active = TRUE AND tenant_id = $2
 		LIMIT 1;
 	`
 	err := h.db.GetContext(r.Context(), &entry, query, pageKey, tenantID)
@@ -104,10 +106,10 @@ func (h *PageDesignerLayoutHandler) ListPages(w http.ResponseWriter, r *http.Req
 
 	var pages []PageRegistryEntry
 	query := `
-		SELECT DISTINCT ON (page_key) id, tenant_id, page_key, title, description, layout_spec, is_gold_copy, is_active, created_at, updated_at
+		SELECT id, tenant_id, page_key, business_object_id, bo_binding_id, display_label, description, icon, default_layout, is_active, created_at, updated_at
 		FROM public.page_registry
-		WHERE is_active = TRUE AND (tenant_id = $1 OR is_gold_copy = TRUE)
-		ORDER BY page_key, CASE WHEN tenant_id = $1 THEN 0 ELSE 1 END, created_at DESC;
+		WHERE is_active = TRUE AND tenant_id = $1
+		ORDER BY created_at DESC;
 	`
 	err := h.db.SelectContext(r.Context(), &pages, query, tenantID)
 	if err != nil {
@@ -137,11 +139,13 @@ func (h *PageDesignerLayoutHandler) SavePage(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		PageKey     string          `json:"page_key"`
-		Title       string          `json:"title"`
-		Description *string         `json:"description,omitempty"`
-		LayoutSpec  json.RawMessage `json:"layout_spec"`
-		IsGoldCopy  bool            `json:"is_gold_copy"`
+		PageKey          string          `json:"page_key"`
+		Title            string          `json:"title"`
+		Description      *string         `json:"description,omitempty"`
+		Icon             *string         `json:"icon,omitempty"`
+		LayoutSpec       json.RawMessage `json:"layout_spec"`
+		BusinessObjectID string          `json:"business_object_id"`
+		BOBindingID      *string         `json:"bo_binding_id,omitempty"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -149,8 +153,8 @@ func (h *PageDesignerLayoutHandler) SavePage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if req.PageKey == "" || req.Title == "" {
-		http.Error(w, "page_key and title are required", http.StatusBadRequest)
+	if req.PageKey == "" || req.Title == "" || req.BusinessObjectID == "" {
+		http.Error(w, "page_key, title, and business_object_id are required", http.StatusBadRequest)
 		return
 	}
 	if len(req.LayoutSpec) == 0 {
@@ -169,21 +173,23 @@ func (h *PageDesignerLayoutHandler) SavePage(w http.ResponseWriter, r *http.Requ
 
 	newID := uuid.New().String()
 	query := `
-		INSERT INTO public.page_registry (id, tenant_id, page_key, title, description, layout_spec, is_gold_copy, is_active, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, NOW(), NOW())
-		ON CONFLICT (tenant_id, page_key)
+		INSERT INTO public.page_registry (id, tenant_id, page_key, business_object_id, bo_binding_id, display_label, description, icon, default_layout, is_active, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, TRUE, NOW(), NOW())
+		ON CONFLICT (page_key, tenant_id)
 		DO UPDATE SET
-			title = EXCLUDED.title,
+			business_object_id = EXCLUDED.business_object_id,
+			bo_binding_id = EXCLUDED.bo_binding_id,
+			display_label = EXCLUDED.display_label,
 			description = EXCLUDED.description,
-			layout_spec = EXCLUDED.layout_spec,
-			is_gold_copy = EXCLUDED.is_gold_copy,
+			icon = EXCLUDED.icon,
+			default_layout = EXCLUDED.default_layout,
 			is_active = TRUE,
 			updated_at = NOW()
-		RETURNING id, tenant_id, page_key, title, description, layout_spec, is_gold_copy, is_active, created_at, updated_at;
+		RETURNING id, tenant_id, page_key, business_object_id, bo_binding_id, display_label, description, icon, default_layout, is_active, created_at, updated_at;
 	`
 
 	var saved PageRegistryEntry
-	err := h.db.GetContext(r.Context(), &saved, query, newID, tenantID, req.PageKey, req.Title, req.Description, req.LayoutSpec, req.IsGoldCopy)
+	err := h.db.GetContext(r.Context(), &saved, query, newID, tenantID, req.PageKey, req.BusinessObjectID, req.BOBindingID, req.Title, req.Description, req.Icon, req.LayoutSpec)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to save page blueprint: %v", err), http.StatusInternalServerError)
 		return

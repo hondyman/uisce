@@ -138,38 +138,40 @@ func (s *BindingDiscoveryService) discoverTerms(
 
 	query := `
 		WITH driving_columns AS (
-			SELECT col.node_id AS column_node_id, col.node_name AS column_name,
+			SELECT col.id AS column_node_id, col.node_name AS column_name,
 			       tbl.node_name AS table_name, 'DIRECT' AS source_type
 			FROM public.catalog_node tbl
-			JOIN public.catalog_node col ON col.parent_node_id = tbl.node_id
-			WHERE tbl.node_id = $1
+			JOIN public.catalog_node col ON col.parent_id = tbl.id
+			WHERE tbl.id = $1
 		),
 		related_tables AS (
-			SELECT DISTINCT rel_tbl.node_id AS table_node_id, rel_tbl.node_name AS table_name
+			SELECT DISTINCT rel_tbl.id AS table_node_id, rel_tbl.node_name AS table_name
 			FROM public.catalog_edge ce
-			JOIN public.catalog_node rel_tbl ON rel_tbl.node_id = ce.to_node_id
-			WHERE ce.from_node_id = $1 
+			JOIN public.catalog_node rel_tbl ON rel_tbl.id = ce.target_node_id
+			WHERE ce.source_node_id = $1
 			  AND (ce.tenant_id = $2 OR ce.tenant_id = '00000000-0000-0000-0000-000000000000')
-			  AND ce.edge_type IN ('JOINS_TO', 'FK_RELATIONSHIP')
+			  AND ce.relationship_type IN ('JOINS_TO', 'FK_RELATIONSHIP')
 			  AND ce.is_active = TRUE
 		),
 		related_columns AS (
-			SELECT col.node_id AS column_node_id, col.node_name AS column_name,
+			SELECT col.id AS column_node_id, col.node_name AS column_name,
 			       rt.table_name, 'RELATED' AS source_type
 			FROM related_tables rt
-			JOIN public.catalog_node col ON col.parent_node_id = rt.table_node_id
+			JOIN public.catalog_node col ON col.parent_id = rt.table_node_id
 		),
 		all_columns AS (
 			SELECT * FROM driving_columns UNION ALL SELECT * FROM related_columns
 		)
-		SELECT 
-			st.node_id AS term_node_id, st.node_key AS term_key, st.node_name AS term_name,
+		SELECT
+			st.id AS term_node_id,
+			COALESCE(st.properties->>'term_key', st.node_name) AS term_key,
+			st.node_name AS term_name,
 			COALESCE(st.properties->>'term_type', 'ATTRIBUTE') AS term_type,
 			ac.source_type, ac.column_node_id, ac.column_name, ac.table_name
 		FROM all_columns ac
-		JOIN public.catalog_edge em ON em.to_node_id = ac.column_node_id AND em.edge_type = 'MAPS_TO'
-		JOIN public.catalog_node st ON st.node_id = em.from_node_id
-		WHERE st.node_type = 'SEMANTIC_TERM'
+		JOIN public.catalog_edge em ON em.target_node_id = ac.column_node_id AND em.relationship_type = 'MAPS_TO'
+		JOIN public.catalog_node st ON st.id = em.source_node_id
+		WHERE st.node_type = 'semantic_term'
 		  AND (st.tenant_id = $2 OR st.tenant_id = '00000000-0000-0000-0000-000000000000');`
 
 	type FlatRow struct {
