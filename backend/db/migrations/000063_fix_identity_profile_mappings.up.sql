@@ -1,4 +1,19 @@
 -- backend/db/migrations/000063_fix_identity_profile_mappings.up.sql
+--
+-- STATUS: NO-OP on the alpha cluster.
+-- Applied: 2026-08-26 22:21:11 (SHA-256: b7387ff2..., logged in oms.migration_log).
+--
+-- PURPOSE: Provides the legacy-goose migration path for green-field DBs that have not
+-- run backend/migrations/000062_abac_security_profiles.sql. On a fresh checkout of the
+-- legacy goose tracker, 000062 runs first and creates the table; this migration then
+-- applies without effect (CREATE TABLE IF NOT EXISTS, all IF NOT EXISTS guards).
+--
+-- ALPHA DRIFT NOTE: The test suite (TestProfileService_Integration) was fixed by
+-- updating the INSERT in profile_service_test.go to supply idp_client_id, idp_group_id,
+-- and profile_key — the NOT NULL columns alpha adds via migration
+-- 20260709_rename_identity_profile_columns. This migration file is NOT the fix;
+-- it exists only for documentation and green-field completeness.
+--
 -- Additive migration: ensures security.identity_profile_mappings table exists and has proper columns & tenant constraints
 
 CREATE SCHEMA IF NOT EXISTS security;
