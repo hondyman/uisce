@@ -15,21 +15,6 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useTheme } from '@mui/material/styles';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
-import TextField from '@mui/material/TextField';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
-import Checkbox from '@mui/material/Checkbox';
 import {
   Save,
   Play,
@@ -171,15 +156,25 @@ export interface TestResult {
 // Category Configurations
 // ============================================================================
 
-const getCategoryConfig = (isDark: boolean) => ({
+const CATEGORY_CONFIG: Record<RuleCategory, {
+  icon: React.ReactNode;
+  color: string;
+  bgColor: string;
+  label: string;
+  description: string;
+  defaultContext: RuleContext;
+  allowedContexts: RuleContext[];
+  actionTypes: Array<{ value: string; label: string; description: string }>;
+  presetTemplates: Array<{ name: string; description: string; template: Partial<Rule> }>;
+}> = {
   data_quality: {
     icon: <Database size={20} />,
-    color: '#2563eb',
-    bgColor: isDark ? '#1e3a5f' : '#eff6ff',
+    color: 'text-blue-600',
+    bgColor: 'bg-blue-50',
     label: 'Data Quality',
     description: 'Validate data integrity, completeness, and accuracy',
-    defaultContext: 'data_record' as RuleContext,
-    allowedContexts: ['data_record', 'mdm_group', 'system_job'] as RuleContext[],
+    defaultContext: 'data_record',
+    allowedContexts: ['data_record', 'mdm_group', 'system_job'],
     actionTypes: [
       { value: 'reject_row', label: 'Reject Row', description: 'Reject the entire row from processing' },
       { value: 'quarantine_row', label: 'Quarantine Row', description: 'Move row to quarantine for review' },
@@ -216,12 +211,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   compliance: {
     icon: <Shield size={20} />,
-    color: '#9333ea',
-    bgColor: isDark ? '#2e1065' : '#faf5ff',
+    color: 'text-purple-600',
+    bgColor: 'bg-purple-50',
     label: 'Compliance',
     description: 'Enforce regulatory and policy requirements',
-    defaultContext: 'trade_event' as RuleContext,
-    allowedContexts: ['trade_event', 'portfolio', 'client_profile'] as RuleContext[],
+    defaultContext: 'trade_event',
+    allowedContexts: ['trade_event', 'portfolio', 'client_profile'],
     actionTypes: [
       { value: 'block_trade', label: 'Block Trade', description: 'Prevent trade execution' },
       { value: 'require_approval', label: 'Require Approval', description: 'Route to compliance officer' },
@@ -261,12 +256,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   mdm: {
     icon: <RefreshCw size={20} />,
-    color: '#16a34a',
-    bgColor: isDark ? '#14532d' : '#f0fdf4',
+    color: 'text-green-600',
+    bgColor: 'bg-green-50',
     label: 'Master Data',
     description: 'Manage data matching, merging, and survivorship',
-    defaultContext: 'mdm_group' as RuleContext,
-    allowedContexts: ['mdm_group', 'data_record'] as RuleContext[],
+    defaultContext: 'mdm_group',
+    allowedContexts: ['mdm_group', 'data_record'],
     actionTypes: [
       { value: 'auto_merge', label: 'Auto-Merge', description: 'Automatically merge matched records' },
       { value: 'flag_duplicate', label: 'Flag Duplicate', description: 'Mark as potential duplicate' },
@@ -295,12 +290,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   wash_trade: {
     icon: <AlertTriangle size={20} />,
-    color: '#dc2626',
-    bgColor: isDark ? '#450a0a' : '#fef2f2',
+    color: 'text-red-600',
+    bgColor: 'bg-red-50',
     label: 'Wash Trade',
     description: 'Detect and prevent wash trading patterns',
-    defaultContext: 'trade_event' as RuleContext,
-    allowedContexts: ['trade_event', 'portfolio'] as RuleContext[],
+    defaultContext: 'trade_event',
+    allowedContexts: ['trade_event', 'portfolio'],
     actionTypes: [
       { value: 'cancel_trade', label: 'Cancel Trade', description: 'Cancel the suspicious trade' },
       { value: 'flag_pattern', label: 'Flag Pattern', description: 'Flag wash trade pattern' },
@@ -332,12 +327,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   values: {
     icon: <TrendingUp size={20} />,
-    color: '#0d9488',
-    bgColor: isDark ? '#134e4a' : '#f0fdfa',
+    color: 'text-teal-600',
+    bgColor: 'bg-teal-50',
     label: 'Values/ESG',
     description: 'Enforce values-based and ESG investment policies',
-    defaultContext: 'portfolio' as RuleContext,
-    allowedContexts: ['portfolio', 'trade_event', 'client_profile'] as RuleContext[],
+    defaultContext: 'portfolio',
+    allowedContexts: ['portfolio', 'trade_event', 'client_profile'],
     actionTypes: [
       { value: 'exclude_security', label: 'Exclude Security', description: 'Exclude from investment universe' },
       { value: 'apply_tilt', label: 'Apply Tilt', description: 'Apply ESG tilt to allocation' },
@@ -366,12 +361,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   workflow: {
     icon: <GitBranch size={20} />,
-    color: '#ea580c',
-    bgColor: isDark ? '#7c2d12' : '#fff7ed',
+    color: 'text-orange-600',
+    bgColor: 'bg-orange-50',
     label: 'Workflow',
     description: 'Define business process rules and routing',
-    defaultContext: 'system_job' as RuleContext,
-    allowedContexts: ['system_job', 'data_record', 'trade_event'] as RuleContext[],
+    defaultContext: 'system_job',
+    allowedContexts: ['system_job', 'data_record', 'trade_event'],
     actionTypes: [
       { value: 'route_task', label: 'Route Task', description: 'Route to specific queue or user' },
       { value: 'trigger_workflow', label: 'Trigger Workflow', description: 'Start a workflow process' },
@@ -392,12 +387,12 @@ const getCategoryConfig = (isDark: boolean) => ({
   },
   custom: {
     icon: <Zap size={20} />,
-    color: '#4b5563',
-    bgColor: isDark ? '#1f2937' : '#f9fafb',
+    color: 'text-gray-600',
+    bgColor: 'bg-gray-50',
     label: 'Custom',
     description: 'Define custom business rules',
-    defaultContext: 'data_record' as RuleContext,
-    allowedContexts: ['data_record', 'trade_event', 'portfolio', 'client_profile', 'mdm_group', 'system_job'] as RuleContext[],
+    defaultContext: 'data_record',
+    allowedContexts: ['data_record', 'trade_event', 'portfolio', 'client_profile', 'mdm_group', 'system_job'],
     actionTypes: [
       { value: 'custom_action', label: 'Custom Action', description: 'Execute custom action handler' },
       { value: 'webhook', label: 'Webhook', description: 'Call external webhook' },
@@ -406,22 +401,22 @@ const getCategoryConfig = (isDark: boolean) => ({
     ],
     presetTemplates: []
   }
-});
+};
 
 const SEVERITY_CONFIG: Record<RuleSeverity, { icon: React.ReactNode; color: string; bgColor: string; label: string }> = {
-  error: { icon: <XCircle size={16} />, color: '#dc2626', bgColor: '#fee2e2', label: 'Error' },
-  warning: { icon: <AlertTriangle size={16} />, color: '#ca8a04', bgColor: '#fef9c3', label: 'Warning' },
-  info: { icon: <Eye size={16} />, color: '#2563eb', bgColor: '#dbeafe', label: 'Info' },
-  hard_block: { icon: <Lock size={16} />, color: '#991b1b', bgColor: '#fecaca', label: 'Hard Block' },
-  soft_block: { icon: <Unlock size={16} />, color: '#ea580c', bgColor: '#ffedd5', label: 'Soft Block' }
+  error: { icon: <XCircle size={16} />, color: 'text-red-600', bgColor: 'bg-red-100', label: 'Error' },
+  warning: { icon: <AlertTriangle size={16} />, color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'Warning' },
+  info: { icon: <Eye size={16} />, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Info' },
+  hard_block: { icon: <Lock size={16} />, color: 'text-red-700', bgColor: 'bg-red-200', label: 'Hard Block' },
+  soft_block: { icon: <Unlock size={16} />, color: 'text-orange-600', bgColor: 'bg-orange-100', label: 'Soft Block' }
 };
 
 const STATUS_CONFIG: Record<RuleStatus, { color: string; bgColor: string; label: string }> = {
-  draft: { color: '#4b5563', bgColor: '#f3f4f6', label: 'Draft' },
-  awaiting_approval: { color: '#ca8a04', bgColor: '#fef9c3', label: 'Awaiting Approval' },
-  active: { color: '#16a34a', bgColor: '#dcfce7', label: 'Active' },
-  inactive: { color: '#6b7280', bgColor: '#f3f4f6', label: 'Inactive' },
-  deprecated: { color: '#dc2626', bgColor: '#fee2e2', label: 'Deprecated' }
+  draft: { color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Draft' },
+  awaiting_approval: { color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'Awaiting Approval' },
+  active: { color: 'text-green-600', bgColor: 'bg-green-100', label: 'Active' },
+  inactive: { color: 'text-gray-500', bgColor: 'bg-gray-100', label: 'Inactive' },
+  deprecated: { color: 'text-red-500', bgColor: 'bg-red-100', label: 'Deprecated' }
 };
 
 // ============================================================================
@@ -430,42 +425,39 @@ const STATUS_CONFIG: Record<RuleStatus, { color: string; bgColor: string; label:
 
 const generateId = () => `rule_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-const createEmptyRule = (tenantId: string, datasourceId: string, category: RuleCategory = 'data_quality'): Rule => {
-  const CATEGORY_CONFIG = getCategoryConfig(false);
-  return {
-    tenant_id: tenantId,
-    tenant_instance_id: datasourceId,
-    name: '',
-    display_name: '',
-    description: '',
-    category,
-    context: CATEGORY_CONFIG[category].defaultContext,
-    target_entity: '',
-    severity: 'warning',
-    status: 'draft',
-    version: 1,
-    environment: 'dev',
-    logic: [{
-      logic_type: 'condition',
-      condition_tree: {
-        id: generateId(),
-        type: 'group',
-        operator: 'AND',
-        conditions: []
-      },
-      evaluation_order: 1,
-      is_active: true
-    }],
-    actions: [],
-    execution_policies: [
-      { channel: 'batch', is_enabled: true, max_concurrent: 10, timeout_seconds: 300, retry_count: 3 },
-      { channel: 'realtime', is_enabled: false, max_concurrent: 100, timeout_seconds: 5, retry_count: 1 }
-    ],
-    dependent_rule_ids: [],
-    tags: [],
-    metadata: {}
-  };
-};
+const createEmptyRule = (tenantId: string, datasourceId: string, category: RuleCategory = 'data_quality'): Rule => ({
+  tenant_id: tenantId,
+  tenant_instance_id: datasourceId,
+  name: '',
+  display_name: '',
+  description: '',
+  category,
+  context: CATEGORY_CONFIG[category].defaultContext,
+  target_entity: '',
+  severity: 'warning',
+  status: 'draft',
+  version: 1,
+  environment: 'dev',
+  logic: [{
+    logic_type: 'condition',
+    condition_tree: {
+      id: generateId(),
+      type: 'group',
+      operator: 'AND',
+      conditions: []
+    },
+    evaluation_order: 1,
+    is_active: true
+  }],
+  actions: [],
+  execution_policies: [
+    { channel: 'batch', is_enabled: true, max_concurrent: 10, timeout_seconds: 300, retry_count: 3 },
+    { channel: 'realtime', is_enabled: false, max_concurrent: 100, timeout_seconds: 5, retry_count: 1 }
+  ],
+  dependent_rule_ids: [],
+  tags: [],
+  metadata: {}
+});
 
 // ============================================================================
 // Sub-Components
@@ -477,47 +469,32 @@ interface CategorySelectorProps {
   disabled?: boolean;
 }
 
-const CategorySelector: React.FC<CategorySelectorProps> = ({ value, onChange, disabled }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const CATEGORY_CONFIG = getCategoryConfig(isDark);
-  const categories = Object.keys(CATEGORY_CONFIG) as RuleCategory[];
-
-  return (
-    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)', lg: 'repeat(7, 1fr)' }, gap: 1 }}>
-      {categories.map(cat => {
-        const config = CATEGORY_CONFIG[cat];
-        const isSelected = value === cat;
-        return (
-          <Button
-            key={cat}
-            variant={isSelected ? 'contained' : 'outlined'}
-            disabled={disabled}
-            onClick={() => onChange(cat)}
-            sx={{
-              p: 1.5,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.5,
-              borderWidth: 2,
-              borderColor: isSelected ? config.color : 'divider',
-              bgcolor: isSelected ? config.bgColor : 'transparent',
-              color: isSelected ? config.color : 'text.secondary',
-              '&:hover': {
-                borderColor: config.color,
-                bgcolor: config.bgColor,
-              },
-              ...(disabled && { opacity: 0.5, cursor: 'not-allowed' }),
-            }}
-          >
-            <Box sx={{ color: isSelected ? config.color : 'inherit' }}>{config.icon}</Box>
-            <Typography variant="caption" sx={{ fontWeight: 500 }}>{config.label}</Typography>
-          </Button>
-        );
-      })}
-    </Box>
-  );
-};
+const CategorySelector: React.FC<CategorySelectorProps> = ({ value, onChange, disabled }) => (
+  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
+    {(Object.keys(CATEGORY_CONFIG) as RuleCategory[]).map(cat => {
+      const config = CATEGORY_CONFIG[cat];
+      const isSelected = value === cat;
+      return (
+        <button
+          key={cat}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(cat)}
+          className={`p-3 rounded-lg border-2 transition-all ${
+            isSelected
+              ? `${config.bgColor} border-current ${config.color}`
+              : 'border-gray-200 hover:border-gray-300 bg-white'
+          } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          <div className={`flex flex-col items-center gap-1 ${isSelected ? config.color : 'text-gray-600'}`}>
+            {config.icon}
+            <span className="text-xs font-medium">{config.label}</span>
+          </div>
+        </button>
+      );
+    })}
+  </div>
+);
 
 interface ActionEditorProps {
   actions: RuleAction[];
@@ -526,9 +503,6 @@ interface ActionEditorProps {
 }
 
 const ActionEditor: React.FC<ActionEditorProps> = ({ actions, category, onChange }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const CATEGORY_CONFIG = getCategoryConfig(isDark);
   const actionTypes = CATEGORY_CONFIG[category].actionTypes;
 
   const addAction = () => {
@@ -553,73 +527,53 @@ const ActionEditor: React.FC<ActionEditorProps> = ({ actions, category, onChange
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Actions</Typography>
-        <Button
-          size="small"
-          startIcon={<Plus size={14} />}
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-semibold text-gray-700">Actions</label>
+        <button
+          type="button"
           onClick={addAction}
-          sx={{ color: '#2563eb' }}
+          className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
         >
-          Add Action
-        </Button>
-      </Box>
+          <Plus size={14} /> Add Action
+        </button>
+      </div>
 
       {actions.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', borderStyle: 'dashed' }}>
-          <Typography variant="body2" color="text.secondary">No actions configured</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-            Add actions to define what happens when the rule triggers
-          </Typography>
-        </Paper>
+        <div className="text-center py-6 border-2 border-dashed border-gray-300 rounded-lg">
+          <p className="text-gray-500 text-sm">No actions configured</p>
+          <p className="text-gray-400 text-xs mt-1">Add actions to define what happens when the rule triggers</p>
+        </div>
       ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <div className="space-y-2">
           {actions.map((action, index) => (
-            <Paper
-              key={index}
-              variant="outlined"
-              sx={{ p: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}
-            >
-              <Box
-                sx={{
-                  width: 24,
-                  height: 24,
-                  bgcolor: '#2563eb',
-                  color: '#fff',
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  flexShrink: 0,
-                }}
-              >
+            <div key={index} className="flex items-center gap-2 p-3 bg-gray-50 rounded-lg border">
+              <span className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-semibold">
                 {index + 1}
-              </Box>
-              <Select
+              </span>
+              <select
                 value={action.action_type}
                 onChange={(e) => updateAction(index, { action_type: e.target.value })}
-                size="small"
-                sx={{ flex: 1, minWidth: 150 }}
+                aria-label={`Action type for step ${index + 1}`}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
               >
                 {actionTypes.map(at => (
-                  <MenuItem key={at.value} value={at.value}>{at.label}</MenuItem>
+                  <option key={at.value} value={at.value}>{at.label}</option>
                 ))}
-              </Select>
-              <IconButton
-                size="small"
+              </select>
+              <button
+                type="button"
                 onClick={() => removeAction(index)}
-                sx={{ color: '#dc2626', '&:hover': { bgcolor: '#fee2e2' } }}
+                aria-label={`Remove action at step ${index + 1}`}
+                className="p-2 text-red-600 hover:bg-red-50 rounded"
               >
                 <Trash2 size={16} />
-              </IconButton>
-            </Paper>
+              </button>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 };
 
@@ -629,8 +583,6 @@ interface ExecutionPolicyEditorProps {
 }
 
 const ExecutionPolicyEditor: React.FC<ExecutionPolicyEditorProps> = ({ policies, onChange }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const [expanded, setExpanded] = useState(false);
 
   const updatePolicy = (channel: ExecutionChannel, updates: Partial<ExecutionPolicy>) => {
@@ -641,79 +593,62 @@ const ExecutionPolicyEditor: React.FC<ExecutionPolicyEditorProps> = ({ policies,
   };
 
   return (
-    <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
-      <Button
-        fullWidth
+    <div className="border rounded-lg">
+      <button
+        type="button"
         onClick={() => setExpanded(!expanded)}
-        sx={{
-          justifyContent: 'space-between',
-          p: 1.5,
-          '&:hover': { bgcolor: isDark ? '#374151' : '#f9fafb' },
-        }}
+        className="w-full flex items-center justify-between p-3 hover:bg-gray-50"
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Settings size={16} sx={{ color: isDark ? '#9ca3af' : '#6b7280' }} />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>Execution Policies</Typography>
-        </Box>
+        <div className="flex items-center gap-2">
+          <Settings size={16} className="text-gray-500" />
+          <span className="text-sm font-semibold text-gray-700">Execution Policies</span>
+        </div>
         {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-      </Button>
+      </button>
 
       {expanded && (
-        <Box sx={{ p: 1.5, borderTop: 1, borderColor: 'divider' }}>
+        <div className="p-3 border-t space-y-3">
           {policies.map(policy => (
-            <Box
-              key={policy.channel}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-                p: 1,
-                mb: 1,
-                bgcolor: isDark ? '#1f2937' : '#f9fafb',
-                borderRadius: 1,
-              }}
-            >
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={policy.is_enabled}
-                    onChange={(e) => updatePolicy(policy.channel, { is_enabled: e.target.checked })}
-                    size="small"
-                  />
-                }
-                label={<Typography variant="body2" sx={{ fontWeight: 500, textTransform: 'capitalize' }}>{policy.channel}</Typography>}
-                sx={{ minWidth: 100 }}
-              />
+            <div key={policy.channel} className="flex items-center gap-4 p-2 bg-gray-50 rounded">
+              <label className="flex items-center gap-2 min-w-[120px]">
+                <input
+                  type="checkbox"
+                  checked={policy.is_enabled}
+                  onChange={(e) => updatePolicy(policy.channel, { is_enabled: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm font-medium capitalize">{policy.channel}</span>
+              </label>
               {policy.is_enabled && (
                 <>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Clock size={14} sx={{ color: isDark ? '#9ca3af' : '#9ca3af' }} />
-                    <TextField
+                  <div className="flex items-center gap-1">
+                    <Clock size={14} className="text-gray-400" />
+                    <input
                       type="number"
-                      size="small"
                       value={policy.timeout_seconds}
                       onChange={(e) => updatePolicy(policy.channel, { timeout_seconds: parseInt(e.target.value) })}
-                      sx={{ width: 60 }}
+                      className="w-16 px-2 py-1 border rounded text-sm"
+                      title="Timeout (seconds)"
                     />
-                    <Typography variant="caption" sx={{ color: isDark ? '#9ca3af' : '#6b7280' }}>sec</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Users size={14} sx={{ color: isDark ? '#9ca3af' : '#9ca3af' }} />
-                    <TextField
+                    <span className="text-xs text-gray-500">sec</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Users size={14} className="text-gray-400" />
+                    <input
                       type="number"
-                      size="small"
                       value={policy.max_concurrent}
                       onChange={(e) => updatePolicy(policy.channel, { max_concurrent: parseInt(e.target.value) })}
-                      sx={{ width: 60 }}
+                      className="w-16 px-2 py-1 border rounded text-sm"
+                      title="Max concurrent"
                     />
-                  </Box>
+                  </div>
                 </>
               )}
-            </Box>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 };
 
@@ -725,73 +660,54 @@ interface GovernanceBarProps {
 }
 
 const GovernanceBar: React.FC<GovernanceBarProps> = ({ rule, onSubmitForApproval, onPromote, isSaving }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const statusConfig = STATUS_CONFIG[rule.status];
 
-  const getEnvColor = () => {
-    if (rule.environment === 'prod') return { bg: '#dcfce7', color: '#166534' };
-    if (rule.environment === 'test') return { bg: '#fef9c3', color: '#854d0e' };
-    return { bg: isDark ? '#374151' : '#f3f4f6', color: isDark ? '#d1d5db' : '#374151' };
-  };
-  const envColors = getEnvColor();
-
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        p: 1.5,
-        bgcolor: isDark ? '#1f2937' : '#f9fafb',
-        borderBottom: 1,
-        borderColor: 'divider',
-      }}
-    >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Chip
-          label={statusConfig.label}
-          size="small"
-          sx={{ bgcolor: statusConfig.bgColor, color: statusConfig.color, fontWeight: 600 }}
-        />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: isDark ? '#9ca3af' : '#6b7280' }}>
+    <div className="flex items-center justify-between p-3 bg-gray-50 border-b">
+      <div className="flex items-center gap-4">
+        <div className={`px-3 py-1 rounded-full text-xs font-semibold ${statusConfig.bgColor} ${statusConfig.color}`}>
+          {statusConfig.label}
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-600">
           <History size={14} />
-          <Typography variant="body2">v{rule.version}</Typography>
-        </Box>
-        <Chip
-          label={rule.environment.toUpperCase()}
-          size="small"
-          sx={{ bgcolor: envColors.bg, color: envColors.color }}
-        />
-      </Box>
+          <span>v{rule.version}</span>
+        </div>
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <span className={`px-2 py-0.5 rounded text-xs ${
+            rule.environment === 'prod' ? 'bg-green-100 text-green-700' :
+            rule.environment === 'test' ? 'bg-yellow-100 text-yellow-700' :
+            'bg-gray-100 text-gray-700'
+          }`}>
+            {rule.environment.toUpperCase()}
+          </span>
+        </div>
+      </div>
 
-      <Box sx={{ display: 'flex', gap: 1 }}>
+      <div className="flex items-center gap-2">
         {rule.status === 'draft' && (
-          <Button
-            size="small"
-            variant="contained"
+          <button
+            type="button"
             onClick={onSubmitForApproval}
             disabled={isSaving}
-            startIcon={<Send size={14} />}
-            sx={{ bgcolor: '#eab308', '&:hover': { bgcolor: '#ca8a04' }, textTransform: 'none' }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-yellow-500 text-white rounded-lg text-sm hover:bg-yellow-600 disabled:opacity-50"
           >
+            <Send size={14} />
             Submit for Approval
-          </Button>
+          </button>
         )}
         {rule.status === 'active' && rule.environment !== 'prod' && (
-          <Button
-            size="small"
-            variant="contained"
+          <button
+            type="button"
             onClick={() => onPromote(rule.environment === 'dev' ? 'test' : 'prod')}
             disabled={isSaving}
-            startIcon={<GitBranch size={14} />}
-            sx={{ bgcolor: '#9333ea', '&:hover': { bgcolor: '#7e22ce' }, textTransform: 'none' }}
+            className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 disabled:opacity-50"
           >
+            <GitBranch size={14} />
             Promote to {rule.environment === 'dev' ? 'Test' : 'Prod'}
-          </Button>
+          </button>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 };
 
@@ -810,10 +726,6 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
   onSubmitForApproval,
   onPromote
 }) => {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const CATEGORY_CONFIG = getCategoryConfig(isDark);
-
   const [rule, setRule] = useState<Rule>(
     initialRule || createEmptyRule(tenantId, datasourceId)
   );
@@ -826,6 +738,7 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
   const categoryConfig = CATEGORY_CONFIG[rule.category];
   const selectedEntity = availableEntities.find(e => e.name === rule.target_entity);
 
+  // Update context when category changes
   useEffect(() => {
     if (!categoryConfig.allowedContexts.includes(rule.context)) {
       setRule(prev => ({ ...prev, context: categoryConfig.defaultContext }));
@@ -905,7 +818,8 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
   };
 
   return (
-    <Paper sx={{ overflow: 'hidden', border: 1, borderColor: 'divider' }}>
+    <div className="bg-white rounded-lg shadow-lg border overflow-hidden">
+      {/* Governance Bar */}
       <GovernanceBar
         rule={rule}
         onSubmitForApproval={handleSubmitForApproval}
@@ -913,156 +827,170 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
         isSaving={isSaving}
       />
 
-      <Box sx={{ p: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Paper sx={{ p: 1.5, bgcolor: categoryConfig.bgColor, borderRadius: 1, alignSelf: 'flex-start' }}>
-            <Box sx={{ color: categoryConfig.color }}>{categoryConfig.icon}</Box>
-          </Paper>
-          <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Rule Name</Typography>
-                <TextField
-                  fullWidth
-                  size="small"
+      {/* Header */}
+      <div className="p-6 border-b">
+        <div className="flex items-start gap-4">
+          <div className={`p-3 rounded-lg ${categoryConfig.bgColor}`}>
+            <span className={categoryConfig.color}>{categoryConfig.icon}</span>
+          </div>
+          <div className="flex-1 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Rule Name</label>
+                <input
+                  type="text"
                   value={rule.name}
                   onChange={(e) => updateRule({ name: e.target.value })}
                   placeholder="e.g., check_required_fields"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-              </Box>
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Display Name</Typography>
-                <TextField
-                  fullWidth
-                  size="small"
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name</label>
+                <input
+                  type="text"
                   value={rule.display_name}
                   onChange={(e) => updateRule({ display_name: e.target.value })}
                   placeholder="e.g., Required Fields Validation"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-              </Box>
-            </Box>
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Description</Typography>
-              <TextField
-                fullWidth
-                size="small"
-                multiline
-                rows={2}
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Description</label>
+              <textarea
                 value={rule.description}
                 onChange={(e) => updateRule({ description: e.target.value })}
                 placeholder="Describe what this rule validates..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg resize-none"
+                rows={2}
               />
-            </Box>
-          </Box>
-        </Box>
-      </Box>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: isDark ? '#1f2937' : '#f9fafb' }}>
-        <Typography variant="caption" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>Rule Category</Typography>
+      {/* Category Selector */}
+      <div className="p-4 border-b bg-gray-50">
+        <label className="block text-sm font-semibold text-gray-700 mb-2">Rule Category</label>
         <CategorySelector
           value={rule.category}
           onChange={(cat) => updateRule({ category: cat, context: CATEGORY_CONFIG[cat].defaultContext })}
           disabled={!!initialRule}
         />
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>{categoryConfig.description}</Typography>
+        <p className="text-xs text-gray-500 mt-2">{categoryConfig.description}</p>
 
+        {/* Quick Templates */}
         {categoryConfig.presetTemplates.length > 0 && (
-          <Box sx={{ mt: 1.5 }}>
-            <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Quick Start Templates:</Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+          <div className="mt-3">
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Quick Start Templates:</label>
+            <div className="flex flex-wrap gap-2">
               {categoryConfig.presetTemplates.map((tpl, idx) => (
-                <Button
+                <button
                   key={idx}
-                  size="small"
-                  variant="outlined"
+                  type="button"
                   onClick={() => applyTemplate(tpl.template)}
-                  startIcon={<Copy size={12} />}
-                  sx={{ fontSize: '0.75rem' }}
+                  className="px-2 py-1 text-xs bg-white border rounded hover:bg-gray-100"
+                  title={tpl.description}
                 >
+                  <Copy size={12} className="inline mr-1" />
                   {tpl.name}
-                </Button>
+                </button>
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
         )}
-      </Box>
+      </div>
 
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
-        <FormControl fullWidth size="small">
-          <InputLabel>Target Entity</InputLabel>
-          <Select
+      {/* Entity & Context Selection */}
+      <div className="p-4 border-b grid grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Target Entity</label>
+          <select
             value={rule.target_entity}
-            label="Target Entity"
             onChange={(e) => updateRule({ target_entity: e.target.value })}
+            aria-label="Target Entity"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
-            <MenuItem value="">Select entity...</MenuItem>
+            <option value="">Select entity...</option>
             {availableEntities.map(ent => (
-              <MenuItem key={ent.name} value={ent.name}>{ent.name}</MenuItem>
+              <option key={ent.name} value={ent.name}>{ent.name}</option>
             ))}
-          </Select>
-        </FormControl>
-        <FormControl fullWidth size="small">
-          <InputLabel>Context</InputLabel>
-          <Select
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Context</label>
+          <select
             value={rule.context}
-            label="Context"
             onChange={(e) => updateRule({ context: e.target.value as RuleContext })}
+            aria-label="Context"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
             {categoryConfig.allowedContexts.map(ctx => (
-              <MenuItem key={ctx} value={ctx}>{ctx.replace('_', ' ')}</MenuItem>
+              <option key={ctx} value={ctx}>{ctx.replace('_', ' ')}</option>
             ))}
-          </Select>
-        </FormControl>
-        <FormControl fullWidth size="small">
-          <InputLabel>Severity</InputLabel>
-          <Select
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">Severity</label>
+          <select
             value={rule.severity}
-            label="Severity"
             onChange={(e) => updateRule({ severity: e.target.value as RuleSeverity })}
+            aria-label="Severity"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           >
             {(Object.keys(SEVERITY_CONFIG) as RuleSeverity[]).map(sev => (
-              <MenuItem key={sev} value={sev}>{SEVERITY_CONFIG[sev].label}</MenuItem>
+              <option key={sev} value={sev}>{SEVERITY_CONFIG[sev].label}</option>
             ))}
-          </Select>
-        </FormControl>
-      </Box>
+          </select>
+        </div>
+      </div>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => setActiveTab(v as typeof activeTab)}
-          sx={{
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              minHeight: 48,
-            },
-          }}
-        >
-          <Tab value="logic" icon={<FileText size={16} />} label="Logic" iconPosition="start" />
-          <Tab value="actions" icon={<Zap size={16} />} label="Actions" iconPosition="start" />
-          <Tab value="dependencies" icon={<GitBranch size={16} />} label="Dependencies" iconPosition="start" />
-          <Tab value="settings" icon={<Settings size={16} />} label="Settings" iconPosition="start" />
-        </Tabs>
-      </Box>
+      {/* Tabs */}
+      <div className="border-b">
+        <div className="flex">
+          {[
+            { key: 'logic', label: 'Logic', icon: <FileText size={16} /> },
+            { key: 'actions', label: 'Actions', icon: <Zap size={16} /> },
+            { key: 'dependencies', label: 'Dependencies', icon: <GitBranch size={16} /> },
+            { key: 'settings', label: 'Settings', icon: <Settings size={16} /> }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <Box sx={{ p: 3 }}>
+      {/* Tab Content */}
+      <div className="p-6">
         {activeTab === 'logic' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <div className="space-y-4">
             {rule.logic.map((logic, idx) => (
-              <Paper key={idx} variant="outlined" sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Logic Block {idx + 1}</Typography>
-                  <FormControl size="small" sx={{ minWidth: 150 }}>
-                    <Select
-                      value={logic.logic_type}
-                      onChange={(e) => updateLogic(idx, { logic_type: e.target.value as RuleLogic['logic_type'] })}
-                    >
-                      <MenuItem value="condition">Visual Condition</MenuItem>
-                      <MenuItem value="expression">CEL Expression</MenuItem>
-                      <MenuItem value="script">Script</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
+              <div key={idx} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h4 className="font-semibold text-gray-900">Logic Block {idx + 1}</h4>
+                  <select
+                    value={logic.logic_type}
+                    onChange={(e) => updateLogic(idx, { logic_type: e.target.value as RuleLogic['logic_type'] })}
+                    aria-label={`Logic type for block ${idx + 1}`}
+                    className="px-2 py-1 border rounded text-sm"
+                  >
+                    <option value="condition">Visual Condition</option>
+                    <option value="expression">CEL Expression</option>
+                    <option value="script">Script</option>
+                  </select>
+                </div>
 
                 {logic.logic_type === 'condition' && selectedEntity && React.createElement(
                   AdvancedConditionBuilder as any,
@@ -1075,45 +1003,41 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
                 )}
 
                 {logic.logic_type === 'expression' && (
-                  <Box>
-                    <Typography variant="caption" sx={{ fontWeight: 500, mb: 0.5, display: 'block' }}>CEL Expression</Typography>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={4}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">CEL Expression</label>
+                    <textarea
                       value={logic.cel_expression || ''}
                       onChange={(e) => updateLogic(idx, { cel_expression: e.target.value })}
                       placeholder="record.amount > 0 && record.status != 'cancelled'"
-                      sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                      rows={4}
                     />
-                  </Box>
+                  </div>
                 )}
 
                 {logic.logic_type === 'script' && (
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <FormControl size="small" sx={{ minWidth: 120 }}>
-                      <Select
-                        value={logic.script_language || 'javascript'}
-                        onChange={(e) => updateLogic(idx, { script_language: e.target.value })}
-                      >
-                        <MenuItem value="javascript">JavaScript</MenuItem>
-                        <MenuItem value="python">Python</MenuItem>
-                      </Select>
-                    </FormControl>
-                    <TextField
-                      fullWidth
-                      multiline
-                      rows={8}
+                  <div className="space-y-2">
+                    <select
+                      value={logic.script_language || 'javascript'}
+                      onChange={(e) => updateLogic(idx, { script_language: e.target.value })}
+                      aria-label={`Script language for block ${idx + 1}`}
+                      className="px-2 py-1 border rounded text-sm"
+                    >
+                      <option value="javascript">JavaScript</option>
+                      <option value="python">Python</option>
+                    </select>
+                    <textarea
                       value={logic.script_content || ''}
                       onChange={(e) => updateLogic(idx, { script_content: e.target.value })}
                       placeholder="// Custom validation logic..."
-                      sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                      className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                      rows={8}
                     />
-                  </Box>
+                  </div>
                 )}
-              </Paper>
+              </div>
             ))}
-          </Box>
+          </div>
         )}
 
         {activeTab === 'actions' && (
@@ -1125,132 +1049,138 @@ export const UnifiedRuleEditor: React.FC<UnifiedRuleEditorProps> = ({
         )}
 
         {activeTab === 'dependencies' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Paper sx={{ p: 2, bgcolor: isDark ? '#1e3a5f' : '#eff6ff', borderColor: '#3b82f6' }} variant="outlined">
-              <Typography variant="body2">
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-800">
                 <strong>Rule Dependencies:</strong> Define which rules must pass before this rule executes.
                 This creates a validation chain where dependent rules are evaluated first.
-              </Typography>
-            </Paper>
-            <FormControl fullWidth>
-              <InputLabel>Dependent Rules</InputLabel>
-              <Select
+              </p>
+            </div>
+            <div>
+              <label htmlFor={`dependent-rules-${rule.id}`} className="block text-sm font-semibold text-gray-700 mb-2">Dependent Rules</label>
+              <select
+                id={`dependent-rules-${rule.id}`}
                 multiple
                 value={rule.dependent_rule_ids}
                 onChange={(e) => updateRule({
-                  dependent_rule_ids: typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value
-                }}
-                label="Dependent Rules"
-                sx={{ minHeight: 100 }}
+                  
+                  dependent_rule_ids: Array.from(e.target.selectedOptions, opt => opt.value)
+                })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg h-40"
               >
                 {availableRules
                   .filter(r => r.id !== rule.id && r.category === rule.category)
                   .map(r => (
-                    <MenuItem key={r.id} value={r.id}>{r.display_name || r.name}</MenuItem>
+                    <option key={r.id} value={r.id}>{r.display_name || r.name}</option>
                   ))}
-              </Select>
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>Hold Ctrl/Cmd to select multiple rules</Typography>
-            </FormControl>
-          </Box>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple rules</p>
+            </div>
+          </div>
         )}
 
         {activeTab === 'settings' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div className="space-y-6">
             <ExecutionPolicyEditor
               policies={rule.execution_policies}
               onChange={(policies) => updateRule({ execution_policies: policies })}
             />
 
-            <Box>
-              <Typography variant="caption" sx={{ fontWeight: 600, mb: 1, display: 'block' }}>Tags</Typography>
-              <TextField
-                fullWidth
-                size="small"
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Tags</label>
+              <input
+                type="text"
                 value={rule.tags.join(', ')}
                 onChange={(e) => updateRule({ tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
                 placeholder="tag1, tag2, tag3"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               />
-            </Box>
+            </div>
 
-            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 2 }}>
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Effective From</Typography>
-                <TextField
-                  fullWidth
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Effective From</label>
+                <input
                   type="datetime-local"
-                  size="small"
                   value={rule.effective_from || ''}
                   onChange={(e) => updateRule({ effective_from: e.target.value })}
-                  InputLabelProps={{ shrink: true }}
+                  aria-label="Effective From"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-              </Box>
-              <Box>
-                <Typography variant="caption" sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}>Effective To</Typography>
-                <TextField
-                  fullWidth
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Effective To</label>
+                <input
                   type="datetime-local"
-                  size="small"
                   value={rule.effective_to || ''}
                   onChange={(e) => updateRule({ effective_to: e.target.value })}
-                  InputLabelProps={{ shrink: true }}
+                  aria-label="Effective To"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 />
-              </Box>
-            </Box>
-          </Box>
+              </div>
+            </div>
+          </div>
         )}
-      </Box>
+      </div>
 
+      {/* Errors */}
       {errors.length > 0 && (
-        <Box sx={{ mx: 3, mb: 2, p: 2, bgcolor: isDark ? '#450a0a' : '#fef2f2', border: 1, borderColor: 'error.main', borderRadius: 1 }}>
+        <div className="mx-6 mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
           {errors.map((err, idx) => (
-            <Typography key={idx} variant="body2" sx={{ color: 'error.main' }}>{err}</Typography>
+            <p key={idx} className="text-sm text-red-700">{err}</p>
           ))}
-        </Box>
+        </div>
       )}
 
+      {/* Test Results */}
       {testResult && (
-        <Box sx={{ mx: 3, mb: 2, p: 2, borderRadius: 1, border: 1, borderColor: testResult.success ? 'success.main' : 'error.main', bgcolor: testResult.success ? isDark ? '#14532d' : '#f0fdf4' : isDark ? '#450a0a' : '#fef2f2' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <div className={`mx-6 mb-4 p-4 rounded-lg border ${
+          testResult.success ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-center gap-2 mb-2">
             {testResult.success ? (
-              <CheckCircle size={20} sx={{ color: '#16a34a' }} />
+              <CheckCircle size={20} className="text-green-600" />
             ) : (
-              <XCircle size={20} sx={{ color: '#dc2626' }} />
+              <XCircle size={20} className="text-red-600" />
             )}
-            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: testResult.success ? '#166534' : '#991b1b' }}>
+            <span className={`font-semibold ${testResult.success ? 'text-green-700' : 'text-red-700'}`}>
               Test {testResult.success ? 'Passed' : 'Failed'}
-            </Typography>
-          </Box>
-          <Typography variant="body2" color="text.secondary">
+            </span>
+          </div>
+          <div className="text-sm text-gray-600">
             {testResult.passed} passed, {testResult.failed} failed
-          </Typography>
+          </div>
           {testResult.sample_results.slice(0, 3).map((sr, idx) => (
-            <Typography key={idx} variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+            <div key={idx} className="text-xs text-gray-500 mt-1">
               {sr.record_id}: {sr.message}
-            </Typography>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
 
-      <Box sx={{ p: 2, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', bgcolor: isDark ? '#1f2937' : '#f9fafb' }}>
-        <Button
-          variant="outlined"
+      {/* Footer Actions */}
+      <div className="p-4 border-t bg-gray-50 flex items-center justify-between">
+        <button
+          type="button"
           onClick={handleTest}
           disabled={isTesting || !rule.target_entity}
-          startIcon={<Play size={16} />}
+          className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-100 disabled:opacity-50"
         >
+          <Play size={16} />
           {isTesting ? 'Testing...' : 'Test Rule'}
-        </Button>
+        </button>
 
-        <Button
-          variant="contained"
+        <button
+          type="button"
           onClick={handleSave}
           disabled={isSaving || !rule.name}
-          startIcon={<Save size={16} />}
+          className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
         >
+          <Save size={16} />
           {isSaving ? 'Saving...' : 'Save Rule'}
-        </Button>
-      </Box>
-    </Paper>
+        </button>
+      </div>
+    </div>
   );
 };
 

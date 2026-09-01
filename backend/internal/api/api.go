@@ -48,24 +48,19 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
-	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
-	"github.com/hondyman/uisce/backend/internal/mdm"
-	"github.com/hondyman/uisce/backend/internal/platform_intelligence/exceptions"
-	"github.com/hondyman/uisce/backend/internal/platform_intelligence/health"
-	"github.com/hondyman/uisce/backend/internal/platform_intelligence/optimization"
-	"github.com/hondyman/uisce/backend/internal/platform_intelligence/roadmap"
 	"github.com/hondyman/uisce/backend/internal/master/customer"
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
-	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
+	"github.com/hondyman/uisce/backend/internal/migrations"
 	models "github.com/hondyman/uisce/backend/internal/models"
 	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/oms/account"
@@ -74,23 +69,28 @@ import (
 	"github.com/hondyman/uisce/backend/internal/oms/trade_order"
 	"github.com/hondyman/uisce/backend/internal/optimizer"
 	"github.com/hondyman/uisce/backend/internal/platform"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/exceptions"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/health"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/optimization"
+	"github.com/hondyman/uisce/backend/internal/platform_intelligence/roadmap"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
 	"github.com/hondyman/uisce/backend/internal/query"
-	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/preference"
 	"github.com/hondyman/uisce/backend/internal/profiler"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/reporting"
 	"github.com/hondyman/uisce/backend/internal/simulation"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/shadow"
-	"github.com/hondyman/uisce/backend/internal/succession"
 	"github.com/hondyman/uisce/backend/internal/streaming"
+	"github.com/hondyman/uisce/backend/internal/succession"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
@@ -108,24 +108,24 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcmetadata "google.golang.org/grpc/metadata"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type ComplianceDeps struct {
-	RuleEngine          *rules.RuleEngine
-	RedisClient         *redis.Client
-	DB                  *sql.DB
-	KafkaBrokers        string
+	RuleEngine         *rules.RuleEngine
+	RedisClient        *redis.Client
+	DB                 *sql.DB
+	KafkaBrokers       string
 	SurvivorshipEngine *mdm.SurvivorshipEngine
 	DriftHealer        *governance.SelfHealingService
-	AdvisorWorker       *rules.AdvisorWorker
-	FIXServer           *fix.Server
+	AdvisorWorker      *rules.AdvisorWorker
+	FIXServer          *fix.Server
 	CDCConsumer        *streaming.SchemaCDCConsumer
 	FlightServer       *flight.FlightServer
 	ShadowEngine       *shadow.ReplayEngine
@@ -197,19 +197,19 @@ type Server struct {
 	ApprovalService         *services.ApprovalService
 	ImpersonationSweeper    *security.Sweeper
 
-	GeminiClient            LLMProvider
-	HouseholdService        *household.Service
-	AltInvestService        *altinvest.Service
-	BillingService          *billing.Service
-	TaxPlanService          *taxplan.Service
-	SuccessionService       *succession.Service
-	GraphService            *catalogmeta.GraphService
-	WriteHandler            *handlers.WriteHandler
-	MCPHandler              *handlers.MCPHandler
-	IgniteClient            *infrastructure.IgniteClient
-	FolderHandler           *handlers.FolderHandler
-	LineageSvc              *services.LineageService
-	CueEngine               *services.CueEngine
+	GeminiClient      LLMProvider
+	HouseholdService  *household.Service
+	AltInvestService  *altinvest.Service
+	BillingService    *billing.Service
+	TaxPlanService    *taxplan.Service
+	SuccessionService *succession.Service
+	GraphService      *catalogmeta.GraphService
+	WriteHandler      *handlers.WriteHandler
+	MCPHandler        *handlers.MCPHandler
+	IgniteClient      *infrastructure.IgniteClient
+	FolderHandler     *handlers.FolderHandler
+	LineageSvc        *services.LineageService
+	CueEngine         *services.CueEngine
 
 	PageLayoutHandler       *handlers.PageLayoutHandler
 	PipelineHandler         *handlers.PipelineHandler
@@ -409,11 +409,11 @@ func (s *Server) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log but try to proceed with minimal context if tenant is present (legacy fallback)
 		claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
 		if tenantID != "" {
 			secCtx = &security.Context{TenantID: tenantID}
 			ctx = r.Context()
@@ -488,11 +488,11 @@ func (s *Server) getBusinessObjectByID(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
 		if tenantID != "" {
 			secCtx = &security.Context{TenantID: tenantID}
 			ctx = r.Context()
@@ -859,31 +859,32 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		log.Printf("[WARN] Failed to load API keys from file: %v", err)
 	}
 
-	// Initialize Keycloak RS256 public keys for JWT validation if configured,
-	// and keep them refreshed so a Keycloak key rotation doesn't require a
-	// backend restart (or worse, silently start rejecting/never-verifying
-	// tokens signed with the new key).
+	// Initialize RS256 public keys for JWT validation — merging the legacy
+	// single-URL KEYCLOAK_JWKS_URL (dev / single-tenant path) with every
+	// issuer registered in semantic.tenant_identity_providers (the
+	// multi-tenant/multi-realm path, see internal/security/idp_registry.go)
+	// — and keep them refreshed so a Keycloak key rotation, or a newly
+	// registered tenant IDP, doesn't require a backend restart.
+	idpRegistry := security.NewDBIssuerRegistry(sqlxDB)
 	jwksURL := os.Getenv("KEYCLOAK_JWKS_URL")
-	if jwksURL != "" {
-		if err := refreshKeycloakJWKS(secMgr, jwksURL); err != nil {
-			log.Printf("[WARN] Initial Keycloak JWKS fetch failed: %v", err)
-		}
-		refreshInterval := 10 * time.Minute
-		if v := os.Getenv("KEYCLOAK_JWKS_REFRESH_INTERVAL"); v != "" {
-			if d, err := time.ParseDuration(v); err == nil && d > 0 {
-				refreshInterval = d
-			}
-		}
-		go func() {
-			ticker := time.NewTicker(refreshInterval)
-			defer ticker.Stop()
-			for range ticker.C {
-				if err := refreshKeycloakJWKS(secMgr, jwksURL); err != nil {
-					log.Printf("[WARN] Keycloak JWKS refresh failed: %v", err)
-				}
-			}
-		}()
+	if err := refreshAllTrustedKeys(context.Background(), secMgr, jwksURL, idpRegistry); err != nil {
+		log.Printf("[WARN] Initial trusted-key fetch failed: %v", err)
 	}
+	refreshInterval := 10 * time.Minute
+	if v := os.Getenv("KEYCLOAK_JWKS_REFRESH_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil && d > 0 {
+			refreshInterval = d
+		}
+	}
+	go func() {
+		ticker := time.NewTicker(refreshInterval)
+		defer ticker.Stop()
+		for range ticker.C {
+			if err := refreshAllTrustedKeys(context.Background(), secMgr, jwksURL, idpRegistry); err != nil {
+				log.Printf("[WARN] Trusted-key refresh failed: %v", err)
+			}
+		}
+	}()
 
 	// Development helper: optionally seed an API key for a test user so local
 	// runs can exercise authenticated endpoints. Set SEED_API_KEY_USER to a
@@ -895,7 +896,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	}
 
 	// Apply Auth Context Middleware globally (does not block, but populates context)
-	r.Use(appmid.AuthContextMiddleware(secMgr))
+	r.Use(appmid.AuthContextMiddleware(secMgr, idpRegistry))
 	// Resolve each request's IdP groups to a functional role / clearance level
 	// via security.identity_profile_mappings. Was defined but never wired up —
 	// EnrichSubjectAttributes returns "unassigned_operator"/"L1" when a user's
@@ -975,17 +976,17 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		resolver = security.NewDBDatasourceResolver(sqlxDB)
 	}
 	srv := &Server{
-		DB:                     db,
-		auditService:           audit.NewChannelAuditService(sqlxDB),
-		Reg:                    &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
-		WsHub:                  newWebSocketHub(),
-		SemanticNameResolver:   semanticNameResolver,
-		AuditSvc:               auditSvc,
-		NotificationSvc:        notificationSvc,
-		CampaignSvc:            campaignSvc,
-		NotificationHandlers:   NewNotificationAPIHandlers(notificationSvc, campaignSvc),
-		DashboardHandlers:      NewDashboardAPIHandlers(db),
-		ModelCatalogHandler:    handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{
+		DB:                   db,
+		auditService:         audit.NewChannelAuditService(sqlxDB),
+		Reg:                  &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
+		WsHub:                newWebSocketHub(),
+		SemanticNameResolver: semanticNameResolver,
+		AuditSvc:             auditSvc,
+		NotificationSvc:      notificationSvc,
+		CampaignSvc:          campaignSvc,
+		NotificationHandlers: NewNotificationAPIHandlers(notificationSvc, campaignSvc),
+		DashboardHandlers:    NewDashboardAPIHandlers(db),
+		ModelCatalogHandler: handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{
 			Resolver: resolver,
 		}),
 		CatalogScanHandler:     catalogScanHandler, // Set early initialized handler
@@ -1664,7 +1665,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerWorkflowRoutes(r, db, cron.New(), entitlementsSvc)
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
-		srv.registerBOCRUDRoutes(r, sqlxDB)
+		srv.registerBOCRUDRoutes(r, sqlxDB, redisClient)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerPlatformIntelligenceRoutes(r, sqlxDB)
@@ -1710,7 +1711,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Initialize refactored handlers
 		pageDesignerHandler := NewPageDesignerLayoutHandler(sqlxDB)
 		pageDesignerHandler.RegisterRoutes(r)
-		boCrudGatewayHandler := NewBOCRUDHandler(sqlxDB)
+		boCrudGatewayHandler := NewBOCRUDHandler(sqlxDB, nil)
 		boCrudGatewayHandler.RegisterRoutes(r)
 		autoPageCompilerHandler := NewAutoPageHandler(sqlxDB)
 		autoPageCompilerHandler.RegisterRoutes(r)
@@ -1793,7 +1794,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
 			r.Get("/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
 
-
 			// Tenant search + scope (impersonation picker) & audit logs
 			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
 			r.Get("/api/v1/audit/channel-logs", srv.GetChannelAuditLogsHandler)
@@ -1867,8 +1867,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		w.Header().Set("Access-Control-Allow-Headers", "*")
 		w.WriteHeader(http.StatusOK)
 	})
-
-
 
 	rootMux.Mount("/", r)
 	return rootMux
@@ -3776,7 +3774,7 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 // registerBOCRUDRoutes mounts the live Business Object record CRUD endpoints
 // (/bo/{boKey}/records/...), wired to fire row_insert/row_update/row_delete
 // trigger evaluations on every committed write.
-func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
+func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB, redisClient *redis.Client) {
 	abacEngine := &ABACEngine{db: sqlxDB}
 	if s.EventBus == nil {
 		s.EventBus = &noopEventBus{}
@@ -3792,6 +3790,8 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 
 	apiStudioHandler := NewAPIStudioHandler(sqlxDB, triggerEngine)
 	apiStudioHandler.RegisterRoutes(r)
+
+	RegisterAPIRuntimeRoutes(r, sqlxDB, redisClient)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints
@@ -4199,8 +4199,6 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
-
-
 
 	// Parse query parameters
 	nodeType := r.URL.Query().Get("type")

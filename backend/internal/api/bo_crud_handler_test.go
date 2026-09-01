@@ -20,7 +20,7 @@ func TestHandleUpdateBORecord(t *testing.T) {
 	defer db.Close()
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
 
-	handler := NewBOCRUDHandler(sqlxDB)
+	handler := NewBOCRUDHandler(sqlxDB, nil)
 
 	r := chi.NewRouter()
 	r.Put("/api/v1/bo/{boKey}/records/{recordId}", handler.HandleUpdateBORecord)

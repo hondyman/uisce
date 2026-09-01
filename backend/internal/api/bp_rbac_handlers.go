@@ -24,13 +24,15 @@ type RBACHandlers struct {
 	db             *sqlx.DB
 	securityDeps   handlers.SecurityContextDeps
 	fieldPermRepo  *security.FieldPermissionRepository
+	entitlements   *security.EntitlementsService
 }
 
-func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps) *RBACHandlers {
+func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps, entitlements *security.EntitlementsService) *RBACHandlers {
 	return &RBACHandlers{
 		db:            db,
 		securityDeps:  securityDeps,
 		fieldPermRepo: security.NewFieldPermissionRepository(db),
+		entitlements:  entitlements,
 	}
 }
 

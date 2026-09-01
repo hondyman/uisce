@@ -818,20 +818,6 @@ func (m *DataIntegrityManager) validateRowCounts(expected, actual int64) bool {
 	return diff <= m.config.RowCountMismatchThreshold
 }
 
-// safeIdentifierRE allowlists the characters permitted in a table name,
-// tenant ID, or datasource ID before they are interpolated into StarRocks
-// EXPORT/DELETE statements. StarRocks does not support bind parameters for
-// identifiers or for its EXPORT DDL, so this allowlist is the injection
-// defense for exportToParquet/deleteFromHot.
-var safeIdentifierRE = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
-
-func validateIdentifier(kind, value string) error {
-	if !safeIdentifierRE.MatchString(value) {
-		return fmt.Errorf("invalid %s %q: only alphanumerics, '-' and '_' are allowed", kind, value)
-	}
-	return nil
-}
-
 // coldStorageBucket returns the per-tenant cold-storage bucket name. Tenant
 // data must not share physical storage with any other tenant's cold tier
 // (same GSIFI isolation requirement as the audit Iceberg sinks in

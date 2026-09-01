@@ -406,19 +406,6 @@ export const useUpdateReportTemplate = () => {
   });
 };
 
-const fetchReportTemplate = async (id: string): Promise<ReportTemplate | null> => {
-  const raw = await request<unknown>(`${API_PREFIX}/reports/${id}`);
-  return toReportTemplate(raw);
-};
-
-export const useReportTemplate = (id: string | undefined) =>
-  useQuery({
-    queryKey: ['reporting', 'reports', id],
-    queryFn: () => fetchReportTemplate(id!),
-    enabled: !!id,
-    staleTime: 30_000,
-  });
-
 export const useDeleteReportTemplate = () => {
   const queryClient = useQueryClient();
   return useMutation({

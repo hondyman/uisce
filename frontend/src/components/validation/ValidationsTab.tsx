@@ -282,77 +282,40 @@ function RuleCategory({
   const hasWarnings = severityCount.warning > 0;
 
   return (
-    <Paper sx={{
-      mb: 3,
-      overflow: 'hidden',
-      border: '1px solid',
-      borderColor: 'divider',
-      borderRadius: 3,
-      boxShadow: 1,
-      bgcolor: (theme) => theme.palette.mode === 'dark' ? '#151b23' : '#ffffff',
-    }}>
-      <Box sx={{
-        px: 3,
-        py: 1.5,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        bgcolor: (theme) => {
-          if (hasErrors) return theme.palette.mode === 'dark' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.05)';
-          if (hasWarnings) return theme.palette.mode === 'dark' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(245, 158, 11, 0.05)';
-          return theme.palette.mode === 'dark' ? '#1c2636' : '#f8fafc';
-        },
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Box component="span" sx={{
-            color: hasErrors ? 'error.main' : hasWarnings ? 'warning.main' : 'text.secondary',
-          }}>
+    <div className="bg-white dark:bg-[#151b23] border border-[#dbe0e6] dark:border-[#232f3e] rounded-2xl shadow-sm mb-6 overflow-hidden">
+      <div className={`px-5 py-3 border-b border-[#f0f2f5] dark:border-[#232f3e] flex items-center justify-between ${
+        hasErrors
+          ? 'bg-red-50/50 dark:bg-red-900/10'
+          : hasWarnings
+            ? 'bg-amber-50/50 dark:bg-amber-900/10'
+            : 'bg-[#f8fafc] dark:bg-[#1c2636]'
+      }`}>
+        <div className="flex items-center gap-3">
+          <span className={`material-symbols-outlined ${
+            hasErrors ? 'text-red-500' : hasWarnings ? 'text-amber-500' : 'text-[#60758a] dark:text-[#94a3b8]'
+          }`}>
             {hasErrors ? 'error' : hasWarnings ? 'warning' : 'folder_open'}
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', lineHeight: 1.2 }}>
-              {title}
-            </Typography>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.6875rem' }}>
-              {description}
-            </Typography>
-          </Box>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          </span>
+          <div>
+            <h4 className="text-sm font-bold text-[#111418] dark:text-white leading-tight">{title}</h4>
+            <p className="text-[11px] text-[#60758a] dark:text-[#94a3b8]">{description}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
           {severityCount.error > 0 && (
-            <Chip
-              label={`${severityCount.error} Errors`}
-              size="small"
-              sx={{
-                bgcolor: 'error.light',
-                color: 'error.dark',
-                fontWeight: 700,
-                fontSize: '0.625rem',
-                height: 20,
-                borderRadius: 'full',
-              }}
-            />
+            <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[10px] font-bold">
+              {severityCount.error} Errors
+            </span>
           )}
           {severityCount.warning > 0 && (
-            <Chip
-              label={`${severityCount.warning} Warnings`}
-              size="small"
-              sx={{
-                bgcolor: 'warning.light',
-                color: 'warning.dark',
-                fontWeight: 700,
-                fontSize: '0.625rem',
-                height: 20,
-                borderRadius: 'full',
-              }}
-            />
+            <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold">
+              {severityCount.warning} Warnings
+            </span>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
 
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+      <div className="p-4 space-y-3">
         {rules.map((rule) => (
           <LazyLoadWrapper key={rule.id}>
             <RuleCard
@@ -363,8 +326,8 @@ function RuleCategory({
             />
           </LazyLoadWrapper>
         ))}
-      </Box>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -466,71 +429,39 @@ export function ValidationsTab({
   if (!rules || rules.length === 0) {
     return (
       <Box sx={{ width: '100%' }}>
+        {/* Premium Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="span" sx={{ color: 'primary.main', fontSize: 28 }}>verified_user</Box>
+            <h2 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[28px]">verified_user</span>
               Validation Analytics & Rules
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, maxWidth: 640 }}>
+            </h2>
+            <p className="text-[#60758a] dark:text-[#94a3b8] mt-1 text-sm max-w-xl">
               Monitor data quality and enforce business logic constraints. Rules are executed during ingestion and data processing.
-            </Typography>
+            </p>
           </Box>
         </Box>
 
-        <Box sx={{
-          py: 8,
-          px: 3,
-          textAlign: 'center',
-          bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1c2636' : '#f8fafc',
-          borderRadius: 3,
-          border: '2px dashed',
-          borderColor: 'divider',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 2,
-        }}>
-          <Box sx={{
-            width: 64,
-            height: 64,
-            borderRadius: '50%',
-            bgcolor: 'primary.light',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}>
-            <Box component="span" sx={{ color: 'primary.main', fontSize: 32 }}>rule</Box>
-          </Box>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
-              No validation rules defined
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, maxWidth: 400, mx: 'auto' }}>
+        <div className="py-20 px-6 text-center bg-[#f8fafc] dark:bg-[#1c2636] rounded-2xl border-2 border-dashed border-[#dbe0e6] dark:border-[#232f3e] flex flex-col items-center gap-4">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="material-symbols-outlined text-primary text-[32px]">rule</span>
+          </div>
+          <div>
+            <h4 className="text-xl font-bold text-[#111418] dark:text-white">No validation rules defined</h4>
+            <p className="text-[#60758a] dark:text-[#94a3b8] text-sm mt-2 max-w-sm mx-auto">
               You haven't added any validation rules for this entity yet. Create your first rule to start monitoring data quality.
-            </Typography>
-          </Box>
+            </p>
+          </div>
           {onAddRule && (
-            <Button
-              variant="contained"
+            <button
               onClick={onAddRule}
-              startIcon={<Box component="span" sx={{ fontSize: 20 }}>add</Box>}
-              sx={{
-                mt: 2,
-                px: 5,
-                py: 1.5,
-                borderRadius: 2,
-                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)',
-                '&:hover': {
-                  boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-                },
-                transition: 'all 0.2s',
-              }}
+              className="mt-4 flex items-center gap-2 px-8 py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] group"
             >
+              <span className="material-symbols-outlined text-[20px] group-hover:rotate-90 transition-transform duration-300">add</span>
               Create Your First Rule
-            </Button>
+            </button>
           )}
-        </Box>
+        </div>
       </Box>
     );
   }
@@ -628,33 +559,13 @@ export function ValidationsTab({
             display: { xs: filtersOpen ? 'block' : 'none', sm: 'block' },
           }}
         >
-          <Paper sx={{
-            bgcolor: (theme) => theme.palette.mode === 'dark' ? '#151b23' : '#ffffff',
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 3,
-            boxShadow: 1,
-            overflow: 'hidden',
-            height: 'fit-content',
-            position: 'sticky',
-            top: 16,
-          }}>
-            <Box sx={{
-              px: 3,
-              py: 2,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1c2636' : '#f8fafc',
-            }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box component="span" sx={{ color: 'primary.main', fontSize: 20 }}>filter_alt</Box>
+          <div className="bg-white dark:bg-[#151b23] border border-[#dbe0e6] dark:border-[#232f3e] rounded-2xl shadow-sm sticky top-4 overflow-hidden h-fit">
+            <div className="px-5 py-4 border-b border-[#f0f2f5] dark:border-[#232f3e] flex justify-between items-center bg-[#f8fafc] dark:bg-[#1c2636]">
+              <h3 className="text-sm font-bold text-[#111418] dark:text-white flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-[20px]">filter_alt</span>
                 Refine Rules
-              </Typography>
-              <Button
-                size="small"
+              </h3>
+              <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedEntitySubtypes(new Set());
@@ -663,18 +574,13 @@ export function ValidationsTab({
                   setSelectedRuleTypes(new Set());
                   setExpandedRuleId(null);
                 }}
-                sx={{
-                  color: 'primary.main',
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  '&:hover': { bgcolor: 'primary.light', opacity: 0.8 },
-                }}
+                className="text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
               >
                 Clear All
-              </Button>
-            </Box>
+              </button>
+            </div>
 
-            <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+            <div className="p-5 space-y-6 max-h-[calc(100vh-200px)] overflow-y-auto">
               {/* Entity Subtypes - Hierarchical */}
               <Box>
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
@@ -890,79 +796,52 @@ export function ValidationsTab({
 
       {/* Main Content */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
+        {/* Premium Header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 4 }}>
           <Box>
-            <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component="span" sx={{ color: 'primary.main', fontSize: 28 }}>verified_user</Box>
+            <h2 className="text-2xl font-bold text-[#111418] dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[28px]">verified_user</span>
               Validation Analytics & Rules
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, maxWidth: 640 }}>
+            </h2>
+            <p className="text-[#60758a] dark:text-[#94a3b8] mt-1 text-sm max-w-xl">
               Monitor data quality and enforce business logic constraints. Rules are executed during ingestion and data processing.
-            </Typography>
+            </p>
           </Box>
           {onAddRule && (
-            <Button
-              variant="contained"
+            <button
               onClick={onAddRule}
-              startIcon={<Box component="span" sx={{ fontSize: 20 }}>add</Box>}
-              sx={{
-                px: 3,
-                py: 1.5,
-                borderRadius: 2,
-                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)',
-                '&:hover': { boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' },
-              }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] group"
             >
+              <span className="material-symbols-outlined text-[20px] group-hover:rotate-90 transition-transform duration-300">add</span>
               Create New Rule
-            </Button>
+            </button>
           )}
         </Box>
 
+        {/* Search and Filter Row */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3, alignItems: 'center' }}>
-          <Box sx={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <Box component="span" sx={{ position: 'absolute', left: 2, color: 'text.secondary', fontSize: 20, pointerEvents: 'none' }}>search</Box>
-            <TextField
-              fullWidth
-              size="small"
+          <div className="flex-1 relative flex items-center">
+            <span className="material-symbols-outlined absolute left-3 text-[#60758a] dark:text-[#94a3b8] text-[20px] pointer-events-none">search</span>
+            <input
+              type="text"
               placeholder="Search rules by name, description, or condition..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1c2636' : '#ffffff',
-                  borderRadius: 2,
-                  '& fieldset': { borderColor: 'divider' },
-                  '&:hover fieldset': { borderColor: 'primary.main' },
-                  '&.Mui-focused fieldset': { borderColor: 'primary.main' },
-                },
-                '& input': {
-                  pl: 5,
-                  fontSize: '0.875rem',
-                  color: 'text.primary',
-                },
-              }}
+              className="w-full bg-white dark:bg-[#1c2636] border border-[#dbe0e6] dark:border-[#232f3e] rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-[#111418] dark:text-white placeholder-[#94a3b8]"
             />
-          </Box>
+          </div>
 
-          <Button
-            variant={filtersOpen ? 'contained' : 'outlined'}
+          <button
             onClick={() => setFiltersOpen(!filtersOpen)}
-            startIcon={<Box component="span" sx={{ fontSize: 20 }}>{filtersOpen ? 'filter_list_off' : 'filter_list'}</Box>}
-            sx={{
-              px: 2,
-              py: 1,
-              borderRadius: 2,
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '0.875rem',
-              ...(filtersOpen
-                ? { bgcolor: 'primary.light', borderColor: 'primary.main', color: 'primary.main', boxShadow: 'inset 0 2px 4px 0 rgba(0,0,0,0.05)' }
-                : { bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1c2636' : '#ffffff', borderColor: 'divider', color: 'text.secondary', '&:hover': { borderColor: 'primary.main' } }
-              ),
-            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all text-sm font-semibold ${
+              filtersOpen 
+                ? 'bg-primary/10 border-primary/30 text-primary shadow-inner' 
+                : 'bg-white dark:bg-[#1c2636] border-[#dbe0e6] dark:border-[#232f3e] text-[#60758a] dark:text-[#94a3b8] hover:border-primary/50'
+            }`}
           >
+            <span className="material-symbols-outlined text-[20px]">{filtersOpen ? 'filter_list_off' : 'filter_list'}</span>
             Filters
-          </Button>
+          </button>
         </Box>
 
         {/* Direct Rules */}
@@ -990,31 +869,17 @@ export function ValidationsTab({
             />
           )}
 
+          {/* No Results */}
           {filteredDirect.length === 0 && filteredGlobal.length === 0 && (
-            <Box sx={{
-              py: 5,
-              px: 3,
-              textAlign: 'center',
-              bgcolor: (theme) => theme.palette.mode === 'dark' ? '#1c2636' : '#f8fafc',
-              borderRadius: 3,
-              border: '2px dashed',
-              borderColor: 'divider',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 1.5,
-            }}>
-              <Box component="span" sx={{ color: 'text.secondary', fontSize: 48 }}>search_off</Box>
-              <Box>
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                  No rules found
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5, maxWidth: 320, mx: 'auto' }}>
+            <div className="py-12 px-6 text-center bg-[#f8fafc] dark:bg-[#1c2636] rounded-2xl border-2 border-dashed border-[#dbe0e6] dark:border-[#232f3e] flex flex-col items-center gap-3">
+              <span className="material-symbols-outlined text-[#60758a] dark:text-[#94a3b8] text-[48px]">search_off</span>
+              <div>
+                <h4 className="text-lg font-bold text-[#111418] dark:text-white">No rules found</h4>
+                <p className="text-[#60758a] dark:text-[#94a3b8] text-sm mt-1 max-w-xs mx-auto">
                   Try adjusting your filters or search terms to find what you're looking for.
-                </Typography>
-              </Box>
-              <Button
-                size="small"
+                </p>
+              </div>
+              <button
                 onClick={() => {
                   setSearchTerm('');
                   setSelectedEntitySubtypes(new Set());
@@ -1022,16 +887,11 @@ export function ValidationsTab({
                   setSelectedStatuses(new Set());
                   setSelectedRuleTypes(new Set());
                 }}
-                sx={{
-                  mt: 1,
-                  color: 'primary.main',
-                  fontWeight: 700,
-                  fontSize: '0.875rem',
-                }}
+                className="mt-2 text-sm font-bold text-primary hover:text-primary/80 transition-colors"
               >
                 Clear all filters
-              </Button>
-            </Box>
+              </button>
+            </div>
           )}
         </Stack>
       </Box>
