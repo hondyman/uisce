@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useTheme } from '@mui/material/styles';
 import { useTenant } from '../../../contexts/TenantContext';
+import { Box } from '@mui/material';
 import * as adminSeed from '../../../api/adminSeed';
-import { Download, Trash2, Zap, CheckCircle } from 'lucide-react';
+import DownloadIcon from '@mui/icons-material/Download';
+import Trash2Icon from '@mui/icons-material/Delete';
+import ZapIcon from '@mui/icons-material/FlashOn';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 const SeedingPage: React.FC = () => {
   const { tenant, datasource } = useTenant();
@@ -141,7 +145,7 @@ const SeedingPage: React.FC = () => {
             background: mode === 'dark' ? '#10b981' : '#10b981'
           }}
         >
-          <Download sx={{ width: 4, height: 4 }} /> Seed All
+          <DownloadIcon sx={{ width: 16, height: 16 }} /> Seed All
         </button>
         <button
           onClick={handleSeedValidation}
@@ -152,7 +156,7 @@ const SeedingPage: React.FC = () => {
             background: mode === 'dark' ? '#3b82f6' : '#3b82f6'
           }}
         >
-          <Zap sx={{ width: 4, height: 4 }} /> Seed Validation Rules
+          <ZapIcon sx={{ width: 16, height: 16 }} /> Seed Validation Rules
         </button>
         <button
           onClick={handleSeedApproval}
@@ -163,7 +167,7 @@ const SeedingPage: React.FC = () => {
             background: mode === 'dark' ? '#a855f7' : '#a855f7'
           }}
         >
-          <CheckCircle sx={{ width: 4, height: 4 }} /> Seed Approval Rules
+          <CheckCircleIcon sx={{ width: 16, height: 16 }} /> Seed Approval Rules
         </button>
         <button
           onClick={handleClear}
@@ -174,7 +178,7 @@ const SeedingPage: React.FC = () => {
             background: mode === 'dark' ? '#dc2626' : '#dc2626'
           }}
         >
-          <Trash2 sx={{ width: 4, height: 4 }} /> Clear Seed
+          <Trash2Icon sx={{ width: 16, height: 16 }} /> Clear Seed
         </button>
       </div>
 
