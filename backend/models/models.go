@@ -110,16 +110,30 @@ type ConnectionDetails struct {
 
 // TenantProductDatasource represents a configured datasource for a tenant's product.
 type TenantProductDatasource struct {
-	ID                uuid.UUID `json:"id" db:"id"`
-	DatasourceID      uuid.UUID `json:"datasource_id" db:"datasource_id"`
-	TenantID          uuid.UUID `json:"tenant_id" db:"tenant_id"`
-	AlphaProductID    uuid.UUID `json:"alpha_product_id" db:"alpha_product_id"`
-	AlphaDatasourceID uuid.UUID `json:"alpha_datasource_id" db:"alpha_datasource_id"`
-	Name              string    `json:"name" db:"name"`
-	DatasourceCode    string    `json:"datasource_code" db:"datasource_code"`
-	Config            []byte    `json:"config" db:"config"` // For jsonb
+	ID                uuid.UUID  `json:"id" db:"id"`
+	DatasourceID      uuid.UUID  `json:"datasource_id" db:"datasource_id"`
+	TenantID          uuid.UUID  `json:"tenant_id" db:"tenant_id"`
+	TenantProductID   uuid.UUID  `json:"tenant_product_id" db:"tenant_product_id"`
+	AlphaProductID    uuid.UUID  `json:"alpha_product_id" db:"alpha_product_id"`
+	AlphaDatasourceID uuid.UUID  `json:"alpha_datasource_id" db:"alpha_datasource_id"`
+	Name              string     `json:"name" db:"name"`
+	DatasourceCode    string     `json:"datasource_code" db:"datasource_code"`
+	Config            []byte     `json:"config" db:"config"` // For jsonb
+	IsActive          bool       `json:"is_active" db:"is_active"`
+	ConnectionID      *uuid.UUID `json:"connection_id,omitempty" db:"connection_id"`
 	// TenantGoldCopy is populated from the parent tenant's `gold_copy` flag.
 	TenantGoldCopy bool `json:"tenant_gold_copy" db:"tenant_gold_copy"`
+}
+
+// TenantProductDatasourceInput is the payload for creating a
+// tenant_product_datasource row via CreateTenantProductDatasource.
+type TenantProductDatasourceInput struct {
+	TenantProductID   uuid.UUID       `json:"tenant_product_id"`
+	AlphaDatasourceID uuid.UUID       `json:"alpha_datasource_id"`
+	SourceName        string          `json:"source_name"`
+	Config            json.RawMessage `json:"config"`
+	IsActive          bool            `json:"is_active"`
+	ConnectionID      *uuid.UUID      `json:"connection_id,omitempty"`
 }
 
 // Auth holds authentication details, typically nested within a connection config.
@@ -198,9 +212,9 @@ type ModelUpgradeAudit struct {
 
 // ResolvedModelConfig is the in-memory form of a FabricDefn.resolved_config used for diffing.
 type ResolvedModelConfig struct {
-	ModelKey string      `json:"model_key"`
-	Cubes    []Cube      `json:"cubes"`
-	Views    []any       `json:"views,omitempty"`
+	ModelKey string `json:"model_key"`
+	Cubes    []Cube `json:"cubes"`
+	Views    []any  `json:"views,omitempty"`
 }
 
 // ChangeAnnotation is used by tuning and reporting logic to surface rule metadata.
@@ -424,26 +438,26 @@ type SemanticModelMetadata struct {
 }
 
 type Cube struct {
-	Name            string                      `json:"name"`
-	SQL             string                      `json:"sql"`
-	SQLTable        string                      `json:"sql_table,omitempty"`
-	SQLAlias        string                      `json:"sql_alias,omitempty"`
-	Extends         any                         `json:"extends,omitempty"`
-	DataSource      string                      `json:"data_source,omitempty"`
-	Dimensions      map[string]map[string]any  `json:"dimensions"`
-	Measures        map[string]map[string]any  `json:"measures"`
-	Joins           map[string]map[string]any  `json:"joins"`
-	Segments        map[string]map[string]any  `json:"segments,omitempty"`
-	Hierarchies     []map[string]any           `json:"hierarchies,omitempty"`
-	Tags            []string                    `json:"tags,omitempty"`
+	Name            string                    `json:"name"`
+	SQL             string                    `json:"sql"`
+	SQLTable        string                    `json:"sql_table,omitempty"`
+	SQLAlias        string                    `json:"sql_alias,omitempty"`
+	Extends         any                       `json:"extends,omitempty"`
+	DataSource      string                    `json:"data_source,omitempty"`
+	Dimensions      map[string]map[string]any `json:"dimensions"`
+	Measures        map[string]map[string]any `json:"measures"`
+	Joins           map[string]map[string]any `json:"joins"`
+	Segments        map[string]map[string]any `json:"segments,omitempty"`
+	Hierarchies     []map[string]any          `json:"hierarchies,omitempty"`
+	Tags            []string                  `json:"tags,omitempty"`
 	PreAggregations map[string]map[string]any `json:"pre_aggregations,omitempty"`
-	AccessPolicy    map[string]any              `json:"access_policy,omitempty"`
-	RefreshKey      map[string]any             `json:"refresh_key,omitempty"`
-	Title           string                     `json:"title,omitempty"`
-	Description     string                     `json:"description,omitempty"`
-	Public          *bool                      `json:"public,omitempty"`
-	Meta            map[string]any             `json:"meta,omitempty"`
-	Metadata        map[string]any             `json:"metadata,omitempty"`
+	AccessPolicy    map[string]any            `json:"access_policy,omitempty"`
+	RefreshKey      map[string]any            `json:"refresh_key,omitempty"`
+	Title           string                    `json:"title,omitempty"`
+	Description     string                    `json:"description,omitempty"`
+	Public          *bool                     `json:"public,omitempty"`
+	Meta            map[string]any            `json:"meta,omitempty"`
+	Metadata        map[string]any            `json:"metadata,omitempty"`
 	FabricDefnID    *uuid.UUID                `json:"fabric_defn_id,omitempty"`
 }
 
@@ -460,7 +474,7 @@ type ViewMeta struct {
 }
 
 type Catalog struct {
-	Cubes map[string]Cube    `json:"cubes"`
+	Cubes map[string]Cube     `json:"cubes"`
 	Views map[string]ViewMeta `json:"views"`
 }
 

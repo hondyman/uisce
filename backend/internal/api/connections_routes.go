@@ -7,8 +7,10 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/backend/models"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -43,6 +45,9 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 		// Test a connection
 		r.Post("/{id}/test", handleTestConnection(connService))
 	})
+
+	// Create a tenant_product_datasource row
+	r.Post("/product-datasources", handleCreateTenantProductDatasource(connService))
 }
 
 func getTenantIDFromRequest(r *http.Request) string {
@@ -340,6 +345,60 @@ func handleTestConnection(svc *services.ConnectionsService) http.HandlerFunc {
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(testResult)
 		}
+	}
+}
+
+// createTenantProductDatasourceRequest mirrors the body sent by
+// TenantDetailPageV2's "Update Connection" flow. tenant_instance_id is
+// accepted but unused: tenant_product_datasource has no such column, and
+// tenant scoping is derived from tenant_product_id instead.
+type createTenantProductDatasourceRequest struct {
+	TenantProductID   uuid.UUID       `json:"tenant_product_id"`
+	TenantInstanceID  *uuid.UUID      `json:"tenant_instance_id,omitempty"`
+	AlphaDatasourceID uuid.UUID       `json:"alpha_datasource_id"`
+	Config            json.RawMessage `json:"config"`
+	IsActive          bool            `json:"is_active"`
+	SourceName        string          `json:"source_name"`
+	ConnectionID      *uuid.UUID      `json:"connection_id,omitempty"`
+}
+
+// handleCreateTenantProductDatasource creates a tenant_product_datasource row
+func handleCreateTenantProductDatasource(svc *services.ConnectionsService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID := getTenantIDFromRequest(r)
+		if tenantID == "" {
+			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
+			return
+		}
+
+		var req createTenantProductDatasourceRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body", "decode_error", err.Error())
+			return
+		}
+
+		input := &models.TenantProductDatasourceInput{
+			TenantProductID:   req.TenantProductID,
+			AlphaDatasourceID: req.AlphaDatasourceID,
+			SourceName:        req.SourceName,
+			Config:            req.Config,
+			IsActive:          req.IsActive,
+			ConnectionID:      req.ConnectionID,
+		}
+
+		created, err := svc.CreateTenantProductDatasource(r.Context(), tenantID, input)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				writeJSONError(w, http.StatusNotFound, err.Error(), "not_found", nil)
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to create tenant product datasource", "create_error", err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(created)
 	}
 }
 

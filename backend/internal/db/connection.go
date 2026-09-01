@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -206,6 +207,31 @@ func GetAllTenantProductDatasources(db *sqlx.DB) ([]models.TenantProductDatasour
 		return nil, fmt.Errorf("error querying for all tenant product datasources: %w", err)
 	}
 	return datasources, nil
+}
+
+// CreateTenantProductDatasource inserts a new tenant_product_datasource row.
+// Callers must run this inside a tenant-scoped transaction (see
+// WithTenantTransaction) and must have already verified tenantProductID
+// belongs to the calling tenant, since this insert has no tenant_id column
+// of its own to scope by.
+func CreateTenantProductDatasource(ctx context.Context, tx *sql.Tx, tpd *models.TenantProductDatasourceInput) (models.TenantProductDatasource, error) {
+	var created models.TenantProductDatasource
+	query := `
+        INSERT INTO public.tenant_product_datasource
+            (tenant_product_id, alpha_datasource_id, source_name, config, is_active, connection_id)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, tenant_product_id, alpha_datasource_id, source_name AS name, config, is_active, connection_id
+    `
+	row := tx.QueryRowContext(ctx, query,
+		tpd.TenantProductID, tpd.AlphaDatasourceID, tpd.SourceName, tpd.Config, tpd.IsActive, tpd.ConnectionID,
+	)
+	if err := row.Scan(
+		&created.ID, &created.TenantProductID, &created.AlphaDatasourceID, &created.Name,
+		&created.Config, &created.IsActive, &created.ConnectionID,
+	); err != nil {
+		return created, fmt.Errorf("error creating tenant product datasource: %w", err)
+	}
+	return created, nil
 }
 
 // FindGoldCopyDatasourceByAlphaIDs finds the corresponding gold copy datasource
