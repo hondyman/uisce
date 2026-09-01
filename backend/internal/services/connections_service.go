@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/events"
+	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -384,6 +385,65 @@ func (s *ConnectionsService) UnlinkConnectionFromDatasource(ctx context.Context,
 		return fmt.Errorf("datasource not found")
 	}
 	return nil
+}
+
+// CreateTenantProductDatasource creates a tenant_product_datasource row,
+// scoped to the tenant via WithTenantTransaction/RLS. input.TenantProductID
+// must reference a tenant_product belonging to a tenant_instance owned by
+// tenantID, and (if set) input.ConnectionID must reference a connection
+// owned by tenantID; both are enforced by the WHERE clauses below rather
+// than relying solely on RLS, since tenant_product_datasource itself has no
+// tenant_id column.
+func (s *ConnectionsService) CreateTenantProductDatasource(ctx context.Context, tenantID string, input *models.TenantProductDatasourceInput) (*models.TenantProductDatasource, error) {
+	if err := db.RequireVerifiedTenantFromCtx(ctx); err != nil {
+		return nil, fmt.Errorf("security: %w", err)
+	}
+	if input == nil || input.TenantProductID == uuid.Nil {
+		return nil, fmt.Errorf("tenant_product_id is required")
+	}
+	if input.AlphaDatasourceID == uuid.Nil {
+		return nil, fmt.Errorf("alpha_datasource_id is required")
+	}
+
+	var created models.TenantProductDatasource
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		var ownsTenantProduct bool
+		ownsQuery := `
+			SELECT EXISTS (
+				SELECT 1 FROM tenant_product tp
+				JOIN tenant_instance ti ON ti.id = tp.datasource_id
+				WHERE tp.id = $1 AND ti.tenant_id = $2
+			)
+		`
+		if err := tx.QueryRowContext(ctx, ownsQuery, input.TenantProductID, tenantID).Scan(&ownsTenantProduct); err != nil {
+			return fmt.Errorf("failed to verify tenant product ownership: %w", err)
+		}
+		if !ownsTenantProduct {
+			return fmt.Errorf("tenant product not found")
+		}
+
+		if input.ConnectionID != nil {
+			var ownsConnection bool
+			connQuery := `SELECT EXISTS (SELECT 1 FROM connections WHERE id = $1 AND tenant_id = $2)`
+			if err := tx.QueryRowContext(ctx, connQuery, *input.ConnectionID, tenantID).Scan(&ownsConnection); err != nil {
+				return fmt.Errorf("failed to verify connection ownership: %w", err)
+			}
+			if !ownsConnection {
+				return fmt.Errorf("connection not found")
+			}
+		}
+
+		row, err := db.CreateTenantProductDatasource(ctx, tx, input)
+		if err != nil {
+			return err
+		}
+		created = row
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &created, nil
 }
 
 func (s *ConnectionsService) GetDatasourcesForConnection(ctx context.Context, tenantID, connectionID string) ([]string, error) {
