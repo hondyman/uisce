@@ -15,28 +15,55 @@ type LLMProvider interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
 
+// DefaultGeminiModel is the single source of truth for which Gemini model
+// callers get when they don't specify one. Update here, not at each call site.
+const DefaultGeminiModel = "gemini-2.5-flash"
+
 // GeminiProvider is an implementation of LLMProvider for Google's Gemini models.
+// Different callers can point the same provider type at different models and
+// generation settings (e.g. deterministic extraction vs. creative drafting)
+// instead of each maintaining its own HTTP/SDK client.
 type GeminiProvider struct {
-	APIKey         string
-	ModelName      string
-	EmbeddingModel string
-	Client         *http.Client
+	APIKey          string
+	ModelName       string
+	EmbeddingModel  string
+	Client          *http.Client
+	Temperature     float64
+	TopP            float64
+	TopK            int
+	MaxOutputTokens int
 }
 
-// NewGeminiProvider creates a new Gemini provider.
+// NewGeminiProvider creates a new Gemini provider with the package's default
+// generation settings (temperature 0.2). Use WithGenerationConfig to override.
 func NewGeminiProvider(apiKey, modelName string) *GeminiProvider {
 	if apiKey == "" {
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if modelName == "" {
-		modelName = "gemini-2.0-flash-exp" // Default model
+		modelName = DefaultGeminiModel
 	}
 	return &GeminiProvider{
-		APIKey:         apiKey,
-		ModelName:      modelName,
-		EmbeddingModel: "text-embedding-004",
-		Client:         &http.Client{},
+		APIKey:          apiKey,
+		ModelName:       modelName,
+		EmbeddingModel:  "text-embedding-004",
+		Client:          &http.Client{},
+		Temperature:     0.2,
+		TopP:            0.95,
+		TopK:            40,
+		MaxOutputTokens: 8192,
 	}
+}
+
+// WithGenerationConfig overrides this provider's generation parameters (e.g.
+// Temperature: 0 for deterministic extraction/classification) and returns the
+// same provider for chaining: llm.NewGeminiProvider(key, model).WithGenerationConfig(0, 0.95, 40, 2000)
+func (g *GeminiProvider) WithGenerationConfig(temperature, topP float64, topK, maxOutputTokens int) *GeminiProvider {
+	g.Temperature = temperature
+	g.TopP = topP
+	g.TopK = topK
+	g.MaxOutputTokens = maxOutputTokens
+	return g
 }
 
 // GenerateResponse sends a prompt to the Gemini API and returns the response.
@@ -56,10 +83,10 @@ func (g *GeminiProvider) GenerateResponse(ctx context.Context, prompt string) (s
 			},
 		},
 		"generationConfig": map[string]interface{}{
-			"temperature":     0.2,
-			"topP":            0.95,
-			"topK":            40,
-			"maxOutputTokens": 8192,
+			"temperature":     g.Temperature,
+			"topP":            g.TopP,
+			"topK":            g.TopK,
+			"maxOutputTokens": g.MaxOutputTokens,
 		},
 	})
 	if err != nil {

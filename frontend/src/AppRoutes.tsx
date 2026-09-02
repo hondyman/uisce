@@ -49,6 +49,7 @@ import Marketplace from "./pages/marketplace/Marketplace";
 import { ValidationRulesBuilderPage } from "./pages/ValidationRulesBuilderPage";
 import { UisceBuilderPage } from "./pages/UisceBuilderPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
+import { DataPipelineStudioPage } from "./features/data-pipelines/pages/DataPipelineStudioPage";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
 import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
@@ -296,6 +297,9 @@ function ProtectedApp() {
         <Route path="/reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
         <Route path="/core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="/core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
+        <Route path="/core/data-pipelines" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
+        <Route path="/pipelines/studio" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
+        <Route path="/pipelines/studio/:id" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
         <Route path="/core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
         <Route path="/query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
         <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />

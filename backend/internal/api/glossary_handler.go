@@ -57,9 +57,13 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/technical-assets", h.CreateTechnicalAssets)
 		r.Delete("/technical-assets/{id}", h.DeleteTechnicalAsset)
 		r.Get("/node-graph", h.GetNodeGraph)
+		r.Get("/nodes/{id}/dependencies", h.GetNodeDependencies)
 
 		// Billion-row safe sample profiling endpoint
 		r.Post("/profile-sample", h.ProfileSample)
+
+		// Bulk-create semantic terms from column groupings in a single request/transaction
+		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
 
 		// Cube.dev properties endpoints
 		r.Get("/semantic-terms/{id}/cube-definition", h.HandleGetSemanticTermWithCubeProperties)
@@ -962,6 +966,214 @@ func (p *NodeProperty) LabelOrName() string {
 }
 
 // CreateEdge creates a new edge between terms
+// GenerateSemanticTerms creates one semantic term per group and links each
+// group's columns to it, all in a single request and a single DB
+// transaction — replacing the frontend's previous per-group request loop.
+// No LLM call is involved: group names/column groupings are computed
+// client-side from column-name heuristics before this is called.
+func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Groups []struct {
+			Name        string   `json:"name"`
+			Description string   `json:"description"`
+			ColumnIDs   []string `json:"column_ids"`
+		} `json:"groups"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.Groups) == 0 {
+		http.Error(w, "groups is required and must be non-empty", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve (or create) the semantic_term node type and MAPS_TO edge type
+	// once, up front, shared by every group in this batch.
+	var nodeTypeID string
+	if err := h.db.QueryRow(`SELECT id FROM catalog_node_type WHERE catalog_type_name = 'semantic_term' LIMIT 1`).Scan(&nodeTypeID); err != nil {
+		if err == sql.ErrNoRows {
+			if err := h.db.QueryRow(`INSERT INTO catalog_node_type (tenant_id, catalog_type_name, created_at, updated_at) VALUES ($1, 'semantic_term', NOW(), NOW()) RETURNING id`, secCtx.TenantID).Scan(&nodeTypeID); err != nil {
+				log.Printf("GenerateSemanticTerms: failed to create semantic_term node type: %v", err)
+				http.Error(w, "Failed to resolve semantic term type", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			log.Printf("GenerateSemanticTerms: failed to resolve semantic_term node type: %v", err)
+			http.Error(w, "Failed to resolve semantic term type", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var columnNodeTypeID sql.NullString
+	if err := h.db.QueryRow(`SELECT id FROM catalog_node_type WHERE catalog_type_name = 'column' LIMIT 1`).Scan(&columnNodeTypeID); err != nil && err != sql.ErrNoRows {
+		log.Printf("GenerateSemanticTerms: failed to resolve column node type: %v", err)
+	}
+
+	var edgeTypeID string
+	if err := h.db.QueryRow(`SELECT id FROM catalog_edge_type WHERE edge_type_name = 'MAPS_TO' LIMIT 1`).Scan(&edgeTypeID); err != nil {
+		if err == sql.ErrNoRows {
+			if err := h.db.QueryRow(`INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at) VALUES ($1, 'MAPS_TO', NOW(), NOW()) RETURNING id`, secCtx.TenantID).Scan(&edgeTypeID); err != nil {
+				log.Printf("GenerateSemanticTerms: failed to create MAPS_TO edge type: %v", err)
+				http.Error(w, "Failed to resolve MAPS_TO edge type", http.StatusInternalServerError)
+				return
+			}
+		} else {
+			log.Printf("GenerateSemanticTerms: failed to resolve MAPS_TO edge type: %v", err)
+			http.Error(w, "Failed to resolve MAPS_TO edge type", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		http.Error(w, "Failed to begin transaction", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// catalog_node/catalog_edge have FORCE ROW LEVEL SECURITY: without this,
+	// uisce_get_current_tenant() returns NULL, every insert's WITH CHECK
+	// fails, and — since that's a real Postgres error, not an app-level one —
+	// it poisons the rest of this transaction (25P02) rather than just this
+	// statement.
+	if _, err := tx.Exec(`SELECT set_config('uisce.current_tenant', $1, true)`, secCtx.TenantID); err != nil {
+		http.Error(w, "Failed to set tenant context", http.StatusInternalServerError)
+		return
+	}
+
+	type createdTerm struct {
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+		EdgeCnt int    `json:"linked_column_count"`
+	}
+	created := make([]createdTerm, 0, len(req.Groups))
+
+	for _, group := range req.Groups {
+		if group.Name == "" || len(group.ColumnIDs) == 0 {
+			continue
+		}
+		qualifiedPath := fmt.Sprintf("semantic_term/%s", group.Name)
+
+		// tenant_datasource_id is a real uuid column: an empty string here
+		// (the request carries no reliable datasource context — secCtx and
+		// the query param are both unset for this endpoint) would fail its
+		// cast and poison the whole transaction. Resolve it from the
+		// group's own first column instead, which is both always available
+		// and more correct: the term's datasource should match the columns
+		// it's actually mapping.
+		var groupDatasourceID sql.NullString
+		if err := tx.QueryRow(`SELECT tenant_datasource_id FROM catalog_node WHERE id = $1`, group.ColumnIDs[0]).Scan(&groupDatasourceID); err != nil {
+			log.Printf("GenerateSemanticTerms: failed to resolve datasource for group %q: %v", group.Name, err)
+			http.Error(w, fmt.Sprintf("Failed to resolve datasource for group %q: %v", group.Name, err), http.StatusInternalServerError)
+			return
+		}
+
+		// catalog_node_unique is (tenant_id, node_type_id, qualified_path) —
+		// tenant_datasource_id isn't part of it, so a lookup that also
+		// filters on datasource can miss an existing row and then collide
+		// on INSERT with a 23505 instead of reusing it.
+		var termID string
+		lookupErr := tx.QueryRow(`
+			SELECT id FROM catalog_node
+			WHERE tenant_id = $1 AND node_type_id = $2 AND (qualified_path = $3 OR node_name = $4)
+			LIMIT 1
+		`, secCtx.TenantID, nodeTypeID, qualifiedPath, group.Name).Scan(&termID)
+		isNewTerm := lookupErr != nil
+		if isNewTerm {
+			if insertErr := tx.QueryRow(`
+				INSERT INTO catalog_node (node_name, node_type_id, tenant_id, tenant_datasource_id, qualified_path, description, properties, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, '{}'::jsonb, NOW(), NOW())
+				RETURNING id
+			`, group.Name, nodeTypeID, secCtx.TenantID, groupDatasourceID, qualifiedPath, group.Description).Scan(&termID); insertErr != nil {
+				log.Printf("GenerateSemanticTerms: failed to create term %q: %v", group.Name, insertErr)
+				http.Error(w, fmt.Sprintf("Failed to create term %q: %v", group.Name, insertErr), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		colIDs := append([]string{}, group.ColumnIDs...)
+
+		// A brand-new term (not an accept onto an existing one) also picks up
+		// every other same-named column across the tenant's other tables that
+		// isn't already mapped to some semantic term — e.g. accepting
+		// "AccountId" on one table's account_id auto-links every other
+		// table's account_id column too, and removes them all from the
+		// approval queue in one pass, rather than asking the same slam-dunk
+		// decision over and over.
+		if isNewTerm && columnNodeTypeID.Valid {
+			var extraCols []string
+			rows, err := tx.Query(`
+				SELECT c.id FROM catalog_node c
+				WHERE c.node_type_id = $1
+				  AND c.node_name = $2
+				  AND c.tenant_id = $3
+				  AND NOT EXISTS (
+					SELECT 1 FROM catalog_edge e
+					WHERE (e.source_node_id = c.id OR e.target_node_id = c.id) AND e.edge_type_id = $4
+				  )
+			`, columnNodeTypeID, group.Name, secCtx.TenantID, edgeTypeID)
+			if err != nil {
+				log.Printf("GenerateSemanticTerms: failed to find same-named columns for %q: %v", group.Name, err)
+			} else {
+				for rows.Next() {
+					var cid string
+					if scanErr := rows.Scan(&cid); scanErr == nil {
+						extraCols = append(extraCols, cid)
+					}
+				}
+				rows.Close()
+			}
+			existing := make(map[string]bool, len(colIDs))
+			for _, id := range colIDs {
+				existing[id] = true
+			}
+			for _, id := range extraCols {
+				if !existing[id] {
+					colIDs = append(colIDs, id)
+					existing[id] = true
+				}
+			}
+		}
+
+		linked := 0
+		for _, colID := range colIDs {
+			if colID == "" {
+				continue
+			}
+			edgeID := uuid.New().String()
+			if _, err := tx.Exec(`
+				INSERT INTO catalog_edge (id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, properties, edge_type_id, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6, NOW(), NOW())
+			`, edgeID, secCtx.TenantID, groupDatasourceID, colID, termID, edgeTypeID); err != nil {
+				log.Printf("GenerateSemanticTerms: failed to link column %s to term %s: %v", colID, termID, err)
+				http.Error(w, fmt.Sprintf("Failed to link column to term %q: %v", group.Name, err), http.StatusInternalServerError)
+				return
+			}
+			linked++
+		}
+
+		created = append(created, createdTerm{ID: termID, Name: group.Name, EdgeCnt: linked})
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Failed to commit transaction", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"terms": created,
+		"count": len(created),
+	})
+}
+
 func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -1150,6 +1362,76 @@ func (h *GlossaryHandler) CreateEdge(w http.ResponseWriter, r *http.Request) {
 }
 
 // DeleteTerm deletes a business term or semantic term
+// GetNodeDependencies reports whether a semantic/business term can be safely
+// deleted. business_object_fields.term_node_id -> catalog_node.id is
+// ON DELETE RESTRICT, so deleting a term that still backs a BO field would
+// otherwise fail with an opaque FK-violation 500; this lets the frontend
+// warn the user and name the blocking BO fields up front instead.
+func (h *GlossaryHandler) GetNodeDependencies(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "term ID is required", http.StatusBadRequest)
+		return
+	}
+
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(r.Context(), `SELECT set_config('uisce.current_tenant', $1, true)`, secCtx.TenantID); err != nil {
+		http.Error(w, "Failed to set tenant context", http.StatusInternalServerError)
+		return
+	}
+
+	rows, err := tx.QueryContext(r.Context(), `
+		SELECT bof.id, bof.bo_id, bof.field_name, bo.bo_key, bo.bo_name
+		FROM business_object_fields bof
+		JOIN business_objects bo ON bo.id = bof.bo_id
+		WHERE bof.term_node_id = $1 AND bof.tenant_id = $2
+	`, id, secCtx.TenantID)
+	if err != nil {
+		log.Printf("[GetNodeDependencies] Error querying dependencies for %s: %v", id, err)
+		http.Error(w, "Failed to check dependencies", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	type dependency struct {
+		RefTable  string `json:"ref_table"`
+		RefID     string `json:"ref_id"`
+		BOID      string `json:"bo_id"`
+		BOKey     string `json:"bo_key"`
+		BOName    string `json:"bo_name"`
+		RefDetail string `json:"ref_detail"`
+	}
+	deps := make([]dependency, 0)
+	for rows.Next() {
+		var fieldID, boID, fieldName, boKey, boName string
+		if err := rows.Scan(&fieldID, &boID, &fieldName, &boKey, &boName); err != nil {
+			continue
+		}
+		deps = append(deps, dependency{
+			RefTable: "business_object_fields", RefID: fieldID,
+			BOID: boID, BOKey: boKey, BOName: boName, RefDetail: fieldName,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"can_delete":   len(deps) == 0,
+		"dependencies": deps,
+	})
+}
+
 func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	if id == "" {
@@ -1171,12 +1453,30 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	query := `
-		DELETE FROM catalog_node
-		WHERE id = $1 AND tenant_id = $2
-	`
+	// catalog_node and catalog_edge both have FORCE ROW LEVEL SECURITY, and
+	// catalog_edge has no foreign key to catalog_node (it's partitioned, so
+	// none was ever added) — so this must (a) set the tenant GUC itself,
+	// unlike the plain h.db.Exec this replaced, and (b) explicitly delete
+	// any edges referencing this node first, or they're left dangling.
+	tx, err := h.db.Begin()
+	if err != nil {
+		http.Error(w, "Failed to begin transaction", http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
 
-	result, err := h.db.Exec(query, id, tenantID)
+	if _, err := tx.Exec(`SELECT set_config('uisce.current_tenant', $1, true)`, tenantID); err != nil {
+		http.Error(w, "Failed to set tenant context", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := tx.Exec(`DELETE FROM catalog_edge WHERE source_node_id = $1 OR target_node_id = $1`, id); err != nil {
+		log.Printf("Error deleting edges for term %s: %v", id, err)
+		http.Error(w, "Failed to delete term's edges", http.StatusInternalServerError)
+		return
+	}
+
+	result, err := tx.Exec(`DELETE FROM catalog_node WHERE id = $1 AND tenant_id = $2`, id, tenantID)
 	if err != nil {
 		log.Printf("Error deleting term %s: %v", id, err)
 		http.Error(w, "Failed to delete term", http.StatusInternalServerError)
@@ -1192,6 +1492,11 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 
 	if rowsAffected == 0 {
 		http.Error(w, "Term not found", http.StatusNotFound)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "Failed to commit delete", http.StatusInternalServerError)
 		return
 	}
 
@@ -1776,6 +2081,31 @@ func (h *GlossaryHandler) GetNodeGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	// catalog_node/catalog_edge are FORCE ROW LEVEL SECURITY tables — the
+	// tenant GUC must be set on this transaction or the SELECT below
+	// silently returns zero rows regardless of the WHERE clause.
+	tx, err := h.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		log.Printf("[GetNodeGraph] Error starting tx: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "edges": []interface{}{}})
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(r.Context(), "SELECT set_config('uisce.current_tenant', $1, true)", secCtx.TenantID); err != nil {
+		log.Printf("[GetNodeGraph] Error setting tenant GUC: %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"nodes": []interface{}{}, "edges": []interface{}{}})
+		return
+	}
+
 	query := `
 		SELECT ce.id, ce.source_node_id, ce.target_node_id,
 		       COALESCE(cet.edge_type_name, ce.relationship_type, '') AS predicate,
@@ -1791,9 +2121,10 @@ func (h *GlossaryHandler) GetNodeGraph(w http.ResponseWriter, r *http.Request) {
 		LEFT JOIN catalog_node_type src_cnt ON src_cnt.id = src.node_type_id
 		LEFT JOIN catalog_node tgt ON tgt.id = ce.target_node_id
 		LEFT JOIN catalog_node_type tgt_cnt ON tgt_cnt.id = tgt.node_type_id
-		WHERE ce.source_node_id = $1 OR ce.target_node_id = $1
+		WHERE (ce.source_node_id = $1 OR ce.target_node_id = $1)
+		  AND ce.tenant_id = $2
 	`
-	rows, err := h.db.QueryContext(r.Context(), query, nodeID)
+	rows, err := tx.QueryContext(r.Context(), query, nodeID, secCtx.TenantID)
 	if err != nil {
 		log.Printf("[GetNodeGraph] Error querying edges: %v", err)
 		w.Header().Set("Content-Type", "application/json")

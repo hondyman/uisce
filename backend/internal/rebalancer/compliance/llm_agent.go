@@ -6,29 +6,22 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
-// IPSComplianceAgent uses an LLM to parse unstructured IPS constraints
+// IPSComplianceAgent uses an LLM to parse unstructured IPS constraints. Uses
+// the centralized pkg/llm Gemini provider (deterministic, temperature 0)
+// rather than its own SDK client.
 type IPSComplianceAgent struct {
-	client *genai.Client
-	model  *genai.GenerativeModel
+	provider *llm.GeminiProvider
 }
 
 func NewIPSComplianceAgent(ctx context.Context, apiKey string) (*IPSComplianceAgent, error) {
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		return nil, err
+	if apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is required")
 	}
-
-	model := client.GenerativeModel("gemini-1.5-pro")
-	model.SetTemperature(0.0) // Deterministic output
-
-	return &IPSComplianceAgent{
-		client: client,
-		model:  model,
-	}, nil
+	provider := llm.NewGeminiProvider(apiKey, "").WithGenerationConfig(0.0, 0.95, 40, 8192)
+	return &IPSComplianceAgent{provider: provider}, nil
 }
 
 type ComplianceResult struct {
@@ -55,21 +48,12 @@ Respond with a JSON object in the following format:
 }
 `, ipsText, companyProfile)
 
-	resp, err := a.model.GenerateContent(ctx, genai.Text(prompt))
+	responseText, err := a.provider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate content: %w", err)
 	}
-
-	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+	if responseText == "" {
 		return nil, fmt.Errorf("empty response from LLM")
-	}
-
-	// Extract text from response
-	var responseText string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if txt, ok := part.(genai.Text); ok {
-			responseText += string(txt)
-		}
 	}
 
 	// Clean up markdown code blocks if present
@@ -86,6 +70,6 @@ Respond with a JSON object in the following format:
 	return &result, nil
 }
 
-func (a *IPSComplianceAgent) Close() {
-	a.client.Close()
-}
+// Close is a no-op: pkg/llm.GeminiProvider is a plain HTTP client with
+// nothing to tear down. Kept for callers that defer a.Close().
+func (a *IPSComplianceAgent) Close() {}

@@ -97,6 +97,7 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}/relationships/{relationshipId}", h.DeleteBusinessObjectRelationship)
 		r.Get("/{id}/delta", h.GetBODelta)
 		r.Get("/{id}/scope", h.DiscoverBindingScope)
+		r.Get("/{id}/resolve-datasource", h.ResolveBindingDatasource)
 		r.Get("/{id}/publish-gate", h.ValidatePublishGate)
 		r.Get("/{id}/multi-backend", h.GetMultiBackendConfiguration)
 		r.Post("/{id}/simulate-impact", h.SimulateLineageImpact)
@@ -1452,6 +1453,52 @@ func (h *BusinessObjectHandler) ExecuteWorkflowAction(w http.ResponseWriter, r *
 }
 
 // DiscoverBindingScope handles GET /api/business-objects/{id}/scope
+// ResolveBindingDatasource handles GET /api/business-objects/{id}/resolve-datasource.
+// Given a core BO's binding (default binding, or ?binding_id=... for a
+// specific one) and the caller's own tenant, returns THAT tenant's own
+// tenant_product_datasource.id for the binding's declared datasource slot
+// (alpha_product_id/alpha_datasource_id) — e.g. "ORM Connection" resolves to
+// tenant A's dedicated database, not gold copy's. This is a pre-flight step:
+// the caller then passes the returned id as X-Datasource-Id on the actual
+// Preview/Execute query call. Deliberately does NOT require a datasource id
+// upfront (unlike most handlers here), since resolving one is the whole
+// point — only the tenant identity is needed.
+func (h *BusinessObjectHandler) ResolveBindingDatasource(w http.ResponseWriter, r *http.Request) {
+	tenantID := getTenantIDFromRequest(r)
+	if tenantID == "" {
+		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
+		return
+	}
+
+	boID := chi.URLParam(r, "id")
+	bindingID := r.URL.Query().Get("binding_id")
+
+	var slot struct {
+		AlphaProductID    sql.NullString `db:"alpha_product_id"`
+		AlphaDatasourceID sql.NullString `db:"alpha_datasource_id"`
+	}
+	err := h.db.GetContext(r.Context(), &slot, `
+		SELECT alpha_product_id::text AS alpha_product_id, alpha_datasource_id::text AS alpha_datasource_id
+		FROM business_object_bindings
+		WHERE bo_id = $1::uuid AND ($2 = '' OR id::text = $2)
+		ORDER BY is_default DESC
+		LIMIT 1
+	`, boID, bindingID)
+	if err != nil || !slot.AlphaProductID.Valid || !slot.AlphaDatasourceID.Valid {
+		writeJSONError(w, http.StatusNotFound, "business object has no binding with a datasource slot configured", "no_binding_slot", nil)
+		return
+	}
+
+	datasourceID, err := h.datasourceResolver.ResolveBindingDatasource(r.Context(), tenantID, slot.AlphaProductID.String, slot.AlphaDatasourceID.String)
+	if err != nil {
+		writeJSONError(w, http.StatusNotFound, err.Error(), "not_found", nil)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"datasource_id": datasourceID})
+}
+
 func (h *BusinessObjectHandler) DiscoverBindingScope(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
 		Resolver: h.datasourceResolver,

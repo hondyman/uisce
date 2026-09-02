@@ -232,7 +232,7 @@ func executeLLMActivity(ctx context.Context, stepType string, config LLMStepConf
 	if err != nil {
 		// Use defaults
 		profile = &LLMProfile{
-			ModelName:   "gemini-2.0-flash-exp",
+			ModelName:   llm.DefaultGeminiModel,
 			Temperature: 0.2,
 			MaxTokens:   4096,
 		}

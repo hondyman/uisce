@@ -1641,6 +1641,13 @@ func (s *sqlDBBORepository) GetBOByTechnicalName(technicalName, tenantID, dataso
 	return s.GetBODefinition(boID)
 }
 
+// HasPhysicalColumn: this repository has no catalog-scan integration, so it
+// can't confirm either way — default to true (apply tenant scoping), the
+// existing safe behavior for validation-rule execution.
+func (s *sqlDBBORepository) HasPhysicalColumn(drivingTable, columnName string) bool {
+	return true
+}
+
 func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)

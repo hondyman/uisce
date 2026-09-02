@@ -29,6 +29,11 @@ var allowedComparisonOps = map[string]bool{
 	"STARTS WITH": true, "STARTS_WITH": true, "START_WITH": true,
 	"ENDS WITH": true, "ENDS_WITH": true, "END_WITH": true,
 	"IN": true, "NOT IN": true,
+	// Case-insensitive equality — the query builder UI already defaults every
+	// string-typed filter to this operator (handleAddFilter in LiveQueryTab),
+	// but nothing below ever recognized it: every manually-added string
+	// filter, and every AI-extracted one, hit "unsupported filter operator".
+	"ILIKE": true, "NOT ILIKE": true,
 }
 
 // CompiledPredicate is a SQL fragment paired with the parameter values it
@@ -130,6 +135,11 @@ func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr s
 			return fmt.Sprintf("%s ILIKE %s", sqlExpr, token), nil
 		case "IN", "NOT IN":
 			return compileInList(g, ctx, sqlExpr, op, splitCSV(v))
+		case "ILIKE", "NOT ILIKE":
+			// Case-insensitive equality, not a substring match — the value is
+			// bound as-is with no % wildcards (that's what CONTAINS is for).
+			token := nextParam(g, ctx, v)
+			return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil
 		default:
 			token := nextParam(g, ctx, v)
 			return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil

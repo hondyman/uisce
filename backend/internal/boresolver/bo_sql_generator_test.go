@@ -31,6 +31,10 @@ func (m *MockBORepository) GetBOByTechnicalName(technicalName, tenantID, datasou
 	return nil, nil
 }
 
+func (m *MockBORepository) HasPhysicalColumn(drivingTable, columnName string) bool {
+	return true
+}
+
 func TestSimpleSQLGeneration(t *testing.T) {
 	// Setup Mock Repo
 	repo := &MockBORepository{

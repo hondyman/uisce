@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
-	"google.golang.org/api/option"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
 // DocumentIntelligenceService processes alternative investment documents using AI
@@ -18,28 +17,26 @@ type DocumentIntelligenceService interface {
 }
 
 type documentIntelligenceService struct {
-	geminiClient *genai.Client
-	altInvSvc    Service
+	geminiProvider *llm.GeminiProvider
+	altInvSvc      Service
 }
 
-// NewDocumentIntelligenceService creates a new document intelligence service
+// NewDocumentIntelligenceService creates a new document intelligence service.
+// Uses the centralized pkg/llm Gemini provider (low temperature, for
+// consistent structured extraction) rather than its own SDK client.
 func NewDocumentIntelligenceService(apiKey string, altInvSvc Service) (DocumentIntelligenceService, error) {
-	client, err := genai.NewClient(context.Background(), option.WithAPIKey(apiKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
+	if apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY is required")
 	}
-
+	provider := llm.NewGeminiProvider(apiKey, "").WithGenerationConfig(0.1, 0.95, 40, 8192)
 	return &documentIntelligenceService{
-		geminiClient: client,
-		altInvSvc:    altInvSvc,
+		geminiProvider: provider,
+		altInvSvc:      altInvSvc,
 	}, nil
 }
 
 // ProcessQuarterlyStatement extracts structured data from a GP quarterly statement
 func (s *documentIntelligenceService) ProcessQuarterlyStatement(ctx context.Context, documentID uuid.UUID, pdfText string) (*ExtractedQuarterlyData, error) {
-	model := s.geminiClient.GenerativeModel("gemini-1.5-flash")
-	model.SetTemperature(0.1) // Low temperature for consistent extraction
-
 	prompt := fmt.Sprintf(`
 Extract the following information from this private equity/alternative investment quarterly statement.
 Return ONLY a valid JSON object with these exact keys:
@@ -60,21 +57,12 @@ Document text:
 %s
 `, pdfText)
 
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	responseText, err := s.geminiProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	if responseText == "" {
 		return nil, fmt.Errorf("no response from Gemini")
-	}
-
-	// Extract text from response
-	responseText := ""
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if txt, ok := part.(genai.Text); ok {
-			responseText += string(txt)
-		}
 	}
 
 	// Clean up response (remove markdown code blocks if present)
@@ -135,9 +123,6 @@ Document text:
 
 // ProcessK1Document extracts data from a K-1 tax document
 func (s *documentIntelligenceService) ProcessK1Document(ctx context.Context, documentID uuid.UUID, pdfText string) (map[string]interface{}, error) {
-	model := s.geminiClient.GenerativeModel("gemini-1.5-flash")
-	model.SetTemperature(0.1)
-
 	prompt := fmt.Sprintf(`
 Extract the following information from this K-1 tax document for a partnership investment.
 Return ONLY a valid JSON object with these keys:
@@ -155,20 +140,12 @@ Document text:
 %s
 `, pdfText)
 
-	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	responseText, err := s.geminiProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("Gemini API error: %w", err)
 	}
-
-	if len(resp.Candidates) == 0 || len(resp.Candidates[0].Content.Parts) == 0 {
+	if responseText == "" {
 		return nil, fmt.Errorf("no response from Gemini")
-	}
-
-	responseText := ""
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if txt, ok := part.(genai.Text); ok {
-			responseText += string(txt)
-		}
 	}
 
 	responseText = strings.TrimSpace(responseText)

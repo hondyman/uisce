@@ -61,6 +61,10 @@ export interface Connection {
   api_key?: string;
   metadata?: Record<string, any>;
   is_active?: boolean;
+  // true when this row has no real `connections` table row backing it (its
+  // config lives inline on tenant_product_datasource) — CRUD for it must go
+  // through /api/tenant-ops/product-datasources/{id}, not /connections/{id}.
+  isInline?: boolean;
 }
 
 interface ConnectionsTabContentProps {
@@ -183,15 +187,19 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
     return null;
   }, [instanceFilter, tenantData]);
 
-  const handleDeleteConnection = async (id: string) => {
+  const handleDeleteConnection = async (id: string, isInline?: boolean) => {
     if (confirm('Are you sure you want to delete this connection? This action cannot be undone.')) {
       try {
-        await apiClient(`/api/tenant-ops/connections/${id}`, {
+        const path = isInline
+          ? `/api/tenant-ops/product-datasources/${id}`
+          : `/api/tenant-ops/connections/${id}`;
+        await apiClient(path, {
           method: 'DELETE',
         });
         window.location.reload();
-      } catch (err) {
+      } catch (err: any) {
         console.error(err);
+        alert(`Failed to delete connection: ${err?.message || 'Unknown error'}`);
       }
     }
   };
@@ -253,11 +261,17 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
           id: product.alpha_product_id || product.alpha_product?.id || product.product_id || product.id
         };
         (product.tenant_product_datasources || product.datasources || []).forEach((ds: any) => {
-          if (ds.connection_id) {
-            console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
-            // Use connection_id as the key to avoid duplicates
-            if (!connectionsMap.has(ds.connection_id)) {
-              console.log(`[DEBUG] Building connection for ds.connection_id: ${ds.connection_id}, ds.config:`, JSON.stringify(ds.config, null, 2));
+          // Most datasources store config inline on tenant_product_datasource
+          // (no connection_id / no real `connections` row) rather than being
+          // linked to the shared `connections` table, so ds.id is the only
+          // identifier available for those. Only datasources actually linked
+          // to a real `connections` row use connection_id.
+          const effectiveConnId = ds.connection_id || ds.id;
+          if (effectiveConnId) {
+            console.log(`    Found datasource with connection_id/id: ${effectiveConnId}`);
+            // Use effectiveConnId as the key to avoid duplicates
+            if (!connectionsMap.has(effectiveConnId)) {
+              console.log(`[DEBUG] Building connection for ds: ${effectiveConnId}, ds.config:`, JSON.stringify(ds.config, null, 2));
               const displayName =
                 ds.alpha_datasource?.datasource_name ||
                 ds.connection_name ||
@@ -273,8 +287,8 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
               if (normalizedType === 'database' || !['postgres', 'mysql', 'snowflake', 'api', 's3', 'azure', 'gcs'].includes(normalizedType)) {
                 normalizedType = 'postgres';
               }
-              connectionsMap.set(ds.connection_id, {
-                id: ds.connection_id,
+              connectionsMap.set(effectiveConnId, {
+                id: effectiveConnId,
                 name: displayName,
                 type: normalizedType,
                 host: configHost,
@@ -293,6 +307,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
                 linkedProduct: productInfo.name,
                 linkedProductId: productInfo.id,
                 linkedDatasourceId: ds.id,
+                isInline: !ds.connection_id,
                 linkedAlphaDatasourceId: ds.alpha_datasource_id || ds.alpha_datasource?.id,
                 lastSync: ds.updated_at ? new Date(ds.updated_at).toLocaleString() : '-',
                 status: (ds.is_active ?? true) ? 'connected' : 'warning',
@@ -619,7 +634,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
                       <IconButton
                         size="small"
                         color="error"
-                        onClick={() => handleDeleteConnection(conn.id)}
+                        onClick={() => handleDeleteConnection(conn.id, conn.isInline)}
                         title="Delete Connection"
                       >
                        <DeleteOutline fontSize="small" />

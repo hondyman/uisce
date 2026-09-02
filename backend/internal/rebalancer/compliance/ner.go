@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/google/generative-ai-go/genai"
 )
 
 // FinancialEntity represents an entity extracted from text
@@ -35,20 +33,12 @@ Text:
 %s
 `, text)
 
-	resp, err := s.agent.model.GenerateContent(ctx, genai.Text(prompt))
+	responseText, err := s.agent.provider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate content: %w", err)
 	}
-
-	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+	if responseText == "" {
 		return nil, fmt.Errorf("empty response from LLM")
-	}
-
-	var responseText string
-	for _, part := range resp.Candidates[0].Content.Parts {
-		if txt, ok := part.(genai.Text); ok {
-			responseText += string(txt)
-		}
 	}
 
 	responseText = strings.TrimPrefix(responseText, "```json")

@@ -91,6 +91,12 @@ type ResolvedDatasource struct {
 
 type DatasourceResolver interface {
 	Resolve(ctx context.Context, datasourceID string) (*ResolvedDatasource, error)
+	// ResolveBindingDatasource turns a Business Object binding's declared
+	// logical datasource slot (alpha_product_id + alpha_datasource_id, e.g.
+	// "ORM Connection") into the calling tenant's own
+	// tenant_product_datasource.id. See DBDatasourceResolver's implementation
+	// for the full rationale.
+	ResolveBindingDatasource(ctx context.Context, tenantID, alphaProductID, alphaDatasourceID string) (string, error)
 }
 
 var scopePartPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)

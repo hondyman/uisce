@@ -591,6 +591,41 @@ export const TenantDetailPageV2: React.FC = () => {
         }
       }
 
+      // Datasources with no real `connections` row (config stored inline on
+      // tenant_product_datasource) are updated in place — they don't go
+      // through the connections table create/link/unlink flow below.
+      if (editingConnection?.id && editingConnection?.isInline) {
+        const inlineConfig = {
+          host: connectionForm.host || undefined,
+          port: connectionForm.port ? parseInt(connectionForm.port) : undefined,
+          database: connectionForm.database || undefined,
+          schema: connectionForm.schema || undefined,
+          base_url: connectionForm.base_url || undefined,
+          api_key: connectionForm.api_key || undefined,
+          auth: connectionForm.username ? {
+            basic: {
+              username: connectionForm.username,
+              password: connectionForm.password || connectionForm.metadata?.auth?.basic?.password || '',
+            },
+          } : undefined,
+          ...connectionForm.metadata,
+        };
+
+        await apiClient(`/api/tenant-ops/product-datasources/${editingConnection.id}`, {
+          method: 'PATCH',
+          headers: { ...(tenantId && { 'X-Tenant-ID': tenantId }) },
+          body: JSON.stringify({
+            source_name: connectionForm.name,
+            config: inlineConfig,
+            is_active: connectionForm.is_active,
+          }),
+        });
+
+        setConnectionDialogOpen(false);
+        await refetchTenant();
+        return;
+      }
+
       let connectionId;
 
       if (editingConnection?.id) {

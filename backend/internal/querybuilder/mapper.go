@@ -19,6 +19,7 @@ func mapQueryDefToSemanticRequest(
 	}
 
 	req := &boresolver.SemanticSQLGenerationRequest{
+		BOID:       boDef.ID,
 		Datasource: boDef.DrivingTable,
 		Limit:      qd.Query.Limit,
 	}

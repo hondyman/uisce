@@ -7,37 +7,35 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/google/generative-ai-go/genai"
-	"google.golang.org/api/option"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
-// GeminiClient wraps Google Gemini API for LLM operations
+// GeminiClient wraps the centralized pkg/llm Gemini provider for the
+// semantic-query planner/executor. All Gemini calls in the backend go
+// through pkg/llm.GeminiProvider so the model and API key live in one place;
+// this type just supplies the planner/executor-specific prompts and
+// deterministic generation settings.
 type GeminiClient struct {
-	client *genai.Client
-	model  string
+	provider *llm.GeminiProvider
 }
 
-// NewGeminiClient creates a new Gemini client
-func NewGeminiClient(apiKey string) (*GeminiClient, error) {
+// NewGeminiClient creates a new Gemini client. modelName is optional — pass
+// "" to use pkg/llm's centralized default model.
+func NewGeminiClient(apiKey string, modelName ...string) (*GeminiClient, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY is required")
 	}
-
-	ctx := context.Background()
-	client, err := genai.NewClient(ctx, option.WithAPIKey(apiKey))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gemini client: %w", err)
+	model := ""
+	if len(modelName) > 0 {
+		model = modelName[0]
 	}
-
-	return &GeminiClient{
-		client: client,
-		model:  "gemini-pro",
-	}, nil
+	provider := llm.NewGeminiProvider(apiKey, model).WithGenerationConfig(0.0, 0.95, 40, 2000)
+	return &GeminiClient{provider: provider}, nil
 }
 
 // GenerateSemanticQuery converts natural language to a SemanticQuery using Gemini
 func (gc *GeminiClient) GenerateSemanticQuery(ctx context.Context, bundle *SemanticBundle, userPrompt string, mode string, region string) (*SemanticQuery, error) {
-	if gc.client == nil {
+	if gc.provider == nil {
 		return nil, fmt.Errorf("gemini client not initialized")
 	}
 
@@ -45,33 +43,9 @@ func (gc *GeminiClient) GenerateSemanticQuery(ctx context.Context, bundle *Seman
 	systemPrompt := buildPlannerSystemPrompt(bundle, mode)
 	fullPrompt := systemPrompt + "\n\nRequest Region: " + region + "\n\nUser Query:\n" + userPrompt + "\n\nNOTE: The returned JSON MUST include a top-level \"region\" field equal to the Request Region."
 
-	// Create model and set generation config
-	model := gc.client.GenerativeModel(gc.model)
-	model.SetTemperature(0.0) // Deterministic for reproducibility
-	model.SetMaxOutputTokens(2000)
-
-	// Call the API
-	resp, err := model.GenerateContent(ctx, genai.Text(fullPrompt))
+	responseText, err := gc.provider.GenerateResponse(ctx, fullPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("gemini API call failed: %w", err)
-	}
-
-	if len(resp.Candidates) == 0 {
-		return nil, fmt.Errorf("no response from gemini")
-	}
-
-	// Extract text from response
-	var responseText string
-	for _, candidate := range resp.Candidates {
-		for _, part := range candidate.Content.Parts {
-			if text, ok := part.(genai.Text); ok {
-				responseText = string(text)
-				break
-			}
-		}
-		if responseText != "" {
-			break
-		}
 	}
 
 	if responseText == "" {
@@ -95,7 +69,7 @@ func (gc *GeminiClient) GenerateSemanticQuery(ctx context.Context, bundle *Seman
 
 // GenerateSQL converts a SemanticQuery to SQL using Gemini
 func (gc *GeminiClient) GenerateSQL(ctx context.Context, bundle *SemanticBundle, q *SemanticQuery) (string, error) {
-	if gc.client == nil {
+	if gc.provider == nil {
 		return "", fmt.Errorf("gemini client not initialized")
 	}
 
@@ -110,33 +84,9 @@ func (gc *GeminiClient) GenerateSQL(ctx context.Context, bundle *SemanticBundle,
 
 	fullPrompt := systemPrompt + "\n\nSemantic Query:\n" + string(queryJSON)
 
-	// Create model and set generation config
-	model := gc.client.GenerativeModel(gc.model)
-	model.SetTemperature(0.0) // Deterministic for reproducibility
-	model.SetMaxOutputTokens(2000)
-
-	// Call the API
-	resp, err := model.GenerateContent(ctx, genai.Text(fullPrompt))
+	responseText, err := gc.provider.GenerateResponse(ctx, fullPrompt)
 	if err != nil {
 		return "", fmt.Errorf("gemini API call failed: %w", err)
-	}
-
-	if len(resp.Candidates) == 0 {
-		return "", fmt.Errorf("no response from gemini")
-	}
-
-	// Extract text from response
-	var responseText string
-	for _, candidate := range resp.Candidates {
-		for _, part := range candidate.Content.Parts {
-			if text, ok := part.(genai.Text); ok {
-				responseText = string(text)
-				break
-			}
-		}
-		if responseText != "" {
-			break
-		}
 	}
 
 	if responseText == "" {
@@ -217,11 +167,9 @@ func extractSQL(text string) string {
 	return ""
 }
 
-// Close closes the Gemini client connection
+// Close is a no-op: pkg/llm.GeminiProvider is a plain HTTP client with
+// nothing to tear down. Kept for callers that defer gc.Close().
 func (gc *GeminiClient) Close() error {
-	if gc.client != nil {
-		return gc.client.Close()
-	}
 	return nil
 }
 

@@ -48,6 +48,11 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 
 	// Create a tenant_product_datasource row
 	r.Post("/product-datasources", handleCreateTenantProductDatasource(connService))
+	// Update/delete a tenant_product_datasource row (inline-config datasources
+	// not backed by a shared `connections` row)
+	r.Put("/product-datasources/{id}", handleUpdateTenantProductDatasource(connService))
+	r.Patch("/product-datasources/{id}", handleUpdateTenantProductDatasource(connService))
+	r.Delete("/product-datasources/{id}", handleDeleteTenantProductDatasource(connService))
 }
 
 func getTenantIDFromRequest(r *http.Request) string {
@@ -399,6 +404,67 @@ func handleCreateTenantProductDatasource(svc *services.ConnectionsService) http.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(created)
+	}
+}
+
+// handleUpdateTenantProductDatasource updates a tenant_product_datasource row
+func handleUpdateTenantProductDatasource(svc *services.ConnectionsService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID := getTenantIDFromRequest(r)
+		if tenantID == "" {
+			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
+			return
+		}
+		id := chi.URLParam(r, "id")
+
+		var req createTenantProductDatasourceRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid request body", "decode_error", err.Error())
+			return
+		}
+
+		input := &models.TenantProductDatasourceInput{
+			SourceName:   req.SourceName,
+			Config:       req.Config,
+			IsActive:     req.IsActive,
+			ConnectionID: req.ConnectionID,
+		}
+
+		updated, err := svc.UpdateTenantProductDatasource(r.Context(), tenantID, id, input)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				writeJSONError(w, http.StatusNotFound, err.Error(), "not_found", nil)
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to update datasource", "update_error", err.Error())
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(updated)
+	}
+}
+
+// handleDeleteTenantProductDatasource deletes a tenant_product_datasource row
+func handleDeleteTenantProductDatasource(svc *services.ConnectionsService) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tenantID := getTenantIDFromRequest(r)
+		if tenantID == "" {
+			writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
+			return
+		}
+		id := chi.URLParam(r, "id")
+
+		if err := svc.DeleteTenantProductDatasource(r.Context(), tenantID, id); err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				writeJSONError(w, http.StatusNotFound, err.Error(), "not_found", nil)
+				return
+			}
+			writeJSONError(w, http.StatusInternalServerError, "failed to delete datasource", "delete_error", err.Error())
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
 

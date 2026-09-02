@@ -154,10 +154,12 @@ func (s *ConnectionsService) CreateConnection(ctx context.Context, tenantID stri
 		RETURNING created_at, updated_at
 	`
 
-	err := s.db.QueryRowContext(ctx, query,
-		conn.ID, conn.TenantID, conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
-		conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey, conn.Metadata, conn.IsActive, conn.CoreID,
-	).Scan(&conn.CreatedAt, &conn.UpdatedAt)
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, query,
+			conn.ID, conn.TenantID, conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
+			conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey, conn.Metadata, conn.IsActive, conn.CoreID,
+		).Scan(&conn.CreatedAt, &conn.UpdatedAt)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create connection: %w", err)
 	}
@@ -179,11 +181,13 @@ func (s *ConnectionsService) GetConnection(ctx context.Context, tenantID, connec
 		WHERE id = $1 AND tenant_id = $2
 	`
 
-	err := s.db.QueryRowContext(ctx, query, connectionID, tenantID).Scan(
-		&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
-		&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
-		&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
-	)
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, query, connectionID, tenantID).Scan(
+			&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
+			&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
+			&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
+		)
+	})
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -226,40 +230,42 @@ func (s *ConnectionsService) ListConnections(ctx context.Context, tenantID strin
 		ORDER BY created_at DESC
 	`
 
-	rows, err := s.db.QueryContext(ctx, query, tenantID)
-	if err != nil {
-		return []*Connection{}, nil
-	}
-	defer rows.Close()
-
 	isGoldCopy := s.isGoldCopyTenant(ctx, tenantID)
 
 	var connections []*Connection
-	for rows.Next() {
-		conn := &Connection{}
-
-		err := rows.Scan(
-			&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
-			&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
-			&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
-		)
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, query, tenantID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan connection: %w", err)
+			return err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			conn := &Connection{}
+
+			if err := rows.Scan(
+				&conn.ID, &conn.TenantID, &conn.Name, &conn.Type, &conn.Host, &conn.Port, &conn.Database, &conn.Schema,
+				&conn.Username, &conn.Password, &conn.SecretPath, &conn.BaseURL, &conn.APIKey, &conn.Metadata,
+				&conn.IsActive, &conn.CoreID, &conn.CreatedAt, &conn.UpdatedAt,
+			); err != nil {
+				return fmt.Errorf("failed to scan connection: %w", err)
+			}
+
+			if conn.CoreID != nil {
+				conn.Origin = "inherited"
+			} else if isGoldCopy {
+				conn.Origin = "gold_copy"
+			} else {
+				conn.Origin = "custom"
+			}
+
+			connections = append(connections, conn)
 		}
 
-		if conn.CoreID != nil {
-			conn.Origin = "inherited"
-		} else if isGoldCopy {
-			conn.Origin = "gold_copy"
-		} else {
-			conn.Origin = "custom"
-		}
-
-		connections = append(connections, conn)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating connections: %w", err)
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list connections: %w", err)
 	}
 
 	return connections, nil
@@ -283,12 +289,14 @@ func (s *ConnectionsService) UpdateConnection(ctx context.Context, tenantID stri
 		RETURNING created_at, updated_at
 	`
 
-	err := s.db.QueryRowContext(ctx, query,
-		conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
-		conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey,
-		normalizedMetadata(conn.Metadata), conn.IsActive,
-		conn.ID, tenantID,
-	).Scan(&conn.CreatedAt, &conn.UpdatedAt)
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, query,
+			conn.Name, conn.Type, conn.Host, conn.Port, conn.Database, conn.Schema,
+			conn.Username, conn.Password, conn.SecretPath, conn.BaseURL, conn.APIKey,
+			normalizedMetadata(conn.Metadata), conn.IsActive,
+			conn.ID, tenantID,
+		).Scan(&conn.CreatedAt, &conn.UpdatedAt)
+	})
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("connection not found")
@@ -305,17 +313,23 @@ func (s *ConnectionsService) UpdateConnection(ctx context.Context, tenantID stri
 func (s *ConnectionsService) DeleteConnection(ctx context.Context, tenantID, connectionID string) error {
 	query := `DELETE FROM connections WHERE id = $1 AND tenant_id = $2`
 
-	result, err := s.db.ExecContext(ctx, query, connectionID, tenantID)
+	var affected int64
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, query, connectionID, tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to delete connection: %w", err)
+		}
+		affected, err = result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return fmt.Errorf("failed to delete connection: %w", err)
+		return err
 	}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rows == 0 {
+	if affected == 0 {
 		return fmt.Errorf("connection not found")
 	}
 
@@ -444,6 +458,69 @@ func (s *ConnectionsService) CreateTenantProductDatasource(ctx context.Context, 
 		return nil, err
 	}
 	return &created, nil
+}
+
+// UpdateTenantProductDatasource updates the inline config/name/active-state
+// of a tenant_product_datasource row (used for datasources that store their
+// connection details inline rather than through a shared `connections` row).
+func (s *ConnectionsService) UpdateTenantProductDatasource(ctx context.Context, tenantID, id string, input *models.TenantProductDatasourceInput) (*models.TenantProductDatasource, error) {
+	if err := db.RequireVerifiedTenantFromCtx(ctx); err != nil {
+		return nil, fmt.Errorf("security: %w", err)
+	}
+	if input == nil {
+		return nil, fmt.Errorf("input is required")
+	}
+
+	var updated models.TenantProductDatasource
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		query := `
+			UPDATE tenant_product_datasource
+			SET source_name = $1, config = $2, is_active = $3, connection_id = $4, updated_at = NOW()
+			WHERE id = $5 AND tenant_id = $6
+			RETURNING id, tenant_product_id, tenant_id, COALESCE(alpha_datasource_id, '00000000-0000-0000-0000-000000000000'),
+			          COALESCE(source_name, ''), config, is_active, connection_id
+		`
+		row := tx.QueryRowContext(ctx, query,
+			input.SourceName, normalizedMetadata(input.Config), input.IsActive, input.ConnectionID,
+			id, tenantID,
+		)
+		return row.Scan(
+			&updated.ID, &updated.TenantProductID, &updated.TenantID, &updated.AlphaDatasourceID,
+			&updated.Name, &updated.Config, &updated.IsActive, &updated.ConnectionID,
+		)
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("datasource not found")
+		}
+		return nil, fmt.Errorf("failed to update datasource: %w", err)
+	}
+	return &updated, nil
+}
+
+// DeleteTenantProductDatasource deletes a tenant_product_datasource row
+// (a datasource with inline config that isn't backed by a `connections` row).
+func (s *ConnectionsService) DeleteTenantProductDatasource(ctx context.Context, tenantID, id string) error {
+	if err := db.RequireVerifiedTenantFromCtx(ctx); err != nil {
+		return fmt.Errorf("security: %w", err)
+	}
+
+	var affected int64
+	err := db.WithTenantTransaction(ctx, s.db.DB, tenantID, func(tx *sql.Tx) error {
+		result, err := tx.ExecContext(ctx, `DELETE FROM tenant_product_datasource WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+		if err != nil {
+			return fmt.Errorf("failed to delete datasource: %w", err)
+		}
+		affected, err = result.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("datasource not found")
+	}
+	return nil
 }
 
 func (s *ConnectionsService) GetDatasourcesForConnection(ctx context.Context, tenantID, connectionID string) ([]string, error) {

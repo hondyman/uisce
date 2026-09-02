@@ -36,7 +36,7 @@ func (s *LLMConfigService) Get() (*LLMConfig, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// default config
-			return &LLMConfig{Provider: "gemini", Model: "gemini-2.0-flash-exp", EmbeddingModel: "text-embedding-004", Params: map[string]any{"temperature": 0.2}}, nil
+			return &LLMConfig{Provider: "gemini", Model: DefaultGeminiModel, EmbeddingModel: "text-embedding-004", Params: map[string]any{"temperature": 0.2}}, nil
 		}
 		return nil, err
 	}

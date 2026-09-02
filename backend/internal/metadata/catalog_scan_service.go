@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -20,8 +21,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/scanner"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // overrideable function used to fetch gold copy node maps (helps testing)
@@ -708,6 +711,16 @@ func (s *CatalogScanService) TestConnectionByID(ctx context.Context, datasourceI
 
 // connectToTargetDatabase establishes connection to a target database
 func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connectionDetails string) (*sql.DB, error) {
+	return ConnectToTargetDatabase(ctx, connectionDetails)
+}
+
+// ConnectToTargetDatabase opens a live connection to an external
+// target-datasource physical database from its stored connection config JSON
+// (the same shape tenant_product_datasource.config / connections use).
+// Exported so other callers that need to run real queries against a
+// tenant's own physical database — not just the catalog scanner — can reuse
+// this instead of re-deriving DSN/mTLS handling.
+func ConnectToTargetDatabase(ctx context.Context, connectionDetails string) (*sql.DB, error) {
 	// This struct is updated to match the nested JSON structure from the database
 	// AND the flat structure from the frontend ConnectionForm.
 	type ConnectionConfig struct {
@@ -863,8 +876,51 @@ func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connec
 	return targetDB, nil
 }
 
-// storeCatalogData stores extracted metadata in the alpha database
+func isUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	var pqErr *pq.Error
+	if errors.As(err, &pqErr) && (pqErr.Code == "23505" || pqErr.Code.Name() == "unique_violation") {
+		return true
+	}
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		return true
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "23505") || strings.Contains(errMsg, "unique constraint") || strings.Contains(errMsg, "duplicate key")
+}
+
+// storeCatalogData stores extracted metadata in the alpha database. A
+// MERGE's WHEN NOT MATCHED evaluates each source row against the target
+// table's state as of the start of that statement — so if a second scan (or
+// any other writer) for the same datasource commits between our snapshot and
+// our INSERT, both writers can independently decide their row is "not
+// matched" and race on the same unique key. That surfaces here as a
+// unique_violation (23505) on catalog_node_unique even though the temp-table
+// dedupe above already removed duplicates *within* our own batch. Retrying
+// the whole store (fresh temp tables, fresh MERGE/UPSERT) resolves it: by the retry,
+// the other writer's commit is visible, so our UPSERT correctly sees MATCHED.
 func (s *CatalogScanService) storeCatalogData(ctx context.Context, datasourceID uuid.UUID, nodes []*models.CatalogNode, edges []models.CatalogEdge, progress chan<- models.ScanProgress) (int64, int64, int64, error) {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		added, updated, removed, err := s.storeCatalogDataOnce(ctx, datasourceID, nodes, edges, progress)
+		if err == nil {
+			return added, updated, removed, nil
+		}
+		lastErr = err
+		if !isUniqueViolation(err) || attempt == maxAttempts {
+			return 0, 0, 0, err
+		}
+		logging.GetLogger().Sugar().Warnf("storeCatalogData: unique_violation on attempt %d/%d for datasource %s, retrying: %v", attempt, maxAttempts, datasourceID, err)
+		time.Sleep(time.Duration(attempt) * 200 * time.Millisecond)
+	}
+	return 0, 0, 0, lastErr
+}
+
+func (s *CatalogScanService) storeCatalogDataOnce(ctx context.Context, datasourceID uuid.UUID, nodes []*models.CatalogNode, edges []models.CatalogEdge, progress chan<- models.ScanProgress) (int64, int64, int64, error) {
 	// Start transaction on alpha database
 	tx, err := s.alphaDB.BeginTxx(ctx, nil)
 	if err != nil {

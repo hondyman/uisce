@@ -23,6 +23,10 @@ func (f *fakeRepo) GetBOByTechnicalName(tenantID, datasourceID, technicalName st
 	return f.def, f.err
 }
 
+func (f *fakeRepo) HasPhysicalColumn(drivingTable, columnName string) bool {
+	return true
+}
+
 func TestValidateSelectedFields_AllValid(t *testing.T) {
 	repo := &fakeRepo{def: &br.BODefinition{Fields: []br.BOField{{ID: "a"}, {ID: "b"}}}}
 	invalid, err := br.ValidateSelectedFields(repo, "bo1", []string{"a"})

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/pkg/bp"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -96,7 +97,7 @@ func RunStoredWorkflow(ctx workflow.Context, input InterpreterInput) (*WorkflowR
 						"activityName":      "ActivityGenerateContent",
 						"promptTemplate":    "Review the following transaction for compliance risks. Return a JSON with 'risk_level' and 'reason'. Transaction: {{.trade_details}}",
 						"systemInstruction": "You are a senior compliance officer. You are strict.",
-						"modelOverride":     "gemini-2.0-flash-exp",
+						"modelOverride":     llm.DefaultGeminiModel,
 					},
 					NextNodeID: stringPtr("node_end"),
 				},

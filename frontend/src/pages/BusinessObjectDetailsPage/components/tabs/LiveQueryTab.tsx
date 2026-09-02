@@ -75,6 +75,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { CoreIcon, SubtypeScopeIcon } from '../../../../components/common/CoreCustomIcons';
 import { useTenant } from '../../../../contexts/TenantContext';
 import { useNotification } from '../../../../hooks/useNotification';
+import { fetchAPI } from '../../../../api';
 import { previewQuery, executeQuery } from '../../../../features/query-builder/services/queryBuilderApi';
 import type { QueryDef, PreviewResult, QueryExecuteResult } from '../../../../features/query-builder/types/queryDef';
 import { DrillDownGridModal } from '../../../../components/LiveQuery/DrillDownGridModal';
@@ -591,12 +592,19 @@ export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTa
       const res: PreviewResult = await previewQuery(qd);
       if (res && res.sql && res.sql.trim()) {
         setPreviewSql(res.sql);
+        setError(null);
       } else {
         setPreviewSql(generatePostgresSQL());
       }
       evaluateCost();
-    } catch {
-      setPreviewSql(generatePostgresSQL());
+    } catch (err: any) {
+      // The client-side generatePostgresSQL() template references a fixed
+      // demo schema (northwind.customer, account_number) unrelated to any
+      // real BO's driving table — silently falling back to it here hid the
+      // real backend preview failure and showed nonsense SQL as if it were
+      // real. Surface the error instead.
+      setError(err?.message || 'Failed to generate SQL preview.');
+      setPreviewSql(`-- Preview failed: ${err?.message || 'unknown error'}`);
       evaluateCost();
     }
   }, [businessObject, dimensions, measures, timeDimensions, filters, limit, tenantId, evaluateCost, generatePostgresSQL]);
@@ -743,56 +751,10 @@ export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTa
         },
       };
 
-      let res: QueryExecuteResult;
-      try {
-        res = await executeQuery(qd);
-      } catch {
-        const isMasked = userRole === 'analyst' && enableDynamicMasking;
-        const cols = [
-          ...dimensions.map(d => d.alias),
-          ...timeDimensions.map(td => td.alias),
-          ...measures.map(m => m.alias),
-        ];
-        const mockRows: any[] = [];
-        for (let i = 1; i <= Math.min(limit, 15); i++) {
-          const row: any = {};
-          dimensions.forEach(d => {
-            if (d.type === 'uuid') {
-              row[d.alias] = `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`;
-            } else if (d.name.includes('number')) {
-              row[d.alias] = isMasked ? `ACC-****-${4900 + i}` : `ACC-98214-${4900 + i}`;
-            } else if (d.name.includes('name') && isMasked && d.isSensitive) {
-              row[d.alias] = `Client Account ***${i}`;
-            } else if (d.name.includes('name')) {
-              row[d.alias] = `Global Wealth Account ${i}`;
-            } else if (d.name.includes('type')) {
-              row[d.alias] = i % 2 === 0 ? 'Individual' : 'Corporate Trust';
-            } else if (d.name.includes('status')) {
-              row[d.alias] = 'Active';
-            } else {
-              row[d.alias] = `${d.alias} ${i}`;
-            }
-          });
-          timeDimensions.forEach(td => {
-            const date = new Date(Date.now() - i * 86400000 * 5);
-            row[td.alias] = date.toISOString().split('T')[0];
-          });
-          measures.forEach(m => {
-            if (m.name.includes('yield') || m.name.includes('margin') || m.name.includes('pct')) row[m.alias] = (4.25 + i * 0.35).toFixed(2) + '%';
-            else if (m.name.includes('cash') || m.name.includes('balance') || m.name.includes('cost')) row[m.alias] = (150000 + i * 12450.50).toFixed(2);
-            else if (m.name.includes('asset') || m.name.includes('nav')) row[m.alias] = (1200000 + i * 45200.75).toFixed(2);
-            else row[m.alias] = (i * 24.5).toFixed(2);
-          });
-          mockRows.push(row);
-        }
-        res = {
-          sql: previewSql,
-          columns: cols.map(c => ({ name: c, type: 'string' })),
-          rows: mockRows,
-          rowCount: mockRows.length,
-          executionTimeMs: resolvedEngineTier.tier === 'STARROCKS' ? 6 : resolvedEngineTier.tier === 'ICEBERG' ? 42 : 14,
-        };
-      }
+      // No fabricated-data fallback here: a failed executeQuery must surface
+      // as a real error (below), not silently render made-up rows that look
+      // like real results.
+      const res: QueryExecuteResult = await executeQuery(qd);
 
       setExecuteResult(res);
       setResultTab(0);
@@ -817,6 +779,9 @@ export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTa
     setError(null);
     setNlqExplanation(null);
     try {
+      // No .catch(() => null) here: swallowing the error made every failure
+      // (auth, 500, network) look identical to "the AI found nothing" — the
+      // outer try/catch below now surfaces the real error instead.
       const resp = await fetchAPI<any>('/business-objects/ai/nlq', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -824,7 +789,7 @@ export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTa
           boIdOrKey: businessObject.id,
           query: q,
         }),
-      }).catch(() => null);
+      });
 
       if (resp) {
         setNlqExplanation(resp.explanation);
@@ -869,14 +834,83 @@ export function LiveQueryTab({ businessObject, selectedSubtypeKey }: LiveQueryTa
         });
         if (matchedMeas.length > 0) setMeasures(matchedMeas);
 
-        setTimeout(() => {
-          handleRunQuery();
-        }, 100);
+        // resp.filters (e.g. "city = london") was being silently dropped —
+        // dimensions/measures got matched onto query state above but the
+        // actual filter conditions Gemini extracted never did, so a query
+        // like "customers where city = london" never got a WHERE clause.
+        const matchedFilters: FilterItem[] = [];
+        (resp.filters || []).forEach((f: { field?: string; fieldId?: string; operator?: string; value?: unknown }) => {
+          const filterField = f.field || f.fieldId;
+          if (!filterField) return;
+          const matched = fields.find(fld =>
+            fld.name.toLowerCase() === filterField.toLowerCase() ||
+            fld.key?.toLowerCase() === filterField.toLowerCase() ||
+            (fld.displayName && fld.displayName.toLowerCase() === filterField.toLowerCase())
+          );
+          if (!matched) return;
+          const kind = getFieldKind(matched.type || matched.dataType);
+          // Equality on a string field from natural language ("city = london")
+          // means case-insensitive matching, not literal SQL "=" — Postgres
+          // "=" is case-sensitive and would silently return zero rows against
+          // real data like "London" for a query written as "london".
+          const opMap: Record<string, FilterOp> = {
+            '=': kind === 'string' ? 'ILIKE' : '=',
+            EQUALS: kind === 'string' ? 'ILIKE' : '=',
+            '!=': '!=', NOT_EQUALS: '!=',
+            '>': '>', '<': '<', '>=': '>=', '<=': '<=',
+            CONTAINS: 'CONTAINS', LIKE: 'LIKE', ILIKE: 'ILIKE',
+          };
+          const op = opMap[String(f.operator || '=').toUpperCase()] || opMap[f.operator || '='] || (kind === 'string' ? 'ILIKE' : '=');
+          matchedFilters.push({
+            id: `${matched.id || matched.technicalName || matched.name}_${Date.now()}`,
+            fieldName: matched.technicalName || matched.name,
+            displayName: matched.displayName || matched.name,
+            fieldType: kind,
+            op,
+            val: f.value != null ? String(f.value) : '',
+          });
+        });
+        if (matchedFilters.length > 0) setFilters(matchedFilters);
+
+        // Run with the freshly matched selections directly, rather than
+        // calling handleRunQuery() after a delay: that closure captures
+        // dimensions/measures/filters from this same render (before the
+        // setDimensions/setMeasures/setFilters above take effect), so it
+        // always executed with the PREVIOUS selection — typically empty on
+        // a fresh query, which is why AI-driven runs silently returned
+        // nothing despite a 200 OK and a correct SQL preview.
+        if (matchedDims.length > 0 || matchedMeas.length > 0 || matchedFilters.length > 0) {
+          setExecuting(true);
+          try {
+            const qd: QueryDef = {
+              context: { boId: businessObject.id, bindingId: businessObject.datasourceId || '', tenantId },
+              query: {
+                dimensions: matchedDims.map(d => ({ termNodeId: d.name, alias: d.alias })),
+                measures: matchedMeas.map(m => ({ termNodeId: m.name, alias: m.alias, agg: m.agg as any })),
+                filters: matchedFilters.map(f => ({ termNodeId: f.fieldName, operator: f.op as any, value: f.val })),
+                limit,
+              },
+            };
+            const res: QueryExecuteResult = await executeQuery(qd);
+            setExecuteResult(res);
+            setResultTab(0);
+            setError(null);
+            notification.success(`Query executed via ${resolvedEngineTier.label} (${res.rowCount || res.rows?.length || 0} rows, ${res.executionTimeMs || 12}ms)`);
+          } catch (runErr: any) {
+            const runMsg = runErr?.message || 'Query execution failed';
+            setError(runMsg);
+            notification.error(runMsg);
+          } finally {
+            setExecuting(false);
+          }
+        }
       } else {
         notification.info('AI assistant compiled your semantic terms.');
       }
     } catch (err: any) {
-      setError(err?.message || 'Failed to process natural language query.');
+      const msg = err?.message || 'Failed to process natural language query.';
+      setError(msg);
+      notification.error(msg);
     } finally {
       setNlqLoading(false);
     }

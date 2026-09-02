@@ -3,6 +3,8 @@ package workflows
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
 // ============================================================================
@@ -301,7 +303,7 @@ type LLMProfile struct {
 	ID             string            `json:"id"`
 	Name           string            `json:"name"`
 	Description    string            `json:"description"`
-	ModelName      string            `json:"model_name"` // e.g., "gemini-2.0-flash-exp"
+	ModelName      string            `json:"model_name"` // e.g., llm.DefaultGeminiModel
 	Temperature    float64           `json:"temperature"`
 	MaxTokens      int               `json:"max_tokens"`
 	SystemPrompt   string            `json:"system_prompt"`   // Base system context
@@ -317,7 +319,7 @@ var DefaultLLMProfiles = map[string]LLMProfile{
 		ID:          "interpretation_default",
 		Name:        "Default Interpretation",
 		Description: "Parse unstructured input into structured data",
-		ModelName:   "gemini-2.0-flash-exp",
+		ModelName:   llm.DefaultGeminiModel,
 		Temperature: 0.1,
 		MaxTokens:   4096,
 		SystemPrompt: `You are a precise data extraction assistant. 
@@ -336,7 +338,7 @@ Return as JSON:`,
 		ID:          "classification_default",
 		Name:        "Default Classification",
 		Description: "Classify input into categories",
-		ModelName:   "gemini-2.0-flash-exp",
+		ModelName:   llm.DefaultGeminiModel,
 		Temperature: 0.0,
 		MaxTokens:   1024,
 		SystemPrompt: `You are a classification assistant.
@@ -355,7 +357,7 @@ Classification:`,
 		ID:          "drafting_default",
 		Name:        "Default Drafting",
 		Description: "Draft professional communications",
-		ModelName:   "gemini-2.0-flash-exp",
+		ModelName:   llm.DefaultGeminiModel,
 		Temperature: 0.3,
 		MaxTokens:   4096,
 		SystemPrompt: `You are a professional communication assistant.
@@ -372,7 +374,7 @@ Draft:`,
 		ID:          "recommendation_default",
 		Name:        "Default Recommendation",
 		Description: "Generate constrained recommendations",
-		ModelName:   "gemini-2.0-flash-exp",
+		ModelName:   llm.DefaultGeminiModel,
 		Temperature: 0.2,
 		MaxTokens:   4096,
 		SystemPrompt: `You are an advisory assistant that generates recommendations.
@@ -395,7 +397,7 @@ Generate recommendation:`,
 		ID:          "explanation_default",
 		Name:        "Default Explanation",
 		Description: "Explain exceptions and decisions",
-		ModelName:   "gemini-2.0-flash-exp",
+		ModelName:   llm.DefaultGeminiModel,
 		Temperature: 0.2,
 		MaxTokens:   2048,
 		SystemPrompt: `You are an explanation assistant.

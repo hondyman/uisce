@@ -12,6 +12,7 @@ import (
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // GetDatasourceIDForNode retrieves the tenant_datasource_id for a given node ID.
@@ -239,44 +240,57 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 
 	var totalInserted, totalUpdated, totalDeleted int64
 
-	// Step 1: MERGE nodes from temp table to permanent table (PostgreSQL 15+)
-	log.Printf("Attempting to merge nodes using MERGE statement...")
+	// Collapse any duplicate (tenant_id, node_type_id, qualified_path)
+	// rows the extractor may have produced within a single scan.
+	if _, err := tx.Exec(`
+		DELETE FROM temp_catalog_node a
+		USING temp_catalog_node b
+		WHERE a.tenant_datasource_id = $1
+		  AND a.tenant_id = b.tenant_id
+		  AND a.node_type_id = b.node_type_id
+		  AND a.qualified_path = b.qualified_path
+		  AND a.ctid < b.ctid
+	`, datasourceID); err != nil {
+		return 0, 0, 0, fmt.Errorf("dedupe temp catalog nodes: %w", err)
+	}
+
+	// Step 1: UPSERT nodes from temp table to permanent table
+	log.Printf("Attempting to upsert nodes using INSERT ON CONFLICT...")
 
 	res, err := tx.Exec(`
-		MERGE INTO public.catalog_node AS target
-		USING (
-			SELECT id, core_id, tenant_id, tenant_datasource_id, node_type_id, node_name, qualified_path, parent_id, properties, description, is_alpha
-			FROM temp_catalog_node
-			WHERE tenant_datasource_id = $1
-		) AS source
-		ON target.tenant_datasource_id = source.tenant_datasource_id 
-		   AND target.node_type_id = source.node_type_id 
-		   AND target.qualified_path = source.qualified_path
-		WHEN MATCHED THEN
-			UPDATE SET
-				core_id = COALESCE(source.core_id, target.core_id),
-				tenant_id = source.tenant_id,
-				node_name = source.node_name,
-				description = COALESCE(source.description, target.description),
-				parent_id = source.parent_id,
-				properties = target.properties || source.properties,
-				is_alpha = source.is_alpha,
-				updated_at = NOW()
-		WHEN NOT MATCHED THEN
-			INSERT (id, core_id, tenant_id, tenant_datasource_id, node_type_id, node_name, qualified_path, parent_id, properties, description, is_alpha, created_at, updated_at)
-			VALUES (source.id, source.core_id, source.tenant_id, source.tenant_datasource_id, source.node_type_id, source.node_name, source.qualified_path, source.parent_id, source.properties, source.description, source.is_alpha, NOW(), NOW())
+		INSERT INTO public.catalog_node (
+			id, core_id, tenant_id, tenant_datasource_id, node_type_id, node_name, qualified_path, parent_id, properties, description, is_alpha, created_at, updated_at
+		)
+		SELECT DISTINCT ON (tenant_id, node_type_id, qualified_path)
+			id, core_id, tenant_id, tenant_datasource_id, node_type_id, node_name, qualified_path, parent_id, properties, description, is_alpha, NOW(), NOW()
+		FROM temp_catalog_node
+		WHERE tenant_datasource_id = $1
+		ORDER BY tenant_id, node_type_id, qualified_path, ctid DESC
+		ON CONFLICT (tenant_id, node_type_id, qualified_path) DO UPDATE SET
+			core_id = COALESCE(EXCLUDED.core_id, public.catalog_node.core_id),
+			tenant_datasource_id = EXCLUDED.tenant_datasource_id,
+			node_name = EXCLUDED.node_name,
+			description = COALESCE(EXCLUDED.description, public.catalog_node.description),
+			parent_id = EXCLUDED.parent_id,
+			properties = public.catalog_node.properties || EXCLUDED.properties,
+			is_alpha = EXCLUDED.is_alpha,
+			updated_at = NOW()
 	`, datasourceID)
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			log.Printf("PostgreSQL (lib/pq) Node Error: Code=%s, Msg=%s, Detail=%s, Table=%s, Constraint=%s", pqErr.Code, pqErr.Message, pqErr.Detail, pqErr.Table, pqErr.Constraint)
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
-			log.Printf("PostgreSQL Error Details: Code=%s, Msg=%s, Detail=%s", pgErr.Code, pgErr.Message, pgErr.Detail)
+			log.Printf("PostgreSQL (pgconn) Node Error: Code=%s, Msg=%s, Detail=%s", pgErr.Code, pgErr.Message, pgErr.Detail)
 		}
 		return 0, 0, 0, fmt.Errorf("merge catalog nodes: %w", err)
 	}
 
 	nodeRowsAffected, _ := res.RowsAffected()
 	totalInserted = nodeRowsAffected // Use = here since it's the first step
-	log.Printf("Node merge completed: %d rows affected.", nodeRowsAffected)
+	log.Printf("Node upsert completed: %d rows affected.", nodeRowsAffected)
 
 	// INCREMENTAL SCAN: No deletions
 	// Steps 2-3 previously deleted stale edges/nodes. This has been removed
@@ -284,8 +298,8 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 	// and changed items are updated. Semantic terms and manual mappings persist.
 	log.Printf("Incremental scan mode: Skipping deletions (preserving existing data)")
 
-	// Step 4: MERGE edges from temp table to permanent table (PostgreSQL 15+)
-	log.Printf("Attempting to merge edges using MERGE statement...")
+	// Step 4: UPSERT edges from temp table to permanent table
+	log.Printf("Attempting to upsert edges...")
 
 	// Optimization: Instead of joining the entire catalog_node table, we join only for the source/target of the temp edges.
 	res, err = tx.Exec(`
@@ -293,7 +307,7 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 			-- Only map nodes that are actually referenced by current edges to keep the join small
 			SELECT DISTINCT tn.id as temp_id, n.id AS final_id
 			FROM temp_catalog_node tn
-			JOIN public.catalog_node n ON tn.tenant_datasource_id = n.tenant_datasource_id 
+			JOIN public.catalog_node n ON tn.tenant_id = n.tenant_id 
 				AND tn.qualified_path = n.qualified_path 
 				AND tn.node_type_id = n.node_type_id
 			WHERE tn.tenant_datasource_id = $1
@@ -301,37 +315,55 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 				tn.id IN (SELECT source_node_id FROM temp_catalog_edge) OR
 				tn.id IN (SELECT target_node_id FROM temp_catalog_edge)
 			  )
-		)
-		MERGE INTO public.catalog_edge AS target
-		USING (
-			SELECT
+		),
+		deduped_edges AS (
+			SELECT DISTINCT ON (te.tenant_id, source_map.final_id, te.edge_type_id, target_map.final_id)
 				te.id, te.core_id, te.tenant_id, te.tenant_datasource_id,
 				source_map.final_id AS final_source_id,
 				target_map.final_id AS final_target_id,
 				te.edge_type_id, te.edge_type_name, te.properties
 			FROM temp_catalog_edge te
-			LEFT JOIN node_id_mapping source_map ON te.source_node_id = source_map.temp_id
-			LEFT JOIN node_id_mapping target_map ON te.target_node_id = target_map.temp_id
+			JOIN node_id_mapping source_map ON te.source_node_id = source_map.temp_id
+			JOIN node_id_mapping target_map ON te.target_node_id = target_map.temp_id
 			WHERE te.tenant_datasource_id = $1
 			  AND source_map.final_id IS NOT NULL
 			  AND target_map.final_id IS NOT NULL
 			  AND source_map.final_id != target_map.final_id
-		) AS source
-		ON target.tenant_datasource_id = source.tenant_datasource_id::text 
-		   AND target.source_node_id = source.final_source_id 
-		   AND target.target_node_id = source.final_target_id 
-		WHEN MATCHED THEN
-			UPDATE SET
-				edge_type_id = source.edge_type_id,
-				relationship_type = source.edge_type_name,
-				properties = source.properties,
-				core_id = source.core_id,
-				updated_at = NOW()
-		WHEN NOT MATCHED THEN
-			INSERT (id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, relationship_type, properties, created_at, updated_at)
-			VALUES (source.id, source.core_id, source.tenant_id, source.tenant_datasource_id, source.final_source_id, source.final_target_id, source.edge_type_id, source.edge_type_name, source.properties, NOW(), NOW())
+			ORDER BY te.tenant_id, source_map.final_id, te.edge_type_id, target_map.final_id, te.ctid DESC
+		),
+		updated AS (
+			UPDATE public.catalog_edge e
+			SET relationship_type = d.edge_type_name,
+			    properties = e.properties || d.properties,
+			    core_id = COALESCE(d.core_id, e.core_id),
+			    tenant_datasource_id = d.tenant_datasource_id::text,
+			    updated_at = NOW()
+			FROM deduped_edges d
+			WHERE e.tenant_id = d.tenant_id
+			  AND e.source_node_id = d.final_source_id
+			  AND e.target_node_id = d.final_target_id
+			  AND e.edge_type_id = d.edge_type_id
+			RETURNING 1
+		)
+		INSERT INTO public.catalog_edge (
+			id, core_id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, edge_type_id, relationship_type, properties, created_at, updated_at
+		)
+		SELECT
+			d.id, d.core_id, d.tenant_id, d.tenant_datasource_id::text, d.final_source_id, d.final_target_id, d.edge_type_id, d.edge_type_name, d.properties, NOW(), NOW()
+		FROM deduped_edges d
+		WHERE NOT EXISTS (
+			SELECT 1 FROM public.catalog_edge e
+			WHERE e.tenant_id = d.tenant_id
+			  AND e.source_node_id = d.final_source_id
+			  AND e.target_node_id = d.final_target_id
+			  AND e.edge_type_id = d.edge_type_id
+		)
 	`, datasourceID)
 	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) {
+			log.Printf("PostgreSQL (lib/pq) Edge Error: Code=%s, Msg=%s, Detail=%s, Table=%s, Constraint=%s", pqErr.Code, pqErr.Message, pqErr.Detail, pqErr.Table, pqErr.Constraint)
+		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
 			log.Printf("Foreign key violation during edge merge: %s", pgErr.Detail)

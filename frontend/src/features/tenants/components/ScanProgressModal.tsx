@@ -257,6 +257,21 @@ export default function ScanProgressModal({
           </Alert>
         )}
 
+        {/* Streaming finished (success or error): show the final phase message.
+            The SSE stream's terminal event only ever populates `progress`, never
+            `result` (setResult is never called), so without this the modal went
+            blank the instant isStreaming flipped false on both success and error. */}
+        {useStreaming && !isStreaming && progress && (progress.phase === 'error' || progress.phase === 'complete') && !result && (
+          <Alert severity={progress.phase === 'error' ? 'error' : 'success'} sx={{ mt: 2, mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 1 }}>
+              {progress.phase === 'error' ? 'Scan Failed' : 'Scan Complete'}
+            </Typography>
+            <Typography variant="body2">
+              {progress.message}
+            </Typography>
+          </Alert>
+        )}
+
         {/* Regular Error */}
         {error && (
           <Alert severity="error" sx={{ mt: 2 }}>

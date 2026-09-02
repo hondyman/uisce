@@ -126,4 +126,10 @@ type BOBinding struct {
 	DatasourceID     string `db:"datasource_id"`
 	DrivingTable     string `db:"driving_table"`
 	DrivingTableID   string `db:"driving_table_id"`
+	// AlphaProductID/AlphaDatasourceID are the binding's declared logical
+	// datasource slot (e.g. "ORM Connection") set once on the core binding by
+	// gold copy. See security.DBDatasourceResolver.ResolveBindingDatasource
+	// for how a calling tenant turns this into their own connection.
+	AlphaProductID    string `db:"alpha_product_id"`
+	AlphaDatasourceID string `db:"alpha_datasource_id"`
 }

@@ -166,14 +166,8 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 	}
 
 	// 2. No explicit binding yet: try to match a scanned catalog_node physical
-	// column under the driving table by name. drivingTable may be
-	// "schema.table" or a bare table name (implicit "public" schema).
-	schema := "public"
-	table := drivingTable
-	if idx := strings.LastIndex(drivingTable, "."); idx >= 0 {
-		schema = drivingTable[:idx]
-		table = drivingTable[idx+1:]
-	}
+	// column under the driving table by name.
+	schema, table := parseDrivingTable(drivingTable)
 
 	for _, candidate := range []string{technicalName, fieldName} {
 		norm := normalizeIdentifier(candidate)
@@ -194,6 +188,56 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 	}
 
 	return "", ""
+}
+
+// parseDrivingTable splits a driving table into (schema, table). drivingTable
+// is a catalog qualified_path ("/schema/table", e.g. "/public/customers" —
+// the same convention BuildFROMClause's sanitizeTableName already assumes),
+// with a dot-separated "schema.table" form supported for back-compat with
+// pre-scan-based driving tables.
+func parseDrivingTable(drivingTable string) (schema, table string) {
+	schema = "public"
+	table = strings.Trim(drivingTable, "/")
+	if idx := strings.LastIndex(table, "/"); idx >= 0 {
+		schema = table[:idx]
+		table = table[idx+1:]
+	} else if idx := strings.LastIndex(drivingTable, "."); idx >= 0 {
+		schema = drivingTable[:idx]
+		table = drivingTable[idx+1:]
+	}
+	return schema, table
+}
+
+// HasPhysicalColumn reports whether columnName should be treated as present
+// on drivingTable's physical table. Trusts scanned catalog_node metadata
+// only when the table was actually scanned (has at least one physical
+// column registered there) — an unscanned driving table (e.g. this
+// platform's own internal tables, which are never run through the catalog
+// scanner) falls back to "column exists" so tenant scoping isn't silently
+// disabled for tables we simply have no metadata about.
+func (r *PostgresBORepository) HasPhysicalColumn(drivingTable, columnName string) bool {
+	schema, table := parseDrivingTable(drivingTable)
+
+	var tableWasScanned bool
+	if err := r.DB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM catalog_node
+			WHERE qualified_path LIKE '/' || $1 || '/' || $2 || '/%'
+			  AND COALESCE(properties->>'is_physical_column', 'false') = 'true'
+		)
+	`, schema, table).Scan(&tableWasScanned); err != nil || !tableWasScanned {
+		return true
+	}
+
+	var exists bool
+	err := r.DB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM catalog_node
+			WHERE qualified_path = '/' || $1 || '/' || $2 || '/' || $3
+			  AND COALESCE(properties->>'is_physical_column', 'false') = 'true'
+		)
+	`, schema, table, columnName).Scan(&exists)
+	return err == nil && exists
 }
 
 // GetBODefinition fetches the BO definition from the database
@@ -431,7 +475,9 @@ func (r *PostgresBORepository) getBODefinitionLegacy(boID string) (*BODefinition
 func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) (*BOBinding, error) {
 	var binding BOBinding
 	bindingQuery := `
-		SELECT id::text AS binding_id, backend_type AS dialect_name
+		SELECT id::text AS binding_id, backend_type AS dialect_name,
+		       COALESCE(alpha_product_id::text, '') AS alpha_product_id,
+		       COALESCE(alpha_datasource_id::text, '') AS alpha_datasource_id
 		FROM public.business_object_bindings
 		WHERE bo_id = $1::uuid AND ($2 = '' OR id::text = $2)
 		ORDER BY is_default DESC

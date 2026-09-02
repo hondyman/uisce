@@ -39,6 +39,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
+	"github.com/hondyman/uisce/backend/internal/datapipeline"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
@@ -250,24 +251,75 @@ type Server struct {
 }
 
 // queryBuilderExecutor resolves datasource IDs to sqlx DB connections for the
-// Query Builder. It mirrors the routing logic in ExecuteSQLHandler.
+// Query Builder. datasourceID is a tenant_product_datasource.id — its stored
+// connection config is resolved to a live connection to the tenant's own
+// external physical database (e.g. their own Northwinds/nw2 Postgres),
+// distinct from defaultDB (this platform's own metadata database). Opened
+// connections are cached for the process lifetime, keyed by datasourceID.
 type queryBuilderExecutor struct {
 	defaultDB    *sqlx.DB
 	aggregatesDB *sqlx.DB
+
+	targetDBMu    sync.Mutex
+	targetDBCache map[string]*sqlx.DB
 }
 
 func (e *queryBuilderExecutor) QueryDB(datasourceID string) *sqlx.DB {
 	if e == nil {
 		return nil
 	}
-	if e.aggregatesDB != nil && e.aggregatesDB.DB != nil {
-		lower := strings.ToLower(datasourceID)
-		if strings.Contains(lower, "northwinds") ||
-			datasourceID == "1af891c8-8a5c-4788-8fd2-5ae1f271868f" {
-			return e.aggregatesDB
-		}
+	if datasourceID == "" || e.defaultDB == nil {
+		return e.defaultDB
 	}
-	return e.defaultDB
+
+	e.targetDBMu.Lock()
+	defer e.targetDBMu.Unlock()
+	if e.targetDBCache == nil {
+		e.targetDBCache = make(map[string]*sqlx.DB)
+	}
+	if cached, ok := e.targetDBCache[datasourceID]; ok {
+		return cached
+	}
+
+	// No fallback to defaultDB on failure below: that would silently run the
+	// query against this platform's own metadata database instead of the
+	// tenant's actual target database — wrong-database results with no
+	// indication anything was off, the same failure mode already fixed
+	// elsewhere in this query path. Returning nil here surfaces a real
+	// "no database connection" error via Execute's existing nil check
+	// instead. Not cached, so a fixed config is picked up on the next call.
+	// Prefer tenant_product_datasource's own inline config; many rows (like
+	// this one) store it empty and instead point connection_id at a real
+	// connections row (flat host/port/database/username/password columns,
+	// plus sslmode/auth_type/mTLS material in its metadata jsonb) — the same
+	// dual representation the Connections tab already has to handle.
+	var configJSON []byte
+	err := e.defaultDB.Get(&configJSON, `
+		SELECT COALESCE(
+			NULLIF(t.config, '{}'::jsonb),
+			(SELECT jsonb_build_object(
+				'host', c.host, 'port', c.port, 'database', c.database,
+				'schema', c.schema, 'username', c.username, 'password', c.password
+			 ) || COALESCE(c.metadata, '{}'::jsonb)
+			 FROM connections c WHERE c.id = t.connection_id)
+		)
+		FROM tenant_product_datasource t
+		WHERE t.id = $1::uuid
+	`, datasourceID)
+	if err != nil || len(configJSON) == 0 {
+		logging.GetLogger().Sugar().Errorf("[QueryBuilder] no connection config for datasource %s: %v", datasourceID, err)
+		return nil
+	}
+
+	rawDB, err := metadata.ConnectToTargetDatabase(context.Background(), string(configJSON))
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("[QueryBuilder] failed to connect to datasource %s: %v", datasourceID, err)
+		return nil
+	}
+
+	targetDB := sqlx.NewDb(rawDB, "pgx")
+	e.targetDBCache[datasourceID] = targetDB
+	return targetDB
 }
 
 // SchemaTable represents a schema and table pair
@@ -1465,6 +1517,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	pipelineHandler := handlers.NewPipelineHandler(sqlxDB, temporalClient)
 	srv.PipelineHandler = pipelineHandler
 	pipelineHandler.RegisterRoutes(r)
+
+	// Initialize Visual Parallel Data Pipeline Platform (ETL/ELT Engine)
+	dataPipelineEngine := datapipeline.NewPipelineEngine(sqlxDB)
+	dataPipelineHandler := datapipeline.NewDataPipelineHandler(sqlxDB, dataPipelineEngine)
+	dataPipelineHandler.RegisterRoutes(r)
 
 	// Initialize Events Ingestion Handler
 	srv.EventsHandler = ingestion.NewEventsHandler(temporalClient)
@@ -4209,6 +4266,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 	nodeTypeIDParam := r.URL.Query().Get("node_type_id")
 	parentIDParam := r.URL.Query().Get("parent_id")
 	q := r.URL.Query().Get("q")
+	unmappedOnly := r.URL.Query().Get("unmapped_only") == "true"
 	limitStr := r.URL.Query().Get("limit")
 
 	limit := 10000 // default limit
@@ -4269,6 +4327,21 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 		query += fmt.Sprintf(" AND cn.node_name ILIKE $%d", argIndex)
 		args = append(args, "%"+q+"%")
 		argIndex++
+	}
+
+	// unmapped_only excludes columns that already have a MAPS_TO edge to a
+	// semantic term — used by the "Generate Semantic Terms" wizard so
+	// already-decided columns don't keep coming back into the approval
+	// queue on every open. Done as an indexed EXISTS check in SQL rather
+	// than a client-side join, since datasources here can have hundreds of
+	// thousands of columns.
+	if unmappedOnly {
+		query += ` AND NOT EXISTS (
+			SELECT 1 FROM catalog_edge ce
+			JOIN catalog_edge_type cet ON cet.id = ce.edge_type_id
+			WHERE (ce.source_node_id = cn.id OR ce.target_node_id = cn.id)
+			  AND cet.edge_type_name = 'MAPS_TO'
+		)`
 	}
 
 	query += " ORDER BY cn.node_name LIMIT " + strconv.Itoa(limit)

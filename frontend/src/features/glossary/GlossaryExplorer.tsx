@@ -158,6 +158,12 @@ export default function GlossaryExplorer() {
     try {
       await deleteTermMutation.mutateAsync(term.id);
       setSearchParams({});
+      // GlossaryExplorer's semantic/business-term queries use their own
+      // ad-hoc query keys, not the shared glossaryKeys.* factory the
+      // mutation's invalidateQueries targets — so they never auto-refetch
+      // on delete without this explicit call.
+      refetchSem();
+      refetchBus();
     } catch (e: any) {
       console.error(e);
       // Collect dependencies from any available source
@@ -286,9 +292,18 @@ export default function GlossaryExplorer() {
   const { data: allColumns, isLoading: columnsLoading } = useQuery<any[]>({
     queryKey: ['glossary-all-columns', tenantId, isGenModalOpen],
     queryFn: () => apiClient<any[]>(
-      `/api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&tenant_id=${tenantId}&limit=10000`
+      // unmapped_only only for the Generate wizard: the legacy Map-Column
+      // wizard (isAddMappingOpen) still needs to see already-mapped columns
+      // too, so it can't share this filter.
+      `/api/rest/catalog-nodes?node_type_id=a64c1011-16e8-4ddf-b447-363bf8e15c9a&tenant_id=${tenantId}&limit=10000${isGenModalOpen ? '&unmapped_only=true' : ''}`
     ),
     enabled: !!tenantId && (isGenModalOpen || isAddMappingOpen),
+  });
+
+  const { data: nodeGraphData } = useQuery<any>({
+    queryKey: ['glossary-node-graph', selectedId],
+    queryFn: () => apiClient<any>(`/api/glossary/node-graph?node_id=${selectedId}`),
+    enabled: activeTab === 'lineage' && !!selectedId,
   });
 
   const semTerms = useMemo(() => {
@@ -365,23 +380,29 @@ export default function GlossaryExplorer() {
     }
   };
 
+  const [isGenSubmitting, setIsGenSubmitting] = useState(false);
+
   const generateColumns = async (selectedGroups: any[]) => {
-    if (!tenantId || selectedGroups.length === 0) return;
+    if (!tenantId || selectedGroups.length === 0 || isGenSubmitting) return;
+    setIsGenSubmitting(true);
     try {
-      for (const group of selectedGroups) {
-        await apiClient(`/api/glossary/generate-semantic-terms?tenant_id=${tenantId}`, {
-          method: 'POST',
-          body: JSON.stringify({
+      await apiClient(`/api/glossary/generate-semantic-terms?tenant_id=${tenantId}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          groups: selectedGroups.map((group: any) => ({
             name: group.suggestedName,
+            description: group.suggestedDescription || '',
             column_ids: group.columns.map((c: any) => c.id)
-          })
-        });
-      }
+          }))
+        })
+      });
       setIsGenModalOpen(false);
       refetchSem();
     } catch (e) {
       console.error(e);
       alert('Error generating semantic terms');
+    } finally {
+      setIsGenSubmitting(false);
     }
   };
 
@@ -468,24 +489,133 @@ export default function GlossaryExplorer() {
   // Wizard Generation State
   const [genGroups, setGenGroups] = useState<any[]>([]);
   const [selectedGenGroups, setSelectedGenGroups] = useState<Set<string>>(new Set());
+  const [genSearch, setGenSearch] = useState('');
+  const [genSchemaFilter, setGenSchemaFilter] = useState('__all__');
+
+  // qualified_path is slash-delimited with a leading slash, e.g.
+  // "/public/employees/address" (schema/table/column) — not dot-delimited.
+  const pathParts = (qualifiedPath: string) => qualifiedPath.split('/').filter(Boolean);
+
+  const schemaOf = (qualifiedPath: string) => {
+    const p = pathParts(qualifiedPath);
+    return p.length >= 3 ? p[0] : '(unknown)';
+  };
+
+  const tableOf = (qualifiedPath: string) => {
+    const p = pathParts(qualifiedPath);
+    return p.length >= 3 ? p[p.length - 2] : '';
+  };
+
+  // Common DB-column abbreviations, expanded before title-casing so the
+  // suggested term reads like a business name instead of a raw column name.
+  const ABBREVIATIONS: Record<string, string> = {
+    addr: 'address', qty: 'quantity', amt: 'amount', desc: 'description',
+    dob: 'date of birth', num: 'number', pct: 'percent', dept: 'department',
+    mgr: 'manager', emp: 'employee', cust: 'customer', ord: 'order',
+    min: 'minimum', max: 'maximum', avg: 'average', ytd: 'year to date',
+    mtd: 'month to date', qtd: 'quarter to date', tel: 'telephone',
+    fname: 'first name', lname: 'last name', mname: 'middle name',
+    dt: 'date', ts: 'timestamp', desc1: 'description', addr1: 'address line 1',
+    addr2: 'address line 2', zip: 'zip code', bday: 'birth date',
+    birthdt: 'birth date', curr: 'currency', qtr: 'quarter',
+  };
+
+  // Bare, single-concept column names that don't carry enough business
+  // meaning on their own (e.g. "address", "birthdate") — for these we
+  // prefix with the owning table name (e.g. "VendorAddress",
+  // "EmployeeBirthDate") instead of merging same-named columns from
+  // different tables into one shared term. Compound/specific names like
+  // "account_id" are left alone and still merge across tables.
+  const GENERIC_TERMS = new Set([
+    'address', 'city', 'state', 'zip', 'zipcode', 'postalcode', 'country',
+    'date', 'name', 'code', 'status', 'type', 'description', 'amount', 'id',
+    'phone', 'email', 'birthdate', 'notes', 'comment', 'region', 'category',
+    'title', 'active', 'created', 'updated', 'url', 'number', 'currency',
+  ]);
+
+  const expandToken = (tok: string) => {
+    const lower = tok.toLowerCase();
+    const expanded = ABBREVIATIONS[lower] || lower;
+    return expanded.replace(/\b\w/g, (l: string) => l.toUpperCase());
+  };
+
+  const humanize = (raw: string) =>
+    raw.split(/[_\s]+/).filter(Boolean).map(expandToken).join(' ');
+
+  const singularize = (word: string) =>
+    word.endsWith('ies') ? word.slice(0, -3) + 'y' : word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : word;
+
+  const tableToTitle = (table: string) =>
+    singularize(table).replace(/[_\s]+/g, ' ').trim().split(' ').filter(Boolean)
+      .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('');
+
+  const availableSchemas = useMemo(() => {
+    const colList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
+    const s = new Set<string>(colList.filter((c: any) => c.qualified_path).map((c: any) => schemaOf(c.qualified_path)));
+    return Array.from(s).sort();
+  }, [allColumns]);
 
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
     const colList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
     if (colList.length === 0) return;
+    // Filtering to one schema before grouping (rather than only warning
+    // after) is what actually prevents unrelated same-named columns in
+    // different schemas from being merged in the first place.
+    const scoped = genSchemaFilter === '__all__' ? colList : colList.filter((c: any) => c.qualified_path && schemaOf(c.qualified_path) === genSchemaFilter);
     const groups: Record<string, any[]> = {};
-    colList.forEach((c: any) => {
+    scoped.forEach((c: any) => {
       if (!c.qualified_path) return;
-      const parts = c.qualified_path.split('.');
+      const parts = pathParts(c.qualified_path);
       const colName = parts[parts.length - 1];
-      const baseName = colName.toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase());
-      if (!groups[baseName]) groups[baseName] = [];
-      groups[baseName].push(c);
+      const bareKey = colName.toLowerCase().replace(/_/g, '');
+      const isGeneric = GENERIC_TERMS.has(bareKey);
+      // Generic bare names (address, birthdate, ...) don't carry enough
+      // meaning alone, so each table's occurrence becomes its own
+      // table-prefixed suggestion (VendorAddress, EmployeeBirthDate)
+      // instead of merging same-named columns across unrelated tables.
+      // PascalCase, no spaces, e.g. "CategoryId" not "Category Id" — this is
+      // a term name, not a display label.
+      const baseName = isGeneric
+        ? `${tableToTitle(tableOf(c.qualified_path))}${humanize(colName).replace(/\s+/g, '')}`
+        : humanize(colName).replace(/\s+/g, '');
+      const groupKey = isGeneric ? `${baseName}::${tableOf(c.qualified_path)}` : baseName;
+      if (!groups[groupKey]) groups[groupKey] = [];
+      groups[groupKey].push(c);
     });
 
-    setGenGroups(Object.entries(groups).map(([name, cols]) => ({ suggestedName: name, columns: cols })));
+    setGenGroups(Object.entries(groups).map(([key, cols]) => {
+      // qualified_path is schema.table.column; a group can legitimately span
+      // multiple tables (e.g. every table's "created_at"), but spanning
+      // multiple *schemas* (only possible when "All schemas" is selected)
+      // usually means unrelated columns got merged just because they share
+      // a name — surface that so it isn't silent.
+      const schemas = new Set(cols.map((c: any) => schemaOf(c.qualified_path)));
+      const suggestedName = key.includes('::') ? key.split('::')[0] : key;
+      const isGeneric = key.includes('::');
+      const tables = Array.from(new Set(cols.map((c: any) => tableToTitle(tableOf(c.qualified_path))).filter(Boolean)));
+      const colWords = humanize((cols[0].qualified_path.split('/').filter(Boolean).pop() || '')).toLowerCase();
+      // Deterministic starter definition — a plain-English sentence built
+      // from the column and owning table(s), so the field isn't blank while
+      // the user reviews. Free to override before accepting.
+      const suggestedDescription = isGeneric || tables.length === 1
+        ? `The ${colWords} for a ${tables[0] || 'record'}.`
+        : `${humanize(cols[0].qualified_path.split('/').filter(Boolean).pop() || '')} value shared across ${tables.length} tables (${tables.join(', ')}).`;
+      return { suggestedName, suggestedDescription, columns: cols, schemas: Array.from(schemas) };
+    }));
     setSelectedGenGroups(new Set());
-  }, [allColumns, isGenModalOpen]);
+    setGenSearch('');
+  }, [allColumns, isGenModalOpen, genSchemaFilter]);
+
+  const filteredGenGroups = useMemo(() => {
+    const q = genSearch.trim().toLowerCase();
+    if (!q) return genGroups;
+    return genGroups.filter(g =>
+      g.suggestedName.toLowerCase().includes(q) ||
+      (g.suggestedDescription || '').toLowerCase().includes(q) ||
+      g.columns.some((c: any) => (c.qualified_path || '').toLowerCase().includes(q))
+    );
+  }, [genGroups, genSearch]);
 
   const inputStyle = {
     background: '#1E2130', border: `1px solid ${C.border}`, color: C.text,
@@ -538,46 +668,92 @@ export default function GlossaryExplorer() {
 
       {isGenModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: C.panel, padding: 24, borderRadius: 12, width: 800, maxHeight: '80vh', overflow: 'auto', border: `1px solid ${C.border}` }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Generate Semantic Terms from Columns</h2>
+          <div style={{ background: C.panel, padding: 24, borderRadius: 12, width: '90vw', maxWidth: 1200, maxHeight: '85vh', display: 'flex', flexDirection: 'column', border: `1px solid ${C.border}` }}>
+            <h2 style={{ margin: '0 0 16px 0', flexShrink: 0 }}>Generate Semantic Terms from Columns</h2>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexShrink: 0 }}>
+              <select
+                style={{ ...inputStyle, marginBottom: 0, width: 220 }}
+                value={genSchemaFilter}
+                onChange={e => setGenSchemaFilter(e.target.value)}
+              >
+                <option value="__all__">All schemas</option>
+                {availableSchemas.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input
+                placeholder="Search suggested name or column path..."
+                style={{ ...inputStyle, marginBottom: 0, flex: 1 }}
+                value={genSearch}
+                onChange={e => setGenSearch(e.target.value)}
+              />
+            </div>
             {columnsLoading ? <Spinner /> : (
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+              <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <th style={{ padding: '8px' }}><input type="checkbox" onChange={e => {
-                      if (e.target.checked) setSelectedGenGroups(new Set(genGroups.map(g => g.suggestedName)));
+                    <th style={{ padding: '8px', width: 32 }}><input type="checkbox" onChange={e => {
+                      if (e.target.checked) setSelectedGenGroups(new Set(filteredGenGroups.map(g => g.suggestedName)));
                       else setSelectedGenGroups(new Set());
                     }} /></th>
-                    <th style={{ padding: '8px' }}>Suggested Name</th>
-                    <th style={{ padding: '8px' }}>Columns Count</th>
+                    <th style={{ padding: '8px', width: 220 }}>Suggested Name</th>
+                    <th style={{ padding: '8px', width: 280 }}>Definition</th>
+                    <th style={{ padding: '8px' }}>Column Path(s)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {genGroups.map((g, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: '8px' }}>
-                        <input type="checkbox" checked={selectedGenGroups.has(g.suggestedName)} onChange={e => {
-                          const next = new Set(selectedGenGroups);
-                          if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
-                          setSelectedGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input style={{ ...inputStyle, marginBottom: 0, width: 'auto' }} value={g.suggestedName} onChange={e => {
-                          const next = [...genGroups];
-                          next[i].suggestedName = e.target.value;
-                          setGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>{g.columns.length}</td>
-                    </tr>
-                  ))}
+                  {filteredGenGroups.map((g, i) => {
+                    const spansMultipleSchemas = g.schemas.length > 1;
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px' }}>
+                          <input type="checkbox" checked={selectedGenGroups.has(g.suggestedName)} onChange={e => {
+                            const next = new Set(selectedGenGroups);
+                            if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
+                            setSelectedGenGroups(next);
+                          }} />
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          <input style={{ ...inputStyle, marginBottom: 0, width: '100%' }} value={g.suggestedName} onChange={e => {
+                            const idx = genGroups.indexOf(g);
+                            const next = [...genGroups];
+                            next[idx] = { ...next[idx], suggestedName: e.target.value };
+                            setGenGroups(next);
+                          }} />
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          <textarea rows={2} style={{ ...inputStyle, marginBottom: 0, width: '100%', resize: 'vertical', fontFamily: 'inherit' }} value={g.suggestedDescription || ''} onChange={e => {
+                            const idx = genGroups.indexOf(g);
+                            const next = [...genGroups];
+                            next[idx] = { ...next[idx], suggestedDescription: e.target.value };
+                            setGenGroups(next);
+                          }} />
+                        </td>
+                        <td style={{ padding: '8px', fontSize: 12, wordBreak: 'break-all' }}>
+                          {spansMultipleSchemas && (
+                            <div style={{ color: '#F59E0B', marginBottom: 4 }}>
+                              ⚠ spans multiple schemas ({g.schemas.join(', ')}) — likely unrelated columns
+                            </div>
+                          )}
+                          {g.columns.map((c: any) => (
+                            <div key={c.id} style={{ color: C.textMuted }}>{c.qualified_path}</div>
+                          ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              </div>
             )}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button onClick={() => setIsGenModalOpen(false)} style={{ background: 'transparent', color: C.text, border: 'none', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => generateColumns(genGroups.filter(g => selectedGenGroups.has(g.suggestedName)))} style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: 'pointer' }}>Create Selected</button>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24, flexShrink: 0 }}>
+              <button onClick={() => setIsGenModalOpen(false)} disabled={isGenSubmitting} style={{ background: 'transparent', color: C.text, border: 'none', cursor: isGenSubmitting ? 'default' : 'pointer', opacity: isGenSubmitting ? 0.5 : 1 }}>Cancel</button>
+              <button
+                onClick={() => generateColumns(genGroups.filter(g => selectedGenGroups.has(g.suggestedName)))}
+                disabled={isGenSubmitting || selectedGenGroups.size === 0}
+                style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: (isGenSubmitting || selectedGenGroups.size === 0) ? 'default' : 'pointer', opacity: (isGenSubmitting || selectedGenGroups.size === 0) ? 0.5 : 1 }}
+              >
+                {isGenSubmitting ? 'Creating…' : 'Create Selected'}
+              </button>
             </div>
           </div>
         </div>
@@ -979,20 +1155,31 @@ export default function GlossaryExplorer() {
                 </div>
               )}
 
-              {activeTab === 'lineage' && selectedTerm && (
-                <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
-                  <LineageGraph
-                    focalTerm={selectedTerm}
-                    focalLabel="Glossary Term (Focal)"
-                    upstreamNodes={[]}
-                    downstreamNodes={[]}
-                    edges={[]}
-                    showDatasourceLayer={false}
-                    height={600}
-                    emptyMessage="No lineage data available."
-                  />
-                </div>
-              )}
+              {activeTab === 'lineage' && selectedTerm && (() => {
+                // Semantic-term lineage: physical columns mapped via MAPS_TO are
+                // the downstream layer; any non-column connected node (e.g. a
+                // business term this semantic term feeds) is upstream. Business
+                // term <-> semantic term lineage will populate the same way once
+                // those edges exist.
+                const nodes: any[] = nodeGraphData?.nodes || [];
+                const edges: any[] = nodeGraphData?.edges || [];
+                const downstreamNodes = nodes.filter((n: any) => n.id !== selectedId && (n.catalog_type_name || n.node_type || '').toLowerCase() === 'column');
+                const upstreamNodes = nodes.filter((n: any) => n.id !== selectedId && (n.catalog_type_name || n.node_type || '').toLowerCase() !== 'column');
+                return (
+                  <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
+                    <LineageGraph
+                      focalTerm={selectedTerm}
+                      focalLabel="Glossary Term (Focal)"
+                      upstreamNodes={upstreamNodes}
+                      downstreamNodes={downstreamNodes}
+                      edges={edges}
+                      showDatasourceLayer={false}
+                      height={600}
+                      emptyMessage="No lineage data available."
+                    />
+                  </div>
+                );
+              })()}
 
 
             </div>

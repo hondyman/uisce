@@ -300,6 +300,7 @@ type BOAuditLog struct {
 type CreateBusinessObjectRequest struct {
 	Name            string                 `json:"name" validate:"required"`
 	BOKey           string                 `json:"bo_key"`
+	BOType          string                 `json:"boType"` // ENTITY (default), FACT, DIMENSION, BRIDGE, REFERENCE
 	DisplayName     string                 `json:"displayName"`
 	DisplayNameSnake string                `json:"display_name"`
 	Description     string                 `json:"description"`

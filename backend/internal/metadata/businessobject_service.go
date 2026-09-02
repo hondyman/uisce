@@ -293,149 +293,176 @@ func (s *BusinessObjectService) CreateBusinessObject(
 	id := uuid.New().String()
 	now := time.Now()
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] CreateBusinessObject START: datasourceID=%q parentID=%q req.Name=%q", datasourceIDStr, parentIDStr, req.Name)
-
-	bo := &models.BusinessObjectDefinition{
-		ID:              id,
-		TenantID:        tenantID,
-		Key:             key,
-		Name:            req.Name,
-		DisplayName:     displayName,
-		TechnicalName:   technicalName,
-		Description:     req.Description,
-		Icon:            req.Icon,
-		IsCore:          false,
-		Category:        req.Category,
-		ParentID:        sql.NullString{String: parentIDStr, Valid: parentIDStr != ""},
-		DatasourceID:    sql.NullString{String: datasourceIDStr, Valid: datasourceIDStr != ""},
-		DriverTableID:   sql.NullString{String: driverTableIDStr, Valid: driverTableIDStr != ""},
-		DriverTableName: driverTableNameStr,
-		CoreFields:      []models.FieldDefinition{},
-		CustomFields:    []models.FieldDefinition{},
-		Subtypes:        make(map[string]models.SubtypeDefinition),
-		CreatedAt:       now,
-		CreatedBy:       userID,
-		LastModifiedAt:  now,
-		LastModifiedBy:  userID,
-		IsActive:        true,
+	// bo_type must satisfy business_objects_bo_type_check.
+	boType := strings.ToUpper(req.BOType)
+	switch boType {
+	case "ENTITY", "FACT", "DIMENSION", "BRIDGE", "REFERENCE":
+	default:
+		boType = "ENTITY"
 	}
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] After init: bo.DatasourceID.Valid=%v bo.DatasourceID.String=%q bo.ParentID.Valid=%v", bo.DatasourceID.Valid, bo.DatasourceID.String, bo.ParentID.Valid)
+	// classification_node_id / business_key_node_id / semantic_id_node_id /
+	// grain_node_id and model_id are NOT NULL on business_objects. A subtype
+	// (parent_id given) shares its parent's identity anchors and model_id —
+	// same pattern the seeded oms.* subtypes use (e.g. oms.account/sma
+	// shares oms.account's classification_node_id). A top-level BO gets four
+	// fresh placeholder catalog_node anchors and uses its own id as model_id.
+	var classificationNodeID, businessKeyNodeID, semanticIDNodeID, grainNodeID, modelID, boKey string
 
-	// Ensure subtypes always carry a datasource. Prefer request, otherwise inherit parent.
-	if bo.ParentID.Valid {
-		logging.GetLogger().Sugar().Errorf("[META-SERVICE] ParentID valid, checking datasource inheritance")
-		if !bo.DatasourceID.Valid {
-			logging.GetLogger().Sugar().Errorf("[META-SERVICE] DatasourceID not valid, will inherit from parent")
-			if req.DatasourceID != "" {
-				bo.DatasourceID = sql.NullString{String: req.DatasourceID, Valid: true}
-			} else {
-				parent, err := s.GetBusinessObject(ctx, secCtx, req.ParentID)
-				if err != nil {
-					return nil, fmt.Errorf("failed to resolve parent datasource: %w", err)
-				}
-				if parent.DatasourceID.Valid && parent.DatasourceID.String != "" {
-					bo.DatasourceID = sql.NullString{String: parent.DatasourceID.String, Valid: true}
-				} else {
-					return nil, fmt.Errorf("missing datasource for subtype create (parent has none)")
-				}
+	if parentIDStr != "" {
+		var parent struct {
+			BOKey                string
+			ClassificationNodeID string
+			BusinessKeyNodeID    string
+			SemanticIDNodeID     string
+			GrainNodeID          string
+			ModelID              string
+		}
+		err := s.db.QueryRowContext(ctx, `
+			SELECT bo_key, classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id, model_id
+			FROM business_objects WHERE id = $1 AND tenant_id = $2
+		`, parentIDStr, tenantID).Scan(&parent.BOKey, &parent.ClassificationNodeID, &parent.BusinessKeyNodeID, &parent.SemanticIDNodeID, &parent.GrainNodeID, &parent.ModelID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve parent business object %q: %w", parentIDStr, err)
+		}
+		classificationNodeID = parent.ClassificationNodeID
+		businessKeyNodeID = parent.BusinessKeyNodeID
+		semanticIDNodeID = parent.SemanticIDNodeID
+		grainNodeID = parent.GrainNodeID
+		modelID = parent.ModelID
+		boKey = parent.BOKey + "/" + key
+	} else {
+		boNodeTypeID, err := s.resolveBusinessObjectNodeTypeID(ctx, tenantID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve business_object catalog node type: %w", err)
+		}
+		classificationNodeID = uuid.New().String()
+		businessKeyNodeID = uuid.New().String()
+		semanticIDNodeID = uuid.New().String()
+		grainNodeID = uuid.New().String()
+		modelID = id
+		boKey = key
+		anchors := []struct{ id, suffix string }{
+			{classificationNodeID, "classification"},
+			{businessKeyNodeID, "business_key"},
+			{semanticIDNodeID, "semantic_id"},
+			{grainNodeID, "grain"},
+		}
+		for _, a := range anchors {
+			if _, err := s.db.ExecContext(ctx, `
+				INSERT INTO catalog_node (id, node_name, node_type_id, tenant_id, qualified_path, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+			`, a.id, fmt.Sprintf("%s (%s)", boKey, a.suffix), boNodeTypeID, tenantID, fmt.Sprintf("business_object/%s/%s", boKey, a.suffix)); err != nil {
+				return nil, fmt.Errorf("failed to create %s anchor node: %w", a.suffix, err)
 			}
-		} else {
-			logging.GetLogger().Sugar().Errorf("[META-SERVICE] DatasourceID already valid: %q", bo.DatasourceID.String)
 		}
 	}
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] Final bo.DatasourceID: Valid=%v String=%q ABOUT TO INSERT", bo.DatasourceID.Valid, bo.DatasourceID.String)
+	if req.BOKey != "" {
+		boKey = req.BOKey
+	}
 
-	// If cloning, copy fields and subtypes from source
+	// Handle nullable driver_table_id UUID
+	var driverTableID interface{} = nil
+	if driverTableIDStr != "" {
+		driverTableID = driverTableIDStr
+	}
+
+	bo := &models.BusinessObjectDefinition{
+		ID:                   id,
+		TenantID:             tenantID,
+		Key:                  boKey,
+		Name:                 req.Name,
+		DisplayName:          displayName,
+		TechnicalName:        technicalName,
+		Description:          req.Description,
+		Icon:                 req.Icon,
+		IsCore:               false,
+		Category:             boType,
+		ParentID:             sql.NullString{String: parentIDStr, Valid: parentIDStr != ""},
+		DriverTableID:        sql.NullString{String: driverTableIDStr, Valid: driverTableIDStr != ""},
+		DriverTableName:      driverTableNameStr,
+		ModelID:              modelID,
+		ClassificationNodeID: sql.NullString{String: classificationNodeID, Valid: true},
+		BusinessKeyNodeID:    sql.NullString{String: businessKeyNodeID, Valid: true},
+		SemanticIDNodeID:     sql.NullString{String: semanticIDNodeID, Valid: true},
+		GrainNodeID:          sql.NullString{String: grainNodeID, Valid: true},
+		CoreFields:           []models.FieldDefinition{},
+		CustomFields:         []models.FieldDefinition{},
+		Subtypes:             make(map[string]models.SubtypeDefinition),
+		CreatedAt:            now,
+		CreatedBy:            userID,
+		LastModifiedAt:       now,
+		LastModifiedBy:       userID,
+		IsActive:             true,
+	}
+
+	// If cloning, copy fields/subtypes from source onto the in-memory bo —
+	// persisted into business_object_fields below, after the BO row exists.
 	if req.CloneFromKey != "" {
 		if err := s.cloneBO(ctx, tenantID, bo, req.CloneFromKey, userID); err != nil {
 			return nil, err
 		}
 	}
 
-	// Insert BO
 	query := `
 		INSERT INTO business_objects (
-			id, tenant_id, key, name, display_name, technical_name,
-			description, icon, is_core, clones_from, clone_parent_key,
-			clone_parent_display_name, category, parent_id, datasource_id,
+			id, tenant_id, model_id, bo_key, bo_name, description, bo_type,
+			classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
 			driver_table_id, driver_table_name,
-			config,
-			created_at, created_by, last_modified_at, last_modified_by, 
-			is_active
+			is_active, is_core, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, $14, $15,
-			$16, $17,
-			$18,
-			$19, $20, $21, $22, 
-			$23
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11,
+			$12, $13,
+			$14, $15, $16, $16
 		)
 	`
 
-	// Handle nullable parent_id UUID
-	var parentID interface{} = nil
-	if bo.ParentID.Valid && bo.ParentID.String != "" {
-		parentID = bo.ParentID.String
-	}
-
-	var datasourceID interface{} = nil
-	if bo.DatasourceID.Valid && bo.DatasourceID.String != "" {
-		datasourceID = bo.DatasourceID.String
-	}
-
-	// Handle nullable driver_table_id UUID
-	var driverTableID interface{} = nil
-	if bo.DriverTableID.Valid {
-		driverTableID = bo.DriverTableID.String
-	}
-
-	// Handle nullable created_by
-	var createdBy interface{} = nil
-	if bo.CreatedBy != "" {
-		createdBy = bo.CreatedBy
-	}
-
-	// Handle nullable last_modified_by
-	var lastModifiedBy interface{} = nil
-	if bo.LastModifiedBy != "" {
-		lastModifiedBy = bo.LastModifiedBy
-	}
-
-	// Prepare config JSON
-	configJSON := map[string]interface{}{
-		"is_core": bo.IsCore,
-	}
-	if req.Config != nil {
-		for k, v := range req.Config {
-			configJSON[k] = v
-		}
-	}
-	configBytes, _ := json.Marshal(configJSON)
-
-	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s datasource=%v parent_id=%v name=%s", bo.TenantID, datasourceID, parentID, bo.Name)
-	fmt.Printf("[META DEBUG] tenant=%s datasource=%v parent_id=%v name=%s valid=%v\n", bo.TenantID, datasourceID, parentID, bo.Name, bo.DatasourceID.Valid)
-
 	_, err := s.db.ExecContext(ctx, query,
-		bo.ID, bo.TenantID, bo.Key, bo.Name, bo.DisplayName, bo.TechnicalName,
-		bo.Description, bo.Icon, bo.IsCore, bo.ClonesFrom, bo.CloneParentKey,
-		bo.CloneParentDisplayName, bo.Category, parentID, datasourceID,
+		bo.ID, bo.TenantID, bo.ModelID, bo.Key, bo.Name, bo.Description, boType,
+		classificationNodeID, businessKeyNodeID, semanticIDNodeID, grainNodeID,
 		driverTableID, bo.DriverTableName,
-		string(configBytes),
-		bo.CreatedAt, createdBy, bo.LastModifiedAt, lastModifiedBy,
-		bo.IsActive,
+		bo.IsActive, bo.IsCore, bo.CreatedAt,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create business object: %w", err)
+	}
+
+	for i, field := range bo.CoreFields {
+		if field.SemanticTermID == "" {
+			continue
+		}
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT INTO business_object_fields (id, tenant_id, bo_id, term_node_id, field_name, field_role, is_required, display_order)
+			VALUES ($1, $2, $3, $4, $5, 'ATTRIBUTE', $6, $7)
+		`, uuid.New().String(), tenantID, bo.ID, field.SemanticTermID, field.TechnicalName, field.IsRequired, (i+1)*10); err != nil {
+			return nil, fmt.Errorf("failed to persist cloned field %q: %w", field.TechnicalName, err)
+		}
 	}
 
 	// Log audit
 	s.logAudit(ctx, tenantID, "business_object", id, "create", nil, userID)
 
 	return bo, nil
+}
+
+// resolveBusinessObjectNodeTypeID returns the catalog_node_type id used for
+// per-BO lineage anchor placeholders, creating it if this tenant has none yet.
+func (s *BusinessObjectService) resolveBusinessObjectNodeTypeID(ctx context.Context, tenantID string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM catalog_node_type WHERE catalog_type_name = 'business_object' LIMIT 1`).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", err
+	}
+	err = s.db.QueryRowContext(ctx, `
+		INSERT INTO catalog_node_type (tenant_id, catalog_type_name, created_at, updated_at)
+		VALUES ($1, 'business_object', NOW(), NOW()) RETURNING id
+	`, tenantID).Scan(&id)
+	return id, err
 }
 
 // GetBusinessObject retrieves a BO by key or ID from either old or new schema

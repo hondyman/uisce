@@ -29,6 +29,10 @@ func (m *MockDatasourceResolver) Resolve(ctx context.Context, datasourceID strin
 	}, nil
 }
 
+func (m *MockDatasourceResolver) ResolveBindingDatasource(ctx context.Context, tenantID, alphaProductID, alphaDatasourceID string) (string, error) {
+	return "tenant-datasource-123", nil
+}
+
 func TestSecurityContextFromRequest_ValidHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Datasource-Id", "ds-123")

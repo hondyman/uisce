@@ -23,6 +23,12 @@ echo "=== Building backend ==="
 go build -buildvcs=false -o /tmp/uisce-backend ./cmd/server
 
 echo "=== Starting backend ==="
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    echo "Loading environment from .env..."
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
 export JWT_SECRET="${JWT_SECRET:-test-secret}"
 export PORT="${PORT:-8080}"
 export DATABASE_URL="${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}"

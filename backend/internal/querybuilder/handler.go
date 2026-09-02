@@ -144,6 +144,7 @@ func (h *QueryBuilderHandler) writeError(w http.ResponseWriter, err error, statu
 	if errors.Is(err, security.ErrImpersonationScopeViolation) {
 		status = http.StatusForbidden
 	}
+	logging.GetLogger().Sugar().Errorf("[QueryBuilder] request failed (status=%d): %v", status, err)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{

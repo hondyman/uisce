@@ -224,13 +224,12 @@ func (s *QueryService) buildSemanticRequest(qd *boresolver.QueryDef) (*boresolve
 		return nil, fmt.Errorf("failed to resolve binding %s: %w", qd.Context.BindingID, err)
 	}
 
-	// If the binding resolves a different datasource than the security context,
-	// prefer the binding's datasource because that is the physical backend the
-	// user selected. The security context still enforces tenant ownership.
-	if binding.DatasourceID != "" {
-		// We intentionally do not mutate secCtx here; ownership was already checked.
-	}
-
+	// The physical connection is always secCtx.DatasourceID (a
+	// tenant_product_datasource.id already validated to belong to the caller's
+	// tenant by security.DatasourceResolver, further enforced by RLS) — never
+	// anything carried on the binding itself. See ResolveBindingDatasource for
+	// how a caller determines which of their own datasources to put there for
+	// a given core BO's binding.
 	return mapQueryDefToSemanticRequest(qd, boDef, binding)
 }
 

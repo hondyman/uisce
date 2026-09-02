@@ -35,7 +35,10 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
     let errorBody: unknown = null;
     try {
       errorBody = await response.json();
-      detail = (errorBody as any)?.error || (errorBody as any)?.message || JSON.stringify(errorBody);
+      // .details carries the actual backend error (e.g. why SQL generation
+      // failed); .error is just the generic HTTP status text ("Bad Request")
+      // and was masking the real reason for every failure.
+      detail = (errorBody as any)?.details || (errorBody as any)?.error || (errorBody as any)?.message || JSON.stringify(errorBody);
     } catch {
       try {
         detail = await response.text();

@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
 // -----------------------------------------------------------------------------
@@ -167,7 +169,7 @@ func NewAIExplorerService(db *sql.DB) *AIExplorerService {
 	}
 	geminiModel := os.Getenv("GEMINI_MODEL")
 	if geminiModel == "" {
-		geminiModel = "gemini-1.5-flash"
+		geminiModel = llm.DefaultGeminiModel
 	}
 
 	embedder := NewEmbeddingService()
@@ -537,61 +539,15 @@ Respond with a JSON object strictly matching this schema:
   "anomalies": []
 }`, systemPrompt, chatHistory.String())
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", s.GeminiModel, s.GeminiKey)
-
-	reqPayload := map[string]interface{}{
-		"contents": []map[string]interface{}{
-			{
-				"parts": []map[string]string{
-					{"text": prompt},
-				},
-			},
-		},
-		"generationConfig": map[string]interface{}{
-			"temperature": 0.1,
-		},
-	}
-
-	bodyBytes, err := json.Marshal(reqPayload)
+	provider := llm.NewGeminiProvider(s.GeminiKey, s.GeminiModel).WithGenerationConfig(0.1, 0.95, 40, 8192)
+	rawText, err := provider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, err
 	}
-
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := s.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini returned status %d", resp.StatusCode)
-	}
-
-	var geminiResp struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(&geminiResp); err != nil {
-		return nil, err
-	}
-
-	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
+	if rawText == "" {
 		return nil, fmt.Errorf("empty gemini response")
 	}
 
-	rawText := geminiResp.Candidates[0].Content.Parts[0].Text
 	jsonStr := extractJSON(rawText)
 	if jsonStr == "" {
 		jsonStr = rawText

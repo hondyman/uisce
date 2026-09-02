@@ -216,6 +216,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <StorageIcon />,
         items: [
           { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Intelligent graph & semantic mapper' },
+          { label: 'Data Pipelines', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Catalog Graph & BO Parallel ETL', badge: { label: 'ETL', color: 'primary' } },
           { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
           { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
           { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
@@ -264,6 +265,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Quality',
         icon: <CheckCircleIcon />,
         items: [
+          { label: 'Data Pipeline Studio', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Parallel visual ETL/ELT pipeline platform', badge: { label: 'ETL Engine', color: 'primary' } },
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
           { label: 'Uisce Builder', path: '/core/uisce-builder', icon: <BuildIcon />, description: 'Advanced UI builder' },
           { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
@@ -307,6 +309,14 @@ const categoryConfigs: CategoryConfig[] = [
         ]
       },
       {
+        label: 'Pipeline Studio',
+        icon: <TimelineIcon />,
+        items: [
+          { label: 'Data Pipeline Studio', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Parallel visual ETL/ELT pipeline platform', badge: { label: 'New', color: 'primary' } },
+          { label: 'Pipeline Flows', path: '/core/flow-builder', icon: <AccountTreeIcon />, description: 'Visual pipeline flows' },
+        ]
+      },
+      {
         label: 'Workflow Studio',
         icon: <AccountTreeIcon />,
         items: [
@@ -347,6 +357,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Workflows',
         icon: <AccountTreeIcon />,
         items: [
+          { label: 'Data Pipelines', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Parallel visual ETL/ELT pipeline engine', badge: { label: 'ETL', color: 'primary' } },
           { label: 'BP Console', path: '/bp-console', icon: <SpeedIcon />, description: 'Orchestration monitor', badge: { label: 'Live', color: 'success' } },
           { label: 'Instance Explorer', path: '/bp-console/instances', icon: <TimelineIcon />, description: 'Debug workflows' },
           { label: 'Work Queues', path: '/bp-console/queues', icon: <AssessmentIcon />, description: 'Queue management' },
