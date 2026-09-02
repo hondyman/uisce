@@ -357,12 +357,9 @@ type boBindingMetadata struct {
 }
 
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
-	// 0. Try the canonical boresolver BO->table resolver — the same
+	// 1. Try the canonical boresolver BO->table resolver — the same
 	// resolution already used (and kept correct against schema drift) by AI
-	// query generation, the Query Builder, and API Studio, instead of this
-	// handler's own duplicate business_objects/catalog_node lookups below
-	// (tiers 1-2 reference columns — bo.key, business_object_bindings,
-	// bo.is_gold_copy — that don't exist on this schema and always miss).
+	// query generation, the Query Builder, and API Studio.
 	if h.boRepo != nil {
 		if boDef, err := h.boRepo.GetBOByTechnicalName(boKey, tenantID.String(), ""); err == nil {
 			if drivingTable := qualifiedTableFromDrivingTable(boDef.DrivingTable); drivingTable != "" {
@@ -371,48 +368,14 @@ func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, ten
 		}
 	}
 
-	var boMeta boBindingMetadata
-
-	// 1. Try public.business_objects + business_object_bindings
-	metaQuery := `
-		SELECT COALESCE(bob.driving_table, bo.driver_table_name, '') AS driving_table,
-		       COALESCE(bob.key_column, 'id') AS key_column
-		FROM public.business_objects bo
-		LEFT JOIN public.business_object_bindings bob ON bob.bo_id = bo.id AND bob.is_default = TRUE
-		WHERE (bo.key = $1 OR bo.id::text = $1) AND (bo.tenant_id = $2 OR bo.is_gold_copy = TRUE)
-		ORDER BY CASE WHEN bo.tenant_id = $2 THEN 0 ELSE 1 END
-		LIMIT 1;
-	`
-	err := h.db.GetContext(ctx, &boMeta, metaQuery, boKey, tenantID)
-	if err == nil && boMeta.DrivingTable != "" {
-		return &boMeta, nil
-	}
-
-	// 2. Try catalog_node (BUSINESS_OBJECT)
-	catalogQuery := `
-		SELECT COALESCE(metadata->>'driving_table', metadata->>'table_name', replace(qualified_path, '/', '.')) AS driving_table,
-		       COALESCE(metadata->>'key_column', metadata->>'primary_key', 'id') AS key_column
-		FROM public.catalog_node
-		WHERE node_type = 'BUSINESS_OBJECT'
-		  AND (node_key = $1 OR qualified_path = $1 OR id::text = $1)
-		  AND (tenant_id = $2 OR is_gold_copy = TRUE)
-		ORDER BY CASE WHEN tenant_id = $2 THEN 0 ELSE 1 END
-		LIMIT 1;
-	`
-	err = h.db.GetContext(ctx, &boMeta, catalogQuery, boKey, tenantID)
-	if err == nil && boMeta.DrivingTable != "" {
-		return &boMeta, nil
-	}
-
-	// 3. Fallback: Check if boKey is a direct qualified table like "oms.account", "master.customer", etc.
-	if strings.Contains(boKey, ".") {
-		return &boBindingMetadata{
-			DrivingTable: boKey,
-			KeyColumn:    "id",
-		}, nil
-	}
-
-	// 4. Default schema fallback if table exists
+	// 2. Last-resort: probe known schemas for a table literally named boKey.
+	// This is the only fallback kept here — the business_objects/
+	// business_object_bindings and catalog_node lookups this handler used
+	// to fall back to on a boresolver miss always errored (they referenced
+	// bo.key, bo.is_gold_copy, catalog_node.node_key/is_gold_copy, none of
+	// which exist on this schema) and the "boKey contains a dot" guess was
+	// actively wrong for real bo_key values like "northwind.customer" (not
+	// a schema.table pair) — both deleted rather than kept as dead weight.
 	for _, schema := range []string{"oms", "master", "altinv", "cash_flow", "public"} {
 		qualified := fmt.Sprintf("%s.%s", schema, boKey)
 		var exists bool
