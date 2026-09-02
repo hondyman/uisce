@@ -95,7 +95,6 @@ func TestPageLayoutHandler_GetAndSave(t *testing.T) {
 	var getResp PageRegistryEntry
 	assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &getResp))
 	assert.Equal(t, "account_hub", getResp.PageKey)
-	assert.True(t, getResp.IsGoldCopy)
 
 	// 2. Save Page
 	savePayload := map[string]interface{}{

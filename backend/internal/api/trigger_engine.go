@@ -9,8 +9,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/domain"
 	"github.com/hondyman/uisce/backend/internal/rulefabric"
+	"github.com/hondyman/uisce/backend/internal/validation"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // ============================================================================
@@ -35,26 +38,39 @@ type TriggerContext struct {
 	ClientIP     string                 `json:"client_ip"`
 	UserAgent    string                 `json:"user_agent"`
 	RequestedAt  time.Time              `json:"requested_at"`
+	// StepName scopes to a specific workflow step's triggers, matching
+	// validation_triggers.step_name; empty matches step-agnostic triggers.
+	StepName string `json:"step_name,omitempty"`
 }
 
-// TriggerConfig represents a validation trigger from DB
+// TriggerConfig represents a validation trigger row, matching the live
+// validation_triggers table — see internal/validation.ValidationTrigger,
+// which reads the same table for the (separate, working) inline-validation
+// use case. TriggerConfig's own condition/action logic used to live in
+// trigger_type_id/event_config/condition_config/action_config/abac_policy_id/
+// enabled/priority columns that were removed from this table by an
+// unrelated migration; this shape replaces that reference with the ones
+// that actually exist.
 type TriggerConfig struct {
-	ID              string          `db:"id" json:"id"`
-	TriggerTypeID   string          `db:"trigger_type_id" json:"trigger_type_id"`
-	TargetEntity    string          `db:"target_entity" json:"target_entity"`
-	EventConfig     json.RawMessage `db:"event_config" json:"event_config"`
-	ConditionConfig json.RawMessage `db:"condition_config" json:"condition_config"`
-	ActionConfig    json.RawMessage `db:"action_config" json:"action_config"`
-	ABACPolicyID    *string         `db:"abac_policy_id" json:"abac_policy_id"`
-	Enabled         bool            `db:"enabled" json:"enabled"`
-	Priority        int             `db:"priority" json:"priority"`
+	ID           string         `db:"id" json:"id"`
+	TenantID     string         `db:"tenant_id" json:"tenant_id"`
+	TriggerType  string         `db:"trigger_type" json:"trigger_type"`
+	TargetEntity string         `db:"target_entity" json:"target_entity"`
+	StepName     sql.NullString `db:"step_name" json:"step_name,omitempty"`
+	RuleIDs      pq.StringArray `db:"rule_ids" json:"rule_ids"`
+	// Meta is the trigger's free-form settings column; this engine reads
+	// two conventional keys from it — see triggerMeta — since the table
+	// has no dedicated abac_policy_id/action_config columns anymore.
+	Meta json.RawMessage `db:"meta" json:"meta,omitempty"`
 }
 
-// RuleCondition represents a single rule in condition_config
-type RuleCondition struct {
-	Field    string      `json:"field"`
-	Operator string      `json:"operator"`
-	Value    interface{} `json:"value"`
+// triggerMeta is the convention this engine expects inside
+// validation_triggers.meta: an optional ABAC policy gate plus the
+// post-commit actions to run once a trigger's rules (RuleIDs, evaluated
+// against catalog_validation_rules) pass.
+type triggerMeta struct {
+	ABACPolicyID string          `json:"abac_policy_id,omitempty"`
+	Actions      json.RawMessage `json:"actions,omitempty"`
 }
 
 // ActionConfig represents post-commit actions
@@ -97,35 +113,38 @@ func (e *TriggerEngine) EvaluateTriggers(ctx context.Context, tc *TriggerContext
 	start := time.Now()
 	results := []ExecutionResult{}
 
-	// 1. Fetch all enabled triggers for this type + entity
+	// 1. Fetch all triggers for this tenant/type/entity(/step). There is no
+	// enabled/priority column on this table (see TriggerConfig) — every row
+	// present is active, most-recently-created first.
 	query := `
-		SELECT vt.id, vt.trigger_type_id, vt.target_entity, 
-		       vt.event_config, vt.condition_config, vt.action_config,
-		       vt.abac_policy_id, vt.enabled, vt.priority
-		FROM validation_triggers vt
-		JOIN trigger_types tt ON vt.trigger_type_id = tt.id
-		WHERE vt.tenant_id = $1 
-		  AND tt.key = $2 
-		  AND vt.target_entity = $3 
-		  AND vt.enabled = true
-		ORDER BY vt.priority ASC`
+		SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids, COALESCE(meta, '{}'::jsonb) AS meta
+		FROM validation_triggers
+		WHERE tenant_id = $1
+		  AND trigger_type = $2
+		  AND target_entity = $3
+		  AND (step_name IS NULL OR step_name = '' OR step_name = $4)
+		ORDER BY created_at DESC`
 
 	triggers := []TriggerConfig{}
-	err := e.db.SelectContext(ctx, &triggers, query, tc.TenantID, tc.TriggerKey, tc.TargetEntity)
+	err := e.db.SelectContext(ctx, &triggers, query, tc.TenantID, tc.TriggerKey, tc.TargetEntity, tc.StepName)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("[ERROR] Failed to fetch triggers: %v", err)
 		return results, err
 	}
 
-	// 2. Evaluate each trigger in priority order
+	validationEngine := validation.NewValidationEngine()
+
+	// 2. Evaluate each trigger, most-recent first
 	var blockingError error
 	for _, trigger := range triggers {
 		execResult := ExecutionResult{
 			TriggerID: trigger.ID,
 		}
 
-		// 2a. Evaluate conditions
-		conditionsMet, conditionResult, err := e.evaluateConditions(trigger.ConditionConfig, tc.EventData)
+		// 2a. Evaluate the trigger's rules (rule_ids -> catalog_validation_rules),
+		// the same mechanism internal/validation.TriggerValidationEngine uses for
+		// inline save-time validation — AND logic, all rules must pass.
+		conditionsMet, conditionResult, err := e.evaluateTriggerRules(ctx, validationEngine, trigger, tc.EventData)
 		if err != nil {
 			execResult.Status = "error"
 			execResult.ErrorMessage = fmt.Sprintf("Condition evaluation failed: %v", err)
@@ -145,15 +164,18 @@ func (e *TriggerEngine) EvaluateTriggers(ctx context.Context, tc *TriggerContext
 			continue
 		}
 
+		var meta triggerMeta
+		_ = json.Unmarshal(trigger.Meta, &meta)
+
 		// 2c. ABAC evaluation
 		abacAllowed := true
-		if trigger.ABACPolicyID != nil {
+		if meta.ABACPolicyID != "" {
 			abacAllowed = e.abacEngine.Evaluate(ctx, &ABACContext{
 				TenantID:  tc.TenantID,
 				SubjectID: tc.UserID,
 				Action:    fmt.Sprintf("execute_trigger:%s", tc.TriggerKey),
 				Resource:  tc.TargetEntity,
-				PolicyID:  *trigger.ABACPolicyID,
+				PolicyID:  meta.ABACPolicyID,
 				ClientIP:  tc.ClientIP,
 				Time:      tc.RequestedAt,
 			})
@@ -167,8 +189,8 @@ func (e *TriggerEngine) EvaluateTriggers(ctx context.Context, tc *TriggerContext
 			continue
 		}
 
-		// 2d. Execute post-commit actions
-		actionResult, err := e.executeActions(ctx, trigger.ActionConfig, tc, trigger.ID)
+		// 2d. Execute post-commit actions (meta.actions -> []ActionConfig)
+		actionResult, err := e.executeActions(ctx, meta.Actions, tc, trigger.ID)
 		if err != nil {
 			execResult.Status = "error"
 			execResult.ErrorMessage = fmt.Sprintf("Action execution failed: %v", err)
@@ -183,138 +205,80 @@ func (e *TriggerEngine) EvaluateTriggers(ctx context.Context, tc *TriggerContext
 		results = append(results, execResult)
 	}
 
-	// 3. Log to audit_log
+	// 3. Log to bp_trigger_executions
 	execDuration := time.Since(start).Milliseconds()
 	e.auditTriggerExecution(ctx, tc, results, execDuration)
 
 	return results, blockingError
 }
 
-// ============================================================================
-// CONDITION EVALUATION (Rule Engine)
-// ============================================================================
-
-func (e *TriggerEngine) evaluateConditions(conditionConfig json.RawMessage, eventData map[string]interface{}) (bool, map[string]interface{}, error) {
-	result := map[string]interface{}{
-		"rules": []map[string]interface{}{},
-		"met":   true,
+// evaluateTriggerRules evaluates every rule referenced by trigger.RuleIDs
+// against eventData (AND logic — all must pass). A rule that's missing or
+// inactive is logged and skipped rather than failing the whole trigger,
+// matching internal/validation.TriggerValidationEngine's behavior for the
+// same table/rule relationship.
+func (e *TriggerEngine) evaluateTriggerRules(ctx context.Context, ve *validation.ValidationEngine, trigger TriggerConfig, eventData map[string]interface{}) (bool, map[string]interface{}, error) {
+	detail := map[string]interface{}{"rules": []map[string]interface{}{}, "met": true}
+	if len(trigger.RuleIDs) == 0 {
+		return true, detail, nil // no rules attached = always pass
 	}
 
-	if len(conditionConfig) == 0 {
-		return true, result, nil // No conditions = always pass
-	}
+	var ruleDetails []map[string]interface{}
+	allPassed := true
 
-	var conditions []RuleCondition
-	if err := json.Unmarshal(conditionConfig, &conditions); err != nil {
-		return false, result, fmt.Errorf("invalid condition config: %w", err)
-	}
+	for _, ruleID := range trigger.RuleIDs {
+		var (
+			id            string
+			ruleType      string
+			conditionJSON json.RawMessage
+			errorMessage  sql.NullString
+		)
+		// catalog_validation_rules has no error_message column —
+		// description serves the same purpose (see also
+		// internal/validation.TriggerValidationEngine.fetchRuleByID, fixed
+		// the same way).
+		err := e.db.QueryRowContext(ctx, `
+			SELECT id, rule_type, condition_json, COALESCE(description, '')
+			FROM catalog_validation_rules
+			WHERE id = $1 AND is_active = true
+		`, ruleID).Scan(&id, &ruleType, &conditionJSON, &errorMessage)
+		if err != nil {
+			log.Printf("[WARN] EvaluateTriggers: rule %s not found or inactive: %v", ruleID, err)
+			continue
+		}
 
-	ruleResults := []map[string]interface{}{}
-	for _, cond := range conditions {
-		ruleResult := e.evaluateRule(cond, eventData)
-		ruleResults = append(ruleResults, ruleResult)
+		// catalog_validation_rules.condition_json is required (by a DB check
+		// constraint) to wrap the actual condition in a
+		// schema_version/authored_mode/payload envelope.
+		condition, err := validation.UnwrapConditionPayload(conditionJSON)
+		if err != nil {
+			log.Printf("[WARN] EvaluateTriggers: rule %s has invalid condition_json: %v", ruleID, err)
+			continue
+		}
 
-		// All rules must pass (AND logic)
-		if !ruleResult["passed"].(bool) {
-			result["met"] = false
+		res := ve.Execute(validation.ExecutionContext{
+			RuleID:       id,
+			RuleType:     ruleType,
+			TargetEntity: trigger.TargetEntity,
+			Condition:    condition,
+			Data:         eventData,
+		})
+
+		msg := res.Message
+		if !res.Passed && errorMessage.Valid && errorMessage.String != "" {
+			msg = errorMessage.String
+		}
+		ruleDetails = append(ruleDetails, map[string]interface{}{
+			"rule_id": id, "passed": res.Passed, "message": msg,
+		})
+		if !res.Passed {
+			allPassed = false
 		}
 	}
 
-	result["rules"] = ruleResults
-	return result["met"].(bool), result, nil
-}
-
-// evaluateRule checks a single rule
-func (e *TriggerEngine) evaluateRule(rule RuleCondition, data map[string]interface{}) map[string]interface{} {
-	fieldValue, exists := data[rule.Field]
-	result := map[string]interface{}{
-		"field":    rule.Field,
-		"operator": rule.Operator,
-		"value":    rule.Value,
-		"passed":   false,
-		"reason":   "",
-	}
-
-	if !exists {
-		result["reason"] = "field not in event data"
-		return result
-	}
-
-	// Operator evaluation
-	switch rule.Operator {
-	case "equals":
-		result["passed"] = fieldValue == rule.Value
-		if !result["passed"].(bool) {
-			result["reason"] = fmt.Sprintf("%v != %v", fieldValue, rule.Value)
-		}
-
-	case "notEquals":
-		result["passed"] = fieldValue != rule.Value
-
-	case "greaterThan":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv > rv
-		} else {
-			result["reason"] = "non-numeric comparison"
-		}
-
-	case "lessThan":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv < rv
-		} else {
-			result["reason"] = "non-numeric comparison"
-		}
-
-	case "greaterThanOrEqual":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv >= rv
-		}
-
-	case "lessThanOrEqual":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv <= rv
-		}
-
-	case "contains":
-		fvStr := fmt.Sprint(fieldValue)
-		rvStr := fmt.Sprint(rule.Value)
-		result["passed"] = len(rvStr) > 0 && contains(fvStr, rvStr)
-
-	case "inList":
-		// rule.Value should be []interface{}
-		if list, ok := rule.Value.([]interface{}); ok {
-			result["passed"] = contains(fmt.Sprint(fieldValue), fmt.Sprint(list))
-		}
-
-	case "isEmpty":
-		result["passed"] = fieldValue == nil || fieldValue == "" || fieldValue == 0
-
-	case "isNotEmpty":
-		result["passed"] = fieldValue != nil && fieldValue != "" && fieldValue != 0
-
-	case "isTrue":
-		if b, ok := fieldValue.(bool); ok {
-			result["passed"] = b
-		}
-
-	case "isFalse":
-		if b, ok := fieldValue.(bool); ok {
-			result["passed"] = !b
-		}
-
-	default:
-		result["reason"] = fmt.Sprintf("unknown operator: %s", rule.Operator)
-	}
-
-	return result
+	detail["rules"] = ruleDetails
+	detail["met"] = allPassed
+	return allPassed, detail, nil
 }
 
 // ============================================================================
@@ -491,23 +455,51 @@ func (e *TriggerEngine) callWebhook(_ context.Context, webhookURL string, _ *Tri
 // AUDIT & LOGGING
 // ============================================================================
 
+// auditTriggerExecution records each result to bp_trigger_executions — the
+// live, partitioned table this belongs to (the old "trigger_executions"
+// table this used to insert into doesn't exist). trigger_id is a required
+// uuid column there, so a malformed/non-uuid TriggerID (shouldn't happen —
+// it always comes from a real validation_triggers.id) is skipped rather
+// than attempted, same as any other write failure here: logged, not fatal,
+// since audit logging must never block the trigger's actual outcome.
 func (e *TriggerEngine) auditTriggerExecution(ctx context.Context, tc *TriggerContext, results []ExecutionResult, durationMs int64) {
+	tenantID, err := uuid.Parse(tc.TenantID)
+	if err != nil {
+		log.Printf("[ERROR] auditTriggerExecution: invalid tenant id %q: %v", tc.TenantID, err)
+		return
+	}
+
 	query := `
-		INSERT INTO trigger_executions 
-		(tenant_id, trigger_id, trigger_key, target_entity, entity_id, event_data, 
-		 evaluation_result, action_result, status, executed_by, duration_ms, executed_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+		INSERT INTO bp_trigger_executions
+		(id, trigger_id, tenant_id, execution_status, trigger_payload, result, execution_time_ms, error_message, executed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	for _, result := range results {
-		evaluationJSON, _ := json.Marshal(result.EvaluationResult)
-		actionJSON, _ := json.Marshal(result.ActionResult)
-		eventJSON, _ := json.Marshal(tc.EventData)
-
-		_, err := e.db.ExecContext(ctx, query,
-			tc.TenantID, result.TriggerID, tc.TriggerKey, tc.TargetEntity, tc.EntityID,
-			eventJSON, evaluationJSON, actionJSON, result.Status, tc.UserID, durationMs, time.Now())
-
+		triggerID, err := uuid.Parse(result.TriggerID)
 		if err != nil {
+			log.Printf("[ERROR] auditTriggerExecution: invalid trigger id %q: %v", result.TriggerID, err)
+			continue
+		}
+
+		payload, _ := json.Marshal(map[string]interface{}{
+			"trigger_key":   tc.TriggerKey,
+			"target_entity": tc.TargetEntity,
+			"entity_id":     tc.EntityID,
+			"executed_by":   tc.UserID,
+			"event_data":    tc.EventData,
+		})
+		resultJSON, _ := json.Marshal(map[string]interface{}{
+			"evaluation_result": result.EvaluationResult,
+			"action_result":     result.ActionResult,
+		})
+		var errMsg sql.NullString
+		if result.ErrorMessage != "" {
+			errMsg = sql.NullString{String: result.ErrorMessage, Valid: true}
+		}
+
+		if _, err := e.db.ExecContext(ctx, query,
+			uuid.New(), triggerID, tenantID, result.Status, payload, resultJSON, durationMs, errMsg, time.Now(),
+		); err != nil {
 			log.Printf("[ERROR] Failed to audit trigger execution: %v", err)
 		}
 	}
@@ -590,25 +582,6 @@ func (e *TriggerEngine) autoRejectStep(_ context.Context, bpExecutionID, stepNam
 // UTILITY FUNCTIONS
 // ============================================================================
 
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case float64:
-		return val, true
-	case float32:
-		return float64(val), true
-	case int:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	default:
-		return 0, false
-	}
-}
-
-func contains(str, substr string) bool {
-	return len(substr) > 0 && (str == substr || len(str) >= len(substr))
-}
-
 func renderTemplate(template string, tc *TriggerContext) string {
 	// Simple template rendering (can use text/template or mustache for production)
 	result := template
@@ -634,8 +607,18 @@ type NotificationPayload struct {
 	Body       string
 }
 
+// ABACEngine is a thin adapter over the single consolidated ABAC
+// implementation (domain.ABACEvaluator, backed by the abac_policies table)
+// so the trigger engine's ABACContext shape doesn't leak into domain. It
+// used to be its own stub ("TODO: Implement ABAC evaluation; return true");
+// evaluation logic itself now lives in exactly one place.
 type ABACEngine struct {
-	db *sqlx.DB
+	evaluator *domain.ABACEvaluator
+}
+
+// NewABACEngine wires the trigger engine's ABAC check to the real evaluator.
+func NewABACEngine(db *sql.DB) *ABACEngine {
+	return &ABACEngine{evaluator: domain.NewABACEvaluator(db)}
 }
 
 type ABACContext struct {
@@ -648,7 +631,27 @@ type ABACContext struct {
 	Time      time.Time
 }
 
-func (a *ABACEngine) Evaluate(_ context.Context, _ *ABACContext) bool {
-	// TODO: Implement ABAC evaluation
-	return true
+func (a *ABACEngine) Evaluate(ctx context.Context, abacCtx *ABACContext) bool {
+	if a.evaluator == nil {
+		return true
+	}
+	allowed, _, _, err := a.evaluator.Evaluate(ctx, domain.EvaluationRequest{
+		UserID:   abacCtx.SubjectID,
+		TenantID: abacCtx.TenantID,
+		AssetID:  abacCtx.Resource,
+		Action:   domain.Permission(abacCtx.Action),
+		Context: map[string]interface{}{
+			"client_ip": abacCtx.ClientIP,
+			"time":      abacCtx.Time,
+			"policy_id": abacCtx.PolicyID,
+		},
+	})
+	if err != nil {
+		// Fail open on evaluation error: an ABAC misconfiguration or DB
+		// hiccup shouldn't block every trigger in the platform. This
+		// mirrors the same principle used elsewhere in the RBAC path —
+		// resolution failures fail open, explicit denials fail closed.
+		return true
+	}
+	return allowed
 }

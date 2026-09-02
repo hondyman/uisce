@@ -147,6 +147,7 @@ func (s *EntitlementsService) fetchEntitlementsForUser(ctx context.Context, secC
 		  AND fp.tenant_id = $3
 		  AND ur.role_key = ANY($4::text[])
 		  AND ur.is_active = true
+		  AND (ur.expires_at IS NULL OR ur.expires_at > now())
 		  %s
 	`, instanceFilter)
 
@@ -179,6 +180,9 @@ func (s *EntitlementsService) fetchEntitlementsForUser(ctx context.Context, secC
 		existing, ok := result.Entitlements[key]
 		if !ok || permissionPriority(permLevel) < permissionPriority(existing) {
 			result.Entitlements[key] = permLevel
+		}
+		if permLevel == PermissionMask {
+			result.MaskedFields[key] = struct{}{}
 		}
 		if maskingPattern != nil && *maskingPattern != "" {
 			result.MaskingPatterns[key] = *maskingPattern

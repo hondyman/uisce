@@ -19,7 +19,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-
 // BOService defines the subset of BusinessObject service methods used by handlers
 type BOService interface {
 	GetBusinessObject(ctx context.Context, secCtx *security.Context, boKey string) (*models.BusinessObjectDefinition, error)
@@ -62,6 +61,8 @@ type BusinessObjectHandler struct {
 	datasourceResolver security.DatasourceResolver
 	db                 *sqlx.DB
 	entitlements       *security.EntitlementsService
+	groupRoleResolver  *security.GroupRoleResolver
+	userProvisioner    *security.UserProvisioner
 }
 
 func NewBusinessObjectHandler(service BOService, datasourceResolver security.DatasourceResolver, sqlxDB *sqlx.DB, entSvc *security.EntitlementsService) *BusinessObjectHandler {
@@ -70,6 +71,8 @@ func NewBusinessObjectHandler(service BOService, datasourceResolver security.Dat
 		datasourceResolver: datasourceResolver,
 		db:                 sqlxDB,
 		entitlements:       entSvc,
+		groupRoleResolver:  security.NewGroupRoleResolver(sqlxDB),
+		userProvisioner:    security.NewUserProvisioner(sqlxDB),
 	}
 }
 
@@ -121,14 +124,13 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
-
-
-
 // GetBusinessObjectFields returns the list of fields (core + custom) for a BO
 func (h *BusinessObjectHandler) GetBusinessObjectFields(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -168,7 +170,9 @@ func (h *BusinessObjectHandler) GetBusinessObjectFields(w http.ResponseWriter, r
 
 func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -240,7 +244,9 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 func (h *BusinessObjectHandler) CreateBusinessObject(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -291,7 +297,9 @@ func (h *BusinessObjectHandler) CreateBusinessObject(w http.ResponseWriter, r *h
 func (h *BusinessObjectHandler) GetBusinessObject(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -422,7 +430,9 @@ func metadataSubtypeToModel(b *models.BusinessObjectDefinition) models.SubtypeDe
 func (h *BusinessObjectHandler) UpdateBusinessObject(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -459,7 +469,9 @@ func (h *BusinessObjectHandler) UpdateBusinessObject(w http.ResponseWriter, r *h
 func (h *BusinessObjectHandler) DeleteBusinessObject(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -487,7 +499,9 @@ func (h *BusinessObjectHandler) DeleteBusinessObject(w http.ResponseWriter, r *h
 func (h *BusinessObjectHandler) RenameSubtype(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -539,7 +553,9 @@ func (h *BusinessObjectHandler) RenameSubtype(w http.ResponseWriter, r *http.Req
 func (h *BusinessObjectHandler) DeleteSubtype(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -578,7 +594,9 @@ func (h *BusinessObjectHandler) DeleteSubtype(w http.ResponseWriter, r *http.Req
 func (h *BusinessObjectHandler) GetBusinessObjectRelationships(w http.ResponseWriter, r *http.Request) {
 	// Build security context with datasource + region validation
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -601,7 +619,9 @@ func (h *BusinessObjectHandler) GetBusinessObjectRelationships(w http.ResponseWr
 // CreateBusinessObjectRelationship creates a link between business objects
 func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -623,12 +643,12 @@ func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.Response
 	}
 
 	var req struct {
-		TargetObjectID   string `json:"targetObjectId"`
-		TargetObjectIDSnake string `json:"target_object_id"`
-		RelationshipType string `json:"relationshipType"`
+		TargetObjectID        string `json:"targetObjectId"`
+		TargetObjectIDSnake   string `json:"target_object_id"`
+		RelationshipType      string `json:"relationshipType"`
 		RelationshipTypeSnake string `json:"relationship_type"`
-		Cardinality      string `json:"cardinality"`
-		Description      string `json:"description"`
+		Cardinality           string `json:"cardinality"`
+		Description           string `json:"description"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -705,7 +725,9 @@ func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.Response
 // UpdateBusinessObjectRelationship updates an existing relationship link
 func (h *BusinessObjectHandler) UpdateBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -763,7 +785,9 @@ func (h *BusinessObjectHandler) UpdateBusinessObjectRelationship(w http.Response
 // DeleteBusinessObjectRelationship deletes a relationship link
 func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -808,7 +832,9 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.Response
 // { bo, fields[], calc_fields[], bindings[], related_bos[] }
 func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -935,11 +961,11 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 					&b.ValidTimeStartCol, &b.ValidTimeEndCol, &b.TransactionStartCol, &b.TransactionEndCol,
 					&b.IsPrimary, &b.Config); err == nil {
 					binding := map[string]interface{}{
-						"binding_id":         b.BindingID,
-						"binding_name":       b.BindingName,
-						"binding_mode":       b.BindingMode,
+						"binding_id":          b.BindingID,
+						"binding_name":        b.BindingName,
+						"binding_mode":        b.BindingMode,
 						"physical_table_name": b.PhysicalTableName,
-						"is_primary":         b.IsPrimary,
+						"is_primary":          b.IsPrimary,
 					}
 					if b.ValidTimeStartCol != nil {
 						binding["valid_time_start_col"] = *b.ValidTimeStartCol
@@ -973,8 +999,8 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	if relationships != nil {
 		for _, rel := range relationships.RelatedObjects {
 			relatedBOs = append(relatedBOs, map[string]interface{}{
-				"bo_name": rel.RelatedObjectName,
-				"edge":    rel.RelationshipType,
+				"bo_name":     rel.RelatedObjectName,
+				"edge":        rel.RelationshipType,
 				"description": rel.Description,
 			})
 		}
@@ -988,15 +1014,15 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	for _, f := range bo.CoreFields {
 		fields = append(fields, map[string]interface{}{
 			"name":             f.Name,
-			"technical_name":  f.TechnicalName,
+			"technical_name":   f.TechnicalName,
 			"semantic_term_id": f.SemanticTermID,
-			"field_type":      f.Type,
+			"field_type":       f.Type,
 		})
 	}
 	for _, f := range bo.CustomFields {
 		fields = append(fields, map[string]interface{}{
 			"name":             f.Name,
-			"technical_name":  f.TechnicalName,
+			"technical_name":   f.TechnicalName,
 			"semantic_term_id": f.SemanticTermID,
 			"field_type":       f.Type,
 		})
@@ -1017,7 +1043,9 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 // IntrospectTable handles POST /api/business-objects/introspect-table
 func (h *BusinessObjectHandler) IntrospectTable(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1056,7 +1084,9 @@ func (h *BusinessObjectHandler) IntrospectTable(w http.ResponseWriter, r *http.R
 // GetBODelta handles GET /api/business-objects/{id}/delta
 func (h *BusinessObjectHandler) GetBODelta(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1078,7 +1108,9 @@ func (h *BusinessObjectHandler) GetBODelta(w http.ResponseWriter, r *http.Reques
 // QueryBORecords handles GET /api/business-objects/{id}/data
 func (h *BusinessObjectHandler) QueryBORecords(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1124,7 +1156,9 @@ func (h *BusinessObjectHandler) QueryBORecords(w http.ResponseWriter, r *http.Re
 // CreateBORecord handles POST /api/business-objects/{id}/data
 func (h *BusinessObjectHandler) CreateBORecord(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1168,7 +1202,9 @@ func (h *BusinessObjectHandler) CreateBORecord(w http.ResponseWriter, r *http.Re
 // UpdateBORecord handles PUT /api/business-objects/{id}/data/{recordId}
 func (h *BusinessObjectHandler) UpdateBORecord(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1212,7 +1248,9 @@ func (h *BusinessObjectHandler) UpdateBORecord(w http.ResponseWriter, r *http.Re
 // DeleteBORecord handles DELETE /api/business-objects/{id}/data/{recordId}
 func (h *BusinessObjectHandler) DeleteBORecord(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1248,7 +1286,9 @@ func (h *BusinessObjectHandler) DeleteBORecord(w http.ResponseWriter, r *http.Re
 // SynthesizeBOWithAI handles POST /api/business-objects/ai/synthesize
 func (h *BusinessObjectHandler) SynthesizeBOWithAI(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1291,7 +1331,9 @@ func (h *BusinessObjectHandler) SynthesizeBOWithAI(w http.ResponseWriter, r *htt
 // TranslateNLToQueryDef handles POST /api/business-objects/ai/nlq
 func (h *BusinessObjectHandler) TranslateNLToQueryDef(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1331,7 +1373,9 @@ func (h *BusinessObjectHandler) TranslateNLToQueryDef(w http.ResponseWriter, r *
 // ExplainDeltaWithAI handles POST /api/business-objects/{id}/ai/explain-delta
 func (h *BusinessObjectHandler) ExplainDeltaWithAI(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1365,7 +1409,9 @@ func (h *BusinessObjectHandler) ExplainDeltaWithAI(w http.ResponseWriter, r *htt
 // DetectAnomaliesWithAI handles POST /api/business-objects/{id}/ai/detect-anomalies
 func (h *BusinessObjectHandler) DetectAnomaliesWithAI(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1399,7 +1445,9 @@ func (h *BusinessObjectHandler) DetectAnomaliesWithAI(w http.ResponseWriter, r *
 // GetBOWorkflowStatus handles GET /api/business-objects/{id}/workflow
 func (h *BusinessObjectHandler) GetBOWorkflowStatus(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1421,7 +1469,9 @@ func (h *BusinessObjectHandler) GetBOWorkflowStatus(w http.ResponseWriter, r *ht
 // ExecuteWorkflowAction handles POST /api/business-objects/{id}/workflow/action
 func (h *BusinessObjectHandler) ExecuteWorkflowAction(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1501,7 +1551,9 @@ func (h *BusinessObjectHandler) ResolveBindingDatasource(w http.ResponseWriter, 
 
 func (h *BusinessObjectHandler) DiscoverBindingScope(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1525,7 +1577,9 @@ func (h *BusinessObjectHandler) DiscoverBindingScope(w http.ResponseWriter, r *h
 // ValidatePublishGate handles GET /api/business-objects/{id}/publish-gate
 func (h *BusinessObjectHandler) ValidatePublishGate(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1547,7 +1601,9 @@ func (h *BusinessObjectHandler) ValidatePublishGate(w http.ResponseWriter, r *ht
 // GetMultiBackendConfiguration handles GET /api/business-objects/{id}/multi-backend
 func (h *BusinessObjectHandler) GetMultiBackendConfiguration(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1569,7 +1625,9 @@ func (h *BusinessObjectHandler) GetMultiBackendConfiguration(w http.ResponseWrit
 // PerformGraphRAGContext handles POST /api/business-objects/ai/graph-rag
 func (h *BusinessObjectHandler) PerformGraphRAGContext(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1596,7 +1654,9 @@ func (h *BusinessObjectHandler) PerformGraphRAGContext(w http.ResponseWriter, r 
 // SimulateLineageImpact handles POST /api/business-objects/{id}/simulate-impact
 func (h *BusinessObjectHandler) SimulateLineageImpact(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1624,7 +1684,9 @@ func (h *BusinessObjectHandler) SimulateLineageImpact(w http.ResponseWriter, r *
 // GenerateBOArtifacts handles GET /api/business-objects/{id}/artifacts
 func (h *BusinessObjectHandler) GenerateBOArtifacts(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1646,7 +1708,9 @@ func (h *BusinessObjectHandler) GenerateBOArtifacts(w http.ResponseWriter, r *ht
 // EvaluateQueryCost handles POST /api/business-objects/evaluate-cost
 func (h *BusinessObjectHandler) EvaluateQueryCost(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1673,7 +1737,9 @@ func (h *BusinessObjectHandler) EvaluateQueryCost(w http.ResponseWriter, r *http
 // DetectSchemaDrift handles GET /api/business-objects/{id}/drift-sentinel
 func (h *BusinessObjectHandler) DetectSchemaDrift(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1695,7 +1761,9 @@ func (h *BusinessObjectHandler) DetectSchemaDrift(w http.ResponseWriter, r *http
 // ApplyDriftRepairPatch handles POST /api/business-objects/{id}/drift-patch
 func (h *BusinessObjectHandler) ApplyDriftRepairPatch(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1730,7 +1798,9 @@ func (h *BusinessObjectHandler) ApplyDriftRepairPatch(w http.ResponseWriter, r *
 // RunLakehouseCompaction handles POST /api/business-objects/{id}/lakehouse-compaction
 func (h *BusinessObjectHandler) RunLakehouseCompaction(w http.ResponseWriter, r *http.Request) {
 	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
-		Resolver: h.datasourceResolver,
+		Resolver:          h.datasourceResolver,
+		GroupRoleResolver: h.groupRoleResolver,
+		UserProvisioner:   h.userProvisioner,
 	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1809,6 +1879,3 @@ func persistCoreFieldsToBOF(ctx context.Context, db *sqlx.DB, boID, tenantID str
 		}
 	}
 }
-
-
-

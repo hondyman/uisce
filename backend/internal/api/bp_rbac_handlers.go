@@ -21,10 +21,10 @@ import (
 // ============================================================================
 
 type RBACHandlers struct {
-	db             *sqlx.DB
-	securityDeps   handlers.SecurityContextDeps
-	fieldPermRepo  *security.FieldPermissionRepository
-	entitlements   *security.EntitlementsService
+	db            *sqlx.DB
+	securityDeps  handlers.SecurityContextDeps
+	fieldPermRepo *security.FieldPermissionRepository
+	entitlements  *security.EntitlementsService
 }
 
 func NewRBACHandlers(db *sqlx.DB, securityDeps handlers.SecurityContextDeps, entitlements *security.EntitlementsService) *RBACHandlers {
@@ -58,9 +58,10 @@ func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
 		r.Get("/roles/{roleId}/users", h.getRoleUsers)
 		r.Get("/users/{userId}/roles", h.getUserRoles)
 
-		// Users (for role assignment UI)
+		// Users (for role assignment UI). Creation is JIT on first authentication
+		// (security.UserProvisioner) — there is no password-based user creation.
 		r.Get("/users", h.listUsers)
-		r.Post("/users", h.createUser)
+		r.Get("/users/search", h.searchUsers)
 		r.Put("/users/{userId}/tenant", h.updateUserTenant)
 
 		// Field-Level Permissions
@@ -93,21 +94,21 @@ func (h *RBACHandlers) RegisterRoutes(r chi.Router) {
 // ============================================================================
 
 type Role struct {
-	ID                 string    `json:"id" db:"id"`
-	TenantID           string    `json:"tenant_id" db:"tenant_id"`
-	RoleKey            string    `json:"role_key" db:"role_key"`
-	RoleName           string    `json:"role_name" db:"role_name"`
-	Description        string    `json:"description" db:"description"`
-	RoleType           string    `json:"role_type" db:"role_type"`
-	RoleLevel          string    `json:"role_level" db:"role_level"`
-	IsActive           bool      `json:"is_active" db:"is_active"`
-	IsTemplate         bool      `json:"is_template" db:"is_template"`
-	ParentRoleID       *string   `json:"parent_role_id" db:"parent_role_id"`
-	SecurityProfileID  *string   `json:"security_profile_id" db:"security_profile_id"`
-	TenantInstanceID   *string   `json:"tenant_instance_id,omitempty" db:"tenant_instance_id"`
-	CreatedBy          *string   `json:"created_by" db:"created_by"`
-	CreatedAt          time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at" db:"updated_at"`
+	ID                string    `json:"id" db:"id"`
+	TenantID          string    `json:"tenant_id" db:"tenant_id"`
+	RoleKey           string    `json:"role_key" db:"role_key"`
+	RoleName          string    `json:"role_name" db:"role_name"`
+	Description       string    `json:"description" db:"description"`
+	RoleType          string    `json:"role_type" db:"role_type"`
+	RoleLevel         string    `json:"role_level" db:"role_level"`
+	IsActive          bool      `json:"is_active" db:"is_active"`
+	IsTemplate        bool      `json:"is_template" db:"is_template"`
+	ParentRoleID      *string   `json:"parent_role_id" db:"parent_role_id"`
+	SecurityProfileID *string   `json:"security_profile_id" db:"security_profile_id"`
+	TenantInstanceID  *string   `json:"tenant_instance_id,omitempty" db:"tenant_instance_id"`
+	CreatedBy         *string   `json:"created_by" db:"created_by"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
 	// Origin is derived, not stored: "gold_copy" for template roles living
 	// under the gold-copy tenant, "tenant" for everything else.
 	Origin string `json:"origin" db:"-"`
@@ -496,10 +497,10 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 	roleID := chi.URLParam(r, "roleId")
 
 	var req struct {
-		UserID       string  `json:"user_id"`
-		ScopeType    *string `json:"scope_type"`
-		ScopeID      *string `json:"scope_id"`
-		ExpiresAt    *string `json:"expires_at"`
+		UserID    string  `json:"user_id"`
+		ScopeType *string `json:"scope_type"`
+		ScopeID   *string `json:"scope_id"`
+		ExpiresAt *string `json:"expires_at"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -513,13 +514,35 @@ func (h *RBACHandlers) assignRoleToUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
-	_, err = h.db.Exec(`
-		INSERT INTO bp_user_roles (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (user_id, role_id, tenant_id, datasource_id, scope_type, scope_id) DO NOTHING
-	`, req.UserID, roleID, tenantID, datasourceID, req.ScopeType, req.ScopeID, req.ExpiresAt)
+	// role_key is looked up rather than trusted from the client: bp_user_roles.role_key
+	// is what EntitlementsService actually joins against, and it must exactly match
+	// the role's own role_key or the assignment silently grants nothing.
+	var roleKey string
+	if err := h.db.Get(&roleKey, `SELECT role_key FROM bp_roles WHERE id = $1`, roleID); err != nil {
+		http.Error(w, fmt.Sprintf("Role not found: %v", err), http.StatusNotFound)
+		return
+	}
+
+	// NOTE: bp_user_roles' unique constraint includes the nullable
+	// tenant_instance_id column, and Postgres never treats NULL as equal to
+	// NULL for uniqueness purposes, so ON CONFLICT on that composite key
+	// silently never fires for tenant-wide (non-instance-scoped) assignments
+	// like this one — it would just insert duplicate rows on repeat calls.
+	// Update-if-exists, insert-if-not instead.
+	res, err := h.db.Exec(`
+		UPDATE bp_user_roles
+		SET scope_type = $5, scope_id = $6, expires_at = $7, is_active = true, role_id = $2
+		WHERE user_id = $1 AND tenant_id = $3 AND role_key = $4 AND tenant_instance_id IS NULL
+	`, req.UserID, roleID, tenantID, roleKey, req.ScopeType, req.ScopeID, req.ExpiresAt)
+	if err == nil {
+		if n, _ := res.RowsAffected(); n == 0 {
+			_, err = h.db.Exec(`
+				INSERT INTO bp_user_roles (user_id, role_id, tenant_id, role_key, scope_type, scope_id, expires_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			`, req.UserID, roleID, tenantID, roleKey, req.ScopeType, req.ScopeID, req.ExpiresAt)
+		}
+	}
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to assign role: %v", err), http.StatusInternalServerError)
@@ -667,6 +690,15 @@ func (h *RBACHandlers) getRoleUsers(w http.ResponseWriter, r *http.Request) {
 // FIELD-LEVEL PERMISSIONS
 // ============================================================================
 
+// listFieldPermissions and createFieldPermission operate on field_name, the
+// column security.EntitlementsService.fetchEntitlementsForUser actually
+// reads to enforce access. They previously used term_node_id/datasource_id,
+// columns that don't exist on the live bp_field_permissions table (removed
+// by a migration these handlers were never updated for) — every call
+// errored. resource_type/resource_id here scope a grant to one specific
+// business object (e.g. "business_object" + a BO's id); leaving resource_id
+// unset makes the grant apply wherever no more specific row exists for that
+// role+field, per fetchEntitlementsForUser's per-resource lookup.
 func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -674,66 +706,62 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
-
-	var fieldPerms []map[string]interface{}
 
 	query := `
-		SELECT DISTINCT ON (fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id)
-			fp.id, r.role_key, r.role_name, fp.term_node_id, fp.resource_type, fp.resource_id, fp.permission_level, fp.masking_pattern,
-			cn.node_name as term_name, cn.display_name as term_display_name
+		SELECT fp.id, fp.role_id, r.role_key, r.role_name, fp.field_name, fp.resource_type, fp.resource_id, fp.permission_level, fp.masking_pattern
 		FROM bp_field_permissions fp
 		JOIN bp_roles r ON fp.role_id = r.id
-		LEFT JOIN catalog_node cn ON fp.term_node_id = cn.id
-		WHERE fp.tenant_id = $1 AND fp.datasource_id = $2
+		WHERE fp.tenant_id = $1
 	`
-	args := []interface{}{tenantID, datasourceID}
+	args := []interface{}{tenantID}
 
 	// Optional role_id filter (not a security boundary)
 	roleID := r.URL.Query().Get("role_id")
 	if roleID != "" {
-		query += " AND fp.role_id = $3"
+		query += " AND fp.role_id = $2"
 		args = append(args, roleID)
 	}
 
-	// Optional term_node_id filter
-	termNodeIDParam := r.URL.Query().Get("term_node_id")
-	if termNodeIDParam != "" {
-		query += " AND fp.term_node_id = $4"
-		args = append(args, termNodeIDParam)
-	}
-
-	query += " ORDER BY fp.role_id, fp.term_node_id, fp.resource_type, fp.resource_id, r.role_name"
+	query += " ORDER BY fp.role_id, fp.field_name, fp.resource_type, fp.resource_id"
 
 	rows, err := h.db.Query(query, args...)
-
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch field permissions: %v", err), http.StatusInternalServerError)
 		return
 	}
 	defer rows.Close()
 
+	var fieldPerms []map[string]interface{}
 	for rows.Next() {
-		var fp map[string]interface{} = make(map[string]interface{})
-		var id, roleKey, roleName, permLevel string
-		var termNodeID, resType, resourceID, termName, termDisplayName, maskingPattern *string
+		var id, rowRoleID, roleKey, roleName, fieldName, permLevel string
+		var resType, resourceID, maskingPattern sql.NullString
 
-		if err := rows.Scan(&id, &roleKey, &roleName, &termNodeID, &resType, &resourceID, &permLevel, &maskingPattern, &termName, &termDisplayName); err != nil {
+		if err := rows.Scan(&id, &rowRoleID, &roleKey, &roleName, &fieldName, &resType, &resourceID, &permLevel, &maskingPattern); err != nil {
 			continue
 		}
 
-		fp["id"] = id
-		fp["role_key"] = roleKey
-		fp["role_name"] = roleName
-		fp["term_node_id"] = termNodeID
-		fp["resource_type"] = resType
-		fp["resource_id"] = resourceID
-		fp["permission_level"] = permLevel
-		fp["masking_pattern"] = maskingPattern
-		fp["term_name"] = termName
-		fp["term_display_name"] = termDisplayName
+		fp := map[string]interface{}{
+			"id":               id,
+			"role_id":          rowRoleID,
+			"role_key":         roleKey,
+			"role_name":        roleName,
+			"field_name":       fieldName,
+			"permission_level": permLevel,
+		}
+		if resType.Valid {
+			fp["resource_type"] = resType.String
+		}
+		if resourceID.Valid {
+			fp["resource_id"] = resourceID.String
+		}
+		if maskingPattern.Valid {
+			fp["masking_pattern"] = maskingPattern.String
+		}
 
 		fieldPerms = append(fieldPerms, fp)
+	}
+	if fieldPerms == nil {
+		fieldPerms = []map[string]interface{}{}
 	}
 
 	respondJSONRBAC(w, r, fieldPerms, http.StatusOK)
@@ -742,21 +770,19 @@ func (h *RBACHandlers) listFieldPermissions(w http.ResponseWriter, r *http.Reque
 func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RoleID          string  `json:"role_id"`
-		TermNodeID      string  `json:"term_node_id"`      // Semantic term ID - required
-		ResourceType    *string `json:"resource_type"`    // Optional: for resource-specific overrides
-		ResourceID      *string `json:"resource_id"`      // Optional: for instance-specific overrides
+		FieldName       string  `json:"field_name"`
+		ResourceType    *string `json:"resource_type"` // e.g. "business_object"
+		ResourceID      *string `json:"resource_id"`   // a specific BO's id; unset = applies wherever no more specific row exists
 		PermissionLevel string  `json:"permission_level"`
-		MaskingPattern *string `json:"masking_pattern"`   // For 'mask' permission level
+		MaskingPattern  *string `json:"masking_pattern"` // For 'mask' permission level
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
-	// Validation: term_node_id is required (field_name path is deprecated)
-	if req.TermNodeID == "" {
-		http.Error(w, "term_node_id is required", http.StatusBadRequest)
+	if req.RoleID == "" || req.FieldName == "" || req.PermissionLevel == "" {
+		http.Error(w, "role_id, field_name, and permission_level are required", http.StatusBadRequest)
 		return
 	}
 
@@ -766,16 +792,27 @@ func (h *RBACHandlers) createFieldPermission(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
 
+	// No unique constraint on (role_id, field_name, resource_type, resource_id)
+	// exists on the live table to ON CONFLICT against (and resource_type/
+	// resource_id are nullable, which would defeat one anyway — see the
+	// GroupRoleResolver comment on NULL-vs-uniqueness). Update-if-exists,
+	// insert-if-not, matching the pattern already used for role assignment.
 	var id string
 	err = h.db.QueryRow(`
-		INSERT INTO bp_field_permissions (tenant_id, datasource_id, role_id, term_node_id, resource_type, resource_id, permission_level, masking_pattern)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (role_id, term_node_id, resource_type, resource_id)
-		DO UPDATE SET permission_level = EXCLUDED.permission_level, masking_pattern = EXCLUDED.masking_pattern, updated_at = CURRENT_TIMESTAMP
+		UPDATE bp_field_permissions
+		SET permission_level = $5, masking_pattern = $6, updated_at = CURRENT_TIMESTAMP
+		WHERE tenant_id = $1 AND role_id = $2 AND field_name = $3
+		  AND resource_type IS NOT DISTINCT FROM $4 AND resource_id IS NOT DISTINCT FROM $7
 		RETURNING id
-	`, tenantID, datasourceID, req.RoleID, req.TermNodeID, req.ResourceType, req.ResourceID, req.PermissionLevel, req.MaskingPattern).Scan(&id)
+	`, tenantID, req.RoleID, req.FieldName, req.ResourceType, req.PermissionLevel, req.MaskingPattern, req.ResourceID).Scan(&id)
+	if err == sql.ErrNoRows {
+		err = h.db.QueryRow(`
+			INSERT INTO bp_field_permissions (tenant_id, role_id, field_name, resource_type, resource_id, permission_level, masking_pattern)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			RETURNING id
+		`, tenantID, req.RoleID, req.FieldName, req.ResourceType, req.ResourceID, req.PermissionLevel, req.MaskingPattern).Scan(&id)
+	}
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to create field permission: %v", err), http.StatusInternalServerError)

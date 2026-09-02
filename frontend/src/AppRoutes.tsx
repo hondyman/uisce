@@ -137,6 +137,8 @@ import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
 import WorkflowStudioPage from "./pages/WorkflowStudioPage";
 import BusinessRuleEditorPage from "./pages/BusinessRuleEditorPage";
 import { SecurityRoutes } from "./features/security/routes";
+import { AISemanticBridgeDashboard } from "./features/ai-bridge/AISemanticBridgeDashboard";
+import { UserAICatalogAssistant } from "./features/ai-bridge/UserAICatalogAssistant";
 
 
 // RBAC Management Pages
@@ -144,6 +146,8 @@ import RoleManagerPage from "./features/admin/pages/RoleManagerPage";
 import { UserManagementPage } from "./features/admin/pages/UserManagementPage";
 import UserRoleAssignmentPage from "./features/admin/pages/UserRoleAssignmentPage";
 import TenantUserAssignmentPage from "./features/admin/pages/TenantUserAssignmentPage";
+import GroupRoleMappingPage from "./features/admin/pages/GroupRoleMappingPage";
+import IdentityProvidersPage from "./features/admin/pages/IdentityProvidersPage";
 import DelegationManagerPage from "./features/admin/pages/DelegationManagerPage";
 import FieldPermissionEditorPage from "./features/admin/pages/FieldPermissionEditorPage";
 
@@ -245,6 +249,8 @@ function ProtectedApp() {
         <Route path="/admin/rbac/field-permissions" element={<ProtectedRoute><FieldPermissionEditorPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/user-roles" element={<ProtectedRoute><UserRoleAssignmentPage /></ProtectedRoute>} />
         <Route path="/admin/rbac/user-tenants" element={<ProtectedRoute><TenantUserAssignmentPage /></ProtectedRoute>} />
+        <Route path="/admin/rbac/group-role-mappings" element={<ProtectedRoute><GroupRoleMappingPage /></ProtectedRoute>} />
+        <Route path="/admin/rbac/identity-providers" element={<ProtectedRoute><IdentityProvidersPage /></ProtectedRoute>} />
         <Route path="/fabric/ip-whitelist" element={<ProtectedRoute><IPWhitelistManagementPage /></ProtectedRoute>} />
         <Route path="/secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />
         <Route path="/secrets/audit" element={<ProtectedRoute><SecretsAuditPage tenantId="default" /></ProtectedRoute>} />
@@ -252,6 +258,8 @@ function ProtectedApp() {
 
         <Route path="/audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
         <Route path="/admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
+        <Route path="/admin/ai-semantic-bridge" element={<ProtectedRoute><AISemanticBridgeDashboard /></ProtectedRoute>} />
+        <Route path="/ai-assistant" element={<ProtectedRoute><UserAICatalogAssistant /></ProtectedRoute>} />
         <Route path="/admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
         <Route path="/admin/temporal-ops" element={<ProtectedRoute><TemporalOpsPage /></ProtectedRoute>} />
         <Route path="/fabric/tenants" element={<ProtectedRoute><TenantsManagementPage /></ProtectedRoute>} />

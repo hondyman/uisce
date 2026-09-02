@@ -120,9 +120,11 @@ func (tve *TriggerValidationEngine) TriggerValidate(ctx context.Context, tenantI
 				continue
 			}
 
-			// Convert condition JSON to map
-			var condition map[string]interface{}
-			if err := json.Unmarshal(rule.ConditionJSON, &condition); err != nil {
+			// Convert condition JSON to map (unwrapping the required
+			// schema_version/authored_mode/payload envelope — see
+			// UnwrapConditionPayload)
+			condition, err := UnwrapConditionPayload(rule.ConditionJSON)
+			if err != nil {
 				tve.logger.Error("TriggerValidate: unmarshal condition failed", "rule_id", rid, "err", err.Error())
 				continue
 			}
@@ -234,8 +236,10 @@ func (tve *TriggerValidationEngine) fetchRuleByID(ctx context.Context, ruleID st
 		return nil, fmt.Errorf("rule not found: %s", ruleID)
 	}
 
+	// catalog_validation_rules has no error_message column — description
+	// serves the same "human-readable explanation" purpose.
 	q := `
-	SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message,
+	SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE(description, ''),
 	       core_rule_id, inherit_mode, core_version_pin
 	FROM catalog_validation_rules
 	WHERE id = $1
@@ -349,9 +353,10 @@ func (tve *TriggerValidationEngine) ValidateField(ctx context.Context, tenantID 
 				continue
 			}
 
-			// unmarshal condition and check the 'field' matches
-			var condition map[string]interface{}
-			if err := json.Unmarshal(rule.ConditionJSON, &condition); err != nil {
+			// unmarshal condition (unwrapping the payload envelope) and
+			// check the 'field' matches
+			condition, err := UnwrapConditionPayload(rule.ConditionJSON)
+			if err != nil {
 				continue
 			}
 			if f, ok := condition["field"].(string); !ok || f != fieldName {
@@ -378,11 +383,13 @@ func (tve *TriggerValidationEngine) ValidateField(ctx context.Context, tenantID 
 		return nil
 	}
 
-	// Fetch rules that target this entity and field, type field_format
+	// Fetch rules that target this entity and field, type field_format.
+	// catalog_validation_rules has no error_message column — description
+	// serves the same purpose (see fetchRuleByID above).
 	q := `
-	SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message
+	SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE(description, '')
 	FROM catalog_validation_rules
-	WHERE tenant_id = $1 
+	WHERE tenant_id = $1
 	  AND rule_type = 'field_format'
 	  AND target_entities @> ARRAY[$2]::text[]
 	  AND condition_json @> jsonb_build_object('field', $3)
@@ -411,8 +418,8 @@ func (tve *TriggerValidationEngine) ValidateField(ctx context.Context, tenantID 
 			continue
 		}
 
-		var condition map[string]interface{}
-		if err := json.Unmarshal(rule.ConditionJSON, &condition); err != nil {
+		condition, err := UnwrapConditionPayload(rule.ConditionJSON)
+		if err != nil {
 			continue
 		}
 

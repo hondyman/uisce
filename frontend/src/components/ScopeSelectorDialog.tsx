@@ -1,5 +1,5 @@
 // frontend/src/components/ScopeSelectorDialog.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -67,10 +67,78 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
   const filteredTenants = useMemo(() => {
     if (!searchQuery.trim()) return accessibleTenants;
     const query = searchQuery.toLowerCase();
-    return accessibleTenants.filter(t => 
+    return accessibleTenants.filter(t =>
       (t.display_name || t.name || '').toLowerCase().includes(query)
     );
   }, [accessibleTenants, searchQuery]);
+
+  // A non-platform-operator with exactly one accessible tenant has nothing to
+  // choose at the tenant level, so it's skipped as a step entirely rather
+  // than shown as a picker with one row. Platform operators always keep the
+  // picker (plus the Global option), since "one tenant today" doesn't mean
+  // "no other tenants exist to switch into."
+  const onlyTenant = !isPlatformOperator && accessibleTenants.length === 1 ? accessibleTenants[0] : null;
+
+  const instanceOptions = selectedTenant?.tenant_instances || [];
+  // Locked (not skipped) when there's exactly one: the user should still see
+  // which instance/product they're scoped to, just can't change it.
+  const instanceLocked = instanceOptions.length === 1 ? instanceOptions[0] : null;
+
+  const productOptions = useMemo(() => {
+    if (!selectedInstance) return [];
+    const list = selectedInstance.tenant_products || selectedInstance.products || [];
+    return Array.from(
+      new Map(
+        list.reduce((acc: Map<string, any>, p: any) => {
+          const existing = acc.get(p.alpha_product_id);
+          const currentDSCount = p.tenant_product_datasources?.length || p.datasources?.length || 0;
+          const existingDSCount = existing ? (existing.tenant_product_datasources?.length || existing.datasources?.length || 0) : 0;
+          if (!existing || currentDSCount > existingDSCount) {
+            acc.set(p.alpha_product_id, p);
+          }
+          return acc;
+        }, new Map())
+      ).values()
+    );
+  }, [selectedInstance]);
+  const productLocked = productOptions.length === 1 ? (productOptions[0] as Product) : null;
+
+  // Auto-advance through every step that has only one possible value —
+  // tenant is skipped outright (see onlyTenant), instance/product are
+  // auto-selected but still rendered (see instanceLocked/productLocked
+  // below) so the user can see what they're scoped to.
+  useEffect(() => {
+    if (!open) return;
+    if (!selectedTenant && onlyTenant) {
+      setSelectedTenant(onlyTenant);
+    }
+  }, [open, onlyTenant, selectedTenant]);
+
+  useEffect(() => {
+    if (!open || !selectedTenant) return;
+    if (!selectedInstance && instanceLocked) {
+      setSelectedInstance(instanceLocked);
+    }
+  }, [open, selectedTenant, selectedInstance, instanceLocked]);
+
+  useEffect(() => {
+    if (!open || !selectedInstance) return;
+    if (!selectedProduct && productLocked) {
+      setSelectedProduct(productLocked);
+    }
+  }, [open, selectedInstance, selectedProduct, productLocked]);
+
+  // Seamless product -> datasource: when a product has exactly one
+  // datasource, there is nothing to pick — apply that datasource as soon as
+  // the product is selected/auto-selected instead of showing a one-row list.
+  useEffect(() => {
+    if (!open || !selectedTenant || !selectedInstance || !selectedProduct) return;
+    const datasources = (selectedProduct as any).tenant_product_datasources || [];
+    if (datasources.length === 1) {
+      setDatasourceScope(selectedTenant, selectedInstance, selectedProduct, datasources[0]);
+      onClose();
+    }
+  }, [open, selectedTenant, selectedInstance, selectedProduct, setDatasourceScope, onClose]);
 
   const handleSelectTenant = (tenant: Tenant) => {
     setSelectedTenant(tenant);
@@ -102,26 +170,33 @@ export const ScopeSelectorDialog: React.FC<ScopeSelectorDialogProps> = ({ open, 
   };
 
   const handleClearSelection = () => {
-    setSelectedTenant(null);
+    // Nothing to clear back to when the tenant step was skipped — re-lock it
+    // immediately rather than leaving the dialog on a tenant list of one.
+    setSelectedTenant(onlyTenant);
     setSelectedInstance(null);
     setSelectedProduct(null);
   };
 
   const handleBack = () => {
-    if (selectedProduct) {
+    if (selectedProduct && !productLocked) {
       setSelectedProduct(null);
-    } else if (selectedInstance) {
+    } else if (selectedInstance && !instanceLocked) {
       setSelectedInstance(null);
-    } else if (selectedTenant) {
+    } else if (selectedTenant && !onlyTenant) {
       setSelectedTenant(null);
     }
   };
+
+  const canGoBack =
+    (!!selectedProduct && !productLocked) ||
+    (!!selectedInstance && !instanceLocked) ||
+    (!!selectedTenant && !onlyTenant);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth PaperProps={{ sx: { height: '80vh' } }}>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {(selectedTenant || selectedInstance || selectedProduct) && (
+          {canGoBack && (
             <IconButton size="small" onClick={handleBack} sx={{ mr: 1 }}>
               <ArrowBackIcon />
             </IconButton>

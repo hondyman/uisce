@@ -15,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/cbo"
+	"github.com/hondyman/uisce/backend/internal/security"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -23,10 +24,27 @@ type BOCRUDHandler struct {
 	db              *sqlx.DB
 	trigger         *TriggerEngine
 	entitlementRepo *cbo.DBEntitlementRepository
+	// entitlements is the fallback authorization check for writes when no
+	// semantic.bo_entitlement_policies row exists for a BO (the common
+	// case — that table is empty platform-wide as of this writing). Without
+	// it, evaluateBOEntitlements silently allows every write once no cbo
+	// policy is configured, which is a real, live bypass around whatever a
+	// role's bp_field_permissions actually grant — this direct CRUD path
+	// doesn't go through metadata.BusinessObjectService.requireAccess at
+	// all. See SetEntitlementsService.
+	entitlements      *security.EntitlementsService
+	groupRoleResolver *security.GroupRoleResolver
 }
 
 func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
 	return &BOCRUDHandler{db: db, trigger: trigger, entitlementRepo: cbo.NewDBEntitlementRepository(db)}
+}
+
+// SetEntitlementsService wires the bp_field_permissions-backed write gate
+// used when no cbo entitlement policy is configured for a BO.
+func (h *BOCRUDHandler) SetEntitlementsService(ent *security.EntitlementsService, groupRoles *security.GroupRoleResolver) {
+	h.entitlements = ent
+	h.groupRoleResolver = groupRoles
 }
 
 // boCRUDIdentifierPattern restricts entitlement-policy-supplied column names
@@ -46,19 +64,35 @@ type boEntitlementContext struct {
 	rowFilterColumn string
 	rowFilterValue  string
 	maskedFields    map[string][]string
+	// directMasks is populated by the bp_field_permissions fallback (see
+	// fallbackEntitlementsGate) when no cbo policy exists for this BO: field
+	// name -> "HIDE" (delete the field) or "MASK" (replace its value).
+	// Unlike maskedFields (a role allowlist checked later against the
+	// caller's roles), this is already resolved for the specific caller, so
+	// applyDirectFieldMasks applies it unconditionally.
+	directMasks map[string]string
 }
 
-// evaluateBOEntitlements fetches policies for boKey and enforces the role
-// gate, returning cbo.ErrEntitlementDenied if the caller doesn't satisfy it.
-func (h *BOCRUDHandler) evaluateBOEntitlements(ctx context.Context, r *http.Request, tenantID uuid.UUID, boKey string) (*boEntitlementContext, error) {
+// evaluateBOEntitlements fetches cbo policies for boKey and enforces the
+// role gate, returning cbo.ErrEntitlementDenied if the caller doesn't
+// satisfy it. requireWrite distinguishes a mutation (create/update/delete)
+// from a read (get/list). When no cbo policy exists for the BO — the
+// common case, see the entitlements field's comment — both reads and
+// writes fall back to bp_field_permissions via security.EntitlementsService
+// (fallbackEntitlementsGate): a role explicitly denied or scoped to
+// read-only can't write through this path just because nobody configured a
+// cbo policy, and masked/hidden fields are stripped from what's returned
+// even though this handler is a separate code path from
+// metadata.BusinessObjectService.QueryBORecords.
+func (h *BOCRUDHandler) evaluateBOEntitlements(ctx context.Context, r *http.Request, tenantID uuid.UUID, boKey string, requireWrite bool) (*boEntitlementContext, error) {
 	ec := &boEntitlementContext{}
 	if h.entitlementRepo == nil {
-		return ec, nil
+		return h.fallbackEntitlementsGate(ctx, r, tenantID, boKey, requireWrite, ec)
 	}
 
 	policies, err := h.entitlementRepo.GetPoliciesForBO(ctx, &tenantID, boKey)
 	if err != nil || len(policies) == 0 {
-		return ec, nil
+		return h.fallbackEntitlementsGate(ctx, r, tenantID, boKey, requireWrite, ec)
 	}
 
 	claims := jwtmiddleware.GetClaimsFromContext(r)
@@ -112,6 +146,111 @@ func (h *BOCRUDHandler) evaluateBOEntitlements(ctx context.Context, r *http.Requ
 	}
 
 	return ec, nil
+}
+
+// fallbackEntitlementsGate is the bp_field_permissions-backed check used
+// whenever no cbo entitlement policy governs a BO (the common case — see
+// the entitlements field's comment). It denies the whole request if the BO
+// is explicitly hidden, denies a write if the caller's role is scoped to
+// read-only (or explicitly none), and always populates ec.directMasks so
+// callers strip/mask fields the caller isn't entitled to see — this is
+// what keeps a read through this direct CRUD path consistent with what
+// metadata.BusinessObjectService.QueryBORecords already enforces.
+//
+// Any resolution failure (no entitlements service wired, BO not found in
+// business_objects, no JWT claims) allows the request through unchanged —
+// this is a targeted patch for the concrete case of an explicit grant
+// existing, not a new fail-closed default for the platform; failing open
+// here matches this path's pre-existing behavior for every other case.
+func (h *BOCRUDHandler) fallbackEntitlementsGate(ctx context.Context, r *http.Request, tenantID uuid.UUID, boKey string, requireWrite bool, ec *boEntitlementContext) (*boEntitlementContext, error) {
+	if h.entitlements == nil {
+		return ec, nil
+	}
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil || claims.UserID == "" {
+		return ec, nil
+	}
+
+	var boID string
+	err := h.db.GetContext(ctx, &boID, `
+		SELECT id FROM business_objects
+		WHERE (bo_key = $1 OR id::text = $1) AND tenant_id = $2
+		LIMIT 1
+	`, boKey, tenantID)
+	if err != nil {
+		return ec, nil
+	}
+
+	secCtx := &security.Context{
+		UserID:   claims.UserID,
+		TenantID: tenantID.String(),
+		Roles:    claims.Roles,
+	}
+	for _, role := range claims.Roles {
+		if role == "global_admin" || role == "global_ops" {
+			secCtx.IsGlobalAdmin = true
+			break
+		}
+	}
+	if h.groupRoleResolver != nil && len(claims.IdpGroups) > 0 {
+		if groupRoles, gerr := h.groupRoleResolver.ResolveRoles(ctx, claims.UserID, secCtx.TenantID, claims.IdpGroups); gerr == nil {
+			secCtx.Roles = append(secCtx.Roles, groupRoles...)
+		}
+	}
+
+	entitlements, err := h.entitlements.ForUser(ctx, secCtx)
+	if err != nil || entitlements == nil {
+		return ec, nil
+	}
+
+	if _, hidden := entitlements.HiddenBOs[boID]; hidden {
+		return nil, cbo.ErrEntitlementDenied
+	}
+
+	if requireWrite {
+		key := security.EntitlementKey{ResourceID: boID, FieldName: "*"}
+		switch entitlements.Entitlements[key] {
+		case security.PermissionRead, security.PermissionNone:
+			return nil, cbo.ErrEntitlementDenied
+		}
+	}
+
+	ec.directMasks = make(map[string]string)
+	for key, perm := range entitlements.Entitlements {
+		if key.ResourceID != boID || key.FieldName == "*" {
+			continue
+		}
+		switch perm {
+		case security.PermissionNone:
+			ec.directMasks[key.FieldName] = "HIDE"
+		case security.PermissionMask:
+			ec.directMasks[key.FieldName] = "MASK"
+		}
+	}
+
+	return ec, nil
+}
+
+// applyDirectFieldMasks applies ec.directMasks — already resolved for the
+// specific caller by fallbackEntitlementsGate — deleting HIDE fields and
+// replacing MASK fields with a placeholder.
+func applyDirectFieldMasks(records []map[string]interface{}, directMasks map[string]string) {
+	if len(directMasks) == 0 {
+		return
+	}
+	for _, record := range records {
+		for field, mode := range directMasks {
+			if _, ok := record[field]; !ok {
+				continue
+			}
+			switch mode {
+			case "HIDE":
+				delete(record, field)
+			case "MASK":
+				record[field] = "[MASKED]"
+			}
+		}
+	}
 }
 
 // maskBORecordFields strips fields from each record when the caller holds
@@ -342,7 +481,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey, true)
 	if err != nil {
 		if errors.Is(err, cbo.ErrEntitlementDenied) {
 			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
@@ -425,6 +564,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	// Clean byte arrays or UUIDs for JSON serialization
 	cleanScanResult(result)
 	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
+	applyDirectFieldMasks([]map[string]interface{}{result}, ec.directMasks)
 
 	h.emitBORowEvent("row_update", tenantID, actorFromRequest(r), boKey, recordID, result)
 
@@ -449,7 +589,7 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey, true)
 	if err != nil {
 		if errors.Is(err, cbo.ErrEntitlementDenied) {
 			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
@@ -521,6 +661,7 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 
 	cleanScanResult(result)
 	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
+	applyDirectFieldMasks([]map[string]interface{}{result}, ec.directMasks)
 
 	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
 	h.emitBORowEvent("row_insert", tenantID, actorFromRequest(r), boKey, newRecordID, result)
@@ -542,7 +683,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey, false)
 	if err != nil {
 		if errors.Is(err, cbo.ErrEntitlementDenied) {
 			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
@@ -594,6 +735,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 
 	cleanScanResult(result)
 	maskBORecordFields([]map[string]interface{}{result}, ec.maskedFields, r)
+	applyDirectFieldMasks([]map[string]interface{}{result}, ec.directMasks)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
@@ -610,7 +752,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey, false)
 	if err != nil {
 		if errors.Is(err, cbo.ErrEntitlementDenied) {
 			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)
@@ -682,6 +824,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	maskBORecordFields(records, ec.maskedFields, r)
+	applyDirectFieldMasks(records, ec.directMasks)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
@@ -704,7 +847,7 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey)
+	ec, err := h.evaluateBOEntitlements(r.Context(), r, tenantID, boKey, true)
 	if err != nil {
 		if errors.Is(err, cbo.ErrEntitlementDenied) {
 			http.Error(w, "Forbidden: caller does not satisfy entitlement policy", http.StatusForbidden)

@@ -1,27 +1,27 @@
 import React from 'react';
-import { useTheme } from '@mui/material/styles';
+import { Box, Typography } from '@mui/material';
 import { useTenant } from '../../../contexts/TenantContext';
+import { FieldPermissionEditor } from '../../../components/RBAC/FieldPermissionEditor';
 
 const FieldPermissionEditorPage: React.FC = () => {
   const { tenant, datasource } = useTenant();
-  const { mode } = useTheme();
 
   if (!tenant || !datasource) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: mode === 'dark' ? '#111827' : '#f9fafb', color: mode === 'dark' ? '#f9fafb' : '#111827' }}>
-        <div sx={{ textAlign: 'center' }}>
-          <h2 sx={{ fontSize: '2xl', fontWeight: 700, mb: 4, color: mode === 'dark' ? '#f9fafb' : '#111827' }}>
+      <Box sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <Typography variant="h5" fontWeight={700} gutterBottom>
             No Tenant/Datasource Selected
-          </h2>
-          <p sx={{ color: mode === 'dark' ? '#d1d5db' : '#6b7280' }}>
+          </Typography>
+          <Typography color="text.secondary">
             Please select a tenant and datasource to configure field permissions.
-          </p>
-        </div>
+          </Typography>
+        </Box>
       </Box>
     );
   }
 
-  return <></>;
+  return <FieldPermissionEditor tenant={tenant} datasource={datasource} />;
 };
 
 export default FieldPermissionEditorPage;

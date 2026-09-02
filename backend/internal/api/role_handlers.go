@@ -9,7 +9,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/logging"
-	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 )
 
 // Role Management API Handlers
@@ -303,15 +302,11 @@ func (s *Server) getUserRoles(w http.ResponseWriter, r *http.Request) {
 // RegisterRoleRoutes registers role management routes
 func (s *Server) RegisterRoleRoutes(r chi.Router) {
 	r.Route("/roles", func(r chi.Router) {
-		r.Use(appmid.SessionAuthMiddleware(appmid.SessionAuthConfig{DB: s.DB, SessionCookie: "session_token", AllowBearerFallback: true})) // Require authentication
-
 		r.Post("/", s.createRole)
 		r.Get("/", s.listRoles)
 	})
 
 	r.Route("/users/{user_id}/roles", func(r chi.Router) {
-		r.Use(appmid.SessionAuthMiddleware(appmid.SessionAuthConfig{DB: s.DB, SessionCookie: "session_token", AllowBearerFallback: true}))
-
 		r.Get("/", s.getUserRoles)
 		r.Post("/", s.assignRole)
 		r.Delete("/{role_id}", s.revokeRole)

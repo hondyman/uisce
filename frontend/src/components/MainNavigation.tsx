@@ -61,7 +61,8 @@ import {
   Group as GroupIcon,
   PersonAdd as PersonAddIcon,
   LockOpen as LockOpenIcon,
-  Groups as GroupsIcon
+  Groups as GroupsIcon,
+  VpnKey as VpnKeyIcon
 } from '@mui/icons-material';
 import { useTenant } from '../contexts/TenantContext';
 import { useAccess } from '../contexts/AccessContext';
@@ -146,6 +147,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Teams', path: '/admin/rbac/teams', icon: <GroupsIcon />, description: 'Team structure' },
           { label: 'User Roles', path: '/admin/rbac/user-roles', icon: <AccountCircleIcon />, description: 'User role assignments' },
           { label: 'User Tenants', path: '/admin/rbac/user-tenants', icon: <SupervisorAccountIcon />, description: 'User tenant assignments' },
+          { label: 'Group Role Mappings', path: '/admin/rbac/group-role-mappings', icon: <GroupsIcon />, description: 'IdP group → role, per tenant' },
         ]
       },
       {
@@ -155,6 +157,7 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Access Rules', path: '/security/access-rules', icon: <LockIcon />, description: 'Row & column security' },
           { label: 'Roles & Permissions', path: '/admin/rbac/roles', icon: <ShieldIcon />, description: 'RBAC management' },
+          { label: 'Identity Providers', path: '/admin/rbac/identity-providers', icon: <VpnKeyIcon />, description: 'Trusted IdPs and tenant grants' },
           { label: 'Delegations', path: '/admin/rbac/delegations', icon: <SupervisorAccountIcon />, description: 'Approval delegations' },
           { label: 'Field Permissions', path: '/admin/rbac/field-permissions', icon: <LockOpenIcon />, description: 'Field-level security' },
           { label: 'IP Whitelist', path: '/fabric/ip-whitelist', icon: <SecurityIcon />, description: 'Network access rules' },

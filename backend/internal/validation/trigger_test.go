@@ -35,7 +35,7 @@ func TestTriggerValidate_Pass(t *testing.T) {
 	}
 	conditionJSON, _ := json.Marshal(ruleCondition)
 
-	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message,\\s*core_rule_id, inherit_mode, core_version_pin").
+	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE\\(description, ''\\),\\s*core_rule_id, inherit_mode, core_version_pin").
 		WithArgs("rule-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "rule_name", "rule_type", "target_entities", "condition_json", "error_message", "core_rule_id", "inherit_mode", "core_version_pin"}).
 			AddRow("rule-1", tenantID.String(), "OrderTotalPositive", "cardinality", pq.Array([]string{"orders"}), conditionJSON, "Total must be positive", nil, nil, nil))
@@ -81,7 +81,7 @@ func TestTriggerValidate_Fail(t *testing.T) {
 	}
 	conditionJSON, _ := json.Marshal(ruleCondition)
 
-	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message,\\s*core_rule_id, inherit_mode, core_version_pin").
+	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE\\(description, ''\\),\\s*core_rule_id, inherit_mode, core_version_pin").
 		WithArgs("rule-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "rule_name", "rule_type", "target_entities", "condition_json", "error_message", "core_rule_id", "inherit_mode", "core_version_pin"}).
 			AddRow("rule-1", tenantID.String(), "OrderTotalPositive", "cardinality", pq.Array([]string{"orders"}), conditionJSON, "Total must be positive", nil, nil, nil))
@@ -120,7 +120,7 @@ func TestValidateField_Pass(t *testing.T) {
 	}
 	conditionJSON, _ := json.Marshal(ruleCondition)
 
-	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message").
+	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE\\(description, ''\\)").
 		WithArgs(tenantID.String(), "customers", "phone").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "rule_name", "rule_type", "target_entities", "condition_json", "error_message"}).
 			AddRow("rule-1", tenantID.String(), "PhoneFormat", "field_format", pq.Array([]string{"customers"}), conditionJSON, "Phone must be valid E.164"))
@@ -153,7 +153,7 @@ func TestValidateField_Fail(t *testing.T) {
 	}
 	conditionJSON, _ := json.Marshal(ruleCondition)
 
-	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, error_message").
+	mock.ExpectQuery("SELECT id, tenant_id, rule_name, rule_type, target_entities, condition_json, COALESCE\\(description, ''\\)").
 		WithArgs(tenantID.String(), "customers", "phone").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "rule_name", "rule_type", "target_entities", "condition_json", "error_message"}).
 			AddRow("rule-1", tenantID.String(), "PhoneFormat", "field_format", pq.Array([]string{"customers"}), conditionJSON, "Phone must be valid E.164"))

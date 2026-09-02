@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/domain"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -76,11 +77,13 @@ type AuditLogEntry struct {
 	Timestamp    time.Time `json:"timestamp" db:"timestamp"`
 }
 
-// RegisterABACRoutes registers all ABAC endpoints
+// RegisterABACRoutes registers all ABAC endpoints. r is expected to already
+// be scoped under /api (see api.go's r.Route("/api", ...)), so this mounts
+// at /api/abac, not /api/api/abac.
 func RegisterABACRoutes(r chi.Router, db *sql.DB) {
 	abacAPI := &ABACAPI{db: db}
 
-	r.Route("/api/abac", func(r chi.Router) {
+	r.Route("/abac", func(r chi.Router) {
 		// Policy endpoints
 		r.Post("/policies", abacAPI.createPolicy)
 		r.Get("/policies", abacAPI.listPolicies)
@@ -426,14 +429,19 @@ func (a *ABACAPI) evaluatePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query policies ordered by priority
-	query := `
-		SELECT id, effect FROM abac_policies
-		WHERE tenant_id = $1 AND datasource_id = $2 AND enabled = true
-		ORDER BY priority DESC
-	`
+	evalCtx := map[string]interface{}{}
+	for k, v := range req.Context {
+		evalCtx[k] = v
+	}
+	evalCtx["roles"] = claims.Roles
 
-	rows, err := a.db.QueryContext(r.Context(), query, tenantID, datasourceID)
+	allowed, reason, _, err := domain.NewABACEvaluator(a.db).Evaluate(r.Context(), domain.EvaluationRequest{
+		UserID:   req.Subject,
+		TenantID: tenantID,
+		AssetID:  req.Resource,
+		Action:   domain.Permission(req.Action),
+		Context:  evalCtx,
+	})
 	if err != nil {
 		log.Printf("Error evaluating policy: %v", err)
 		w.Header().Set("Content-Type", "application/json")
@@ -441,26 +449,10 @@ func (a *ABACAPI) evaluatePolicy(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"error": "Evaluation failed"})
 		return
 	}
-	defer rows.Close()
 
-	// Default decision: deny
 	decision := "deny"
-	policyID := ""
-	reason := "No matching policy"
-
-	// Check policies in priority order
-	for rows.Next() {
-		var id, effect string
-		if err := rows.Scan(&id, &effect); err != nil {
-			continue
-		}
-
-		// Simple evaluation: if policy matches request, use the effect
-		// In production, implement full policy matching logic
-		decision = effect
-		policyID = id
-		reason = fmt.Sprintf("Matched policy %s", id)
-		break
+	if allowed {
+		decision = "allow"
 	}
 
 	// Log the evaluation decision
@@ -476,7 +468,6 @@ func (a *ABACAPI) evaluatePolicy(w http.ResponseWriter, r *http.Request) {
 		Decision:  decision,
 		Reason:    reason,
 		Timestamp: time.Now(),
-		PolicyID:  policyID,
 	})
 }
 

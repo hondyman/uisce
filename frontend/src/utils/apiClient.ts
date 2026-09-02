@@ -19,42 +19,36 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
 
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
 
-    // Inject Tenant Scope (but not for auth endpoints - they don't require tenant context)
-    const skipTenantHeaderPaths = ['/api/auth/login', '/api/auth/register', '/api/auth/refresh', '/api/auth/logout'];
-    const shouldSkipTenantHeaders = skipTenantHeaderPaths.some(p => path.includes(p));
+    // Always inject region
+    if (!headers.has('X-Tenant-Region')) {
+        const region = getSelectedRegion();
+        if (region) headers.set('X-Tenant-Region', region);
+    }
 
-    if (!shouldSkipTenantHeaders) {
-        // Always inject region
-        if (!headers.has('X-Tenant-Region')) {
-            const region = getSelectedRegion();
-            if (region) headers.set('X-Tenant-Region', region);
+    try {
+        const { tenant, datasource } = readCachedSelection();
+        if (tenant?.id && !headers.has('X-Tenant-ID')) {
+            headers.set('X-Tenant-ID', tenant.id);
         }
+        const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
+        if (datasourceId && !headers.has('X-Tenant-Datasource-ID')) {
+            headers.set('X-Tenant-Datasource-ID', datasourceId);
+        }
+    } catch (_) {}
 
+    // Inject chat metadata headers so the backend ChatEngine can persist
+    // every message with the correct view_type / embedded / surface flags.
+    if (path.includes('/chat') || path.includes('/genui') || path.includes('/ai/chat')) {
         try {
-            const { tenant, datasource } = readCachedSelection();
-            if (tenant?.id && !headers.has('X-Tenant-ID')) {
-                headers.set('X-Tenant-ID', tenant.id);
-            }
-            const datasourceId = datasource?.id || datasource?.alpha_tenant_instance_id;
-            if (datasourceId && !headers.has('X-Tenant-Datasource-ID')) {
-                headers.set('X-Tenant-Datasource-ID', datasourceId);
+            if (typeof localStorage !== 'undefined') {
+                const viewType = localStorage.getItem('chat_view_type') || 'admin';
+                if (!headers.has('X-Chat-View-Type')) headers.set('X-Chat-View-Type', viewType);
+                const embedded = localStorage.getItem('chat_embedded') || 'false';
+                if (!headers.has('X-Chat-Embedded')) headers.set('X-Chat-Embedded', embedded);
+                const surface = localStorage.getItem('chat_embed_surface') || 'studio';
+                if (!headers.has('X-Chat-Embed-Surface')) headers.set('X-Chat-Embed-Surface', surface);
             }
         } catch (_) {}
-
-        // Inject chat metadata headers so the backend ChatEngine can persist
-        // every message with the correct view_type / embedded / surface flags.
-        if (path.includes('/chat') || path.includes('/genui') || path.includes('/ai/chat')) {
-            try {
-                if (typeof localStorage !== 'undefined') {
-                    const viewType = localStorage.getItem('chat_view_type') || 'admin';
-                    if (!headers.has('X-Chat-View-Type')) headers.set('X-Chat-View-Type', viewType);
-                    const embedded = localStorage.getItem('chat_embedded') || 'false';
-                    if (!headers.has('X-Chat-Embedded')) headers.set('X-Chat-Embedded', embedded);
-                    const surface = localStorage.getItem('chat_embed_surface') || 'studio';
-                    if (!headers.has('X-Chat-Embed-Surface')) headers.set('X-Chat-Embed-Surface', surface);
-                }
-            } catch (_) {}
-        }
     }
 
     // Inject Authorization Token - check multiple storage locations for OIDC tokens

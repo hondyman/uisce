@@ -33,11 +33,11 @@ import (
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cache"
-	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
-	"github.com/hondyman/uisce/backend/internal/chat_history"
-	"github.com/hondyman/uisce/backend/internal/calculation"
-	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
+	"github.com/hondyman/uisce/backend/internal/calculation"
+	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
+	"github.com/hondyman/uisce/backend/internal/cbo"
+	"github.com/hondyman/uisce/backend/internal/chat_history"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
@@ -75,21 +75,21 @@ import (
 	"github.com/hondyman/uisce/backend/internal/platform_intelligence/optimization"
 	"github.com/hondyman/uisce/backend/internal/platform_intelligence/roadmap"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
-	"github.com/hondyman/uisce/backend/internal/query"
 	"github.com/hondyman/uisce/backend/internal/preference"
 	"github.com/hondyman/uisce/backend/internal/profiler"
+	"github.com/hondyman/uisce/backend/internal/query"
 	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
-	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/reporting"
-	"github.com/hondyman/uisce/backend/internal/simulation"
+	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/shadow"
+	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/streaming"
 	"github.com/hondyman/uisce/backend/internal/succession"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
@@ -212,34 +212,34 @@ type Server struct {
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
 
-	PageLayoutHandler       *handlers.PageLayoutHandler
-	PipelineHandler         *handlers.PipelineHandler
-	EventsHandler           *ingestion.EventsHandler
-	GenAICopilotHandler     *handlers.GenAICopilotHandler
-	PolicyGenerationHandler *handlers.PolicyGenerationHandler
-	CalcHandler             *handlers.CalcHandler
-	DatasourceResolver      security.DatasourceResolver
-	SecurityContextDeps     handlers.SecurityContextDeps
-	BusinessObjectService   *catalogmeta.BusinessObjectService
-	QueryHandler            *handlers.QueryHandler
-	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
-	BOStatusHandler         *handlers.BOStatusHandler
-	DrillDownResolver       *optimizer.DrillDownResolver
-	SavedQueryHandler       *handlers.SavedQueryHandler
+	PageLayoutHandler        *handlers.PageLayoutHandler
+	PipelineHandler          *handlers.PipelineHandler
+	EventsHandler            *ingestion.EventsHandler
+	GenAICopilotHandler      *handlers.GenAICopilotHandler
+	PolicyGenerationHandler  *handlers.PolicyGenerationHandler
+	CalcHandler              *handlers.CalcHandler
+	DatasourceResolver       security.DatasourceResolver
+	SecurityContextDeps      handlers.SecurityContextDeps
+	BusinessObjectService    *catalogmeta.BusinessObjectService
+	QueryHandler             *handlers.QueryHandler
+	QueryBuilderHandler      *querybuilder.QueryBuilderHandler
+	BOStatusHandler          *handlers.BOStatusHandler
+	DrillDownResolver        *optimizer.DrillDownResolver
+	SavedQueryHandler        *handlers.SavedQueryHandler
 	DataExplorerSavedHandler *DataExplorerSavedHandler
-	SearchHandler           *handlers.SearchHandler
-	NLQHandler              *handlers.NLQHandler
-	AuditHistoryHandler     *handlers.AuditHistoryHandler
-	RelationshipHandler     *RelationshipHandler
-	LineageHandler          *LineageHandler
-	AdminAPIKeyHandler      *handlers.AdminAPIKeyHandler
-	AdminHandler            *AdminHandler
-	RAGHandler              *RAGHandler
-	EventBus                EventBus
-	ExportHandlers          *handlers.ExportHandlers
-	SchedulerHandlers       *handlers.SchedulerHandlers
-	auditService            *audit.ChannelAuditService
-	semanticCache           *cache.SemanticCache
+	SearchHandler            *handlers.SearchHandler
+	NLQHandler               *handlers.NLQHandler
+	AuditHistoryHandler      *handlers.AuditHistoryHandler
+	RelationshipHandler      *RelationshipHandler
+	LineageHandler           *LineageHandler
+	AdminAPIKeyHandler       *handlers.AdminAPIKeyHandler
+	AdminHandler             *AdminHandler
+	RAGHandler               *RAGHandler
+	EventBus                 EventBus
+	ExportHandlers           *handlers.ExportHandlers
+	SchedulerHandlers        *handlers.SchedulerHandlers
+	auditService             *audit.ChannelAuditService
+	semanticCache            *cache.SemanticCache
 
 	// Phase 8: Advanced Cross-Domain Intelligence
 	PortfolioSecuritySvc *mdm.PortfolioSecurityService
@@ -1157,7 +1157,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Search Service
 	searchSvc := services.NewSearchService(sqlxDB, llmProvider)
 	securityDeps := handlers.SecurityContextDeps{
-		Resolver: srv.DatasourceResolver,
+		Resolver:          srv.DatasourceResolver,
+		GroupRoleResolver: security.NewGroupRoleResolver(sqlxDB),
+		UserProvisioner:   security.NewUserProvisioner(sqlxDB),
 	}
 	srv.SecurityContextDeps = securityDeps
 	optService := optimize.NewService(sqlxDB)
@@ -1473,8 +1475,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Kafka audit publisher
 
 	boService := catalogmeta.NewBusinessObjectService(sqlxDB, tenantManager, auditPublisher, sqlRepo)
+	if srv.AggregatesDB != nil {
+		boService.SetAggregatesDB(sqlx.NewDb(srv.AggregatesDB, "postgres"))
+	}
 	srv.BusinessObjectService = boService
 	entitlementsSvc := security.NewEntitlementsService(sqlxDB, 1000, 5*time.Minute)
+	boService.SetEntitlementsService(entitlementsSvc)
 	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB, entitlementsSvc)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
 
@@ -1581,6 +1587,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Register layout routes (saved UI layouts)
 	layoutHandler := NewLayoutHandler(sqlxDB.DB, schedulerSecurityDeps)
 	layoutHandler.RegisterRoutes(r)
+
+	// Multi-AI Semantic Bridge (Snowflake Cortex, Databricks Genie, MCP Providers)
+	semanticBridgeHandler := NewSemanticBridgeHandler(sqlxDB)
+	semanticBridgeHandler.RegisterRoutes(r)
 
 	// API routes
 	routes := NewRoutes()
@@ -1692,8 +1702,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Middleware was causing panic here because it was added after routes were registered above.
 		// Moving it to a specific group below.
 
-		// Note: We are NOT enabling SessionAuthMiddleware yet as it might conflict or isn't needed for this flow.
-		// r.Use(appmid.SessionAuthMiddleware(appmid.SessionAuthConfig{DB: db, SessionCookie: "session_token", AllowBearerFallback: true}))
 		// r.Use(srv.auditMiddleware())
 
 		// DISABLED: Internal GraphQL API endpoint
@@ -1722,7 +1730,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerWorkflowRoutes(r, db, cron.New(), entitlementsSvc)
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
-		srv.registerBOCRUDRoutes(r, sqlxDB, redisClient)
+		srv.registerBOCRUDRoutes(r, sqlxDB, redisClient, entitlementsSvc)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerPlatformIntelligenceRoutes(r, sqlxDB)
@@ -2585,7 +2593,9 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 		jobAudience = jobId
 	} else {
-		// Session auth flow
+		// Generic connections authenticate with the same Keycloak-issued JWT
+		// bearer token used by every other endpoint (see AuthContextMiddleware) —
+		// there is no separate local session store.
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "No token provided", http.StatusUnauthorized)
@@ -2598,17 +2608,18 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Verify session token via DB
-		err := s.DB.QueryRowContext(r.Context(), `
-			SELECT u.id, u.role
-			FROM private_markets_sessions s
-			JOIN public.users u ON s.user_id = u.id
-			WHERE s.session_token = $1 AND s.expires_at > now() AND s.is_active = true
-		`, tokenString).Scan(&userID, &audience)
-
-		if err != nil {
-			http.Error(w, "Invalid session", http.StatusUnauthorized)
+		if s.SecMgr == nil {
+			http.Error(w, "Authentication not configured", http.StatusInternalServerError)
 			return
+		}
+		claims, err := s.SecMgr.ValidateToken(tokenString)
+		if err != nil || claims.UserID == "" {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		userID = claims.UserID
+		if len(claims.Roles) > 0 {
+			audience = claims.Roles[0]
 		}
 	}
 
@@ -3500,8 +3511,10 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 	// Role Management
 	s.RegisterRoleRoutes(r)
 
-	// User & Audit (Admin only)
-	r.Get("/users", s.listUsers)
+	// Audit (Admin only). User listing lives at /rbac/users (RBACHandlers.listUsers),
+	// which reads the current app_user/users view correctly; this legacy sibling
+	// queried columns (role, organization, is_core_admin) that don't exist on that
+	// view and always errored, so it's removed rather than fixed.
 	r.Get("/audit/events", s.listIAMEvents)
 	r.Get("/audit/stats", s.getSecurityStats)
 }
@@ -3802,9 +3815,13 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 
 	// Advanced RBAC & Permissions
 	rbacHandlers := NewRBACHandlers(s.SQLXDB, handlers.SecurityContextDeps{
-		Resolver: s.DatasourceResolver,
+		Resolver:          s.DatasourceResolver,
+		GroupRoleResolver: security.NewGroupRoleResolver(s.SQLXDB),
+		UserProvisioner:   security.NewUserProvisioner(s.SQLXDB),
 	}, entSvc)
 	rbacHandlers.RegisterRoutes(r)
+	rbacHandlers.RegisterIDPRoutes(r)
+	RegisterABACRoutes(r, s.DB)
 
 	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────
 	// All /api/marketplace/* routes require at minimum a valid AuthInfo.
@@ -3819,7 +3836,7 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 // registerTriggerEngineRoutes mounts the Trigger and Automation engine endpoints
 func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	// Wire full TriggerEngine dependencies and register chi-based trigger routes.
-	abacEngine := &ABACEngine{db: sqlxDB}
+	abacEngine := NewABACEngine(sqlxDB.DB)
 
 	// Try to wire a real AMQP-backed EventBus for production/dev if configured.
 	if s.EventBus == nil {
@@ -3835,8 +3852,8 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 // registerBOCRUDRoutes mounts the live Business Object record CRUD endpoints
 // (/bo/{boKey}/records/...), wired to fire row_insert/row_update/row_delete
 // trigger evaluations on every committed write.
-func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB, redisClient *redis.Client) {
-	abacEngine := &ABACEngine{db: sqlxDB}
+func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB, redisClient *redis.Client, entitlementsSvc *security.EntitlementsService) {
+	abacEngine := NewABACEngine(sqlxDB.DB)
 	if s.EventBus == nil {
 		s.EventBus = &noopEventBus{}
 	}
@@ -3844,6 +3861,7 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB, redisClient
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 
 	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine)
+	boCRUDHandler.SetEntitlementsService(entitlementsSvc, security.NewGroupRoleResolver(sqlxDB))
 	boCRUDHandler.RegisterRoutes(r)
 
 	studioHandler := NewStudioDefinitionsHandler(sqlxDB, triggerEngine)

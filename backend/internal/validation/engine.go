@@ -1,6 +1,7 @@
 package validation
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -12,6 +13,38 @@ type ValidationEngine struct{}
 // NewValidationEngine creates a new validation engine
 func NewValidationEngine() *ValidationEngine {
 	return &ValidationEngine{}
+}
+
+// conditionEnvelope is the shape catalog_validation_rules.condition_json is
+// required to have (see the table's condition_json_required_keys check
+// constraint: schema_version, authored_mode, and payload must all be
+// present). The actual rule condition — the flat {"field":...,"pattern":...}
+// (or operator/value, etc.) map every executeXxx method in this file reads —
+// lives under payload, not at the top level.
+type conditionEnvelope struct {
+	SchemaVersion string          `json:"schema_version"`
+	AuthoredMode  string          `json:"authored_mode"`
+	Payload       json.RawMessage `json:"payload"`
+}
+
+// UnwrapConditionPayload extracts the flat condition map from a
+// condition_json value, unwrapping the required schema_version/
+// authored_mode/payload envelope. Rows without that envelope (e.g. older
+// data, or hand-built test fixtures) are tolerated by falling back to
+// treating the whole value as the flat map.
+func UnwrapConditionPayload(conditionJSON []byte) (map[string]interface{}, error) {
+	var envelope conditionEnvelope
+	if err := json.Unmarshal(conditionJSON, &envelope); err == nil && len(envelope.Payload) > 0 {
+		var payload map[string]interface{}
+		if err := json.Unmarshal(envelope.Payload, &payload); err == nil {
+			return payload, nil
+		}
+	}
+	var flat map[string]interface{}
+	if err := json.Unmarshal(conditionJSON, &flat); err != nil {
+		return nil, err
+	}
+	return flat, nil
 }
 
 // ExecutionContext holds the data and context for rule execution

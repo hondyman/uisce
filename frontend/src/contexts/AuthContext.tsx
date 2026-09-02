@@ -52,7 +52,7 @@ interface AuthContextType {
   isReadOnlyOperator: () => boolean;
   canManageCoreAssets: () => boolean;
   canManageCustomAssets: () => boolean;
-  login: (email?: string, password?: string) => Promise<void>;
+  login: () => Promise<void>;
   register: (email: string, password: string, name: string, organization?: string) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
@@ -308,54 +308,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, [hydrateFromOidcUser]);
 
-  const login = async (email?: string, password?: string): Promise<void> => {
-    if (email && password) {
-      try {
-        const resp = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-        });
-        if (!resp.ok) {
-          const errText = await resp.text();
-          throw new Error(errText || 'Invalid credentials');
-        }
-        const data = await resp.json();
-        const userObj: User = {
-          id: data.user?.id || data.user_id || '00000000-0000-0000-0000-000000000001',
-          email: data.user?.email || email,
-          name: data.user?.name || email.split('@')[0] || 'User',
-          role: data.user?.role || 'admin',
-          organization: data.user?.organization || 'uisce',
-          permissions: data.user?.permissions || ['read', 'write', 'admin'],
-          is_active: true,
-          is_core_admin: data.user?.is_core_admin ?? true,
-          isCoreAdmin: data.user?.is_core_admin ?? true,
-          is_admin: true,
-          is_global_admin: true,
-        };
-        const token = data.access_token || data.token;
-        const refreshToken = data.refresh_token;
-        const expiresAt = Date.now() + (data.expires_in || 3600) * 1000;
-
-        localStorage.setItem(AUTH_TOKEN_KEY, token);
-        if (refreshToken) {
-          localStorage.setItem(AUTH_REFRESH_TOKEN_KEY, refreshToken);
-        }
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userObj));
-        localStorage.setItem(AUTH_EXPIRES_AT_KEY, expiresAt.toString());
-
-        setUser(userObj);
-        setToken(token);
-        setRefreshTokenValue(refreshToken || null);
-        setTokenExpiresAt(expiresAt);
-        return;
-      } catch (error) {
-        devError('Direct backend login failed:', error);
-        throw error;
-      }
-    }
-
+  const login = async (): Promise<void> => {
     try {
       await userManager.signinRedirect();
     } catch (error) {

@@ -346,94 +346,10 @@ func getDatasourceIDFromRequest(r *http.Request) string {
 	return r.Header.Get("X-Tenant-Datasource-ID")
 }
 
-// ============================================================================
-// FIELD-LEVEL MASKING HELPER (for use in handlers)
-// ============================================================================
-
-type FieldMaskingRule struct {
-	FieldName      string
-	MaskingType    string
-	MaskingPattern string
-}
-
-// GetFieldMaskingRules retrieves masking rules for a user and resource
-func (re *RBACEnforcer) GetFieldMaskingRules(userID, tenantID, datasourceID, resourceType string) ([]FieldMaskingRule, error) {
-	rows, err := re.db.Query(`
-		SELECT DISTINCT fmr.field_name, fmr.masking_type, fmr.masking_pattern
-		FROM bp_user_roles ur
-		JOIN bp_roles r ON ur.role_id = r.id
-		JOIN bp_field_masking_rules fmr ON fmr.tenant_id = ur.tenant_id 
-		                               AND fmr.datasource_id = ur.datasource_id
-		                               AND fmr.resource_type = $4
-		WHERE ur.user_id = $1
-		  AND ur.tenant_id = $2
-		  AND ur.datasource_id = $3
-		  AND ur.is_active = true
-		  AND NOT (r.id = ANY(fmr.unmasked_roles))
-		  AND (ur.expires_at IS NULL OR ur.expires_at > CURRENT_TIMESTAMP)
-	`, userID, tenantID, datasourceID, resourceType)
-
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var rules []FieldMaskingRule
-	for rows.Next() {
-		var rule FieldMaskingRule
-		if err := rows.Scan(&rule.FieldName, &rule.MaskingType, &rule.MaskingPattern); err != nil {
-			continue
-		}
-		rules = append(rules, rule)
-	}
-
-	return rules, nil
-}
-
-// ApplyFieldMasking applies masking rules to data (simple implementation)
-func ApplyFieldMasking(data map[string]interface{}, rules []FieldMaskingRule) {
-	for _, rule := range rules {
-		if val, exists := data[rule.FieldName]; exists {
-			if strVal, ok := val.(string); ok {
-				data[rule.FieldName] = maskValue(strVal, rule.MaskingPattern)
-			}
-		}
-	}
-}
-
-func maskValue(value, pattern string) string {
-	if pattern == "" {
-		return "***MASKED***"
-	}
-
-	// Simple pattern matching
-	// pattern examples: "XXX-XX-####" (SSN), "XXXX-####" (bank account)
-	// X = masked, # = visible from end
-
-	visibleCount := 0
-	for _, char := range pattern {
-		if char == '#' {
-			visibleCount++
-		}
-	}
-
-	if visibleCount == 0 {
-		return pattern
-	}
-
-	if len(value) < visibleCount {
-		return value
-	}
-
-	visible := value[len(value)-visibleCount:]
-	masked := ""
-	for i := 0; i < len(pattern)-visibleCount; i++ {
-		if pattern[i] == 'X' {
-			masked += "X"
-		} else {
-			masked += string(pattern[i])
-		}
-	}
-
-	return masked + visible
-}
+// Field-level masking is handled by security.EntitlementsService against
+// bp_field_permissions (permission_level = 'mask'), not by the deprecated
+// bp_field_masking_rules table this file used to query directly (see
+// add_masking_consolidation.sql, which migrated that data and marked the
+// table deprecated). This file's version was also unreachable in practice —
+// bp_user_roles has no datasource_id column in the live schema, so the join
+// here always errored.

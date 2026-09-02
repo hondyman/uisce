@@ -24,7 +24,6 @@ import (
 	"github.com/lib/pq"
 )
 
-
 // AccessLevel represents the effective permission over a Business Object.
 type AccessLevel string
 
@@ -46,17 +45,17 @@ type AccessDecision struct {
 
 // RelationshipResult represents a related entity found via catalog edges
 type RelationshipResult struct {
-	ID                   string `json:"id" db:"id"`
-	RelatedObjectName    string `json:"relatedObjectName" db:"related_object_name"`
-	TargetObjectID       string `json:"targetObjectId" db:"target_object_id"`
-	RelationshipType     string `json:"relationshipType" db:"relationship_type"`
-	Cardinality          string `json:"cardinality" db:"cardinality"`
-	Description          string `json:"description" db:"description"`
-	JoinCondition        string `json:"joinCondition" db:"join_condition"`
-	SourceDriverTable    string `json:"sourceDriverTable" db:"source_driver_table"`
-	TargetDriverTable    string `json:"targetDriverTable" db:"target_driver_table"`
-	ScopedSubtypeKey     string `json:"scopedSubtypeKey" db:"scoped_subtype_key"`
-	TargetSubtypeKey     string `json:"targetSubtypeKey" db:"target_subtype_key"`
+	ID                     string `json:"id" db:"id"`
+	RelatedObjectName      string `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID         string `json:"targetObjectId" db:"target_object_id"`
+	RelationshipType       string `json:"relationshipType" db:"relationship_type"`
+	Cardinality            string `json:"cardinality" db:"cardinality"`
+	Description            string `json:"description" db:"description"`
+	JoinCondition          string `json:"joinCondition" db:"join_condition"`
+	SourceDriverTable      string `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable      string `json:"targetDriverTable" db:"target_driver_table"`
+	ScopedSubtypeKey       string `json:"scopedSubtypeKey" db:"scoped_subtype_key"`
+	TargetSubtypeKey       string `json:"targetSubtypeKey" db:"target_subtype_key"`
 	SatelliteJoinCondition string `json:"satelliteJoinCondition" db:"satellite_join_condition"`
 }
 
@@ -80,6 +79,38 @@ type BusinessObjectService struct {
 	tenantManager  *platform.TenantDBManager
 	auditPublisher *events.AuditEventPublisher
 	lineageRepo    lineage.LineageRepository
+	aggregatesDB   *sqlx.DB
+	entitlements   *security.EntitlementsService
+}
+
+// SetEntitlementsService wires the field/BO-level entitlements engine used to
+// enforce read/write access and column masking on business object records.
+// Without it, resolveAccessDecision falls back to fail-open (legacy behavior).
+func (s *BusinessObjectService) SetEntitlementsService(ent *security.EntitlementsService) {
+	s.entitlements = ent
+}
+
+// SetAggregatesDB wires an optional connection to the external aggregates
+// database (e.g. the Northwind CRM datasource) that physical BO record
+// CRUD (QueryBORecords/InsertBORecord/UpdateBORecord/DeleteBORecord) reads
+// and writes against, instead of the platform's own metadata database.
+func (s *BusinessObjectService) SetAggregatesDB(db *sqlx.DB) {
+	s.aggregatesDB = db
+}
+
+// recordDB picks which physical database a BO's driver-table CRUD should
+// run against. BOs sourced from an external datasource (identified here by
+// key/technical-name prefix, mirroring the routing in bo_sql_routes.go's
+// ExecuteSQLHandler) live in aggregatesDB; everything else stays on the
+// platform's own database.
+func (s *BusinessObjectService) recordDB(bo *models.BusinessObjectDefinition) *sqlx.DB {
+	if s.aggregatesDB != nil {
+		if strings.Contains(strings.ToLower(bo.Key), "northwind") ||
+			strings.Contains(strings.ToLower(bo.TechnicalName), "northwind") {
+			return s.aggregatesDB
+		}
+	}
+	return s.db
 }
 
 var boFieldsColumnCache sync.Map
@@ -147,37 +178,76 @@ func (l AccessLevel) atLeast(required AccessLevel) bool {
 	return rank[l] >= rank[required]
 }
 
-// resolveAccessDecision determines the access level for a user on a given business object.
-func (s *BusinessObjectService) resolveAccessDecision(ctx context.Context, tenantID, boID string) (*AccessDecision, error) {
-	// 1. Resolve Principal from context (Handler vs Service layer gap)
-	// We use the security package's AuthInfo which is populated by middleware
-	authInfo, ok := security.AuthInfoFromContext(ctx)
-	if !ok {
-		// If no auth info, assume no access? Or maybe strict mode?
-		// For now, if no auth context, we might be in a system process or unauth allowed endpoint (unlikely for BOs)
-		// But effectively, "no user" = "no groups" = "no access" unless fail-open
+// resolveAccessDecision determines the access level and column masks for a
+// user on a given business object, using the field/BO-level entitlements
+// engine (bp_roles / bp_user_roles / bp_field_permissions) when available.
+func (s *BusinessObjectService) resolveAccessDecision(ctx context.Context, secCtx *security.Context, boID string) (*AccessDecision, error) {
+	if secCtx == nil {
 		return &AccessDecision{AccessLevel: AccessLevelNone, ColumnMasks: map[string]string{}}, nil
 	}
 
-	// 2. Global Admin / Global Ops Bypass (Root Access)
-	for _, role := range authInfo.Roles {
+	// Global Admin / Global Ops Bypass (Root Access)
+	if secCtx.IsGlobalAdmin {
+		return &AccessDecision{AccessLevel: AccessLevelWrite, ColumnMasks: map[string]string{}}, nil
+	}
+	for _, role := range secCtx.Roles {
 		if role == "global_admin" || role == "global_ops" {
-			// Full access, no row filters, no column masks
-			return &AccessDecision{
-				AccessLevel: AccessLevelWrite,
-				ColumnMasks: map[string]string{},
-			}, nil
+			return &AccessDecision{AccessLevel: AccessLevelWrite, ColumnMasks: map[string]string{}}, nil
 		}
 	}
 
-	// 3. Fallback: Fail Open (Legacy Behavior) until AccessRuleRepository is wired
-	// This ensures existing functionalities continue to work while we standardize the check structure.
-	return &AccessDecision{AccessLevel: AccessLevelWrite, ColumnMasks: map[string]string{}}, nil
+	if s.entitlements == nil {
+		// A missing entitlements service is a wiring bug, not a "no rules
+		// configured yet" state — it means access control can't be evaluated
+		// at all. Fail closed: SetEntitlementsService is called unconditionally
+		// at startup (see api.go), so this should never trigger outside a
+		// misconfigured test harness.
+		logging.GetLogger().Sugar().Error("[SECURITY] entitlements service not configured; denying access")
+		return &AccessDecision{AccessLevel: AccessLevelNone, ColumnMasks: map[string]string{}}, nil
+	}
+
+	entitlements, err := s.entitlements.ForUser(ctx, secCtx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve entitlements: %w", err)
+	}
+	if entitlements == nil {
+		// nil result from ForUser means IsGlobalAdmin short-circuit; already handled above,
+		// but treat defensively as unrestricted.
+		return &AccessDecision{AccessLevel: AccessLevelWrite, ColumnMasks: map[string]string{}}, nil
+	}
+
+	if _, hidden := entitlements.HiddenBOs[boID]; hidden {
+		return &AccessDecision{AccessLevel: AccessLevelNone, ColumnMasks: map[string]string{}}, nil
+	}
+
+	wildcardKey := security.EntitlementKey{ResourceID: boID, FieldName: "*"}
+	level := AccessLevelRead
+	switch entitlements.Entitlements[wildcardKey] {
+	case security.PermissionWrite:
+		level = AccessLevelWrite
+	case security.PermissionNone:
+		return &AccessDecision{AccessLevel: AccessLevelNone, ColumnMasks: map[string]string{}}, nil
+	}
+
+	columnMasks := make(map[string]string)
+	for key, perm := range entitlements.Entitlements {
+		if key.ResourceID != boID || key.FieldName == "*" {
+			continue
+		}
+		switch perm {
+		case security.PermissionNone:
+			columnMasks[key.FieldName] = "HIDE"
+		case security.PermissionMask:
+			columnMasks[key.FieldName] = "MASK"
+		}
+	}
+
+	return &AccessDecision{AccessLevel: level, ColumnMasks: columnMasks}, nil
 }
 
 // requireAccess enforces the required level and returns the decision for downstream use.
-func (s *BusinessObjectService) requireAccess(ctx context.Context, tenantID, boID string, required AccessLevel) (*AccessDecision, error) {
-	decision, err := s.resolveAccessDecision(ctx, tenantID, boID)
+func (s *BusinessObjectService) requireAccess(ctx context.Context, secCtx *security.Context, boID string, required AccessLevel) (*AccessDecision, error) {
+	decision, err := s.resolveAccessDecision(ctx, secCtx, boID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +261,26 @@ func (s *BusinessObjectService) requireAccess(ctx context.Context, tenantID, boI
 	}
 
 	return decision, nil
+}
+
+// applyColumnMasksToRows enforces HIDE/MASK on queried BO record rows in place.
+func applyColumnMasksToRows(rows []map[string]interface{}, masks map[string]string) {
+	if len(masks) == 0 {
+		return
+	}
+	for _, row := range rows {
+		for field, mask := range masks {
+			if _, ok := row[field]; !ok {
+				continue
+			}
+			switch mask {
+			case "HIDE":
+				delete(row, field)
+			case "MASK":
+				row[field] = "[MASKED]"
+			}
+		}
+	}
 }
 
 // small helpers
@@ -478,7 +568,7 @@ func (s *BusinessObjectService) GetBusinessObject(
 		isUUID = true
 	}
 
-	if _, err := s.requireAccess(ctx, tenantID, boKey, AccessLevelRead); err != nil {
+	if _, err := s.requireAccess(ctx, secCtx, boKey, AccessLevelRead); err != nil {
 		return nil, err
 	}
 
@@ -495,9 +585,9 @@ func (s *BusinessObjectService) GetBusinessObject(
 	bo := &models.BusinessObjectDefinition{}
 	var (
 		clsNodeID, bkNodeID, semNodeID, grainNodeID sql.NullString
-		stiDiscCol, activeSubtypeFilter sql.NullString
-		description sql.NullString
-		createdAt, updatedAt sql.NullTime
+		stiDiscCol, activeSubtypeFilter             sql.NullString
+		description                                 sql.NullString
+		createdAt, updatedAt                        sql.NullTime
 	)
 
 	err := s.db.QueryRowxContext(ctx, query, tenantID, boKey, isUUID).Scan(
@@ -804,14 +894,14 @@ func (s *BusinessObjectService) ListBusinessObjects(
 		}
 
 		bo := &models.BusinessObjectDefinition{
-			ID:        row.ID,
-			TenantID:  row.TenantID,
-			Key:       row.BoKey,
-			Name:      row.BoName,
-			IsCore:    row.IsCore,
-			IsActive:  row.IsActive,
-			ModelID:   row.ModelID,
-			Category:  row.BoType,
+			ID:       row.ID,
+			TenantID: row.TenantID,
+			Key:      row.BoKey,
+			Name:     row.BoName,
+			IsCore:   row.IsCore,
+			IsActive: row.IsActive,
+			ModelID:  row.ModelID,
+			Category: row.BoType,
 		}
 		bo.DisplayName = row.BoName
 
@@ -1060,14 +1150,14 @@ func (s *BusinessObjectService) listCoreBusinessObjects(ctx context.Context, gol
 		}
 
 		bo := &models.BusinessObjectDefinition{
-			ID:        row.ID,
-			TenantID:  row.TenantID,
-			Key:       row.BoKey,
-			Name:      row.BoName,
-			IsCore:    row.IsCore,
-			IsActive:  row.IsActive,
-			ModelID:   row.ModelID,
-			Category:  row.BoType,
+			ID:       row.ID,
+			TenantID: row.TenantID,
+			Key:      row.BoKey,
+			Name:     row.BoName,
+			IsCore:   row.IsCore,
+			IsActive: row.IsActive,
+			ModelID:  row.ModelID,
+			Category: row.BoType,
 		}
 		bo.DisplayName = row.BoName
 
@@ -1284,14 +1374,14 @@ func (s *BusinessObjectService) listTenantCustomBusinessObjects(ctx context.Cont
 		}
 
 		bo := &models.BusinessObjectDefinition{
-			ID:        row.ID,
-			TenantID:  row.TenantID,
-			Key:       row.BoKey,
-			Name:      row.BoName,
-			IsCore:    row.IsCore,
-			IsActive:  row.IsActive,
-			ModelID:   row.ModelID,
-			Category:  row.BoType,
+			ID:       row.ID,
+			TenantID: row.TenantID,
+			Key:      row.BoKey,
+			Name:     row.BoName,
+			IsCore:   row.IsCore,
+			IsActive: row.IsActive,
+			ModelID:  row.ModelID,
+			Category: row.BoType,
 		}
 		bo.DisplayName = row.BoName
 
@@ -1526,7 +1616,6 @@ func (s *BusinessObjectService) mergeCustomOntoCore(coreBO, customBO *models.Bus
 	// PR duplicate-fix: customFields holds only the custom (tenant-extension) fields.
 	// Do NOT prepend coreBO.CoreFields here — they already live in composed.CoreFields.
 	composed.CustomFields = customBO.CustomFields
-
 
 	// If custom BO has a config, use it (allows tenant overrides)
 	if len(customBO.Config) > 0 {
@@ -1811,7 +1900,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	}
 
 	// Enforce Write Access
-	if _, err := s.requireAccess(ctx, tenantID, current.ID, AccessLevelWrite); err != nil {
+	if _, err := s.requireAccess(ctx, secCtx, current.ID, AccessLevelWrite); err != nil {
 		return nil, err
 	}
 
@@ -2195,7 +2284,7 @@ func (s *BusinessObjectService) DeleteBusinessObject(
 	}
 
 	// Enforce Write Access
-	if _, err := s.requireAccess(ctx, tenantID, bo.ID, AccessLevelWrite); err != nil {
+	if _, err := s.requireAccess(ctx, secCtx, bo.ID, AccessLevelWrite); err != nil {
 		return err
 	}
 
@@ -2766,7 +2855,6 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	// Load entity-level fields (non-subtype fields)
 	var entityFields []models.FieldDefinition
 
-
 	fieldQuery := `
 		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
 		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
@@ -2890,18 +2978,18 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		`
 		_ = s.db.SelectContext(ctx, &bRows, fallbackBindingQuery, bo.ID)
 	}
-		for _, b := range bRows {
-			bo.Bindings = append(bo.Bindings, map[string]interface{}{
-				"boBindingId":     b.BoBindingId,
-				"bindingName":     b.BindingName,
-				"backendId":       b.BackendId,
-				"drivingNodeName": b.QualifiedPath,
-				"nodeName":        b.NodeName,
-				"isCore":          b.IsCore,
-				"isActive":        b.IsActive,
-				"temporalMode":    b.TemporalMode,
-			})
-		}
+	for _, b := range bRows {
+		bo.Bindings = append(bo.Bindings, map[string]interface{}{
+			"boBindingId":     b.BoBindingId,
+			"bindingName":     b.BindingName,
+			"backendId":       b.BackendId,
+			"drivingNodeName": b.QualifiedPath,
+			"nodeName":        b.NodeName,
+			"isCore":          b.IsCore,
+			"isActive":        b.IsActive,
+			"temporalMode":    b.TemporalMode,
+		})
+	}
 
 	return nil
 }
@@ -4036,7 +4124,6 @@ func (s *BusinessObjectService) IntrospectTable(
 		isUUID = true
 	}
 
-
 	if isUUID {
 		var node struct {
 			ID            string `db:"id"`
@@ -4224,6 +4311,12 @@ func (s *BusinessObjectService) QueryBORecords(
 		return nil, fmt.Errorf("business object not found: %w", err)
 	}
 
+	// Resolve column-level masking (GetBusinessObject already enforced read access / hidden-BO denial above).
+	accessDecision, err := s.resolveAccessDecision(ctx, secCtx, bo.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	// 2. Resolve Driver Table
 	drivingTable := bo.DriverTableName
 	if drivingTable == "" && bo.DriverTableID.Valid && bo.DriverTableID.String != "" {
@@ -4368,10 +4461,12 @@ func (s *BusinessObjectService) QueryBORecords(
 
 	whereSQL := strings.Join(whereClauses, " AND ")
 
+	recDB := s.recordDB(bo)
+
 	// 5. Total count query
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", pq.QuoteIdentifier(rawTable), whereSQL)
 	var total int
-	if err := s.db.GetContext(ctx, &total, countSQL, args...); err != nil {
+	if err := recDB.GetContext(ctx, &total, countSQL, args...); err != nil {
 		logging.GetLogger().Sugar().Warnf("Count query failed: %v", err)
 		total = 0
 	}
@@ -4401,7 +4496,7 @@ func (s *BusinessObjectService) QueryBORecords(
 		selectCols, pq.QuoteIdentifier(rawTable), whereSQL, orderSQL, limit, offset,
 	)
 
-	rows, err := s.db.QueryxContext(ctx, querySQL, args...)
+	rows, err := recDB.QueryxContext(ctx, querySQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query records from %s: %w", rawTable, err)
 	}
@@ -4426,6 +4521,8 @@ func (s *BusinessObjectService) QueryBORecords(
 	if resultRows == nil {
 		resultRows = []map[string]interface{}{}
 	}
+
+	applyColumnMasksToRows(resultRows, accessDecision.ColumnMasks)
 
 	return &models.BORecordQueryResponse{
 		Total:           total,
@@ -4493,7 +4590,7 @@ func (s *BusinessObjectService) CreateBORecord(
 		strings.Join(placeholders, ", "),
 	)
 
-	rows, err := s.db.QueryxContext(ctx, insertSQL, vals...)
+	rows, err := s.recordDB(bo).QueryxContext(ctx, insertSQL, vals...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to insert record into %s: %w", rawTable, err)
 	}
@@ -4577,7 +4674,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 
 	vals = append(vals, recordID)
 
-	rows, err := s.db.QueryxContext(ctx, updateSQL, vals...)
+	rows, err := s.recordDB(bo).QueryxContext(ctx, updateSQL, vals...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update record in %s: %w", rawTable, err)
 	}
@@ -4623,7 +4720,7 @@ func (s *BusinessObjectService) DeleteBORecord(
 	}
 
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", pq.QuoteIdentifier(rawTable))
-	_, err = s.db.ExecContext(ctx, deleteSQL, recordID)
+	_, err = s.recordDB(bo).ExecContext(ctx, deleteSQL, recordID)
 	if err != nil {
 		return fmt.Errorf("failed to delete record from %s: %w", rawTable, err)
 	}
@@ -5410,7 +5507,7 @@ func (s *BusinessObjectService) GetBOWorkflowStatus(ctx context.Context, secCtx 
 			TriggeredBy: "System",
 			Status:      "COMPLETED",
 			StartTime:   time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-			EndTime:     time.Now().Add(-2 * time.Hour + 3*time.Second).Format(time.RFC3339),
+			EndTime:     time.Now().Add(-2*time.Hour + 3*time.Second).Format(time.RFC3339),
 		},
 	}
 
@@ -5455,8 +5552,6 @@ func (s *BusinessObjectService) ExecuteWorkflowAction(ctx context.Context, secCt
 		"targetStatus": targetStatus,
 		"reviewerNote": req.ReviewerNote,
 	}, userID)
-
-
 
 	return s.GetBOWorkflowStatus(ctx, secCtx, bo.ID)
 }
@@ -5567,11 +5662,11 @@ func (s *BusinessObjectService) ValidatePublishGate(ctx context.Context, secCtx 
 	}
 
 	return &models.BOPublishGateValidationResponse{
-		BOID:               bo.ID,
-		CanPublish:         canPublish,
-		UnresolvedFields:   unresolved,
+		BOID:                bo.ID,
+		CanPublish:          canPublish,
+		UnresolvedFields:    unresolved,
 		MissingDependencies: []string{},
-		GateSummary:        summary,
+		GateSummary:         summary,
 	}, nil
 }
 
@@ -6003,8 +6098,3 @@ func (s *BusinessObjectService) RunLakehouseCompaction(ctx context.Context, secC
 
 	return report, nil
 }
-
-
-
-
-

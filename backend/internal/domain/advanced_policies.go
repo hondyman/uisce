@@ -32,10 +32,15 @@ type AdvancedPolicyRule struct {
 	Actions     []string          `json:"actions"`
 	Resources   []string          `json:"resources"`
 	Users       []string          `json:"users"`
-	Tenants     []string          `json:"tenants"`
-	Enabled     bool              `json:"enabled"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	// Roles matches if the caller holds any of these roles, read from
+	// req.Context["roles"] (a []string) — the request itself carries no
+	// dedicated roles field, so callers (e.g. ABACEvaluator) populate it
+	// from the JWT before evaluating.
+	Roles     []string  `json:"roles"`
+	Tenants   []string  `json:"tenants"`
+	Enabled   bool      `json:"enabled"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // EvaluatePolicy evaluates a policy rule against a request
@@ -53,6 +58,27 @@ func (ape *AdvancedPolicyEngine) EvaluatePolicy(ctx context.Context, rule Advanc
 	// Check user match
 	if !ape.matchesAny(rule.Users, req.UserID) && len(rule.Users) > 0 {
 		return false, "user not in allowed list", nil
+	}
+
+	// Check role match — a rule with Roles set matches if the caller holds
+	// any of them, independent of (and in addition to) any Users list.
+	if len(rule.Roles) > 0 {
+		var callerRoles []string
+		if req.Context != nil {
+			if rs, ok := req.Context["roles"].([]string); ok {
+				callerRoles = rs
+			}
+		}
+		roleMatched := false
+		for _, r := range callerRoles {
+			if ape.matchesAny(rule.Roles, r) {
+				roleMatched = true
+				break
+			}
+		}
+		if !roleMatched {
+			return false, "caller role not in allowed list", nil
+		}
 	}
 
 	// Check resource match

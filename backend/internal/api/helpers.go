@@ -349,15 +349,6 @@ func errorsIs(err, target error) bool {
 	return errors.Is(err, target)
 }
 
-// generateRandomToken returns a URL-safe random token
-func generateRandomToken() string {
-	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
-		return uuid.New().String()
-	}
-	return hex.EncodeToString(b)
-}
-
 // generateJobID returns a new UUID-based job id
 func generateJobID() string {
 	return uuid.New().String()

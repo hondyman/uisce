@@ -26,6 +26,58 @@ func isTenantOrGlobalAdmin(roles []string) bool {
 }
 
 // listUsers returns all users for role assignment
+// searchUsers backs the role-assignment "search for a user" picker.
+func (h *RBACHandlers) searchUsers(w http.ResponseWriter, r *http.Request) {
+	if _, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps); err != nil {
+		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q == "" {
+		respondJSONRBAC(w, r, []map[string]interface{}{}, http.StatusOK)
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT id, username, email, name
+		FROM users
+		WHERE is_active = true
+		  AND (email ILIKE $1 OR username ILIKE $1 OR name ILIKE $1)
+		ORDER BY name, username
+		LIMIT 20
+	`, "%"+q+"%")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to search users: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var users []map[string]interface{}
+	for rows.Next() {
+		var id, email string
+		var username, name sql.NullString
+		if err := rows.Scan(&id, &username, &email, &name); err != nil {
+			continue
+		}
+		user := map[string]interface{}{"id": id, "email": email}
+		if username.Valid {
+			user["username"] = username.String
+		} else {
+			user["username"] = email
+		}
+		if name.Valid {
+			user["name"] = name.String
+		}
+		users = append(users, user)
+	}
+	if users == nil {
+		users = []map[string]interface{}{}
+	}
+
+	respondJSONRBAC(w, r, users, http.StatusOK)
+}
+
 func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	_, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -54,8 +106,12 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 
 	for rows.Next() {
 		var user map[string]interface{} = make(map[string]interface{})
-		var id, username, email string
-		var name, firstName, lastName, status, userTenantID sql.NullString
+		var id, email string
+		// username is nullable at the schema level (e.g. a user provisioned
+		// from a JWT with no natural username claim) — scanning it as a
+		// plain string previously made rows.Scan fail and silently drop the
+		// row from this admin picker, hiding the user from role assignment.
+		var username, name, firstName, lastName, status, userTenantID sql.NullString
 		var isActive bool
 		var createdAt time.Time
 
@@ -64,7 +120,11 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		user["id"] = id
-		user["username"] = username
+		if username.Valid {
+			user["username"] = username.String
+		} else {
+			user["username"] = email
+		}
 		user["email"] = email
 		if name.Valid {
 			user["name"] = name.String
@@ -92,55 +152,6 @@ func (h *RBACHandlers) listUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSONRBAC(w, r, users, http.StatusOK)
-}
-
-// createUser creates a new user in the tenant
-func (h *RBACHandlers) createUser(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Username  string `json:"username"`
-		Email     string `json:"email"`
-		Name      string `json:"name"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-		Password  string `json:"password"`
-		Status    string `json:"status"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.Username == "" || req.Email == "" {
-		http.Error(w, "Username and Email are required", http.StatusBadRequest)
-		return
-	}
-
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
-		return
-	}
-	tenantID := secCtx.TenantID
-
-	// Default status
-	if req.Status == "" {
-		req.Status = "active"
-	}
-
-	var userID string
-	err = h.db.QueryRow(`
-		INSERT INTO users (username, email, name, first_name, last_name, tenant_id, status, is_active, password_hash)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8)
-		RETURNING id
-	`, req.Username, req.Email, req.Name, req.FirstName, req.LastName, tenantID, req.Status, req.Password).Scan(&userID)
-
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create user: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	respondJSONRBAC(w, r, map[string]string{"id": userID, "status": "created"}, http.StatusCreated)
 }
 
 // updateUserTenant updates the tenant_id for a user

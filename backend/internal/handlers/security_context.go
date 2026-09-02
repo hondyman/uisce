@@ -8,10 +8,21 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 type SecurityContextDeps struct {
 	Resolver security.DatasourceResolver
+	// GroupRoleResolver, when set, merges tenant-scoped role_keys derived from
+	// the caller's IdP group claims (security.idp_group_role_mappings) into
+	// secCtx.Roles. Optional: nil means group-based entitlements are skipped
+	// and only literal role claims on the token apply (prior behavior).
+	GroupRoleResolver *security.GroupRoleResolver
+	// UserProvisioner, when set, just-in-time creates the app_user row for a
+	// first-time authenticated identity. Optional: nil means an unrecognized
+	// user simply has no roles/permissions rows to match (fails closed, not
+	// an error).
+	UserProvisioner *security.UserProvisioner
 }
 
 func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRegion string, deps SecurityContextDeps) (*security.Context, context.Context, error) {
@@ -89,7 +100,54 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 		return nil, r.Context(), err
 	}
 
+	// Just-in-time provision the app_user row for a first-time identity.
+	// Grants nothing by itself — role/entitlement resolution below is
+	// unaffected either way — it only ensures a row exists for admin UIs
+	// (user lists, role assignment) to attach to without a manual step.
+	if deps.UserProvisioner != nil {
+		email, name := "", ""
+		if claims, ok := auth.RawClaims.(*services.JWTClaims); ok && claims != nil {
+			email = claims.Email
+		}
+		if err := deps.UserProvisioner.EnsureUser(r.Context(), auth.UserID, email, name, secCtx.TenantID); err != nil {
+			logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user provisioning failed for user=%s: %v", auth.UserID, err)
+		}
+	}
+
+	// Merge tenant-scoped, group-derived roles on top of any literal role
+	// claims. Must happen after BuildContext resolves the active TenantID,
+	// since the same group can grant different role_keys in different
+	// tenants (e.g. read-only in one, full CRUD in another).
+	if deps.GroupRoleResolver != nil && !secCtx.IsGlobalAdmin {
+		if claims, ok := auth.RawClaims.(*services.JWTClaims); ok && claims != nil && len(claims.IdpGroups) > 0 {
+			groupRoles, err := deps.GroupRoleResolver.ResolveRoles(r.Context(), auth.UserID, secCtx.TenantID, claims.IdpGroups)
+			if err != nil {
+				logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] group role resolution failed for user=%s tenant=%s: %v", auth.UserID, secCtx.TenantID, err)
+			} else if len(groupRoles) > 0 {
+				secCtx.Roles = mergeRoles(secCtx.Roles, groupRoles)
+			}
+		}
+	}
+
 	// Inject security context into request context for downstream use
 	ctx := security.WithContext(r.Context(), secCtx)
 	return secCtx, ctx, nil
+}
+
+func mergeRoles(existing, additional []string) []string {
+	seen := make(map[string]struct{}, len(existing))
+	merged := make([]string, 0, len(existing)+len(additional))
+	for _, r := range existing {
+		if _, ok := seen[r]; !ok {
+			seen[r] = struct{}{}
+			merged = append(merged, r)
+		}
+	}
+	for _, r := range additional {
+		if _, ok := seen[r]; !ok {
+			seen[r] = struct{}{}
+			merged = append(merged, r)
+		}
+	}
+	return merged
 }

@@ -1,12 +1,13 @@
 /**
  * Field Permission Editor - Enterprise Field-Level Security
- * 
- * Features:
- * - Field-level access control configuration
- * - PII masking pattern management
- * - Role-to-field permission matrix
- * - Visual masking preview
- * - Compliance-ready security rules
+ *
+ * Configures bp_field_permissions rows for a specific business object, the
+ * same table/mechanism security.EntitlementsService reads to enforce read
+ * access, write access, and PII masking on BO records. Permissions here are
+ * always scoped to one resource_type="business_object" + resource_id (the
+ * selected BO's id) — EntitlementsService only ever queries
+ * resource_type='business_object', and enforcement is keyed per BO
+ * instance, so a permission row without a concrete resource_id is inert.
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -20,10 +21,6 @@ import {
   Security as SecurityIcon,
   Save as SaveIcon,
   Close as CloseIcon,
-  Add as AddIcon,
-  Delete as DeleteIcon,
-  Warning as WarningIcon,
-  CheckCircle as CheckCircleIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
 
@@ -36,18 +33,11 @@ interface FieldPermission {
   role_id: string;
   role_key: string;
   role_name: string;
-  resource_type: string;
+  resource_type?: string;
+  resource_id?: string;
   field_name: string;
   permission_level: 'none' | 'read' | 'write' | 'mask';
-}
-
-interface MaskingRule {
-  id: string;
-  resource_type: string;
-  field_name: string;
-  masking_type: 'full' | 'partial' | 'hash' | 'tokenize';
-  masking_pattern: string;
-  unmasked_roles: string[];
+  masking_pattern?: string;
 }
 
 interface Role {
@@ -55,6 +45,18 @@ interface Role {
   role_key: string;
   role_name: string;
   role_level: string;
+}
+
+interface BusinessObjectSummary {
+  id: string;
+  name: string;
+  displayName: string;
+}
+
+interface BOField {
+  id: string;
+  name: string;
+  technicalName: string;
 }
 
 interface FieldPermissionEditorProps {
@@ -68,59 +70,81 @@ interface FieldPermissionEditorProps {
 
 export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   tenant,
-  datasource,
 }) => {
   const [roles, setRoles] = useState<Role[]>([]);
+  const [businessObjects, setBusinessObjects] = useState<BusinessObjectSummary[]>([]);
+  const [selectedBOId, setSelectedBOId] = useState<string>('');
+  const [boFields, setBoFields] = useState<BOField[]>([]);
   const [fieldPermissions, setFieldPermissions] = useState<FieldPermission[]>([]);
-  const [maskingRules, setMaskingRules] = useState<MaskingRule[]>([]);
-  const [selectedRole, setSelectedRole] = useState<Role | null>(null);
-  const [selectedResource, setSelectedResource] = useState<string>('process');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showMaskingModal, setShowMaskingModal] = useState(false);
+  const [loadingFields, setLoadingFields] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Common sensitive fields
-  const sensitiveFields = [
-    { name: 'ssn', label: 'Social Security Number', category: 'PII' },
-    { name: 'tax_id', label: 'Tax ID', category: 'PII' },
-    { name: 'bank_account', label: 'Bank Account', category: 'Financial' },
-    { name: 'credit_card', label: 'Credit Card', category: 'Financial' },
-    { name: 'email', label: 'Email Address', category: 'PII' },
-    { name: 'phone', label: 'Phone Number', category: 'PII' },
-    { name: 'salary', label: 'Salary', category: 'Financial' },
-    { name: 'account_balance', label: 'Account Balance', category: 'Financial' },
-  ];
+  const [maskModal, setMaskModal] = useState<{ roleId: string; fieldName: string } | null>(null);
+  const [maskingPattern, setMaskingPattern] = useState('XXX-XX-####');
 
-  // Masking form state
-  const [maskingForm, setMaskingForm] = useState({
-    resource_type: 'process',
-    field_name: '',
-    masking_type: 'partial' as 'full' | 'partial' | 'hash' | 'tokenize',
-    masking_pattern: '',
-    unmasked_roles: [] as string[],
-  });
+  // Fetch roles + business objects once
+  useEffect(() => {
+    (async () => {
+      try {
+        setLoading(true);
+        const [roleData, boData] = await Promise.all([
+          apiClient<Role[]>('/api/rbac/roles'),
+          apiClient<BusinessObjectSummary[]>('/api/business-objects'),
+        ]);
+        setRoles(roleData || []);
+        const bos = boData || [];
+        setBusinessObjects(bos);
+        if (bos.length > 0) {
+          setSelectedBOId(bos[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load roles/business objects:', error);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [tenant.id]);
 
-  // Fetch roles
-  const fetchRoles = async () => {
-    try {
-      const data = await apiClient<Role[]>('/api/rbac/roles');
-      setRoles(data || []);
-    } catch (error) {
-      console.error('Failed to fetch roles:', error);
+  // Fetch this BO's fields + its existing field permissions whenever the selected BO changes
+  useEffect(() => {
+    if (!selectedBOId) {
+      setBoFields([]);
+      setFieldPermissions([]);
+      return;
     }
-  };
+    (async () => {
+      try {
+        setLoadingFields(true);
+        const [fields, perms] = await Promise.all([
+          apiClient<BOField[]>(`/api/business-objects/${selectedBOId}/fields`),
+          apiClient<FieldPermission[]>('/api/rbac/field-permissions'),
+        ]);
+        setBoFields(fields || []);
+        setFieldPermissions(
+          (perms || []).filter(
+            p => p.resource_type === 'business_object' && p.resource_id === selectedBOId
+          )
+        );
+      } catch (error) {
+        console.error('Failed to load BO fields/permissions:', error);
+      } finally {
+        setLoadingFields(false);
+      }
+    })();
+  }, [selectedBOId]);
 
-  // Fetch field permissions
-  const fetchFieldPermissions = async () => {
+  const refetchPermissions = async () => {
     try {
-      setLoading(true);
-      const data = await apiClient<FieldPermission[]>('/api/rbac/field-permissions');
-      setFieldPermissions(data || []);
+      const perms = await apiClient<FieldPermission[]>('/api/rbac/field-permissions');
+      setFieldPermissions(
+        (perms || []).filter(
+          p => p.resource_type === 'business_object' && p.resource_id === selectedBOId
+        )
+      );
     } catch (error) {
-      console.error('Failed to fetch field permissions:', error);
-    } finally {
-      setLoading(false);
+      console.error('Failed to refresh field permissions:', error);
     }
   };
 
@@ -128,20 +152,24 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
   const setFieldPermission = async (
     roleId: string,
     fieldName: string,
-    level: 'none' | 'read' | 'write' | 'mask'
+    level: 'none' | 'read' | 'write' | 'mask',
+    pattern?: string
   ) => {
+    if (!selectedBOId) return;
     try {
       setSaving(true);
       await apiClient(`/api/rbac/field-permissions`, {
         method: 'POST',
         body: JSON.stringify({
           role_id: roleId,
-          resource_type: selectedResource,
+          resource_type: 'business_object',
+          resource_id: selectedBOId,
           field_name: fieldName,
           permission_level: level,
+          masking_pattern: pattern,
         }),
       });
-      await fetchFieldPermissions();
+      await refetchPermissions();
     } catch (error) {
       console.error('Failed to set field permission:', error);
     } finally {
@@ -149,58 +177,34 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
     }
   };
 
-  // Create masking rule
-  const createMaskingRule = async () => {
-    try {
-      setSaving(true);
-      await apiClient(`/api/rbac/field-masking-rules`, {
-        method: 'POST',
-        body: JSON.stringify({
-          ...maskingForm,
-        }),
-      });
-      await fetchFieldPermissions();
-      setShowMaskingModal(false);
-      resetMaskingForm();
-    } catch (error) {
-      console.error('Failed to create masking rule:', error);
-    } finally {
-      setSaving(false);
+  const handleLevelClick = (roleId: string, fieldName: string, level: 'none' | 'read' | 'write' | 'mask') => {
+    if (level === 'mask') {
+      const existing = fieldPermissions.find(
+        p => p.role_id === roleId && p.field_name === fieldName
+      );
+      setMaskingPattern(existing?.masking_pattern || 'XXX-XX-####');
+      setMaskModal({ roleId, fieldName });
+      return;
     }
-  };
-
-  // Reset masking form
-  const resetMaskingForm = () => {
-    setMaskingForm({
-      resource_type: 'process',
-      field_name: '',
-      masking_type: 'partial',
-      masking_pattern: '',
-      unmasked_roles: [],
-    });
+    setFieldPermission(roleId, fieldName, level);
   };
 
   // Get permission for role and field
   const getPermission = (roleId: string, fieldName: string): 'none' | 'read' | 'write' | 'mask' => {
     const perm = fieldPermissions.find(
-      p => p.role_id === roleId && p.field_name === fieldName && p.resource_type === selectedResource
+      p => p.role_id === roleId && p.field_name === fieldName
     );
     return perm?.permission_level || 'none';
   };
 
   // Filter fields by search
   const filteredFields = useMemo(() => {
-    return sensitiveFields.filter(field =>
-      field.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      field.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      field.category.toLowerCase().includes(searchTerm.toLowerCase())
+    const q = searchTerm.toLowerCase();
+    return boFields.filter(field =>
+      (field.name || '').toLowerCase().includes(q) ||
+      (field.technicalName || '').toLowerCase().includes(q)
     );
-  }, [searchTerm]);
-
-  useEffect(() => {
-    fetchRoles();
-    fetchFieldPermissions();
-  }, [tenant.id]);
+  }, [boFields, searchTerm]);
 
   const getPermissionColor = (level: string) => {
     const colors = {
@@ -222,32 +226,11 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
     return icons[level] || <VisibilityOffIcon sx={{ width: 16, height: 16 }} />;
   };
 
-  const maskingPatterns = {
-    ssn: 'XXX-XX-####',
-    tax_id: 'XX-XXXXXXX',
-    bank_account: 'XXXX-####',
-    credit_card: 'XXXX-XXXX-XXXX-####',
-    email: 'X***@domain.com',
-    phone: '(XXX) XXX-####',
-  };
-
-  const getExampleMasked = (fieldName: string, pattern: string) => {
-    const examples = {
-      ssn: { original: '123-45-6789', masked: 'XXX-XX-6789' },
-      tax_id: { original: '12-3456789', masked: 'XX-XXXXXX9' },
-      bank_account: { original: '1234-5678', masked: 'XXXX-5678' },
-      credit_card: { original: '1234-5678-9012-3456', masked: 'XXXX-XXXX-XXXX-3456' },
-      email: { original: 'john.doe@example.com', masked: 'j***@example.com' },
-      phone: { original: '(555) 123-4567', masked: '(XXX) XXX-4567' },
-    };
-    return examples[fieldName as keyof typeof examples] || { original: 'Sample', masked: 'XXXX' };
-  };
-
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          <SecurityIcon sx={{ width: 48, height: 48, color: 'primary.main', animation: 'pulse 2s infinite' }} />
+          <SecurityIcon sx={{ width: 48, height: 48, color: 'primary.main' }} />
           <Typography color="text.secondary">Loading field permissions...</Typography>
         </Box>
       </Box>
@@ -258,38 +241,30 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6">
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <LockIcon sx={{ width: 32, height: 32, color: 'primary.main' }} />
-              Field Permission Editor
-            </h1>
-            <p className="text-gray-600 mt-2">
-              Configure field-level security and masking rules for {tenant.display_name}
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              resetMaskingForm();
-              setShowMaskingModal(true);
-            }}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2 shadow-lg"
-          >
-            <AddIcon sx={{ width: 20, height: 20 }} />
-            Add Masking Rule
-          </button>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <LockIcon sx={{ width: 32, height: 32, color: 'primary.main' }} />
+            Field Permission Editor
+          </h1>
+          <p className="text-gray-600 mt-2">
+            Configure per-field read/write/mask access for {tenant.display_name}. Changes apply to the
+            selected business object only.
+          </p>
         </div>
 
-        {/* Resource Type & Search */}
+        {/* Business Object & Search */}
         <div className="flex gap-4 mt-6">
           <select
-            value={selectedResource}
-            onChange={(e) => setSelectedResource(e.target.value)}
-            className="px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white"
+            value={selectedBOId}
+            onChange={(e) => setSelectedBOId(e.target.value)}
+            className="px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 bg-white min-w-[220px]"
           >
-            <option value="process">Process</option>
-            <option value="step">Step</option>
-            <option value="document">Document</option>
+            {businessObjects.length === 0 && <option value="">No business objects found</option>}
+            {businessObjects.map(bo => (
+              <option key={bo.id} value={bo.id}>
+                {bo.displayName || bo.name}
+              </option>
+            ))}
           </select>
           <div className="flex-1 relative">
             <SearchIcon sx={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'text.secondary', width: 20, height: 20 }} />
@@ -311,9 +286,8 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             <thead className="bg-gray-100">
               <tr>
                 <th className="text-left py-4 px-6 font-bold text-gray-700 sticky left-0 bg-gray-100 z-10">
-                  Field Name
+                  Field
                 </th>
-                <th className="text-left py-4 px-6 font-bold text-gray-700">Category</th>
                 {roles.map(role => (
                   <th key={role.id} className="text-center py-4 px-4 font-bold text-gray-700 min-w-[150px]">
                     <div className="flex flex-col items-center gap-1">
@@ -325,49 +299,57 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
               </tr>
             </thead>
             <tbody>
-              {filteredFields.map((field, idx) => (
-                <tr key={field.name} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="py-4 px-6 font-medium text-gray-900 sticky left-0 bg-inherit z-10">
-                    <div>
-                      <div className="font-bold">{field.label}</div>
-                      <div className="text-xs text-gray-500">{field.name}</div>
-                    </div>
+              {loadingFields ? (
+                <tr>
+                  <td colSpan={roles.length + 1} className="py-8 text-center text-gray-500">
+                    Loading fields...
                   </td>
-                  <td className="py-4 px-6">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                      field.category === 'PII'
-                        ? 'bg-purple-100 text-purple-700 border border-purple-300'
-                        : 'bg-green-100 text-green-700 border border-green-300'
-                    }`}>
-                      {field.category}
-                    </span>
+                </tr>
+              ) : filteredFields.length === 0 ? (
+                <tr>
+                  <td colSpan={roles.length + 1} className="py-8 text-center text-gray-500">
+                    {selectedBOId ? 'No fields found for this business object.' : 'Select a business object.'}
                   </td>
-                  {roles.map(role => {
-                    const currentLevel = getPermission(role.id, field.name);
-                    return (
-                      <td key={role.id} className="py-4 px-4">
-                        <div className="flex flex-col gap-1">
-                          {(['none', 'read', 'write', 'mask'] as const).map(level => (
-                            <button
-                              key={level}
-                              onClick={() => setFieldPermission(role.id, field.name, level)}
-                              disabled={saving}
-                              className={`px-3 py-2 rounded-lg text-xs font-bold border-2 transition-all flex items-center justify-center gap-2 ${
-                                currentLevel === level
-                                  ? getPermissionColor(level)
-                                  : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              {getPermissionIcon(level)}
-                              {level.toUpperCase()}
-                            </button>
-                          ))}
+                </tr>
+              ) : (
+                filteredFields.map((field, idx) => {
+                  const fieldName = field.technicalName || field.name;
+                  return (
+                    <tr key={field.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="py-4 px-6 font-medium text-gray-900 sticky left-0 bg-inherit z-10">
+                        <div>
+                          <div className="font-bold">{field.name}</div>
+                          <div className="text-xs text-gray-500">{fieldName}</div>
                         </div>
                       </td>
-                    );
-                  })}
-                </tr>
-              ))}
+                      {roles.map(role => {
+                        const currentLevel = getPermission(role.id, fieldName);
+                        return (
+                          <td key={role.id} className="py-4 px-4">
+                            <div className="flex flex-col gap-1">
+                              {(['none', 'read', 'write', 'mask'] as const).map(level => (
+                                <button
+                                  key={level}
+                                  onClick={() => handleLevelClick(role.id, fieldName, level)}
+                                  disabled={saving}
+                                  className={`px-3 py-2 rounded-lg text-xs font-bold border-2 transition-all flex items-center justify-center gap-2 ${
+                                    currentLevel === level
+                                      ? getPermissionColor(level)
+                                      : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  {getPermissionIcon(level)}
+                                  {level.toUpperCase()}
+                                </button>
+                              ))}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -383,7 +365,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             </div>
             <div>
               <div className="font-medium text-gray-900">None</div>
-              <div className="text-xs text-gray-600">No access (hidden)</div>
+              <div className="text-xs text-gray-600">Field hidden entirely</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -392,7 +374,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             </div>
             <div>
               <div className="font-medium text-gray-900">Read</div>
-              <div className="text-xs text-gray-600">Full visibility</div>
+              <div className="text-xs text-gray-600">Visible, not editable</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -401,7 +383,7 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             </div>
             <div>
               <div className="font-medium text-gray-900">Write</div>
-              <div className="text-xs text-gray-600">Full access</div>
+              <div className="text-xs text-gray-600">Visible and editable</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -410,162 +392,67 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({
             </div>
             <div>
               <div className="font-medium text-gray-900">Mask</div>
-              <div className="text-xs text-gray-600">Partial visibility</div>
+              <div className="text-xs text-gray-600">Visible, value replaced</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Masking Modal */}
-      {showMaskingModal && (
+      {/* Masking pattern modal — shown when a cell is set to "mask" */}
+      {maskModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
             <div className="p-6 border-b-2 border-gray-200">
               <div className="flex items-center justify-between">
-                <h3 className="text-2xl font-bold text-gray-900">Add Masking Rule</h3>
+                <h3 className="text-xl font-bold text-gray-900">Masking Pattern</h3>
                 <button
-                  onClick={() => setShowMaskingModal(false)}
+                  onClick={() => setMaskModal(null)}
                   className="p-2 hover:bg-gray-100 rounded-lg transition-all"
                 >
                   <CloseIcon sx={{ width: 24, height: 24, color: 'text.secondary' }} />
                 </button>
               </div>
+              <p className="text-sm text-gray-600 mt-2">
+                Field <span className="font-mono font-bold">{maskModal.fieldName}</span>
+              </p>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Field Name *
-                </label>
-                <select
-                  value={maskingForm.field_name}
-                  onChange={(e) => {
-                    const fieldName = e.target.value;
-                    setMaskingForm({
-                      ...maskingForm,
-                      field_name: fieldName,
-                      masking_pattern: maskingPatterns[fieldName as keyof typeof maskingPatterns] || '',
-                    });
-                  }}
-                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                >
-                  <option value="">Select a field</option>
-                  {sensitiveFields.map(field => (
-                    <option key={field.name} value={field.name}>
-                      {field.label} ({field.name})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Masking Type *
-                </label>
-                <select
-                  value={maskingForm.masking_type}
-                  onChange={(e) =>
-                    setMaskingForm({
-                      ...maskingForm,
-                      masking_type: e.target.value as 'full' | 'partial' | 'hash' | 'tokenize',
-                    })
-                  }
-                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
-                >
-                  <option value="full">Full Masking (****)</option>
-                  <option value="partial">Partial Masking (XXX-XX-1234)</option>
-                  <option value="hash">Hash (SHA-256)</option>
-                  <option value="tokenize">Tokenize (Replace with token)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Masking Pattern *
+                  Pattern
                 </label>
                 <input
                   type="text"
-                  value={maskingForm.masking_pattern}
-                  onChange={(e) =>
-                    setMaskingForm({ ...maskingForm, masking_pattern: e.target.value })
-                  }
-                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                  value={maskingPattern}
+                  onChange={(e) => setMaskingPattern(e.target.value)}
+                  className="w-full p-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 font-mono"
                   placeholder="e.g., XXX-XX-####"
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  Use X for masked characters, # for visible characters from the end
+                  X = masked character, # = visible character kept from the end of the value.
                 </p>
-              </div>
-
-              {/* Preview */}
-              {maskingForm.field_name && maskingForm.masking_pattern && (
-                <div className="p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
-                  <h4 className="font-bold text-gray-900 mb-3">Masking Preview</h4>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Original</p>
-                      <p className="font-mono text-lg text-gray-900">
-                        {getExampleMasked(maskingForm.field_name, maskingForm.masking_pattern).original}
-                      </p>
-                    </div>
-                    <div className="text-2xl text-gray-400">→</div>
-                    <div>
-                      <p className="text-sm text-gray-600">Masked</p>
-                      <p className="font-mono text-lg font-bold text-blue-600">
-                        {maskingForm.masking_pattern}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Unmasked Roles (Full Access)
-                </label>
-                <div className="space-y-2 max-h-48 overflow-y-auto border-2 border-gray-200 rounded-lg p-4">
-                  {roles.map(role => (
-                    <label key={role.id} className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={maskingForm.unmasked_roles.includes(role.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setMaskingForm({
-                              ...maskingForm,
-                              unmasked_roles: [...maskingForm.unmasked_roles, role.id],
-                            });
-                          } else {
-                            setMaskingForm({
-                              ...maskingForm,
-                              unmasked_roles: maskingForm.unmasked_roles.filter(id => id !== role.id),
-                            });
-                          }
-                        }}
-                        className="w-5 h-5 text-blue-600 border-2 border-gray-300 rounded"
-                      />
-                      <span className="font-medium text-gray-900">{role.role_name}</span>
-                      <span className="text-xs text-gray-500">({role.role_level})</span>
-                    </label>
-                  ))}
-                </div>
               </div>
             </div>
 
             <div className="p-6 border-t-2 border-gray-200 flex justify-end gap-3">
               <button
-                onClick={() => setShowMaskingModal(false)}
+                onClick={() => setMaskModal(null)}
                 className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-all"
               >
                 Cancel
               </button>
               <button
-                onClick={createMaskingRule}
-                disabled={!maskingForm.field_name || !maskingForm.masking_pattern || saving}
+                onClick={async () => {
+                  if (!maskModal) return;
+                  await setFieldPermission(maskModal.roleId, maskModal.fieldName, 'mask', maskingPattern);
+                  setMaskModal(null);
+                }}
+                disabled={!maskingPattern || saving}
                 className="px-6 py-3 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-all flex items-center gap-2 disabled:opacity-50"
               >
                 <SaveIcon sx={{ width: 20, height: 20 }} />
-                {saving ? 'Saving...' : 'Save Rule'}
+                {saving ? 'Saving...' : 'Apply Mask'}
               </button>
             </div>
           </div>
