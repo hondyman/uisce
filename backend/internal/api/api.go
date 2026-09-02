@@ -12,6 +12,7 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -1058,6 +1059,24 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		ExportHandlers:    nil, // Will be set after initialization
 		SchedulerHandlers: nil, // Will be set after initialization
+	}
+
+	// Connect to the external aggregates datasource (e.g. the Northwind CRM
+	// database that BO record CRUD reads/writes against for northwind-*
+	// business objects — see metadata.BusinessObjectService.recordDB and
+	// bo_sql_routes.go's "northwinds" check) — this field existed and was
+	// checked in several places but never actually assigned anywhere, so
+	// every one of those call sites silently fell back to the platform DB.
+	if aggDSN, err := buildAggregatesDatasourceDSN(sqlxDB); err != nil {
+		log.Printf("[WARN] no external aggregates datasource configured: %v", err)
+	} else if aggDB, err := sql.Open("postgres", aggDSN); err != nil {
+		log.Printf("[WARN] failed to open aggregates datasource connection: %v", err)
+	} else if err := aggDB.Ping(); err != nil {
+		log.Printf("[WARN] failed to ping aggregates datasource: %v", err)
+		aggDB.Close()
+	} else {
+		srv.AggregatesDB = aggDB
+		log.Printf("[INFO] Connected to external aggregates datasource")
 	}
 
 	// Register trace proxy and metrics endpoints
@@ -3870,7 +3889,11 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB, redisClient
 	apiStudioHandler := NewAPIStudioHandler(sqlxDB, triggerEngine)
 	apiStudioHandler.RegisterRoutes(r)
 
-	RegisterAPIRuntimeRoutes(r, sqlxDB, redisClient)
+	var aggregatesDB *sqlx.DB
+	if s.AggregatesDB != nil {
+		aggregatesDB = sqlx.NewDb(s.AggregatesDB, "postgres")
+	}
+	RegisterAPIRuntimeRoutes(r, sqlxDB, redisClient, aggregatesDB)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints
@@ -4686,4 +4709,38 @@ func newCBOTelemetryRouter(sqlxDB *sqlx.DB) *cbo.TelemetryRouter {
 	}
 	tr := cbo.NewTelemetryRouter(sqlxDB, redisClient, cfg, cbo.NewNopLogger())
 	return tr
+}
+
+// buildAggregatesDatasourceDSN reads the database_name for the platform's
+// external aggregates datasource (currently: exactly one row — see
+// tenant_datasources' host/port/database_name/username/password columns)
+// and returns a libpq DSN for it, reusing DATABASE_URL's own host/sslmode/
+// client-cert settings (same Postgres server, just a different database)
+// rather than assuming the aggregates connection is unauthenticated or
+// unencrypted. There is only ever one such datasource wired up today
+// (matching the existing hardcoded "northwinds" checks in
+// metadata.BusinessObjectService.recordDB and bo_sql_routes.go); this
+// doesn't attempt real per-tenant multi-datasource routing.
+func buildAggregatesDatasourceDSN(db *sqlx.DB) (string, error) {
+	var databaseName string
+	err := db.Get(&databaseName, `
+		SELECT database_name
+		FROM tenant_datasources
+		WHERE datasource_type = 'postgres' AND host IS NOT NULL AND database_name IS NOT NULL
+		LIMIT 1
+	`)
+	if err != nil {
+		return "", fmt.Errorf("no external postgres datasource configured in tenant_datasources: %w", err)
+	}
+
+	baseURL := os.Getenv("DATABASE_URL")
+	if baseURL == "" {
+		return "", fmt.Errorf("DATABASE_URL not set, cannot derive aggregates connection settings")
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse DATABASE_URL: %w", err)
+	}
+	parsed.Path = "/" + databaseName
+	return parsed.String(), nil
 }

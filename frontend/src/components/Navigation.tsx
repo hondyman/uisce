@@ -22,6 +22,7 @@ const ANALYTICS_MENU: MenuGroup = {
   id: 'analytics',
   label: 'Analytics',
   items: [
+    { id: 'ai-assistant', label: 'AI Catalog Assistant', description: 'Query semantics across Snowflake Cortex, Databricks Genie & Claude.', to: '/ai-assistant', icon: '🧠' },
     { id: 'metrics', label: 'Metrics Console', description: 'Centralized metrics definition and monitoring.', to: '/metrics', icon: '📊' },
     { id: 'nlq', label: 'Ask AI', description: 'Natural language query interface.', to: '/nlq', icon: '🤖' },
     { id: 'fixed-income', label: 'Fixed Income Analytics', description: 'Bond analytics and yield curve analysis.', to: '/fixed-income' },
@@ -101,6 +102,7 @@ const SETTINGS_MENU: MenuGroup = {
   id: 'settings',
   label: 'Settings',
   items: [
+    { id: 'ai-bridge', label: 'AI Semantic Bridge', description: 'Manage push targets to Snowflake Cortex, Databricks & MCP.', to: '/admin/ai-semantic-bridge' },
     { id: 'tenants', label: 'Tenant Management', description: 'Manage tenants and data sources.', to: '/tenants' },
     { id: 'roles', label: 'Role Management', description: 'Assign permissions to roles.', to: '/fabric/roles' },
     { id: 'llm', label: 'LLM Configuration', description: 'Configure AI model providers.', to: '/admin/llm' },

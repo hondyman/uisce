@@ -73,6 +73,24 @@ func (s *MCPServer) ListTools() []ToolDefinition {
 				},
 			},
 		},
+		{
+			Name:        "get_semantic_catalog",
+			Description: "Retrieves the full taxonomy hierarchy and registered Business Objects for the active tenant.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+			},
+		},
+		{
+			Name:        "get_business_object_details",
+			Description: "Retrieves detailed dimensions, measures, formulas, and expressions for a given Business Object key.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"boKey": map[string]interface{}{"type": "string", "description": "Business Object key (e.g. 'account', 'position', 'customer')"},
+				},
+				"required": []string{"boKey"},
+			},
+		},
 	}
 }
 
@@ -102,6 +120,20 @@ func (s *MCPServer) ExecuteTool(ctx context.Context, req ToolExecutionRequest) (
 
 	case "inspect_schema_drift":
 		result, execErr = s.inspectSchemaDrift(ctx, req.TenantID)
+
+	case "get_semantic_catalog":
+		result, execErr = s.getSemanticCatalog(ctx, req.TenantID)
+
+	case "get_business_object_details":
+		boKey, _ := req.Parameters["boKey"].(string)
+		if boKey == "" {
+			boKey, _ = req.Parameters["bo_key"].(string)
+		}
+		if boKey == "" {
+			execErr = fmt.Errorf("boKey parameter is required")
+		} else {
+			result, execErr = s.getBusinessObjectDetails(ctx, req.TenantID, boKey)
+		}
 
 	default:
 		execErr = fmt.Errorf("unrecognized MCP tool: %s", req.ToolName)
@@ -207,6 +239,92 @@ func (s *MCPServer) inspectSchemaDrift(ctx context.Context, tenantID uuid.UUID) 
 			"fieldName":      p.FieldName,
 			"proposedColumn": p.ProposedColumn,
 			"confidence":     p.Confidence,
+		})
+	}
+	return results, nil
+}
+
+func (s *MCPServer) getSemanticCatalog(ctx context.Context, tenantID uuid.UUID) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+
+	query := `
+		SELECT bo.bo_key, bo.bo_name, bo.bo_type, COALESCE(bo.description, '') AS description,
+		       COALESCE(t.node_name, '') AS classification
+		FROM public.business_object bo
+		LEFT JOIN public.catalog_node t ON bo.classification_node_id = t.node_id
+		WHERE (bo.tenant_id = $1 OR bo.tenant_id = '00000000-0000-0000-0000-000000000000')
+		  AND bo.is_active = TRUE
+		ORDER BY bo.bo_key ASC;`
+
+	type boRow struct {
+		BOKey          string `db:"bo_key"`
+		BOName         string `db:"bo_name"`
+		BOType         string `db:"bo_type"`
+		Description    string `db:"description"`
+		Classification string `db:"classification"`
+	}
+
+	var rows []boRow
+	if err := s.db.SelectContext(ctx, &rows, query, tenantID); err != nil {
+		return nil, fmt.Errorf("failed querying catalog: %w", err)
+	}
+
+	results := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		results = append(results, map[string]interface{}{
+			"bo_key":         r.BOKey,
+			"bo_name":        r.BOName,
+			"bo_type":        r.BOType,
+			"description":    r.Description,
+			"classification": r.Classification,
+		})
+	}
+	return results, nil
+}
+
+func (s *MCPServer) getBusinessObjectDetails(ctx context.Context, tenantID uuid.UUID, boKey string) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+
+	query := `
+		SELECT bof.field_name, bof.field_role, COALESCE(st.node_name, bof.field_name) AS term_name,
+		       COALESCE(st.properties->>'data_type', 'VARCHAR') AS data_type,
+		       COALESCE(st.properties->>'aggregation_type', 'NONE') AS agg_type,
+		       COALESCE(fb.transformation_sql, col.node_name, bof.field_name) AS expression
+		FROM public.business_object bo
+		JOIN public.business_object_field bof ON bo.id = bof.bo_id
+		LEFT JOIN public.catalog_node st ON bof.term_node_id = st.node_id
+		LEFT JOIN public.field_binding fb ON fb.field_id = bof.id AND (fb.tenant_id = $1 OR fb.tenant_id = '00000000-0000-0000-0000-000000000000')
+		LEFT JOIN public.catalog_node col ON fb.source_node_id = col.node_id
+		WHERE bo.bo_key = $2 AND (bo.tenant_id = $1 OR bo.tenant_id = '00000000-0000-0000-0000-000000000000')
+		  AND bof.is_active = TRUE;`
+
+	type fieldRow struct {
+		FieldName  string `db:"field_name"`
+		FieldRole  string `db:"field_role"`
+		TermName   string `db:"term_name"`
+		DataType   string `db:"data_type"`
+		AggType    string `db:"agg_type"`
+		Expression string `db:"expression"`
+	}
+
+	var rows []fieldRow
+	if err := s.db.SelectContext(ctx, &rows, query, tenantID, boKey); err != nil {
+		return nil, fmt.Errorf("failed fetching BO details: %w", err)
+	}
+
+	results := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		results = append(results, map[string]interface{}{
+			"field_name": r.FieldName,
+			"field_role": r.FieldRole,
+			"term_name":  r.TermName,
+			"data_type":  r.DataType,
+			"agg_type":   r.AggType,
+			"expression": r.Expression,
 		})
 	}
 	return results, nil
