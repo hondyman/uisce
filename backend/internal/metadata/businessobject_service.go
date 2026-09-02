@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -81,6 +82,8 @@ type BusinessObjectService struct {
 	lineageRepo    lineage.LineageRepository
 	aggregatesDB   *sqlx.DB
 	entitlements   *security.EntitlementsService
+	boRepo         *boresolver.PostgresBORepository
+	boGen          *boresolver.BOSQLGenerator
 }
 
 // SetEntitlementsService wires the field/BO-level entitlements engine used to
@@ -150,11 +153,18 @@ func (s *BusinessObjectService) boFieldsDisplayNameExpr(ctx context.Context, sch
 
 // NewBusinessObjectService creates a new BO service
 func NewBusinessObjectService(db *sqlx.DB, tm *platform.TenantDBManager, ap *events.AuditEventPublisher, lr lineage.LineageRepository) *BusinessObjectService {
+	boRepo := boresolver.NewPostgresBORepository(db)
+	boGen, err := boresolver.NewBOSQLGenerator(boRepo, "postgres")
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("failed to construct BOSQLGenerator: %v", err)
+	}
 	return &BusinessObjectService{
 		db:             db,
 		tenantManager:  tm,
 		auditPublisher: ap,
 		lineageRepo:    lr,
+		boRepo:         boRepo,
+		boGen:          boGen,
 	}
 }
 
@@ -4317,56 +4327,98 @@ func (s *BusinessObjectService) QueryBORecords(
 		return nil, err
 	}
 
-	// 2. Resolve Driver Table
-	drivingTable := bo.DriverTableName
-	if drivingTable == "" && bo.DriverTableID.Valid && bo.DriverTableID.String != "" {
-		_ = s.db.GetContext(ctx, &drivingTable, `SELECT node_name FROM catalog_node WHERE id = $1::uuid`, bo.DriverTableID.String)
-	}
-	if drivingTable == "" {
-		drivingTable = bo.TechnicalName
-	}
-	if drivingTable == "" {
-		drivingTable = bo.Key
-	}
-
-	// Clean table name
-	rawTable := drivingTable
-	rawTable = strings.TrimPrefix(rawTable, "/")
-	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
-		rawTable = rawTable[idx+1:]
-	}
-
-	// 3. Determine available fields/columns
-	columnNames := make([]string, 0)
-	for _, f := range bo.CoreFields {
-		col := f.TechnicalName
-		if col == "" {
-			col = f.Name
-		}
-		if col != "" {
-			columnNames = append(columnNames, col)
-		}
-	}
-	for _, f := range bo.CustomFields {
-		col := f.TechnicalName
-		if col == "" {
-			col = f.Name
-		}
-		if col != "" {
-			columnNames = append(columnNames, col)
-		}
-	}
-
-	// Include subtype-specific fields in projection when subtype filter is active
-	if req.SubtypeKey != "" {
-		if st, ok := bo.Subtypes[req.SubtypeKey]; ok {
-			for _, f := range st.SubtypeFields {
-				col := f.TechnicalName
-				if col == "" {
-					col = f.Name
+	// 2+3. Resolve the driver table and its columns via the canonical
+	// boresolver BO-SQL system — the same physical-column/table resolution
+	// already used (and proven correct against schema drift) by AI query
+	// generation, the Query Builder, and API Studio — instead of this
+	// service's own duplicate driver-table-name/field-list logic. Falls back
+	// to that legacy resolution only when boresolver has no catalog data for
+	// this BO yet (see 20260902_003_sync_business_objects_to_catalog_node.sql,
+	// which today only covers northwind's BOs).
+	var rawTable string
+	var columnNames []string
+	baseFromSQL := ""
+	if s.boGen != nil && s.boRepo != nil {
+		if boDef, boErr := s.boRepo.GetBOByTechnicalName(bo.Key, secCtx.TenantID, secCtx.DatasourceID); boErr == nil {
+			fieldIDs := make([]string, 0, len(boDef.Fields))
+			for _, f := range boDef.Fields {
+				fieldIDs = append(fieldIDs, f.ID)
+				columnNames = append(columnNames, f.Name)
+			}
+			var subtypeKey *string
+			if req.SubtypeKey != "" {
+				subtypeKey = &req.SubtypeKey
+			}
+			genSQL, _, genErr := s.boGen.GenerateSQL(boresolver.SQLGenerationRequest{
+				TenantID:           secCtx.TenantID,
+				BusinessObjectID:   boDef.ID,
+				SelectedFields:     fieldIDs,
+				SelectedSubtypeKey: subtypeKey,
+			})
+			if genErr == nil {
+				baseFromSQL = genSQL
+				rawTable = strings.TrimSuffix(strings.TrimPrefix(boDef.DrivingTable, "/"), "/")
+				if idx := strings.LastIndex(rawTable, "/"); idx >= 0 {
+					rawTable = rawTable[idx+1:]
 				}
-				if col != "" {
-					columnNames = append(columnNames, col)
+			} else {
+				logging.GetLogger().Sugar().Warnf("boresolver SQL generation failed for BO %q, falling back to legacy resolution: %v", bo.Key, genErr)
+				columnNames = nil
+			}
+		} else {
+			logging.GetLogger().Sugar().Debugf("boresolver has no catalog data for BO %q, using legacy driver-table resolution: %v", bo.Key, boErr)
+		}
+	}
+
+	if baseFromSQL == "" {
+		// Legacy fallback: resolve driver table/columns straight off the BO
+		// definition rather than the catalog graph.
+		drivingTable := bo.DriverTableName
+		if drivingTable == "" && bo.DriverTableID.Valid && bo.DriverTableID.String != "" {
+			_ = s.db.GetContext(ctx, &drivingTable, `SELECT node_name FROM catalog_node WHERE id = $1::uuid`, bo.DriverTableID.String)
+		}
+		if drivingTable == "" {
+			drivingTable = bo.TechnicalName
+		}
+		if drivingTable == "" {
+			drivingTable = bo.Key
+		}
+
+		rawTable = drivingTable
+		rawTable = strings.TrimPrefix(rawTable, "/")
+		if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
+			rawTable = rawTable[idx+1:]
+		}
+
+		columnNames = nil
+		for _, f := range bo.CoreFields {
+			col := f.TechnicalName
+			if col == "" {
+				col = f.Name
+			}
+			if col != "" {
+				columnNames = append(columnNames, col)
+			}
+		}
+		for _, f := range bo.CustomFields {
+			col := f.TechnicalName
+			if col == "" {
+				col = f.Name
+			}
+			if col != "" {
+				columnNames = append(columnNames, col)
+			}
+		}
+		if req.SubtypeKey != "" {
+			if st, ok := bo.Subtypes[req.SubtypeKey]; ok {
+				for _, f := range st.SubtypeFields {
+					col := f.TechnicalName
+					if col == "" {
+						col = f.Name
+					}
+					if col != "" {
+						columnNames = append(columnNames, col)
+					}
 				}
 			}
 		}
@@ -4452,8 +4504,12 @@ func (s *BusinessObjectService) QueryBORecords(
 		}
 	}
 
-	// Subtype key filter — supports STI subtype partitioned records
-	if req.SubtypeKey != "" {
+	// Subtype key filter — supports STI subtype partitioned records. When the
+	// boresolver base query is in play, its own SelectedSubtypeKey pushdown
+	// already scoped this (see above); the manual predicate here is only for
+	// the legacy fallback, since the wrapped boresolver result set doesn't
+	// necessarily project a "subtype_code" column.
+	if req.SubtypeKey != "" && baseFromSQL == "" {
 		whereClauses = append(whereClauses, fmt.Sprintf("subtype_code = $%d", argIdx))
 		args = append(args, req.SubtypeKey)
 		argIdx++
@@ -4463,8 +4519,13 @@ func (s *BusinessObjectService) QueryBORecords(
 
 	recDB := s.recordDB(bo)
 
+	fromSQL := pq.QuoteIdentifier(rawTable)
+	if baseFromSQL != "" {
+		fromSQL = fmt.Sprintf("(%s) bo_base", baseFromSQL)
+	}
+
 	// 5. Total count query
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", pq.QuoteIdentifier(rawTable), whereSQL)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", fromSQL, whereSQL)
 	var total int
 	if err := recDB.GetContext(ctx, &total, countSQL, args...); err != nil {
 		logging.GetLogger().Sugar().Warnf("Count query failed: %v", err)
@@ -4493,7 +4554,7 @@ func (s *BusinessObjectService) QueryBORecords(
 
 	querySQL := fmt.Sprintf(
 		"SELECT %s FROM %s WHERE %s %s LIMIT %d OFFSET %d",
-		selectCols, pq.QuoteIdentifier(rawTable), whereSQL, orderSQL, limit, offset,
+		selectCols, fromSQL, whereSQL, orderSQL, limit, offset,
 	)
 
 	rows, err := recDB.QueryxContext(ctx, querySQL, args...)

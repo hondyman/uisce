@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/security"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
@@ -24,6 +25,7 @@ type BOCRUDHandler struct {
 	db              *sqlx.DB
 	trigger         *TriggerEngine
 	entitlementRepo *cbo.DBEntitlementRepository
+	boRepo          *boresolver.PostgresBORepository
 	// entitlements is the fallback authorization check for writes when no
 	// semantic.bo_entitlement_policies row exists for a BO (the common
 	// case — that table is empty platform-wide as of this writing). Without
@@ -37,7 +39,7 @@ type BOCRUDHandler struct {
 }
 
 func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
-	return &BOCRUDHandler{db: db, trigger: trigger, entitlementRepo: cbo.NewDBEntitlementRepository(db)}
+	return &BOCRUDHandler{db: db, trigger: trigger, entitlementRepo: cbo.NewDBEntitlementRepository(db), boRepo: boresolver.NewPostgresBORepository(db)}
 }
 
 // SetEntitlementsService wires the bp_field_permissions-backed write gate
@@ -355,6 +357,20 @@ type boBindingMetadata struct {
 }
 
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
+	// 0. Try the canonical boresolver BO->table resolver — the same
+	// resolution already used (and kept correct against schema drift) by AI
+	// query generation, the Query Builder, and API Studio, instead of this
+	// handler's own duplicate business_objects/catalog_node lookups below
+	// (tiers 1-2 reference columns — bo.key, business_object_bindings,
+	// bo.is_gold_copy — that don't exist on this schema and always miss).
+	if h.boRepo != nil {
+		if boDef, err := h.boRepo.GetBOByTechnicalName(boKey, tenantID.String(), ""); err == nil {
+			if drivingTable := qualifiedTableFromDrivingTable(boDef.DrivingTable); drivingTable != "" {
+				return &boBindingMetadata{DrivingTable: drivingTable, KeyColumn: "id"}, nil
+			}
+		}
+	}
+
 	var boMeta boBindingMetadata
 
 	// 1. Try public.business_objects + business_object_bindings
@@ -415,6 +431,20 @@ func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, ten
 	}
 
 	return nil, fmt.Errorf("business object definition not found for key '%s'", boKey)
+}
+
+// qualifiedTableFromDrivingTable normalizes boresolver's DrivingTable
+// (business_objects.driver_table_name, e.g. "/public/customers") to the
+// unquoted "schema.table" form every call site in this file expects
+// (resolveDiscriminatorColumn splits on ".", raw SQL is built with
+// fmt.Sprintf("FROM %s", drivingTable) directly). A bare table name with no
+// schema segment is returned unchanged.
+func qualifiedTableFromDrivingTable(drivingTable string) string {
+	t := strings.Trim(drivingTable, "/")
+	if t == "" {
+		return ""
+	}
+	return strings.ReplaceAll(t, "/", ".")
 }
 
 // resolveDiscriminatorColumn probes whether the driving table has a "subtype_code" column —
