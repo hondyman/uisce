@@ -98,16 +98,26 @@ func (s *SemanticGraphService) Initialize() error {
 
 	for typeName, typeIDPtr := range nodeTypes {
 		var typeID uuid.UUID
+		// catalog_node_type's actual column is catalog_type_name (this used
+		// to query a "node_type" column that doesn't exist). Some type
+		// names have duplicate rows from earlier drift — prefer whichever
+		// one existing catalog_node rows actually reference, so this keeps
+		// resolving to the id already in live use rather than picking an
+		// arbitrary duplicate.
 		err := s.db.Get(&typeID, `
-			SELECT id FROM catalog_node_type WHERE node_type = $1 LIMIT 1
+			SELECT cnt.id
+			FROM catalog_node_type cnt
+			WHERE cnt.catalog_type_name = $1
+			ORDER BY (SELECT count(*) FROM catalog_node cn WHERE cn.node_type_id = cnt.id) DESC
+			LIMIT 1
 		`, typeName)
 		if err == sql.ErrNoRows {
 			// Create node type if it doesn't exist
 			typeID = uuid.New()
 			_, err = s.db.Exec(`
-				INSERT INTO catalog_node_type (id, node_type, display_name, description)
-				VALUES ($1, $2, $3, $4)
-			`, typeID, typeName, formatNodeTypeName(typeName), "Semantic graph node type")
+				INSERT INTO catalog_node_type (id, catalog_type_name, description)
+				VALUES ($1, $2, $3)
+			`, typeID, typeName, "Semantic graph node type")
 			if err != nil {
 				return fmt.Errorf("failed to create node type %s: %w", typeName, err)
 			}
@@ -268,19 +278,32 @@ func (s *SemanticGraphService) GetNodeByName(
 	}
 
 	var node struct {
-		ID            uuid.UUID       `db:"id"`
-		NodeName      string          `db:"node_name"`
-		Description   sql.NullString  `db:"description"`
-		Properties    json.RawMessage `db:"properties"`
-		Config        json.RawMessage `db:"config"`
-		QualifiedPath string          `db:"qualified_path"`
+		ID          uuid.UUID      `db:"id"`
+		NodeName    string         `db:"node_name"`
+		Description sql.NullString `db:"description"`
+		// properties/config are nullable in the live schema (many rows,
+		// including newly-synced business_object nodes, only ever set
+		// properties) — json.RawMessage can't Scan a SQL NULL directly.
+		Properties    sql.NullString `db:"properties"`
+		Config        sql.NullString `db:"config"`
+		QualifiedPath string         `db:"qualified_path"`
 	}
 
+	// datasourceID is the zero UUID whenever the caller has no specific
+	// datasource to scope to (e.g. apistudio's REST/GraphQL/OData runtimes
+	// never populate BOSQLRequest.DatasourceID at all) — every existing
+	// business_object catalog_node row also has tenant_datasource_id NULL,
+	// which a plain "= $3" comparison can never match regardless of what
+	// $3 is. Treat the zero UUID as "unscoped": match a NULL
+	// tenant_datasource_id, or fall through to an exact match when the
+	// caller did supply a real one.
+	isZeroDatasource := datasourceID == uuid.Nil
 	err := s.db.Get(&node, `
 		SELECT id, node_name, description, properties, config, qualified_path
 		FROM catalog_node
-		WHERE node_type_id = $1 AND node_name = $2 AND tenant_datasource_id = $3
-	`, nodeTypeID, nodeName, datasourceID)
+		WHERE node_type_id = $1 AND node_name = $2
+		  AND (($3 AND tenant_datasource_id IS NULL) OR (NOT $3 AND tenant_datasource_id = $4))
+	`, nodeTypeID, nodeName, isZeroDatasource, datasourceID)
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -297,8 +320,12 @@ func (s *SemanticGraphService) GetNodeByName(
 		QualifiedPath: node.QualifiedPath,
 	}
 
-	json.Unmarshal(node.Properties, &result.Properties)
-	json.Unmarshal(node.Config, &result.Config)
+	if node.Properties.Valid {
+		json.Unmarshal([]byte(node.Properties.String), &result.Properties)
+	}
+	if node.Config.Valid {
+		json.Unmarshal([]byte(node.Config.String), &result.Config)
+	}
 
 	return result, nil
 }

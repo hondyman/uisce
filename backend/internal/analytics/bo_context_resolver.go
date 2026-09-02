@@ -384,9 +384,18 @@ func (r *BOContextResolver) GenerateBOSQL(ctx BOContext, termNames []string, cal
 		joins = append(joins, resolved.RequiredJoins...)
 	}
 
-	// Build SQL
+	// Build SQL. An empty selectClauses (no fields requested, or every
+	// requested field failed to resolve to a term/calc — e.g. no semantic
+	// term exists yet for it) would otherwise produce "SELECT \nFROM ...",
+	// which Postgres rejects outright; fall back to * like
+	// metadata.BusinessObjectService.QueryBORecords already does for the
+	// same "no explicit projection" case.
+	selectList := "*"
+	if len(selectClauses) > 0 {
+		selectList = strings.Join(selectClauses, ",\n  ")
+	}
 	sql := fmt.Sprintf("SELECT\n  %s\nFROM %s",
-		strings.Join(selectClauses, ",\n  "),
+		selectList,
 		ctx.DrivingTable,
 	)
 

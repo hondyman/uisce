@@ -175,6 +175,14 @@ const ODataMountPrefix = "/odata"
 // this BO entitlement path — see trigger_engine.go.
 func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Client) {
 	graphService := analytics.NewSemanticGraphService(db)
+	// Initialize resolves the semantic node-type ids (business_object,
+	// table, column, ...) that GetNodeByName filters on — without it,
+	// every lookup used ids of uuid.Nil (they default to Go's zero value)
+	// and would always report "unknown node type", regardless of whether
+	// the catalog itself was populated. This was never called anywhere.
+	if err := graphService.Initialize(); err != nil {
+		log.Printf("[api-studio] semantic graph service Initialize failed: %v", err)
+	}
 	resolver := analytics.NewBOContextResolver(db, graphService)
 
 	planner := cbo.NewPlanner(
