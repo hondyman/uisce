@@ -3,11 +3,17 @@ package analytics
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 )
+
+// filterIdentifierPattern restricts filter keys to safe SQL identifiers,
+// since they are attacker-controlled (sourced from HTTP query params /
+// GraphQL args) and are embedded directly into the generated SQL string.
+var filterIdentifierPattern = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
 
 // BOResolverSemanticAdapter implements cbo.SemanticRepository on top of
 // boresolver.BOSQLGenerator/PostgresBORepository — the resolver already
