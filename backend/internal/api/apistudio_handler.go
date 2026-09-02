@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/apistudio"
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/semantic"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
@@ -173,7 +174,7 @@ const ODataMountPrefix = "/odata"
 // Postgres RLS tenant isolation via apistudio.withTenantScopedQuery.
 // Platform-wide RBAC (ABACEngine.Evaluate) remains a stubbed no-op outside
 // this BO entitlement path — see trigger_engine.go.
-func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Client) {
+func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Client, aggregatesDB *sqlx.DB) {
 	graphService := analytics.NewSemanticGraphService(db)
 	// Initialize resolves the semantic node-type ids (business_object,
 	// table, column, ...) that GetNodeByName filters on — without it,
@@ -185,8 +186,18 @@ func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Clie
 	}
 	resolver := analytics.NewBOContextResolver(db, graphService)
 
+	// SQL generation delegates to boresolver.BOSQLGenerator (the resolver
+	// already proven correct for AI query generation / Query Builder — see
+	// BOResolverSemanticAdapter's doc comment for why this is used instead
+	// of BOContextResolver.GenerateBOSQL/ResolveTerm).
+	boRepo := boresolver.NewPostgresBORepository(db)
+	boGen, err := boresolver.NewBOSQLGenerator(boRepo, "postgres")
+	if err != nil {
+		log.Printf("[api-studio] failed to construct BOSQLGenerator: %v", err)
+	}
+
 	planner := cbo.NewPlanner(
-		analytics.NewSemanticRepoAdapter(resolver),
+		analytics.NewBOResolverSemanticAdapter(boRepo, boGen),
 		cbo.NewDBPreAggRepository(db),
 		cbo.NewDBEntitlementRepository(db),
 		cbo.NewDBTelemetryRepository(db),
@@ -198,12 +209,14 @@ func RegisterAPIRuntimeRoutes(r chi.Router, db *sqlx.DB, redisClient *redis.Clie
 
 	rt := apistudio.NewAPIRuntime(repo, resolver, db, redisClient)
 	rt.SetMountPrefix(APIRuntimeMountPrefix)
+	rt.SetAggregatesDB(aggregatesDB)
 	r.Route(APIRuntimeMountPrefix, func(sr chi.Router) {
 		sr.HandleFunc("/*", rt.ServeHTTP)
 	})
 
 	odata := apistudio.NewODataHandler(repo, resolver, db, redisClient)
 	odata.SetMountPrefix(ODataMountPrefix)
+	odata.SetAggregatesDB(aggregatesDB)
 	r.Route(ODataMountPrefix, func(sr chi.Router) {
 		sr.HandleFunc("/*", odata.ServeHTTP)
 		sr.HandleFunc("/", odata.ServeHTTP)

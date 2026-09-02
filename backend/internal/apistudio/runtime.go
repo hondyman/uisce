@@ -15,8 +15,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/region"
-	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
 // applyFieldMasking strips fields from each result row when the caller
@@ -52,12 +52,13 @@ func applyFieldMasking(rows []map[string]interface{}, maskedFields map[string][]
 // APIRuntime handles dynamic API requests by
 // mapping endpoints to the semantic resolver.
 type APIRuntime struct {
-	repo        *Repository
-	resolver    *analytics.BOContextResolver
-	db          *sqlx.DB // for execution
-	planCache   *GraphQLPlanCache
-	rateLimiter *RateLimiter
-	mountPrefix string
+	repo         *Repository
+	resolver     *analytics.BOContextResolver
+	db           *sqlx.DB // for execution
+	aggregatesDB *sqlx.DB
+	planCache    *GraphQLPlanCache
+	rateLimiter  *RateLimiter
+	mountPrefix  string
 }
 
 // NewAPIRuntime creates a new runtime
@@ -77,6 +78,29 @@ func NewAPIRuntime(repo *Repository, resolver *analytics.BOContextResolver, db *
 // relative to that mount point (see sdk.go's generated client baseUrl).
 func (rt *APIRuntime) SetMountPrefix(prefix string) {
 	rt.mountPrefix = prefix
+}
+
+// SetAggregatesDB wires the external aggregates datasource (e.g. the
+// Northwind CRM database) that resolved SQL executes against for
+// northwind-* business objects, mirroring
+// metadata.BusinessObjectService.recordDB — see execDBForBO.
+func (rt *APIRuntime) SetAggregatesDB(db *sqlx.DB) {
+	rt.aggregatesDB = db
+}
+
+// execDBForBO picks which database connection to run resolved SQL against.
+// northwind-* BOs live in the external aggregates datasource, not the
+// platform database this runtime was constructed with — see
+// metadata.BusinessObjectService.recordDB, the same rule applied there for
+// the (already-working) REST BO CRUD path. When routed to the aggregates
+// DB, tenant-scoping is skipped: that connection is a single external
+// system for one tenant already, not a shared multi-tenant database with
+// RLS policies keyed on uisce.current_tenant.
+func execDBForBO(defaultDB, aggregatesDB *sqlx.DB, boName string) (db *sqlx.DB, useTenantScope bool) {
+	if aggregatesDB != nil && strings.Contains(strings.ToLower(boName), "northwind") {
+		return aggregatesDB, false
+	}
+	return defaultDB, true
 }
 
 // ServeHTTP implements the dynamic REST dispatcher
@@ -174,8 +198,16 @@ func (rt *APIRuntime) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 3. Execute — tenant-scoped: RLS policies key off uisce.current_tenant,
 	// which only exists inside a transaction that sets it (see db.WithTenantTransaction).
 	// A bare pooled query here would run with no tenant GUC set, defeating RLS entirely.
+	// Except for northwind-* BOs, which live on the external aggregates
+	// datasource (execDBForBO) — a single-tenant connection with no RLS to
+	// scope in the first place.
+	execDB, useTenantScope := execDBForBO(rt.db, rt.aggregatesDB, ep.BOName)
+	runQuery := withTenantScopedQuery
+	if !useTenantScope {
+		runQuery = runUnscopedQuery
+	}
 	var result []map[string]interface{}
-	execErr := withTenantScopedQuery(r.Context(), rt.db, tenantIDStr, sql, func(rows *sqlx.Rows) error {
+	execErr := runQuery(r.Context(), execDB, tenantIDStr, sql, func(rows *sqlx.Rows) error {
 		for rows.Next() {
 			row := make(map[string]interface{})
 			if err := rows.MapScan(row); err != nil {
@@ -263,4 +295,19 @@ func withTenantScopedQuery(ctx context.Context, db *sqlx.DB, tenantID string, sq
 	}
 
 	return tx.Commit()
+}
+
+// runUnscopedQuery matches withTenantScopedQuery's signature but skips the
+// tenant-GUC transaction — for the external aggregates datasource
+// (execDBForBO), which is a single-tenant external system on its own
+// connection, not a shared database with RLS policies keyed on
+// uisce.current_tenant. tenantID is accepted (unused) only so both funcs
+// satisfy the same call-site signature.
+func runUnscopedQuery(ctx context.Context, db *sqlx.DB, _ string, sql string, scan func(*sqlx.Rows) error) error {
+	rows, err := db.QueryxContext(ctx, sql)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	return scan(rows)
 }

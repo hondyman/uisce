@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/cbo"
 )
@@ -138,25 +137,5 @@ func (a *SemanticRepoAdapter) categorizeFields(ctx *BOContext, dimensions []stri
 // both must be sanitized here: keys are restricted to a strict identifier
 // whitelist and quoted, values have embedded quotes escaped.
 func (a *SemanticRepoAdapter) appendFilters(sql string, filters map[string]interface{}) string {
-	if len(filters) == 0 {
-		return sql
-	}
-
-	conditions := []string{}
-	for k, v := range filters {
-		if !filterIdentifierPattern.MatchString(k) {
-			continue
-		}
-		escaped := strings.ReplaceAll(fmt.Sprintf("%v", v), "'", "''")
-		conditions = append(conditions, fmt.Sprintf("%q = '%s'", k, escaped))
-	}
-
-	if len(conditions) > 0 {
-		sql += " WHERE " + conditions[0]
-		for i := 1; i < len(conditions); i++ {
-			sql += " AND " + conditions[i]
-		}
-	}
-
-	return sql
+	return appendPlanFilters(sql, filters)
 }

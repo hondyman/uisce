@@ -39,12 +39,19 @@ import (
 //     list, else the first field — APIEndpoint doesn't track a real primary
 //     key column, so this is a best-effort guess, not authoritative.
 type ODataHandler struct {
-	repo        *Repository
-	resolver    *analytics.BOContextResolver
-	db          *sqlx.DB
-	planCache   *GraphQLPlanCache
-	rateLimiter *RateLimiter
-	mountPrefix string
+	repo         *Repository
+	resolver     *analytics.BOContextResolver
+	db           *sqlx.DB
+	aggregatesDB *sqlx.DB
+	planCache    *GraphQLPlanCache
+	rateLimiter  *RateLimiter
+	mountPrefix  string
+}
+
+// SetAggregatesDB wires the external aggregates datasource — see
+// APIRuntime.SetAggregatesDB/execDBForBO.
+func (h *ODataHandler) SetAggregatesDB(db *sqlx.DB) {
+	h.aggregatesDB = db
 }
 
 // NewODataHandler creates a new OData handler.
@@ -348,8 +355,13 @@ func (h *ODataHandler) serveEntitySet(w http.ResponseWriter, r *http.Request, en
 	// above, never raw query text.
 	pagedSQL := fmt.Sprintf("SELECT * FROM (%s) AS odata_page LIMIT %d OFFSET %d", plan.SQL, top, skip)
 
+	execDB, useTenantScope := execDBForBO(h.db, h.aggregatesDB, ep.BOName)
 	var result []map[string]interface{}
-	execErr := withTenantScopedQuery(r.Context(), h.db, tenantID, pagedSQL, func(rows *sqlx.Rows) error {
+	runQuery := withTenantScopedQuery
+	if !useTenantScope {
+		runQuery = runUnscopedQuery
+	}
+	execErr := runQuery(r.Context(), execDB, tenantID, pagedSQL, func(rows *sqlx.Rows) error {
 		for rows.Next() {
 			row := make(map[string]interface{})
 			if err := rows.MapScan(row); err != nil {
