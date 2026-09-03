@@ -70,7 +70,7 @@ import { useOrganizationEntitlement } from '../contexts/useOrganizationEntitleme
 import useBlockableNavigate from './RouteBlocker/useBlockableNavigate';
 import { useAuth } from '../contexts/AuthContext';
 import { MenuCardsPage, MenuCardItem } from './ui/MenuCardsPage';
-import { ViewModule as ViewModuleIcon, Menu as MenuListIcon } from '@mui/icons-material';
+import { ViewModule as ViewModuleIcon, Menu as MenuListIcon, Hub as HubIcon } from '@mui/icons-material';
 import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
 import TenantTreeView from './TenantTreeView';
@@ -222,6 +222,7 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Data Pipelines', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Catalog Graph & BO Parallel ETL', badge: { label: 'ETL', color: 'primary' } },
           { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Generic assets & structures' },
           { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
+          { label: 'Graph Views', path: '/catalog/view-definitions', icon: <HubIcon />, description: 'ERD, lineage & custom visualizations' },
           { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
           { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },
         ]

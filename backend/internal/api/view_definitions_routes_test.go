@@ -6,6 +6,41 @@ import (
 	"github.com/hondyman/uisce/backend/internal/graphview"
 )
 
+func TestAssignedAssetTypesMatch(t *testing.T) {
+	config := map[string]interface{}{
+		"assignedAssetTypes": map[string]interface{}{
+			"catalogNodeTypes": []interface{}{"table", "column"},
+			"boSubtypes":       []interface{}{"EQUITY", "FIXED_INCOME"},
+		},
+	}
+
+	cases := []struct {
+		name         string
+		assetType    string
+		assetSubtype string
+		want         bool
+	}{
+		{"matches catalog node type", "table", "", true},
+		{"catalog node type match is case-insensitive", "TABLE", "", true},
+		{"matches BO subtype", "business_object", "EQUITY", true},
+		{"no match", "database", "DERIVATIVE", false},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := assignedAssetTypesMatch(config, c.assetType, c.assetSubtype); got != c.want {
+				t.Fatalf("assignedAssetTypesMatch(%q, %q) = %v, want %v", c.assetType, c.assetSubtype, got, c.want)
+			}
+		})
+	}
+}
+
+func TestAssignedAssetTypesMatch_NoAssignedAssetTypesConfigured(t *testing.T) {
+	if assignedAssetTypesMatch(map[string]interface{}{}, "table", "") {
+		t.Fatal("expected no match when assignedAssetTypes is absent from config")
+	}
+}
+
 func TestApplyTypePolicy_ExcludesConfiguredNodeType(t *testing.T) {
 	graph := &graphview.ResponseGraph{
 		Nodes: []graphview.ResponseNode{

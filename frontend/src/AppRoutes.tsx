@@ -40,6 +40,7 @@ import { CatalogNodeTypesPage } from "./pages/catalog/CatalogNodeTypesPage";
 import { CatalogEdgeTypesPage } from "./pages/catalog/CatalogEdgeTypesPage";
 import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
+import { ViewDefinitionsPage } from "./pages/catalog/ViewDefinitionsPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import DynamicUIGeneratorPage from "./pages/DynamicUIGeneratorPage";
@@ -282,6 +283,7 @@ function ProtectedApp() {
         <Route path="/catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />
         <Route path="/catalog/edge-types" element={<ProtectedRoute><CatalogEdgeTypesPage /></ProtectedRoute>} />
         <Route path="/catalog/edge-types/:id" element={<ProtectedRoute><EdgeTypeDetailPage /></ProtectedRoute>} />
+        <Route path="/catalog/view-definitions" element={<ProtectedRoute><ViewDefinitionsPage /></ProtectedRoute>} />
 
         <Route path="/core/semantic-mapper" element={<ProtectedRoute><SemanticMapperPage /></ProtectedRoute>} />
 

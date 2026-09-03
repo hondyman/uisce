@@ -1,19 +1,8 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import ReactFlow, {
-  Node,
-  Edge,
-  Controls,
-  Background,
-  useNodesState,
-  useEdgesState,
-  Panel,
-  MiniMap,
-  BackgroundVariant,
-} from 'reactflow';
-import dagre from 'dagre';
-import 'reactflow/dist/style.css';
+import React, { useEffect, useState } from 'react';
 import { Box, CircularProgress, Alert, Typography } from '@mui/material';
 
+import { CatalogGraph } from '../graph/CatalogGraph';
+import { CatalogResponseGraph, CatalogResponseNode } from '../../api/viewDefinitions';
 import { BONode } from './CustomNodes/BONode';
 import { TermNode } from './CustomNodes/TermNode';
 import { CalculationNode } from './CustomNodes/CalculationNode';
@@ -22,7 +11,7 @@ import { ColumnNode } from './CustomNodes/ColumnNode';
 import { NodeDetailDrawer } from './NodeDetailDrawer';
 import { GraphLegend } from './GraphLegend';
 
-const nodeTypes = {
+const nodeTypeOverrides = {
   bo: BONode,
   term: TermNode,
   calculation: CalculationNode,
@@ -31,193 +20,128 @@ const nodeTypes = {
   related_bo: BONode, // Reuse BO node with different styling
 };
 
+const nodeDimensions: Record<string, { width: number; height: number }> = {
+  bo: { width: 320, height: 160 },
+  related_bo: { width: 320, height: 160 },
+  calculation: { width: 220, height: 100 },
+  term: { width: 200, height: 90 },
+  table: { width: 180, height: 80 },
+  column: { width: 160, height: 70 },
+};
+
+function getNodeDimensions(type: string) {
+  return nodeDimensions[type] || { width: 250, height: 120 };
+}
+
+function getEdgeColor(type: string) {
+  switch (type) {
+    case 'contains':
+      return '#1976d2'; // Primary blue
+    case 'maps_to':
+      return '#2e7d32'; // Green
+    case 'belongs_to':
+      return '#757575'; // Grey
+    case 'relates_to':
+      return '#ed6c02'; // Orange
+    case 'uses':
+      return '#9c27b0'; // Purple
+    case 'joins_via':
+      return '#d32f2f'; // Red
+    default:
+      return '#666';
+  }
+}
+
 interface BOLineageGraphTabProps {
   boId: string;
 }
 
-interface GraphData {
-  nodes: any[];
-  edges: any[];
+// Attaches this BO's semantic terms as data on the 'bo' node so BONode can
+// group and render them, and condenses the raw /api/bo/{boId}/graph response
+// to just BO <-> related-BO edges — matching the original BOLineageGraphTab
+// behavior before this was ported onto the shared CatalogGraph renderer.
+function condenseBoGraph(raw: { nodes: any[]; edges: any[] }): CatalogResponseGraph {
+  const boTerms: any[] = [];
+  (raw.nodes || []).forEach((n) => {
+    if (n.type === 'term') {
+      boTerms.push({
+        id: n.id,
+        nodeName: n.data?.termName || n.label,
+        termType: n.data?.termType,
+        dataType: n.data?.dataType,
+        isKey: n.data?.isKey,
+        subtypeId: n.data?.subtypeId,
+        subtypeName: n.data?.subtypeName,
+      });
+    }
+  });
+
+  const condensedNodes = (raw.nodes || [])
+    .filter((n) => n.type === 'bo' || n.type === 'related_bo')
+    .map((n) => ({
+      id: n.id,
+      type: n.type,
+      label: n.label,
+      properties: {
+        ...n.data,
+        terms: n.type === 'bo' ? boTerms : [],
+        termCount: n.type === 'bo' ? boTerms.length : n.data?.termCount || 0,
+      },
+    }));
+
+  const condensedEdges = (raw.edges || [])
+    .filter((e: any) => e.source.startsWith('BO:') && e.target.startsWith('BO:'))
+    .map((e: any) => ({ id: e.id, source: e.source, target: e.target, type: e.type }));
+
+  if (condensedNodes.length > 0) {
+    return { nodes: condensedNodes, edges: condensedEdges };
+  }
+
+  // Fallback: no condensable BO nodes found, render the raw graph as-is.
+  return {
+    nodes: (raw.nodes || []).map((n: any) => ({ id: n.id, type: n.type, label: n.label, properties: n.data || {} })),
+    edges: (raw.edges || []).map((e: any) => ({ id: e.id, source: e.source, target: e.target, type: e.type })),
+  };
 }
 
 export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [graphData, setGraphData] = useState<CatalogResponseGraph | null>(null);
+  const [selectedNode, setSelectedNode] = useState<CatalogResponseNode | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchGraph();
-  }, [boId]);
-
-  const fetchGraph = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/bo/${boId}/graph`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch graph: ${response.statusText}`);
-      }
-      const data: GraphData = await response.json();
-
-      // Collect terms by BO
-      const boTerms: any[] = [];
-      (data.nodes || []).forEach(n => {
-        if (n.type === 'term') {
-          boTerms.push({
-            id: n.id,
-            nodeName: n.data?.termName || n.label,
-            termType: n.data?.termType,
-            dataType: n.data?.dataType,
-            isKey: n.data?.isKey,
-            subtypeId: n.data?.subtypeId,
-            subtypeName: n.data?.subtypeName,
-          });
+    let cancelled = false;
+    const fetchGraph = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/bo/${boId}/graph`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch graph: ${response.statusText}`);
         }
-      });
-
-      // Filter nodes to condensed BO view (BO and Related BOs)
-      const condensedNodes = (data.nodes || []).filter(
-        n => n.type === 'bo' || n.type === 'related_bo'
-      ).map(n => ({
-        ...n,
-        data: {
-          ...n.data,
-          terms: n.type === 'bo' ? boTerms : [],
-          termCount: n.type === 'bo' ? boTerms.length : (n.data?.termCount || 0),
+        const data = await response.json();
+        if (!cancelled) {
+          setGraphData(condenseBoGraph(data));
         }
-      }));
-
-      // Filter edges between BO and Related BOs
-      const condensedEdges = (data.edges || []).filter(e => {
-        const srcIsBO = e.source.startsWith('BO:');
-        const tgtIsBO = e.target.startsWith('BO:');
-        return srcIsBO && tgtIsBO;
-      });
-
-      // Apply auto-layout
-      const layouted = applyDagreLayout(
-        condensedNodes.length > 0 ? condensedNodes : data.nodes,
-        condensedEdges.length > 0 ? condensedEdges : data.edges
-      );
-
-      setNodes(layouted.nodes);
-      setEdges(layouted.edges);
-    } catch (err) {
-      console.error('Failed to fetch graph:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const applyDagreLayout = (rawNodes: any[], rawEdges: any[]) => {
-    const dagreGraph = new dagre.graphlib.Graph();
-    dagreGraph.setDefaultEdgeLabel(() => ({}));
-    dagreGraph.setGraph({ rankdir: 'TB', ranksep: 120, nodesep: 100 });
-
-    // Determine node dimensions based on type
-    const getNodeDimensions = (type: string) => {
-      switch (type) {
-        case 'bo':
-        case 'related_bo':
-          return { width: 320, height: 160 };
-        case 'calculation':
-          return { width: 220, height: 100 };
-        case 'term':
-          return { width: 200, height: 90 };
-        case 'table':
-          return { width: 180, height: 80 };
-        case 'column':
-          return { width: 160, height: 70 };
-        default:
-          return { width: 250, height: 120 };
+      } catch (err) {
+        console.error('Failed to fetch graph:', err);
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unknown error');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
-
-    rawNodes.forEach((node) => {
-      const dims = getNodeDimensions(node.type);
-      dagreGraph.setNode(node.id, dims);
-    });
-
-    rawEdges.forEach((edge) => {
-      dagreGraph.setEdge(edge.source, edge.target);
-    });
-
-    dagre.layout(dagreGraph);
-
-    const layoutedNodes = rawNodes.map((node) => {
-      const nodeWithPosition = dagreGraph.node(node.id);
-      const dims = getNodeDimensions(node.type);
-      
-      return {
-        ...node,
-        position: {
-          x: (nodeWithPosition?.x || 150) - dims.width / 2,
-          y: (nodeWithPosition?.y || 100) - dims.height / 2,
-        },
-        // Add styling based on type
-        style: node.type === 'bo' ? { zIndex: 10 } : {},
-      };
-    });
-
-    // Style edges based on type
-    const layoutedEdges = rawEdges.map((edge) => ({
-      ...edge,
-      type: 'smoothstep',
-      animated: false,
-      label: edge.label || edge.type || '',
-      labelStyle: { fill: '#555', fontWeight: 600, fontSize: 10 },
-      labelBgStyle: { fill: '#fafafa', fillOpacity: 0.9 },
-      labelBgPadding: [4, 2],
-      labelBgBorderRadius: 4,
-      style: {
-        stroke: getEdgeColor(edge.type),
-        strokeWidth: edge.type === 'relates_to' ? 3 : 2,
-      },
-    }));
-
-    return { nodes: layoutedNodes, edges: layoutedEdges };
-  };
-
-  const getEdgeColor = (type: string) => {
-    switch (type) {
-      case 'contains':
-        return '#1976d2'; // Primary blue
-      case 'maps_to':
-        return '#2e7d32'; // Green
-      case 'belongs_to':
-        return '#757575'; // Grey
-      case 'relates_to':
-        return '#ed6c02'; // Orange
-      case 'uses':
-        return '#9c27b0'; // Purple
-      case 'joins_via':
-        return '#d32f2f'; // Red
-      default:
-        return '#666';
-    }
-  };
-
-  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
-    setSelectedNode(node);
-  }, []);
-
-  const onPaneClick = useCallback(() => {
-    setSelectedNode(null);
-  }, []);
+    fetchGraph();
+    return () => {
+      cancelled = true;
+    };
+  }, [boId]);
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '600px',
-        }}
-      >
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '600px' }}>
         <CircularProgress />
       </Box>
     );
@@ -236,35 +160,25 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
 
   return (
     <Box sx={{ width: '100%', height: '800px', position: 'relative' }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeClick={onNodeClick}
-        onPaneClick={onPaneClick}
-        nodeTypes={nodeTypes}
-        fitView
-        minZoom={0.1}
-        maxZoom={2}
-      >
-        <Controls />
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
-        <MiniMap
-          nodeStrokeWidth={3}
-          zoomable
-          pannable
-          style={{
-            backgroundColor: '#f5f5f5',
-          }}
-        />
-        <Panel position="top-right">
-          <GraphLegend />
-        </Panel>
-      </ReactFlow>
+      <CatalogGraph
+        graphData={graphData || { nodes: [], edges: [] }}
+        layout={{ algorithm: 'dagre', direction: 'TB' }}
+        nodeTypeOverrides={nodeTypeOverrides}
+        getNodeDimensions={getNodeDimensions}
+        edgeColor={(edge) => getEdgeColor(edge.type)}
+        showMiniMap
+        legend={<GraphLegend />}
+        onNodeSelect={setSelectedNode}
+      />
 
       <NodeDetailDrawer
-        node={selectedNode}
+        // NodeDetailDrawer reads node.data.*; CatalogResponseNode carries the
+        // same fields under .properties, so adapt the shape at the boundary.
+        node={
+          selectedNode
+            ? ({ id: selectedNode.id, type: selectedNode.type, data: selectedNode.properties, position: { x: 0, y: 0 } } as any)
+            : null
+        }
         open={!!selectedNode}
         onClose={() => setSelectedNode(null)}
         boId={boId}

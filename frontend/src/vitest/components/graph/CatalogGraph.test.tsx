@@ -28,28 +28,36 @@ vi.mock('reactflow', () => ({
   },
 }));
 
+// Fixtures are hoisted module-scope constants, not built inline in the hook
+// mocks below — a hook returning a fresh object on every render is exactly
+// the kind of unstable reference CatalogGraph's content-signature guard
+// exists to tolerate, but there's no reason to exercise that edge case here.
+const mockViewDefinition = {
+  data: {
+    id: 'view-1',
+    view_key: 'erd',
+    display_name: 'ERD',
+    is_core: true,
+    is_active: true,
+    config: { layout: { algorithm: 'dagre', direction: 'LR' } },
+  },
+};
+
+const mockGraph = {
+  data: {
+    nodes: [
+      { id: 'n1', type: 'table', label: 'orders', properties: {} },
+      { id: 'n2', type: 'column', label: 'id', properties: {} },
+    ],
+    edges: [{ id: 'n1-n2', source: 'n1', target: 'n2', type: 'belongs_to' }],
+  },
+  isLoading: false,
+  error: null,
+};
+
 vi.mock('@/api/viewDefinitions', () => ({
-  useViewDefinition: () => ({
-    data: {
-      id: 'view-1',
-      view_key: 'erd',
-      display_name: 'ERD',
-      is_core: true,
-      is_active: true,
-      config: { layout: { algorithm: 'dagre', direction: 'LR' } },
-    },
-  }),
-  useCatalogGraph: () => ({
-    data: {
-      nodes: [
-        { id: 'n1', type: 'table', label: 'orders', properties: {} },
-        { id: 'n2', type: 'column', label: 'id', properties: {} },
-      ],
-      edges: [{ id: 'n1-n2', source: 'n1', target: 'n2', type: 'belongs_to' }],
-    },
-    isLoading: false,
-    error: null,
-  }),
+  useViewDefinition: () => mockViewDefinition,
+  useCatalogGraph: () => mockGraph,
 }));
 
 import { CatalogGraph } from '@/components/graph/CatalogGraph';
