@@ -14,7 +14,7 @@ Token claims will become a consistency check (mismatch = reject), rather than th
 
 | Finding, as discovered | Status | Details / Tracking |
 |---|---|---|
-| Shared-secret HS256 forgery (original Critical) | **Closed on main API bearer dispatch; open on external consumers pending audit** | Alg-gate rejects HS256 on main API; `semantic-rules-api`, `notifications-service`, and `trace_auth_middleware` retain shared-secret HMAC paths pending migration/network gating. |
+| Shared-secret HS256 forgery (original Critical) | **Closed on main API bearer dispatch; open on external consumers pending audit** | Alg-gate rejects HS256 on main API; `semantic-rules-api`, `notifications-service`, `validation-service`, `rule-engine-service`, and `trace_auth_middleware` retain shared-secret HMAC paths pending migration/network gating. |
 | Fail-open middleware | Closed | Structural dispatch by dot-count (1-dot / 2-dot / default), 401 on all invalid credentials. |
 | Unauthenticated header impersonation (390 handler sites) | Closed at the boundary | Strip-first deletes `X-User-ID`, `X-Tenant-ID`, `X-Real-Admin-ID`, `X-Impersonation-*` before routing. Handler migration to `Actor(r)` is Phase 3. |
 | SSE route bypassing all middleware | Closed | `rootMux.With(AuthContextMiddleware)` added to `/api/catalog/scan/stream`. Handler rejects missing auth context with 401. |
