@@ -121,14 +121,18 @@ clusters → distinct directories → look at process mounts, not "lag."
 The migrations directory has concurrent writers. Two listings of the
 same glob (`ls backend/db/migrations/20260903_*.sql | cat -n`), taken
 minutes apart during one working session, returned 5 files and then 9.
-The 4 new files were untracked WIP from a concurrent workstream —
-untracked means not in HEAD, present on disk, golang-migrate sees
-them. Re-verify directory contents before counting them in any
-record. Counts, SHAs, and directory contents are point-in-time.
-
-The same lesson applies to `git status --short backend/db/migrations/`:
-tracked status flips mid-session (`20260903_001_create_semantic_ai_bridge.up.sql`
-was untracked before this commit was finalized; the four migrate_legacy /
-validation_trigger files likewise). Before recording any count in a
-permanent artifact, run the paste fresh.
+At listing time the 4 new files were untracked WIP from a
+concurrent workstream — untracked means not in HEAD, present on
+disk, golang-migrate sees them. Between the two listings, those
+files were committed by a parallel agent (commit `054ed3f31` —
+"retire legacy pipelines table" — explains the two
+`migrate_legacy_pipelines.{up,down}.sql`; commit `a2cd0d245` —
+"renumber semantic AI bridge" — explains the `20260903_001_create_semantic_ai_bridge.up.sql`
+flip from untracked to tracked). The lesson is stronger than the
+listing alone reveals: tracked status can flip *twice within one
+session*, and the same file can be both untracked (working-tree
+arithmetic) and committed (HEAD arithmetic) at different capture
+moments. Re-verify directory contents AND `git status` before
+recording any count in a permanent artifact. Counts, SHAs, tracked
+status, and directory contents are all point-in-time.
 
