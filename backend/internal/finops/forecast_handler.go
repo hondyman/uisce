@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
@@ -39,7 +40,7 @@ func NewForecastHandler(db *sqlx.DB) *ForecastHandler {
 	}
 }
 
-// RegisterRoutes mounts the FinOps forecast endpoints onto mux.
+// RegisterRoutes mounts the FinOps forecast endpoints onto a standard http.ServeMux (Go 1.22+).
 func (h *ForecastHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/finops/forecast/today", h.handleForecastToday)
 	mux.HandleFunc("POST /api/finops/prewarm/trigger", h.handlePrewarmTrigger)
@@ -48,6 +49,19 @@ func (h *ForecastHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/finops/forecast/{forecastId}/feedback", h.handleSubmitFeedback)
 	mux.HandleFunc("GET /api/finops/forecast/{forecastId}/feedback", h.handleGetFeedback)
 	mux.HandleFunc("GET /api/finops/calibration", h.handleGetCalibration)
+}
+
+// RegisterChiRoutes mounts the FinOps forecast endpoints onto a chi.Router.
+func (h *ForecastHandler) RegisterChiRoutes(r chi.Router) {
+	r.Route("/finops", func(sub chi.Router) {
+		sub.Get("/forecast/today", h.handleForecastToday)
+		sub.Post("/prewarm/trigger", h.handlePrewarmTrigger)
+		sub.Get("/smoothing-policy", h.handleGetPolicy)
+		sub.Put("/smoothing-policy", h.handleUpsertPolicy)
+		sub.Post("/forecast/{forecastId}/feedback", h.handleSubmitFeedback)
+		sub.Get("/forecast/{forecastId}/feedback", h.handleGetFeedback)
+		sub.Get("/calibration", h.handleGetCalibration)
+	})
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -140,7 +154,7 @@ func (h *ForecastHandler) handleSubmitFeedback(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	forecastIDStr := r.PathValue("forecastId")
+	forecastIDStr := getURLParam(r, "forecastId")
 	forecastID, err := uuid.Parse(forecastIDStr)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_forecast_id", "forecastId must be a valid UUID")
@@ -171,7 +185,7 @@ func (h *ForecastHandler) handleGetFeedback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	forecastIDStr := r.PathValue("forecastId")
+	forecastIDStr := getURLParam(r, "forecastId")
 	forecastID, err := uuid.Parse(forecastIDStr)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_forecast_id", "forecastId must be a valid UUID")
@@ -232,4 +246,11 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, map[string]string{"error": code, "message": message})
+}
+
+func getURLParam(r *http.Request, key string) string {
+	if val := chi.URLParam(r, key); val != "" {
+		return val
+	}
+	return r.PathValue(key)
 }

@@ -44,6 +44,7 @@ import (
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
+	"github.com/hondyman/uisce/backend/internal/finops"
 	"github.com/hondyman/uisce/backend/internal/fix"
 	"github.com/hondyman/uisce/backend/internal/flight"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
@@ -1927,7 +1928,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			}
 		}
 
-		// WebSocket token issuance
+		// FinOps Predictive Compute Demand Forecasting & Workload Smoothing
+		finopsHandler := finops.NewForecastHandler(sqlxDB)
+		finopsHandler.RegisterChiRoutes(r)
 
 		// Legacy Compatibility & Misc
 		// Log unmatched /api requests for debugging 404s inside the /api subrouter
