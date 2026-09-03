@@ -39,7 +39,6 @@ func (h *SemanticRelationshipsHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/taxonomy/l3-classifications", h.ListL3Classifications)
 	r.Get("/taxonomy/suggest-l3", h.SuggestL3Classification)
 	r.Post("/taxonomy/classify-term", h.ClassifyTerm)
-	r.Post("/catalog/nodes/{id}/visualize-lens", h.VisualizeLens)
 }
 
 // GetRelatedTerms returns related terms, peers, specializations, and differentiator reasoning for a term.
@@ -371,37 +370,4 @@ func (h *SemanticRelationshipsHandler) ClassifyTerm(w http.ResponseWriter, r *ht
 	json.NewEncoder(w).Encode(map[string]string{
 		"status": "classified",
 	})
-}
-
-// VisualizeLens returns the multi-lens projection graph for the Cognitive Studio.
-func (h *SemanticRelationshipsHandler) VisualizeLens(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	nodeID := chi.URLParam(r, "id")
-	if nodeID == "" {
-		http.Error(w, `{"error":"node id is required"}`, http.StatusBadRequest)
-		return
-	}
-
-	var req analytics.VisualizeLensRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		req.LensType = analytics.LensSubtypeAndPeers
-	}
-
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := req.TenantID
-	if tenantID == "" && claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
-
-	graphData, err := h.relService.VisualizeLens(r.Context(), tenantID, nodeID, req)
-	if err != nil {
-		logging.GetLogger().Sugar().Errorf("Failed to build lens visualization for %s: %v", nodeID, err)
-		http.Error(w, `{"error":"failed to generate lens graph"}`, http.StatusInternalServerError)
-		return
-	}
-
-	json.NewEncoder(w).Encode(graphData)
 }
