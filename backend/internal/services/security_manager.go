@@ -17,6 +17,7 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	"github.com/hondyman/uisce/backend/internal/logging"
 )
 
 // RateLimiter provides advanced rate limiting capabilities
@@ -548,29 +549,27 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("token missing issuer (iss) claim")
 	}
 
-	// Verify audience (aud)
+	// Verify audience (aud) in warn-only mode
 	expectedAudience := os.Getenv("JWT_AUDIENCE")
 	if expectedAudience != "" {
 		audClaim, ok := mc["aud"]
 		if !ok {
-			return nil, fmt.Errorf("token missing audience (aud) claim")
-		}
-		hasAudience := false
-		if audStr, ok := audClaim.(string); ok {
-			hasAudience = (audStr == expectedAudience)
-		} else if audList, ok := audClaim.([]interface{}); ok {
-			for _, a := range audList {
-				if s, ok := a.(string); ok && s == expectedAudience {
-					hasAudience = true
-					break
+			logging.GetLogger().Sugar().Warnf("JWT validation: token missing audience (aud) claim, expected %q", expectedAudience)
+		} else {
+			hasAudience := false
+			if audStr, ok := audClaim.(string); ok {
+				hasAudience = (audStr == expectedAudience)
+			} else if audList, ok := audClaim.([]interface{}); ok {
+				for _, a := range audList {
+					if s, ok := a.(string); ok && s == expectedAudience {
+						hasAudience = true
+						break
+					}
 				}
 			}
-		}
-		if !hasAudience {
-			// In production, we should enforce this. If warn-mode is desired, we can just log.
-			// But user says: "Until then, run the aud check in warn-mode, promote to enforce once logs show zero warnings."
-			logging.GetLogger().Sugar().Warnf("JWT validation: missing required audience %q", expectedAudience)
-			// return nil, fmt.Errorf("token missing required audience: %s", expectedAudience)
+			if !hasAudience {
+				logging.GetLogger().Sugar().Warnf("JWT validation: audience mismatch: got %v, expected %q", audClaim, expectedAudience)
+			}
 		}
 	}
 	userID := getStringClaim(mc, "user_id")

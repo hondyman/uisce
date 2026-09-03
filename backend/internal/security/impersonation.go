@@ -648,10 +648,11 @@ func (s *ContextExchangeService) VerifyImpersonationAuthority(ctx context.Contex
 func signImpersonationToken(session ImpersonationSession, realRoles []string) (string, error) {
 	secret := os.Getenv("IMPERSONATION_TOKEN_SECRET")
 	if secret == "" {
-		secret = os.Getenv("JWT_SECRET")
-	}
-	if secret == "" {
-		return "", errors.New("IMPERSONATION_TOKEN_SECRET (or JWT_SECRET) is not configured")
+		if os.Getenv("APP_ENV") == "development" {
+			secret = "dev-only-impersonation-secret-do-not-use-in-production"
+		} else {
+			return "", errors.New("IMPERSONATION_TOKEN_SECRET is not configured")
+		}
 	}
 
 	payload := impersonationTokenPayload{
@@ -692,10 +693,11 @@ func signImpersonationToken(session ImpersonationSession, realRoles []string) (s
 func ValidateImpersonationToken(tokenStr string) (*impersonationTokenPayload, error) {
 	secret := os.Getenv("IMPERSONATION_TOKEN_SECRET")
 	if secret == "" {
-		secret = os.Getenv("JWT_SECRET")
-	}
-	if secret == "" {
-		return nil, errors.New("IMPERSONATION_TOKEN_SECRET (or JWT_SECRET) is not configured")
+		if os.Getenv("APP_ENV") == "development" {
+			secret = "dev-only-impersonation-secret-do-not-use-in-production"
+		} else {
+			return nil, errors.New("IMPERSONATION_TOKEN_SECRET is not configured")
+		}
 	}
 
 	// Split into payload.signature

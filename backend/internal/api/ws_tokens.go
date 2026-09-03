@@ -35,19 +35,18 @@ func (s *Server) getWsToken(w http.ResponseWriter, r *http.Request) {
 		"exp":     time.Now().Add(time.Duration(req.TTL) * time.Second).Unix(),
 	}
 
-	var signed string
-	var err error
-	if s.SecMgr != nil {
-		signed, err = s.SecMgr.SignToken(claims)
-	} else {
-		secret := os.Getenv("JWT_SECRET")
-		if secret == "" {
-			http.Error(w, "JWT_SECRET environment variable is not set", http.StatusInternalServerError)
+	wsSecret := os.Getenv("WS_TOKEN_SECRET")
+	if wsSecret == "" {
+		if os.Getenv("APP_ENV") == "development" {
+			wsSecret = "dev-only-ws-secret-do-not-use-in-production"
+		} else {
+			http.Error(w, "WS_TOKEN_SECRET environment variable is not configured", http.StatusInternalServerError)
 			return
 		}
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-		signed, err = token.SignedString([]byte(secret))
 	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString([]byte(wsSecret))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to sign token: %v", err), http.StatusInternalServerError)
 		return
@@ -65,40 +64,30 @@ func (s *Server) validateWsToken(tokenString string, jobId string) (map[string]i
 		tokenString = tokenString[7:]
 	}
 
-	var claims jwt.MapClaims
-	var err error
-	if s.SecMgr != nil {
-		var parsed map[string]interface{}
-		parsed, err = s.SecMgr.ParseToken(tokenString)
-		if err == nil {
-			// convert parsed to jwt.MapClaims-like map
-			claims = jwt.MapClaims{}
-			for k, v := range parsed {
-				claims[k] = v
-			}
+	wsSecret := os.Getenv("WS_TOKEN_SECRET")
+	if wsSecret == "" {
+		if os.Getenv("APP_ENV") == "development" {
+			wsSecret = "dev-only-ws-secret-do-not-use-in-production"
+		} else {
+			return nil, fmt.Errorf("WS_TOKEN_SECRET environment variable is not configured")
 		}
-	} else {
-		secret := os.Getenv("JWT_SECRET")
-		if secret == "" {
-			return nil, fmt.Errorf("JWT_SECRET environment variable is not set")
+	}
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		token, err2 := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(secret), nil
-		})
-		if err2 != nil {
-			return nil, err2
-		}
-		if !token.Valid {
-			return nil, fmt.Errorf("invalid token")
-		}
-		var ok bool
-		claims, ok = token.Claims.(jwt.MapClaims)
-		if !ok {
-			return nil, fmt.Errorf("invalid token claims")
-		}
+		return []byte(wsSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !token.Valid {
+		return nil, fmt.Errorf("invalid token")
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, fmt.Errorf("invalid token claims")
 	}
 
 	// Verify job_id and purpose

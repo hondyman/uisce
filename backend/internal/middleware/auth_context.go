@@ -29,210 +29,228 @@ import (
 func AuthContextMiddleware(secMgr *services.SecurityManager, idpRegistry security.IssuerRegistry) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if secMgr != nil {
-				authHeader := r.Header.Get("Authorization")
-				if authHeader != "" {
-					// ── Check for impersonation context token first ──────────
-					// Impersonation tokens are HMAC-signed platform-internal tokens
-					// that carry a concrete target tenant_id and impersonation_active=true.
-					// If this succeeds, the downstream security context behaves exactly
-					// like a normal tenant user — no special-casing required.
-					rawToken := strings.TrimPrefix(authHeader, "Bearer ")
-					if impPayload, err := security.ValidateImpersonationToken(rawToken); err == nil {
-						uid := impPayload.Sub
-						tenantID := impPayload.TenantID
+			// 1. Capture client-requested tenant selection before stripping
+			clientSelectedTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 
-						// Authoritative identity: the REAL admin, not the target tenant user.
-						r.Header.Set("X-User-ID", uid)
-						r.Header.Set("X-Tenant-ID", tenantID)
+			// 2. Unconditionally strip all spoofable identity and impersonation headers
+			r.Header.Del("X-User-ID")
+			r.Header.Del("X-Tenant-ID")
+			r.Header.Del("X-Real-Admin-ID")
+			for k := range r.Header {
+				if strings.HasPrefix(strings.ToLower(k), "x-impersonation-") {
+					r.Header.Del(k)
+				}
+			}
 
-						// Signal to downstream handlers and the frontend that impersonation is active.
-						w.Header().Set("X-Impersonation-Active", "true")
-						w.Header().Set("X-Real-Admin-ID", uid)
-						w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
+			// 3. OPTIONS preflight pass-through
+			if r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-						// Preserve the real admin roles so downstream authorization and audit
-						// know which role initiated the session. Fall back to the token's
-						// admin_role for tokens that do not carry RealRoles. Legacy tokens
-						// issued before multi-role support have neither field; treat them as
-						// global_admin because the platform previously allowed only global
-						// admins to impersonate.
-						realRoles := impPayload.RealRoles
-						adminRole := impPayload.AdminRole
-						if len(realRoles) == 0 {
-							if adminRole != "" {
-								realRoles = []string{adminRole}
-							} else {
-								realRoles = []string{security.RoleGlobalAdmin}
-								adminRole = security.RoleGlobalAdmin
-							}
-						}
-						isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||
-							hasRole(realRoles, security.RoleGlobalOps) ||
-							hasRole(realRoles, "core_admin") ||
-							hasRole(realRoles, "is_core_admin")
+			if secMgr == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-						ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-							UserID:                 uid,
-							Roles:                  realRoles,
-							TenantIDs:              []string{tenantID},
-							IsGlobalAdmin:          isGlobalAdmin,
-							ImpersonationActive:    true,
-							RealAdminUserID:        uid,
-							ImpersonationSessionID: impPayload.SessionID,
-							ImpersonationMode:      string(impPayload.Mode),
-							ImpersonationAdminRole: adminRole,
-						})
-						// Attach the impersonation scope so BuildContext can enforce it.
-						// Default to tenant-wide; honour the token's scope_kind/scope_id when set.
-						ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
-							Kind: impPayload.ScopeKind,
-							ID:   impPayload.ScopeID,
-						})
-						r = r.WithContext(ctx)
-						next.ServeHTTP(w, r)
+			authHeader := r.Header.Get("Authorization")
+			apiKey := r.Header.Get("X-API-Key")
+
+			if authHeader != "" {
+				if !strings.HasPrefix(authHeader, "Bearer ") {
+					http.Error(w, `{"error": "unauthorized", "message": "invalid authorization header format"}`, http.StatusUnauthorized)
+					return
+				}
+
+				rawToken := strings.TrimSpace(strings.TrimPrefix(authHeader, "Bearer "))
+				if rawToken == "" {
+					http.Error(w, `{"error": "unauthorized", "message": "empty bearer token"}`, http.StatusUnauthorized)
+					return
+				}
+
+				dotCount := strings.Count(rawToken, ".")
+				switch dotCount {
+				case 1:
+					// ── Impersonation context token dispatch (payload.signature) ─────────
+					impPayload, err := security.ValidateImpersonationToken(rawToken)
+					if err != nil {
+						logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Impersonation token rejected: %v", err)
+						http.Error(w, `{"error": "unauthorized", "message": "invalid impersonation token"}`, http.StatusUnauthorized)
 						return
 					}
 
-					// ── Standard JWT validation ──────────────────────────────
-					if jclaims, err := secMgr.ValidateToken(rawToken); err == nil {
-						// Full tenant isolation for externally-issued tokens: confirm
-						// the signing IDP is actually registered for the tenant(s)
-						// the token claims (see services.ValidateIssuerTenant). A
-						// valid signature alone only proves "a registered IDP signed
-						// this" — not that this is the IDP this tenant trusts, which
-						// matters once a tenant can have more than one registered
-						// realm (M&A) or an issuer is deliberately cross-tenant
-						// (super-admin / professional-services). No-op for internal
-						// HS256 tokens (jclaims.Issuer is empty for those).
-						//
-						// issuerTrustedTenants, when non-nil, is the full set of
-						// tenants this token's issuer is registered for — used below
-						// to constrain the global-admin X-Tenant-ID-header path so a
-						// cross-tenant-realm admin can only select a tenant their
-						// issuer actually covers, not an arbitrary UUID.
-						var issuerTrustedTenants []string
-						if idpRegistry != nil {
-							trusted, err := services.ValidateIssuerTenant(r.Context(), idpRegistry, jclaims)
-							if err != nil {
-								logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] issuer/tenant validation failed: %v", err)
-								next.ServeHTTP(w, r)
-								return
-							}
-							issuerTrustedTenants = trusted
-						}
-						
-						logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Auth event: sub=%s, alg=%s, iss=%s", jclaims.UserID, jclaims.Alg, jclaims.Issuer)
+					uid := impPayload.Sub
+					tenantID := impPayload.TenantID
 
-						uid := jclaims.UserID
-						if uid != "" {
-							// Inject UserID into headers for legacy handlers that rely on it
-							r.Header.Set("X-User-ID", uid)
+					// Authoritative identity: the REAL admin, not the target tenant user.
+					r.Header.Set("X-User-ID", uid)
+					r.Header.Set("X-Tenant-ID", tenantID)
 
-							// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.
-							// Computed up front because it gates whether the client-supplied
-							// X-Tenant-ID header may be trusted below.
-							isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
-								hasRole(normalizeStringList(jclaims.Roles), "global_ops")
-							// Backward-compat: also accept legacy "core_admin" / "is_core_admin" claim if present.
-							if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
-								for _, role := range normalizeStringList(jclaims.Roles) {
-									if role == "core_admin" || role == "is_core_admin" {
-										isGlobalAdmin = true
-										break
-									}
-								}
-							}
+					// Signal to downstream handlers and the frontend that impersonation is active.
+					w.Header().Set("X-Impersonation-Active", "true")
+					w.Header().Set("X-Real-Admin-ID", uid)
+					w.Header().Set("X-Impersonation-Mode", string(impPayload.Mode))
 
-							// Authoritative Tenant ID from token
-							tenantID := strings.TrimSpace(jclaims.TenantID)
-							tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
-							if tenantID != "" {
-								// Override header with authoritative value from token if present.
-								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 1 {
-								tenantID = tenantIDs[0]
-								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 0 && isGlobalAdmin {
-								// The token carries no tenant claim. Global admins operate across all
-								// tenants and pick the active one via the UI, so the client-supplied
-								// X-Tenant-ID header is the only source of that selection. Trusting it
-								// here is safe specifically because it is gated on the verified
-								// global_admin/global_ops role from the signed token — a non-admin
-								// token can never reach this branch and cannot spoof a tenant via the
-								// header. Still parsed as a UUID to reject malformed/injected values.
-								headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-								parsed, parseErr := uuid.Parse(headerTenant)
-								// When this token came from a registered external issuer,
-								// issuerTrustedTenants is that issuer's full registered set —
-								// a cross-tenant-realm admin may only select a tenant their
-								// issuer actually covers, not an arbitrary UUID. Internal
-								// (HS256) global-admin tokens have issuerTrustedTenants == nil
-								// and keep the prior, unconstrained behavior.
-								allowedByIssuer := issuerTrustedTenants == nil
-								if !allowedByIssuer && parseErr == nil {
-									for _, t := range issuerTrustedTenants {
-										if t == parsed.String() {
-											allowedByIssuer = true
-											break
-										}
-									}
-								}
-								if parseErr == nil && allowedByIssuer {
-									tenantID = parsed.String()
-									r.Header.Set("X-Tenant-ID", tenantID)
-									tenantIDs = []string{tenantID}
-									logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Global admin token lacks tenant claim; trusting X-Tenant-ID header: tenant=%s user=%s", tenantID, uid)
-								} else {
-									if parseErr == nil && !allowedByIssuer {
-										logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin selected tenant=%s not in issuer's registered set; rejecting: user=%s", headerTenant, uid)
-									} else {
-										logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin token lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
-									}
-									r.Header.Del("X-Tenant-ID")
-								}
-							} else if len(tenantIDs) == 0 {
-								// Non-admin token with no tenant claim: never trust a client-supplied
-								// header, since there is no verified entitlement to check it against.
-								r.Header.Del("X-Tenant-ID")
-							}
-
-							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:        uid,
-								Roles:         normalizeStringList(jclaims.Roles),
-								TenantIDs:     tenantIDs,
-								IsGlobalAdmin: isGlobalAdmin,
-								RawClaims:     jclaims,
-							})
-							r = r.WithContext(ctx)
+					realRoles := impPayload.RealRoles
+					adminRole := impPayload.AdminRole
+					if len(realRoles) == 0 {
+						if adminRole != "" {
+							realRoles = []string{adminRole}
+						} else {
+							realRoles = []string{security.RoleGlobalAdmin}
+							adminRole = security.RoleGlobalAdmin
 						}
 					}
-				} else if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
-					if ak, ok := secMgr.GetAPIKey(apiKey); ok && ak != nil {
-						uid := ak.UserID
-						if uid != "" {
-							r.Header.Set("X-User-ID", uid)
+					isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||
+						hasRole(realRoles, security.RoleGlobalOps) ||
+						hasRole(realRoles, "core_admin") ||
+						hasRole(realRoles, "is_core_admin")
 
-							tenantID := ak.TenantID
-							if tenantID != "" {
-								r.Header.Set("X-Tenant-ID", tenantID)
+					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+					ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+						UserID:                 uid,
+						Roles:                  realRoles,
+						TenantIDs:              []string{tenantID},
+						IsGlobalAdmin:          isGlobalAdmin,
+						ImpersonationActive:    true,
+						RealAdminUserID:        uid,
+						ImpersonationSessionID: impPayload.SessionID,
+						ImpersonationMode:      string(impPayload.Mode),
+						ImpersonationAdminRole: adminRole,
+					})
+					ctx = security.WithImpersonationScope(ctx, security.ImpersonationScopeContext{
+						Kind: impPayload.ScopeKind,
+						ID:   impPayload.ScopeID,
+					})
+					r = r.WithContext(ctx)
+					next.ServeHTTP(w, r)
+					return
+
+				case 2:
+					// ── Standard JWT validation (header.payload.signature) ────────────────
+					jclaims, err := secMgr.ValidateToken(rawToken)
+					if err != nil {
+						logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] JWT validation failed: %v", err)
+						http.Error(w, `{"error": "unauthorized", "message": "invalid token"}`, http.StatusUnauthorized)
+						return
+					}
+
+					var issuerTrustedTenants []string
+					if idpRegistry != nil {
+						trusted, err := services.ValidateIssuerTenant(r.Context(), idpRegistry, jclaims)
+						if err != nil {
+							logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] issuer/tenant validation failed: %v", err)
+							http.Error(w, `{"error": "unauthorized", "message": "untrusted token issuer or tenant mismatch"}`, http.StatusUnauthorized)
+							return
+						}
+						issuerTrustedTenants = trusted
+					}
+
+					logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Auth event: sub=%s, alg=%s, iss=%s", jclaims.UserID, jclaims.Alg, jclaims.Issuer)
+
+					uid := jclaims.UserID
+					if uid == "" {
+						http.Error(w, `{"error": "unauthorized", "message": "missing subject in token"}`, http.StatusUnauthorized)
+						return
+					}
+
+					r.Header.Set("X-User-ID", uid)
+
+					isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
+						hasRole(normalizeStringList(jclaims.Roles), "global_ops")
+					if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
+						for _, role := range normalizeStringList(jclaims.Roles) {
+							if role == "core_admin" || role == "is_core_admin" {
+								isGlobalAdmin = true
+								break
 							}
-
-							ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
-							ctx = security.WithAuthInfo(ctx, security.AuthInfo{
-								UserID:    uid,
-								Roles:     normalizeStringList(ak.Roles),
-								TenantIDs: normalizeTenantIDs(ak.TenantIDs, tenantID),
-								RawClaims: nil,
-							})
-							r = r.WithContext(ctx)
 						}
 					}
+
+					tenantID := strings.TrimSpace(jclaims.TenantID)
+					tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
+					if tenantID != "" {
+						r.Header.Set("X-Tenant-ID", tenantID)
+					} else if len(tenantIDs) == 1 {
+						tenantID = tenantIDs[0]
+						r.Header.Set("X-Tenant-ID", tenantID)
+					} else if len(tenantIDs) == 0 && isGlobalAdmin {
+						parsed, parseErr := uuid.Parse(clientSelectedTenant)
+						allowedByIssuer := issuerTrustedTenants == nil
+						if !allowedByIssuer && parseErr == nil {
+							for _, t := range issuerTrustedTenants {
+								if t == parsed.String() {
+									allowedByIssuer = true
+									break
+								}
+							}
+						}
+						if parseErr == nil && allowedByIssuer {
+							tenantID = parsed.String()
+							r.Header.Set("X-Tenant-ID", tenantID)
+							tenantIDs = []string{tenantID}
+							logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Global admin token lacks tenant claim; trusting sanitized client X-Tenant-ID: tenant=%s user=%s", tenantID, uid)
+						} else {
+							if parseErr == nil && !allowedByIssuer {
+								logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin selected tenant=%s not in issuer's registered set; rejecting: user=%s", clientSelectedTenant, uid)
+							} else {
+								logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Global admin token lacks tenant claim and client X-Tenant-ID is missing or not a valid UUID: header=%q user=%s", clientSelectedTenant, uid)
+							}
+							r.Header.Del("X-Tenant-ID")
+						}
+					} else if len(tenantIDs) == 0 {
+						r.Header.Del("X-Tenant-ID")
+					}
+
+					ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+					ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+						UserID:        uid,
+						Roles:         normalizeStringList(jclaims.Roles),
+						TenantIDs:     tenantIDs,
+						IsGlobalAdmin: isGlobalAdmin,
+						RawClaims:     jclaims,
+					})
+					r = r.WithContext(ctx)
+					next.ServeHTTP(w, r)
+					return
+
+				default:
+					http.Error(w, `{"error": "unauthorized", "message": "malformed bearer token structure"}`, http.StatusUnauthorized)
+					return
+				}
+			} else if apiKey != "" {
+				ak, ok := secMgr.GetAPIKey(apiKey)
+				if !ok || ak == nil {
+					logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Invalid API key presented")
+					http.Error(w, `{"error": "unauthorized", "message": "invalid api key"}`, http.StatusUnauthorized)
+					return
 				}
 
+				uid := ak.UserID
+				if uid == "" {
+					http.Error(w, `{"error": "unauthorized", "message": "invalid api key user mapping"}`, http.StatusUnauthorized)
+					return
+				}
+
+				r.Header.Set("X-User-ID", uid)
+				tenantID := ak.TenantID
+				if tenantID != "" {
+					r.Header.Set("X-Tenant-ID", tenantID)
+				}
+
+				ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
+				ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+					UserID:    uid,
+					Roles:     normalizeStringList(ak.Roles),
+					TenantIDs: normalizeTenantIDs(ak.TenantIDs, tenantID),
+					RawClaims: nil,
+				})
+				r = r.WithContext(ctx)
+				next.ServeHTTP(w, r)
+				return
 			}
+
+			// No credentials presented: headers are stripped, proceed anonymously
 			next.ServeHTTP(w, r)
 		})
 	}
