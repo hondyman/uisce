@@ -43,7 +43,7 @@ func main() {
 		dbURL = os.Getenv("POSTGRES_DSN")
 	}
 	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
-		dbURL = "postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL is required (hardcoded fallback removed post-mTLS hardening of 100.84.50.65)")
 	}
 	port := os.Getenv("PORT")
 	if port == "" {

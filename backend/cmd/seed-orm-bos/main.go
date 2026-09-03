@@ -15,7 +15,7 @@ import (
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
+		log.Fatal("DATABASE_URL is required (hardcoded fallback removed post-mTLS hardening of 100.84.50.65)")
 	}
 
 	db, err := sqlx.Connect("postgres", dbURL)
