@@ -281,7 +281,15 @@ print("Patched. Restart Polaris to clear credential cache.")
 **Resolution:** Ensure all multi-tenant read paths use `db.WithTenantTransaction(ctx, db, tenantID, func(tx) { ... })` which wraps `SET LOCAL` and all queries in a single `BeginTx` → `tx.QueryContext` → `Commit` flow. The Go test in `backend/internal/db/tenant_tx_test.go` verifies this:
 
 ```bash
-UISCE_TEST_DB_DSN="host=100.84.50.65 port=5432 dbname=polaris user=postgres password=postgres" \
+# Post-mTLS (Sept 2026): DSN must carry client cert params. Plaintext password
+# DSNs against 100.84.50.65 fail with "connection requires a valid client
+# certificate". Adjust the env below to match the cert paths used by the
+# rest of this project — see the mTLS handoff for a working example.
+PGSSLMODE=verify-full \
+PGSSLCERT="$HOME/.uisce/certs/postgres-client.crt" \
+PGSSLKEY="$HOME/.uisce/certs/postgres-client.key" \
+PGSSLROOTCERT="$HOME/.uisce/certs/ca.crt" \
+UISCE_TEST_DB_DSN="host=100.84.50.65 port=5432 dbname=polaris user=postgres" \
   go test -v ./backend/internal/db/
 ```
 
@@ -295,7 +303,11 @@ UISCE_TEST_DB_DSN="host=100.84.50.65 port=5432 dbname=polaris user=postgres pass
 ```bash
 # Apply via migration runner
 go run ./backend/cmd/migrate --direction=up --migration=20260727000025
-# Or verify:
+# Or verify (post-mTLS: libpq env vars, not password DSN):
+PGSSLMODE=verify-full \
+PGSSLCERT="$HOME/.uisce/certs/postgres-client.crt" \
+PGSSLKEY="$HOME/.uisce/certs/postgres-client.key" \
+PGSSLROOTCERT="$HOME/.uisce/certs/ca.crt" \
 psql -h 100.84.50.65 -U postgres -d polaris -c "SELECT column_name FROM information_schema.columns WHERE table_name='tenant_product_datasource' AND column_name='tenant_id';"
 ```
 

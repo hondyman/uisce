@@ -13,6 +13,20 @@ import (
 	"strings"
 )
 
+// Package migrations owns the database schema versioning machinery for the
+// Uisce platform. The authoritative bookkeeping lives in `oms.migration_log`:
+//
+//   - Each row records a single applied migration file (the .up.sql form).
+//   - The `sha256` column stores the SHA-256 of the file content at apply time.
+//   - On every ApplyMigrations invocation, the runner re-computes the SHA of
+//     each .up.sql in `db/migrations/` and skips files whose SHA matches the
+//     stored value. If the SHA has changed since apply, the file is
+//     **skipped with a warning** — this runner does not re-execute changed
+//     migrations. (Editing an applied file is treated as a defect, not as an
+//     opportunity to replay history.)
+//   - public.schema_migrations (golang-migrate's table) is NOT authoritative
+//     for this database and may be empty or stale. Do not use it for
+//     migration-status queries — always query `oms.migration_log`.
 func ApplyMigrations(db *sql.DB) error {
 	_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS oms`)
 	if err != nil {
