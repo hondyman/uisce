@@ -6,9 +6,10 @@
 --             public.tenants(id) primary key
 
 -- ---------------------------------------------------------------------------
--- 0. Audit Telemetry Source Extensions
+-- 0. Audit & FinOps Schemas and Telemetry Extensions
 -- ---------------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS audit;
+CREATE SCHEMA IF NOT EXISTS finops;
 
 -- audit.analytical_query_execution_logs was created in 20260824_002 with timestamp 'created_at'
 -- Ensure optional columns for FinOps telemetry exist if not already present
