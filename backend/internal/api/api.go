@@ -903,12 +903,13 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// for metadata-driven UI components
 	r.Use(appmid.MetadataCacheMiddlewareDefault())
 
-	// Assert APP_ENV at startup: refuse to boot if env configuration is ambiguous or unsafe
+	// Assert APP_ENV at startup: require explicit valid environment
 	appEnv := os.Getenv("APP_ENV")
-	if os.Getenv("ENV") == "production" || os.Getenv("NODE_ENV") == "production" {
-		if appEnv == "" || appEnv == "development" {
-			log.Fatalf("FATAL: Refusing to start in production with invalid APP_ENV=%q", appEnv)
-		}
+	switch appEnv {
+	case "development", "staging", "production":
+		// valid
+	default:
+		log.Fatalf("FATAL: Refusing to start with invalid or unset APP_ENV=%q. Must be 'development', 'staging', or 'production'", appEnv)
 	}
 
 	// Initialize security manager with JWT secret

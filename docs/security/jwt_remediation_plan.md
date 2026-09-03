@@ -32,6 +32,11 @@ Token claims will become a consistency check (mismatch = reject), rather than th
    - Token claims will only act as a consistency check.
    - This change definitively mitigates the "mint global_admin" vulnerability class.
 
+3. **Server-Side Impersonation Session Validation**:
+   - Validate `SessionID` against `platform_admin_audit` / active sessions store (active, unrevoked, unexpired) inside `ValidateImpersonationToken`.
+   - Re-derive operator `RealRoles` server-side from `app_user` / role tables rather than trusting claims in the token.
+   - Owner: Platform Security (Phase 3).
+
 ## Epic: Uisce Support Access & Delegation
 Staff should have zero ambient tenant membership. We will implement a delegation model:
 1. Staff authenticates to the uisce realm (MFA).
