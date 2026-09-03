@@ -22,9 +22,6 @@ ALTER TABLE audit.analytical_query_execution_logs
 CREATE INDEX IF NOT EXISTS idx_aqel_tenant_created
     ON audit.analytical_query_execution_logs (tenant_id, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_aqel_tenant_dow
-    ON audit.analytical_query_execution_logs (tenant_id, EXTRACT(DOW FROM created_at));
-
 -- ---------------------------------------------------------------------------
 -- 1. Projected Hourly Compute Demand per Tenant
 -- ---------------------------------------------------------------------------
