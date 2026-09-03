@@ -5,7 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -125,4 +127,54 @@ func TestPrewarmCoordinator_ANDGateSemantics(t *testing.T) {
 	mult2 := 4.50
 	passes2 := prob2 >= policy.MinPeakProbabilityToPrewarm && mult2 >= policy.PrewarmThresholdMultiplier
 	assert.True(t, passes2, "quarter-end spike must trigger prewarming")
+}
+
+// TestPrewarmCoordinator_TerminalUpdate_TargetMetricPerTarget covers the
+// per-target × UPDATE cell of the (path × row-state) matrix. Symmetric
+// to the per-target INSERT test, but exercises the UPDATE branch with a
+// PENDING row that updateOrPersistLedgerEntry matches. Asserts no
+// mixed-semantics row can be produced: per-target UPDATE writes
+// bo_id=<first target's BOID> and target_metric=<first target's
+// FormulaType> together. (The original bug: UPDATE setting
+// bo_id=<first target> while leaving target_metric='ALL' from the
+// original PENDING — guarded by THIS test, not by the run-level one.)
+func TestPrewarmCoordinator_TerminalUpdate_TargetMetricPerTarget(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	tenantID := uuid.New()
+	jobID := uuid.New()
+	primaryBOID := uuid.New()
+
+	mock.ExpectExec(`UPDATE finops\.prewarm_execution_ledger`).
+		WithArgs(
+			&primaryBOID,     // $1 bo_id (first target's BO)
+			"XIRR",           // $2 target_metric (first target's FormulaType)
+			sqlmock.AnyArg(), // $3 entities_prewarmed_count
+			sqlmock.AnyArg(), // $4 compute_cost
+			sqlmock.AnyArg(), // $5 estimated_savings
+			sqlmock.AnyArg(), // $6 peak_probability
+			sqlmock.AnyArg(), // $7 policy_id (nil per existing pattern)
+			sqlmock.AnyArg(), // $8 status
+			sqlmock.AnyArg(), // $9 error_detail
+			tenantID,         // $10
+			&jobID,           // $11
+		).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	coord := NewPrewarmCoordinator(sqlxDB)
+	targets := []hotTarget{
+		{BOID: primaryBOID, FieldID: uuid.New(), HitCount: 100, FormulaType: "XIRR"},
+	}
+	result := &PrewarmResult{
+		TenantID:        tenantID,
+		Status:          "SIMULATED",
+		TargetsSeeded:   1,
+		PeakProbability: 0.95,
+	}
+	err = coord.updateOrPersistLedgerEntry(context.Background(), tenantID, &jobID, targets, result, nil, "")
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

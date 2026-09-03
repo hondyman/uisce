@@ -91,3 +91,44 @@ LIKE '…' ORDER BY applied_at` immediately **before and after** a
 restart. Unchanged timestamps + unchanged row count prove write-once
 behaviorally and prove the runner did not re-apply. This check is part
 of every FinOps Predictive deployment.
+
+## A second cousin: different directories, not directory lag
+
+applied_at clusters can also surface directory mismatches between
+processes. Sept 3 2026: 17_catalog stamped `2026-09-02 23:40:58Z`
+while 16/17_feedback/18 stamped `2026-09-03 02:22:42Z`. File birth
+times (`stat -f '%SB'` in UTC; local EDT would inflate offsets by
+4h if naively compared to UTC applied_at):
+
+| File                      | Birth (UTC)         | Existed at 23:40Z? |
+|---------------------------|---------------------|--------------------|
+| 20261016                  | 2026-09-02 21:38Z   | Yes — 2h02m before |
+| 17_feedback               | 2026-09-02 23:18Z   | Yes — 22min before |
+| 17_catalog                | 2026-09-02 23:33Z   | Yes — 7min before  |
+| 20261018                  | 2026-09-03 02:08Z   | No — born AFTER    |
+
+18's non-application at 23:40Z needs no hypothesis — it didn't exist
+yet. The remaining anomaly: 17_catalog (7min old) was applied while
+16 (2h02m old) and 17_feedback (22min old) were skipped. The 7-minute
+gap favors a workstream-scoped migrations directory — the 23:40Z
+process restarted for the catalog rollout, saw only its own files.
+Inspect each runner process's working directory; correlate with the
+git state of that directory at the recorded applied_at. Distinct
+clusters → distinct directories → look at process mounts, not "lag."
+
+## A third cousin: concurrent writers to a shared migrations dir
+
+The migrations directory has concurrent writers. Two listings of the
+same glob (`ls backend/db/migrations/20260903_*.sql | cat -n`), taken
+minutes apart during one working session, returned 5 files and then 9.
+The 4 new files were untracked WIP from a concurrent workstream —
+untracked means not in HEAD, present on disk, golang-migrate sees
+them. Re-verify directory contents before counting them in any
+record. Counts, SHAs, and directory contents are point-in-time.
+
+The same lesson applies to `git status --short backend/db/migrations/`:
+tracked status flips mid-session (`20260903_001_create_semantic_ai_bridge.up.sql`
+was untracked before this commit was finalized; the four migrate_legacy /
+validation_trigger files likewise). Before recording any count in a
+permanent artifact, run the paste fresh.
+

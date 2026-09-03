@@ -282,11 +282,11 @@ func TestPrewarmCoordinator_TerminalInsert_TargetMetricFromFirstTarget(t *testin
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
-// TestPrewarmCoordinator_TerminalUpdate_TargetMetricConsistentWithBOID verifies the
-// fourth cell of the matrix: UPDATE path with no targets passes bo_id=nil AND
-// target_metric='ALL' together. Closes the mixed-semantics vector — the next editor
-// who tries to split these will trip this assertion.
-func TestPrewarmCoordinator_TerminalUpdate_TargetMetricConsistentWithBOID(t *testing.T) {
+// TestPrewarmCoordinator_TerminalUpdate_TargetMetricRunLevelAll verifies the
+// run-level × UPDATE cell of the matrix: UPDATE path with no targets passes
+// bo_id=nil AND target_metric='ALL' together. Guards the inverse direction
+// of the original mixed-semantics bug (per-target bo_id + run-level metric).
+func TestPrewarmCoordinator_TerminalUpdate_TargetMetricRunLevelAll(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
