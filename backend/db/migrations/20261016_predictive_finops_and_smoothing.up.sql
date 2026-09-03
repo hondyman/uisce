@@ -6,31 +6,24 @@
 --             public.tenants(id) primary key
 
 -- ---------------------------------------------------------------------------
--- 0. Audit Telemetry Source (guard in case not created by another migration)
+-- 0. Audit Telemetry Source Extensions
 -- ---------------------------------------------------------------------------
 CREATE SCHEMA IF NOT EXISTS audit;
 
-CREATE TABLE IF NOT EXISTS audit.analytical_query_execution_logs (
-    log_id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id           UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-    query_hash          VARCHAR(64)  NOT NULL,                -- SHA-256 of normalised AST
-    backend_type        VARCHAR(30)  NOT NULL DEFAULT 'POSTGRES', -- POSTGRES | STARROCKS | ICEBERG
-    scanned_bytes       BIGINT       NOT NULL DEFAULT 0,
-    cpu_duration_ms     BIGINT       NOT NULL DEFAULT 0,
-    attributed_cost_usd NUMERIC(10, 6) NOT NULL DEFAULT 0.000000,
-    result_row_count    BIGINT       NOT NULL DEFAULT 0,
-    cache_hit           BOOLEAN      NOT NULL DEFAULT FALSE,
-    executed_at         TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    user_id             UUID,
-    bo_id               UUID,
-    session_id          UUID
-);
+-- audit.analytical_query_execution_logs was created in 20260824_002 with timestamp 'created_at'
+-- Ensure optional columns for FinOps telemetry exist if not already present
+ALTER TABLE audit.analytical_query_execution_logs
+    ADD COLUMN IF NOT EXISTS cpu_duration_ms     BIGINT       NOT NULL DEFAULT 0,
+    ADD COLUMN IF NOT EXISTS attributed_cost_usd NUMERIC(10, 6) NOT NULL DEFAULT 0.000000,
+    ADD COLUMN IF NOT EXISTS user_id             UUID,
+    ADD COLUMN IF NOT EXISTS bo_id               UUID,
+    ADD COLUMN IF NOT EXISTS session_id          UUID;
 
-CREATE INDEX IF NOT EXISTS idx_aqel_tenant_time
-    ON audit.analytical_query_execution_logs (tenant_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_aqel_tenant_created
+    ON audit.analytical_query_execution_logs (tenant_id, created_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_aqel_tenant_dow
-    ON audit.analytical_query_execution_logs (tenant_id, EXTRACT(DOW FROM executed_at));
+    ON audit.analytical_query_execution_logs (tenant_id, EXTRACT(DOW FROM created_at));
 
 -- ---------------------------------------------------------------------------
 -- 1. Projected Hourly Compute Demand per Tenant

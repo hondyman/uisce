@@ -83,8 +83,8 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 				COALESCE(AVG(attributed_cost_usd),    0.0) AS avg_cost
 			FROM audit.analytical_query_execution_logs
 			WHERE tenant_id = $1
-			  AND executed_at >= NOW() - INTERVAL '60 days'
-			  AND EXTRACT(DOW FROM executed_at) = EXTRACT(DOW FROM $2::TIMESTAMPTZ);
+			  AND created_at >= NOW() - INTERVAL '60 days'
+			  AND EXTRACT(DOW FROM created_at) = EXTRACT(DOW FROM $2::TIMESTAMPTZ);
 		`
 		if err := f.db.GetContext(ctx, &baseline, baselineQuery, tenantID, targetDate); err != nil {
 			return nil, fmt.Errorf("failed fetching baseline telemetry: %w", err)
