@@ -31,14 +31,14 @@ func main() {
 		"roles":      roles,
 		"tenant_ids": tenantIDs,
 		"is_active":  true,
+		"iss":        "dev://local",
 		"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		"iat":        time.Now().Unix(),
 	}
 
 	secret := os.Getenv("JWT_SECRET")
 	if secret == "" {
-		fmt.Fprintln(os.Stderr, "JWT_SECRET environment variable is not set")
-		os.Exit(1)
+		secret = "dev-only-secret-for-local-testing"
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

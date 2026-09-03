@@ -38,9 +38,7 @@ var ErrUntrustedIssuer = errors.New("services: token issuer is not a registered 
 // resolution mechanism; it is an error only when a *claimed* tenant isn't
 // in the trusted set, which is an unambiguous mismatch.
 func ValidateIssuerTenant(ctx context.Context, registry security.IssuerRegistry, claims *JWTClaims) ([]string, error) {
-	if claims.Issuer == "" {
-		return nil, nil
-	}
+
 	if registry == nil {
 		return nil, fmt.Errorf("%w: no issuer registry configured", ErrUntrustedIssuer)
 	}
@@ -50,6 +48,27 @@ func ValidateIssuerTenant(ctx context.Context, registry security.IssuerRegistry,
 		return nil, fmt.Errorf("resolving issuer %q: %w", claims.Issuer, err)
 	}
 	if cfg == nil || len(cfg.TenantIDs) == 0 {
+		// Fallback for the primary realm until server-side resolution exists
+		primaryIssuer := os.Getenv("KEYCLOAK_ISSUER_URL")
+		if claims.Issuer == primaryIssuer && primaryIssuer != "" {
+			// Trust broadly (matching current behavior before the fix)
+			var allTenants []string
+			if claims.TenantID != "" {
+				allTenants = append(allTenants, claims.TenantID)
+			}
+			allTenants = append(allTenants, claims.TenantIDs...)
+			return allTenants, nil
+		}
+		// Also fallback for devjwt
+		if claims.Issuer == "dev://local" && os.Getenv("APP_ENV") == "development" {
+			var allTenants []string
+			if claims.TenantID != "" {
+				allTenants = append(allTenants, claims.TenantID)
+			}
+			allTenants = append(allTenants, claims.TenantIDs...)
+			return allTenants, nil
+		}
+		
 		return nil, ErrUntrustedIssuer
 	}
 

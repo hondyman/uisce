@@ -213,6 +213,7 @@ type JWTManager struct {
 	rsaPublicKeys   map[string]*rsa.PublicKey // keyed by JWKS "kid", for rotation support
 	tokenDuration   time.Duration
 	refreshDuration time.Duration
+	appEnv          string
 	mu              sync.RWMutex
 }
 
@@ -405,6 +406,7 @@ func NewJWTManager(secret []byte) *JWTManager {
 		secretKey:       secret,
 		tokenDuration:   15 * time.Minute,
 		refreshDuration: 7 * 24 * time.Hour,
+		appEnv:          os.Getenv("APP_ENV"),
 	}
 }
 
@@ -514,8 +516,14 @@ func (jm *JWTManager) SetRSAPublicKeyPEM(pemBytes []byte) error {
 // JWT_SECRET or a real Keycloak JWKS endpoint instead.
 func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 	mc := jwt.MapClaims{}
-	_, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); ok {
+	parsedToken, err := jwt.ParseWithClaims(tokenString, mc, func(token *jwt.Token) (interface{}, error) {
+		switch token.Method.(type) {
+		case *jwt.SigningMethodHMAC:
+			if jm.appEnv != "development" {
+				return nil, fmt.Errorf("HS* tokens are only permitted in development environments")
+			}
+			return jm.secretKey, nil
+		case *jwt.SigningMethodRSA:
 			jm.mu.RLock()
 			defer jm.mu.RUnlock()
 			if kid, _ := token.Header["kid"].(string); kid != "" {
@@ -526,12 +534,44 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 			if jm.rsaPublicKey != nil {
 				return jm.rsaPublicKey, nil
 			}
-			return nil, fmt.Errorf("no RSA public key configured for RS256 token verification")
+			return nil, fmt.Errorf("no RSA public key configured for RS* token verification")
+		default:
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return jm.secretKey, nil
 	})
 	if err != nil {
 		return nil, err
+	}
+	
+	iss := getStringClaim(mc, "iss")
+	if iss == "" {
+		return nil, fmt.Errorf("token missing issuer (iss) claim")
+	}
+
+	// Verify audience (aud)
+	expectedAudience := os.Getenv("JWT_AUDIENCE")
+	if expectedAudience != "" {
+		audClaim, ok := mc["aud"]
+		if !ok {
+			return nil, fmt.Errorf("token missing audience (aud) claim")
+		}
+		hasAudience := false
+		if audStr, ok := audClaim.(string); ok {
+			hasAudience = (audStr == expectedAudience)
+		} else if audList, ok := audClaim.([]interface{}); ok {
+			for _, a := range audList {
+				if s, ok := a.(string); ok && s == expectedAudience {
+					hasAudience = true
+					break
+				}
+			}
+		}
+		if !hasAudience {
+			// In production, we should enforce this. If warn-mode is desired, we can just log.
+			// But user says: "Until then, run the aud check in warn-mode, promote to enforce once logs show zero warnings."
+			logging.GetLogger().Sugar().Warnf("JWT validation: missing required audience %q", expectedAudience)
+			// return nil, fmt.Errorf("token missing required audience: %s", expectedAudience)
+		}
 	}
 	userID := getStringClaim(mc, "user_id")
 	if userID == "" {
@@ -601,7 +641,8 @@ func (jm *JWTManager) ValidateToken(tokenString string) (*JWTClaims, error) {
 		Roles:         roles,
 		IdpGroups:     idpGroups,
 		IssuedAt:      time.Now(),
-		Issuer:        getStringClaim(mc, "iss"),
+		Issuer:        iss,
+		Alg:           fmt.Sprintf("%v", parsedToken.Header["alg"]),
 	}, nil
 }
 
@@ -620,6 +661,7 @@ type JWTClaims struct {
 	// Used by ValidateIssuerTenant to confirm the issuing IDP is actually
 	// registered for the tenant(s) the token claims.
 	Issuer string
+	Alg    string // Populated by ValidateToken
 }
 
 func parseStringListClaim(value interface{}) []string {

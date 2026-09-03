@@ -122,6 +122,9 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, idpRegistry securit
 							}
 							issuerTrustedTenants = trusted
 						}
+						
+						logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] Auth event: sub=%s, alg=%s, iss=%s", jclaims.UserID, jclaims.Alg, jclaims.Issuer)
+
 						uid := jclaims.UserID
 						if uid != "" {
 							// Inject UserID into headers for legacy handlers that rely on it
