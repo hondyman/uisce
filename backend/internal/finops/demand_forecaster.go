@@ -24,9 +24,11 @@ type ForecastResult struct {
 	ContributingFactors []string  `json:"contributingFactors"`
 	// CalibrationFactor is the rolling correction multiplier derived from past
 	// feedback. 1.0 = neutral; >1.0 = model was under-predicting; <1.0 = over-predicting.
-	CalibrationFactor  float64 `json:"calibrationFactor"`
+	CalibrationFactor float64 `json:"calibrationFactor"`
 	// CalibrationSamples is the number of feedback records used to compute the factor.
-	CalibrationSamples int     `json:"calibrationSamples"`
+	CalibrationSamples int `json:"calibrationSamples"`
+	// ProjectedMultiplier is the composite calendar & burst multiplier applied to baseline.
+	ProjectedMultiplier float64 `json:"projectedMultiplier"`
 }
 
 // DemandForecaster synthesises historical telemetry and exchange-calendar signals
@@ -36,15 +38,27 @@ type ForecastResult struct {
 type DemandForecaster struct {
 	db              *sqlx.DB
 	feedbackService *ForecastFeedbackService
+	clock           Clock
 }
 
-// NewDemandForecaster constructs a DemandForecaster.
+// NewDemandForecaster constructs a DemandForecaster with the production RealClock.
 // feedbackSvc may be nil — in that case no calibration is applied (factor = 1.0).
 // db may be nil in unit-test contexts; queries are skipped and defaults are used.
 func NewDemandForecaster(db *sqlx.DB) *DemandForecaster {
+	return NewDemandForecasterWithClock(db, RealClock{})
+}
+
+// NewDemandForecasterWithClock constructs a DemandForecaster using the supplied
+// clock. Used by tests to pin "today" to a deterministic date, and by callers
+// that need to share a single clock across multiple components.
+func NewDemandForecasterWithClock(db *sqlx.DB, clock Clock) *DemandForecaster {
+	if clock == nil {
+		clock = RealClock{}
+	}
 	return &DemandForecaster{
 		db:              db,
 		feedbackService: NewForecastFeedbackService(db),
+		clock:           clock,
 	}
 }
 
@@ -64,15 +78,17 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 		return nil, fmt.Errorf("Rule 7 violation: tenant_id cannot be nil")
 	}
 
-	loc := targetDate.Location()
-	windowStart := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, loc)
-	windowEnd := windowStart.Add(24 * time.Hour)
+	// Midnight UTC boundaries eliminate DST / time-of-day boundary drift.
+	utc := time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, time.UTC)
+	windowStart := utc
+	windowEnd := utc.Add(24 * time.Hour)
 
 	// ── Step 1: Historical DOW-matched baseline ──────────────────────────────
 	var baseline struct {
-		AvgBytes int64   `db:"avg_bytes"`
-		AvgCPUms int64   `db:"avg_cpums"`
-		AvgCost  float64 `db:"avg_cost"`
+		AvgBytes    int64   `db:"avg_bytes"`
+		AvgCPUms    int64   `db:"avg_cpums"`
+		AvgCost     float64 `db:"avg_cost"`
+		SampleCount int64   `db:"sample_count"`
 	}
 
 	if f.db != nil {
@@ -80,7 +96,8 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 			SELECT
 				COALESCE(AVG(scanned_bytes)::BIGINT,  0) AS avg_bytes,
 				COALESCE(AVG(cpu_duration_ms)::BIGINT, 0) AS avg_cpums,
-				COALESCE(AVG(attributed_cost_usd),    0.0) AS avg_cost
+				COALESCE(AVG(attributed_cost_usd),    0.0) AS avg_cost,
+				COUNT(1)                                   AS sample_count
 			FROM audit.analytical_query_execution_logs
 			WHERE tenant_id = $1
 			  AND created_at >= NOW() - INTERVAL '60 days'
@@ -94,6 +111,7 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 		baseline.AvgBytes = 500_000_000  // 500 MB
 		baseline.AvgCPUms = 30_000       // 30 s
 		baseline.AvgCost = 0.85
+		baseline.SampleCount = 42
 	}
 
 	// ── Step 2: Calendar multipliers ────────────────────────────────────────
@@ -142,15 +160,19 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 	// Peak probability saturates at 1.0; a 3.5× baseline day = certainty.
 	peakProb := math.Min(1.0, (multiplier-1.0)/3.5)
 
-	// Confidence grows when we have calendar signal AND calibration samples.
-	confidence := 0.65
+	// Confidence dynamically scales with sample count and calendar signal.
+	// In the absence of query history (e.g. nil DB / cold tenant), defaults are 0.65 baseline, 0.88 with calendar signal.
+	baseConf := 0.65
+	if f.db != nil {
+		baseConf = 0.40 + math.Min(0.35, float64(baseline.SampleCount)/100.0*0.35)
+	}
 	if len(calendarEvents) > 0 {
-		confidence = 0.88
+		baseConf = math.Max(baseConf, 0.88)
 	}
 	// Calibration data boosts confidence: each sample adds a small increment (max +0.10).
 	if calibrationSamples > 0 {
 		calibBoost := math.Min(0.10, float64(calibrationSamples)/float64(calibrationWindowSize)*0.10)
-		confidence = math.Min(0.99, confidence+calibBoost)
+		baseConf = math.Min(0.99, baseConf+calibBoost)
 	}
 
 	return &ForecastResult{
@@ -160,10 +182,11 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 		ProjectedBytes:      projectedBytes,
 		ProjectedCPUms:      projectedCPUms,
 		ProjectedCostUSD:    projectedCost,
-		ConfidenceScore:     confidence,
+		ConfidenceScore:     baseConf,
 		PeakProbability:     peakProb,
 		CalibrationFactor:   calibrationFactor,
 		CalibrationSamples:  calibrationSamples,
+		ProjectedMultiplier: multiplier,
 		ContributingFactors: calendarEvents,
 	}, nil
 }
@@ -171,7 +194,7 @@ func (f *DemandForecaster) GenerateTenantDemandForecast(
 // PersistForecast upserts the forecast result into finops.compute_demand_forecasts.
 // Existing rows for the same (tenant_id, forecast_window_start) are overwritten.
 func (f *DemandForecaster) PersistForecast(ctx context.Context, r *ForecastResult) error {
-	if f.db == nil {
+	if f.db == nil || r == nil {
 		return nil
 	}
 	factorsJSON, err := json.Marshal(r.ContributingFactors)
@@ -214,18 +237,33 @@ func (f *DemandForecaster) PersistForecast(ctx context.Context, r *ForecastResul
 
 // ── Calendar helpers ─────────────────────────────────────────────────────────
 
-// isMonthEndWindow returns true when targetDate falls within 2 calendar days of the month boundary.
+// isMonthEndWindow returns true when targetDate falls within the last 2 days of the month
+// or the first 2 days of the subsequent month (covering month-end close and post-close reconciliations).
 func isMonthEndWindow(t time.Time) bool {
-	nextDay := t.Add(48 * time.Hour)
-	return nextDay.Month() != t.Month()
+	utc := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	// First 2 days of month (day 1, 2)
+	if utc.Day() <= 2 {
+		return true
+	}
+	// Last 2 days of month: 2 days ahead crosses to next month
+	return utc.AddDate(0, 0, 2).Month() != utc.Month()
 }
 
-// isQuarterEndWindow returns true when targetDate is a month-end of a fiscal quarter close
-// (March, June, September, or December).
+// isQuarterEndWindow returns true when targetDate is a month-end window of a fiscal quarter close
+// (March, June, September, or December, or the first 2 days of April, July, October, or January for quarter-close reconciliation).
 func isQuarterEndWindow(t time.Time) bool {
 	if !isMonthEndWindow(t) {
 		return false
 	}
-	m := t.Month()
-	return m == time.March || m == time.June || m == time.September || m == time.December
+	utc := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+	m := utc.Month()
+	// Quarter-end close days in the quarter itself:
+	if m == time.March || m == time.June || m == time.September || m == time.December {
+		return true
+	}
+	// First 2 days of the subsequent month (quarter-close reconciliation and NAV finalize):
+	if utc.Day() <= 2 && (m == time.April || m == time.July || m == time.October || m == time.January) {
+		return true
+	}
+	return false
 }

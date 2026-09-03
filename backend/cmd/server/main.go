@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/api"
+	"github.com/hondyman/uisce/backend/internal/finops"
 	"github.com/hondyman/uisce/backend/internal/observability"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/semantic_bridge"
@@ -24,7 +25,10 @@ func main() {
 		dbURL = os.Getenv("POSTGRES_DSN")
 	}
 	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
-		dbURL = "postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
+		// Dev canary: deliberately invalid post-mTLS (no cert, plaintext).
+		// Ping() below will fail fast with "connection requires a valid client
+		// certificate" — clear signal that the operator forgot to set DATABASE_URL.
+		dbURL = "postgresql://postgres@100.84.50.65:5432/alpha?sslmode=disable"
 	}
 
 	port := os.Getenv("PORT")
@@ -47,6 +51,19 @@ func main() {
 	sqlxDB := sqlx.NewDb(db, "postgres")
 
 	startLedgerMonitor(sqlxDB)
+
+	// Predictive FinOps: sweep orphan PENDING prewarm rows left behind by a prior
+	// crash or timeout. Synchronous before ListenAndServe — one UPDATE, low-ms cost,
+	// deterministic ordering relative to the ledger monitor. Log-and-continue on
+	// failure: a DB hiccup must not block serving, but the sweep exists to be noticed,
+	// so the failure is structured for alerting.
+	sweepCtx, sweepCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := finops.NewPrewarmCoordinator(sqlxDB).RecoverStalePendingExecutions(sweepCtx); err != nil {
+		log.Printf("[WARN] prewarm startup sweep failed: %v (PENDING abandonment markers may not be cleaned up this cycle)", err)
+	} else {
+		log.Println("[INFO] prewarm startup sweep: clean (no orphan PENDING rows)")
+	}
+	sweepCancel()
 
 	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil)
 

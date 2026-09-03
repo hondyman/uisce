@@ -57,6 +57,7 @@ interface CalibrationState {
 }
 
 interface PrewarmResult {
+  jobId?: string;
   triggered: boolean;
   peakProbability: number;
   targetsSeeded: number;
@@ -93,10 +94,14 @@ function peakColor(prob: number): string {
 function statusChipColor(status: string): { bg: string; fg: string } {
   switch (status) {
     case 'COMPLETED':      return { bg: '#064E3B', fg: '#34D399' };
+    case 'SIMULATED':      return { bg: '#1E1B4B', fg: '#818CF8' };
+    case 'QUEUED':
+    case 'PENDING':        return { bg: '#0C4A6E', fg: '#38BDF8' };
     case 'PARTIAL':        return { bg: '#78350F', fg: '#FCD34D' };
     case 'FAILED':         return { bg: '#7F1D1D', fg: '#FCA5A5' };
     case 'SKIPPED_BELOW_THRESHOLD':
     case 'SKIPPED_NO_TARGETS':
+    case 'SKIPPED_ALREADY_IN_FLIGHT':
       return { bg: '#1E293B', fg: '#94A3B8' };
     default:               return { bg: '#1E293B', fg: '#E2E8F0' };
   }
@@ -147,24 +152,42 @@ export const FinOpsForecastDashboard: React.FC<FinOpsForecastDashboardProps> = (
       setForecast(data);
     } catch (e) {
       setError((e as Error).message);
-      // Fallback demo values so the dashboard renders meaningfully in development.
-      setForecast({
-        tenantId,
-        windowStart: new Date().toISOString(),
-        windowEnd: new Date(Date.now() + 86400000).toISOString(),
-        projectedBytes: 850_000_000,
-        projectedCpuMs: 135_000,
-        projectedCostUsd: 420.5,
-        confidenceScore: 0.88,
-        peakProbability: 0.85,
-        contributingFactors: ['CALENDAR_MONTH_END', 'BATCH_REPORT_BURST(4)'],
-        calibrationFactor: 1.0,
-        calibrationSamples: 0,
-      });
+      // Fallback demo values gated strictly behind DEV mode to prevent misleading prod dashboards.
+      if (import.meta.env.DEV) {
+        setForecast({
+          tenantId,
+          windowStart: new Date().toISOString(),
+          windowEnd: new Date(Date.now() + 86400000).toISOString(),
+          projectedBytes: 850_000_000,
+          projectedCpuMs: 135_000,
+          projectedCostUsd: 420.5,
+          confidenceScore: 0.88,
+          peakProbability: 0.85,
+          contributingFactors: ['CALENDAR_MONTH_END', 'BATCH_REPORT_BURST(4)'],
+          calibrationFactor: 1.0,
+          calibrationSamples: 0,
+        });
+      } else {
+        setForecast(null);
+      }
     } finally {
       setLoadingForecast(false);
     }
   }, [tenantId]);
+
+  const fetchPrewarmStatus = useCallback(async (jobId?: string) => {
+    try {
+      const url = jobId
+        ? `/api/finops/prewarm/status?jobId=${encodeURIComponent(jobId)}`
+        : '/api/finops/prewarm/status';
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const data: PrewarmResult = await res.json();
+      setPrewarmResult(data);
+    } catch {
+      // Non-fatal.
+    }
+  }, []);
 
   const fetchCalibration = useCallback(async () => {
     try {
@@ -192,7 +215,40 @@ export const FinOpsForecastDashboard: React.FC<FinOpsForecastDashboardProps> = (
     fetchForecast();
     fetchPolicy();
     fetchCalibration();
-  }, [fetchForecast, fetchPolicy, fetchCalibration]);
+    fetchPrewarmStatus();
+  }, [fetchForecast, fetchPolicy, fetchCalibration, fetchPrewarmStatus]);
+
+  // Poll prewarm status specifically for this job while PENDING or QUEUED until terminal status
+  // Capped at 15 minutes to align with the backend 15-minute coordinator sweep threshold.
+  useEffect(() => {
+    const isRunning = prewarmResult?.status === 'PENDING' || prewarmResult?.status === 'QUEUED';
+    if (!isRunning) return;
+
+    let isMounted = true;
+    const currentJobId = prewarmResult?.jobId;
+    const startTime = Date.now();
+    const maxPollDurationMs = 15 * 60 * 1000; // 15 minutes (aligns with backend sweep threshold)
+
+    const timer = setInterval(async () => {
+      if (!isMounted) return;
+      if (Date.now() - startTime > maxPollDurationMs) {
+        clearInterval(timer);
+        setPrewarmResult((prev) =>
+          prev
+            ? { ...prev, status: 'TIMEOUT' }
+            : null
+        );
+        setError('Pre-warming job execution exceeded maximum wait time (15m).');
+        return;
+      }
+      await fetchPrewarmStatus(currentJobId);
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      clearInterval(timer);
+    };
+  }, [prewarmResult?.status, prewarmResult?.jobId, fetchPrewarmStatus]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
@@ -200,9 +256,25 @@ export const FinOpsForecastDashboard: React.FC<FinOpsForecastDashboardProps> = (
     setLoadingPrewarm(true);
     try {
       const res = await fetch('/api/finops/prewarm/trigger', { method: 'POST' });
+      if (res.status === 409) {
+        setError('A pre-warming execution is already running for your tenant.');
+        return;
+      }
       if (!res.ok) throw new Error(`Prewarm trigger failed (${res.status})`);
-      const data: PrewarmResult = await res.json();
-      setPrewarmResult(data);
+      const data = await res.json();
+      if (res.status === 202) {
+        setPrewarmResult({
+          jobId: data.jobId,
+          triggered: true,
+          peakProbability: forecast?.peakProbability ?? 0,
+          targetsSeeded: 0,
+          computeCostIncurredUsd: 0,
+          estimatedPeakSavingsUsd: 0,
+          status: 'PENDING',
+        });
+      } else {
+        setPrewarmResult(data as PrewarmResult);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -306,11 +378,16 @@ export const FinOpsForecastDashboard: React.FC<FinOpsForecastDashboardProps> = (
       {/* ── Error banner ───────────────────────────────────────────────────── */}
       {error && (
         <Alert
-          severity="warning"
-          sx={{ mb: 2, bgcolor: 'rgba(245,158,11,0.08)', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.25)' }}
+          severity={import.meta.env.DEV ? 'warning' : 'error'}
+          sx={{
+            mb: 2,
+            bgcolor: import.meta.env.DEV ? 'rgba(245,158,11,0.08)' : 'rgba(239,68,68,0.08)',
+            color: import.meta.env.DEV ? '#FCD34D' : '#FCA5A5',
+            border: `1px solid ${import.meta.env.DEV ? 'rgba(245,158,11,0.25)' : 'rgba(239,68,68,0.25)'}`,
+          }}
           onClose={() => setError(null)}
         >
-          {error} — displaying demo values.
+          {error}{import.meta.env.DEV ? ' — displaying demo values.' : ' — forecast telemetry unavailable.'}
         </Alert>
       )}
 
