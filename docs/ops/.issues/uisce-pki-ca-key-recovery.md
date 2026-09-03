@@ -32,10 +32,22 @@ private key is missing.
 
 ### Step 1 — Finder Trash check (your action only)
 
-macOS TCC denies this sandboxed terminal. Required: open Finder →
-Empty Trash (the GUI checkbox under Finder > Settings > Advanced) and
-look for `ca.key`. Or run `find $HOME -name 'ca.key' -not -path
-'*/Library/*'` from a terminal with Full Disk Access.
+macOS TCC denies this sandboxed terminal. Required: **open** the Trash
+(Finder sidebar → Trash, or `open ~/.Trash` from a terminal with
+Full Disk Access), **scan** for `ca.key`, and **if present**, drag it
+out. Do not empty the Trash before scanning — if `ca.key` is in
+there (the single most likely location per the escalation's own
+reasoning), emptying destroys it and converts a recovery into a full
+PKI regeneration.
+
+Search commands (run from a Full Disk Access terminal — Library
+inclusions and `~/.Trash` traversal both require it; the whole point
+of FDA is dropping exclusions):
+
+```bash
+find $HOME -name 'ca.key' 2>/dev/null
+mdfind 'kMDItemFSName == "ca.key"'   # Spotlight indexes where find walks; useful in tandem
+```
 
 - **If present**: drag out, store durably (encrypted backup,
   password manager, or Infisical), update the verification record's
@@ -44,9 +56,10 @@ look for `ca.key`. Or run `find $HOME -name 'ca.key' -not -path
 
 ### Step 2 — locate on the original issuing host
 
-The mTLS handoff said `ca.key` "exists only on the machine that did
-this work." Locate it on the original issuing host and copy it to
-durable storage (encrypted backup, password manager, or Infisical).
+The mTLS handoff (`docs/ops/mtls-postgres-hardening.md`) said `ca.key`
+"exists only on the machine that did this work." Locate it on the
+original issuing host and copy it to durable storage (encrypted
+backup, password manager, or Infisical).
 
 If the issuing host is no longer reachable / the key is genuinely
 lost: the PKI is frozen at its current 9-role surface. New roles
@@ -64,8 +77,9 @@ per-role certs, new `pg_hba.conf`).
 
 - Verification record: `docs/ops/finops-predictive-verification.md`
   § "ca.key (Uisce PKI signing private key) — escalation"
-- mTLS handoff: `backend/.env` (the DSN params; PKI provenance
-  documented in the conversation that introduced the mTLS hardening)
+- mTLS handoff: `docs/ops/mtls-postgres-hardening.md` (durable home
+  for PKI provenance, per-role disposition, JDBC PKCS#8-vs-PEM
+  distinction, known gaps)
 - First surfaced: `b8103da33` (runner.go authoritative-bookkeeping
   doc references the PKI gap); recorded in `c0a614ae8`
   (verification record commit)

@@ -190,7 +190,7 @@ bookkeeping doc references the PKI gap); the Trash step itself is
 not captured in the repo because macOS TCC denies the sandboxed
 terminal access to `~/.Trash`.
 
-Tracking issue (paste-ready body): `docs/ops/.issues/uiece-pki-ca-key-recovery.md`
+Tracking issue (paste-ready body): `docs/ops/.issues/uisce-pki-ca-key-recovery.md`
 (Replace the path with the GitHub issue URL after the issue is created.)
 
 ## Migration collision structure (committed tree at HEAD)
