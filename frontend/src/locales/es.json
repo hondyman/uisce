@@ -1,4 +1,14 @@
 {
+  "app": {
+    "name": "Uisce"
+  },
+  "a11y": {
+    "skipToContent": "Saltar al contenido principal",
+    "mainContent": "Contenido principal"
+  },
+  "nav": {
+    "language": "Idioma"
+  },
   "relationships": {
     "id": "ID",
     "predicate": "Predicado",
@@ -343,7 +353,7 @@
   "button": { "close": "Cerrar" },
   "status": { "active": "Activo", "inactive": "Inactivo" },
   "language": { "label": "Idioma" },
-  "search": { "placeholder": "Escriba para buscar...", "clear": "Borrar búsqueda", "results_count": "{{count}} resultado", "results_count_plural": "{{count}} resultados", "keyboard_hint": "↑↓ para navegar • Enter para seleccionar • Esc para cerrar", "no_results": "No se encontraron resultados", "no_results_subtext": "Intente ajustar sus términos de búsqueda" },
+  "search": { "placeholder": "Escriba para buscar...", "clear": "Borrar búsqueda", "results_count": "{count, plural, =0 {# resultados} one {# resultado} other {# resultados}}", "keyboard_hint": "↑↓ para navegar • Enter para seleccionar • Esc para cerrar", "no_results": "No se encontraron resultados", "no_results_subtext": "Intente ajustar sus términos de búsqueda" },
   "relationships_table": { "source": "Nodo de origen", "target": "Nodo de destino", "relationship_type": "Tipo de relación", "edge_type_id": "ID de tipo de arista", "created": "Creado", "none_found": "No se encontraron relaciones para este término" },
   "filters": { "with_relationships": "Con relaciones", "without_relationships": "Sin relaciones", "clear_filter": "Borrar filtro" },
   "back": { "to_overview": "Volver a la vista general" }

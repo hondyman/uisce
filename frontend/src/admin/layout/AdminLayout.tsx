@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { stripLocale } from "../../i18n/locales";
 import "./AdminLayout.css";
 
 interface NavItem {
@@ -28,7 +29,7 @@ export const AdminLayout: React.FC = () => {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const isActive = (path: string) => location.pathname === path;
+  const isActive = (path: string) => stripLocale(location.pathname) === path;
 
   return (
     <div className="admin-layout">

@@ -29,7 +29,7 @@ export function t(key: string, fallback?: string) {
   // prefer i18n if initialized
   try {
     if (i18n && typeof i18n.t === 'function') {
-      const result = i18n.t(key);
+      const result = i18n.t(key as never);
       // i18next returns the key if translation missing, so use fallback if it's the same
       if (result && result !== key) return result;
     }

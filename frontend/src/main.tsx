@@ -1,5 +1,7 @@
 import { initSession } from './utils/initSession';
 import './i18n';
+import { useTranslation } from 'react-i18next';
+import { isRtl } from './i18n/locales';
 
 // Initialize session (dev seeding, etc.)
 initSession();
@@ -39,6 +41,8 @@ export const ColorModeContext = React.createContext({ toggleColorMode: () => {} 
  */
 function AppWithTheme() {
   const { effectiveTheme } = useTheme();
+  const { i18n: i18nInstance } = useTranslation();
+  const dir = isRtl(i18nInstance.language) ? 'rtl' as const : 'ltr' as const;
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -53,8 +57,8 @@ function AppWithTheme() {
   }));
 
   const theme = useMemo(
-    () => createUisceTheme(effectiveTheme),
-    [effectiveTheme],
+    () => createUisceTheme(effectiveTheme, dir),
+    [effectiveTheme, dir],
   );
 
   const colorMode = useMemo(

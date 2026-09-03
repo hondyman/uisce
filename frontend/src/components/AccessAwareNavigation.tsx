@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { useLocation } from 'react-router-dom';
+import { stripLocale } from '../i18n/locales';
 import {
   List,
   ListItem,
@@ -85,7 +86,7 @@ export const AccessAwareNavigation: React.FC<AccessAwareNavigationProps> = ({ it
   const renderNavItem = (item: NavItem, depth: number = 0) => {
     const { allowed, reason } = canAccess(item.path);
     const minScope = requiresScope(item.path);
-    const isCurrentPath = location.pathname === item.path;
+    const isCurrentPath = stripLocale(location.pathname) === item.path;
     const hasChildren = item.children && item.children.length > 0;
 
     if (hasChildren) {

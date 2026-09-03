@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { apiFetch } from '../lib/apiClient';
 import BlockableLink from './RouteBlocker/BlockableLink';
+import { stripLocale } from '../i18n/locales';
 import { NotificationBell } from './Notifications/NotificationBell';
 import {
   AppBar,
@@ -755,7 +756,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   };
 
   const isCurrentPath = (path: string) => {
-    return location.pathname === path;
+    return stripLocale(location.pathname) === path;
   };
 
   return (

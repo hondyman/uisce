@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { stripLocale } from '../i18n/locales';
 import BlockableLink from './RouteBlocker/BlockableLink';
 import {
   AppBar,
@@ -155,7 +156,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = ({ onToggleTheme })
                   borderRadius: 1,
                   mx: 1,
                   mb: 0.5,
-                  backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
+                  backgroundColor: stripLocale(location.pathname) === item.path ? 'action.selected' : 'transparent',
                   '&:hover': {
                     backgroundColor: 'action.hover',
                   },
@@ -170,7 +171,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = ({ onToggleTheme })
                   secondary={isMobile ? null : item.description}
                   primaryTypographyProps={{
                     fontSize: isMobile ? '1rem' : '0.875rem',
-                    fontWeight: location.pathname === item.path ? 'bold' : 'normal',
+                    fontWeight: stripLocale(location.pathname) === item.path ? 'bold' : 'normal',
                   }}
                   secondaryTypographyProps={{
                     fontSize: '0.75rem',
@@ -316,7 +317,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = ({ onToggleTheme })
                 onClick={handleMenuClose}
                 sx={{
                   pl: 4,
-                  backgroundColor: location.pathname === item.path ? 'action.selected' : 'transparent',
+                  backgroundColor: stripLocale(location.pathname) === item.path ? 'action.selected' : 'transparent',
                 }}
               >
                 <ListItemIcon sx={{ minWidth: '36px' }}>

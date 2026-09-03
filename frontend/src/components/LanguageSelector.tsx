@@ -1,50 +1,65 @@
 import React, { useState } from 'react';
-import { IconButton, Menu, MenuItem, ListItemText, ListItemIcon } from '@mui/material';
+import { IconButton, Menu, MenuItem, ListItemText } from '@mui/material';
 import TranslateIcon from '@mui/icons-material/Translate';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { LOCALES, NATIVE_NAMES, Locale, localePath } from '../i18n/locales';
+import { useLocale } from '../i18n/useLocale';
 import useUserAPI from '../hooks/useUserAPI';
 import { useAuth } from '../contexts/AuthContext';
 
-// Supported languages - add more as needed
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Español' },
-  { code: 'fr', label: 'Français' },
-  // synthetic placeholder for test-language used in tests
-  { code: 'xx', label: 'Test' },
-];
-
 const LanguageSelector: React.FC = () => {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const current = useLocale();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+
+  const { updateUserPreferences } = useUserAPI();
+  const auth = useAuth();
 
   const handleOpen = (ev: React.MouseEvent<HTMLElement>) => setAnchorEl(ev.currentTarget);
   const handleClose = () => setAnchorEl(null);
 
-  const { getUserPreferences, updateUserPreferences } = useUserAPI();
-  const auth = useAuth();
+  const handleChangeLanguage = async (code: Locale) => {
+    const rest = pathname.replace(/^\/[^/]+/, '') || '/';
+    const search = window.location.search;
+    const hash = window.location.hash;
+    handleClose();
 
-  const handleChangeLanguage = async (code: string) => {
-    await i18n.changeLanguage(code);
-    // persist choice locally
-    try { localStorage.setItem('selected_language', code); } catch (e) { /* ignore */ }
+    // If the current path is un-prefixed (e.g. /login, /api-studio), don't
+    // navigate — there's no locale segment to rewrite. Just change language
+    // and persist; the locale will apply to the next navigation.
+    if (!pathname.split('/')[1] || !LOCALES.includes(pathname.split('/')[1] as Locale)) {
+      try {
+        await i18n.changeLanguage(code);
+      } catch (err) {
+        console.error('Failed to change language', err);
+      }
+    } else {
+      navigate(`${localePath(code, rest)}${search}${hash}`);
+    }
 
-    // If user is logged in, try to persist to server
+    try { localStorage.setItem('appLocale', code); } catch { /* ignore */ }
+
     try {
       if (auth?.user?.id) {
         await updateUserPreferences(auth.user.id, { language: code });
       }
     } catch (err) {
-      // ignore network/save failures to avoid blocking the UI
       console.error('Failed to persist language preference', err);
     }
-
-    handleClose();
   };
 
   return (
     <>
-      <IconButton size="small" color="inherit" onClick={handleOpen} aria-label="Language selector">
+      <IconButton
+        size="small"
+        color="inherit"
+        onClick={handleOpen}
+        aria-label={t('nav.language')}
+        title={t('nav.language')}
+      >
         <TranslateIcon />
       </IconButton>
       <Menu
@@ -52,9 +67,14 @@ const LanguageSelector: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={handleClose}
       >
-        {LANGUAGES.map((lang) => (
-          <MenuItem key={lang.code} onClick={() => handleChangeLanguage(lang.code)} selected={i18n.resolvedLanguage === lang.code}>
-            <ListItemText>{lang.label}</ListItemText>
+        {LOCALES.map((lang) => (
+          <MenuItem
+            key={lang}
+            onClick={() => handleChangeLanguage(lang)}
+            selected={i18n.resolvedLanguage === lang || current === lang}
+            lang={lang}
+          >
+            <ListItemText>{NATIVE_NAMES[lang]}</ListItemText>
           </MenuItem>
         ))}
       </Menu>

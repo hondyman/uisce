@@ -91,7 +91,10 @@ function oceanFocusRing(hex: string) {
 
 // ── Theme factory ─────────────────────────────────────────────────────────────
 
-export function createUisceTheme(mode: 'light' | 'dark'): Theme {
+export function createUisceTheme(
+  mode: 'light' | 'dark',
+  direction: 'ltr' | 'rtl' = 'ltr',
+): Theme {
   const p = mode === 'light' ? lightPalette : darkPalette;
 
   const palette: PaletteOptions = {
@@ -135,6 +138,7 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
   const charcoalBg   = mode === 'light' ? uisceTide[100]    : uisceAbyss[950]; // #020810
 
   return createTheme({
+    direction,
     palette,
     shape: { borderRadius: 10 },
     typography: {

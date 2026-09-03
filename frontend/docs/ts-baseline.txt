@@ -1,0 +1,1339 @@
+                Type 'string' is not assignable to type 'Granularity | undefined'.
+              Types of property 'granularity' are incompatible.
+            Type '"RANK"' is not assignable to type 'AggFn'.
+            Type '{ fieldId: string; granularity: string; }' is not assignable to type 'DimensionSelection'.
+            Type 'string' is not assignable to type 'FilterCategory'.
+            Type 'unknown' is not assignable to type 'FilterCondition'.
+          Type 'DimensionSelection | { fieldId: string; granularity: string; }' is not assignable to type 'DimensionSelection'.
+          Type 'import("src/features/data-explorer/types/dataExplorerTypes").AggFn' is not assignable to type 'import("src/features/data-explorer/types/explorerTypes").AggFn'.
+          Type 'string' is not assignable to type 'OverridableStringUnion<"success" | "info" | "warning" | "error" | "disabled" | "action" | "inherit" | "primary" | "secondary", SvgIconPropsColorOverrides> | undefined'.
+          Type 'undefined' is not assignable to type 'string'.
+          Type 'unknown[]' is not assignable to type 'FilterCondition[]'.
+          Types of property 'category' are incompatible.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: any; }'.
+        Type '"RANK"' is not assignable to type 'AggFn | undefined'.
+        Type '"RANK"' is not assignable to type 'AggregateFunction'.
+        Type '(DimensionSelection | { fieldId: string; granularity: string; })[]' is not assignable to type 'DimensionSelection[]'.
+        Type '{ id: string; combinator: "AND"; category: string; conditions: { id: string; field: string; fieldLabel: string; dataType: FieldType; operator: string; value: string; values: never[]; enabled: boolean; }[]; }' is not assignable to type 'FilterGroup'.
+        Type 'MouseEvent<HTMLAnchorElement, MouseEvent>' is missing the following properties from type 'CalculatedFieldItem': id, name
+        Type 'MouseEvent<HTMLButtonElement, MouseEvent>' is missing the following properties from type 'CalculatedFieldItem': id, name
+        Type 'string | undefined' is not assignable to type 'OverridableStringUnion<"success" | "info" | "warning" | "error" | "disabled" | "action" | "inherit" | "primary" | "secondary", SvgIconPropsColorOverrides> | undefined'.
+        Type 'string | undefined' is not assignable to type 'string'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'true' is not assignable to type 'SystemStyleObject<Theme> | CssVariableType | ((theme: Theme) => string | number | SystemStyleObject<Theme>) | undefined'.
+        Type 'undefined' is not assignable to type 'string'.
+        Types of property 'agg' are incompatible.
+        Types of property 'conditions' are incompatible.
+      Property 'component' does not exist on type 'IntrinsicAttributes & ListItemOwnProps & CommonProps & Omit<Omit<DetailedHTMLProps<LiHTMLAttributes<HTMLLIElement>, HTMLLIElement>, "ref"> & { ...; }, "style" | ... 15 more ... | "secondaryAction">'. Did you mean 'components'?
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'item' does not exist on type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+      Property 'selected' does not exist on type 'IntrinsicAttributes & { component: "div"; } & ListItemOwnProps & CommonProps & Omit<Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, "ref"> & { ...; }, "style" | ... 15 more ... | "secondaryAction">'.
+      Property 'value' does not exist on type 'IntrinsicAttributes & { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      Property 'value' does not exist on type 'IntrinsicAttributes & { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+      The types of 'timeDimensions' are incompatible between these types.
+      Type '{ fieldId: string; agg: AggFn; }' is not assignable to type 'MeasureSelection'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type '{ component: any; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | "className" | "color" | "children" | "fontSize" | "shapeRendering" | "viewBox" | ... 4 more ... | "titleAccess">'.
+      Type '{ id: string; combinator: "AND"; category: string; conditions: { id: string; field: string; fieldLabel: string; dataType: FieldType; operator: string; value: string; values: never[]; enabled: boolean; }[]; }[]' is not assignable to type 'FilterGroup[]'.
+      Type 'AggFn' is not assignable to type 'AggregateFunction'.
+      Type 'DynamicProperty<string>' is not assignable to type 'ReactNode'.
+      Type 'DynamicProperty<string>' is not assignable to type 'ReactNode'.
+      Type 'import("src/components/reporting/filterApi").FilterModel' is not assignable to type 'import("src/components/reporting/filterTypes").FilterModel'.
+      Type 'import("src/features/data-explorer/types/dataExplorerTypes").AggFn | undefined' is not assignable to type 'import("src/features/data-explorer/types/explorerTypes").AggFn | undefined'.
+      Type 'Lock' is missing the following properties from type 'Component<any, any, any>': context, setState, forceUpdate, render, and 3 more.
+      Type 'Record<string, unknown>' is not assignable to type 'string'.
+      Type 'string' is not assignable to type '400 | 600 | 500 | 800 | 300 | 700 | undefined'.
+      Type 'string' is not assignable to type 'FilterOperator'.
+      Types of parameters 'newField' and 'event' are incompatible.
+      Types of parameters 'newField' and 'event' are incompatible.
+      Types of property 'color' are incompatible.
+      Types of property 'name' are incompatible.
+      Types of property 'name' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+      Types of property 'noWrap' are incompatible.
+    Call signature return types '{ timeDimensions: (DimensionSelection | { fieldId: string; granularity: string; })[]; sourceId: string; bindingId: string; dimensions: DimensionSelection[]; ... 5 more ...; limit: number; }' and 'ExplorerQueryState' are incompatible.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; key: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; key: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; key: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; md: number; lg: number; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: ColSpan; key: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: Element; item: true; xs: number; sm: number; key: string; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: string; size: "small"; startIcon: Element; onClick: (newField?: CalculatedFieldItem | undefined) => void; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: string; value: boolean; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ children: string; value: boolean; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'component' is missing in type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' but required in type '{ component: ElementType<any, keyof IntrinsicElements>; }'.
+    Property 'dataSources' is missing in type 'PageStudioPage' but required in type 'CorePageDefinition'.
+    Type '(newField?: CalculatedFieldItem | undefined) => void' is not assignable to type 'MouseEventHandler<HTMLAnchorElement>'.
+    Type '(newField?: CalculatedFieldItem | undefined) => void' is not assignable to type 'MouseEventHandler<HTMLButtonElement>'.
+    Type '{ children: Element; item: true; xs: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; key: string; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; key: string; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; key: string; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; md: number; lg: number; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; sm: ColSpan; key: string; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element; item: true; xs: number; sm: number; key: string; }' is not assignable to type 'IntrinsicAttributes & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<Theme> & Omit<...>'.
+    Type '{ children: Element[]; key: string; component: "div"; onClick: () => void; selected: boolean; sx: { mb: number; borderRadius: number; border: "1px solid"; borderColor: "divider" | "primary.main"; bgcolor: "background.paper" | "action.selected"; cursor: "pointer"; '&:hover': { ...; }; }; secondaryAction: Element; }' is not assignable to type 'IntrinsicAttributes & { component: "div"; } & ListItemOwnProps & CommonProps & Omit<Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, "ref"> & { ...; }, "style" | ... 15 more ... | "secondaryAction">'.
+    Type '{ children: Element[]; key: string; component: string; onClick: () => void; selected: boolean; sx: { mb: number; borderRadius: number; border: "1px solid"; borderColor: "divider" | "primary.main"; bgcolor: "background.paper" | "action.selected"; cursor: "pointer"; '&:hover': { ...; }; }; secondaryAction: Element; }' is not assignable to type 'IntrinsicAttributes & ListItemOwnProps & CommonProps & Omit<Omit<DetailedHTMLProps<LiHTMLAttributes<HTMLLIElement>, HTMLLIElement>, "ref"> & { ...; }, "style" | ... 15 more ... | "secondaryAction">'.
+    Type '{ children: string; value: boolean; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+    Type '{ children: string; value: boolean; }' is not assignable to type 'IntrinsicAttributes & { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>'.
+    Type '{ color: "secondary.dark"; fontFamily: "monospace"; fontSize: string; display: "block"; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ color: "secondary.dark"; fontFamily: "monospace"; fontSize: string; display: "block"; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ conditions: (FilterCondition | { id: string; field: string; fieldLabel: string; dataType: FieldType; operator: string; value: string; values: never[]; enabled: boolean; })[]; id: string; combinator: "AND" | "OR"; category?: FilterCategory | undefined; groups?: FilterGroup[] | undefined; }[] | { ...; }[]' is not assignable to type 'FilterGroup[]'.
+    Type '{ displayName: string; name?: undefined; }' is not assignable to type '{ name: string; }'.
+    Type '{ fieldId: string; agg: AggFn; }[]' is not assignable to type 'MeasureSelection[]'.
+    Type '{ fontFamily: "monospace"; fontSize: string; fontWeight: number; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ fontFamily: "monospace"; fontSize: string; fontWeight: number; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ fontSize: string; fontWeight: number; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ fontSize: string; fontWeight: number; noWrap: true; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }' is not assignable to type 'SvgIconOwnProps'.
+    Type '{ new (): Lock; prototype: Lock; }' is not assignable to type 'new (props: any, deprecatedLegacyContext?: any) => Component<any, any, any>'.
+    Type '{ noWrap: true; overflow: "hidden"; textOverflow: "ellipsis"; maxWidth: number; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ noWrap: true; overflow: "hidden"; textOverflow: "ellipsis"; maxWidth: number; }' is not assignable to type 'SxProps<Theme> | undefined'.
+    Type '{ semanticTermId: string; key: string | undefined; name: string | undefined; businessName: string | undefined; technicalName: string | undefined; type: string; role: string; semanticTermName: string; description: string; sequence: number; isCore: boolean; lastModifiedAt: string; }' is not assignable to type '{ name: string; }'.
+    Type 'false' is not assignable to type 'string | number | readonly string[] | undefined'.
+    Type 'FilterModel' is not assignable to type 'SetStateAction<FilterModel>'.
+    Type 'Record<string, unknown> | undefined' is not assignable to type 'string | undefined'.
+    Type 'string | DynamicProperty<string>' is not assignable to type 'ReactNode'.
+    Type 'string | DynamicProperty<string>' is not assignable to type 'ReactNode'.
+    Type 'string | undefined' is not assignable to type '400 | 600 | 500 | 800 | 300 | 700 | undefined'.
+    Type 'true' is not assignable to type 'string | number | readonly string[] | undefined'.
+    Type 'unknown' is not assignable to type 'ReactNode'.
+    Type 'unknown' is not assignable to type 'ReactNode'.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of parameters 'props' and 'props' are incompatible.
+    Types of property 'agg' are incompatible.
+    Types of property 'aggregation' are incompatible.
+    Types of property 'operator' are incompatible.
+  Its type '{ new (): Lock; prototype: Lock; }' is not a valid JSX element type.
+  No index signature with a parameter of type 'string' was found on type 'Record<string, number> | {}'.
+  No index signature with a parameter of type 'string' was found on type 'Record<string, number> | {}'.
+  Object literal may only specify known properties, and 'gridSpan' does not exist in type 'RelatedObjectWidget'.
+  Overload 1 of 2, '(props: { component: "div"; } & ListItemOwnProps & CommonProps & Omit<Omit<DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>, "ref"> & { ...; }, "style" | ... 15 more ... | "secondaryAction">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ChipOwnProps & ChipSlotsAndSlotProps & CommonProps & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & GridBaseProps & { sx?: SxProps<Theme> | undefined; } & SystemProps<...> & Omit<...>): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & SvgIconOwnProps & CommonProps & Omit<any, "style" | ... 10 more ... | "titleAccess">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "p" | ... 112 more ... | "variantMapping">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "p" | ... 112 more ... | "variantMapping">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "p" | ... 112 more ... | "variantMapping">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "p" | ... 112 more ... | "variantMapping">): Element | null', gave the following error.
+  Overload 1 of 2, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & TypographyOwnProps & CommonProps & Omit<any, "p" | ... 112 more ... | "variantMapping">): Element | null', gave the following error.
+  Overload 1 of 3, '(props: { href: string; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "style" | ... 27 more ... | "startIcon">): Element', gave the following error.
+  Overload 1 of 3, '(props: { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "style" | ... 20 more ... | "divider">): Element', gave the following error.
+  Overload 1 of 3, '(props: { href: string; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<Omit<DetailedHTMLProps<AnchorHTMLAttributes<HTMLAnchorElement>, HTMLAnchorElement>, "ref"> & { ...; }, "style" | ... 20 more ... | "divider">): Element', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<ChipTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<GridTypeMap<{}, "div">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<ListItemTypeMap<{}, "li">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<SvgIconTypeMap<{}, "svg">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+  Overload 2 of 2, '(props: DefaultComponentProps<TypographyTypeMap<{}, "span">>): Element | null', gave the following error.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & ButtonOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+  Overload 2 of 3, '(props: { component: ElementType<any, keyof IntrinsicElements>; } & MenuItemOwnProps & Omit<ButtonBaseOwnProps, "classes"> & CommonProps & Omit<...>): Element | null', gave the following error.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<ButtonTypeMap<{}, "button">>>): Element | null', gave the following error.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<MenuItemTypeMap<{}, "li">>>): Element | null', gave the following error.
+  Overload 3 of 3, '(props: DefaultComponentProps<ExtendButtonBaseTypeMap<MenuItemTypeMap<{}, "li">>>): Element | null', gave the following error.
+  Property 'alerts' does not exist on type 'IntrinsicAttributes'.
+  Property 'availableFieldDefs' does not exist on type 'IntrinsicAttributes & ReportSectionProps'.
+  Property 'availableFieldDefs' does not exist on type 'IntrinsicAttributes & ReportSectionProps'.
+  Property 'borderTop' does not exist on type 'CellStyle'.
+  Property 'canEdit' does not exist on type 'IntrinsicAttributes & RelationshipListProps'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'className' does not exist on type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+  Property 'createUrl' does not exist on type 'IntrinsicAttributes & GenericBOFormModalProps'.
+  Property 'dataSources' is missing in type 'PageStudioPage' but required in type 'CorePageDefinition'.
+  Property 'declaredParameters' is missing in type '{ version: 3; pageKey: string; title: string; rootBoKey: string; rootBoId: string; selectedSubtypeKeys: never[]; tabs: { id: string; title: string; canvas: never[]; }[]; }' but required in type 'PageStudioLayoutSpec'.
+  Property 'defaultValue' does not exist on type '{ name: string; label: string; type: "select"; required: boolean; options: { label: string; value: string; }[]; }'.
+  Property 'expression' does not exist on type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+  Property 'fieldNames' does not exist on type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+  Property 'fieldNames' does not exist on type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+  Property 'filter' does not exist on type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+  Property 'fingerprints' does not exist on type 'IntrinsicAttributes'.
+  Property 'fontStyle' does not exist on type 'CellStyle'.
+  Property 'fontStyle' does not exist on type 'CellStyle'.
+  Property 'fontStyle' does not exist on type 'CellStyle'.
+  Property 'fontStyle' does not exist on type 'CellStyle'.
+  Property 'name' is missing in type 'RawField' but required in type '{ name: string; }'.
+  Property 'node' does not exist on type 'IntrinsicAttributes & PropertiesPanelProps'.
+  Property 'onGenerated' does not exist on type 'IntrinsicAttributes & AIGeneratorWizardProps'. Did you mean 'onGenerate'?
+  Property 'onResize' does not exist on type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+  Property 'paddingTop' does not exist on type 'CellStyle'.
+  Property 'page' does not exist on type 'IntrinsicAttributes & AIDocumentationViewerProps'.
+  Property 'page' does not exist on type 'IntrinsicAttributes & AITestGeneratorProps'.
+  Property 'pageId' does not exist on type 'IntrinsicAttributes'.
+  Property 'plan' does not exist on type 'IntrinsicAttributes & SqlPreviewDialogProps'.
+  Property 'selectedSubtypeKey' does not exist on type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+  Property 'selectedSubtypeKey' does not exist on type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+  Property 'subheader' does not exist on type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+  Property 'subheader' does not exist on type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+  Property 'subheader' does not exist on type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<DetailsHTMLAttributes<HTMLDetailsElement>, HTMLDetailsElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<FormHTMLAttributes<HTMLFormElement>, HTMLFormElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLHeadingElement>, HTMLHeadingElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLHeadingElement>, HTMLHeadingElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLParagraphElement>, HTMLParagraphElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLPreElement>, HTMLPreElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+  Property 'sx' does not exist on type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'sx' does not exist on type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & CellStyleEditorProps'.
+  Property 'value' does not exist on type 'IntrinsicAttributes & CellStyleEditorProps'.
+  Type '(prev: ExplorerQueryState) => { timeDimensions: (DimensionSelection | { fieldId: string; granularity: string; })[]; sourceId: string; bindingId: string; ... 6 more ...; limit: number; }' is not assignable to type '(prev: ExplorerQueryState) => ExplorerQueryState'.
+  Type '(prev: FilterGroup[]) => { conditions: (FilterCondition | { id: string; field: string; fieldLabel: string; dataType: FieldType; operator: string; value: string; values: never[]; enabled: boolean; })[]; id: string; combinator: "AND" | "OR"; category?: FilterCategory | undefined; groups?: FilterGroup[] | undefined; }[...' is not assignable to type '(prevState: FilterGroup[]) => FilterGroup[]'.
+  Type '{ id: string; name: string; label: string; category: FieldCategory; type: FieldType; aggregation: AggFn | undefined; description: string | undefined; }' is not assignable to type 'SemanticField'.
+  Type '{ id: string; subject_node_id: string; object_node_id: string; source_node_id: string; target_node_id: string; edge_type_name: string; relationship_type: string; predicate: string; description: string; }' is missing the following properties from type 'CatalogEdge': object_node_type_id, properties, is_active, created_at, and 3 more.
+  Type '{ id: string; subject_node_id: string; object_node_id: string; source_node_id: string; target_node_id: string; edge_type_name: string; relationship_type: string; predicate: string; description: string; }' is missing the following properties from type 'CatalogEdge': object_node_type_id, properties, is_active, created_at, and 3 more.
+  Type '{ name: string; displayName?: undefined; } | { displayName: string; name?: undefined; }' is not assignable to type '{ name: string; }'.
+  Type '{ termNodeId: string; alias: string; agg: AggFn; expression: string | undefined; }' is not assignable to type 'MeasureDef'.
+  Type '{ termNodeId: string; operator: string; value: string | string[]; }' is not assignable to type 'FilterDef'.
+  Type 'Awaited<T> & object & Record<"ok", unknown>' is missing the following properties from type 'Response': headers, redirected, status, statusText, and 11 more.
+  Type 'Field | { semanticTermId: string; key: string | undefined; name: string | undefined; businessName: string | undefined; technicalName: string | undefined; type: string; role: string; ... 4 more ...; lastModifiedAt: string; }' is not assignable to type '{ name: string; }'.
+  Type 'FilterCategory' is not assignable to type 'string'.
+  Type 'null' is not assignable to type '{ displayName?: string | undefined; description?: string | undefined; status?: string | undefined; isActive?: boolean | undefined; } | undefined'.
+  Type 'null' is not assignable to type '{ version?: string | undefined; updatedAt?: string | undefined; } | undefined'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'FunctionComponent<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+  Type 'PageStudioPage[]' is not assignable to type 'CorePageDefinition[]'.
+  Type 'readonly ["glossary"]' has no call signatures.
+  Type 'string' is not assignable to type '"small" | "medium" | "inherit" | "large" | undefined'.
+  Type 'string' is not assignable to type '"small" | "medium" | "inherit" | "large" | undefined'.
+  Type 'undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'number'.
+  Type 'undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+  Types of parameters 'targetSection' and 'payload' are incompatible.
+  Types of parameters 'value' and 'value' are incompatible.
+  Types of property 'fontWeight' are incompatible.
+  Types of property 'measures' are incompatible.
+src/AccessDebuggerPage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/AccessIntelligenceDashboard.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/admin-v2/api.ts: error TS2352: Conversion of type 'Awaited<T> & object & Record<"ok", unknown>' to type 'Response' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.
+src/admin-v2/components/AlertList.tsx: error TS2305: Module '"../types"' has no exported member 'Alert'.
+src/admin-v2/components/AlertList.tsx: error TS2322: Type '{ children: Element[]; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS2305: Module '"@/admin-v2/types"' has no exported member 'CreateAPIKeyRequest'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS2339: Property 'data' does not exist on type '{ api_key: any; }'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS2339: Property 'data' does not exist on type '{ api_key: any; }'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS2339: Property 'data' does not exist on type '{ tenants: Tenant[]; }'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS2339: Property 'data' does not exist on type '{ tenants: Tenant[]; }'.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS7006: Parameter 'id' implicitly has an 'any' type.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/admin-v2/components/CreateAPIKeyModal.tsx: error TS7006: Parameter 'tenant' implicitly has an 'any' type.
+src/admin-v2/components/CreateTenantModal.tsx: error TS2305: Module '"@/admin-v2/types"' has no exported member 'CreateTenantRequest'.
+src/admin-v2/components/CreateTenantModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/admin-v2/components/ErrorFingerprints.tsx: error TS2305: Module '"@/admin-v2/types"' has no exported member 'ErrorFingerprint'.
+src/admin-v2/components/ExecuteActionModal.tsx: error TS2339: Property 'defaultValue' does not exist on type '{ name: string; label: string; type: "select"; required: boolean; options: { label: string; value: string; }[]; defaultValue: string; placeholder?: undefined; } | { name: string; label: string; type: "select"; required: boolean; options: { ...; }[]; }'.
+src/admin-v2/components/HealthBadge.tsx: error TS2305: Module '"@/admin-v2/types"' has no exported member 'HealthStatus'.
+src/admin-v2/components/HeatmapChart.tsx: error TS2305: Module '"@/admin-v2/types"' has no exported member 'Heatmap'.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter '_' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'cellIdx' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 's' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'series' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'series' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'seriesIdx' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'v' implicitly has an 'any' type.
+src/admin-v2/components/HeatmapChart.tsx: error TS7006: Parameter 'value' implicitly has an 'any' type.
+src/admin-v2/components/index.ts: error TS2305: Module '"./AlertList"' has no exported member 'AlertListProps'.
+src/admin-v2/components/index.ts: error TS2305: Module '"./Card"' has no exported member 'CardProps'.
+src/admin-v2/components/index.ts: error TS2305: Module '"./Feedback"' has no exported member 'SpinnerProps'.
+src/admin-v2/components/index.ts: error TS2305: Module '"./Modal"' has no exported member 'ModalProps'.
+src/admin-v2/components/index.ts: error TS2305: Module '"./Table"' has no exported member 'TableProps'.
+src/admin-v2/components/index.ts: error TS2724: '"./ErrorFingerprints"' has no exported member named 'ErrorFingerprintsProps'. Did you mean 'ErrorFingerprints'?
+src/admin-v2/components/index.ts: error TS2724: '"./IntelligentRCAPanel"' has no exported member named 'IntelligentRCAPanelProps'. Did you mean 'IntelligentRCAPanel'?
+src/admin-v2/components/index.ts: error TS2724: '"./PatternMatchPanel"' has no exported member named 'PatternMatchPanelProps'. Did you mean 'PatternMatchPanel'?
+src/admin-v2/components/index.ts: error TS2724: '"./SmartRCASuggestions"' has no exported member named 'SmartRCASuggestionsProps'. Did you mean 'SmartRCASuggestions'?
+src/admin-v2/components/Integrations/AppDirectory.tsx: error TS2322: Type '{ children: Element[]; key: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/components/Integrations/SSOConfig.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/components/Integrations/SSOConfig.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/components/Integrations/TeamManager.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/components/ObservabilityDrawer.tsx: error TS2322: Type '{ children: Element[]; sx: { mt: number; }; }' is not assignable to type 'DetailedHTMLProps<DetailsHTMLAttributes<HTMLDetailsElement>, HTMLDetailsElement>'.
+src/admin-v2/hooks/useAPIKeys.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'APIKey'.
+src/admin-v2/hooks/useAPIKeys.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'APIKeyUsage'.
+src/admin-v2/hooks/useAPIKeys.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'CreateAPIKeyRequest'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'Alert'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'AlertEvent'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'EndpointHealth'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'ErrorEvent'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'ErrorFingerprint'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'Heatmap'.
+src/admin-v2/hooks/useOps.ts: error TS2305: Module '"../types"' has no exported member 'TenantHealth'.
+src/admin-v2/hooks/usePatterns.ts: error TS2558: Expected 0 type arguments, but got 1.
+src/admin-v2/hooks/usePatterns.ts: error TS2558: Expected 0 type arguments, but got 1.
+src/admin-v2/hooks/useRCA.ts: error TS2558: Expected 0 type arguments, but got 1.
+src/admin-v2/hooks/useTenants.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'CreateTenantRequest'.
+src/admin-v2/hooks/useTenants.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'Tenant'.
+src/admin-v2/hooks/useTenants.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'UpdateTenantRequest'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'APIKeyUsage'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'DailyUsage'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'EndpointUsage'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'ErrorPoint'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'LatencyPoint'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'RecentError'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'TopTenant'.
+src/admin-v2/hooks/useUsage.ts: error TS2305: Module '"@/admin-v2/types"' has no exported member 'UsagePoint'.
+src/admin-v2/pages/APIKeysPage.tsx: error TS2339: Property 'data' does not exist on type '{ api_keys: APIKey[]; }'.
+src/admin-v2/pages/APIKeysPage.tsx: error TS7006: Parameter 'key' implicitly has an 'any' type.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ alerts: Alert[]; onEvaluate: () => Promise<QueryObserverResult<ListAlertsResponse, Error>>; }' is not assignable to type 'IntrinsicAttributes'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ children: Element; title: string; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2322: Type '{ fingerprints: ErrorFingerprint[]; }' is not assignable to type 'IntrinsicAttributes'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2339: Property 'data' does not exist on type '{ endpoints: EndpointUsage[]; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2339: Property 'data' does not exist on type '{ errors: RecentError[]; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2339: Property 'data' does not exist on type '{ tenants: TopTenant[]; }'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2345: Argument of type '{ enabled: boolean; }' is not assignable to parameter of type 'boolean | undefined'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2345: Argument of type '{ limit: number; }' is not assignable to parameter of type 'number'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS2345: Argument of type '{ window: string; }' is not assignable to parameter of type '"tenant" | "region" | "endpoint" | undefined'.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS7006: Parameter 'endpoint' implicitly has an 'any' type.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS7006: Parameter 'error' implicitly has an 'any' type.
+src/admin-v2/pages/GlobalOpsDashboard.tsx: error TS7006: Parameter 'tenant' implicitly has an 'any' type.
+src/admin-v2/pages/TenantsPage.tsx: error TS2322: Type '{ children: Element; className: string; }' is not assignable to type 'IntrinsicAttributes & { title?: ReactNode; subtitle?: ReactNode; children: ReactNode; }'.
+src/admin-v2/pages/TenantsPage.tsx: error TS2339: Property 'data' does not exist on type '{ tenants: Tenant[]; }'.
+src/admin-v2/pages/TenantsPage.tsx: error TS7006: Parameter 'tenant' implicitly has an 'any' type.
+src/admin/pages/APIKeysPage.tsx: error TS2304: Cannot find name 'Paper'.
+src/admin/pages/APIKeysPage.tsx: error TS2304: Cannot find name 'Typography'.
+src/admin/pages/APIKeysPage.tsx: error TS2304: Cannot find name 'Typography'.
+src/admin/pages/APIKeysPage.tsx: error TS2304: Cannot find name 'Typography'.
+src/admin/pages/APIKeysPage.tsx: error TS2304: Cannot find name 'Typography'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: (string | Element)[]; key: string; sx: { display: string; alignItems: string; gap: number; userSelect: string; }; }' is not assignable to type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; flexDirection: string; gap: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; flexDirection: string; gap: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; flexDirection: string; gap: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; flexDirection: string; gap: number; }; onSubmit: (e: FormEvent<Element>) => Promise<void>; }' is not assignable to type 'DetailedHTMLProps<FormHTMLAttributes<HTMLFormElement>, HTMLFormElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; gap: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; gap: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; justifyContent: string; gap: number; mt: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; htmlFor: string; sx: { fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; htmlFor: string; sx: { fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; key: string; sx: { display: string; px: number; py: number; borderRadius: number; fontSize: string; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; sx: { color: string; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLSpanElement>, HTMLSpanElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; sx: { color: string; }; onClick: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; sx: { color: string; fontSize: string; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; type: "button"; sx: { variant: string; color: string; "&:hover": { opacity: number; }; "&:disabled": { opacity: number; }; }; onClick: () => void; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/admin/pages/APIKeysPage.tsx: error TS2322: Type '{ children: string; type: "submit"; sx: { variant: string; }; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/AlertCenter.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/api/glossary.ts: error TS2349: This expression is not callable.
+src/components/AddEdgeDialog.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/components/ambient/AmbientKnowledgeInbox.tsx: error TS2305: Module '"@mui/icons-material"' has no exported member 'ShieldCheck'.
+src/components/BusinessObjectManager/BusinessObjectRelationshipWizard.tsx: error TS2304: Cannot find name 'Chip'.
+src/components/BusinessObjectManager/BusinessObjectRelationshipWizard.tsx: error TS2304: Cannot find name 'Chip'.
+src/components/Compliance/GSIFIEventRegistry.tsx: error TS2339: Property 'get' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/GSIFIEventRegistry.tsx: error TS2339: Property 'post' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/SoDRulesManager.tsx: error TS2339: Property 'delete' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/SoDRulesManager.tsx: error TS2339: Property 'get' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/SoDRulesManager.tsx: error TS2339: Property 'post' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/TAMMatrixManager.tsx: error TS2339: Property 'delete' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/TAMMatrixManager.tsx: error TS2339: Property 'get' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/Compliance/TAMMatrixManager.tsx: error TS2339: Property 'post' does not exist on type '<T = Response>(input: RequestInfo | URL, init?: RequestInit | undefined) => Promise<T>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { color: string; fontSize: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { fontSize: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { fontSize: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; color: string; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; color: string; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2322: Type '{ sx: { width: number; height: number; color: string; }; }' is not assignable to type 'IntrinsicAttributes & Omit<LucideProps, "ref"> & RefAttributes<SVGSVGElement>'.
+src/components/DashboardConversationInterface.tsx: error TS2339: Property 'json' does not exist on type 'AuthFetchResponse<any>'.
+src/components/DashboardConversationInterface.tsx: error TS2339: Property 'json' does not exist on type 'AuthFetchResponse<any>'.
+src/components/DashboardConversationInterface.tsx: error TS2339: Property 'json' does not exist on type 'AuthFetchResponse<any>'.
+src/components/DashboardConversationInterface.tsx: error TS2339: Property 'json' does not exist on type 'AuthFetchResponse<any>'.
+src/components/EditEdgeDialog.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/components/MobileResponsiveNavigation.tsx: error TS2304: Cannot find name 'AutoAwesomeIcon'.
+src/components/pagedesigner/DynamicPropertyTypes.ts: error TS2709: Cannot use namespace 'ConditionGroup' as a type.
+src/components/pagestudio/CoreFieldBadge.tsx: error TS2322: Type 'string | number' is not assignable to type '"small" | "medium" | "inherit" | "large" | undefined'.
+src/components/pagestudio/CoreFieldBadge.tsx: error TS2322: Type 'string | number' is not assignable to type '"small" | "medium" | "inherit" | "large" | undefined'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS18046: 'value' is of type 'unknown'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Paper'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Paper'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageParametersDialog.tsx: error TS2304: Cannot find name 'Tooltip'.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS2322: Type '{ gridSpan: { xs: number; md: number; lg: number; }; type: "field"; fieldKey: string; label: string; dataType: string; controlType: ControlType; subtypeKey: string | null; isCore?: boolean | undefined; presentation?: DynamicFieldUIConfig | undefined; id: string; } | { ...; } | { ...; }' is not assignable to type 'CanvasWidget'.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS2783: 'bgcolor' is specified more than once, so this usage will be overwritten.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_d' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_d' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_d' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_e' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_e' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter '_e' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter 'delta' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter 'delta' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioCanvas.tsx: error TS7006: Parameter 'delta' implicitly has an 'any' type.
+src/components/pagestudio/PageStudioPalette.tsx: error TS2322: Type '{ selectedBO: any; relatedBOs: any[] | undefined; selectedSubtypeKey: null; onAddFieldToCanvas: (field: BOField) => void; onAddAllAsTable: (fields: BOField[]) => void; mode: string; }' is not assignable to type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+src/components/pagestudio/PageStudioPropertiesPanel.tsx: error TS2304: Cannot find name 'Button'.
+src/components/pagestudio/PageStudioPropertiesPanel.tsx: error TS2304: Cannot find name 'Button'.
+src/components/pagestudio/PageStudioPropertiesPanel.tsx: error TS2353: Object literal may only specify known properties, and 'gap' does not exist in type 'ContainerWidget'.
+src/components/pagestudio/pageStudioTypes.ts: error TS2339: Property '_subtypeKey' does not exist on type 'BOField'.
+src/components/pagestudio/RelatedObjectGrid.tsx: error TS2322: Type '{ boKey: string; recordId: string | null; open: true; onClose: () => void; onSaved: () => void; createUrl: string; fieldKeys: string[]; }' is not assignable to type 'IntrinsicAttributes & GenericBOFormModalProps'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2322: Type 'OverridableComponent<SvgIconTypeMap<{}, "svg">> & { muiName: string; }' is not assignable to type 'ComponentType<{ fontSize?: string | number | undefined; sx?: object | undefined; color?: string | undefined; }>'.
+src/components/pagestudio/widgetRegistry.tsx: error TS2769: No overload matches this call.
+src/components/RBAC/RoleManager_Styled.tsx: error TS2339: Property 'data' does not exist on type 'never'.
+src/components/RBAC/RoleManager_Styled.tsx: error TS2339: Property 'roles' does not exist on type 'never'.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS7006: Parameter 'index' implicitly has an 'any' type.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS7006: Parameter 'self' implicitly has an 'any' type.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS7006: Parameter 't' implicitly has an 'any' type.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS7006: Parameter 't' implicitly has an 'any' type.
+src/components/RBAC/TeamManager_MasterDetail.tsx: error TS7006: Parameter 'team' implicitly has an 'any' type.
+src/components/RBAC/TeamManager.tsx: error TS2769: No overload matches this call.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/components/RBAC/UserManager_MasterDetail.tsx: error TS7006: Parameter 'u' implicitly has an 'any' type.
+src/components/reporting/BOFieldsPalette.tsx: error TS2769: No overload matches this call.
+src/components/reporting/BOFormWidget.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/components/reporting/CalculatedFieldsEditor.tsx: error TS2769: No overload matches this call.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2304: Cannot find name 'Paper'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2304: Cannot find name 'Paper'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type '{ expression: { id: string; category: string; enabled: boolean; rawExpression: string | undefined; }; onUpdate: (updates: any) => void; }' is not assignable to type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type '{ fieldNames: string[]; expression: { id: string; category: string; enabled: boolean; rawExpression: string | undefined; }; onUpdate: (updates: any) => void; }' is not assignable to type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type '{ fieldNames: string[]; expression: { id: string; category: string; enabled: boolean; rawExpression: string | undefined; }; onUpdate: (updates: any) => void; }' is not assignable to type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type '{ filter: { id: string; category: string; enabled: boolean; rawExpression: string; }; fieldNames: string[]; parameterNames: any[]; onUpdate: (updates: any) => void; onClose: () => void; }' is not assignable to type 'IntrinsicAttributes & { condition: unknown; onChange: (c: unknown) => void; }'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type 'string | FilterCategory' is not assignable to type 'string'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type 'string' is not assignable to type 'FilterCategory'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2322: Type 'string' is not assignable to type 'FilterCategory'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2345: Argument of type 'string' is not assignable to parameter of type 'FieldType'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2345: Argument of type 'string' is not assignable to parameter of type 'FieldType'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2345: Argument of type 'string' is not assignable to parameter of type 'FieldType'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2353: Object literal may only specify known properties, and 'groupCombinator' does not exist in type 'FilterModel'.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | "WHERE"' and '"BITEMPORAL"' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | "WHERE"' and '"HAVING"' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | "WHERE"' and '"QUALIFY"' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | undefined' and 'string' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | undefined' and 'string' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory | undefined' and 'string' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2367: This comparison appears to be unintentional because the types 'FilterCategory' and 'string' have no overlap.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2554: Expected 1 arguments, but got 0.
+src/components/reporting/FilterBuilderPanel.tsx: error TS2554: Expected 1 arguments, but got 4.
+src/components/reporting/FilterBuilderPanel.tsx: error TS7006: Parameter 'updates' implicitly has an 'any' type.
+src/components/reporting/FilterBuilderPanel.tsx: error TS7006: Parameter 'updates' implicitly has an 'any' type.
+src/components/reporting/FilterBuilderPanel.tsx: error TS7006: Parameter 'updates' implicitly has an 'any' type.
+src/components/reporting/FilterBuilderPanel.tsx: error TS7006: Parameter 'updates' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'Filter'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'ReportParameter'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'TenantCalendar'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'TenantDefaults'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'ValueSource'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./operatorMetadata"' has no exported member 'getOperatorById'.
+src/components/reporting/FilterEditModal.tsx: error TS2305: Module '"./operatorMetadata"' has no exported member 'OPERATOR_GROUPS'.
+src/components/reporting/FilterEditModal.tsx: error TS2339: Property 'groupLabel' does not exist on type 'Operator'.
+src/components/reporting/FilterEditModal.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterEditModal.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterEditModal.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterEditModal.tsx: error TS2339: Property 'id' does not exist on type 'Operator'.
+src/components/reporting/FilterEditModal.tsx: error TS2345: Argument of type 'string' is not assignable to parameter of type 'FieldType'.
+src/components/reporting/FilterEditModal.tsx: error TS2345: Argument of type 'string' is not assignable to parameter of type 'FieldType'.
+src/components/reporting/FilterEditModal.tsx: error TS2724: '"./operatorMetadata"' has no exported member named 'OperatorDef'. Did you mean 'Operator'?
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'group' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FilterEditModal.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterApi"' has no exported member 'createFilter'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterApi"' has no exported member 'createGroup'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterApi"' has no exported member 'listTenantCalendars'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'Filter'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'FilterGroup'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'ReportParameter'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'TenantCalendar'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./filterTypes"' has no exported member 'TenantDefaults'.
+src/components/reporting/FiltersPanel.tsx: error TS2305: Module '"./operatorMetadata"' has no exported member 'getOperatorById'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2339: Property 'groups' does not exist on type 'FilterModel'.
+src/components/reporting/FiltersPanel.tsx: error TS2345: Argument of type 'Dispatch<SetStateAction<FilterModel>>' is not assignable to parameter of type '(value: FilterModel) => void | PromiseLike<void>'.
+src/components/reporting/FiltersPanel.tsx: error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+src/components/reporting/FiltersPanel.tsx: error TS2345: Argument of type 'number | undefined' is not assignable to parameter of type 'number'.
+src/components/reporting/FiltersPanel.tsx: error TS2554: Expected 1 arguments, but got 0.
+src/components/reporting/FiltersPanel.tsx: error TS2554: Expected 1 arguments, but got 4.
+src/components/reporting/FiltersPanel.tsx: error TS2724: '"./filterApi"' has no exported member named 'emptyFilterModel'. Did you mean 'FilterModel'?
+src/components/reporting/FiltersPanel.tsx: error TS2769: No overload matches this call.
+src/components/reporting/FiltersPanel.tsx: error TS2769: No overload matches this call.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter '_' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'f' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'fIdx' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'filter' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'g' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'gIdx' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'group' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'i' implicitly has an 'any' type.
+src/components/reporting/FiltersPanel.tsx: error TS7006: Parameter 'n' implicitly has an 'any' type.
+src/components/reporting/form/FormFieldPropertiesPanel.tsx: error TS2322: Type '{ value: CellStyle; onChange: (style: CellStyle) => void; }' is not assignable to type 'IntrinsicAttributes & CellStyleEditorProps'.
+src/components/reporting/form/FormFieldPropertiesPanel.tsx: error TS2322: Type 'import("src/components/reporting/tableColumnModel").CellStyle' is not assignable to type 'import("src/components/reporting/form/FormManagerTypes").CellStyle'.
+src/components/reporting/form/ReportFormManager.tsx: error TS2769: No overload matches this call.
+src/components/reporting/form/ReportFormManager.tsx: error TS2769: No overload matches this call.
+src/components/reporting/form/ReportFormRenderer.tsx: error TS2769: No overload matches this call.
+src/components/reporting/formElementModel.ts: error TS2709: Cannot use namespace 'ConditionGroup' as a type.
+src/components/reporting/FormEmbedShell.tsx: error TS2339: Property 'paddingTop' does not exist on type 'CellStyle'.
+src/components/reporting/FormEmbedShell.tsx: error TS2339: Property 'paddingTop' does not exist on type 'CellStyle'.
+src/components/reporting/FormEmbedShell.tsx: error TS2538: Type 'unknown' cannot be used as an index type.
+src/components/reporting/FormEmbedShell.tsx: error TS2769: No overload matches this call.
+src/components/reporting/FormPropertiesPanel.tsx: error TS2322: Type '{ value: CellStyle; onChange: (style: CellStyle) => void; }' is not assignable to type 'IntrinsicAttributes & CellStyleEditorProps'.
+src/components/reporting/ParameterContextEngine.ts: error TS2305: Module '"./builderSerialization"' has no exported member 'ReportParameter'.
+src/components/reporting/ParametersDialog.tsx: error TS2305: Module '"./builderSerialization"' has no exported member 'ParameterType'.
+src/components/reporting/ParametersDialog.tsx: error TS2305: Module '"./builderSerialization"' has no exported member 'ReportParameter'.
+src/components/reporting/ParametersDialog.tsx: error TS7006: Parameter 'prev' implicitly has an 'any' type.
+src/components/reporting/PropertiesPanel.tsx: error TS2304: Cannot find name 'Chip'.
+src/components/reporting/PropertiesPanel.tsx: error TS2305: Module '"./tableColumnModel"' has no exported member 'ConditionalRule'.
+src/components/reporting/PropertiesPanel.tsx: error TS2305: Module '"./tableColumnModel"' has no exported member 'NamedStyle'.
+src/components/reporting/PropertiesPanel.tsx: error TS2339: Property 'FORM_REFERENCE' does not exist on type '{ readonly TEXTBOX: "textbox"; readonly TABLE: "table"; readonly MATRIX: "matrix"; readonly LIST: "list"; readonly CHART: "chart"; readonly IMAGE: "image"; readonly SUBREPORT: "subreport"; ... 6 more ...; readonly FORM: "form"; }'.
+src/components/reporting/ReportCanvas.tsx: error TS2322: Type '{ section: "body" | "pageHeader" | "reportHeader" | "pageFooter" | "reportFooter"; elements: any[]; onElementUpdate: (id: string, updates: Partial<any>) => void; onElementDelete: (id: string) => void; ... 12 more ...; onFormBlockAdd: ((section: string, payload: { ...; }) => void) | undefined; }' is not assignable to type 'IntrinsicAttributes & ReportSectionProps'.
+src/components/reporting/ReportParametersToolbar.tsx: error TS2769: No overload matches this call.
+src/components/reporting/ReportParametersToolbar.tsx: error TS2769: No overload matches this call.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'formRegistry' does not exist on type 'ReportSectionProps'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_FOOTER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_FOOTER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_FOOTER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_HEADER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_HEADER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/ReportSection.tsx: error TS2339: Property 'GROUP_HEADER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/sectionLayoutModel.ts: error TS2305: Module '"./tableColumnModel"' has no exported member 'BorderSide'.
+src/components/reporting/sectionLayoutModel.ts: error TS2709: Cannot use namespace 'ConditionGroup' as a type.
+src/components/reporting/SectionPropertyPanel.tsx: error TS2339: Property 'GROUP_FOOTER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/SectionPropertyPanel.tsx: error TS2339: Property 'GROUP_HEADER' does not exist on type '{ readonly REPORT_HEADER: "reportHeader"; readonly PAGE_HEADER: "pageHeader"; readonly BODY: "body"; readonly PAGE_FOOTER: "pageFooter"; readonly REPORT_FOOTER: "reportFooter"; }'.
+src/components/reporting/SSRSReportBuilder.tsx: error TS2322: Type '(type: string, targetSection?: string) => Promise<void>' is not assignable to type '(type: string, payload?: Record<string, unknown> | undefined) => void'.
+src/components/reporting/SSRSReportBuilder.tsx: error TS2322: Type '{ selectedBO: any; relatedBOs: any[]; onAddFieldToCanvas: (field: BOField) => void; onAddAllAsTable: (fields: BOField[]) => void; onResize: (e: MouseEvent<Element, MouseEvent>) => void; }' is not assignable to type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+src/components/reporting/SSRSReportBuilder.tsx: error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+src/components/reporting/SSRSReportBuilder.tsx: error TS2739: Type 'Record<string, unknown>' is missing the following properties from type 'SaveReportTemplateInput': name, definition
+src/components/reporting/TableColumnEditor.tsx: error TS2305: Module '"./tableColumnModel"' has no exported member 'AggregateFunction'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'enabled' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'enabled' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'enabled' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'formatPrefix' does not exist on type 'ColumnConfig'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'formatSuffix' does not exist on type 'ColumnConfig'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'function' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'scope' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2339: Property 'scope' does not exist on type 'string'.
+src/components/reporting/TableColumnEditor.tsx: error TS2353: Object literal may only specify known properties, and 'formatPrefix' does not exist in type 'Partial<ColumnConfig>'.
+src/components/reporting/TableColumnEditor.tsx: error TS2353: Object literal may only specify known properties, and 'formatSuffix' does not exist in type 'Partial<ColumnConfig>'.
+src/components/reporting/TableColumnEditor.tsx: error TS2551: Property 'minWidthPx' does not exist on type 'ColumnConfig'. Did you mean 'widthPx'?
+src/components/reporting/TableColumnEditor.tsx: error TS2561: Object literal may only specify known properties, but 'minWidthPx' does not exist in type 'Partial<ColumnConfig>'. Did you mean to write 'widthPx'?
+src/components/reporting/TableColumnEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/TableColumnEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/TableColumnEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/TableColumnEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/TableColumnEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/TableColumnEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"fontStyle" | "fontWeight"' can't be used to index type 'CellStyle'.
+src/components/reporting/TableColumnEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"fontStyle" | "fontWeight"' can't be used to index type 'CellStyle'.
+src/components/reporting/TableColumnEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"fontStyle" | "fontWeight"' can't be used to index type 'CellStyle'.
+src/components/reporting/TableColumnEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"fontStyle" | "fontWeight"' can't be used to index type 'CellStyle'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableSerialization.ts: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS18048: 'banding.gridlines' is possibly 'undefined'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS18048: 'banding.gridlines' is possibly 'undefined'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS18048: 'banding.gridlines' is possibly 'undefined'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS18048: 'banding.gridlines' is possibly 'undefined'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS18048: 'banding.gridlines' is possibly 'undefined'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'GridlinesConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'bandColor' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'bandedColumns' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'bandedRows' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'color' does not exist on type 'boolean'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'headerFill' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'headerTextColor' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'horizontal' does not exist on type 'boolean'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'style' does not exist on type 'boolean'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'totalsFill' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'totalsTextColor' does not exist on type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'vertical' does not exist on type 'boolean'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2339: Property 'width' does not exist on type 'boolean'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'bandColor' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'bandedColumns' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'bandedRows' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'headerFill' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'headerTextColor' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'totalsFill' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2353: Object literal may only specify known properties, and 'totalsTextColor' does not exist in type 'BandingConfig'.
+src/components/reporting/tableStyling/BandingEditor.tsx: error TS2698: Spread types may only be created from object types.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'BorderSide'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2322: Type 'number' is not assignable to type 'string'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'fontStyle' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'fontStyle' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textDecoration' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textDecoration' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textDecoration' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textDecoration' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textDecoration' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textTransform' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2339: Property 'textTransform' does not exist on type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2353: Object literal may only specify known properties, and 'fontStyle' does not exist in type 'Partial<CellStyle>'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2353: Object literal may only specify known properties, and 'textDecoration' does not exist in type 'Partial<CellStyle>'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2353: Object literal may only specify known properties, and 'textDecoration' does not exist in type 'Partial<CellStyle>'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2353: Object literal may only specify known properties, and 'textTransform' does not exist in type 'Partial<CellStyle>'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2367: This comparison appears to be unintentional because the types 'string | undefined' and 'number' have no overlap.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS2367: This comparison appears to be unintentional because the types 'string | undefined' and 'number' have no overlap.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"borderTop" | "borderRight" | "borderBottom" | "borderLeft"' can't be used to index type 'CellStyle'.
+src/components/reporting/tableStyling/CellStyleEditor.tsx: error TS7053: Element implicitly has an 'any' type because expression of type '"paddingTop" | "paddingRight" | "paddingBottom" | "paddingLeft"' can't be used to index type 'CellStyle'.
+src/components/reporting/tableStyling/ConditionalRuleEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'ColorScaleConfig'.
+src/components/reporting/tableStyling/ConditionalRuleEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'ConditionalRule'.
+src/components/reporting/tableStyling/ConditionalRuleEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'DataBarConfig'.
+src/components/reporting/tableStyling/ConditionalRuleEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'ExpressionConfig'.
+src/components/reporting/tableStyling/FormatMaskInput.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'FormatType'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderColumns' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderColumns' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderColumns' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderRows' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderRows' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenHeaderRows' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenTrailingColumns' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2339: Property 'frozenTrailingRows' does not exist on type 'FreezePaneConfig'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2353: Object literal may only specify known properties, and 'frozenHeaderColumns' does not exist in type 'Partial<FreezePaneConfig>'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2353: Object literal may only specify known properties, and 'frozenHeaderRows' does not exist in type 'Partial<FreezePaneConfig>'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2353: Object literal may only specify known properties, and 'frozenTrailingColumns' does not exist in type 'Partial<FreezePaneConfig>'.
+src/components/reporting/tableStyling/FreezePaneEditor.tsx: error TS2353: Object literal may only specify known properties, and 'frozenTrailingRows' does not exist in type 'Partial<FreezePaneConfig>'.
+src/components/reporting/tableStyling/NamedStyleManager.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'NamedStyle'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'mode' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'mode' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'mode' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'pageTotalEnabled' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'pageTotalEnabled' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'pageTotalLabel' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'pageTotalPosition' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'pageTotalPosition' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'repeatHeadersOnEachPage' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2339: Property 'rowsPerPage' does not exist on type 'PaginationConfig'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'mode' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'mode' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'pageTotalEnabled' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'pageTotalLabel' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'pageTotalPosition' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'pageTotalPosition' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'repeatHeadersOnEachPage' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/PaginationEditor.tsx: error TS2353: Object literal may only specify known properties, and 'rowsPerPage' does not exist in type 'Partial<PaginationConfig>'.
+src/components/reporting/tableStyling/SparklinePicker.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'SparklineConfig'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.grandTotal' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.subtotals' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.subtotals' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.subtotals' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.subtotals' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS18048: 'totals.subtotals' is possibly 'undefined'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2305: Module '"../tableColumnModel"' has no exported member 'AggregateConfig'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'enabled' does not exist on type 'string'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'label' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'label' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'position' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'position' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'position' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2339: Property 'position' does not exist on type '{ enabled?: boolean | undefined; }'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2724: '"../tableColumnModel"' has no exported member named 'GrandTotalConfig'. Did you mean 'TotalsConfig'?
+src/components/reporting/tableStyling/TotalsEditor.tsx: error TS2724: '"../tableColumnModel"' has no exported member named 'SubtotalsConfig'. Did you mean 'TotalsConfig'?
+src/ConversationalQueryInterface.tsx: error TS2554: Expected 1 arguments, but got 3.
+src/ExplorerTab.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/ExplorerTab.tsx: error TS2554: Expected 0 arguments, but got 2.
+src/features/admin/pages/ClientBenchmarks.tsx: error TS2305: Module '"@mui/icons-material"' has no exported member 'ShieldCheck'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: (string | Element)[]; onClick: () => Promise<void>; disabled: boolean; sx: { px: number; py: number; borderRadius: number; color: string; display: string; items: string; gap: number; fontSize: string; background: string; }; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: (string | Element)[]; onClick: () => Promise<void>; disabled: boolean; sx: { px: number; py: number; borderRadius: number; color: string; display: string; items: string; gap: number; fontSize: string; background: string; }; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: (string | Element)[]; onClick: () => Promise<void>; disabled: boolean; sx: { px: number; py: number; borderRadius: number; color: string; display: string; items: string; gap: number; fontSize: string; background: string; }; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: (string | Element)[]; onClick: () => Promise<void>; disabled: boolean; sx: { px: number; py: number; borderRadius: number; color: string; display: string; items: string; gap: number; fontSize: string; background: string; }; }' is not assignable to type 'DetailedHTMLProps<ButtonHTMLAttributes<HTMLButtonElement>, HTMLButtonElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; gap: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: Element[]; sx: { display: string; gridTemplateColumns: string; gap: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { display: string; fontSize: string; fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { display: string; fontSize: string; fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<LabelHTMLAttributes<HTMLLabelElement>, HTMLLabelElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { fontSize: string; color: string; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLParagraphElement>, HTMLParagraphElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { fontSize: string; fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLHeadingElement>, HTMLHeadingElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { fontSize: string; whitePre: string; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLPreElement>, HTMLPreElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ children: string; sx: { fontWeight: number; mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLHeadingElement>, HTMLHeadingElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ value: string; onChange: (e: ChangeEvent<HTMLInputElement>) => void; sx: { width: string; p: number; borderRadius: number; border: string; }; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2322: Type '{ value: string; onChange: (e: ChangeEvent<HTMLInputElement>) => void; sx: { width: string; p: number; borderRadius: number; border: string; }; }' is not assignable to type 'DetailedHTMLProps<InputHTMLAttributes<HTMLInputElement>, HTMLInputElement>'.
+src/features/admin/pages/SeedingPage.tsx: error TS2339: Property 'mode' does not exist on type 'Theme'.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/admin/pages/UserAccessDetailPage.tsx: error TS2554: Expected 1-2 arguments, but got 3.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2322: Type '{ title: string; subheader: string; avatarPalette: "info"; avatarLetter: string; description: string; statusLabel: string; statusColor: "success"; features: string[]; targets: BridgeTarget[]; ... 5 more ...; syncing: string | null; }' is not assignable to type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2322: Type '{ title: string; subheader: string; avatarPalette: "secondary"; avatarLetter: string; description: string; statusLabel: string; statusColor: "success"; features: string[]; targets: never[]; previewLabel: string; ... 5 more ...; syncing: null; }' is not assignable to type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2322: Type '{ title: string; subheader: string; avatarPalette: "warning"; avatarLetter: string; description: string; statusLabel: string; statusColor: "success"; features: string[]; targets: BridgeTarget[]; ... 5 more ...; syncing: string | null; }' is not assignable to type 'IntrinsicAttributes & { title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; ... 12 more ...; syncing: string | null; }'.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2339: Property 'subheader' does not exist on type '{ title: string; avatarColor?: string | undefined; avatarPalette?: "success" | "info" | "warning" | "primary" | "secondary" | undefined; avatarLetter: string; description: string; statusLabel: string; ... 9 more ...; syncing: string | null; }'.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/AISemanticBridgeDashboard.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/UserAICatalogAssistant.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/UserAICatalogAssistant.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/UserAICatalogAssistant.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/UserAICatalogAssistant.tsx: error TS2769: No overload matches this call.
+src/features/ai-bridge/UserAICatalogAssistant.tsx: error TS2769: No overload matches this call.
+src/features/altinvest/AlternativesAnalyticsDashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/altinvest/AlternativesAnalyticsDashboard.tsx: error TS2304: Cannot find name 'Award'.
+src/features/altinvest/AlternativesAnalyticsDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/altinvest/AlternativesAnalyticsDashboard.tsx: error TS2304: Cannot find name 'Target'.
+src/features/altinvest/AlternativesAnalyticsDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/altinvest/AltInvestDashboard.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/altinvest/AltInvestDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/altinvest/AltInvestDashboard.tsx: error TS2304: Cannot find name 'FileText'.
+src/features/altinvest/AltInvestDashboard.tsx: error TS2304: Cannot find name 'PieChart'.
+src/features/altinvest/AltInvestDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'CheckCircle2'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/altinvest/CapitalCallTracker.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'Download'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'Eye'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'FileText'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'FileText'.
+src/features/altinvest/DocumentVault.tsx: error TS2304: Cannot find name 'Upload'.
+src/features/analytics/pages/AggregateDesignerPage.tsx: error TS2322: Type '{ children: Element[]; value: string; onChange: (e: ChangeEvent<HTMLSelectElement>) => void; sx: { padding: string; borderRadius: number; border: string; width: string; }; }' is not assignable to type 'DetailedHTMLProps<SelectHTMLAttributes<HTMLSelectElement>, HTMLSelectElement>'.
+src/features/billing/BillingCenter.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/billing/BillingCenter.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/billing/BillingCenter.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/billing/BillingCenter.tsx: error TS2304: Cannot find name 'Download'.
+src/features/billing/BillingCenter.tsx: error TS2304: Cannot find name 'Receipt'.
+src/features/billing/FinOpsForecastDashboard.tsx: error TS2769: No overload matches this call.
+src/features/billing/FinOpsForecastDashboard.tsx: error TS2769: No overload matches this call.
+src/features/billing/FinOpsForecastDashboard.tsx: error TS2769: No overload matches this call.
+src/features/business-objects/BusinessObjectStudio.tsx: error TS2304: Cannot find name 'TableHead'.
+src/features/business-objects/BusinessObjectStudio.tsx: error TS2304: Cannot find name 'TableHead'.
+src/features/business-objects/BusinessObjectStudio.tsx: error TS2304: Cannot find name 'TableHead'.
+src/features/business-objects/BusinessObjectStudio.tsx: error TS2304: Cannot find name 'TableHead'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'CheckCircle2'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'FileSearch'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'Filter'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'Play'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/compliance/ComplianceMasterDashboard.tsx: error TS2304: Cannot find name 'ShieldAlert'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'Activity'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'TrendingDown'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'TrendingDown'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/crypto/CryptoDashboard.tsx: error TS2304: Cannot find name 'Zap'.
+src/features/data-explorer/components/FilterPillBar.tsx: error TS2304: Cannot find name 'useMemo'.
+src/features/data-explorer/components/PivotTablePane.tsx: error TS18048: 'rowDim' is possibly 'undefined'.
+src/features/data-explorer/components/PivotTablePane.tsx: error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Record<string, number> | {}'.
+src/features/data-explorer/components/PivotTablePane.tsx: error TS7053: Element implicitly has an 'any' type because expression of type 'string' can't be used to index type 'Record<string, number> | {}'.
+src/features/data-explorer/components/QueryLibrary.tsx: error TS2339: Property 'currentTenant' does not exist on type 'TenantContextType'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"dual_axis"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"funnel"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"gauge"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"pivot"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"radar"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"stacked_bar"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualObjectsPalette.tsx: error TS2322: Type '"treemap"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2305: Module '"../types/dataExplorerTypes"' has no exported member 'DEFAULT_CHART_CONFIG'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"dual_axis"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"funnel"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"gauge"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"pivot"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"radar"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"stacked_bar"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2322: Type '"treemap"' is not assignable to type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2345: Argument of type '"dual_axis"' is not assignable to parameter of type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2345: Argument of type '"dual_axis"' is not assignable to parameter of type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2345: Argument of type '"gauge"' is not assignable to parameter of type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2345: Argument of type '"pivot"' is not assignable to parameter of type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2345: Argument of type '"treemap"' is not assignable to parameter of type 'ViewMode'.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2367: This comparison appears to be unintentional because the types '"area" | "line" | "bar" | "kpi" | "pie" | "scatter"' and '"pivot"' have no overlap.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2367: This comparison appears to be unintentional because the types '"area" | "line" | "bar" | "kpi" | "pie" | "scatter"' and '"pivot"' have no overlap.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2367: This comparison appears to be unintentional because the types '"table" | "area" | "line" | "kpi" | "pie" | "scatter"' and '"dual_axis"' have no overlap.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2367: This comparison appears to be unintentional because the types '"table" | "area" | "line" | "kpi" | "pie" | "scatter"' and '"stacked_bar"' have no overlap.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2367: This comparison appears to be unintentional because the types 'ViewMode' and '"gauge"' have no overlap.
+src/features/data-explorer/components/VisualStudioBar.tsx: error TS2724: '"../types/dataExplorerTypes"' has no exported member named 'ChartConfig'. Did you mean 'ShareConfig'?
+src/features/data-explorer/components/WorkbookPropertiesDialog.tsx: error TS2305: Module '"../types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2304: Cannot find name 'ExplorerRelatedBO'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2304: Cannot find name 'ExplorerSubtype'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2304: Cannot find name 'FieldCategory'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2304: Cannot find name 'FieldCategory'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2322: Type '{ termNodeId: string; alias: string; agg: AggFn; expression: string | undefined; }[]' is not assignable to type 'MeasureDef[]'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2322: Type '{ termNodeId: string; operator: string; value: string | string[]; }[]' is not assignable to type 'FilterDef[]'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2353: Object literal may only specify known properties, and 'selectedSubtypeKey' does not exist in type 'QueryContext'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2367: This comparison appears to be unintentional because the types '"string" | "boolean" | "unknown"' and '"uuid"' have no overlap.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2367: This comparison appears to be unintentional because the types '"string" | "number" | "boolean" | "unknown"' and '"time"' have no overlap.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/services/dataExplorerApi.ts: error TS2694: Namespace '"src/features/data-explorer/types/dataExplorerTypes"' has no exported member 'QueryWorkbook'.
+src/features/data-explorer/types/explorerTypes.ts: error TS2305: Module '"../../../components/reporting/builderSerialization"' has no exported member 'ReportBuilderState'.
+src/features/data-explorer/types/explorerTypes.ts: error TS2305: Module '"../../../components/reporting/builderSerialization"' has no exported member 'ReportParameter'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'Download'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'Eye'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'FileText'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'Trash2'.
+src/features/documents/DocumentVaultUI.tsx: error TS2304: Cannot find name 'Upload'.
+src/features/fabric/components/ClaimAwareLineageViewer.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/features/fabric/components/TenantManagementView.tsx: error TS2345: Argument of type '"dashboard"' is not assignable to parameter of type 'SetStateAction<SidebarView>'.
+src/features/fabric/components/TenantManagementView.tsx: error TS2367: This comparison appears to be unintentional because the types 'SidebarView' and '"dashboard"' have no overlap.
+src/features/fabric/components/TenantManagementView.tsx: error TS2367: This comparison appears to be unintentional because the types 'SidebarView' and '"dashboard"' have no overlap.
+src/features/fabric/components/TenantManagementView.tsx: error TS2367: This comparison appears to be unintentional because the types 'SidebarView' and '"dashboard"' have no overlap.
+src/features/fabric/components/TenantManagementView.tsx: error TS2367: This comparison appears to be unintentional because the types 'SidebarView' and '"dashboard"' have no overlap.
+src/features/fabric/pages/ModelGenerator.tsx: error TS2554: Expected 0 arguments, but got 2.
+src/features/feebilling/FeeBillingCenter.tsx: error TS2304: Cannot find name 'AlertCircle'.
+src/features/feebilling/FeeBillingCenter.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/feebilling/FeeBillingCenter.tsx: error TS2304: Cannot find name 'Settings'.
+src/features/feebilling/FeeBillingCenter.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/feebilling/FeeBillingCenter.tsx: error TS2304: Cannot find name 'Users'.
+src/features/feed/components/Feed.tsx: error TS2304: Cannot find name 'Loader2'.
+src/features/feed/components/Feed.tsx: error TS2305: Module '"@mui/icons-material"' has no exported member 'CircularProgress'.
+src/features/feed/components/FeedCard.tsx: error TS2304: Cannot find name 'Lightbulb'.
+src/features/feed/components/FeedCard.tsx: error TS2304: Cannot find name 'Newspaper'.
+src/features/feed/components/FeedCard.tsx: error TS2304: Cannot find name 'Zap'.
+src/features/feed/components/FeedCard.tsx: error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ cardId: string; clientId: string; actionDetails?: Record<string, any> | undefined; }'.
+src/features/glossary/components/RelationshipExplorer.tsx: error TS2322: Type '{ edges: CatalogEdge[]; nodes: CatalogNode[]; selectedNodeId: string; darkMode: true; canEdit: boolean; canDelete: boolean; onDeleted: () => void; onUpdated: () => void; getNodeName: (id: string) => string; getNodePath: (id: string) => string | undefined; }' is not assignable to type 'IntrinsicAttributes & RelationshipListProps'.
+src/features/glossary/hooks/useEntityRelationships.ts: error TS2345: Argument of type '{ id: string; subject_node_id: string; object_node_id: string; source_node_id: string; target_node_id: string; edge_type_name: string; relationship_type: string; predicate: string; description: string; }' is not assignable to parameter of type 'CatalogEdge'.
+src/features/glossary/hooks/useEntityRelationships.ts: error TS2345: Argument of type '{ id: string; subject_node_id: string; object_node_id: string; source_node_id: string; target_node_id: string; edge_type_name: string; relationship_type: string; predicate: string; description: string; }' is not assignable to parameter of type 'CatalogEdge'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Briefcase'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Building'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'ChevronDown'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'ChevronRight'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'FileText'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Home'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Plus'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Users'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Users'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Users'.
+src/features/household/HouseholdDashboard.tsx: error TS2304: Cannot find name 'Users'.
+src/features/mapper/IntelligentSemanticMapper.tsx: error TS2339: Property 'name' does not exist on type 'NodeType'.
+src/features/mapper/IntelligentSemanticMapper.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/features/mapper/services/geminiBatchMapper.ts: error TS2709: Cannot use namespace 'EdgeType' as a type.
+src/features/mapper/utils/graphMatcher.ts: error TS2709: Cannot use namespace 'EdgeType' as a type.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'Mic'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'MicOff'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'Monitor'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'PhoneOff'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'Video'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'Video'.
+src/features/meetings/VideoConference.tsx: error TS2304: Cannot find name 'VideoOff'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Check'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'CheckCheck'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Paperclip'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Paperclip'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Search'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Send'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/messaging/SecureMessaging.tsx: error TS2304: Cannot find name 'Shield'.
+src/features/messaging/SecureMessaging.tsx: error TS2607: JSX element class does not support attributes because it does not have a 'props' property.
+src/features/messaging/SecureMessaging.tsx: error TS2786: 'Lock' cannot be used as a JSX component.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'Mail'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'Phone'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'Play'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/nba/pages/AdvisorNBADashboard.tsx: error TS2304: Cannot find name 'XCircle'.
+src/features/query-builder/pages/BusinessObjectQueryBuilder.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'Activity'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'ArrowDownRight'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'ArrowUpRight'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'BarChart3'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'CloudLightning'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'Download'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'Filter'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'Gauge'.
+src/features/risk/RiskMasterDashboard.tsx: error TS2304: Cannot find name 'Gauge'.
+src/features/succession/SuccessionPlanningDashboard.tsx: error TS2304: Cannot find name 'ArrowRight'.
+src/features/succession/SuccessionPlanningDashboard.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/succession/SuccessionPlanningDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/succession/SuccessionPlanningDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/succession/SuccessionPlanningDashboard.tsx: error TS2304: Cannot find name 'Users'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'Award'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'Target'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/succession/SuccessionTools.tsx: error TS2304: Cannot find name 'Users'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'AlertTriangle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'Calendar'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'TrendingDown'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'TrendingDown'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'TrendingUp'.
+src/features/tax/TaxOptimizationDashboard.tsx: error TS2304: Cannot find name 'X'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Clock'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'DollarSign'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Repeat'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Sparkles'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Sparkles'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Sparkles'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'Sparkles'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'TrendingDown'.
+src/features/taxplan/TaxDashboard.tsx: error TS2304: Cannot find name 'X'.
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2304: Cannot find name 'CheckCircle'.
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2304: Cannot find name 'Loader2'.
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2304: Cannot find name 'XCircle'.
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2305: Module '"@mui/icons-material"' has no exported member 'CircularProgress'.
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2552: Cannot find name 'Clock'. Did you mean 'Lock'?
+src/features/wealth/pages/ApprovalInboxPage.tsx: error TS2552: Cannot find name 'Clock'. Did you mean 'Lock'?
+src/features/workflow/pages/WorkflowDesignerPage.tsx: error TS2322: Type '{ node: Node<any, string | undefined>; }' is not assignable to type 'IntrinsicAttributes & PropertiesPanelProps'.
+src/genui/components/ProposalCard.tsx: error TS2322: Type '{ children: Element[]; sx: { mb: number; }; }' is not assignable to type 'DetailedHTMLProps<HTMLAttributes<HTMLElement>, HTMLElement>'.
+src/GoalTrackerPanel.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/hooks/__tests__/useModelCatalog.delete.test.ts: error TS2554: Expected 0 arguments, but got 2.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 2.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 3.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 3.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 3.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 3.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 0-1 arguments, but got 3.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 2-3 arguments, but got 4.
+src/hooks/useCalendarSync.ts: error TS2554: Expected 2-3 arguments, but got 4.
+src/hooks/useCanEditCoreItem.ts: error TS2305: Module '"../utils/goldCopy"' has no exported member 'GOLD_COPY_TENANT_ID'.
+src/hooks/useCanEditCoreItem.ts: error TS2339: Property 'id' does not exist on type 'TenantContextType'.
+src/hooks/useCanEditCoreItem.ts: error TS2339: Property 'id' does not exist on type 'TenantContextType'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'datasourceId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/hooks/useModelCatalog.ts: error TS2304: Cannot find name 'tenantId'.
+src/index.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/JITAuditDashboard.tsx: error TS2304: Cannot find name 'useTheme'.
+src/layout/index.ts: error TS2305: Module '"./TenantSwitcher"' has no exported member 'Tenant'.
+src/NLQueryInterface.tsx: error TS2554: Expected 1 arguments, but got 3.
+src/pages/AIExplorerPage.tsx: error TS2339: Property 'currentTenant' does not exist on type 'TenantContextType'.
+src/pages/api-studio/APIPreview.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/api-studio/APIPreview.tsx: error TS2554: Expected 2 arguments, but got 3.
+src/pages/api-studio/APIPreview.tsx: error TS2554: Expected 4 arguments, but got 5.
+src/pages/api-studio/APIStudioPage.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/api-studio/NLDesignInterface.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/BusinessObjectDetailsPage.tsx: error TS18047: 'tenant' is possibly 'null'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2304: Cannot find name 'uniqueFields'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2322: Type 'BusinessObject | null' is not assignable to type '{ displayName?: string | undefined; description?: string | undefined; status?: string | undefined; isActive?: boolean | undefined; } | undefined'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2322: Type 'BusinessObject | null' is not assignable to type '{ version?: string | undefined; updatedAt?: string | undefined; } | undefined'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2345: Argument of type '(Field | { semanticTermId: string; key: string | undefined; name: string | undefined; businessName: string | undefined; technicalName: string | undefined; type: string; role: string; ... 4 more ...; lastModifiedAt: string; })[]' is not assignable to parameter of type '{ name: string; }[]'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2353: Object literal may only specify known properties, and 'message' does not exist in type 'ValidationSummaryItem'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2353: Object literal may only specify known properties, and 'message' does not exist in type 'ValidationSummaryItem'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2353: Object literal may only specify known properties, and 'message' does not exist in type 'ValidationSummaryItem'.
+src/pages/BusinessObjectDetailsPage.tsx: error TS2353: Object literal may only specify known properties, and 'message' does not exist in type 'ValidationSummaryItem'.
+src/pages/BusinessObjectDetailsPage/components/dialogs/DeleteObjectConfirmDialog.tsx: error TS2709: Cannot use namespace 'BusinessObject' as a type.
+src/pages/BusinessObjectDetailsPage/components/dialogs/DeleteSubtypeDialog.tsx: error TS2709: Cannot use namespace 'BusinessObject' as a type.
+src/pages/BusinessObjectDetailsPage/components/dialogs/EditFieldDialog.tsx: error TS2709: Cannot use namespace 'EnhancedSemanticTerm' as a type.
+src/pages/BusinessObjectDetailsPage/components/dialogs/FieldDeleteConfirmDialog.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/dialogs/SubtypeDialog.tsx: error TS2709: Cannot use namespace 'BusinessObject' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/FieldsTab.tsx: error TS2709: Cannot use namespace 'Field' as a type.
+src/pages/BusinessObjectDetailsPage/components/tabs/LiveQueryTab.tsx: error TS2769: No overload matches this call.
+src/pages/catalog/CatalogEdgeTypesPage.tsx: error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ id: string; }'.
+src/pages/catalog/CatalogEdgeTypesPage.tsx: error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ id: string; data: UpdateEdgeTypeRequest; }'.
+src/pages/catalog/CatalogEdgeTypesPage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/catalog/EdgeTypeDetailPage.tsx: error TS2304: Cannot find name 'ArrowForwardIcon'.
+src/pages/catalog/EdgeTypeDetailPage.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/catalog/NodeTypeDetailPage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/console/DashboardHome.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/console/DashboardHome.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/console/DashboardHome.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/console/DashboardHome.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/console/DashboardHome.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/ConversationalDashboardPage.tsx: error TS2304: Cannot find name 'Split'.
+src/pages/DataExplorerPage.tsx: error TS2304: Cannot find name 'ChartViewMode'.
+src/pages/DataExplorerPage.tsx: error TS2322: Type '{ id: string; name: string; label: string; category: FieldCategory; type: FieldType; aggregation: AggFn | undefined; description: string | undefined; }[]' is not assignable to type 'SemanticField[]'.
+src/pages/DataExplorerPage.tsx: error TS2322: Type '{ title: string; dimensions: string[]; measures: { fieldId: string; agg: AggFn; }[]; timeDimensions: { fieldId: string; granularity: Granularity; }[]; filters: { id: string; fieldId: string; operator: FilterOperator; value: string; }[]; limit: number; suggestedChart: ViewMode; }' is not assignable to type 'ExplorerQueryDefinition'.
+src/pages/DataQueryBuilderPage.tsx: error TS2322: Type '{ open: boolean; sql: string; plan: FederatedPlan | undefined; onClose: () => void; }' is not assignable to type 'IntrinsicAttributes & SqlPreviewDialogProps'.
+src/pages/DataQueryBuilderPage.tsx: error TS2322: Type '{ selectedBO: any; selectedSubtypeKey: string | null | undefined; relatedBOs: ExplorerRelatedBO[] | undefined; onAddFieldToCanvas: (field: BOField) => void; onAddAllAsTable: (fields: BOField[]) => void; }' is not assignable to type 'IntrinsicAttributes & BOFieldsPaletteProps'.
+src/pages/DataQueryBuilderPage.tsx: error TS2322: Type 'string' is not assignable to type 'FilterCategory'.
+src/pages/DataQueryBuilderPage.tsx: error TS2345: Argument of type '(prev: ExplorerQueryState) => { timeDimensions: (DimensionSelection | { fieldId: string; granularity: string; })[]; sourceId: string; bindingId: string; ... 6 more ...; limit: number; }' is not assignable to parameter of type 'ExplorerQueryState | ((prev: ExplorerQueryState) => ExplorerQueryState)'.
+src/pages/DataQueryBuilderPage.tsx: error TS2345: Argument of type '(prev: FilterGroup[]) => { conditions: (FilterCondition | { id: string; field: string; fieldLabel: string; dataType: FieldType; operator: string; value: string; values: never[]; enabled: boolean; })[]; id: string; combinator: "AND" | "OR"; category?: FilterCategory | undefined; groups?: FilterGroup[] | undefined; }[...' is not assignable to parameter of type 'SetStateAction<FilterGroup[]>'.
+src/pages/edges/EdgeTypeFormModal.tsx: error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ id: string; data: UpdateEdgeTypeRequest; }'.
+src/pages/edges/EdgeTypeFormModal.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/edges/EdgeTypeFormModal.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/edges/EdgeTypeFormModal.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/edges/EdgeTypeSetupPage.tsx: error TS2353: Object literal may only specify known properties, and 'tenantId' does not exist in type '{ id: string; }'.
+src/pages/edges/EdgeTypeSetupPage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/edges/EdgeTypeSetupPage.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/pages/Fabric/UnifiedSemanticBuilder.tsx: error TS2554: Expected 0 arguments, but got 2.
+src/pages/HomePage.tsx: error TS1117: An object literal cannot have multiple properties with the same name.
+src/pages/LoginPage.tsx: error TS2554: Expected 0 arguments, but got 2.
+src/pages/page-studio/ComponentPalette.tsx: error TS2769: No overload matches this call.
+src/pages/page-studio/LayoutCanvas.tsx: error TS18046: 'node' is of type 'unknown'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS18046: 'node' is of type 'unknown'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS18046: 'node' is of type 'unknown'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'nodes' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'nodes' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'nodes' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'nodes' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'nodes' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'root' does not exist on type 'LayoutNode[]'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS2339: Property 'tenantId' does not exist on type 'CorePageDefinition'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS7006: Parameter 'childId' implicitly has an 'any' type.
+src/pages/page-studio/LayoutCanvas.tsx: error TS7006: Parameter 'cid' implicitly has an 'any' type.
+src/pages/page-studio/LayoutCanvas.tsx: error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/pages/page-studio/LayoutCanvas.tsx: error TS7015: Element implicitly has an 'any' type because index expression is not of type 'number'.
+src/pages/page-studio/PageEditor.tsx: error TS2322: Type '{ page: CorePageDefinition; }' is not assignable to type 'IntrinsicAttributes & AIDocumentationViewerProps'.
+src/pages/page-studio/PageEditor.tsx: error TS2322: Type '{ page: CorePageDefinition; }' is not assignable to type 'IntrinsicAttributes & AITestGeneratorProps'.
+src/pages/page-studio/PageEditor.tsx: error TS2322: Type '{ pageId: string; }' is not assignable to type 'IntrinsicAttributes'.
+src/pages/page-studio/PageEditor.tsx: error TS2339: Property 'tenantId' does not exist on type 'CorePageDefinition'.
+src/pages/page-studio/PageEditor.tsx: error TS2339: Property 'tenantId' does not exist on type 'CorePageDefinition'.
+src/pages/page-studio/PageEditor.tsx: error TS2345: Argument of type 'PageStudioPage' is not assignable to parameter of type 'CorePageDefinition'.
+src/pages/page-studio/PagePerformanceDashboard.tsx: error TS2769: No overload matches this call.
+src/pages/page-studio/PagePerformanceDashboard.tsx: error TS2769: No overload matches this call.
+src/pages/page-studio/PagePerformanceDashboard.tsx: error TS2769: No overload matches this call.
+src/pages/page-studio/PagePerformanceDashboard.tsx: error TS2769: No overload matches this call.
+src/pages/page-studio/PageStudioPage.tsx: error TS2322: Type '{ open: boolean; onClose: () => void; onGenerated: (result: any) => void; tenantId: string; }' is not assignable to type 'IntrinsicAttributes & AIGeneratorWizardProps'.
+src/pages/page-studio/PageStudioPage.tsx: error TS2345: Argument of type 'PageStudioPage[]' is not assignable to parameter of type 'SetStateAction<CorePageDefinition[]>'.
+src/pages/page-studio/PageStudioPage.tsx: error TS2353: Object literal may only specify known properties, and 'env' does not exist in type 'Partial<CorePageDefinition>'.
+src/pages/page-studio/PageStudioPage.tsx: error TS2353: Object literal may only specify known properties, and 'root' does not exist in type 'LayoutNode[]'.
+src/pages/page-studio/PageStudioPage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/page-studio/PageStudioPage.tsx: error TS2739: Type '{}' is missing the following properties from type 'TenantBrandingEditorProps': open, onClose, tenantId
+src/pages/page-studio/PageStudioPage.tsx: error TS2739: Type '{}' is missing the following properties from type 'TenantUpgradeAssistantProps': open, onClose, tenantId
+src/pages/page-studio/PageStudioPage.tsx: error TS2740: Type '{}' is missing the following properties from type 'ComponentDefinition[]': length, pop, push, concat, and 29 more.
+src/pages/PortfolioDashboardPage.tsx: error TS2304: Cannot find name 'Plus'.
+src/pages/scheduler/DAGsView.tsx: error TS2554: Expected 0-1 arguments, but got 2.
+src/pages/scheduler/JobsView.tsx: error TS2554: Expected 0-1 arguments, but got 2.
+src/pages/scheduler/SchedulerConsolePage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/scheduler/SchedulerConsolePage.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/scheduler/SchedulerOverview.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/pages/scheduler/SchedulerOverview.tsx: error TS2554: Expected 0-1 arguments, but got 2.
+src/pages/scheduler/SchedulerOverview.tsx: error TS2724: '"@mui/icons-material"' has no exported member named 'Calendar'. Did you mean 'CallEnd'?
+src/QueryTemplateBrowser.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/ReviewerInbox.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/RoleClaimMatrix.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/SemanticViewPicker.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/SuggestedForYouPanel.tsx: error TS2554: Expected 1 arguments, but got 2.
+src/TourLauncher.tsx: error TS2554: Expected 0 arguments, but got 1.
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: CanvasWidget[]; onChange: () => void; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: CanvasWidget[]; onChange: Mock<any, any>; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: CanvasWidget[]; onChange: Mock<any, any>; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: never[]; onChange: () => void; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: never[]; onChange: Mock<any, any>; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/PageStudioCanvas.test.tsx: error TS2739: Type '{ canvas: never[]; onChange: Mock<any, any>; onAddRelatedObject: Mock<any, any>; }' is missing the following properties from type 'PageStudioCanvasProps': selectedWidgetPath, onSelectWidget
+src/vitest/components/pagestudio/pageStudioTabsMigration.test.ts: error TS2345: Argument of type '{ version: 3; pageKey: string; title: string; rootBoKey: string; rootBoId: string; selectedSubtypeKeys: never[]; tabs: { id: string; title: string; canvas: never[]; }[]; }' is not assignable to parameter of type 'PageStudioLayoutSpec | PageStudioLayoutSpecV2'.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2305: Module '"../../../../src/components/reporting/builderSerialization"' has no exported member 'buildReportTitle'.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2305: Module '"../../../../src/components/reporting/builderSerialization"' has no exported member 'ReportBuilderState'.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/builderSerialization.test.ts: error TS2554: Expected 2-3 arguments, but got 1.
+src/vitest/components/reporting/ReportSection.test.tsx: error TS2322: Type '{ section: "body"; elements: any[]; onElementUpdate: () => void; onElementDelete: () => void; onElementSelect: () => void; layoutSettings: { columns: number; columnSpacing: number; headerTokens: never[]; footerTokens: never[]; pageBreakBetweenRegions: boolean; pageBreakAfterGroup: boolean; }; ... 4 more ...; availab...' is not assignable to type 'IntrinsicAttributes & ReportSectionProps'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2345: Argument of type '{ enabled: boolean; function: string; scope: string; }' is not assignable to parameter of type 'string'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2345: Argument of type '{ enabled: boolean; function: string; scope: string; }' is not assignable to parameter of type 'string'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2345: Argument of type '{ enabled: boolean; function: string; scope: string; }' is not assignable to parameter of type 'string'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2345: Argument of type '{ enabled: boolean; function: string; scope: string; }' is not assignable to parameter of type 'string'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2353: Object literal may only specify known properties, and 'formatPrefix' does not exist in type 'ColumnConfig'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2353: Object literal may only specify known properties, and 'position' does not exist in type '{ enabled?: boolean | undefined; }'.
+src/vitest/components/reporting/tableStyling/TotalsEditor.test.tsx: error TS2353: Object literal may only specify known properties, and 'position' does not exist in type '{ enabled?: boolean | undefined; }'.
+src/vitest/utils/dedupeFields.test.ts: error TS2345: Argument of type '({ name: string; displayName?: undefined; } | { displayName: string; name?: undefined; })[]' is not assignable to parameter of type '{ name: string; }[]'.
+src/vitest/utils/dedupeFields.test.ts: error TS2345: Argument of type 'RawField[]' is not assignable to parameter of type '{ name: string; }[]'.
+src/vitest/utils/subtypeQueryScope.test.ts: error TS2694: Namespace '"*"' has no exported member 'FieldDefinition'.

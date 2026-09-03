@@ -39,6 +39,26 @@ module.exports = [
         }
       ],
       "import/no-named-as-default": "off",
+      // Locale-prefixed routes: forbid direct imports of `Link`/`NavLink` from
+      // react-router-dom so every internal navigation is prefixed with the
+      // current locale. Use the wrappers in src/routes/Link.tsx instead.
+      "no-restricted-imports": [
+        "error",
+        {
+          "paths": [
+            {
+              "name": "react-router-dom",
+              "importNames": ["Link"],
+              "message": "Import Link from 'src/routes/Link' so paths are locale-prefixed."
+            },
+            {
+              "name": "react-router-dom",
+              "importNames": ["NavLink"],
+              "message": "Import NavLink from 'src/routes/Link' so paths are locale-prefixed."
+            }
+          ]
+        }
+      ],
       // Disallow console usage except console.error
       "no-restricted-syntax": [
         "error",

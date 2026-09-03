@@ -1,5 +1,7 @@
 import React from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
+import { Link } from "../../routes/Link";
+import { stripLocale } from "../../i18n/locales";
 import "./AdminLayout.css";
 
 export interface AdminLayoutProps {
@@ -8,6 +10,7 @@ export interface AdminLayoutProps {
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const location = useLocation();
+  const stripped = stripLocale(location.pathname);
 
   const navItems = [
     { path: "/admin", label: "Dashboard", icon: "📊" },
@@ -20,8 +23,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   ];
 
   const isActive = (path: string) => {
-    if (path === "/admin" && location.pathname === "/admin") return true;
-    if (path !== "/admin" && location.pathname.startsWith(path)) return true;
+    if (path === "/admin" && stripped === "/admin") return true;
+    if (path !== "/admin" && stripped.startsWith(path)) return true;
     return false;
   };
 

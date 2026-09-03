@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { stripLocale } from '../i18n/locales';
 import { 
   Box, List, ListItem, ListItemButton, ListItemIcon, 
   ListItemText, ListSubheader, Typography, Skeleton 
@@ -70,12 +71,12 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
           <Box key={node.id}>
             <ListItem disablePadding>
               <ListItemButton
-                selected={location.pathname === `/app/data-product/${node.target_page_key}`}
+                selected={stripLocale(location.pathname) === `/app/data-product/${node.target_page_key}`}
                 onClick={() => node.target_page_key && navigate(`/app/data-product/${node.target_page_key}`)}
                 sx={{
                   px: 3,
                   py: 1,
-                  color: location.pathname === `/app/data-product/${node.target_page_key}` ? '#38bdf8' : 'inherit',
+                  color: stripLocale(location.pathname) === `/app/data-product/${node.target_page_key}` ? '#38bdf8' : 'inherit',
                   '&.Mui-selected': { bgcolor: 'rgba(56, 189, 248, 0.08)', color: '#38bdf8' },
                   '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' }
                 }}
@@ -91,12 +92,12 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
             {node.children && node.children.map(child => (
               <ListItemButton
                 key={child.id}
-                selected={location.pathname === `/app/data-product/${child.target_page_key}`}
+                selected={stripLocale(location.pathname) === `/app/data-product/${child.target_page_key}`}
                 onClick={() => child.target_page_key && navigate(`/app/data-product/${child.target_page_key}`)}
                 sx={{ 
                   pl: 6, 
                   py: 0.5, 
-                  color: location.pathname === `/app/data-product/${child.target_page_key}` ? '#38bdf8' : 'inherit',
+                  color: stripLocale(location.pathname) === `/app/data-product/${child.target_page_key}` ? '#38bdf8' : 'inherit',
                   '&.Mui-selected': { bgcolor: 'rgba(56, 189, 248, 0.08)', color: '#38bdf8' },
                   '&:hover': { bgcolor: 'rgba(255,255,255,0.03)' }
                 }}
