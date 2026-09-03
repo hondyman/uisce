@@ -4769,6 +4769,9 @@ func newCBOTelemetryRouter(sqlxDB *sqlx.DB) *cbo.TelemetryRouter {
 // metadata.BusinessObjectService.recordDB and bo_sql_routes.go); this
 // doesn't attempt real per-tenant multi-datasource routing.
 func buildAggregatesDatasourceDSN(db *sqlx.DB) (string, error) {
+	if db == nil || db.DB == nil {
+		return "", fmt.Errorf("database not initialized")
+	}
 	var databaseName string
 	err := db.Get(&databaseName, `
 		SELECT database_name

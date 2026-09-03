@@ -45,6 +45,9 @@ func NewDBIssuerRegistry(db *sqlx.DB) *DBIssuerRegistry {
 
 // ResolveIssuer looks up the trust configuration for a token's "iss" claim.
 func (r *DBIssuerRegistry) ResolveIssuer(ctx context.Context, issuer string) (*IssuerConfig, error) {
+	if r == nil || r.db == nil || r.db.DB == nil {
+		return nil, nil
+	}
 	var idpID, jwksURI string
 	err := r.db.QueryRowContext(ctx, `
 		SELECT id, jwks_uri FROM semantic.tenant_identity_providers
@@ -68,6 +71,9 @@ func (r *DBIssuerRegistry) ResolveIssuer(ctx context.Context, issuer string) (*I
 // ListActiveIssuers returns every active issuer registration, for the JWKS
 // key-refresh loop.
 func (r *DBIssuerRegistry) ListActiveIssuers(ctx context.Context) ([]IssuerConfig, error) {
+	if r == nil || r.db == nil || r.db.DB == nil {
+		return nil, nil
+	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, issuer, jwks_uri FROM semantic.tenant_identity_providers
 		WHERE is_active = TRUE
