@@ -25,6 +25,7 @@ func TestSecurityManager_Checklist(t *testing.T) {
 		// Create valid token
 		claims := jwt.MapClaims{
 			"user_id": "user123",
+			"iss":     "dev://local",
 			"exp":     time.Now().Add(time.Hour).Unix(),
 		}
 		token, err := sm.SignToken(claims)
@@ -96,7 +97,10 @@ func TestSecurityManager_Checklist(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 
 		// Request with valid JWT
-		claims := jwt.MapClaims{"user_id": "middleware-user"}
+		claims := jwt.MapClaims{
+			"user_id": "middleware-user",
+			"iss":     "dev://local",
+		}
 		token, _ := sm.SignToken(claims)
 		req = httptest.NewRequest("GET", "/secure", nil)
 		req.Header.Set("Authorization", "Bearer "+token)

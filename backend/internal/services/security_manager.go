@@ -896,7 +896,8 @@ func (sm *SecurityManager) SecurityMiddleware() func(http.Handler) http.Handler 
 
 			// Check JWT token
 			if token := r.Header.Get("Authorization"); token != "" {
-				if claims, err := sm.jwtManager.ValidateToken(token); err == nil {
+				rawToken := strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
+				if claims, err := sm.jwtManager.ValidateToken(rawToken); err == nil {
 					userID = claims.UserID
 					authMethod = "jwt"
 				}

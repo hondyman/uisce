@@ -39,7 +39,10 @@ func TestAuthContextMiddleware_WithAPIKey(t *testing.T) {
 
 func TestAuthContextMiddleware_WithJWT(t *testing.T) {
 	sm := services.NewSecurityManager(nil, nil, []byte("jwt-secret"))
-	token, err := sm.SignToken(map[string]interface{}{"user_id": "user-jwt"})
+	token, err := sm.SignToken(map[string]interface{}{
+		"user_id": "user-jwt",
+		"iss":     "dev://local",
+	})
 	if err != nil {
 		t.Fatalf("failed to sign token: %v", err)
 	}

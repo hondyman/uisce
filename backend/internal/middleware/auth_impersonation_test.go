@@ -35,7 +35,7 @@ func (r *recordingAudit) ListExpiredActiveSessions(_ context.Context) ([]securit
 func (r *recordingAudit) LogExpired(_ context.Context, _ security.ImpersonationSession) error { return nil }
 
 func TestAuthContextMiddleware_ImpersonationToken_PreservesRealRoles(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-for-middleware-tests")
+	t.Setenv("IMPERSONATION_TOKEN_SECRET", "test-secret-for-middleware-tests")
 
 	sm := newTestSecurityManager()
 	userID := uuid.NewString()
@@ -61,11 +61,11 @@ func TestAuthContextMiddleware_ImpersonationToken_PreservesRealRoles(t *testing.
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authInfo, ok := security.AuthInfoFromContext(r.Context())
 		require.True(t, ok)
-		require.Equal(t, userID, authInfo.UserID)
-		require.Equal(t, tenantID, authInfo.TenantIDs[0])
-		require.Contains(t, authInfo.Roles, security.RoleProfessionalServices)
 		require.True(t, authInfo.ImpersonationActive)
+		require.Equal(t, userID, authInfo.RealAdminUserID)
+		require.Equal(t, tenantID, authInfo.TenantIDs[0])
 		require.Equal(t, security.RoleProfessionalServices, authInfo.ImpersonationAdminRole)
+		require.Equal(t, []string{security.RoleProfessionalServices}, authInfo.Roles)
 		require.False(t, authInfo.IsGlobalAdmin)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -79,23 +79,18 @@ func TestAuthContextMiddleware_ImpersonationToken_PreservesRealRoles(t *testing.
 }
 
 func TestAuthContextMiddleware_ImpersonationToken_LegacyFallback(t *testing.T) {
-	t.Setenv("JWT_SECRET", "test-secret-for-middleware-tests")
+	t.Setenv("IMPERSONATION_TOKEN_SECRET", "test-secret-for-middleware-tests")
 
 	sm := newTestSecurityManager()
 	tenantID := uuid.NewString()
 
-	// Manually craft a legacy payload (no admin_role or real_roles) to simulate
-	// tokens issued before multi-role support.
+	// Manually craft a legacy payload (no admin_role or real_roles).
+	// With the legacy privilege-escalation default removed, this must now be rejected (401).
 	legacyToken, err := signLegacyImpersonationToken(tenantID)
 	require.NoError(t, err)
 
 	mw := AuthContextMiddleware(sm, nil)
 	handler := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authInfo, ok := security.AuthInfoFromContext(r.Context())
-		require.True(t, ok)
-		require.True(t, authInfo.ImpersonationActive)
-		require.Equal(t, security.RoleGlobalAdmin, authInfo.ImpersonationAdminRole)
-		require.True(t, authInfo.IsGlobalAdmin)
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -104,13 +99,13 @@ func TestAuthContextMiddleware_ImpersonationToken_LegacyFallback(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	require.Equal(t, http.StatusOK, rr.Code)
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
 // signLegacyImpersonationToken creates a token payload identical to the format
 // used before multi-role support (no admin_role, real_roles, or scope fields).
 func signLegacyImpersonationToken(tenantID string) (string, error) {
-	secret := os.Getenv("JWT_SECRET")
+	secret := os.Getenv("IMPERSONATION_TOKEN_SECRET")
 	payload := map[string]any{
 		"sub":                  "legacy-admin",
 		"admin_email":          "legacy@example.com",

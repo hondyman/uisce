@@ -97,8 +97,9 @@ func AuthContextMiddleware(secMgr *services.SecurityManager, idpRegistry securit
 						if adminRole != "" {
 							realRoles = []string{adminRole}
 						} else {
-							realRoles = []string{security.RoleGlobalAdmin}
-							adminRole = security.RoleGlobalAdmin
+							logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] Impersonation token lacks roles; rejecting legacy token")
+							http.Error(w, `{"error": "unauthorized", "message": "legacy impersonation token missing role claims is not permitted"}`, http.StatusUnauthorized)
+							return
 						}
 					}
 					isGlobalAdmin := hasRole(realRoles, security.RoleGlobalAdmin) ||

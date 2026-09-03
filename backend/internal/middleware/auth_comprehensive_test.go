@@ -26,6 +26,9 @@ func newTestSecurityManager() *services.SecurityManager {
 
 // Helper to sign a token for testing
 func signTestToken(sm *services.SecurityManager, claims jwt.MapClaims) string {
+	if _, ok := claims["iss"]; !ok {
+		claims["iss"] = "dev://local"
+	}
 	token, err := sm.SignToken(claims)
 	if err != nil {
 		panic(err)
@@ -104,7 +107,7 @@ func TestAPIKeyAuth_RevokedKey_Rejected(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	require.Equal(t, http.StatusForbidden, rr.Code)
+	require.Equal(t, http.StatusUnauthorized, rr.Code)
 }
 
 func TestAPIKeyAuth_WrongTenant_ProperlyScoped(t *testing.T) {
