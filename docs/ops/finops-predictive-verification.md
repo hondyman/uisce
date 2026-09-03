@@ -149,6 +149,9 @@ is silently unapplied. Three branches:
 calc_fields is core schema — this is **triage**, not cleanup.
 Captured in commit `3c90f2895` as the first post-commit action.
 
+Tracking issue (paste-ready body): `docs/ops/.issues/20260731-calc-fields-drift.md`
+(Replace the path with the GitHub issue URL after the issue is created.)
+
 ## ca.key (Uisce PKI signing private key) — escalation
 
 Post-mTLS handoff reality, captured Sept 3:
@@ -186,6 +189,9 @@ Captured in commit `b8103da33` (runner.go authoritative-
 bookkeeping doc references the PKI gap); the Trash step itself is
 not captured in the repo because macOS TCC denies the sandboxed
 terminal access to `~/.Trash`.
+
+Tracking issue (paste-ready body): `docs/ops/.issues/uiece-pki-ca-key-recovery.md`
+(Replace the path with the GitHub issue URL after the issue is created.)
 
 ## Migration collision structure (committed tree at HEAD)
 
