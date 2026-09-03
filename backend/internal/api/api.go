@@ -1990,10 +1990,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	})
 	fmt.Fprintf(os.Stderr, "[ROUTES-DUMP-END]\n")
 
-	// Wrap everything in a root Mux to allow raw SSE handling without middleware
-	// This avoids the "middleware defined after routes" panic while still bypassing cache/buffer
+	// Wrap everything in a root Mux to allow raw SSE handling without middleware buffering
+	// Apply AuthContextMiddleware to the SSE endpoint directly so identity headers are stripped
+	// and authenticated tokens/api-keys are validated fail-closed.
 	rootMux := chi.NewRouter()
-	rootMux.Get("/api/catalog/scan/stream", srv.CatalogScanHandler.HandleScanStream)
+	rootMux.With(appmid.AuthContextMiddleware(secMgr, idpRegistry)).Get("/api/catalog/scan/stream", srv.CatalogScanHandler.HandleScanStream)
 
 	// Add OPTIONS handler for CORS preflight for SSE
 	rootMux.Options("/api/catalog/scan/stream", func(w http.ResponseWriter, r *http.Request) {

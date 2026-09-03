@@ -46,7 +46,7 @@ func NewDBIssuerRegistry(db *sqlx.DB) *DBIssuerRegistry {
 // ResolveIssuer looks up the trust configuration for a token's "iss" claim.
 func (r *DBIssuerRegistry) ResolveIssuer(ctx context.Context, issuer string) (*IssuerConfig, error) {
 	if r == nil || r.db == nil || r.db.DB == nil {
-		return nil, nil
+		return nil, fmt.Errorf("idp registry: database connection is nil")
 	}
 	var idpID, jwksURI string
 	err := r.db.QueryRowContext(ctx, `
@@ -72,7 +72,7 @@ func (r *DBIssuerRegistry) ResolveIssuer(ctx context.Context, issuer string) (*I
 // key-refresh loop.
 func (r *DBIssuerRegistry) ListActiveIssuers(ctx context.Context) ([]IssuerConfig, error) {
 	if r == nil || r.db == nil || r.db.DB == nil {
-		return nil, nil
+		return nil, fmt.Errorf("idp registry: database connection is nil")
 	}
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, issuer, jwks_uri FROM semantic.tenant_identity_providers

@@ -49,3 +49,8 @@ Staff should have zero ambient tenant membership. We will implement a delegation
 1. **Claim = binding check**: Accept a registered tenant IdP's token only if the asserted `tenant_id` matches the registered tenant.
 2. **JIT Provisioning**: First login creates the user mapped exclusively to that tenant.
 3. **Secret Isolation**: Per-tenant IdP client secrets will live in Infisical (never a shared `IDP_CLIENT_SECRET`).
+
+## Compliance Engine Microservice Exposure & Auth
+- **Exposure**: Internal service (`backend/services/compliance-engine/cmd/compliance-engine/main.go`).
+- **Auth**: Uses `jwtmiddleware.NewJWTMiddleware(publicPaths...)` which mounts Keycloak JWT validation on non-`/health` routes.
+- **Remediation / Phase 3 Item**: It currently operates on its own self-contained router and validates user JWTs directly rather than authenticating S2S requests from the main backend. In Phase 3, this service will be locked down behind internal network policy and transition to service-to-service mTLS or dedicated S2S tokens issued by the backend platform.
