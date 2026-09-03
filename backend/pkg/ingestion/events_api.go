@@ -50,11 +50,13 @@ func (h *EventsHandler) IngestMarketEvent(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// 2. Trigger the Interpreter Workflow
+	// 2. Trigger the Interpreter Workflow (by stored ID)
 	// The Event Payload becomes the "Input Data" for the Business Process
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        fmt.Sprintf("event-%s-%s", evt.Type, evt.EventID),
-		TaskQueue: "bp_queue",
+		ID: fmt.Sprintf("event-%s-%s", evt.Type, evt.EventID),
+		// workflows.BPTaskQueue, not a hand-written literal — must match
+		// what NewBPWorker (cmd/bp-worker) registers on.
+		TaskQueue: workflows.BPTaskQueue,
 	}
 
 	input := workflows.InterpreterInput{
@@ -66,7 +68,13 @@ func (h *EventsHandler) IngestMarketEvent(w http.ResponseWriter, r *http.Request
 		},
 	}
 
-	we, err := h.temporalClient.ExecuteWorkflow(r.Context(), workflowOptions, workflows.InterpreterWorkflow, input)
+	// RunStoredWorkflow, not InterpreterWorkflow: input here is
+	// InterpreterInput{WorkflowID, InitialData}, which matches
+	// RunStoredWorkflow's signature, not InterpreterWorkflow's (which
+	// takes a WorkflowDefinition directly) — this was a genuine
+	// type-mismatch bug that would have failed at workflow-start time on
+	// every real call.
+	we, err := h.temporalClient.ExecuteWorkflow(r.Context(), workflowOptions, workflows.RunStoredWorkflow, input)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to trigger workflow: %v", err), http.StatusInternalServerError)
 		return

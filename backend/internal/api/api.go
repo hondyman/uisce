@@ -1608,8 +1608,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	layoutHandler.RegisterRoutes(r)
 
 	// Multi-AI Semantic Bridge (Snowflake Cortex, Databricks Genie, MCP Providers)
-	semanticBridgeHandler := NewSemanticBridgeHandler(sqlxDB)
-	semanticBridgeHandler.RegisterRoutes(r)
+	if semanticBridgeHandler, err := NewSemanticBridgeHandler(sqlxDB); err != nil {
+		fmt.Fprintf(os.Stderr, "[WARN] Semantic AI Bridge disabled: %v\n", err)
+	} else {
+		semanticBridgeHandler.RegisterRoutes(r)
+	}
 
 	// API routes
 	routes := NewRoutes()
@@ -1700,6 +1703,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register Catalog Node/Edge Type Routes
 		RegisterNodeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
 		RegisterEdgeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
+		RegisterViewDefinitionsRoutes(r, db, lineageRepo, handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
 		RegisterLookupsRoutes(r, db)
 
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem

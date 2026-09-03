@@ -37,6 +37,15 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	if datasourceID == "" {
 		datasourceID = strings.TrimSpace(r.Header.Get("X-Tenant-Instance-ID"))
 	}
+	if datasourceID == "" {
+		// Mirrors the ?tenant_id= query fallback below — callers that pass
+		// tenant/datasource as query params (not headers) need both or
+		// neither; without this, secCtx.DatasourceID silently falls back
+		// to BuildContext's "none" sentinel even when the caller clearly
+		// specified one, and every downstream uuid.Parse(secCtx.DatasourceID)
+		// then fails on that literal string.
+		datasourceID = strings.TrimSpace(r.URL.Query().Get("datasource_id"))
+	}
 
 	// Try multiple header names for region
 	region := strings.TrimSpace(bodyRegion)

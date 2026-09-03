@@ -118,12 +118,21 @@ func TestTenantScoping_CombinesWithExistingFilters(t *testing.T) {
 	sql, args, err := generator.GenerateSQL(req)
 	require.NoError(t, err)
 
+	// Filter values are parameterized (SQL-injection safety), and Rule 7
+	// tenant scoping is injected as a later pass that appends to whatever
+	// filter WHERE clause already exists, continuing the placeholder
+	// counter from where the filters left off — see
+	// InjectTenantScopingToGraph's "existing join conditions are
+	// parenthesized before the tenant check is appended" note. So the
+	// filter's placeholder ($1) precedes the tenant check's ($2) both in
+	// the SQL text and in args, not the reverse.
 	where := extractWhere(sql)
-	assert.True(t, strings.HasPrefix(where, "t0.tenant_id = $1"))
+	assert.Contains(t, where, "t0.total_amount > $1")
+	assert.Contains(t, where, "t0.tenant_id = $2")
 	assert.Contains(t, where, " AND ")
-	assert.Contains(t, sql, "t0.total_amount > 100")
-	require.Len(t, args, 1)
-	assert.Equal(t, "tenant-alpha", args[0])
+	require.Len(t, args, 2)
+	assert.Equal(t, 100, args[0])
+	assert.Equal(t, "tenant-alpha", args[1])
 }
 
 func TestTenantScoping_NoTenantID_NoScoping(t *testing.T) {

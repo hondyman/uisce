@@ -145,6 +145,12 @@ func TestSecurityContextFromRequest_BodyParametersPriority(t *testing.T) {
 	assert.Equal(t, "body-region", secCtx.Region)
 }
 
+// TestSecurityContextFromRequest_MissingDatasource used to assert a
+// missing datasource_id was a hard error. security.BuildContext now
+// deliberately supports a datasource-less "metadata scope" (Business
+// Object definitions, catalog metadata — see its "Pure tenant/instance
+// metadata scope" branch), so an empty datasource_id is valid: it resolves
+// to the "none" sentinel datasource rather than failing.
 func TestSecurityContextFromRequest_MissingDatasource(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Region", "us-east-1")
@@ -161,13 +167,17 @@ func TestSecurityContextFromRequest_MissingDatasource(t *testing.T) {
 		Resolver: &MockDatasourceResolver{},
 	}
 
-	_, _, err := SecurityContextFromRequest(req, "", "", deps)
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "datasource_id is required")
-	assert.Contains(t, err.Error(), "X-Datasource-Id")
+	require.NoError(t, err)
+	assert.Equal(t, "none", secCtx.DatasourceID)
+	assert.Equal(t, "tenant-123", secCtx.TenantID)
 }
 
+// TestSecurityContextFromRequest_MissingRegion used to assert a missing
+// region was a hard error. SecurityContextFromRequest defaults region to
+// "us-east-1" when unset instead (see its region-fallback chain), so this
+// now asserts that default applies rather than an error.
 func TestSecurityContextFromRequest_MissingRegion(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Datasource-Id", "ds-123")
@@ -184,11 +194,10 @@ func TestSecurityContextFromRequest_MissingRegion(t *testing.T) {
 		Resolver: &MockDatasourceResolver{},
 	}
 
-	_, _, err := SecurityContextFromRequest(req, "", "", deps)
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "region is required")
-	assert.Contains(t, err.Error(), "X-Region")
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", secCtx.Region)
 }
 
 func TestSecurityContextFromRequest_MissingAuthContext(t *testing.T) {

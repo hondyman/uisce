@@ -1,12 +1,7 @@
 <!-- gitnexus:start -->
-
-# Project Branding Context
-
-The internal application name is **Uuisce** (pronounced "ish-ka"). This is the semantic layer project name. Ensure all generated UI components, app titles, exports, metadata, and documentation consistently use **Uuisce** instead of any placeholder, legacy derivation, or variant (e.g., not "ishka", "UISCE", or other forms).
-
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **uisce** (390438 symbols, 546497 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **uisce** (396592 symbols, 564011 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

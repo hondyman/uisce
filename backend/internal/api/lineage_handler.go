@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/graphview"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 )
@@ -24,74 +25,15 @@ func NewLineageHandler(repo lineage.LineageRepository, securityDeps handlers.Sec
 	}
 }
 
-// ResponseNode represents a node in API response format (compatible with frontend)
-type ResponseNode struct {
-	ID         string                 `json:"id"`
-	Type       string                 `json:"type"`
-	Label      string                 `json:"label"`
-	Properties map[string]interface{} `json:"properties"`
-}
-
-// ResponseEdge represents an edge in API response format (compatible with frontend)
-type ResponseEdge struct {
-	ID         string                 `json:"id,omitempty"`
-	Source     string                 `json:"source"`
-	Target     string                 `json:"target"`
-	Type       string                 `json:"type"`
-	Properties map[string]interface{} `json:"properties,omitempty"`
-}
-
-// ResponseGraph represents the graph in frontend-compatible format
-type ResponseGraph struct {
-	Nodes []ResponseNode `json:"nodes"`
-	Edges []ResponseEdge `json:"edges"`
-}
+// ResponseNode/ResponseEdge/ResponseGraph moved to internal/graphview so every
+// catalog graph producer (lineage, BO graph, view-definitions) shares one wire shape.
+type ResponseNode = graphview.ResponseNode
+type ResponseEdge = graphview.ResponseEdge
+type ResponseGraph = graphview.ResponseGraph
 
 // convertToResponseGraph converts lineage.Graph to frontend-compatible format
 func convertToResponseGraph(graph *lineage.Graph) *ResponseGraph {
-	resp := &ResponseGraph{
-		Nodes: make([]ResponseNode, 0, len(graph.Nodes)),
-		Edges: make([]ResponseEdge, 0, len(graph.Edges)),
-	}
-
-	// Convert nodes
-	for _, node := range graph.Nodes {
-		var props map[string]interface{}
-		if len(node.Metadata) > 0 {
-			json.Unmarshal(node.Metadata, &props)
-		}
-		if props == nil {
-			props = make(map[string]interface{})
-		}
-
-		resp.Nodes = append(resp.Nodes, ResponseNode{
-			ID:         node.ID,
-			Type:       string(node.Type),
-			Label:      node.Name,
-			Properties: props,
-		})
-	}
-
-	// Convert edges
-	for _, edge := range graph.Edges {
-		var props map[string]interface{}
-		if len(edge.Metadata) > 0 {
-			json.Unmarshal(edge.Metadata, &props)
-		}
-		if props == nil {
-			props = make(map[string]interface{})
-		}
-
-		resp.Edges = append(resp.Edges, ResponseEdge{
-			ID:         edge.FromID + "->" + edge.ToID,
-			Source:     edge.FromID,
-			Target:     edge.ToID,
-			Type:       string(edge.Type),
-			Properties: props,
-		})
-	}
-
-	return resp
+	return graphview.ConvertLineageGraph(graph)
 }
 
 // RegisterRoutes registers lineage routes

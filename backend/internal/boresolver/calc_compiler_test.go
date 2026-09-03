@@ -36,16 +36,65 @@ func TestDeepCalculationEngine_Success(t *testing.T) {
 	gen := &boresolver.BOSQLGenerator{}
 	baseQuery := "SELECT revenue AS total_revenue, aum AS total_aum, fee AS management_fee FROM public.funds WHERE tenant_id = '123'"
 
-	sql, err := gen.CompileDeepCalculations(layers, baseQuery, []string{"net_fund_yield"})
+	sql, hostNodes, err := gen.CompileDeepCalculations(layers, baseQuery, []string{"net_fund_yield"})
 	assert.NoError(t, err)
+	assert.Empty(t, hostNodes, "purely arithmetic formulas should never produce host-runtime nodes")
 
 	// Validate the nested structure
 	assert.Contains(t, sql, "WITH layer_0 AS (")
 	assert.Contains(t, sql, "layer_1 AS (")
-	assert.Contains(t, sql, "(total_revenue / total_aum) * 100) AS gross_return")
+	// Division now compiles through Dialect.SafeDiv rather than a raw "/",
+	// so it can never emit a divide-by-zero error at query time.
+	assert.Contains(t, sql, "CASE WHEN total_aum = 0 THEN NULL ELSE total_revenue / total_aum END")
+	assert.Contains(t, sql, "AS gross_return")
 	assert.Contains(t, sql, "layer_2 AS (")
-	assert.Contains(t, sql, "(gross_return - management_fee) AS net_fund_yield")
+	assert.Contains(t, sql, "gross_return - management_fee")
+	assert.Contains(t, sql, "AS net_fund_yield")
 	assert.Contains(t, sql, "FROM layer_2;")
+}
+
+// TestDeepCalculationEngine_HostRuntimeTier verifies that a formula calling
+// a host-runtime-only function (xirr) is excluded from the compiled SQL and
+// returned separately for the caller to execute via finlib, while pure
+// pushdown fields in the same graph still compile to SQL as normal.
+func TestDeepCalculationEngine_HostRuntimeTier(t *testing.T) {
+	graph := boresolver.NewCalcGraph()
+
+	graph.AddNode(&boresolver.CalcNode{TermKey: "cashflow_amount", IsBaseField: true})
+	graph.AddNode(&boresolver.CalcNode{TermKey: "cashflow_date", IsBaseField: true})
+	graph.AddNode(&boresolver.CalcNode{TermKey: "management_fee", IsBaseField: true})
+
+	graph.AddNode(&boresolver.CalcNode{
+		TermKey:      "fund_xirr",
+		Formula:      "xirr(${cashflow_amount}, ${cashflow_date})",
+		Dependencies: []string{"cashflow_amount", "cashflow_date"},
+	})
+	graph.AddNode(&boresolver.CalcNode{
+		TermKey:      "fee_x2",
+		Formula:      "${management_fee} * 2",
+		Dependencies: []string{"management_fee"},
+	})
+
+	layers, err := graph.ResolveExecutionLayers()
+	assert.NoError(t, err)
+
+	gen := &boresolver.BOSQLGenerator{}
+	baseQuery := "SELECT amount AS cashflow_amount, dt AS cashflow_date, fee AS management_fee FROM public.cashflows"
+
+	sql, hostNodes, err := gen.CompileDeepCalculations(layers, baseQuery, []string{"fund_xirr", "fee_x2"})
+	assert.NoError(t, err)
+
+	// fund_xirr must NOT appear in the compiled SQL — it isn't SQL-expressible.
+	assert.NotContains(t, sql, "fund_xirr")
+	assert.NotContains(t, sql, "xirr(")
+	// fee_x2 is pure pushdown and must still compile normally.
+	assert.Contains(t, sql, "management_fee")
+	assert.Contains(t, sql, "AS fee_x2")
+
+	// fund_xirr comes back as a host-runtime node for the caller to execute.
+	assert.Len(t, hostNodes, 1)
+	assert.Equal(t, "fund_xirr", hostNodes[0].TermKey)
+	assert.Equal(t, boresolver.TierHostRuntime, hostNodes[0].Tier)
 }
 
 func TestDeepCalculationEngine_CircularDependencyBlock(t *testing.T) {

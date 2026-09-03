@@ -76,7 +76,11 @@ func (h *CatalogScanHandler) HandleCatalogScan(w http.ResponseWriter, r *http.Re
 	}
 
 	var tenantDatasourceID *uuid.UUID
-	if datasourceIDParam != "" {
+	// "none" is BuildContext's sentinel for "no datasource in scope" (the
+	// metadata-only branch in security.BuildContext) — not a real ID to
+	// parse. Treating it as empty here restores "no datasource_id means
+	// scan everything," which is what this handler always intended.
+	if datasourceIDParam != "" && datasourceIDParam != "none" {
 		parsedID, err := uuid.Parse(datasourceIDParam)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)

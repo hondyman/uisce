@@ -9,6 +9,8 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // TestDeleteModelCoreCascade verifies that deleting a core model queries for associated
@@ -21,13 +23,23 @@ func TestDeleteModelCoreCascade(t *testing.T) {
 	defer dbSQL.Close()
 
 	db := dbSQL
-	h := NewModelCatalogHandler(db)
 
 	// Prepare input IDs
 	tenantID := uuid.New()
 	dsID := uuid.New()
 	coreID := uuid.New()
 	coreModelKey := "orders"
+
+	// DeleteModel requires an authenticated request with a configured
+	// datasource resolver (see SecurityContextFromRequest); the resolver
+	// echoes back tenantID so BuildContext's tenant-allowed check passes.
+	h := NewModelCatalogHandler(db, SecurityContextDeps{
+		Resolver: &MockDatasourceResolver{
+			resolveFunc: func(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+				return &security.ResolvedDatasource{TenantID: tenantID.String(), DatasourceID: datasourceID}, nil
+			},
+		},
+	})
 
 	// First, the handler will QueryRow to fetch model_key and source_config
 	// Expect QueryRow -> will return model_key and json indicating core generator
@@ -52,6 +64,8 @@ func TestDeleteModelCoreCascade(t *testing.T) {
 	// Build request to match registered route and query param usage
 	// Handler registers DELETE /models/{model_id} and reads tenant_id and datasource_id from query string
 	req := httptest.NewRequest("DELETE", "/models/"+coreID.String()+"?tenant_id="+tenantID.String()+"&datasource_id="+dsID.String(), nil)
+	authInfo := security.AuthInfo{UserID: "test-user", Roles: []string{"admin"}, TenantIDs: []string{tenantID.String()}}
+	req = req.WithContext(security.WithAuthInfo(req.Context(), authInfo))
 
 	// Set chi route param for model_id so chi.URLParam works for model_id
 	rctx := chi.NewRouteContext()

@@ -14,10 +14,29 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 )
+
+// testSecurityDeps satisfies SecurityContextFromRequest's Resolver
+// requirement using the MockDatasourceResolver already defined in
+// security_context_test.go (same package).
+func testSecurityDeps() SecurityContextDeps {
+	return SecurityContextDeps{Resolver: &MockDatasourceResolver{}}
+}
+
+// withTestAuth injects AuthInfo the way AuthContextMiddleware would in
+// production, so SecurityContextFromRequest's auth check passes.
+func withTestAuth(req *http.Request) *http.Request {
+	authInfo := security.AuthInfo{
+		UserID:    "test-user",
+		Roles:     []string{"admin"},
+		TenantIDs: []string{"tenant-123"},
+	}
+	return req.WithContext(security.WithAuthInfo(req.Context(), authInfo))
+}
 
 // fakeMetadataScanner satisfies services.MetadataScanner for testing
 type fakeMetadataScanner struct{}
@@ -46,11 +65,12 @@ func TestHandleCatalogScan_AllSuccess(t *testing.T) {
 		err:     nil,
 	}
 
-	h := NewCatalogScanHandler(fake)
+	h := NewCatalogScanHandler(fake, testSecurityDeps())
 
 	// call handler
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req = withTestAuth(req)
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -72,10 +92,11 @@ func TestHandleCatalogScan_PartialFailure(t *testing.T) {
 		err: nil,
 	}
 
-	h := NewCatalogScanHandler(fake)
+	h := NewCatalogScanHandler(fake, testSecurityDeps())
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req = withTestAuth(req)
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code) // Updated to expect 200
@@ -97,10 +118,11 @@ func TestHandleCatalogScan_AllFailure(t *testing.T) {
 	// handler should respond 200 (not 500) because service indicates all failed via returned error
 	// But it returns 200 even if all failed.
 	fake2 := &fakeScanService{results: fake.results, err: assert.AnError}
-	h2 := NewCatalogScanHandler(fake2)
+	h2 := NewCatalogScanHandler(fake2, testSecurityDeps())
 
 	w2 := httptest.NewRecorder()
 	req2, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req2 = withTestAuth(req2)
 	h2.HandleCatalogScan(w2, req2)
 
 	assert.Equal(t, http.StatusOK, w2.Code) // Updated to expect 200
@@ -177,10 +199,11 @@ func TestHandleCatalogScan_InvokesUpsert_EndToEnd(t *testing.T) {
 		return svc.ScanSingleDatasourceForTest(ctx, ds, goldCopyNodes)
 	})
 
-	h := NewCatalogScanHandler(svc)
+	h := NewCatalogScanHandler(svc, testSecurityDeps())
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req = withTestAuth(req)
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)

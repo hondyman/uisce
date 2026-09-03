@@ -402,8 +402,13 @@ func (h *PipelineHandler) ExecutePipeline(w http.ResponseWriter, r *http.Request
 	// 4. Start Temporal Workflow
 	workflowID := fmt.Sprintf("pipeline-%s-%d", pipelineID, time.Now().Unix())
 	options := client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: "bp_workflow_queue",
+		ID: workflowID,
+		// workflows.BPTaskQueue, not a hand-written literal: this must
+		// match exactly what NewBPWorker (cmd/bp-worker) registers on, or
+		// InterpreterWorkflow runs get queued with no worker ever polling
+		// them — this literal ("bp_workflow_queue") previously didn't
+		// match any registered worker at all.
+		TaskQueue: workflows.BPTaskQueue,
 	}
 
 	run, err := h.temporalClient.ExecuteWorkflow(context.Background(), options, workflows.InterpreterWorkflow, dsl)

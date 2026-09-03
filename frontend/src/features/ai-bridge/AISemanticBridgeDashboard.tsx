@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuthFetch } from '../../utils/authFetch';
 import {
   Alert,
   AppBar,
@@ -80,6 +81,8 @@ interface BridgeTarget {
   syncFrequency: string;
   lastSyncAt?: string;
   lastSyncStatus?: string;
+  credentialsRotatedAt?: string;
+  credentialRotationDue?: boolean;
 }
 
 interface SyncLog {
@@ -257,6 +260,7 @@ const GOVERNANCE_ROWS = [
 export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
   tenantId = '00000000-0000-0000-0000-000000000000',
 }) => {
+  const { authFetch } = useAuthFetch();
   const [tab, setTab] = useState(0);
   const [targets, setTargets] = useState<BridgeTarget[]>([]);
   const [logs, setLogs] = useState<SyncLog[]>([]);
@@ -275,17 +279,25 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
   const [cortexSQL, setCortexSQL] = useState('');
   const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
 
+  const [newTargetName, setNewTargetName] = useState('');
+  const [newVendorType, setNewVendorType] = useState('SNOWFLAKE_CORTEX');
+  const [newSyncFrequency, setNewSyncFrequency] = useState('ON_PUBLISH');
+  const [newAccountOrHost, setNewAccountOrHost] = useState('');
+  const [newWarehouse, setNewWarehouse] = useState('');
+  const [newToken, setNewToken] = useState('');
+  const [savingTarget, setSavingTarget] = useState(false);
+
   const fetchState = useCallback(async () => {
     setLoading(true);
     try {
       const [rt, rl] = await Promise.all([
-        fetch('/api/v1/semantic-bridge/targets', { headers: { 'X-Tenant-ID': tenantId } }),
-        fetch('/api/v1/semantic-bridge/logs', { headers: { 'X-Tenant-ID': tenantId } }),
+        authFetch('/api/v1/semantic-bridge/targets'),
+        authFetch('/api/v1/semantic-bridge/logs'),
       ]);
-      if (rt.ok) { const d = await rt.json(); setTargets(Array.isArray(d) ? d : []); }
-      if (rl.ok) { const d = await rl.json(); setLogs(Array.isArray(d) ? d : []); }
+      if (rt.ok) setTargets(Array.isArray(rt.data) ? rt.data : []);
+      if (rl.ok) setLogs(Array.isArray(rl.data) ? rl.data : []);
     } catch { /* offline */ } finally { setLoading(false); }
-  }, [tenantId]);
+  }, [authFetch]);
 
   useEffect(() => { fetchState(); }, [fetchState]);
 
@@ -301,8 +313,8 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
     setPreviewContent('Loading specification…');
     setPreviewOpen(true);
     try {
-      const r = await fetch(endpoint, { method: 'POST', headers: { 'X-Tenant-ID': tenantId } });
-      setPreviewContent(await r.text());
+      const r = await authFetch(endpoint, { method: 'POST' });
+      setPreviewContent(r.ok ? await r.response.text() : `# Error ${r.status}: ${r.error || 'could not load specification'}`);
     } catch {
       setPreviewContent('# Error: could not load specification. Check server status.');
     }
@@ -311,12 +323,20 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
   const handleSync = async (targetId: string) => {
     setSyncing(targetId);
     try {
-      const r = await fetch(`/api/v1/semantic-bridge/sync/${targetId}`, {
-        method: 'POST', headers: { 'X-Tenant-ID': tenantId },
-      });
+      const r = await authFetch(`/api/v1/semantic-bridge/sync/${targetId}`, { method: 'POST' });
       if (r.ok) {
-        setSnackSeverity('success');
-        setSnackbar('Sync completed. Audit ledger updated with SHA-256 receipt.');
+        const body = r.data;
+        setSnackSeverity(body?.status === 'SUCCESS' ? 'success' : 'error');
+        setSnackbar(
+          body?.status === 'SUCCESS'
+            ? 'Sync completed and pushed to the vendor. Audit ledger updated.'
+            : body?.status === 'NOT_CONFIGURED'
+              ? 'Compiled the model but did not push — target has no host/account/token configured yet.'
+              : `Sync reported ${body?.status ?? 'an error'} — check target credentials.`,
+        );
+      } else if (r.status === 403) {
+        setSnackSeverity('error');
+        setSnackbar('Forbidden — syncing a target requires the admin role.');
       } else {
         setSnackSeverity('error');
         setSnackbar('Sync failed — check target credentials.');
@@ -327,6 +347,61 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
       setSnackbar('Network error during sync.');
     } finally {
       setSyncing(null);
+    }
+  };
+
+  const resetAddTargetForm = () => {
+    setNewTargetName('');
+    setNewVendorType('SNOWFLAKE_CORTEX');
+    setNewSyncFrequency('ON_PUBLISH');
+    setNewAccountOrHost('');
+    setNewWarehouse('');
+    setNewToken('');
+  };
+
+  const handleAddTarget = async () => {
+    if (!newTargetName.trim()) {
+      setSnackSeverity('error');
+      setSnackbar('Target name is required.');
+      return;
+    }
+    setSavingTarget(true);
+    try {
+      const isSnowflake = newVendorType === 'SNOWFLAKE_CORTEX';
+      const configPayload: Record<string, string> = isSnowflake
+        ? { account: newAccountOrHost, warehouse: newWarehouse }
+        : { host: newAccountOrHost, warehouse_id: newWarehouse };
+      const credentials = newToken ? { token: newToken } : undefined;
+
+      const r = await authFetch('/api/v1/semantic-bridge/targets', {
+        method: 'POST',
+        json: {
+          vendorType: newVendorType,
+          targetName: newTargetName.trim(),
+          syncFrequency: newSyncFrequency,
+          configPayload,
+          ...(credentials ? { credentials } : {}),
+        },
+      });
+
+      if (r.ok) {
+        setSnackSeverity('success');
+        setSnackbar('Target registered — credentials sealed with AES-256-GCM before storage.');
+        setAddOpen(false);
+        resetAddTargetForm();
+        await fetchState();
+      } else if (r.status === 403) {
+        setSnackSeverity('error');
+        setSnackbar('Forbidden — registering a target requires the admin role.');
+      } else {
+        setSnackSeverity('error');
+        setSnackbar(`Failed to register target: ${r.error || 'unknown error'}`);
+      }
+    } catch {
+      setSnackSeverity('error');
+      setSnackbar('Network error while registering target.');
+    } finally {
+      setSavingTarget(false);
     }
   };
 
@@ -602,7 +677,14 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
                                       sx={{ fontWeight: 700 }}
                                     />
                                   </TableCell>
-                                  <TableCell sx={{ fontWeight: 600 }}>{t.targetName}</TableCell>
+                                  <TableCell sx={{ fontWeight: 600 }}>
+                                    {t.targetName}
+                                    {t.credentialRotationDue && (
+                                      <Tooltip title="Credential hasn't been rotated in over 90 days — consider issuing a new token with the vendor and updating it here.">
+                                        <Chip label="Rotate credential" color="warning" size="small" variant="outlined" sx={{ ml: 1, fontWeight: 600 }} />
+                                      </Tooltip>
+                                    )}
+                                  </TableCell>
                                   <TableCell><Typography variant="caption" fontFamily="monospace">{t.vendorType}</Typography></TableCell>
                                   <TableCell><Chip label={t.syncFrequency} size="small" variant="outlined" /></TableCell>
                                   <TableCell>
@@ -979,10 +1061,16 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
         <DialogTitle>Register New Push Destination</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2.5} sx={{ mt: 0.5 }}>
-            <TextField label="Target Name" fullWidth size="small" />
+            <TextField
+              label="Target Name"
+              fullWidth
+              size="small"
+              value={newTargetName}
+              onChange={e => setNewTargetName(e.target.value)}
+            />
             <FormControl fullWidth size="small">
               <InputLabel>Vendor Type</InputLabel>
-              <Select label="Vendor Type" defaultValue="SNOWFLAKE_CORTEX">
+              <Select label="Vendor Type" value={newVendorType} onChange={e => setNewVendorType(e.target.value)}>
                 {['SNOWFLAKE_CORTEX', 'DATABRICKS_GENIE', 'CLAUDE_MCP', 'COPILOT_MCP', 'OPENAI_ASSISTANT'].map(v => (
                   <MenuItem key={v} value={v}>{v}</MenuItem>
                 ))}
@@ -990,19 +1078,45 @@ export const AISemanticBridgeDashboard: React.FC<{ tenantId?: string }> = ({
             </FormControl>
             <FormControl fullWidth size="small">
               <InputLabel>Sync Frequency</InputLabel>
-              <Select label="Sync Frequency" defaultValue="ON_PUBLISH">
+              <Select label="Sync Frequency" value={newSyncFrequency} onChange={e => setNewSyncFrequency(e.target.value)}>
                 {['ON_PUBLISH', 'DAILY', 'WEEKLY', 'MANUAL'].map(v => (
                   <MenuItem key={v} value={v}>{v}</MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <TextField label="Endpoint / Stage URL" fullWidth size="small" placeholder="@ANALYTICS_DB.SEMANTIC.CORTEX_STAGE" />
+            {(newVendorType === 'SNOWFLAKE_CORTEX' || newVendorType === 'DATABRICKS_GENIE') && (
+              <>
+                <TextField
+                  label={newVendorType === 'SNOWFLAKE_CORTEX' ? 'Snowflake Account (e.g. xy12345.us-east-1)' : 'Databricks Host (e.g. dbc-xxxx.cloud.databricks.com)'}
+                  fullWidth
+                  size="small"
+                  value={newAccountOrHost}
+                  onChange={e => setNewAccountOrHost(e.target.value)}
+                />
+                <TextField
+                  label={newVendorType === 'SNOWFLAKE_CORTEX' ? 'Warehouse' : 'SQL Warehouse ID'}
+                  fullWidth
+                  size="small"
+                  value={newWarehouse}
+                  onChange={e => setNewWarehouse(e.target.value)}
+                />
+                <TextField
+                  label={newVendorType === 'SNOWFLAKE_CORTEX' ? 'Programmatic Access Token' : 'Personal Access Token'}
+                  fullWidth
+                  size="small"
+                  type="password"
+                  value={newToken}
+                  onChange={e => setNewToken(e.target.value)}
+                  helperText="Sealed with AES-256-GCM before it is stored — never sent back to the browser."
+                />
+              </>
+            )}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" onClick={() => { setAddOpen(false); setSnackSeverity('success'); setSnackbar('Target registered — will appear on next refresh.'); }} sx={{ textTransform: 'none' }}>
-            Register Target
+          <Button onClick={() => { setAddOpen(false); resetAddTargetForm(); }} sx={{ textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" onClick={handleAddTarget} disabled={savingTarget} sx={{ textTransform: 'none' }}>
+            {savingTarget ? 'Registering…' : 'Register Target'}
           </Button>
         </DialogActions>
       </Dialog>

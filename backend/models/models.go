@@ -368,8 +368,15 @@ type Calculation struct {
 	ExecutionType  string          `json:"execution_type" db:"execution_type"` // realtime, batch
 	Engine         string          `json:"engine" db:"engine"`                 // internal, cube, spark
 	IsMaterialized bool            `json:"is_materialized" db:"is_materialized"`
-	CreatedAt      time.Time       `json:"created_at" db:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at" db:"updated_at"`
+	// Tier and ExecutionPreference are the centralized calc engine's
+	// single source of truth for how this calc runs (see
+	// boresolver.ResolveTier / boresolver.ExecutionPreference).
+	// SemanticCalculationService.CreateCalculation/UpdateCalculation
+	// compute and store Tier at save time so callers never re-derive it.
+	Tier                string    `json:"tier" db:"tier"`                                 // "pushdown" | "host_runtime"
+	ExecutionPreference string    `json:"execution_preference" db:"execution_preference"` // "auto" | "pushdown" | "host_runtime"
+	CreatedAt           time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // SemanticModelCalculation represents the link between a semantic model and a calculation.

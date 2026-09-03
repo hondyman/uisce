@@ -69,7 +69,12 @@ func TestSimpleSQLGeneration(t *testing.T) {
 	assert.Contains(t, sql, "SELECT")
 	assert.Contains(t, sql, "FROM orders")
 	assert.Contains(t, sql, "LIMIT 10")
-	assert.Nil(t, args)
+	// Filter values are parameterized (SQL-injection safety) rather than
+	// inlined as literals, so the "total_amount > 100" filter shows up as
+	// a placeholder in the SQL with its value carried in args, not as a
+	// literal in the text and a nil args slice.
+	assert.Contains(t, sql, "total_amount > $1")
+	assert.Equal(t, []interface{}{100}, args)
 }
 
 func TestJoinInference(t *testing.T) {

@@ -251,5 +251,80 @@ export function useDeleteNodeType() {
   });
 }
 
+// Create a new generic asset node (instance of a node type)
+export function useCreateNode() {
+  const { tenant } = useTenant();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ nodeTypeId, ...newNode }: Partial<CatalogNode> & { nodeTypeId: string }) => {
+      if (!tenant?.id) throw new Error('Tenant ID is required');
+
+      const res = await apiFetch(`/api/node-types/${nodeTypeId}/nodes`, {
+        method: 'POST',
+        body: JSON.stringify(newNode),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to create node');
+      }
+
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: nodeTypesKeys.nodes(variables.nodeTypeId) });
+    },
+  });
+}
+
+// Update an existing generic asset node
+export function useUpdateNode() {
+  const { tenant } = useTenant();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, nodeTypeId, ...updates }: Partial<CatalogNode> & { id: string; nodeTypeId: string }) => {
+      if (!tenant?.id) throw new Error('Tenant ID is required');
+
+      const res = await apiFetch(`/api/nodes/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to update node');
+      }
+
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: nodeTypesKeys.nodes(variables.nodeTypeId) });
+    },
+  });
+}
+
+// Delete a generic asset node
+export function useDeleteNode() {
+  const { tenant } = useTenant();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: string; nodeTypeId: string }) => {
+      if (!tenant?.id) throw new Error('Tenant ID is required');
+
+      const res = await apiFetch(`/api/nodes/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete node');
+      }
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: nodeTypesKeys.nodes(variables.nodeTypeId) });
+    },
+  });
+}
+
 // Alias for search specific use case
 export const useSearchNodeTypes = useNodeTypes;

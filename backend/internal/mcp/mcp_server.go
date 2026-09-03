@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -91,6 +92,18 @@ func (s *MCPServer) ListTools() []ToolDefinition {
 				"required": []string{"boKey"},
 			},
 		},
+		{
+			Name:        "search_semantic_terms",
+			Description: "Keyword search over Business Object names, keys, descriptions, and field/term names for the active tenant. Returns ranked matches to ground a follow-up get_business_object_details call. This is a plain ILIKE search, not vector/embedding retrieval.",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"query": map[string]interface{}{"type": "string", "description": "Free-text search term, e.g. 'settlement date' or 'custodial account'"},
+					"limit": map[string]interface{}{"type": "integer", "description": "Max results to return (default 20, max 100)"},
+				},
+				"required": []string{"query"},
+			},
+		},
 	}
 }
 
@@ -133,6 +146,21 @@ func (s *MCPServer) ExecuteTool(ctx context.Context, req ToolExecutionRequest) (
 			execErr = fmt.Errorf("boKey parameter is required")
 		} else {
 			result, execErr = s.getBusinessObjectDetails(ctx, req.TenantID, boKey)
+		}
+
+	case "search_semantic_terms":
+		q, _ := req.Parameters["query"].(string)
+		if q == "" {
+			execErr = fmt.Errorf("query parameter is required")
+		} else {
+			limit := 20
+			if l, ok := req.Parameters["limit"].(float64); ok && l > 0 {
+				limit = int(l)
+				if limit > 100 {
+					limit = 100
+				}
+			}
+			result, execErr = s.searchSemanticTerms(ctx, req.TenantID, q, limit)
 		}
 
 	default:
@@ -326,6 +354,62 @@ func (s *MCPServer) getBusinessObjectDetails(ctx context.Context, tenantID uuid.
 			"agg_type":   r.AggType,
 			"expression": r.Expression,
 		})
+	}
+	return results, nil
+}
+
+// searchSemanticTerms does a plain ILIKE keyword search across Business
+// Object names/keys/descriptions and their field/term names, scoped to the
+// tenant (or gold-copy). It is intentionally not vector search — no
+// embedding index is wired up for the catalog yet — but it's a real,
+// working substitute rather than a stubbed no-op.
+func (s *MCPServer) searchSemanticTerms(ctx context.Context, tenantID uuid.UUID, query string, limit int) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return []map[string]interface{}{}, nil
+	}
+
+	like := "%" + query + "%"
+
+	sqlQuery := `
+		SELECT DISTINCT bo.bo_key, bo.bo_name, COALESCE(bo.description, '') AS description,
+		       bof.field_name, COALESCE(st.node_name, '') AS term_name
+		FROM public.business_object bo
+		LEFT JOIN public.business_object_field bof ON bof.bo_id = bo.id AND bof.is_active = TRUE
+		LEFT JOIN public.catalog_node st ON bof.term_node_id = st.node_id
+		WHERE (bo.tenant_id = $1 OR bo.tenant_id = '00000000-0000-0000-0000-000000000000')
+		  AND bo.is_active = TRUE
+		  AND (
+		    bo.bo_key ILIKE $2 OR bo.bo_name ILIKE $2 OR bo.description ILIKE $2
+		    OR bof.field_name ILIKE $2 OR st.node_name ILIKE $2
+		  )
+		ORDER BY bo.bo_key ASC
+		LIMIT $3;`
+
+	type row struct {
+		BOKey       string         `db:"bo_key"`
+		BOName      string         `db:"bo_name"`
+		Description string         `db:"description"`
+		FieldName   sql.NullString `db:"field_name"`
+		TermName    string         `db:"term_name"`
+	}
+
+	var rows []row
+	if err := s.db.SelectContext(ctx, &rows, sqlQuery, tenantID, like, limit); err != nil {
+		return nil, fmt.Errorf("search_semantic_terms failed: %w", err)
+	}
+
+	results := make([]map[string]interface{}, 0, len(rows))
+	for _, r := range rows {
+		match := map[string]interface{}{
+			"bo_key":      r.BOKey,
+			"bo_name":     r.BOName,
+			"description": r.Description,
+		}
+		if r.FieldName.Valid && r.FieldName.String != "" {
+			match["field_name"] = r.FieldName.String
+			match["term_name"] = r.TermName
+		}
+		results = append(results, match)
 	}
 	return results, nil
 }

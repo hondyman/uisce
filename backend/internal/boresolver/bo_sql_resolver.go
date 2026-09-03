@@ -48,8 +48,14 @@ func ResolveExpression(expression string, dialectName string, ctx *ResolutionCon
 		return "", nil, fmt.Errorf("unknown dialect: %s", dialectName)
 	}
 
-	// 2. Parse Expression
-	expr, err := ParseExpression(expression)
+	// 2. Parse Expression. ParseCalcFormula (not ParseExpression) so this
+	// accepts both formula conventions already live in this codebase: bare
+	// identifiers (models.Calculation.Formula, the CalculationHandler path)
+	// and "${term}" references (CalcNode.Formula, seeded by
+	// cmd/seed-calculations and the Northwind semantic seed) — it's a
+	// no-op rewrite for formulas that never use "${...}", so this is a
+	// strict superset of the previous behavior.
+	expr, err := ParseCalcFormula(expression)
 	if err != nil {
 		return "", nil, err
 	}

@@ -36,3 +36,7 @@ func (m *mockResolver) Resolve(ctx context.Context, datasourceID string) (*secur
 		AllowedRegions: []string{"us-east-1"},
 	}, nil
 }
+
+func (m *mockResolver) ResolveBindingDatasource(ctx context.Context, tenantID, alphaProductID, alphaDatasourceID string) (string, error) {
+	return alphaDatasourceID, nil
+}

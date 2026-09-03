@@ -14,7 +14,45 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+// testTenantID matches the tenant_id every test below drives through the
+// ?tenant_id= query param — SecurityContextFromRequest resolves
+// secCtx.TenantID from the resolver's response, not the raw query string,
+// so the resolver must echo it back for the handler's SQL args to match
+// what the test's sqlmock expectations assert.
+const testTenantID = "11111111-1111-1111-1111-111111111111"
+
+// echoDatasourceResolver satisfies handlers.SecurityContextFromRequest's
+// non-nil Resolver requirement, echoing back whatever datasourceID it's
+// asked to resolve under testTenantID — sufficient for UpdateModel, which
+// only needs secCtx.TenantID/DatasourceID to round-trip the query params
+// the test supplied.
+type echoDatasourceResolver struct{}
+
+func (echoDatasourceResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{TenantID: testTenantID, DatasourceID: datasourceID}, nil
+}
+
+func (echoDatasourceResolver) ResolveBindingDatasource(ctx context.Context, tenantID, alphaProductID, alphaDatasourceID string) (string, error) {
+	return "", nil
+}
+
+func testSecurityDeps() handlers.SecurityContextDeps {
+	return handlers.SecurityContextDeps{Resolver: echoDatasourceResolver{}}
+}
+
+// withTestAuth injects AuthInfo the way AuthContextMiddleware would in
+// production, so SecurityContextFromRequest's auth check passes.
+func withTestAuth(req *http.Request) *http.Request {
+	authInfo := security.AuthInfo{
+		UserID:    "test-user",
+		Roles:     []string{"admin"},
+		TenantIDs: []string{testTenantID},
+	}
+	return req.WithContext(security.WithAuthInfo(req.Context(), authInfo))
+}
 
 // We assert UpdateModel sets published_at on publish and clears it on draft by driving the HTTP handler.
 func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
@@ -24,7 +62,7 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db)
+	h := handlers.NewModelCatalogHandler(db, testSecurityDeps())
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -47,6 +85,7 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	// Set chi route param for model_id
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("model_id", modelID.String())
+	req = withTestAuth(req)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -67,6 +106,7 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	req2.Header.Set("Content-Type", "application/json")
 	rctx2 := chi.NewRouteContext()
 	rctx2.URLParams.Add("model_id", modelID.String())
+	req2 = withTestAuth(req2)
 	req2 = req2.WithContext(context.WithValue(req2.Context(), chi.RouteCtxKey, rctx2))
 	r.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusOK {
@@ -86,7 +126,7 @@ func TestUpdateModel_ChecksumOnResolvedConfig(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db)
+	h := handlers.NewModelCatalogHandler(db, testSecurityDeps())
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -108,6 +148,7 @@ func TestUpdateModel_ChecksumOnResolvedConfig(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("model_id", modelID.String())
+	req = withTestAuth(req)
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

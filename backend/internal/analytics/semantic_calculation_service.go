@@ -2,13 +2,15 @@ package analytics
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/hondyman/uisce/calc-engine/exec"
 	"github.com/jmoiron/sqlx"
@@ -438,17 +440,63 @@ func (s *SemanticCalculationService) GetCalculationByName(name string) (*models.
 	return &calc, nil
 }
 
+// resolveTier parses calc.Formula and resolves its execution tier via the
+// centralized calc engine (boresolver.ResolveTier), storing the result on
+// calc.Tier. This is what makes Tier a persisted single source of truth
+// rather than something every caller re-derives: Create/Update compute it
+// once at save time, and the execute endpoint just reads it back.
+//
+// calc.ExecutionPreference ("auto"/"pushdown"/"host_runtime") defaults to
+// "auto" when unset. A parse failure or an explicit "pushdown" preference
+// that the formula can't satisfy is returned as an error — a calc must not
+// be saved with an unresolvable tier.
+func resolveTier(calc *models.Calculation) error {
+	if calc.Formula == "" {
+		calc.Tier = boresolver.TierPushdown.String()
+		return nil
+	}
+
+	expr, err := boresolver.ParseCalcFormula(calc.Formula)
+	if err != nil {
+		return fmt.Errorf("invalid formula: %w", err)
+	}
+
+	var pref boresolver.ExecutionPreference
+	switch calc.ExecutionPreference {
+	case "", "auto":
+		calc.ExecutionPreference = "auto"
+		pref = boresolver.PreferAuto
+	case "pushdown":
+		pref = boresolver.PreferPushdown
+	case "host_runtime":
+		pref = boresolver.PreferHostRuntime
+	default:
+		return fmt.Errorf("invalid execution_preference %q (must be auto, pushdown, or host_runtime)", calc.ExecutionPreference)
+	}
+
+	tier, err := boresolver.ResolveTier(expr, boresolver.PostgresDialect{}, pref)
+	if err != nil {
+		return err
+	}
+	calc.Tier = tier.String()
+	return nil
+}
+
 // CreateCalculation creates a new calculation definition in the database
 func (s *SemanticCalculationService) CreateCalculation(calc *models.Calculation) error {
 	calc.ID = uuid.New()
 	calc.CreatedAt = time.Now()
 	calc.UpdatedAt = time.Now()
 
+	if err := resolveTier(calc); err != nil {
+		return err
+	}
+
 	query := `
 		INSERT INTO calculations (
-			id, node_id, name, title, description, formula, engine_type, return_type, arguments, category, subcategory, domain_id, execution_type, engine, is_materialized, created_at, updated_at
+			id, node_id, name, title, description, formula, engine_type, return_type, arguments, category, subcategory, domain_id, execution_type, engine, is_materialized, tier, execution_preference, created_at, updated_at
 		) VALUES (
-			:id, :node_id, :name, :title, :description, :formula, :engine_type, :return_type, :arguments, :category, :subcategory, :domain_id, :execution_type, :engine, :is_materialized, :created_at, :updated_at
+			:id, :node_id, :name, :title, :description, :formula, :engine_type, :return_type, :arguments, :category, :subcategory, :domain_id, :execution_type, :engine, :is_materialized, :tier, :execution_preference, :created_at, :updated_at
 		)
 	`
 	_, err := s.db.NamedExec(query, calc)
@@ -458,6 +506,11 @@ func (s *SemanticCalculationService) CreateCalculation(calc *models.Calculation)
 // UpdateCalculation updates an existing calculation definition
 func (s *SemanticCalculationService) UpdateCalculation(calc *models.Calculation) error {
 	calc.UpdatedAt = time.Now()
+
+	if err := resolveTier(calc); err != nil {
+		return err
+	}
+
 	query := `
 		UPDATE calculations SET
 			name = :name,
@@ -473,6 +526,8 @@ func (s *SemanticCalculationService) UpdateCalculation(calc *models.Calculation)
 			execution_type = :execution_type,
 			engine = :engine,
 			is_materialized = :is_materialized,
+			tier = :tier,
+			execution_preference = :execution_preference,
 			updated_at = :updated_at
 		WHERE id = :id
 	`
@@ -489,6 +544,80 @@ func (s *SemanticCalculationService) ListCalculations() ([]models.Calculation, e
 		return nil, err
 	}
 	return calcs, nil
+}
+
+// BuildCalcGraph recursively resolves a calc's dependency chain from
+// STORED calculations into a boresolver.CalcGraph: any term the formula
+// references that matches another calculation's Name is pulled in as a
+// nested calc (its own formula included, recursively); anything else is
+// treated as a base field (IsBaseField=true, no formula — resolved by
+// whatever runs the graph, e.g. SQLRowSource for host-runtime nodes or the
+// base query layer for pushdown nodes).
+//
+// This is what makes "calc in a calc" work at the persistence layer, not
+// just when a caller hand-builds a CalcGraph in Go — the centralized calc
+// engine's execute path (CalculationHandler.Execute) calls this to compile
+// and run any calc's full dependency chain in one pass.
+func (s *SemanticCalculationService) BuildCalcGraph(root *models.Calculation) (*boresolver.CalcGraph, error) {
+	graph := boresolver.NewCalcGraph()
+	visited := make(map[string]bool)
+
+	var visit func(calc *models.Calculation) error
+	visit = func(calc *models.Calculation) error {
+		if visited[calc.Name] {
+			return nil
+		}
+		visited[calc.Name] = true
+
+		expr, err := boresolver.ParseCalcFormula(calc.Formula)
+		if err != nil {
+			return fmt.Errorf("calc %q: %w", calc.Name, err)
+		}
+
+		var deps []string
+		for _, ref := range boresolver.CollectTermRefs(expr) {
+			deps = append(deps, ref)
+			if visited[ref] {
+				continue
+			}
+			dep, err := s.GetCalculationByName(ref)
+			if err != nil {
+				if !errors.Is(err, sql.ErrNoRows) {
+					return fmt.Errorf("failed to resolve dependency %q of calc %q: %w", ref, calc.Name, err)
+				}
+				// No calc with this name -> a base field, resolved elsewhere.
+				graph.AddNode(&boresolver.CalcNode{TermKey: ref, IsBaseField: true})
+				visited[ref] = true
+				continue
+			}
+			if err := visit(dep); err != nil {
+				return err
+			}
+		}
+
+		var pref boresolver.ExecutionPreference
+		switch calc.ExecutionPreference {
+		case "pushdown":
+			pref = boresolver.PreferPushdown
+		case "host_runtime":
+			pref = boresolver.PreferHostRuntime
+		default:
+			pref = boresolver.PreferAuto
+		}
+
+		graph.AddNode(&boresolver.CalcNode{
+			TermKey:      calc.Name,
+			Formula:      calc.Formula,
+			Dependencies: deps,
+			Preference:   pref,
+		})
+		return nil
+	}
+
+	if err := visit(root); err != nil {
+		return nil, err
+	}
+	return graph, nil
 }
 
 // ExecuteFinancialCalc executes a financial calculation using semantic interpretation
@@ -520,80 +649,25 @@ func ExecuteFinancialCalc(calc interface{}, db *sqlx.DB) (interface{}, error) {
 	return service.ExecuteCalculation(adapter)
 }
 
-// ExecuteVectorizedExcelCalc executes Excel formulas across multiple entities in batch
-func ExecuteVectorizedExcelCalc(metrics []string, entities []string, db *sqlx.DB) (map[string]map[string]interface{}, error) {
-	service := &SemanticCalculationService{db: db}
-	return service.ExecuteVectorizedExcelCalculation(metrics, entities)
-}
+// ExecuteVectorizedExcelCalc and ExecuteVectorizedExcelCalculation were
+// removed (2026-09) — they were dead code (zero real callers; confirmed via
+// impact analysis and a repo-wide text search) built on placeholder data
+// sources (getMetricDefinition/getEntityData explicitly returned canned
+// sample data, never real entity data). Running a formula across many
+// entities in one batch is now a real, tested capability:
+// boresolver.HostRuntimeExecutor.Execute already evaluates a calc across
+// every entity a RowSource returns in one batched query (see
+// boresolver.SQLRowSource), and datapipeline.HostRuntimeCalcTransformer
+// wraps the same executor for scheduled/precalc batch runs.
 
-// ExecuteVectorizedExcelCalculation handles batch Excel formula execution across multiple metrics and entities
-func (s *SemanticCalculationService) ExecuteVectorizedExcelCalculation(metrics []string, entities []string) (map[string]map[string]interface{}, error) {
-	results := make(map[string]map[string]interface{})
-
-	// For each metric, execute across all entities
-	for _, metricID := range metrics {
-		metricResults := make(map[string]interface{})
-
-		// Get metric definition (this would come from your registry)
-		metricDef, err := s.getMetricDefinition(metricID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get metric definition for %s: %w", metricID, err)
-		}
-
-		// Check if this is an Excel-based metric
-		if metricDef.FinancialCalc == nil || metricDef.FinancialCalc.Type != "excel_formula" {
-			continue // Skip non-Excel metrics
-		}
-
-		// Build vectorized arguments for all entities
-		vectorizedArgs := make([]map[string]interface{}, len(entities))
-
-		for i, entityID := range entities {
-			// Get entity data (this would come from your data layer)
-			entityData, err := s.getEntityData(entityID)
-			if err != nil {
-				metricResults[entityID] = map[string]interface{}{
-					"error": fmt.Sprintf("failed to get entity data: %v", err),
-				}
-				continue
-			}
-
-			// Resolve arguments for this entity
-			resolvedArgs, err := s.resolveArgumentsForEntity(metricDef.FinancialCalc, entityData)
-			if err != nil {
-				metricResults[entityID] = map[string]interface{}{
-					"error": fmt.Sprintf("failed to resolve arguments: %v", err),
-				}
-				continue
-			}
-
-			vectorizedArgs[i] = resolvedArgs
-		}
-
-		// Execute vectorized calculation
-		batchResults, err := s.executeVectorizedExcelFormula(metricDef.FinancialCalc.Formula, vectorizedArgs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute vectorized Excel formula for metric %s: %w", metricID, err)
-		}
-
-		// Map results back to entity IDs
-		for i, entityID := range entities {
-			if i < len(batchResults) {
-				metricResults[entityID] = batchResults[i]
-			} else {
-				metricResults[entityID] = map[string]interface{}{
-					"error": "result index out of bounds",
-				}
-			}
-		}
-
-		results[metricID] = metricResults
-	}
-
-	return results, nil
-}
-
-// ExecuteCalculation interprets the business intent and executes the appropriate calculation
+// ExecuteCalculation dispatches a FIXED quant model (portfolio
+// optimization, Black-Scholes, Monte Carlo, ...) by its FinancialCalculation
+// interface — typed vector/matrix inputs, not a stored formula. This is
+// deliberately a separate system from ExecuteFormulaCalculation
+// (execute_calculation.go), which runs formula-driven models.Calculation
+// rows through the tiered boresolver calc engine: quant models here aren't
+// user-authorable strings and don't belong in the AST/tier-resolution
+// path.
 func (s *SemanticCalculationService) ExecuteCalculation(calc FinancialCalculation) (interface{}, error) {
 	return s.ExecuteCalculationWithContext(calc, nil)
 }
@@ -659,7 +733,7 @@ func (s *SemanticCalculationService) ExecuteCalculationWithContext(calc Financia
 	case "irr":
 		return s.executeCashFlowAnalysis(calc)
 	case "excel_formula":
-		return s.executeExcelFormula(calc)
+		return s.executeFormulaViaCalcEngine(calc)
 	default:
 		return nil, fmt.Errorf("unsupported calculation type: %s", calc.GetType())
 	}
@@ -1027,460 +1101,86 @@ func (s *SemanticCalculationService) calculateIRR(cashFlows []float64, guess flo
 	return rate
 }
 
-// executeExcelFormula handles Excel formula evaluation with vectorized support
-func (s *SemanticCalculationService) executeExcelFormula(calc FinancialCalculation) (interface{}, error) {
-	// Get formula and arguments from the calculation
-	formula := calc.GetFormula()
-	arguments := calc.GetArguments()
 
+// executeFormulaViaCalcEngine evaluates an "excel_formula" calculation
+// through the real boresolver calc engine (finlib-backed for xirr/irr,
+// dialect-aware for everything else) instead of the hand-rolled
+// evaluateXIRR/evaluateNPV/... stubs this replaced (2026-09) — those were
+// dead code (zero real callers) with a strictly worse XIRR ("for
+// simplicity, use the existing IRR calculation" — i.e. treated irregular
+// dates as equally-spaced periods) than finlib.XIRR's actual Actual/365
+// date-weighted solve.
+//
+// Arguments are expected as parallel arrays keyed by term name (e.g.
+// {"cash_flows": [...], "dates": [...]}) — one row per index, scalar
+// arguments broadcast to every row — matching boresolver.CalcRow, so the
+// same functions registered for the tenant-facing formula engine (see
+// calc_functions.go) work here too.
+func (s *SemanticCalculationService) executeFormulaViaCalcEngine(calc FinancialCalculation) (interface{}, error) {
+	formula := calc.GetFormula()
 	if formula == "" {
 		return nil, fmt.Errorf("excel formula is required")
 	}
 
-	// Check if this is a vectorized request (contains arrays of argument sets)
-	if vectorizedArgs, isVectorized := s.detectVectorizedArguments(arguments); isVectorized {
-		// Execute formula for each argument set in the batch
-		results, err := s.executeVectorizedExcelFormula(formula, vectorizedArgs)
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute vectorized Excel formula: %w", err)
-		}
-
-		// Return batch results with metadata
-		return map[string]interface{}{
-			"results":          results,
-			"formula":          formula,
-			"arguments":        arguments,
-			"calculation_type": "excel_formula_vectorized",
-			"batch_size":       len(results),
-			"business_context": "Vectorized Excel-based financial calculations",
-		}, nil
-	}
-
-	// Single formula evaluation (existing logic)
-	result, err := s.evaluateSimpleExcelFormula(formula, arguments)
+	expr, err := boresolver.ParseCalcFormula(formula)
 	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate Excel formula: %w", err)
+		return nil, fmt.Errorf("failed to parse formula: %w", err)
 	}
 
-	// Return result with metadata
+	arguments := calc.GetArguments()
+	rows, err := argumentsToCalcRows(arguments)
+	if err != nil {
+		return nil, fmt.Errorf("failed to interpret arguments: %w", err)
+	}
+
+	value, err := boresolver.EvalHostExpr(expr, rows, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to evaluate formula: %w", err)
+	}
+
 	return map[string]interface{}{
-		"result":           result,
+		"result":           value,
 		"formula":          formula,
 		"arguments":        arguments,
 		"calculation_type": "excel_formula",
-		"business_context": "Excel-based financial calculation",
 	}, nil
 }
 
-// evaluateSimpleExcelFormula provides basic Excel function evaluation
-func (s *SemanticCalculationService) evaluateSimpleExcelFormula(formula string, arguments map[string]interface{}) (float64, error) {
-	// Remove the = prefix if present
-	if len(formula) > 0 && formula[0] == '=' {
-		formula = formula[1:]
-	}
+// argumentsToCalcRows converts a flat arguments map (as produced by
+// FinancialCalculation.GetArguments) into boresolver.CalcRow series:
+// array-valued arguments become one value per row (all arrays must share
+// the same length), scalar-valued arguments are broadcast to every row.
+func argumentsToCalcRows(args map[string]interface{}) ([]boresolver.CalcRow, error) {
+	seriesLen := -1
+	series := make(map[string][]interface{})
+	scalars := make(map[string]interface{})
 
-	// Parse function name and arguments
-	if len(formula) < 4 {
-		return 0, fmt.Errorf("invalid formula format")
-	}
-
-	// Simple implementations for common Excel functions
-	switch {
-	case strings.HasPrefix(formula, "XIRR("):
-		return s.evaluateXIRR(arguments)
-	case strings.HasPrefix(formula, "NPV("):
-		return s.evaluateNPV(arguments)
-	case strings.HasPrefix(formula, "IRR("):
-		return s.evaluateIRR(arguments)
-	case strings.HasPrefix(formula, "PV("):
-		return s.evaluatePV(arguments)
-	case strings.HasPrefix(formula, "FV("):
-		return s.evaluateFV(arguments)
-	case strings.HasPrefix(formula, "PMT("):
-		return s.evaluatePMT(arguments)
-	case strings.HasPrefix(formula, "MIRR("):
-		return s.evaluateMIRR(arguments)
-	default:
-		return 0, fmt.Errorf("unsupported Excel function: %s", formula)
-	}
-}
-
-// evaluateXIRR implements Excel's XIRR function
-func (s *SemanticCalculationService) evaluateXIRR(arguments map[string]interface{}) (float64, error) {
-	cashFlows, ok := arguments["cash_flows"].([]interface{})
-	if !ok {
-		return 0, fmt.Errorf("cash_flows argument required for XIRR")
-	}
-
-	dates, ok := arguments["dates"].([]interface{})
-	if !ok {
-		return 0, fmt.Errorf("dates argument required for XIRR")
-	}
-
-	if len(cashFlows) != len(dates) {
-		return 0, fmt.Errorf("cash flows and dates must have the same length")
-	}
-
-	// Convert to float64 arrays
-	cf := make([]float64, len(cashFlows))
-	for i, v := range cashFlows {
-		if f, ok := v.(float64); ok {
-			cf[i] = f
-		} else {
-			return 0, fmt.Errorf("invalid cash flow value")
-		}
-	}
-
-	// For simplicity, use the existing IRR calculation
-	// In production, you'd use proper XIRR with date weighting
-	return s.calculateIRR(cf, 0.1), nil
-}
-
-// evaluateNPV implements Excel's NPV function
-func (s *SemanticCalculationService) evaluateNPV(arguments map[string]interface{}) (float64, error) {
-	rate, ok := arguments["rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("rate argument required for NPV")
-	}
-
-	cashFlows, ok := arguments["cash_flows"].([]interface{})
-	if !ok {
-		return 0, fmt.Errorf("cash_flows argument required for NPV")
-	}
-
-	npv := 0.0
-	for i, v := range cashFlows {
-		if f, ok := v.(float64); ok {
-			if i == 0 {
-				npv += f
-			} else {
-				npv += f / math.Pow(1+rate, float64(i))
+	for k, v := range args {
+		if arr, ok := v.([]interface{}); ok {
+			if seriesLen == -1 {
+				seriesLen = len(arr)
+			} else if len(arr) != seriesLen {
+				return nil, fmt.Errorf("argument %q has length %d, expected %d (all array arguments must be the same length)", k, len(arr), seriesLen)
 			}
-		} else {
-			return 0, fmt.Errorf("invalid cash flow value")
-		}
-	}
-
-	return npv, nil
-}
-
-// evaluateIRR implements Excel's IRR function
-func (s *SemanticCalculationService) evaluateIRR(arguments map[string]interface{}) (float64, error) {
-	cashFlows, ok := arguments["cash_flows"].([]interface{})
-	if !ok {
-		return 0, fmt.Errorf("cash_flows argument required for IRR")
-	}
-
-	cf := make([]float64, len(cashFlows))
-	for i, v := range cashFlows {
-		if f, ok := v.(float64); ok {
-			cf[i] = f
-		} else {
-			return 0, fmt.Errorf("invalid cash flow value")
-		}
-	}
-
-	return s.calculateIRR(cf, 0.1), nil
-}
-
-// evaluatePV implements Excel's PV function
-func (s *SemanticCalculationService) evaluatePV(arguments map[string]interface{}) (float64, error) {
-	rate, ok := arguments["rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("rate argument required for PV")
-	}
-
-	nper, ok := arguments["nper"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("nper argument required for PV")
-	}
-
-	pmt, ok := arguments["pmt"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("pmt argument required for PV")
-	}
-
-	fv, ok := arguments["fv"].(float64)
-	if !ok {
-		fv = 0
-	}
-
-	return -s.calculatePV(rate, int(nper), pmt, fv), nil
-}
-
-// evaluateFV implements Excel's FV function
-func (s *SemanticCalculationService) evaluateFV(arguments map[string]interface{}) (float64, error) {
-	rate, ok := arguments["rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("rate argument required for FV")
-	}
-
-	nper, ok := arguments["nper"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("nper argument required for FV")
-	}
-
-	pmt, ok := arguments["pmt"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("pmt argument required for FV")
-	}
-
-	pv, ok := arguments["pv"].(float64)
-	if !ok {
-		pv = 0
-	}
-
-	return s.calculateFV(rate, int(nper), pmt, pv), nil
-}
-
-// evaluatePMT implements Excel's PMT function
-func (s *SemanticCalculationService) evaluatePMT(arguments map[string]interface{}) (float64, error) {
-	rate, ok := arguments["rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("rate argument required for PMT")
-	}
-
-	nper, ok := arguments["nper"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("nper argument required for PMT")
-	}
-
-	pv, ok := arguments["pv"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("pv argument required for PMT")
-	}
-
-	fv, ok := arguments["fv"].(float64)
-	if !ok {
-		fv = 0
-	}
-
-	return s.calculatePMT(rate, int(nper), pv, fv), nil
-}
-
-// evaluateMIRR implements Excel's MIRR function
-func (s *SemanticCalculationService) evaluateMIRR(arguments map[string]interface{}) (float64, error) {
-	cashFlows, ok := arguments["cash_flows"].([]interface{})
-	if !ok {
-		return 0, fmt.Errorf("cash_flows argument required for MIRR")
-	}
-
-	financeRate, ok := arguments["finance_rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("finance_rate argument required for MIRR")
-	}
-
-	reinvestRate, ok := arguments["reinvest_rate"].(float64)
-	if !ok {
-		return 0, fmt.Errorf("reinvest_rate argument required for MIRR")
-	}
-
-	cf := make([]float64, len(cashFlows))
-	for i, v := range cashFlows {
-		if f, ok := v.(float64); ok {
-			cf[i] = f
-		} else {
-			return 0, fmt.Errorf("invalid cash flow value")
-		}
-	}
-
-	return s.calculateMIRR(cf, financeRate, reinvestRate), nil
-}
-
-// Helper methods for financial calculations
-func (s *SemanticCalculationService) calculatePV(rate float64, nper int, pmt, fv float64) float64 {
-	if rate == 0 {
-		return -fv - pmt*float64(nper)
-	}
-
-	return (fv + pmt*(1-math.Pow(1+rate, float64(-nper)))/rate) / math.Pow(1+rate, float64(nper))
-}
-
-func (s *SemanticCalculationService) calculateFV(rate float64, nper int, pmt, pv float64) float64 {
-	if rate == 0 {
-		return -pv - pmt*float64(nper)
-	}
-
-	return pv*math.Pow(1+rate, float64(nper)) + pmt*(math.Pow(1+rate, float64(nper))-1)/rate
-}
-
-func (s *SemanticCalculationService) calculatePMT(rate float64, nper int, pv, fv float64) float64 {
-	if rate == 0 {
-		return (-pv - fv) / float64(nper)
-	}
-
-	return (pv + fv*math.Pow(1+rate, float64(-nper))) * rate / (1 - math.Pow(1+rate, float64(-nper)))
-}
-
-func (s *SemanticCalculationService) calculateMIRR(cashFlows []float64, financeRate, reinvestRate float64) float64 {
-	if len(cashFlows) == 0 {
-		return 0
-	}
-
-	positiveFlows := 0.0
-	negativeFlows := 0.0
-
-	for i, cf := range cashFlows {
-		if cf > 0 {
-			positiveFlows += cf / math.Pow(1+reinvestRate, float64(i))
-		} else {
-			negativeFlows += cf / math.Pow(1+financeRate, float64(i))
-		}
-	}
-
-	if negativeFlows == 0 {
-		return 0
-	}
-
-	return math.Pow(positiveFlows/math.Abs(negativeFlows), 1.0/float64(len(cashFlows)-1)) - 1
-}
-
-// detectVectorizedArguments checks if arguments contain arrays indicating vectorized execution
-func (s *SemanticCalculationService) detectVectorizedArguments(arguments map[string]interface{}) ([]map[string]interface{}, bool) {
-	// Look for arguments that are arrays of values or arrays of objects
-	var batchSize int = -1
-
-	for _, value := range arguments {
-		switch v := value.(type) {
-		case []interface{}:
-			// Check if this is an array of primitive values (single batch dimension)
-			if len(v) > 0 {
-				if _, ok := v[0].(map[string]interface{}); !ok {
-					// This is an array of primitives - indicates vectorized execution
-					if batchSize == -1 {
-						batchSize = len(v)
-					} else if batchSize != len(v) {
-						// Inconsistent batch sizes
-						return nil, false
-					}
-				}
-			}
-		case []map[string]interface{}:
-			// This is explicitly an array of argument sets
-			if batchSize == -1 {
-				batchSize = len(v)
-			} else if batchSize != len(v) {
-				return nil, false
-			}
-		}
-	}
-
-	if batchSize <= 1 {
-		return nil, false
-	}
-
-	// Build vectorized argument sets
-	vectorizedArgs := make([]map[string]interface{}, batchSize)
-	for i := 0; i < batchSize; i++ {
-		argSet := make(map[string]interface{})
-		for key, value := range arguments {
-			switch v := value.(type) { //nolint:gocritic
-			case []any:
-				if len(v) > i {
-					argSet[key] = v[i]
-				}
-			case []map[string]any:
-				if len(v) > i {
-					// Merge the argument set
-					for k, val := range v[i] {
-						argSet[k] = val
-					}
-				}
-			default:
-				// Scalar values are replicated across all batch items
-				argSet[key] = value
-			}
-		}
-		vectorizedArgs[i] = argSet
-	}
-
-	return vectorizedArgs, true
-}
-
-// executeVectorizedExcelFormula executes the same Excel formula across multiple argument sets
-func (s *SemanticCalculationService) executeVectorizedExcelFormula(formula string, vectorizedArgs []map[string]interface{}) ([]interface{}, error) {
-	results := make([]interface{}, len(vectorizedArgs))
-
-	// Execute formula for each argument set
-	for i, args := range vectorizedArgs {
-		result, err := s.evaluateSimpleExcelFormula(formula, args)
-		if err != nil {
-			// For vectorized execution, we can choose to continue with partial results
-			// or fail fast. Here we choose to continue but mark failed calculations
-			results[i] = map[string]interface{}{
-				"error": err.Error(),
-				"index": i,
-			}
+			series[k] = arr
 			continue
 		}
-		results[i] = result
+		scalars[k] = v
+	}
+	if seriesLen == -1 {
+		seriesLen = 1 // no array arguments at all -- a single scalar "row"
 	}
 
-	return results, nil
-}
-
-// getMetricDefinition retrieves metric definition from registry (placeholder implementation)
-func (s *SemanticCalculationService) getMetricDefinition(metricID string) (*MetricDefinition, error) {
-	// This would integrate with your metric registry
-	// For now, return a placeholder
-	return &MetricDefinition{
-		ID: metricID,
-		FinancialCalc: &FinancialCalc{
-			Type:    "excel_formula",
-			Formula: "=XIRR({cash_flows}, {dates})",
-			Arguments: map[string]interface{}{
-				"cash_flows": "ARRAY_AGG(net_cash_flow)",
-				"dates":      "ARRAY_AGG(transaction_date)",
-			},
-		},
-	}, nil
-}
-
-// getEntityData retrieves entity data for calculation (placeholder implementation)
-func (s *SemanticCalculationService) getEntityData(entityID string) (map[string]interface{}, error) {
-	// This would integrate with your data layer
-	// For now, return sample data
-	return map[string]interface{}{
-		"entity_id":  entityID,
-		"cash_flows": []interface{}{-1000.0, 200.0, 300.0, 400.0, 500.0},
-		"dates":      []interface{}{1.0, 2.0, 3.0, 4.0, 5.0},
-	}, nil
-}
-
-// resolveArgumentsForEntity resolves formula arguments for a specific entity
-func (s *SemanticCalculationService) resolveArgumentsForEntity(calc *FinancialCalc, entityData map[string]interface{}) (map[string]interface{}, error) {
-	resolved := make(map[string]interface{})
-
-	for key, value := range calc.Arguments {
-		switch v := value.(type) {
-		case string:
-			// Handle SQL-like expressions (simplified)
-			if v == "ARRAY_AGG(net_cash_flow)" {
-				if cashFlows, ok := entityData["cash_flows"].([]interface{}); ok {
-					resolved[key] = cashFlows
-				} else {
-					resolved[key] = []interface{}{}
-				}
-			} else if v == "ARRAY_AGG(transaction_date)" {
-				if dates, ok := entityData["dates"].([]interface{}); ok {
-					resolved[key] = dates
-				} else {
-					resolved[key] = []interface{}{}
-				}
-			} else {
-				resolved[key] = v
-			}
-		default:
-			resolved[key] = value
+	rows := make([]boresolver.CalcRow, seriesLen)
+	for i := 0; i < seriesLen; i++ {
+		row := make(boresolver.CalcRow, len(args))
+		for k, v := range scalars {
+			row[k] = v
 		}
+		for k, arr := range series {
+			row[k] = arr[i]
+		}
+		rows[i] = row
 	}
-
-	return resolved, nil
-}
-
-// MetricDefinition represents a metric from the registry
-type MetricDefinition struct {
-	ID            string         `json:"id"`
-	Name          string         `json:"name"`
-	FinancialCalc *FinancialCalc `json:"financial_calc,omitempty"`
+	return rows, nil
 }

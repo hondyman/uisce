@@ -11,20 +11,20 @@ import (
 )
 
 type CortexModelSpec struct {
-	Name            string                 `yaml:"name"`
-	Description     string                 `yaml:"description"`
-	Tables          []CortexTableSpec      `yaml:"tables"`
-	Relationships   []CortexRelationship   `yaml:"relationships,omitempty"`
-	VerifiedQueries []CortexVerifiedQuery  `yaml:"verified_queries,omitempty"`
+	Name            string                `yaml:"name"`
+	Description     string                `yaml:"description"`
+	Tables          []CortexTableSpec     `yaml:"tables"`
+	Relationships   []CortexRelationship  `yaml:"relationships,omitempty"`
+	VerifiedQueries []CortexVerifiedQuery `yaml:"verified_queries,omitempty"`
 }
 
 type CortexVerifiedQuery struct {
-	Name                    string   `yaml:"name"`
-	Question                string   `yaml:"question"`
-	SQL                     string   `yaml:"sql"`
-	VerifiedBy              string   `yaml:"verified_by,omitempty"`
-	VerifiedAt              string   `yaml:"verified_at,omitempty"`
-	UseAsOnboardingExample  bool     `yaml:"use_as_onboarding_example,omitempty"`
+	Name                   string `yaml:"name"`
+	Question               string `yaml:"question"`
+	SQL                    string `yaml:"sql"`
+	VerifiedBy             string `yaml:"verified_by,omitempty"`
+	VerifiedAt             string `yaml:"verified_at,omitempty"`
+	UseAsOnboardingExample bool   `yaml:"use_as_onboarding_example,omitempty"`
 }
 
 type CortexTableSpec struct {
@@ -75,11 +75,11 @@ type CortexRelationship struct {
 }
 
 type GovernanceTagStatement struct {
-	TableName string `json:"table_name"`
+	TableName  string `json:"table_name"`
 	ColumnName string `json:"column_name"`
-	TagKey    string `json:"tag_key"`
-	TagValue  string `json:"tag_value"`
-	SQL       string `json:"sql"`
+	TagKey     string `json:"tag_key"`
+	TagValue   string `json:"tag_value"`
+	SQL        string `json:"sql"`
 }
 
 type CortexExporter struct {

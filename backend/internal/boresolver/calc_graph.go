@@ -12,6 +12,21 @@ type CalcNode struct {
 	Formula        string // e.g., "${gross_return} - ${management_fee}"
 	Dependencies   []string
 	Depth          int // Execution layer index
+
+	// ParsedExpr is populated by ResolveExecutionLayers (for non-base
+	// fields) by parsing Formula. It's dialect-independent.
+	ParsedExpr Expr
+
+	// Preference controls how CompileDeepCalculations resolves Tier for
+	// this node (see calc_functions.go). Zero value is PreferAuto: pick SQL
+	// pushdown if the target dialect supports every function in the
+	// formula, else fall back to the Go host-runtime executor.
+	Preference ExecutionPreference
+
+	// Tier is the resolved execution tier for the LAST dialect this node
+	// was compiled against (set by CompileDeepCalculations, which is
+	// dialect-aware — ResolveExecutionLayers is not).
+	Tier CalcTier
 }
 
 // CalcGraph manages the topological resolution of derived metrics
@@ -48,6 +63,14 @@ func (g *CalcGraph) ResolveExecutionLayers() ([][]*CalcNode, error) {
 		node, exists := g.Nodes[nodeKey]
 		if !exists {
 			return fmt.Errorf("missing dependency in graph: %s", nodeKey)
+		}
+
+		if !node.IsBaseField && node.Formula != "" && node.ParsedExpr == nil {
+			expr, err := ParseCalcFormula(node.Formula)
+			if err != nil {
+				return fmt.Errorf("failed to parse formula for %s: %w", nodeKey, err)
+			}
+			node.ParsedExpr = expr
 		}
 
 		for _, depKey := range node.Dependencies {

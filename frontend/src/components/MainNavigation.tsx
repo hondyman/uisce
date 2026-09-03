@@ -220,7 +220,7 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Semantic Mapper', path: '/core/semantic-mapper', icon: <AutoFixHighIcon />, description: 'Intelligent graph & semantic mapper' },
           { label: 'Data Pipelines', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Catalog Graph & BO Parallel ETL', badge: { label: 'ETL', color: 'primary' } },
-          { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Metadata structures' },
+          { label: 'Node Types', path: '/catalog/node-types', icon: <SchemaIcon />, description: 'Generic assets & structures' },
           { label: 'Edge Types', path: '/catalog/edge-types', icon: <AccountTreeIcon />, description: 'Relationship types' },
           { label: 'AI Term Suggestions', path: '/catalog/ai-suggestions', icon: <AutoFixHighIcon />, description: 'Suggested terms' },
           { label: 'Bundle Explorer', path: '/bundle-explorer', icon: <SchemaIcon />, description: 'Explore semantic bundles' },

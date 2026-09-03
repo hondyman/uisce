@@ -12,8 +12,8 @@ func TestMCPServer_ListTools(t *testing.T) {
 	server := mcp.NewMCPServer(nil)
 	tools := server.ListTools()
 
-	if len(tools) != 5 {
-		t.Fatalf("expected 5 registered MCP tools, got: %d", len(tools))
+	if len(tools) != 6 {
+		t.Fatalf("expected 6 registered MCP tools, got: %d", len(tools))
 	}
 }
 

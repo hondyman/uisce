@@ -15,8 +15,13 @@ type BPWorker struct {
 
 const BPTaskQueue = "bp-framework-queue"
 
-// NewBPWorker creates a new Business Process worker
-func NewBPWorker(c client.Client) *BPWorker {
+// NewBPWorker creates a new Business Process worker. deps may be nil, in
+// which case activities requiring real dependencies (currently just
+// ActivityCalculation, see calc_activities.go) are not registered — a
+// workflow definition using a "Calculation" node against a worker started
+// without deps will fail at runtime with "unable to find activityType",
+// same as before ActivityCalculation existed at all.
+func NewBPWorker(c client.Client, deps *ActivityDeps) *BPWorker {
 	w := worker.New(c, BPTaskQueue, worker.Options{
 		MaxConcurrentActivityExecutionSize:     10,
 		MaxConcurrentWorkflowTaskExecutionSize: 10,
@@ -24,6 +29,7 @@ func NewBPWorker(c client.Client) *BPWorker {
 
 	// Register Workflows
 	w.RegisterWorkflow(InterpreterWorkflow)
+	w.RegisterWorkflow(RunStoredWorkflow)
 
 	// ==================== LLM ACTIVITIES ====================
 	w.RegisterActivity(LLMInterpretationActivity)
@@ -58,6 +64,16 @@ func NewBPWorker(c client.Client) *BPWorker {
 	w.RegisterActivity(ActivityDataValidation)
 	w.RegisterActivity(ActivityGenerateReport)
 	w.RegisterActivity(ActivityNotification)
+
+	// ==================== CALC ENGINE ACTIVITIES ====================
+	// Requires deps (DB-backed SemanticCalculationService) — see
+	// calc_activities.go. Without deps, a "Calculation" workflow node
+	// fails at runtime rather than silently using a fake/stub result.
+	if deps != nil && deps.CalcService != nil {
+		w.RegisterActivity(deps.ActivityCalculation)
+	} else {
+		log.Println("WARNING: BP worker started without ActivityDeps.CalcService — \"Calculation\" workflow nodes will fail at runtime")
+	}
 
 	// Note: The following activities are referenced in dynamic_bp_workflow.go
 	// but use string-based activity calls. They will be registered when implemented.

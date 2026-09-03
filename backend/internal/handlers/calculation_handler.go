@@ -32,6 +32,7 @@ func (h *CalculationHandler) Routes() chi.Router {
 	r.Get("/{name}", h.GetCalculation)
 	r.Get("/{id}/explain", h.ExplainCalculation)     // Added explain
 	r.Post("/explain", h.ExplainExpressionStateless) // Added stateless explain
+	r.Post("/{id}/execute", h.Execute)               // Centralized engine: pushdown SQL or host-runtime, dispatched by stored Tier
 
 	return r
 }
@@ -132,7 +133,7 @@ func (h *CalculationHandler) ExplainCalculation(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	expr, err := boresolver.ParseExpression(calc.Formula)
+	expr, err := boresolver.ParseCalcFormula(calc.Formula)
 	if err != nil {
 		http.Error(w, "Cannot parse expression: "+err.Error(), http.StatusBadRequest)
 		return
@@ -169,6 +170,11 @@ func (h *CalculationHandler) ExplainCalculation(w http.ResponseWriter, r *http.R
 	}
 
 	explanation := boresolver.ExplainExpression(expr, env)
+	// Tier: whether this formula compiles entirely to SQL pushdown or
+	// needs the host-runtime engine (e.g. xirr) — same ResolveTier logic
+	// CompileDeepCalculations uses at compile time, so what this endpoint
+	// reports is never out of sync with how the calc actually runs.
+	engineInfo := boresolver.ValidateFormula(calc.Formula, boresolver.PostgresDialect{}, boresolver.PreferAuto, nil)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"calculation_id":     calc.ID,
@@ -179,6 +185,9 @@ func (h *CalculationHandler) ExplainCalculation(w http.ResponseWriter, r *http.R
 		"explanation":        explanation,
 		"sql":                resolvedSQL,
 		"joins":              joins,
+		"tier":               engineInfo.Tier,
+		"referenced_terms":   engineInfo.ReferencedTerms,
+		"functions_used":     engineInfo.FunctionsUsed,
 	})
 }
 
@@ -192,7 +201,7 @@ func (h *CalculationHandler) ExplainExpressionStateless(w http.ResponseWriter, r
 		return
 	}
 
-	expr, err := boresolver.ParseExpression(req.Expression)
+	expr, err := boresolver.ParseCalcFormula(req.Expression)
 	if err != nil {
 		http.Error(w, "Cannot parse expression: "+err.Error(), http.StatusBadRequest)
 		return
@@ -228,35 +237,53 @@ func (h *CalculationHandler) ExplainExpressionStateless(w http.ResponseWriter, r
 	}
 
 	explanation := boresolver.ExplainExpression(expr, env)
+	// Tier: whether a formula-bar draft would compile to SQL pushdown or
+	// needs the host-runtime engine — this is what powers live "as you
+	// type" feedback (e.g. "this will run as: SQL" vs "this will run as:
+	// host-runtime (xirr)") without waiting for a save.
+	engineInfo := boresolver.ValidateFormula(req.Expression, boresolver.PostgresDialect{}, boresolver.PreferAuto, nil)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"explanation":   explanation,
-		"inferred_type": boresolver.InferType(expr, env),
-		"is_aggregate":  boresolver.IsAggregateExpr(expr),
-		"sql":           resolvedSQL,
-		"joins":         joins,
+		"explanation":      explanation,
+		"inferred_type":    boresolver.InferType(expr, env),
+		"is_aggregate":     boresolver.IsAggregateExpr(expr),
+		"sql":              resolvedSQL,
+		"joins":            joins,
+		"tier":             engineInfo.Tier,
+		"referenced_terms": engineInfo.ReferencedTerms,
+		"functions_used":   engineInfo.FunctionsUsed,
+		"formula_errors":   engineInfo.Errors,
+		"formula_is_valid": engineInfo.Valid,
 	})
 }
 
 // Validation helper
 func (h *CalculationHandler) validateExpression(expression string, boID string) []string {
-	expr, err := boresolver.ParseExpression(expression)
+	expr, err := boresolver.ParseCalcFormula(expression)
 	if err != nil {
 		return []string{"Parse Error: " + err.Error()}
 	}
 
+	var messages []string
+
 	env, err := analytics.NewCatalogTypeEnv(h.Service.GetDB(), boID)
-	if err != nil {
-		// If env creation fails, maybe DB issue. Return error or skip semantic check?
-		// We'll skip precise type check but parser check invalid syntax already.
-		return nil
+	if err == nil {
+		errs := boresolver.ValidateExpression(expr, env)
+		for _, e := range errs {
+			messages = append(messages, e.Message)
+		}
+	}
+	// If env creation failed (DB issue), skip the precise type check —
+	// parser syntax check above already ran regardless.
+
+	// Tier resolution never errors under PreferAuto (it always has a
+	// fallback), so this is a forward-compatible no-op today; it starts
+	// rejecting formulas the moment a caller passes an explicit
+	// PreferPushdown-style requirement through this path.
+	if _, tierErr := boresolver.ResolveTier(expr, boresolver.PostgresDialect{}, boresolver.PreferAuto); tierErr != nil {
+		messages = append(messages, tierErr.Error())
 	}
 
-	errs := boresolver.ValidateExpression(expr, env)
-	var messages []string
-	for _, e := range errs {
-		messages = append(messages, e.Message)
-	}
 	return messages
 }
 

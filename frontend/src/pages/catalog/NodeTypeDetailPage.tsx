@@ -15,7 +15,9 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import SettingsInputComponentIcon from '@mui/icons-material/SettingsInputComponent';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import { useNodeType, useNodesByType } from '../../api/nodeTypes';
+import { useNodeType, useNodesByType, useCreateNode, useUpdateNode, useDeleteNode, CatalogNode } from '../../api/nodeTypes';
+import { useConfirm } from '../../components/ConfirmProvider';
+import { useNotification } from '../../hooks/useNotification';
 import { useEdgeTypes } from '../../api/edgeTypes';
 import { useTenant } from '../../contexts/TenantContext';
 import { ProfessionalColorPicker } from '../../components/ProfessionalColorPicker';
@@ -27,8 +29,10 @@ export const NodeTypeDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const { tenant } = useTenant();
+  const confirm = useConfirm();
+  const notification = useNotification();
   const [selectedNode, setSelectedNode] = useState<any>(null);
-  
+
   // Edit state
   const [editOpen, setEditOpen] = useState(false);
   const [editDescription, setEditDescription] = useState('');
@@ -39,8 +43,120 @@ export const NodeTypeDetailPage: React.FC = () => {
   const [editPropsOpen, setEditPropsOpen] = useState(false);
   const [editProps, setEditProps] = useState<PropertyDefinition[]>([]);
   const [editPropsSaving, setEditPropsSaving] = useState(false);
-  
+
+  // Asset (node instance) state
+  const [assetDialogOpen, setAssetDialogOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<CatalogNode | null>(null);
+  const [assetName, setAssetName] = useState('');
+  const [assetDescription, setAssetDescription] = useState('');
+  const [assetIsActive, setAssetIsActive] = useState(true);
+  const [assetFieldValues, setAssetFieldValues] = useState<Record<string, string>>({});
+
   const { data: nodeType, isLoading: typeLoading, refetch: refetchNodeType } = useNodeType(id || '');
+  const { data: assetNodes, isLoading: assetsLoading } = useNodesByType(id || '');
+  const createNodeMutation = useCreateNode();
+  const updateNodeMutation = useUpdateNode();
+  const deleteNodeMutation = useDeleteNode();
+
+  // The node type's own schema (defined via the Properties editor) drives the form
+  // fields shown when creating/editing an asset of this type.
+  const typeProperties: PropertyDefinition[] = useMemo(() => {
+    if (!nodeType?.config?.properties) return [];
+    if (Array.isArray(nodeType.config.properties)) return nodeType.config.properties;
+    return Object.entries(nodeType.config.properties).map(([k, v]: [string, any]) => ({
+      name: k,
+      label: v.label || k,
+      data_type: v.data_type || 'string',
+      nullable: v.nullable ?? true,
+      description: v.description || '',
+      properties: v.properties || [],
+    }));
+  }, [nodeType]);
+
+  const handleAssetCreateOpen = () => {
+    setEditingAsset(null);
+    setAssetName('');
+    setAssetDescription('');
+    setAssetIsActive(true);
+    setAssetFieldValues({});
+    setAssetDialogOpen(true);
+  };
+
+  const handleAssetEditOpen = (node: CatalogNode) => {
+    setEditingAsset(node);
+    setAssetName(node.node_name || '');
+    setAssetDescription(node.description || '');
+    setAssetIsActive(node.is_active ?? true);
+    const values: Record<string, string> = {};
+    typeProperties.forEach((p) => {
+      const v = node.properties?.[p.name];
+      values[p.name] = v === undefined || v === null ? '' : String(v);
+    });
+    setAssetFieldValues(values);
+    setAssetDialogOpen(true);
+  };
+
+  const handleAssetSave = async () => {
+    if (!id || !assetName.trim()) {
+      notification.error('Name is required');
+      return;
+    }
+    const properties: Record<string, any> = {};
+    typeProperties.forEach((p) => {
+      const raw = assetFieldValues[p.name];
+      if (raw === undefined || raw === '') return;
+      if (p.data_type === 'integer' || p.data_type === 'float') {
+        const num = Number(raw);
+        properties[p.name] = Number.isNaN(num) ? raw : num;
+      } else if (p.data_type === 'boolean') {
+        properties[p.name] = raw === 'true';
+      } else {
+        properties[p.name] = raw;
+      }
+    });
+
+    try {
+      if (editingAsset) {
+        await updateNodeMutation.mutateAsync({
+          id: editingAsset.id,
+          nodeTypeId: id,
+          node_name: assetName,
+          description: assetDescription,
+          is_active: assetIsActive,
+          properties,
+        });
+        notification.success(`"${assetName}" updated successfully`);
+      } else {
+        await createNodeMutation.mutateAsync({
+          nodeTypeId: id,
+          node_name: assetName,
+          description: assetDescription,
+          is_active: assetIsActive,
+          properties,
+        });
+        notification.success(`"${assetName}" created successfully`);
+      }
+      setAssetDialogOpen(false);
+    } catch (error) {
+      notification.error(`Failed to save asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
+  const handleAssetDelete = async (node: CatalogNode) => {
+    if (!id) return;
+    const confirmed = await confirm({
+      title: 'Delete Asset',
+      description: `Are you sure you want to delete "${node.node_name}"? This action cannot be undone.`,
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteNodeMutation.mutateAsync({ id: node.id, nodeTypeId: id });
+      notification.success(`"${node.node_name}" deleted successfully`);
+    } catch (error) {
+      notification.error(`Failed to delete asset: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
 
   // Filter edge types where this node type is subject or object
   const associatedEdgeTypes = useMemo(() => {
@@ -362,6 +478,120 @@ export const NodeTypeDetailPage: React.FC = () => {
         </Grid>
       </Paper>
 
+      {/* Assets (node instances) Section */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: C.text }}>
+          Assets ({assetNodes?.length || 0})
+        </Typography>
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={handleAssetCreateOpen}
+          sx={{
+            borderRadius: 2,
+            bgcolor: C.accent,
+            color: '#FFFFFF',
+            '&:hover': { bgcolor: '#4F46E5' },
+          }}
+        >
+          Add Asset
+        </Button>
+      </Box>
+
+      {assetsLoading ? (
+        <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 3, mb: 4, bgcolor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }} />
+      ) : assetNodes && assetNodes.length > 0 ? (
+        <TableContainer
+          component={Paper}
+          elevation={0}
+          sx={{
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+            bgcolor: C.panel,
+            overflow: 'hidden',
+            mb: 4,
+          }}
+        >
+          <Table>
+            <TableHead>
+              <TableRow sx={{ bgcolor: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)', borderBottom: `1px solid ${C.border}` }}>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Name</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Description</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Created</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: C.textMuted, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {assetNodes.map((node) => (
+                <TableRow
+                  key={node.id}
+                  hover
+                  onClick={() => setSelectedNode(node)}
+                  sx={{
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: isDark ? 'rgba(255,255,255,0.02) !important' : 'rgba(0,0,0,0.01) !important' },
+                    borderBottom: `1px solid ${C.border}`,
+                  }}
+                >
+                  <TableCell sx={{ fontWeight: 600, color: C.text }}>{node.node_name}</TableCell>
+                  <TableCell sx={{ maxWidth: 320 }}>
+                    <Typography variant="body2" sx={{ color: C.textMuted }} noWrap>
+                      {node.description || '-'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <span style={{
+                      display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
+                      borderRadius: 9999, fontSize: 10, fontWeight: 700, letterSpacing: '0.04em',
+                      color: node.is_active !== false ? C.success : C.textMuted,
+                      background: node.is_active !== false ? (isDark ? `${C.success}18` : `${C.success}12`) : 'transparent',
+                      border: `1px solid ${node.is_active !== false ? C.success : C.border}44`,
+                      fontFamily: 'monospace', textTransform: 'uppercase',
+                    }}>
+                      {node.is_active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ color: C.textMuted, fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                      {new Date(node.created_at).toLocaleDateString()}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }} onClick={(e) => e.stopPropagation()}>
+                      <IconButton size="small" onClick={() => handleAssetEditOpen(node)} sx={{ color: C.textMuted, '&:hover': { color: C.accent, bgcolor: C.accentDim } }}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton size="small" onClick={() => handleAssetDelete(node)} sx={{ color: C.textMuted, '&:hover': { color: C.danger, bgcolor: `${C.danger}18` } }}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <Paper
+          elevation={0}
+          sx={{
+            p: 4,
+            mb: 4,
+            borderRadius: 3,
+            border: `1px solid ${C.border}`,
+            bgcolor: C.panel,
+            textAlign: 'center',
+          }}
+        >
+          <Typography sx={{ color: C.textMuted, mb: 1.5 }}>No assets of this type yet.</Typography>
+          <Button size="small" startIcon={<AddIcon />} sx={{ color: C.accent }} onClick={handleAssetCreateOpen}>
+            Add the first asset
+          </Button>
+        </Paper>
+      )}
+
       {/* Associated Edge Types Section */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" fontWeight="bold" sx={{ color: C.text }}>
@@ -659,6 +889,101 @@ export const NodeTypeDetailPage: React.FC = () => {
             sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
           >
             {editPropsSaving ? 'Saving...' : 'Save All Properties'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create/Edit Asset Dialog */}
+      <Dialog
+        open={assetDialogOpen}
+        onClose={() => setAssetDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: C.panel,
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+          }
+        }}
+      >
+        <DialogTitle sx={{ borderBottom: `1px solid ${C.border}`, fontWeight: 700 }}>
+          {editingAsset ? `Edit Asset: ${editingAsset.node_name}` : `New ${nodeType.catalog_type_name} Asset`}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextField
+            label="Name"
+            value={assetName}
+            onChange={(e) => setAssetName(e.target.value)}
+            fullWidth
+            required
+            sx={{ mt: 1 }}
+            InputProps={{
+              sx: { bgcolor: isDark ? '#0A0C12' : '#F8FAFC', color: C.text, '& fieldset': { borderColor: C.border } }
+            }}
+          />
+          <TextField
+            label="Description"
+            multiline
+            rows={2}
+            value={assetDescription}
+            onChange={(e) => setAssetDescription(e.target.value)}
+            fullWidth
+            InputProps={{
+              sx: { bgcolor: isDark ? '#0A0C12' : '#F8FAFC', color: C.text, '& fieldset': { borderColor: C.border } }
+            }}
+          />
+
+          {typeProperties.length > 0 && (
+            <>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: C.textMuted, mt: 1 }}>
+                Properties
+              </Typography>
+              {typeProperties.map((p) => (
+                p.data_type === 'boolean' ? (
+                  <FormControl key={p.name} fullWidth size="small">
+                    <InputLabel sx={{ color: C.textMuted }}>{p.label || p.name}</InputLabel>
+                    <Select
+                      value={assetFieldValues[p.name] ?? ''}
+                      label={p.label || p.name}
+                      onChange={(e) => setAssetFieldValues({ ...assetFieldValues, [p.name]: e.target.value as string })}
+                      sx={{ color: C.text, '& fieldset': { borderColor: C.border } }}
+                    >
+                      <MenuItem value="">-</MenuItem>
+                      <MenuItem value="true">True</MenuItem>
+                      <MenuItem value="false">False</MenuItem>
+                    </Select>
+                  </FormControl>
+                ) : (
+                  <TextField
+                    key={p.name}
+                    label={p.label || p.name}
+                    type={p.data_type === 'integer' || p.data_type === 'float' ? 'number' : p.data_type === 'date' ? 'date' : 'text'}
+                    value={assetFieldValues[p.name] ?? ''}
+                    onChange={(e) => setAssetFieldValues({ ...assetFieldValues, [p.name]: e.target.value })}
+                    fullWidth
+                    size="small"
+                    helperText={p.description}
+                    InputLabelProps={p.data_type === 'date' ? { shrink: true } : undefined}
+                    InputProps={{
+                      sx: { bgcolor: isDark ? '#0A0C12' : '#F8FAFC', color: C.text, '& fieldset': { borderColor: C.border } }
+                    }}
+                  />
+                )
+              ))}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, borderTop: `1px solid ${C.border}` }}>
+          <Button onClick={() => setAssetDialogOpen(false)} sx={{ color: C.textMuted }}>Cancel</Button>
+          <Button
+            onClick={handleAssetSave}
+            variant="contained"
+            disabled={createNodeMutation.isPending || updateNodeMutation.isPending}
+            sx={{ bgcolor: C.accent, color: '#fff', '&:hover': { bgcolor: '#4F46E5' } }}
+          >
+            {editingAsset ? 'Save Changes' : 'Create'}
           </Button>
         </DialogActions>
       </Dialog>

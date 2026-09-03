@@ -38,6 +38,19 @@ const (
 type Token struct {
 	Type  TokenType
 	Value string
+	Pos   int // rune offset into the input where this token starts
+}
+
+// ParseError is a structured parse error carrying the rune position in the
+// formula where the problem was found, so a formula-bar UI can highlight
+// the exact offending token instead of just showing a generic message.
+type ParseError struct {
+	Message string
+	Pos     int
+}
+
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("%s (at position %d)", e.Message, e.Pos)
 }
 
 type Lexer struct {
@@ -71,9 +84,15 @@ func (l *Lexer) NextToken() Token {
 		l.next()
 	}
 
+	tokStart := l.pos
+	withPos := func(t Token) Token {
+		t.Pos = tokStart
+		return t
+	}
+
 	ch := l.peek()
 	if ch == 0 {
-		return Token{Type: TokenEOF}
+		return withPos(Token{Type: TokenEOF})
 	}
 
 	// identifiers and keywords
@@ -92,16 +111,16 @@ func (l *Lexer) NextToken() Token {
 		// Check keywords
 		upperVal := strings.ToUpper(val)
 		if upperVal == "AND" {
-			return Token{Type: TokenAND, Value: "AND"}
+			return withPos(Token{Type: TokenAND, Value: "AND"})
 		}
 		if upperVal == "OR" {
-			return Token{Type: TokenOR, Value: "OR"}
+			return withPos(Token{Type: TokenOR, Value: "OR"})
 		}
 		if upperVal == "NOT" {
-			return Token{Type: TokenNOT, Value: "NOT"}
+			return withPos(Token{Type: TokenNOT, Value: "NOT"})
 		}
 
-		return Token{Type: TokenIdent, Value: val}
+		return withPos(Token{Type: TokenIdent, Value: val})
 	}
 
 	// numbers
@@ -119,7 +138,7 @@ func (l *Lexer) NextToken() Token {
 				break
 			}
 		}
-		return Token{Type: TokenNumber, Value: string(l.input[start:l.pos])}
+		return withPos(Token{Type: TokenNumber, Value: string(l.input[start:l.pos])})
 	}
 
 	// strings
@@ -138,65 +157,65 @@ func (l *Lexer) NextToken() Token {
 		}
 		val := string(l.input[start:l.pos])
 		l.next()
-		return Token{Type: TokenString, Value: val}
+		return withPos(Token{Type: TokenString, Value: val})
 	}
 
 	// symbol tokens
 	switch ch {
 	case '+':
 		l.next()
-		return Token{Type: TokenPlus, Value: "+"}
+		return withPos(Token{Type: TokenPlus, Value: "+"})
 	case '-':
 		l.next()
-		return Token{Type: TokenMinus, Value: "-"}
+		return withPos(Token{Type: TokenMinus, Value: "-"})
 	case '*':
 		l.next()
-		return Token{Type: TokenStar, Value: "*"}
+		return withPos(Token{Type: TokenStar, Value: "*"})
 	case '/':
 		l.next()
-		return Token{Type: TokenSlash, Value: "/"}
+		return withPos(Token{Type: TokenSlash, Value: "/"})
 	case '(':
 		l.next()
-		return Token{Type: TokenLParen, Value: "("}
+		return withPos(Token{Type: TokenLParen, Value: "("})
 	case ')':
 		l.next()
-		return Token{Type: TokenRParen, Value: ")"}
+		return withPos(Token{Type: TokenRParen, Value: ")"})
 	case ',':
 		l.next()
-		return Token{Type: TokenComma, Value: ","}
+		return withPos(Token{Type: TokenComma, Value: ","})
 	case '=':
 		l.next()
-		return Token{Type: TokenEQ, Value: "="}
+		return withPos(Token{Type: TokenEQ, Value: "="})
 	case '!':
 		if l.peek() == '=' {
 			l.next() // consume '!'
 			l.next() // consume '='
-			return Token{Type: TokenNEQ, Value: "!="}
+			return withPos(Token{Type: TokenNEQ, Value: "!="})
 		}
 		l.next()
-		return Token{Type: TokenEOF} // or error
+		return withPos(Token{Type: TokenEOF}) // or error
 	case '>':
 		l.next()
 		if l.peek() == '=' {
 			l.next()
-			return Token{Type: TokenGTE, Value: ">="}
+			return withPos(Token{Type: TokenGTE, Value: ">="})
 		}
-		return Token{Type: TokenGT, Value: ">"}
+		return withPos(Token{Type: TokenGT, Value: ">"})
 	case '<':
 		l.next()
 		if l.peek() == '=' {
 			l.next()
-			return Token{Type: TokenLTE, Value: "<="}
+			return withPos(Token{Type: TokenLTE, Value: "<="})
 		}
 		// check for <> as NEQ?
 		if l.peek() == '>' {
 			l.next()
-			return Token{Type: TokenNEQ, Value: "<>"}
+			return withPos(Token{Type: TokenNEQ, Value: "<>"})
 		}
-		return Token{Type: TokenLT, Value: "<"}
+		return withPos(Token{Type: TokenLT, Value: "<"})
 	default:
 		l.next()
-		return Token{Type: TokenEOF}
+		return withPos(Token{Type: TokenEOF})
 	}
 }
 
@@ -319,14 +338,14 @@ func (p *Parser) parseExpr(minPrec int) (Expr, error) {
 			p.nextToken()
 		} else if p.cur.Type == TokenRParen {
 			if p.peekToken().Type != TokenRParen {
-				return nil, fmt.Errorf("expected ')'")
+				return nil, &ParseError{Message: "expected ')'", Pos: p.cur.Pos}
 			}
 			p.nextToken()
 		} else {
-			return nil, fmt.Errorf("expected ')'")
+			return nil, &ParseError{Message: "expected ')'", Pos: p.cur.Pos}
 		}
 	default:
-		return nil, fmt.Errorf("unexpected token: %v", tok)
+		return nil, &ParseError{Message: fmt.Sprintf("unexpected token %q", tok.Value), Pos: tok.Pos}
 	}
 
 	// infix
@@ -388,7 +407,7 @@ func (p *Parser) parseCallArguments() ([]Expr, error) {
 	}
 
 	if p.peekToken().Type != TokenRParen {
-		return nil, fmt.Errorf("expected ')' after arguments")
+		return nil, &ParseError{Message: "expected ')' after arguments", Pos: p.peekToken().Pos}
 	}
 	p.nextToken()
 	return args, nil

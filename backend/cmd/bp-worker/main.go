@@ -6,8 +6,11 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/pkg/workflows"
+	"github.com/jmoiron/sqlx"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 	"go.temporal.io/sdk/client"
 )
 
@@ -43,8 +46,28 @@ func main() {
 
 	log.Println("Connected to Temporal successfully")
 
+	// Connect to Postgres for DB-backed activities (currently just
+	// ActivityCalculation, the centralized calc engine — see
+	// pkg/workflows/calc_activities.go). Without this, "Calculation"
+	// workflow nodes fail at runtime rather than silently no-op.
+	var deps *workflows.ActivityDeps
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		db, err := sqlx.Open("postgres", dbURL)
+		if err != nil {
+			log.Fatalf("Failed to connect to database: %v", err)
+		}
+		defer db.Close()
+		if err := db.Ping(); err != nil {
+			log.Fatalf("Database ping failed: %v", err)
+		}
+		log.Println("Connected to PostgreSQL database")
+		deps = &workflows.ActivityDeps{CalcService: analytics.NewSemanticCalculationService(db)}
+	} else {
+		log.Println("WARNING: DATABASE_URL not set — \"Calculation\" workflow nodes will fail at runtime")
+	}
+
 	// Create and start the BP worker
-	worker := workflows.NewBPWorker(c)
+	worker := workflows.NewBPWorker(c, deps)
 
 	// Handle graceful shutdown
 	sigChan := make(chan os.Signal, 1)

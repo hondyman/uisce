@@ -27,7 +27,7 @@ func TestWebSocketEventStreaming(t *testing.T) {
 	defer broker.Stop()
 
 	// Create WebSocket handler
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 
 	// Create test server
 	server := httptest.NewServer(wsHandler)
@@ -79,7 +79,7 @@ func TestWebSocketRegionFiltering(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -137,7 +137,7 @@ func TestWebSocketMultipleTenants(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -238,7 +238,7 @@ func TestWebSocketDisconnectHandling(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 

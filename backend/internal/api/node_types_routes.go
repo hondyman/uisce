@@ -95,6 +95,11 @@ func RegisterNodeTypesRoutes(r chi.Router, db *sql.DB, securityDeps handlers.Sec
 	r.Delete("/node-types/{id}/properties/{propName}", h.handleDeleteNodeTypeProperty)
 
 	r.Get("/node-types/{id}/nodes", h.handleGetNodesForType)
+	r.Post("/node-types/{id}/nodes", h.handleCreateNode)
+
+	r.Get("/nodes/{id}", h.handleGetNode)
+	r.Patch("/nodes/{id}", h.handleUpdateNode)
+	r.Delete("/nodes/{id}", h.handleDeleteNode)
 }
 
 func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Request) {
@@ -672,7 +677,7 @@ func (h *NodeTypesHandler) handleGetNodesForType(w http.ResponseWriter, r *http.
 	args := []interface{}{id, tenantID}
 
 	if tenantDatasourceID != "" {
-		query += " AND (tenant_datasource_id = $4 OR tenant_datasource_id IS NULL)"
+		query += " AND (tenant_datasource_id = $3 OR tenant_datasource_id IS NULL)"
 		args = append(args, tenantDatasourceID)
 	}
 
@@ -734,4 +739,221 @@ func (h *NodeTypesHandler) handleGetNodesForType(w http.ResponseWriter, r *http.
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(nodes)
+}
+
+// CatalogNodeInstance represents a single generic asset node (an instance of a catalog_node_type).
+type CatalogNodeInstance struct {
+	ID                 string                 `json:"id"`
+	NodeName           string                 `json:"node_name"`
+	Description        *string                `json:"description,omitempty"`
+	NodeTypeID         string                 `json:"node_type_id"`
+	TenantID           string                 `json:"tenant_id"`
+	TenantDatasourceID *string                `json:"tenant_datasource_id,omitempty"`
+	ParentID           *string                `json:"parent_id,omitempty"`
+	QualifiedPath      *string                `json:"qualified_path,omitempty"`
+	Properties         map[string]interface{} `json:"properties,omitempty"`
+	Config             map[string]interface{} `json:"config,omitempty"`
+	IsActive           *bool                  `json:"is_active,omitempty"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
+}
+
+func (h *NodeTypesHandler) handleCreateNode(w http.ResponseWriter, r *http.Request) {
+	nodeTypeID := chi.URLParam(r, "id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	var n CatalogNodeInstance
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if n.NodeName == "" {
+		http.Error(w, "node_name is required", http.StatusBadRequest)
+		return
+	}
+
+	n.ID = uuid.New().String()
+	n.NodeTypeID = nodeTypeID
+	n.TenantID = tenantID
+	if secCtx.DatasourceID != "" {
+		n.TenantDatasourceID = &secCtx.DatasourceID
+	}
+	if n.IsActive == nil {
+		active := true
+		n.IsActive = &active
+	}
+	if n.Properties == nil {
+		n.Properties = make(map[string]interface{})
+	}
+	if n.Config == nil {
+		n.Config = make(map[string]interface{})
+	}
+
+	propertiesJSON, err := json.Marshal(n.Properties)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	configJSON, err := json.Marshal(n.Config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	query := `
+			INSERT INTO catalog_node
+			(id, node_name, description, node_type_id, tenant_id, tenant_datasource_id, parent_id, qualified_path, properties, config, is_active, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+			RETURNING created_at, updated_at
+		`
+	err = h.db.QueryRow(query, n.ID, n.NodeName, n.Description, n.NodeTypeID, n.TenantID,
+		n.TenantDatasourceID, n.ParentID, n.QualifiedPath, propertiesJSON, configJSON, n.IsActive).Scan(&n.CreatedAt, &n.UpdatedAt)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(n)
+}
+
+func (h *NodeTypesHandler) scanNode(row *sql.Row) (*CatalogNodeInstance, error) {
+	var n CatalogNodeInstance
+	var propertiesJSON, configJSON []byte
+	err := row.Scan(&n.ID, &n.NodeName, &n.Description, &n.NodeTypeID, &n.TenantID,
+		&n.TenantDatasourceID, &n.ParentID, &n.QualifiedPath, &propertiesJSON, &configJSON,
+		&n.IsActive, &n.CreatedAt, &n.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	if len(propertiesJSON) > 0 {
+		json.Unmarshal(propertiesJSON, &n.Properties)
+	}
+	if len(configJSON) > 0 {
+		json.Unmarshal(configJSON, &n.Config)
+	}
+	return &n, nil
+}
+
+func (h *NodeTypesHandler) handleGetNode(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	query := `
+			SELECT id, node_name, description, node_type_id, tenant_id, tenant_datasource_id,
+				   parent_id, qualified_path, COALESCE(properties, '{}'::jsonb), COALESCE(config, '{}'::jsonb),
+				   is_active, created_at, updated_at
+			FROM catalog_node
+			WHERE id = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		`
+	n, err := h.scanNode(h.db.QueryRow(query, id, tenantID))
+	if err == sql.ErrNoRows {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(n)
+}
+
+func (h *NodeTypesHandler) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	var n CatalogNodeInstance
+	if err := json.NewDecoder(r.Body).Decode(&n); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if n.NodeName == "" {
+		http.Error(w, "node_name is required", http.StatusBadRequest)
+		return
+	}
+	if n.Properties == nil {
+		n.Properties = make(map[string]interface{})
+	}
+	if n.Config == nil {
+		n.Config = make(map[string]interface{})
+	}
+
+	propertiesJSON, err := json.Marshal(n.Properties)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	configJSON, err := json.Marshal(n.Config)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	query := `
+			UPDATE catalog_node
+			SET node_name = $1, description = $2, parent_id = $3, qualified_path = $4,
+				properties = $5, config = $6, is_active = $7, updated_at = NOW()
+			WHERE id = $8 AND tenant_id = $9
+			RETURNING id, node_name, description, node_type_id, tenant_id, tenant_datasource_id,
+					  parent_id, qualified_path, COALESCE(properties, '{}'::jsonb), COALESCE(config, '{}'::jsonb),
+					  is_active, created_at, updated_at
+		`
+	n2, err := h.scanNode(h.db.QueryRow(query, n.NodeName, n.Description, n.ParentID, n.QualifiedPath,
+		propertiesJSON, configJSON, n.IsActive, id, tenantID))
+	if err == sql.ErrNoRows {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(n2)
+}
+
+func (h *NodeTypesHandler) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+	tenantID := secCtx.TenantID
+
+	query := `DELETE FROM catalog_node WHERE id = $1 AND tenant_id = $2`
+	result, err := h.db.Exec(query, id, tenantID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "Node not found", http.StatusNotFound)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -5,8 +5,11 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 )
 
 // TokenEncryptor handles AES-GCM encryption for sensitive tokens
@@ -68,4 +71,45 @@ func (e *TokenEncryptor) Decrypt(ciphertextB64 string) (string, error) {
 	}
 
 	return string(plaintext), nil
+}
+
+// DecodeKey accepts a 32-byte raw key, a 64-char hex-encoded key, or a
+// base64 (standard/URL-safe, padded/unpadded) encoding of 32 bytes. Returns
+// the raw 32 bytes required for AES-256 / HMAC-SHA256.
+func DecodeKey(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if len(s) == 32 {
+		return []byte(s), nil
+	}
+	if len(s) == 64 {
+		if raw, err := hex.DecodeString(s); err == nil && len(raw) == 32 {
+			return raw, nil
+		}
+	}
+	for _, enc := range []*base64.Encoding{base64.StdEncoding, base64.RawStdEncoding, base64.URLEncoding, base64.RawURLEncoding} {
+		if raw, err := enc.DecodeString(s); err == nil && len(raw) == 32 {
+			return raw, nil
+		}
+	}
+	return nil, fmt.Errorf("expected 32 raw bytes, 64 hex chars, or base64 of 32 bytes; got %d chars", len(s))
+}
+
+// LoadKeyFromEnv resolves a 32-byte server secret from envVar (raw/hex/base64).
+// If unset and devFallbackEnvVar evaluates to "true", a process-lifetime
+// random key is returned (logged as insecure — restarting the process
+// invalidates anything sealed with it). Otherwise it errors, so callers fail
+// closed rather than silently running with no real secret.
+func LoadKeyFromEnv(envVar, devFallbackEnvVar string) ([]byte, error) {
+	if v := os.Getenv(envVar); v != "" {
+		return DecodeKey(v)
+	}
+	if os.Getenv(devFallbackEnvVar) == "true" {
+		key := make([]byte, 32)
+		if _, err := rand.Read(key); err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(os.Stderr, "[WARN] %s is unset; using a process-lifetime random key. Restarting will invalidate anything sealed with it. Set %s before deploying.\n", envVar, envVar)
+		return key, nil
+	}
+	return nil, fmt.Errorf("%s is required; generate one with `openssl rand -base64 32`, or set %s=true for local development", envVar, devFallbackEnvVar)
 }
