@@ -101,19 +101,33 @@ func (s *ForecastFeedbackService) SubmitFeedback(
 		}, nil
 	}
 
+	var accuracyRatio *float64
+	if req.ActualCostUSD != nil && *req.ActualCostUSD > 0 {
+		var projectedCost float64
+		err := s.db.GetContext(ctx, &projectedCost, `
+			SELECT projected_cost_usd FROM finops.compute_demand_forecasts
+			WHERE forecast_id = $1 AND tenant_id = $2
+		`, req.ForecastID, tenantID)
+		if err == nil && projectedCost > 0 {
+			ratio := *req.ActualCostUSD / projectedCost
+			accuracyRatio = &ratio
+		}
+	}
+
 	var fb ForecastFeedback
 	err := s.db.GetContext(ctx, &fb, `
 		INSERT INTO finops.forecast_feedback (
 			tenant_id, forecast_id, outcome,
 			actual_scanned_bytes, actual_cpu_duration_ms, actual_cost_usd,
-			notes, recorded_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			accuracy_ratio, notes, recorded_by
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (forecast_id)
 		DO UPDATE SET
 			outcome               = EXCLUDED.outcome,
 			actual_scanned_bytes  = EXCLUDED.actual_scanned_bytes,
 			actual_cpu_duration_ms = EXCLUDED.actual_cpu_duration_ms,
 			actual_cost_usd       = EXCLUDED.actual_cost_usd,
+			accuracy_ratio        = EXCLUDED.accuracy_ratio,
 			notes                 = EXCLUDED.notes,
 			recorded_by           = EXCLUDED.recorded_by,
 			recorded_at           = NOW()
@@ -128,6 +142,7 @@ func (s *ForecastFeedbackService) SubmitFeedback(
 		req.ActualScannedBytes,
 		req.ActualCPUDurationMs,
 		req.ActualCostUSD,
+		accuracyRatio,
 		req.Notes,
 		req.RecordedBy,
 	)

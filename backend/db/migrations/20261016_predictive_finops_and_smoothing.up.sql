@@ -93,27 +93,7 @@ COMMENT ON TABLE finops.workload_smoothing_policies IS
     'Tenant-level configuration governing pre-warming schedules, spike thresholds, and '
     'burst deferral limits. Consumed by the PrewarmCoordinator at runtime.';
 
--- Trigger to auto-update updated_at
-CREATE OR REPLACE FUNCTION finops.set_smoothing_policy_updated_at()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-    NEW.updated_at = NOW();
-    RETURN NEW;
-END;
-$$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM pg_trigger
-        WHERE tgname = 'trg_smoothing_policy_updated_at'
-    ) THEN
-        CREATE TRIGGER trg_smoothing_policy_updated_at
-            BEFORE UPDATE ON finops.workload_smoothing_policies
-            FOR EACH ROW EXECUTE FUNCTION finops.set_smoothing_policy_updated_at();
-    END IF;
-END;
-$$;
+-- (updated_at is maintained directly by UpsertPolicy in application code)
 
 -- ---------------------------------------------------------------------------
 -- 3. Pre-Warm Execution Ledger (Rule 8: Observability & Billing)

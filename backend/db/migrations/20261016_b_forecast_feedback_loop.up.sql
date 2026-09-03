@@ -23,20 +23,8 @@ CREATE TABLE IF NOT EXISTS finops.forecast_feedback (
     actual_cpu_duration_ms BIGINT         DEFAULT NULL,
     actual_cost_usd        NUMERIC(10, 4) DEFAULT NULL,
 
-    -- Derived accuracy ratio = actual_cost / projected_cost (computed on insert via trigger)
-    accuracy_ratio  NUMERIC(8, 4)  GENERATED ALWAYS AS (
-        CASE
-            WHEN actual_cost_usd IS NOT NULL AND actual_cost_usd > 0
-            THEN ROUND(actual_cost_usd /
-                    NULLIF((
-                        SELECT projected_cost_usd
-                        FROM   finops.compute_demand_forecasts cdf
-                        WHERE  cdf.forecast_id = forecast_feedback.forecast_id
-                        LIMIT  1
-                    ), 0), 4)
-            ELSE NULL
-        END
-    ) STORED,
+    -- Accuracy ratio = actual_cost / projected_cost (calculated by application on submission)
+    accuracy_ratio  NUMERIC(8, 4)  DEFAULT NULL,
 
     notes           TEXT,
     recorded_by     UUID,        -- user_id who submitted the feedback (nullable for system submissions)
