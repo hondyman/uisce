@@ -14,18 +14,17 @@
 -- resolution, batched SQLRowSource fetch, finlib.XIRR) against real data
 -- volume and real irregular dates -- it is not a real financial metric.
 --
--- tenant_id is a placeholder ('00000000-0000-0000-0000-000000000001',
--- matching the fallback convention already used in
--- migrations/004_calendar_semantic_integration.sql) since Northwind has no
--- tenant_id column and lives in a separate physical database from the
--- tenants table. Replace with the real gold-copy tenant_id for this
--- dataset once confirmed.
+-- tenant_id is the real "northwind" tenant row from the app's own tenants
+-- table (alpha.tenants, id 99e99e99-99e9-49e9-89e9-99e99e99e999) -- not a
+-- placeholder. Northwind itself has no tenant_id column and lives in a
+-- separate physical database from the tenants table, so this value is
+-- hardcoded to match that row rather than looked up at view-eval time.
 CREATE OR REPLACE VIEW public.customer_cashflows AS
 SELECT
     o.customer_id,
     o.order_date AS cashflow_date,
     (-1.0 * (od.unit_price * od.quantity * (1 - od.discount)))::double precision AS cashflow_amount,
-    '00000000-0000-0000-0000-000000000001'::uuid AS tenant_id
+    '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AS tenant_id
 FROM public.orders o
 JOIN public.order_details od
   ON od.order_id = o.order_id AND od.order_date = o.order_date
@@ -39,7 +38,7 @@ SELECT
     o.customer_id,
     (MAX(o.order_date) + INTERVAL '30 days')::date AS cashflow_date,
     (1.15 * SUM(od.unit_price * od.quantity * (1 - od.discount)))::double precision AS cashflow_amount,
-    '00000000-0000-0000-0000-000000000001'::uuid AS tenant_id
+    '99e99e99-99e9-49e9-89e9-99e99e99e999'::uuid AS tenant_id
 FROM public.orders o
 JOIN public.order_details od
   ON od.order_id = o.order_id AND od.order_date = o.order_date

@@ -31,7 +31,7 @@ import (
 
 func main() {
 	dsn := flag.String("dsn", os.Getenv("NORTHWINDS_DATABASE_URL"), "Postgres DSN for the northwinds database")
-	tenantID := flag.String("tenant", "00000000-0000-0000-0000-000000000001", "tenant_id to scope the query to (must match customer_cashflows.tenant_id)")
+	tenantID := flag.String("tenant", "99e99e99-99e9-49e9-89e9-99e99e99e999", "tenant_id to scope the query to (must match customer_cashflows.tenant_id -- the real 'northwind' tenant row in alpha.tenants)")
 	customer := flag.String("customer", "", "limit to one customer_id (e.g. SAVEA); empty = all customers")
 	flag.Parse()
 

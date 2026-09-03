@@ -2,10 +2,14 @@ package workflows
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/rules"
 	"github.com/hondyman/uisce/backend/pkg/bp"
-	"github.com/hondyman/uisce/backend/pkg/llm"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -48,125 +52,43 @@ type WorkflowResult struct {
 type InterpreterInput struct {
 	WorkflowID  string                 `json:"workflowId"`
 	InitialData map[string]interface{} `json:"initialData"`
+	// TenantID selects a tenant-specific override of WorkflowID's definition
+	// over the core/shared one (see ActivityLoadWorkflowDefinition). Empty
+	// means "core definition only" — safe default for callers that predate
+	// this field.
+	TenantID string `json:"tenantId,omitempty"`
 }
 
-// RunStoredWorkflow loads a BP definition by ID and executes it
+// RunStoredWorkflow loads a real, stored BP definition by workflow_key
+// (backend/db/migrations/20261019_workflow_definitions.up.sql, via
+// ActivityLoadWorkflowDefinition) and executes it. This replaces a hardcoded
+// Go switch that made every "stored" workflow one of four demo definitions
+// compiled into the binary — a genuine gap, since it meant there was no way
+// to actually author or store a new BP definition without a code change and
+// redeploy.
 func RunStoredWorkflow(ctx workflow.Context, input InterpreterInput) (*WorkflowResult, error) {
-	// 1. Load Definition (Mocking the DB load for now, or use Activity)
-	// In production, call: activity.ExecuteActivity(ctx, "LoadBPDefinition", input.WorkflowID)
-
-	// For demo: Construct a simple DSL based on ID
-	dsl := WorkflowDefinition{
-		Name:        input.WorkflowID,
-		StartNodeID: "node_1",
-		GlobalState: input.InitialData,
-		Nodes: map[string]WorkflowNode{
-			"node_1": {
-				ID:   "node_1",
-				Type: "ACTIVITY",
-				Config: map[string]interface{}{
-					"activityName": "ActivityCheckCompliance", // Use our new compliance check!
-				},
-				NextNodeID: stringPtr("node_2"),
-			},
-			"node_2": {
-				ID:   "node_2",
-				Type: "ACTIVITY",
-				Config: map[string]interface{}{
-					"activityName": "ActivityValidateGoldenRecord", // Use our new MDM check!
-				},
-				NextNodeID: stringPtr("node_3"),
-			},
-			"node_3": {
-				ID:   "node_3",
-				Type: "END",
-			},
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:    3,
 		},
 	}
+	loadCtx := workflow.WithActivityOptions(ctx, ao)
 
-	if input.WorkflowID == "bp_genai_demo" {
-		dsl = WorkflowDefinition{
-			Name:        "GenAI Co-pilot Demo",
-			StartNodeID: "node_analyze",
-			GlobalState: input.InitialData,
-			Nodes: map[string]WorkflowNode{
-				"node_analyze": {
-					ID:   "node_analyze",
-					Type: "ACTIVITY",
-					Config: map[string]interface{}{
-						"activityName":      "ActivityGenerateContent",
-						"promptTemplate":    "Review the following transaction for compliance risks. Return a JSON with 'risk_level' and 'reason'. Transaction: {{.trade_details}}",
-						"systemInstruction": "You are a senior compliance officer. You are strict.",
-						"modelOverride":     llm.DefaultGeminiModel,
-					},
-					NextNodeID: stringPtr("node_end"),
-				},
-				"node_end": {
-					ID:   "node_end",
-					Type: "END",
-				},
-			},
-		}
+	var dsl WorkflowDefinition
+	err := workflow.ExecuteActivity(loadCtx, "ActivityLoadWorkflowDefinition", input.TenantID, input.WorkflowID).Get(loadCtx, &dsl)
+	if err != nil {
+		return nil, fmt.Errorf("RunStoredWorkflow: loading definition %q: %w", input.WorkflowID, err)
 	}
 
-	if input.WorkflowID == "bp_risk_demo" {
-		dsl = WorkflowDefinition{
-			Name:        "Settlement Risk Prediction Demo",
-			StartNodeID: "node_predict",
-			GlobalState: input.InitialData,
-			Nodes: map[string]WorkflowNode{
-				"node_predict": {
-					ID:   "node_predict",
-					Type: "ACTIVITY",
-					Config: map[string]interface{}{
-						"activityName":     "ActivityPredictSettlementRisk",
-						"counterpartyName": "Unknown Entity", // Fallback
-					},
-					NextNodeID: stringPtr("node_end"),
-				},
-				"node_end": {
-					ID:   "node_end",
-					Type: "END",
-				},
-			},
-		}
-	}
-
-	if input.WorkflowID == "bp_rwa_issuance" {
-		dsl = WorkflowDefinition{
-			Name:        "Digital Asset Issuance (RWA)",
-			StartNodeID: "node_kyc",
-			GlobalState: input.InitialData,
-			Nodes: map[string]WorkflowNode{
-				"node_kyc": {
-					ID:   "node_kyc",
-					Type: "ACTIVITY",
-					Config: map[string]interface{}{
-						"activityName": "ActivityPerformKYC",
-					},
-					NextNodeID: stringPtr("node_mint"),
-				},
-				"node_mint": {
-					ID:   "node_mint",
-					Type: "ACTIVITY",
-					Config: map[string]interface{}{
-						"activityName": "ActivityMintToken",
-					},
-					NextNodeID: stringPtr("node_distribute"),
-				},
-				"node_distribute": {
-					ID:   "node_distribute",
-					Type: "ACTIVITY",
-					Config: map[string]interface{}{
-						"activityName": "ActivityDistributeDividends",
-					},
-					NextNodeID: stringPtr("node_end"),
-				},
-				"node_end": {
-					ID:   "node_end",
-					Type: "END",
-				},
-			},
+	if dsl.GlobalState == nil {
+		dsl.GlobalState = input.InitialData
+	} else {
+		for k, v := range input.InitialData {
+			dsl.GlobalState[k] = v
 		}
 	}
 
@@ -968,15 +890,69 @@ func mapLegacyTypeToActivity(legacyType interface{}) string {
 	}
 }
 
-// Simple local evaluator (can be replaced by CEL or similar lib)
+// conditionExprPattern splits a BranchOption.Condition string like
+// "value > 5" or "status == 'approved'" into field / operator / value
+// literal. Longer operators are listed before their single-character
+// prefixes so "==" and ">=" aren't misparsed as "=" or ">".
+var conditionExprPattern = regexp.MustCompile(`^(.+?)\s*(==|!=|>=|<=|>|<)\s*(.+)$`)
+
+// evaluateConditionLocal evaluates a BRANCH node's condition string against
+// workflow state, delegating to internal/rules.ConditionEvaluator — the same
+// evaluator compliance/MDM rules run through (see
+// internal/rules/bo_context_bridge.go) — instead of a workflow-local
+// reimplementation, so "value > 5" and "customer.risk_score < 50" behave
+// identically whether they appear in a compliance rule or a BP branch.
+//
+// An empty condition is treated as an unconditional match (the branch's
+// default meaning). A condition that doesn't parse, or that fails to
+// evaluate, is treated as not-matched (fail closed) rather than the
+// previous hardcoded stub, which always returned true and silently routed
+// every workflow down its first branch regardless of the actual condition.
 func evaluateConditionLocal(condition string, state map[string]interface{}) bool {
-	// TODO: Implement proper expression parsing
-	// For prototype: return true if condition is empty (default)
+	condition = strings.TrimSpace(condition)
 	if condition == "" {
 		return true
 	}
-	// Add real evaluation logic here
-	return true
+
+	m := conditionExprPattern.FindStringSubmatch(condition)
+	if m == nil {
+		return false
+	}
+	field := strings.TrimSpace(m[1])
+	operator := m[2]
+	value := parseConditionLiteral(strings.TrimSpace(m[3]))
+
+	ce := rules.NewConditionEvaluator()
+	passed, err := ce.EvaluateWithHierarchy(map[string]interface{}{
+		"type":     "simple",
+		"field":    field,
+		"operator": operator,
+		"value":    value,
+	}, state)
+	if err != nil {
+		return false
+	}
+	return passed
+}
+
+// parseConditionLiteral interprets a condition's right-hand-side literal:
+// single- or double-quoted strings, true/false, numbers, else a bare string.
+func parseConditionLiteral(s string) interface{} {
+	if len(s) >= 2 {
+		if (s[0] == '\'' && s[len(s)-1] == '\'') || (s[0] == '"' && s[len(s)-1] == '"') {
+			return s[1 : len(s)-1]
+		}
+	}
+	switch s {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	if n, err := strconv.ParseFloat(s, 64); err == nil {
+		return n
+	}
+	return s
 }
 
 // ============================================================================

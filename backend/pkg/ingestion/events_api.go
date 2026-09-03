@@ -54,9 +54,13 @@ func (h *EventsHandler) IngestMarketEvent(w http.ResponseWriter, r *http.Request
 	// The Event Payload becomes the "Input Data" for the Business Process
 	workflowOptions := client.StartWorkflowOptions{
 		ID: fmt.Sprintf("event-%s-%s", evt.Type, evt.EventID),
-		// workflows.BPTaskQueue, not a hand-written literal — must match
-		// what NewBPWorker (cmd/bp-worker) registers on.
-		TaskQueue: workflows.BPTaskQueue,
+		// workflows.DeployedBPTaskQueue ("bp_queue"), not BPTaskQueue: the
+		// worker actually deployed in production is cmd/worker (see
+		// backend/Dockerfile's "./worker" and docker-compose.hybrid.yml /
+		// docker-compose.starrocks.yml), which polls "bp_queue" and
+		// registers RunStoredWorkflow there. cmd/bp-worker (BPTaskQueue,
+		// "bp-framework-queue") is not deployed anywhere.
+		TaskQueue: workflows.DeployedBPTaskQueue,
 	}
 
 	input := workflows.InterpreterInput{

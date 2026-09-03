@@ -3,45 +3,79 @@ package workflows
 import (
 	"context"
 	"fmt"
+	"reflect"
+
+	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/mdm"
 )
 
-// MDMActivities handles validation against Master Data Management systems
+// MDMActivities validates proposed record attributes against the real
+// mastered golden record for that entity, read from
+// catalog_mdm.golden_records_ledger via mdm.UniversalMasteringEngine
+// (internal/mdm/universal_mastering_engine.go) — the same ledger
+// MasterAndSealRecord writes to. Previously this was fully mocked with
+// hardcoded fake data for one entity ID ("CP-123"); see
+// internal/mdm/rule_validation_bridge.go for the parallel BO-aware bridge
+// built for SurvivorshipEngine.
 type MDMActivities struct {
-	// In a real system, this would hold clients to external MDM (Informatica, Tibco, etc.)
+	engine *mdm.UniversalMasteringEngine
 }
 
-func NewMDMActivities() *MDMActivities {
-	return &MDMActivities{}
+func NewMDMActivities(engine *mdm.UniversalMasteringEngine) *MDMActivities {
+	return &MDMActivities{engine: engine}
 }
 
-type MDMValidationRequest struct {
-	EntityType string                 `json:"entityType"` // e.g. "Counterparty"
-	EntityID   string                 `json:"entityId"`
-	Attributes map[string]interface{} `json:"attributes"` // The data we want to write
-}
+// ActivityValidateGoldenRecord checks whether proposed attributes match the
+// mastered golden record for an entity. config must include "tenant_id",
+// "entity_type" (used as domain_key, e.g. "Counterparty") and "entity_id"
+// (used as master_entity_sid). The proposed attributes to check come from
+// payload — this activity follows the (ctx, config, payload)
+// map[string]interface{} convention every other DSL-dispatched activity
+// uses (see dynamic_bp_workflow.go's ACTIVITY case), unlike its previous
+// single-struct-argument signature, which could never actually be invoked
+// through workflow.ExecuteActivity(ctx, activityName, node.Config,
+// currentState) — an argument-count mismatch that would have failed at
+// runtime regardless of the mocked data underneath it.
+//
+// No golden record ever mastered for this entity is not a violation (there
+// is nothing to contradict yet) — it returns validation_status "NO_GOLDEN_RECORD",
+// not an error.
+func (a *MDMActivities) ActivityValidateGoldenRecord(ctx context.Context, config map[string]interface{}, payload map[string]interface{}) (map[string]interface{}, error) {
+	tenantIDStr, _ := config["tenant_id"].(string)
+	if tenantIDStr == "" {
+		tenantIDStr, _ = payload["tenant_id"].(string)
+	}
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("ActivityValidateGoldenRecord: config.tenant_id must be a valid UUID: %w", err)
+	}
 
-// ActivityValidateGoldenRecord checks if the proposed attributes match the Trusted Source.
-// Use Case: A user tries to update a Risk Rating to "Low", but the MDM says it is "High".
-func (a *MDMActivities) ActivityValidateGoldenRecord(ctx context.Context, req MDMValidationRequest) (map[string]interface{}, error) {
-	// activity.RecordHeartbeat(ctx, "Checking MDM...")
+	entityType, _ := config["entity_type"].(string)
+	entityID, _ := config["entity_id"].(string)
+	if entityType == "" || entityID == "" {
+		return nil, fmt.Errorf("ActivityValidateGoldenRecord: config.entity_type and config.entity_id are required")
+	}
 
-	// 1. Fetch Golden Record (Mocked)
-	goldenRecord, err := a.fetchGoldenRecord(req.EntityType, req.EntityID)
+	proposed, _ := payload["attributes"].(map[string]interface{})
+
+	goldenRecord, err := a.engine.FetchLatestGoldenRecord(ctx, tenantID, entityType, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("MDM lookup failed: %w", err)
 	}
+	if goldenRecord == nil {
+		return map[string]interface{}{
+			"validation_status": "NO_GOLDEN_RECORD",
+		}, nil
+	}
 
-	// 2. Compare Attributes
-	mismatches := []string{}
-	for key, proposedVal := range req.Attributes {
+	var mismatches []string
+	for key, proposedVal := range proposed {
 		goldenVal, exists := goldenRecord[key]
 		if !exists {
-			// If field doesn't exist in MDM, maybe we allow or warn?
-			// For strict governance, we might error.
 			continue
 		}
-
-		if proposedVal != goldenVal {
+		if !reflect.DeepEqual(proposedVal, goldenVal) {
 			mismatches = append(mismatches, fmt.Sprintf("%s: Proposed='%v', Golden='%v'", key, proposedVal, goldenVal))
 		}
 	}
@@ -52,24 +86,5 @@ func (a *MDMActivities) ActivityValidateGoldenRecord(ctx context.Context, req MD
 
 	return map[string]interface{}{
 		"validation_status": "MATCH",
-		"mdm_version":       "v1.5",
 	}, nil
-}
-
-// Mock MDM Data Store
-func (a *MDMActivities) fetchGoldenRecord(entityType, id string) (map[string]interface{}, error) {
-	// Simulating a "Counterparty" database
-	if entityType == "Counterparty" {
-		if id == "CP-123" {
-			return map[string]interface{}{
-				"risk_rating": "HIGH",
-				"kyc_status":  "APPROVED",
-				"country":     "US",
-			}, nil
-		}
-		if id == "CP-999" {
-			return nil, fmt.Errorf("entity not found in MDM")
-		}
-	}
-	return map[string]interface{}{}, nil
 }

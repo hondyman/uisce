@@ -7,12 +7,17 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	_ "github.com/lib/pq"
 
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cbo"
+	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
+	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/nba"
 	obsActivities "github.com/hondyman/uisce/backend/internal/observability/activities"
 	obsWorkflows "github.com/hondyman/uisce/backend/internal/observability/workflows"
@@ -66,9 +71,14 @@ func main() {
 	}
 	log.Println("✅ Connected to PostgreSQL database")
 
-	// Create worker for bp_queue
-	w := worker.New(temporalClient, "bp_queue", worker.Options{})
-	log.Println("✅ Worker created for task queue: bp_queue")
+	// Create worker for the production BP task queue. pkgworkflows.DeployedBPTaskQueue
+	// is the single source of truth for this literal — pipelines_handler.go
+	// and events_api.go start workflows against that same constant, so a
+	// future queue rename here can't silently orphan their workflow starts
+	// the way the previous hand-copied "bp_queue" / "bp_workflow_queue" /
+	// "bp-framework-queue" literals did.
+	w := worker.New(temporalClient, pkgworkflows.DeployedBPTaskQueue, worker.Options{})
+	log.Println("✅ Worker created for task queue:", pkgworkflows.DeployedBPTaskQueue)
 
 	// Register workflow
 	w.RegisterWorkflow(workflows.DynamicBPWorkflow)
@@ -239,10 +249,35 @@ func main() {
 	pkgworkflows.RegisterSafeActivity("ActivityCheckCompliance", compActivities.ActivityCheckCompliance)
 	log.Println("✅ Registered Pre-Trade Compliance Activities")
 
-	mdmActivities := pkgworkflows.NewMDMActivities()
+	// Centralized calc engine (analytics.SemanticCalculationService.ExecuteFormulaCalculation,
+	// the same engine behind POST /calculations/{id}/execute) as a "Calculation"
+	// workflow step. Previously only registered on cmd/bp-worker, which isn't
+	// deployed anywhere (see pkgworkflows.DeployedBPTaskQueue) — so a real
+	// "Calculation" BP node would fail at runtime with "unable to find
+	// activityType" until now.
+	calcActivityDeps := &pkgworkflows.ActivityDeps{CalcService: analytics.NewSemanticCalculationService(dbx)}
+	w.RegisterActivity(calcActivityDeps.ActivityCalculation)
+	log.Println("✅ Registered centralized calc engine activity (ActivityCalculation)")
+
+	// Real workflow_definitions-backed loader for RunStoredWorkflow — see
+	// db/migrations/20261019_workflow_definitions.up.sql.
+	workflowDefActivities := pkgworkflows.NewWorkflowDefinitionActivities(dbx)
+	w.RegisterActivity(workflowDefActivities.ActivityLoadWorkflowDefinition)
+	log.Println("✅ Registered workflow definition loader activity (ActivityLoadWorkflowDefinition)")
+
+	mdmActivities := pkgworkflows.NewMDMActivities(mdm.NewUniversalMasteringEngine(dbx))
 	w.RegisterActivity(mdmActivities.ActivityValidateGoldenRecord)
 	pkgworkflows.RegisterSafeActivity("ActivityValidateGoldenRecord", mdmActivities.ActivityValidateGoldenRecord)
 	log.Println("✅ Registered MDM Validation Activities")
+
+	// Data Pipeline Studio: durable execution + validator-node rule engine
+	// wiring. Reuses the same ruleEngine/dbx instances rather than standing
+	// up separate ones.
+	dataPipelineEngine := datapipeline.NewPipelineEngine(dbx, ruleEngine, temporalClient)
+	dataPipelineActivities := datapipeline.NewPipelineActivities(dataPipelineEngine)
+	w.RegisterWorkflow(datapipeline.RunPipelineDAGWorkflow)
+	w.RegisterActivity(dataPipelineActivities.ActivityExecutePipelineDAG)
+	log.Println("✅ Registered Data Pipeline Studio workflow and activity")
 
 	// 7. GenAI Activities (Phase 7)
 	llmCfgPath := ".runtime/llm_config.json"
@@ -391,6 +426,31 @@ func main() {
 	// Wait for shutdown signal
 	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// Outbox poller: routes "Pipeline.Trigger" events (written by
+	// internal/validation's async BO-CRUD trigger dispatch) to
+	// dataPipelineEngine.ExecuteRunAsWorkflow. Other event types keep going
+	// through the default Kafka publish path inside ProcessOutbox (nil
+	// publisher here since Kafka wiring isn't set up in this worker;
+	// non-Pipeline.Trigger events are left unpublished until a
+	// publisher-equipped poller picks them up).
+	outboxTicker := time.NewTicker(5 * time.Second)
+	defer outboxTicker.Stop()
+	go func() {
+		handlers := map[string]events.EventHandlerFunc{
+			datapipeline.PipelineTriggerEventType: datapipeline.NewPipelineTriggerOutboxHandler(dataPipelineEngine),
+		}
+		for {
+			select {
+			case <-sigCtx.Done():
+				return
+			case <-outboxTicker.C:
+				if err := events.ProcessOutbox(sigCtx, dbx, nil, handlers); err != nil {
+					log.Printf("⚠️ outbox processing error: %v", err)
+				}
+			}
+		}
+	}()
 
 	<-sigCtx.Done()
 	log.Println("📴 Shutting down worker...")

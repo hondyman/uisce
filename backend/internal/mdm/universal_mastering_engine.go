@@ -3,6 +3,7 @@ package mdm
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -210,5 +211,44 @@ func (e *UniversalMasteringEngine) MasterAndSealRecord(
 		MerkleAuditSeal:     merkleSeal,
 		EvaluatedConfidence: 0.9850,
 	}, nil
+}
+
+// FetchLatestGoldenRecord reads the most recent golden_attributes sealed by
+// MasterAndSealRecord for (tenantID, domainKey, masterEntitySID) from
+// catalog_mdm.golden_records_ledger — the read side of the same bitemporal
+// ledger MasterAndSealRecord writes to. Returns (nil, nil) if no record has
+// ever been mastered for this key, distinguishing "nothing known yet" from
+// a query error.
+func (e *UniversalMasteringEngine) FetchLatestGoldenRecord(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	domainKey string,
+	masterEntitySID string,
+) (map[string]interface{}, error) {
+	if e.db == nil {
+		return nil, fmt.Errorf("FetchLatestGoldenRecord: no database configured")
+	}
+
+	var attrsJSON []byte
+	err := e.db.QueryRowContext(ctx, `
+		SELECT golden_attributes
+		FROM catalog_mdm.golden_records_ledger
+		WHERE tenant_id = $1 AND domain_key = $2 AND master_entity_sid = $3
+		ORDER BY knowledge_time DESC
+		LIMIT 1`,
+		tenantID, domainKey, masterEntitySID,
+	).Scan(&attrsJSON)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("fetching golden record for %s/%s: %w", domainKey, masterEntitySID, err)
+	}
+
+	var attrs map[string]interface{}
+	if err := json.Unmarshal(attrsJSON, &attrs); err != nil {
+		return nil, fmt.Errorf("golden record for %s/%s has invalid stored JSON: %w", domainKey, masterEntitySID, err)
+	}
+	return attrs, nil
 }
 

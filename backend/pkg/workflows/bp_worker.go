@@ -13,7 +13,23 @@ type BPWorker struct {
 	worker worker.Worker
 }
 
+// BPTaskQueue is the task queue for cmd/bp-worker (this file's NewBPWorker).
+// IMPORTANT: cmd/bp-worker is not deployed anywhere today — no
+// docker-compose file builds or runs it (grep confirms; backend/Dockerfile
+// and every compose service that runs "./worker" build cmd/worker instead).
+// A caller that wants to reach the actual production BP Temporal worker
+// must use DeployedBPTaskQueue below, not this constant.
 const BPTaskQueue = "bp-framework-queue"
+
+// DeployedBPTaskQueue is the task queue the real, deployed BP Temporal
+// worker (cmd/worker/main.go, built into backend/Dockerfile as "./worker"
+// and run by docker-compose.hybrid.yml / docker-compose.starrocks.yml)
+// actually listens on. cmd/worker registers RunStoredWorkflow and
+// InterpreterWorkflow on this queue. Any code starting one of those
+// workflows in production must target this constant — targeting
+// BPTaskQueue instead sends the workflow to a queue nothing is listening
+// on, where it will sit as an orphaned open workflow forever.
+const DeployedBPTaskQueue = "bp_queue"
 
 // NewBPWorker creates a new Business Process worker. deps may be nil, in
 // which case activities requiring real dependencies (currently just
