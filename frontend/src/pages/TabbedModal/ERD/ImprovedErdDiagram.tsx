@@ -1,17 +1,18 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { useCallback, useState, useMemo, useEffect } from 'react';
-import ReactFlow, {
+import {
   Background,
+  BackgroundVariant,
   Node as FlowNode,
   Edge,
   ReactFlowInstance,
   Viewport,
   MarkerType,
-  BackgroundVariant,
   Handle,
   Position,
   NodeProps,
 } from 'reactflow';
+import { CatalogGraph } from '../../../components/graph/CatalogGraph';
 import BusinessEntitySemanticService from '../../../services/businessEntitySemanticService';
 import ErdSidebar from './ErdSidebar';
 import ErdMinimap from './ErdMinimap';
@@ -408,10 +409,14 @@ const ImprovedErdDiagram: React.FC<ImprovedErdDiagramProps> = ({
       return [];
     }
 
-    // Pass showColumns and highlightedItem to node data
+    // Pass showColumns and highlightedItem to node data, preserving each
+    // node's own type (previously this was force-overwritten to
+    // 'professionalTable' for every node, discarding real per-node type
+    // distinctions). Nodes without an explicit type still render as tables,
+    // since that's ERD's default shape.
     const nodesWithData = initialNodes.map(node => ({
       ...node,
-      type: 'professionalTable', // Force correct node type
+      type: node.type || 'table',
       data: {
         ...node.data,
         showColumns,
@@ -497,20 +502,15 @@ const ImprovedErdDiagram: React.FC<ImprovedErdDiagramProps> = ({
   return (
     <div className="improved-erd-container">
       {(() => { console.log('✅ ReactFlow container div rendered'); return null; })()}
-      <ReactFlow
-        nodes={enhancedNodes}
-        edges={enhancedEdges}
-        nodeTypes={finalNodeTypes}
+      <CatalogGraph
+        rawNodes={enhancedNodes}
+        rawEdges={enhancedEdges}
+        nodeTypeOverrides={finalNodeTypes}
         onInit={onInit}
         onNodeClick={onNodeClick}
         onEdgeClick={handleEdgeClickInfo}
         onPaneClick={onPaneClick}
         onMoveEnd={onMoveEnd}
-        nodesDraggable={true}
-        nodesConnectable={false}
-        elementsSelectable={true}
-        selectNodesOnDrag={false}
-        panOnDrag={true}
         fitView={enhancedNodes.length > 0}
         fitViewOptions={{
           padding: 0.2,
@@ -521,6 +521,11 @@ const ImprovedErdDiagram: React.FC<ImprovedErdDiagramProps> = ({
         defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
         minZoom={0.3}
         maxZoom={2.0}
+        nodesDraggable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        selectNodesOnDrag={false}
+        panOnDrag={true}
         attributionPosition="bottom-left"
         proOptions={{ hideAttribution: true }}
       >
@@ -537,18 +542,18 @@ const ImprovedErdDiagram: React.FC<ImprovedErdDiagramProps> = ({
           onToggleInfoMode={handleToggleInfoMode}
           onGenerateMappings={handleGenerateMappings}
         />
-        
+
         {isMinimapVisible && <ErdMinimap />}
-        
-        <Background 
-          color="#cbd5e1" 
-          gap={[24, 24]} 
+
+        <Background
+          color="#cbd5e1"
+          gap={[24, 24]}
           size={2}
           offset={2}
           className="improved-erd-background"
           variant={BackgroundVariant.Dots}
         />
-      </ReactFlow>
+      </CatalogGraph>
 
       {/* Info Panel */}
       <ErdInfoPanel

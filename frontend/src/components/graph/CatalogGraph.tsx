@@ -10,6 +10,10 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   ReactFlowProvider,
+  ReactFlowInstance,
+  Viewport,
+  FitViewOptions,
+  ProOptions,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box, CircularProgress, Alert } from '@mui/material';
@@ -27,7 +31,30 @@ import { applyDagreLayout, NodeDimensionsLookup } from './layout/dagreLayout';
 import { applyBfsLevelLayout } from './layout/bfsLevelLayout';
 import { CatalogNodeProps } from './CatalogNodeProps';
 
-export interface CatalogGraphProps {
+interface RawModeProps {
+  nodeTypeOverrides?: Record<string, CatalogNodeComponent>;
+  children?: React.ReactNode;
+  onInit?: (instance: ReactFlowInstance) => void;
+  onNodeClick?: (event: React.MouseEvent, node: Node) => void;
+  onEdgeClick?: (event: React.MouseEvent, edge: Edge) => void;
+  onPaneClick?: () => void;
+  onMoveEnd?: (event: any, viewport: Viewport) => void;
+  fitView?: boolean;
+  fitViewOptions?: FitViewOptions;
+  defaultViewport?: Viewport;
+  minZoom?: number;
+  maxZoom?: number;
+  className?: string;
+  nodesDraggable?: boolean;
+  nodesConnectable?: boolean;
+  elementsSelectable?: boolean;
+  selectNodesOnDrag?: boolean;
+  panOnDrag?: boolean;
+  proOptions?: ProOptions;
+  attributionPosition?: string;
+}
+
+export interface CatalogGraphProps extends RawModeProps {
   /**
    * View-fetch mode: pass viewDefinitionId + rootNodeId to have CatalogGraph
    * fetch and normalize the graph itself via GET
@@ -44,8 +71,17 @@ export interface CatalogGraphProps {
    */
   graphData?: CatalogResponseGraph;
   layout?: ViewLayoutConfig;
-  /** Per-view renderer overrides, e.g. ERD's table-with-inline-columns node for 'table'. */
-  nodeTypeOverrides?: Record<string, CatalogNodeComponent>;
+  /**
+   * Raw mode: pass already ReactFlow-shaped, pre-positioned nodes/edges
+   * directly (e.g. ERD, which computes its own row-packing layout upstream).
+   * CatalogGraph applies no normalization, layout, clustering, or (unlike
+   * the other two modes) any tenant-scoped data fetching in this mode — it's
+   * a thin ReactFlow wrapper giving the caller nodeRegistry dispatch and a
+   * children overlay slot for free. Takes precedence over `graphData` if
+   * both are somehow provided.
+   */
+  rawNodes?: Node[];
+  rawEdges?: Edge[];
   getNodeDimensions?: NodeDimensionsLookup;
   onNodeSelect?: (node: CatalogResponseNode) => void;
   edgeColor?: (edge: CatalogResponseEdge) => string;
@@ -107,13 +143,86 @@ function graphSignatureOf(graphData: CatalogResponseGraph | undefined | null): s
   }
 }
 
+// Raw mode as its own component (not just a branch inside one component) so
+// its render tree never calls useViewDefinition/useCatalogGraph — those pull
+// the active tenant via useTenant(), which throws outside a TenantProvider.
+// Raw-mode callers (e.g. ERD, which supplies its own pre-positioned nodes)
+// genuinely need zero tenant-scoped data fetching, and conditionally calling
+// those hooks from inside one shared component would violate the rules of
+// hooks anyway — a separate component is the correct fix, not a workaround.
+function RawCatalogGraph({
+  rawNodes,
+  rawEdges,
+  nodeTypeOverrides,
+  children,
+  onInit,
+  onNodeClick,
+  onEdgeClick,
+  onPaneClick,
+  onMoveEnd,
+  fitView = true,
+  fitViewOptions,
+  defaultViewport,
+  minZoom,
+  maxZoom,
+  className,
+  nodesDraggable,
+  nodesConnectable,
+  elementsSelectable,
+  selectNodesOnDrag,
+  panOnDrag,
+  proOptions,
+  attributionPosition,
+}: RawModeProps & { rawNodes: Node[]; rawEdges?: Edge[] }) {
+  const [nodes, setNodes, onNodesChange] = useNodesState<any>(rawNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(rawEdges || []);
+
+  useEffect(() => {
+    setNodes(rawNodes || []);
+    setEdges(rawEdges || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawNodes, rawEdges]);
+
+  const nodeTypes = useMemo(() => getNodeTypes(nodeTypeOverrides), [nodeTypeOverrides]);
+
+  return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      onInit={onInit}
+      onNodeClick={onNodeClick}
+      onEdgeClick={onEdgeClick}
+      onPaneClick={onPaneClick}
+      onMoveEnd={onMoveEnd}
+      fitView={fitView}
+      fitViewOptions={fitViewOptions}
+      defaultViewport={defaultViewport}
+      minZoom={minZoom}
+      maxZoom={maxZoom}
+      className={className}
+      nodesDraggable={nodesDraggable}
+      nodesConnectable={nodesConnectable}
+      elementsSelectable={elementsSelectable}
+      selectNodesOnDrag={selectNodesOnDrag}
+      panOnDrag={panOnDrag}
+      proOptions={proOptions}
+      attributionPosition={attributionPosition as any}
+    >
+      {children}
+    </ReactFlow>
+  );
+}
+
 // Generic graph renderer shared by every catalog graph viewer. Either fetches
 // and normalizes a graph itself (view-fetch mode, driven by a ViewDefinition)
 // or renders a graph a caller already fetched from elsewhere (pre-fetched
 // mode, e.g. a viewer built on /api/bo/{boId}/graph). Either way, node
 // rendering dispatches through nodeRegistry and layout runs through the
 // shared dagre/bfs-level strategies — no viewer hand-rolls either again.
-function CatalogGraphInner({
+function FetchingCatalogGraph({
   viewDefinitionId,
   rootNodeId,
   depth,
@@ -227,6 +336,10 @@ function CatalogGraphInner({
 
 export const CatalogGraph: React.FC<CatalogGraphProps> = (props) => (
   <ReactFlowProvider>
-    <CatalogGraphInner {...props} />
+    {props.rawNodes ? (
+      <RawCatalogGraph {...props} rawNodes={props.rawNodes} />
+    ) : (
+      <FetchingCatalogGraph {...props} />
+    )}
   </ReactFlowProvider>
 );
