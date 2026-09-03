@@ -67,5 +67,5 @@ Staff should have zero ambient tenant membership. We will implement a delegation
 
 ## Compliance Engine Microservice Exposure & Auth
 - **Exposure**: Internal service (`backend/services/compliance-engine/cmd/compliance-engine/main.go`).
-- **Auth**: Uses `jwtmiddleware.NewJWTMiddleware(publicPaths...)` which mounts Keycloak JWT validation on non-`/health` routes.
-- **Remediation / Phase 3 Item**: It currently operates on its own self-contained router and validates user JWTs directly rather than authenticating S2S requests from the main backend. In Phase 3, this service will be locked down behind internal network policy and transition to service-to-service mTLS or dedicated S2S tokens issued by the backend platform.
+- **Auth**: Uses `jwtmiddleware.NewJWTMiddleware(...)` backed by `libs/jwt-middleware` (strict HMAC-SHA256 using `JWT_SECRET`, failing closed on invalid/missing tokens).
+- **Remediation / Phase 3 Item**: It operates on its own router and validates bearer tokens directly via the shared HMAC secret rather than authenticating S2S requests from the main backend. In Phase 3, this service will be locked down behind internal Kubernetes NetworkPolicy and transition to service-to-service mTLS or dedicated S2S tokens issued by the backend platform.
