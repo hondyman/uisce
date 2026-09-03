@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
@@ -40,33 +41,25 @@ func TestRegisterCatalogScanRoute(t *testing.T) {
 
 func TestCatalogScanStream_AuthProtection(t *testing.T) {
 	// Verify that /api/catalog/scan/stream on rootMux strips spoofed identity headers
-	// when accessed anonymously or with invalid credentials.
+	// and strictly enforces authentication with 401 Unauthorized.
 	r := chi.NewRouter()
-	
-	fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.Header.Get("X-User-ID") != "" {
-			t.Errorf("expected X-User-ID to be stripped, got %q", req.Header.Get("X-User-ID"))
-		}
-		if req.Header.Get("X-Tenant-ID") != "" {
-			t.Errorf("expected X-Tenant-ID to be stripped, got %q", req.Header.Get("X-Tenant-ID"))
-		}
-		w.WriteHeader(http.StatusOK)
-	})
+
+	handler := handlers.NewCatalogScanHandler(nil, handlers.SecurityContextDeps{})
 
 	secMgr := services.NewSecurityManager(nil, nil, []byte("test-secret-32-bytes-long-required!!"))
-	r.With(appmid.AuthContextMiddleware(secMgr, nil)).Get("/api/catalog/scan/stream", fakeHandler)
+	r.With(appmid.AuthContextMiddleware(secMgr, nil)).Get("/api/catalog/scan/stream", handler.HandleScanStream)
 
-	// 1. Spoofed headers with no credentials -> headers stripped downstream
-	req := httptest.NewRequest(http.MethodGet, "/api/catalog/scan/stream", nil)
+	// 1. Spoofed headers with no credentials -> stripped by middleware, rejected with 401 by handler
+	req := httptest.NewRequest(http.MethodGet, "/api/catalog/scan/stream?datasource_id=00000000-0000-0000-0000-000000000001", nil)
 	req.Header.Set("X-User-ID", "attacker-id")
 	req.Header.Set("X-Tenant-ID", "victim-tenant")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 OK, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for unauthenticated/spoofed request, got %d body=%s", w.Code, w.Body.String())
 	}
 
-	// 2. Malformed credentials -> rejected with 401
+	// 2. Malformed credentials -> rejected with 401 by middleware
 	req401 := httptest.NewRequest(http.MethodGet, "/api/catalog/scan/stream", nil)
 	req401.Header.Set("Authorization", "Bearer not.a.valid.jwt")
 	w401 := httptest.NewRecorder()
