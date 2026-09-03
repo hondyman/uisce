@@ -19,10 +19,18 @@ func main() {
 	roles := splitList(os.Args[2])
 	tenantIDs := splitList(os.Args[3])
 
+	primaryTenant := ""
+	if len(tenantIDs) > 0 {
+		primaryTenant = tenantIDs[0]
+	}
+
 	claims := jwt.MapClaims{
 		"sub":        userID,
+		"user_id":    userID,
+		"tenant_id":  primaryTenant,
 		"roles":      roles,
 		"tenant_ids": tenantIDs,
+		"is_active":  true,
 		"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		"iat":        time.Now().Unix(),
 	}
