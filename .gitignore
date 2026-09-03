@@ -33,6 +33,29 @@ services/governance/governance
 services/governance/governance-service
 services/semantic-engine/cmd/cmd
 services/semantic-engine/semantic-engine
+# Large compiled Go binaries that must never be committed
+backend/uisce-server
+backend/catalog-admin
+backend/worker
+backend/api.test
+backend/handlers.test
+backend/metadata.test
+backend/alternative_investment.test
+backend/main
+backend/main_test
+backend/server
+backend/server.old
+backend/bundles
+backend/loadtest
+backend/*-demo
+backend/demo_*
+backend/test_*
+backend/mcp-server
+backend/semantic-rules-api
+backend/security-sync-worker
+backend/screen-builder-service
+backend/notifications-service
+backend/temporal-worker
 
 # Backend runtime artifacts
 backend.log
