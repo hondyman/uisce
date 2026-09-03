@@ -20,6 +20,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/validation"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -84,6 +85,19 @@ type BusinessObjectService struct {
 	entitlements   *security.EntitlementsService
 	boRepo         *boresolver.PostgresBORepository
 	boGen          *boresolver.BOSQLGenerator
+	triggerEngine  *validation.TriggerValidationEngine
+}
+
+// SetTriggerEngine wires the trigger-aware validation engine
+// (internal/validation.TriggerValidationEngine) used by CreateBORecord,
+// UpdateBORecord and DeleteBORecord to fire "create"/"save"/"delete"
+// triggers — and any Data Pipeline Studio pipeline bound to them — before
+// the physical INSERT/UPDATE/DELETE against a BO's driver table. Optional:
+// when nil (the default for construction paths that don't call this, e.g.
+// tests, cmd/seed-orm-bos, cmd/e2e_bo_check), trigger dispatch is skipped
+// and BO record CRUD behaves exactly as before this was wired up.
+func (s *BusinessObjectService) SetTriggerEngine(te *validation.TriggerValidationEngine) {
+	s.triggerEngine = te
 }
 
 // SetEntitlementsService wires the field/BO-level entitlements engine used to
@@ -3004,6 +3018,27 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	return nil
 }
 
+// dispatchBORecordTrigger fires the trigger engine (if wired via
+// SetTriggerEngine) for a physical BO record write, BEFORE the
+// INSERT/UPDATE/DELETE executes so a "sync" DispatchMode pipeline failure
+// can still block the write. entity is the BO's schema-qualified driver
+// table (e.g. "oms.account"). A nil triggerEngine or an invalid tenantID is
+// treated as opt-out, not an error, to keep this fully backward compatible.
+func (s *BusinessObjectService) dispatchBORecordTrigger(ctx context.Context, tenantID string, action validation.TriggerType, entity string, data map[string]interface{}) error {
+	if s.triggerEngine == nil {
+		return nil
+	}
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("dispatchBORecordTrigger: invalid tenant id %q, skipping trigger dispatch: %v", tenantID, err)
+		return nil
+	}
+	if err := s.triggerEngine.DispatchTrigger(ctx, tid, action, entity, data); err != nil {
+		return fmt.Errorf("trigger validation failed: %w", err)
+	}
+	return nil
+}
+
 func (s *BusinessObjectService) logAudit(
 	ctx context.Context,
 	tenantID, entityType, entityID, action string,
@@ -4632,6 +4667,10 @@ func (s *BusinessObjectService) CreateBORecord(
 		rec["id"] = uuid.New().String()
 	}
 
+	if err := s.dispatchBORecordTrigger(ctx, secCtx.TenantID, validation.TriggerTypeCreate, table, rec); err != nil {
+		return nil, err
+	}
+
 	var cols []string
 	var placeholders []string
 	var vals []interface{}
@@ -4726,6 +4765,10 @@ func (s *BusinessObjectService) UpdateBORecord(
 		return nil, fmt.Errorf("no updateable fields provided")
 	}
 
+	if err := s.dispatchBORecordTrigger(ctx, secCtx.TenantID, validation.TriggerTypeSave, table, rec); err != nil {
+		return nil, err
+	}
+
 	updateSQL := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE id = $%d RETURNING *",
 		pq.QuoteIdentifier(rawTable),
@@ -4778,6 +4821,10 @@ func (s *BusinessObjectService) DeleteBORecord(
 	rawTable := table
 	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
 		rawTable = rawTable[idx+1:]
+	}
+
+	if err := s.dispatchBORecordTrigger(ctx, secCtx.TenantID, validation.TriggerTypeDelete, table, map[string]interface{}{"id": recordID}); err != nil {
+		return err
 	}
 
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", pq.QuoteIdentifier(rawTable))

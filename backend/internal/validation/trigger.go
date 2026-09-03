@@ -21,6 +21,17 @@ type ValidationTrigger struct {
 	StepName     *string         `json:"step_name,omitempty"`
 	RuleIDs      pq.StringArray  `json:"rule_ids"`
 	Meta         json.RawMessage `json:"meta,omitempty"`
+
+	// PipelineID optionally binds this trigger to a Data Pipeline Studio
+	// pipeline (internal/datapipeline.PipelineDefinition) that runs after
+	// the trigger's rule checks pass. Nil means no pipeline binding —
+	// existing triggers with no pipeline configured are unaffected.
+	PipelineID *uuid.UUID `json:"pipeline_id,omitempty"`
+	// DispatchMode is "sync" (pipeline runs inline; a pipeline failure
+	// blocks the write, same as a failed rule) or "async" (an outbox event
+	// is written and the pipeline runs later via Temporal, never blocking
+	// the write). Ignored when PipelineID is nil.
+	DispatchMode string `json:"dispatch_mode,omitempty"`
 }
 
 // ValidationRule represents a single validation rule (from catalog_validation_rules)
@@ -45,6 +56,27 @@ type TriggerValidationEngine struct {
 	// test-only in-memory overrides to avoid DB access during unit tests
 	testTriggers []ValidationTrigger
 	testRules    map[string]ValidationRule
+
+	// pipelineExecutor and outboxPublisher back trigger->pipeline dispatch
+	// (see trigger_dispatch.go). Both may be nil, in which case triggers
+	// with PipelineID set are skipped with a warning rather than failing
+	// the write — this keeps the feature fully opt-in/backward compatible.
+	pipelineExecutor PipelineTriggerExecutor
+	outboxPublisher  PipelineOutboxPublisher
+}
+
+// WithPipelineExecutor wires a synchronous pipeline executor used by
+// triggers with DispatchMode "sync". Returns the engine for chaining.
+func (tve *TriggerValidationEngine) WithPipelineExecutor(exec PipelineTriggerExecutor) *TriggerValidationEngine {
+	tve.pipelineExecutor = exec
+	return tve
+}
+
+// WithOutboxPublisher wires the outbox writer used by triggers with
+// DispatchMode "async". Returns the engine for chaining.
+func (tve *TriggerValidationEngine) WithOutboxPublisher(pub PipelineOutboxPublisher) *TriggerValidationEngine {
+	tve.outboxPublisher = pub
+	return tve
 }
 
 // Logger interface for dependency injection
@@ -147,9 +179,54 @@ func (tve *TriggerValidationEngine) TriggerValidate(ctx context.Context, tenantI
 				return fmt.Errorf("%s: %s", rule.RuleName, msg)
 			}
 		}
+
+		// All rule checks passed for this trigger — dispatch its bound
+		// pipeline (if any), sync or async per DispatchMode.
+		if t.PipelineID != nil {
+			if err := tve.dispatchTriggerPipeline(ctx, tenantID, t, data); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil
+}
+
+// dispatchTriggerPipeline runs (sync) or enqueues (async) the pipeline
+// bound to trigger t. Sync failures block the write, matching the blocking
+// semantics already used for failed validation rules. Async dispatch never
+// blocks the write: enqueue failures are logged, not returned.
+func (tve *TriggerValidationEngine) dispatchTriggerPipeline(ctx context.Context, tenantID uuid.UUID, t ValidationTrigger, data map[string]interface{}) error {
+	if t.PipelineID == nil {
+		return nil
+	}
+
+	switch t.DispatchMode {
+	case "async":
+		if tve.outboxPublisher == nil {
+			tve.logger.Warn("dispatchTriggerPipeline: async dispatch requested but no outbox publisher configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
+			return nil
+		}
+		if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, data); err != nil {
+			// Async dispatch must never block the write it validated.
+			tve.logger.Error("dispatchTriggerPipeline: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
+		}
+		return nil
+
+	case "sync", "":
+		if tve.pipelineExecutor == nil {
+			tve.logger.Warn("dispatchTriggerPipeline: sync dispatch requested but no pipeline executor configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
+			return nil
+		}
+		if err := tve.pipelineExecutor.RunPipelineSync(ctx, tenantID, *t.PipelineID, data); err != nil {
+			return fmt.Errorf("pipeline '%s' failed: %w", t.PipelineID.String(), err)
+		}
+		return nil
+
+	default:
+		tve.logger.Warn("dispatchTriggerPipeline: unknown dispatch_mode, skipping", "trigger_id", t.ID, "dispatch_mode", t.DispatchMode)
+		return nil
+	}
 }
 
 // fetchTriggers retrieves validation triggers for a given action from the DB
@@ -179,10 +256,11 @@ func (tve *TriggerValidationEngine) fetchTriggers(ctx context.Context, tenantID,
 	}
 
 	q := `
-	SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids, COALESCE(meta, '{}'::jsonb)::text
+	SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids, COALESCE(meta, '{}'::jsonb)::text,
+	       pipeline_id, COALESCE(dispatch_mode, '')
 	FROM validation_triggers
-	WHERE tenant_id = $1 
-	  AND trigger_type = $2 
+	WHERE tenant_id = $1
+	  AND trigger_type = $2
 	  AND target_entity = $3
 	  AND (step_name IS NULL OR step_name = $4 OR step_name = '')
 	ORDER BY created_at DESC
@@ -205,14 +283,20 @@ func (tve *TriggerValidationEngine) fetchTriggers(ctx context.Context, tenantID,
 		var stepNameNull sql.NullString
 		var ruleIDsArray pq.StringArray
 		var metaStr string
+		var pipelineIDNull sql.NullString
 
-		if err := rows.Scan(&t.ID, &t.TenantID, &t.TriggerType, &t.TargetEntity, &stepNameNull, &ruleIDsArray, &metaStr); err != nil {
+		if err := rows.Scan(&t.ID, &t.TenantID, &t.TriggerType, &t.TargetEntity, &stepNameNull, &ruleIDsArray, &metaStr, &pipelineIDNull, &t.DispatchMode); err != nil {
 			tve.logger.Warn("fetchTriggers: scan error", "err", err.Error())
 			continue
 		}
 
 		if stepNameNull.Valid {
 			t.StepName = &stepNameNull.String
+		}
+		if pipelineIDNull.Valid && pipelineIDNull.String != "" {
+			if pid, err := uuid.Parse(pipelineIDNull.String); err == nil {
+				t.PipelineID = &pid
+			}
 		}
 		t.RuleIDs = ruleIDsArray
 		t.Meta = json.RawMessage(metaStr)

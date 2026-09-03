@@ -372,3 +372,106 @@ func TestDispatchTriggerTypes(t *testing.T) {
 	assert.Equal(t, TriggerTypeCalculatedField, TriggerType("calculated_field"))
 	assert.Equal(t, TriggerTypeSecurityRole, TriggerType("security_role"))
 }
+
+// ============================================================================
+// Pipeline-bound trigger dispatch (sync / async)
+// ============================================================================
+
+// fakePipelineExecutor records RunPipelineSync calls and optionally fails.
+type fakePipelineExecutor struct {
+	calls   int
+	failErr error
+}
+
+func (f *fakePipelineExecutor) RunPipelineSync(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+	f.calls++
+	return f.failErr
+}
+
+// fakeOutboxPublisher records PublishPipelineTrigger calls and optionally fails.
+type fakeOutboxPublisher struct {
+	calls   int
+	failErr error
+}
+
+func (f *fakeOutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+	f.calls++
+	return f.failErr
+}
+
+func TestDispatchTrigger_PipelineSync_RunsAndBlocksOnFailure(t *testing.T) {
+	tenantID := uuid.New()
+	pipelineID := uuid.New()
+	ctx := context.Background()
+
+	exec := &fakePipelineExecutor{}
+	engine := NewTriggerValidationEngine(nil, &SimpleLogger{}).WithPipelineExecutor(exec)
+
+	trig := ValidationTrigger{
+		ID:           uuid.New().String(),
+		TenantID:     tenantID.String(),
+		TriggerType:  "create",
+		TargetEntity: "orders",
+		RuleIDs:      pq.StringArray{},
+		Meta:         jsonRaw(`{}`),
+		PipelineID:   &pipelineID,
+		DispatchMode: "sync",
+	}
+	engine.WithTestTriggers([]ValidationTrigger{trig}).WithTestRules(map[string]ValidationRule{})
+
+	err := engine.DispatchTrigger(ctx, tenantID, TriggerTypeCreate, "orders", map[string]interface{}{"total": 10.0})
+	assert.NoError(t, err)
+	assert.Equal(t, 1, exec.calls, "expected sync pipeline executor to be invoked once")
+
+	// Now make the pipeline fail — it must block the write like a failed rule would.
+	exec.failErr = assert.AnError
+	err = engine.DispatchTrigger(ctx, tenantID, TriggerTypeCreate, "orders", map[string]interface{}{"total": 10.0})
+	assert.Error(t, err, "a failing sync pipeline must block the write")
+}
+
+func TestDispatchTrigger_PipelineAsync_NeverBlocks(t *testing.T) {
+	tenantID := uuid.New()
+	pipelineID := uuid.New()
+	ctx := context.Background()
+
+	pub := &fakeOutboxPublisher{failErr: assert.AnError}
+	engine := NewTriggerValidationEngine(nil, &SimpleLogger{}).WithOutboxPublisher(pub)
+
+	trig := ValidationTrigger{
+		ID:           uuid.New().String(),
+		TenantID:     tenantID.String(),
+		TriggerType:  "create",
+		TargetEntity: "orders",
+		RuleIDs:      pq.StringArray{},
+		Meta:         jsonRaw(`{}`),
+		PipelineID:   &pipelineID,
+		DispatchMode: "async",
+	}
+	engine.WithTestTriggers([]ValidationTrigger{trig}).WithTestRules(map[string]ValidationRule{})
+
+	// Even though the outbox publish itself fails, async dispatch must
+	// never block the write.
+	err := engine.DispatchTrigger(ctx, tenantID, TriggerTypeCreate, "orders", map[string]interface{}{"total": 10.0})
+	assert.NoError(t, err)
+	assert.Equal(t, 1, pub.calls, "expected async outbox publisher to be invoked once")
+}
+
+func TestDispatchTrigger_NoPipelineBinding_Unaffected(t *testing.T) {
+	tenantID := uuid.New()
+	ctx := context.Background()
+
+	engine := NewTriggerValidationEngine(nil, &SimpleLogger{})
+	trig := ValidationTrigger{
+		ID:           uuid.New().String(),
+		TenantID:     tenantID.String(),
+		TriggerType:  "create",
+		TargetEntity: "orders",
+		RuleIDs:      pq.StringArray{},
+		Meta:         jsonRaw(`{}`),
+		// No PipelineID set.
+	}
+	engine.WithTestTriggers([]ValidationTrigger{trig}).WithTestRules(map[string]ValidationRule{})
+
+	err := engine.DispatchTrigger(ctx, tenantID, TriggerTypeCreate, "orders", map[string]interface{}{"total": 10.0})
+	assert.NoError(t, err, "triggers with no pipeline binding must behave exactly as before")
+}

@@ -49,6 +49,23 @@ const (
 	TriggerTypeSecurityRole       TriggerType = "security_role"       // Role assignment
 )
 
+// PipelineTriggerExecutor runs a Data Pipeline Studio pipeline synchronously
+// for a "sync" DispatchMode trigger. Implemented by
+// internal/datapipeline.PipelineEngine (see PipelineEngine.RunPipelineSync)
+// — kept as an interface here so internal/validation never has to import
+// internal/datapipeline directly.
+type PipelineTriggerExecutor interface {
+	RunPipelineSync(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+}
+
+// PipelineOutboxPublisher enqueues a "Pipeline.Trigger" outbox event for an
+// "async" DispatchMode trigger. The event is later picked up by
+// events.ProcessOutbox's "Pipeline.Trigger" handler (wired in cmd/worker),
+// which calls PipelineEngine.ExecuteRunAsWorkflow.
+type PipelineOutboxPublisher interface {
+	PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+}
+
 // TriggerDispatchContext holds metadata about the trigger dispatch event
 type TriggerDispatchContext struct {
 	TenantID      uuid.UUID              // Tenant scope

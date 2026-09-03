@@ -10,6 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	"github.com/hondyman/uisce/backend/internal/rules"
 )
 
 func TestTransforms_ColumnMapper(t *testing.T) {
@@ -115,7 +117,7 @@ func TestTransforms_GraphSynthesizer(t *testing.T) {
 
 func TestPipelineEngine_SimulationRun(t *testing.T) {
 	ctx := context.Background()
-	engine := NewPipelineEngine(nil)
+	engine := NewPipelineEngine(nil, nil, nil)
 
 	dag := PipelineDAG{
 		Nodes: []PipelineNode{
@@ -187,7 +189,7 @@ func TestPipelineEngine_SimulationRun(t *testing.T) {
 }
 
 func TestHTTPHandlers_RESTEndpoints(t *testing.T) {
-	engine := NewPipelineEngine(nil)
+	engine := NewPipelineEngine(nil, nil, nil)
 	handler := NewDataPipelineHandler(nil, engine)
 
 	r := chi.NewRouter()
@@ -282,5 +284,86 @@ func TestTransforms_BloombergFieldsMapper(t *testing.T) {
 	sectors, ok := props["market_sectors"].(map[string]bool)
 	if !ok || !sectors["equity"] || !sectors["corp"] || !sectors["mtge"] || sectors["govt"] {
 		t.Errorf("Sectors mismatch: %v", sectors)
+	}
+}
+
+func TestRuleValidatorTransformer(t *testing.T) {
+	ctx := context.Background()
+	engine := rules.NewRuleEngine(nil)
+
+	validator := &RuleValidatorTransformer{
+		Engine:   engine,
+		TenantID: uuid.New().String(),
+		CELRules: []RuleValidatorRule{
+			{
+				ID:         "positive_balance",
+				Expression: `input.balance > 0.0`,
+				Message:    "balance must be positive",
+			},
+		},
+	}
+
+	input := []PipelineRecord{
+		{"account_number": "ACC-1", "balance": 100.0},
+		{"account_number": "ACC-2", "balance": -50.0},
+	}
+
+	out, errs, err := validator.Transform(ctx, input)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("Expected 1 passing record, got %d: %v", len(out), out)
+	}
+	if out[0]["account_number"] != "ACC-1" {
+		t.Errorf("Expected ACC-1 to pass, got %v", out[0]["account_number"])
+	}
+	if len(errs) == 0 {
+		t.Errorf("Expected an error for the failing record, got none")
+	}
+}
+
+func TestRuleValidatorTransformer_NoEngine(t *testing.T) {
+	ctx := context.Background()
+	validator := &RuleValidatorTransformer{}
+
+	input := []PipelineRecord{{"a": 1}, {"a": 2}}
+	out, errs, err := validator.Transform(ctx, input)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+	if len(out) != 2 || len(errs) != 0 {
+		t.Errorf("Expected pass-through with nil engine, got out=%v errs=%v", out, errs)
+	}
+}
+
+func TestEngine_ValidatorNodeDispatch(t *testing.T) {
+	ctx := context.Background()
+	engine := NewPipelineEngine(nil, rules.NewRuleEngine(nil), nil)
+	tenantID := uuid.New()
+
+	node := PipelineNode{
+		ID:   "validate-1",
+		Type: "validator",
+		Config: map[string]interface{}{
+			"expression": `input.status == "active"`,
+			"message":    "status must be active",
+		},
+	}
+
+	records := []PipelineRecord{
+		{"status": "active"},
+		{"status": "inactive"},
+	}
+
+	out, errs, err := engine.executeTransform(ctx, tenantID, node, records, 1)
+	if err != nil {
+		t.Fatalf("executeTransform failed: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("Expected 1 record to pass validator, got %d", len(out))
+	}
+	if len(errs) != 1 {
+		t.Fatalf("Expected 1 validation error, got %d: %v", len(errs), errs)
 	}
 }

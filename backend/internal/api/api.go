@@ -28,6 +28,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/ai"
 	"github.com/hondyman/uisce/backend/internal/altinvest"
 	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
+	"github.com/hondyman/uisce/backend/pkg/workflows"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/audit"
 	"github.com/hondyman/uisce/backend/internal/billing"
@@ -41,6 +42,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/chat_history"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/validation"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
@@ -214,8 +216,8 @@ type Server struct {
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
 
+	DataPipelineEngine       *datapipeline.PipelineEngine
 	PageLayoutHandler        *handlers.PageLayoutHandler
-	PipelineHandler          *handlers.PipelineHandler
 	EventsHandler            *ingestion.EventsHandler
 	GenAICopilotHandler      *handlers.GenAICopilotHandler
 	PolicyGenerationHandler  *handlers.PolicyGenerationHandler
@@ -1540,14 +1542,43 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.PageLayoutHandler = pageLayoutHandler
 	pageLayoutHandler.RegisterRoutes(r)
 
-	pipelineHandler := handlers.NewPipelineHandler(sqlxDB, temporalClient)
-	srv.PipelineHandler = pipelineHandler
-	pipelineHandler.RegisterRoutes(r)
+	// The legacy ReactFlow pipeline system (internal/handlers.PipelineHandler,
+	// table `pipelines`) has been retired in favor of internal/datapipeline
+	// as the single pipeline system (see db/migrations/20260903_migrate_legacy_pipelines.up.sql
+	// for the one-time data migration). The old handler's
+	// /api/v1/pipelines/activities/safe route is preserved here directly
+	// since the frontend Studio still calls it and it has no other
+	// dependency on the retired handler.
+	r.Get("/api/v1/pipelines/activities/safe", func(w http.ResponseWriter, req *http.Request) {
+		activities := workflows.GetClientSafeActivities()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string][]string{"activities": activities})
+	})
 
-	// Initialize Visual Parallel Data Pipeline Platform (ETL/ELT Engine)
-	dataPipelineEngine := datapipeline.NewPipelineEngine(sqlxDB)
+	// Initialize Visual Parallel Data Pipeline Platform (ETL/ELT Engine) —
+	// the single pipeline system: typed DAG model, rule validation, and
+	// durable Temporal execution. Reuses the shared *rules.RuleEngine from
+	// ComplianceDeps (constructed once in cmd/server/main.go) rather than
+	// standing up a second engine instance.
+	var dataPipelineRuleEngine *rules.RuleEngine
+	if complianceDeps != nil {
+		dataPipelineRuleEngine = complianceDeps.RuleEngine
+	}
+	dataPipelineEngine := datapipeline.NewPipelineEngine(sqlxDB, dataPipelineRuleEngine, temporalClient)
 	dataPipelineHandler := datapipeline.NewDataPipelineHandler(sqlxDB, dataPipelineEngine)
 	dataPipelineHandler.RegisterRoutes(r)
+	srv.DataPipelineEngine = dataPipelineEngine
+
+	// Wire the trigger-aware validation engine into the BO physical-record
+	// write path (CreateBORecord/UpdateBORecord/DeleteBORecord) so triggers
+	// bound to a Data Pipeline Studio pipeline actually fire on BO CRUD.
+	// Sync-mode pipelines run inline via dataPipelineEngine (RunPipelineSync);
+	// async-mode pipelines are enqueued to the outbox and picked up later by
+	// cmd/worker's "Pipeline.Trigger" handler.
+	boTriggerEngine := validation.NewTriggerValidationEngine(db, &validation.SimpleLogger{}).
+		WithPipelineExecutor(dataPipelineEngine).
+		WithOutboxPublisher(datapipeline.NewOutboxPublisher(sqlxDB))
+	boService.SetTriggerEngine(boTriggerEngine)
 
 	// Initialize Events Ingestion Handler
 	srv.EventsHandler = ingestion.NewEventsHandler(temporalClient)

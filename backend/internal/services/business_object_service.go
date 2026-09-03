@@ -11,13 +11,48 @@ import (
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/validation"
 	"github.com/jmoiron/sqlx"
 )
 
 // BusinessObjectService handles business object operations with real database queries
 type BusinessObjectService struct {
-	db    *sqlx.DB
-	rules AccessRuleRepository
+	db            *sqlx.DB
+	rules         AccessRuleRepository
+	triggerEngine *validation.TriggerValidationEngine
+}
+
+// SetTriggerEngine wires the trigger-aware validation engine
+// (internal/validation.TriggerValidationEngine) used by CreateInstance,
+// UpdateInstance and DeleteInstance to fire "create"/"save"/"delete"
+// triggers — and any Data Pipeline Studio pipeline bound to them — before
+// the business_object_instances write. Optional: when nil (the default for
+// construction paths that don't call this, e.g. cmd/rule-engine-service,
+// cmd/validation-service), trigger dispatch is skipped and instance CRUD
+// behaves exactly as before this was wired up.
+func (s *BusinessObjectService) SetTriggerEngine(te *validation.TriggerValidationEngine) {
+	s.triggerEngine = te
+}
+
+// dispatchInstanceTrigger fires the trigger engine (if wired via
+// SetTriggerEngine) for a business_object_instances write, BEFORE the
+// INSERT/UPDATE/DELETE executes so a "sync" DispatchMode pipeline failure
+// can still block the write. entity is the BO's key (e.g. "oms.account").
+// A nil triggerEngine or an invalid tenantID is treated as opt-out, not an
+// error, to keep this fully backward compatible.
+func (s *BusinessObjectService) dispatchInstanceTrigger(ctx context.Context, tenantID string, action validation.TriggerType, entity string, data map[string]interface{}) error {
+	if s.triggerEngine == nil {
+		return nil
+	}
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("dispatchInstanceTrigger: invalid tenant id %q, skipping trigger dispatch: %v", tenantID, err)
+		return nil
+	}
+	if err := s.triggerEngine.DispatchTrigger(ctx, tid, action, entity, data); err != nil {
+		return fmt.Errorf("trigger validation failed: %w", err)
+	}
+	return nil
 }
 
 // NewBusinessObjectService creates a new BusinessObjectService with database connection
@@ -762,6 +797,25 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 		instance.ID = uuid.New().String()
 	}
 
+	entityKey := instance.BusinessObjectKey
+	if entityKey == "" {
+		if bo, err := s.GetBusinessObject(ctx, tenantID, boID); err == nil {
+			entityKey = bo.Key
+		} else {
+			entityKey = boID
+		}
+	}
+	triggerData := map[string]interface{}{"id": instance.ID}
+	for k, v := range instance.CoreFieldValues {
+		triggerData[k] = v
+	}
+	for k, v := range instance.CustomFieldValues {
+		triggerData[k] = v
+	}
+	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeCreate, entityKey, triggerData); err != nil {
+		return nil, err
+	}
+
 	coreJSON, err := json.Marshal(instance.CoreFieldValues)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal core attributes: %w", err)
@@ -1009,6 +1063,21 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 		return nil, fmt.Errorf("failed to marshal custom attributes: %w", err)
 	}
 
+	entityKey := boID
+	if bo, err := s.GetBusinessObject(ctx, tenantID, boID); err == nil {
+		entityKey = bo.Key
+	}
+	triggerData := map[string]interface{}{"id": instanceID}
+	for k, v := range core {
+		triggerData[k] = v
+	}
+	for k, v := range custom {
+		triggerData[k] = v
+	}
+	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeSave, entityKey, triggerData); err != nil {
+		return nil, err
+	}
+
 	whereParts := []string{"tenant_id = $3", "id = $4"}
 	if decision.RowPredicate != "" {
 		whereParts = append(whereParts, "("+decision.RowPredicate+")")
@@ -1056,6 +1125,14 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 	decision, err := s.requireAccess(ctx, tenantID, boID, AccessLevelWrite)
 	if err != nil {
 		return fmt.Errorf("access denied for business object: %w", err)
+	}
+
+	entityKey := boID
+	if bo, err := s.GetBusinessObject(ctx, tenantID, boID); err == nil {
+		entityKey = bo.Key
+	}
+	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeDelete, entityKey, map[string]interface{}{"id": instanceID}); err != nil {
+		return err
 	}
 
 	whereParts := []string{"tenant_id = $1", "id = $2"}

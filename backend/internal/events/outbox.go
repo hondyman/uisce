@@ -39,9 +39,27 @@ func PublishEvent(ctx context.Context, tx *sqlx.Tx, eventType string, payload in
 	return nil
 }
 
-// ProcessOutbox reads unpublished events and publishes them to the broker.
-// This would be called by a background worker.
-func ProcessOutbox(ctx context.Context, db *sqlx.DB, publisher *KafkaPublisher) error {
+// EventHandlerFunc processes a single outbox event's decoded payload. It is
+// used for event types that need application-level routing (e.g.
+// "Pipeline.Trigger" invoking the data pipeline engine) instead of the
+// default Kafka publish path.
+type EventHandlerFunc func(ctx context.Context, payload map[string]interface{}) error
+
+// ProcessOutbox reads unpublished events and dispatches them.
+//
+// For each event, if handlers contains an entry keyed by the event's
+// EventType, that handler is invoked instead of the default Kafka publish
+// path — this is how "Pipeline.Trigger" events (written by
+// internal/validation's async trigger dispatch) get routed to
+// datapipeline.PipelineEngine.ExecuteRunAsWorkflow without this package
+// needing to import internal/datapipeline. Event types with no matching
+// handler keep going through publisher.publishEvent, preserving existing
+// behavior. handlers may be nil, in which case every event goes through the
+// publisher as before.
+//
+// This is called by a background worker on a ticker (see cmd/worker's
+// outbox-polling goroutine).
+func ProcessOutbox(ctx context.Context, db *sqlx.DB, publisher *KafkaPublisher, handlers map[string]EventHandlerFunc) error {
 	// Lock rows to prevent concurrent processing (SKIP LOCKED)
 	q := `
 		SELECT id, event_type, payload, published, created_at
@@ -72,11 +90,19 @@ func ProcessOutbox(ctx context.Context, db *sqlx.DB, publisher *KafkaPublisher) 
 			continue
 		}
 
-		// The publisher should implement a generic publish method (e.g., `PublishToTopic(ctx, topic, key, payload)`)
-		// Prefer `KafkaPublisher` which exposes `PublishToTopic` for generic payloads. If using legacy `RabbitMQPublisher`,
-		// provide an adapter or wrapper to maintain parity with Kafka publishing semantics.
-		// Publish via configured publisher implementation
-		err = publisher.publishEvent(ctx, EventType(evt.EventType), payloadMap)
+		if handler, ok := handlers[evt.EventType]; ok {
+			err = handler(ctx, payloadMap)
+		} else if publisher != nil {
+			// The publisher should implement a generic publish method (e.g., `PublishToTopic(ctx, topic, key, payload)`)
+			// Prefer `KafkaPublisher` which exposes `PublishToTopic` for generic payloads. If using legacy `RabbitMQPublisher`,
+			// provide an adapter or wrapper to maintain parity with Kafka publishing semantics.
+			// Publish via configured publisher implementation
+			err = publisher.publishEvent(ctx, EventType(evt.EventType), payloadMap)
+		}
+		if err != nil {
+			// Leave unpublished for retry on the next tick.
+			continue
+		}
 
 		// Mark as published
 		updateQ := `UPDATE outbox SET published = TRUE, published_at = NOW() WHERE id = $1`

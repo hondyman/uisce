@@ -8,6 +8,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/sdk/client"
+
+	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/pkg/workflows"
 )
 
 // Transformer defines an operator step in the data pipeline
@@ -292,30 +297,94 @@ func (a *APICallerTransformer) Transform(ctx context.Context, input []PipelineRe
 	return output, errs, nil
 }
 
-// WorkflowCallerTransformer triggers an existing Flow Builder / Temporal workflow
+// WorkflowCallerTransformer triggers an existing Flow Builder / Temporal
+// workflow (workflows.RunStoredWorkflow) for each record. TemporalClient
+// must be set to actually dispatch; when nil it falls back to a mock
+// dispatch (for tests / TestStep sandbox calls where no live Temporal
+// connection is available), same as before this transformer was made real.
 type WorkflowCallerTransformer struct {
-	WorkflowID   string                 `json:"workflow_id"`
-	WorkflowName string                 `json:"workflow_name"`
-	Mode         string                 `json:"mode"` // "sync", "async"
-	PayloadKey   string                 `json:"payload_key"`
+	WorkflowID     string `json:"workflow_id"`
+	WorkflowName   string `json:"workflow_name"`
+	Mode           string `json:"mode"` // "sync", "async"
+	PayloadKey     string `json:"payload_key"`
+	TemporalClient client.Client
+	TaskQueue      string
 }
 
 func (w *WorkflowCallerTransformer) Transform(ctx context.Context, input []PipelineRecord) ([]PipelineRecord, []string, error) {
 	output := make([]PipelineRecord, 0, len(input))
-	for _, record := range input {
+	var errs []string
+
+	taskQueue := w.TaskQueue
+	if taskQueue == "" {
+		taskQueue = workflows.DeployedBPTaskQueue
+	}
+
+	for i, record := range input {
 		recCopy := make(PipelineRecord)
 		for k, v := range record {
 			recCopy[k] = v
 		}
 
-		wfRunID := fmt.Sprintf("wf-run-%s-%d", uuid.New().String()[:8], time.Now().UnixNano()%100000)
-		recCopy["_workflow_run_id"] = wfRunID
-		recCopy["_workflow_status"] = "dispatched"
+		payload := map[string]interface{}(recCopy)
+		if w.PayloadKey != "" {
+			if v, ok := recCopy[w.PayloadKey]; ok {
+				if m, ok := v.(map[string]interface{}); ok {
+					payload = m
+				}
+			}
+		}
+
+		if w.TemporalClient == nil {
+			// No live Temporal connection configured (e.g. TestStep sandbox
+			// evaluation): mock the dispatch rather than failing the record.
+			wfRunID := fmt.Sprintf("wf-run-%s-%d", uuid.New().String()[:8], time.Now().UnixNano()%100000)
+			recCopy["_workflow_run_id"] = wfRunID
+			recCopy["_workflow_status"] = "dispatched_mock"
+			recCopy["_workflow_name"] = w.WorkflowName
+			output = append(output, recCopy)
+			continue
+		}
+
+		opts := client.StartWorkflowOptions{
+			ID:        fmt.Sprintf("pipeline-wfcall-%s-%d", uuid.New().String()[:8], time.Now().UnixNano()),
+			TaskQueue: taskQueue,
+		}
+		run, err := w.TemporalClient.ExecuteWorkflow(ctx, opts, "RunStoredWorkflow", workflows.InterpreterInput{
+			WorkflowID:  w.WorkflowID,
+			InitialData: payload,
+		})
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("row %d: failed to start workflow '%s': %v", i+1, w.WorkflowName, err))
+			if w.Mode == "sync" {
+				continue
+			}
+			// async mode: still emit the record, tagged as failed to dispatch
+			recCopy["_workflow_status"] = "dispatch_failed"
+			output = append(output, recCopy)
+			continue
+		}
+
+		recCopy["_workflow_run_id"] = run.GetID()
+		recCopy["_workflow_run_run_id"] = run.GetRunID()
 		recCopy["_workflow_name"] = w.WorkflowName
+
+		if w.Mode == "sync" {
+			var result workflows.WorkflowResult
+			if err := run.Get(ctx, &result); err != nil {
+				errs = append(errs, fmt.Sprintf("row %d: workflow '%s' failed: %v", i+1, w.WorkflowName, err))
+				recCopy["_workflow_status"] = "failed"
+			} else {
+				recCopy["_workflow_status"] = result.Status
+				recCopy["_workflow_result"] = result.FinalState
+			}
+		} else {
+			recCopy["_workflow_status"] = "dispatched"
+		}
 
 		output = append(output, recCopy)
 	}
-	return output, nil, nil
+	return output, errs, nil
 }
 
 // BOCrudTransformer executes full CRUD operations on STI business objects
@@ -426,6 +495,115 @@ func (b *BloombergFieldsMapper) Transform(ctx context.Context, input []PipelineR
 		}
 
 		output = append(output, nodeRecord)
+	}
+
+	return output, errs, nil
+}
+
+// RuleValidatorRule is a single named CEL validation rule evaluated per record.
+type RuleValidatorRule struct {
+	ID         string `json:"id"`
+	Expression string `json:"expression"` // CEL expression evaluated against `input`; must return bool
+	Message    string `json:"message,omitempty"`
+}
+
+// RuleValidatorTransformer validates each pipeline record against real
+// business rules via internal/rules.RuleEngine (the same CEL/VM expression
+// engine used by BO CRUD validation), instead of the previous "validator"
+// node type stub/no-op. Failing records are reported through the errors
+// slice (row-level error convention shared with AllowlistEnforcer /
+// FilterTransformer) rather than silently dropped from the output.
+//
+// Config carries the rules to evaluate either as:
+//   - `rules`: []RuleValidatorRule — literal CEL expressions (evaluated via
+//     RuleEngine.EvaluateCEL against the record, optionally BO-context
+//     enriched via BuildContextFromBORow when BO is set), or
+//   - `rule_ids`/`core_rule_id`: pre-resolved *rules.RuleWithMetadata
+//     (Rules field) evaluated via RuleEngine.EvaluateRule/EvaluateBatch —
+//     for callers that have already loaded compiled rule nodes from the
+//     rule repository (RuleValidatorTransformer itself does not resolve
+//     IDs to compiled RuleNodes; that compilation step lives with the core
+//     rule compiler/repository and must be done by the caller ahead of
+//     time, e.g. in engine.go's node dispatch).
+type RuleValidatorTransformer struct {
+	Engine   *rules.RuleEngine
+	TenantID string
+
+	// CELRules are literal per-record CEL expressions to evaluate.
+	CELRules []RuleValidatorRule
+
+	// Rules are pre-resolved compiled rules (e.g. loaded by ID from the
+	// rule repository ahead of time) evaluated via EvaluateRule/EvaluateBatch.
+	Rules []*rules.RuleWithMetadata
+
+	// BO optionally maps raw record fields to Business Object semantic
+	// field names via BuildContextFromBORow before evaluation, matching the
+	// vocabulary rules are normally authored against.
+	BO *boresolver.BODefinition
+}
+
+func (v *RuleValidatorTransformer) Transform(ctx context.Context, input []PipelineRecord) ([]PipelineRecord, []string, error) {
+	if v.Engine == nil {
+		// No rule engine wired: pass records through unchanged rather than
+		// silently failing every record.
+		return input, nil, nil
+	}
+
+	output := make([]PipelineRecord, 0, len(input))
+	var errs []string
+
+	for i, record := range input {
+		var evalCtx map[string]interface{}
+		if v.BO != nil {
+			evalCtx = rules.BuildContextFromBORow(v.BO, record)
+		} else {
+			evalCtx = map[string]interface{}(record)
+		}
+
+		recordFailed := false
+
+		for _, r := range v.CELRules {
+			if r.Expression == "" {
+				continue
+			}
+			passed, err := v.Engine.EvaluateCEL(ctx, r.Expression, evalCtx)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("row %d: rule '%s' evaluation error: %v", i+1, r.ID, err))
+				recordFailed = true
+				continue
+			}
+			if !passed {
+				msg := r.Message
+				if msg == "" {
+					msg = fmt.Sprintf("failed rule '%s'", r.ID)
+				}
+				errs = append(errs, fmt.Sprintf("row %d: %s", i+1, msg))
+				recordFailed = true
+			}
+		}
+
+		if len(v.Rules) > 0 {
+			batch := v.Engine.EvaluateBatch(ctx, v.TenantID, v.Rules, evalCtx)
+			if batch != nil && !batch.PassedAll {
+				for _, res := range batch.Results {
+					if res == nil || res.Passed {
+						continue
+					}
+					if len(res.FailureReasons) > 0 {
+						for _, reason := range res.FailureReasons {
+							errs = append(errs, fmt.Sprintf("row %d: rule '%s' failed: %s", i+1, res.RuleID, reason))
+						}
+					} else {
+						errs = append(errs, fmt.Sprintf("row %d: rule '%s' failed", i+1, res.RuleID))
+					}
+					recordFailed = true
+				}
+			}
+		}
+
+		if !recordFailed {
+			output = append(output, record)
+		}
 	}
 
 	return output, errs, nil

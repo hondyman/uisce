@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -329,13 +330,38 @@ func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request
 	var payload struct {
 		Pipeline PipelineDefinition `json:"pipeline"`
 		Records  []PipelineRecord   `json:"records,omitempty"`
+		Durable  bool               `json:"durable,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Trigger asynchronous parallel run
+	// `?durable=true` query param is equivalent to payload.durable, for
+	// callers that prefer to select the mode without touching the body.
+	durable := payload.Durable
+	if v := r.URL.Query().Get("durable"); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			durable = parsed
+		}
+	}
+
+	if durable {
+		workflowID, err := h.engine.ExecuteRunAsWorkflow(r.Context(), tenantID, payload.Pipeline, payload.Records)
+		if err != nil {
+			http.Error(w, "Failed to start durable pipeline run: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":      "submitted",
+			"workflow_id": workflowID,
+		})
+		return
+	}
+
+	// Default: synchronous in-process run (existing behavior, unchanged).
 	run, err := h.engine.ExecuteRun(r.Context(), tenantID, payload.Pipeline, payload.Records, false)
 	if err != nil {
 		http.Error(w, "Execution failed: "+err.Error(), http.StatusInternalServerError)

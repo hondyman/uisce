@@ -9,8 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/sdk/client"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/pkg/workflows"
 )
 
 // PipelineEngine coordinates the compilation and parallel execution of data pipelines
@@ -19,22 +22,36 @@ type PipelineEngine struct {
 	boDriver      *BODriver
 	catalogDriver *CatalogDriver
 
+	// ruleEngine backs the "validator" node type (RuleValidatorTransformer)
+	// with real CEL/VM rule evaluation. May be nil in tests/mock setups, in
+	// which case validator nodes pass records through unchanged.
+	ruleEngine *rules.RuleEngine
+
+	// temporalClient backs durable, Temporal-workflow-based execution
+	// (ExecuteRunAsWorkflow) and WorkflowCallerTransformer. May be nil when
+	// only synchronous in-process execution (ExecuteRun) is needed.
+	temporalClient client.Client
+
 	runsMut     sync.RWMutex
 	activeRuns  map[string]*PipelineExecutionRun
 	subscribers map[string][]chan PipelineExecutionRun
 }
 
-// NewPipelineEngine creates a new pipeline execution engine
-func NewPipelineEngine(db *sqlx.DB) *PipelineEngine {
+// NewPipelineEngine creates a new pipeline execution engine. ruleEngine and
+// temporalClient may both be nil (e.g. in unit tests) — validator nodes and
+// durable/workflow-calling execution degrade gracefully when unset.
+func NewPipelineEngine(db *sqlx.DB, ruleEngine *rules.RuleEngine, temporalClient client.Client) *PipelineEngine {
 	boDriver := NewBODriver(db)
 	catalogDriver := NewCatalogDriver(db)
 
 	return &PipelineEngine{
-		db:            db,
-		boDriver:      boDriver,
-		catalogDriver: catalogDriver,
-		activeRuns:    make(map[string]*PipelineExecutionRun),
-		subscribers:   make(map[string][]chan PipelineExecutionRun),
+		db:             db,
+		boDriver:       boDriver,
+		catalogDriver:  catalogDriver,
+		ruleEngine:     ruleEngine,
+		temporalClient: temporalClient,
+		activeRuns:     make(map[string]*PipelineExecutionRun),
+		subscribers:    make(map[string][]chan PipelineExecutionRun),
 	}
 }
 
@@ -233,6 +250,78 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 	return run, nil
 }
 
+// RunPipelineSync loads the pipeline definition by ID and executes it
+// synchronously (in-process, no Temporal) for a single trigger-supplied
+// record. It implements validation.PipelineTriggerExecutor, letting BO CRUD
+// "sync" DispatchMode triggers (internal/validation.TriggerValidationEngine)
+// invoke a pipeline without internal/validation importing this package
+// directly.
+func (e *PipelineEngine) RunPipelineSync(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+	def, err := e.loadPipelineDefinition(ctx, tenantID, pipelineID)
+	if err != nil {
+		return err
+	}
+	run, err := e.ExecuteRun(ctx, tenantID, *def, []PipelineRecord{record}, false)
+	if err != nil {
+		return err
+	}
+	if run.Status == "failed" {
+		if len(run.ErrorDetails) > 0 {
+			return fmt.Errorf("pipeline run failed: %s", run.ErrorDetails[0])
+		}
+		return fmt.Errorf("pipeline run failed")
+	}
+	return nil
+}
+
+func (e *PipelineEngine) loadPipelineDefinition(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID) (*PipelineDefinition, error) {
+	if e.db == nil {
+		return nil, fmt.Errorf("pipeline engine has no database configured")
+	}
+	var def PipelineDefinition
+	query := `
+		SELECT id, tenant_id, name, description, mode, target_entity, dag_json,
+		       concurrency, batch_size, error_policy, is_active, created_by, created_at, last_modified_at
+		FROM data_pipeline_definitions
+		WHERE id = $1 AND tenant_id = $2 AND is_active = true
+	`
+	if err := e.db.GetContext(ctx, &def, query, pipelineID, tenantID); err != nil {
+		return nil, fmt.Errorf("load pipeline '%s': %w", pipelineID, err)
+	}
+	return &def, nil
+}
+
+// ExecuteRunAsWorkflow starts a durable, Temporal-backed execution of the
+// given pipeline definition and returns immediately with the started
+// workflow's ID. The actual DAG walk (PipelineEngine.ExecuteRun) runs
+// inside RunPipelineDAGWorkflow/ActivityExecutePipelineDAG on the deployed
+// worker (cmd/worker), which polls workflows.DeployedBPTaskQueue
+// ("bp_queue") — NOT workflows.BPTaskQueue ("bp-framework-queue"), which no
+// deployed worker polls.
+func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord) (string, error) {
+	if e.temporalClient == nil {
+		return "", fmt.Errorf("pipeline engine has no temporal client configured")
+	}
+
+	workflowID := fmt.Sprintf("data-pipeline-%s-%d", def.ID, time.Now().UnixNano())
+	options := client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: workflows.DeployedBPTaskQueue,
+	}
+
+	input := PipelineWorkflowInput{
+		TenantID:     tenantID,
+		Definition:   def,
+		InputRecords: inputRecords,
+	}
+
+	run, err := e.temporalClient.ExecuteWorkflow(ctx, options, RunPipelineDAGWorkflow, input)
+	if err != nil {
+		return "", fmt.Errorf("failed to start durable pipeline workflow: %w", err)
+	}
+	return run.GetID(), nil
+}
+
 func (e *PipelineEngine) executeSource(ctx context.Context, tenantID uuid.UUID, node PipelineNode) ([]PipelineRecord, error) {
 	subType, _ := node.Config["sourceType"].(string)
 	if subType == "" {
@@ -285,8 +374,45 @@ func (e *PipelineEngine) executeTransform(ctx context.Context, tenantID uuid.UUI
 	if subType == "" {
 		subType, _ = node.Config["transformType"].(string)
 	}
+	// A bare "validator" node type with no more specific subType routes to
+	// real rule validation by default (replaces the previous no-op stub).
+	if node.Type == "validator" && (subType == "" || subType == "validate") {
+		subType = "rule_validator"
+	}
 
 	switch subType {
+	case "rule_validator":
+		var celRules []RuleValidatorRule
+		if rawRules, ok := node.Config["rules"].([]interface{}); ok {
+			for _, rr := range rawRules {
+				m, ok := rr.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				id, _ := m["id"].(string)
+				expr, _ := m["expression"].(string)
+				msg, _ := m["message"].(string)
+				if expr == "" {
+					continue
+				}
+				celRules = append(celRules, RuleValidatorRule{ID: id, Expression: expr, Message: msg})
+			}
+		}
+		// Convenience: a single "expression" key on the node config, for
+		// simple single-rule validator tiles.
+		if expr, ok := node.Config["expression"].(string); ok && expr != "" {
+			id, _ := node.Config["rule_id"].(string)
+			msg, _ := node.Config["message"].(string)
+			celRules = append(celRules, RuleValidatorRule{ID: id, Expression: expr, Message: msg})
+		}
+
+		validator := &RuleValidatorTransformer{
+			Engine:   e.ruleEngine,
+			TenantID: tenantID.String(),
+			CELRules: celRules,
+		}
+		return validator.Transform(ctx, records)
+
 	case "column_mapper", "mapper":
 		mappings := make(map[string]string)
 		if rawMap, ok := node.Config["mappings"].(map[string]interface{}); ok {
@@ -365,9 +491,10 @@ func (e *PipelineEngine) executeTransform(ctx context.Context, tenantID uuid.UUI
 		wfName, _ := node.Config["workflow_name"].(string)
 		mode, _ := node.Config["mode"].(string)
 		caller := &WorkflowCallerTransformer{
-			WorkflowID:   wfID,
-			WorkflowName: wfName,
-			Mode:         mode,
+			WorkflowID:     wfID,
+			WorkflowName:   wfName,
+			Mode:           mode,
+			TemporalClient: e.temporalClient,
 		}
 		return caller.Transform(ctx, records)
 

@@ -1,0 +1,6 @@
+-- No-op: this migration only copies rows forward from the legacy `pipelines`
+-- table into `data_pipeline_definitions`. Reversing it would require knowing
+-- which rows in data_pipeline_definitions originated from this migration
+-- versus being created natively afterwards, which we don't track. The
+-- legacy `pipelines` table itself is left untouched by the .up migration, so
+-- no data is lost by leaving this as a no-op.

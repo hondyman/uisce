@@ -24,8 +24,8 @@ func TestTriggerValidate_Pass(t *testing.T) {
 	// Mock fetchTriggers query
 	mock.ExpectQuery("SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids").
 		WithArgs(tenantID.String(), "save", "orders", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "trigger_type", "target_entity", "step_name", "rule_ids", "meta"}).
-			AddRow("trigger-1", tenantID.String(), "save", "orders", nil, pq.Array([]string{"rule-1"}), "{}"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "trigger_type", "target_entity", "step_name", "rule_ids", "meta", "pipeline_id", "dispatch_mode"}).
+			AddRow("trigger-1", tenantID.String(), "save", "orders", nil, pq.Array([]string{"rule-1"}), "{}", nil, ""))
 
 	// Mock fetchRuleByID query
 	ruleCondition := map[string]interface{}{
@@ -70,8 +70,8 @@ func TestTriggerValidate_Fail(t *testing.T) {
 	// Mock fetchTriggers query
 	mock.ExpectQuery("SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids").
 		WithArgs(tenantID.String(), "save", "orders", sqlmock.AnyArg()).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "trigger_type", "target_entity", "step_name", "rule_ids", "meta"}).
-			AddRow("trigger-1", tenantID.String(), "save", "orders", nil, pq.Array([]string{"rule-1"}), "{}"))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "trigger_type", "target_entity", "step_name", "rule_ids", "meta", "pipeline_id", "dispatch_mode"}).
+			AddRow("trigger-1", tenantID.String(), "save", "orders", nil, pq.Array([]string{"rule-1"}), "{}", nil, ""))
 
 	// Mock fetchRuleByID query - cardinality rule that should fail
 	ruleCondition := map[string]interface{}{
