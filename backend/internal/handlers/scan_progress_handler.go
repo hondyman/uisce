@@ -13,13 +13,19 @@ import (
 
 // HandleScanStream handles SSE streaming of scan progress
 func (h *CatalogScanHandler) HandleScanStream(w http.ResponseWriter, r *http.Request) {
-	// Extract datasource_id from query params or secCtx
+	// Enforce authentication: SSE stream triggers/monitors backend scans and requires valid security context
+	secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil || secCtx == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized", "message": "authentication required for catalog scan stream"})
+		return
+	}
+
+	// Extract datasource_id from query params or authenticated security context
 	dsStr := r.URL.Query().Get("datasource_id")
 	if dsStr == "" {
-		secCtx, _, err := SecurityContextFromRequest(r, "", "", h.securityDeps)
-		if err == nil && secCtx != nil {
-			dsStr = secCtx.DatasourceID
-		}
+		dsStr = secCtx.DatasourceID
 	}
 
 	datasourceID, err := uuid.Parse(dsStr)

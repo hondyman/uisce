@@ -10,6 +10,21 @@ Our current JWT implementation suffers from a trust inversion: self-asserted tok
 **A token proves *who authenticated*. Your database proves *what they're allowed to do*.**
 Token claims will become a consistency check (mismatch = reject), rather than the source of truth for authorization.
 
+## Findings & Status Matrix
+
+| Finding, as discovered | Status | Details / Tracking |
+|---|---|---|
+| Shared-secret HS256 forgery (original Critical) | Closed in code; prod `JWT_SECRET` purge is ops | Alg-gate rejects HS256 in prod/staging; fail-closed on unset `APP_ENV`. |
+| Fail-open middleware | Closed | Structural dispatch by dot-count (1-dot / 2-dot / default), 401 on all invalid credentials. |
+| Unauthenticated header impersonation (390 handler sites) | Closed at the boundary | Strip-first deletes `X-User-ID`, `X-Tenant-ID`, `X-Real-Admin-ID`, `X-Impersonation-*` before routing. Handler migration to `Actor(r)` is Phase 3. |
+| SSE route bypassing all middleware | Closed | `rootMux.With(AuthContextMiddleware)` added to `/api/catalog/scan/stream`. Handler rejects missing auth context with 401. |
+| Legacy impersonation → `global_admin` | Closed | Tokens missing roles now rejected with 401 Unauthorized. |
+| Flat `kid` map / `iss`-spoof escalation | **Open — hard gate before first tenant IdP registration** | Namespace keys as `map[issuer]map[kid]*rsa.PublicKey`. Blocks BYOI multi-tenancy. |
+| `aud` enforcement | Warn-mode | Promotes to hard rejection once auth logs confirm clean audiences and frontend switches to access tokens. |
+| Impersonation server-side session validation | Tracked Phase 3 | Lookup `SessionID` in session store / audit table inside `ValidateImpersonationToken`. Owner: Platform Security. |
+| Compliance-engine accepting user JWTs | Interim acceptable | Service is internal-only. Phase 3 moves to S2S tokens/mTLS. |
+
+
 ## Remediation Plan (This Week)
 
 ### Phase 1: Immediate Containment
