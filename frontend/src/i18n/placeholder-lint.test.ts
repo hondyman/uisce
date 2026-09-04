@@ -19,15 +19,15 @@ const LOCALES_DIR = path.resolve(__dirname, '../locales');
 const SOURCE = 'en';
 
 const DOUBLE_BRACE_RE = /\{\{(\w+)\}\}/g;
-const SINGLE_BRACE_RE = /(?<!\{)\{[a-zA-Z_]\w*\}(?!\})/;
+const SINGLE_BRACE_RE = /(?<!\{)\{[a-zA-Z_]\w*\}(?!\})/g;
 const ICU_PATTERN = /\{\w+,\s*(plural|select|number|date|time)\b/;
 
-function flatLeaves(obj, prefix = '') {
-  const out = {};
+function flatLeaves(obj: Record<string, unknown>, prefix = ''): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}.${k}` : k;
     if (v && typeof v === 'object' && !Array.isArray(v)) {
-      Object.assign(out, flatLeaves(v, key));
+      Object.assign(out, flatLeaves(v as Record<string, unknown>, key));
     } else {
       out[key] = v;
     }
@@ -35,11 +35,11 @@ function flatLeaves(obj, prefix = '') {
   return out;
 }
 
-function placeholders(value) {
-  return new Set(Array.from(value.matchAll(DOUBLE_BRACE_RE), (m) => m[1]));
+function placeholders(value: string): Set<string> {
+  return new Set(Array.from(value.matchAll(DOUBLE_BRACE_RE), (m): string => m[1] ?? ''));
 }
 
-function loadLocale(name) {
+function loadLocale(name: string) {
   return flatLeaves(JSON.parse(readFileSync(path.join(LOCALES_DIR, `${name}.json`), 'utf8')));
 }
 

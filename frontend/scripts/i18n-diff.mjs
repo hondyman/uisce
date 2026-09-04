@@ -12,8 +12,11 @@
  *                = (present-and-not-identity) / total-en-keys.
  *
  * Usage:
- *   node scripts/i18n-diff.mjs           # report only, exit 0
- *   node scripts/i18n-diff.mjs --strict  # exit 1 if any locale has gaps
+ *   node scripts/i18n-diff.mjs                  # report only, exit 0
+ *   node scripts/i18n-diff.mjs --strict         # exit 1 if skeleton locales
+ *                                              # have any identity-as-translation
+ *   node scripts/i18n-diff.mjs --threshold=N    # fail if any ACTIVE locale has
+ *                                              # identity > N keys (vendor gate)
  *
  * Exit codes:
  *   0 = coverage within thresholds (or --strict not set)
@@ -33,18 +36,16 @@ const STRICT = process.argv.includes('--strict');
 // count as untranslated work. Phase 2 vendor briefs MUST keep this list
 // in sync; Phase 3 vendor acceptance uses it as the gate for "0 missing
 // identity" deliverables.
+//
+// Add to this list ONLY when the key's English value is a known
+// non-translatable (brand, unit, code, etc.). Do NOT add keys whose
+// values are full sentences in English — those ARE untranslated work.
 const IDENTITY_ALLOWLIST = new Set([
   'app.name',
-  'nav.language',
 ]);
 
 function isIdentityExpected(key) {
-  if (IDENTITY_ALLOWLIST.has(key)) return true;
-  // Heuristic: any key whose English value is a single word with no
-  // spaces AND ≤ 6 chars (acronyms, units like "API", "USD", "OK").
-  // Conservatively tagged; vendor team can promote entries to the
-  // explicit allowlist if the heuristic gets a false positive.
-  return false;
+  return IDENTITY_ALLOWLIST.has(key);
 }
 
 function loadJson(p) {
@@ -129,6 +130,12 @@ for (const locale of locales) {
   const status = missing.length === 0 && identity.length === 0 ? 'OK' : 'GAP';
   if (isActive && missing.length > 0) failed = true;
 
+  // Vendor acceptance gate: an ACTIVE locale is "delivered" when it has
+  // zero missing keys AND zero untranslated-identity keys (allowing for
+  // the explicit IDENTITY_ALLOWLIST above). Pure `status === 'OK'` would
+  // also work here; we keep both for visibility in the table.
+  const delivered = isActive && missing.length === 0 && identity.length === 0;
+
   console.log(
     `  ${locale.padEnd(10)}  ` +
     `${String(localeKeys.length).padStart(7)}  ` +
@@ -136,7 +143,7 @@ for (const locale of locales) {
     `${String(identity.length).padStart(8)}  ` +
     `${String(translated).padStart(10)}  ` +
     `${translatedPct.padStart(12)}%  ` +
-    `${String(extra.length).padStart(5)}  ${status}${isActive ? '' : ' (skeleton)'}`,
+    `${String(extra.length).padStart(5)}  ${status}${isActive ? '' : ' (skeleton)'}${delivered ? ' [DELIVERED]' : ''}`,
   );
 
   if (missing.length > 0 && missing.length <= 8) {
@@ -165,8 +172,27 @@ writeFileSync(
 );
 
 console.log('');
+
+// Parse --threshold=N (vendor acceptance: fail if any ACTIVE locale has
+// identity-key count > N). Default: --threshold=0 (current behavior).
+// Realistic Phase 3 acceptance: --threshold=20 (a few stragglers OK).
+const thresholdArg = process.argv.find((a) => a.startsWith('--threshold='));
+const IDENTITY_THRESHOLD = thresholdArg ? parseInt(thresholdArg.split('=')[1], 10) : 0;
+
 if (failed) {
   console.error('FAIL: at least one active locale has missing keys.');
+  process.exit(1);
+}
+const overThreshold = Object.entries(summary.locales).filter(
+  ([, v]) => v.active && v.identity > IDENTITY_THRESHOLD,
+);
+if (overThreshold.length > 0) {
+  console.error(
+    `FAIL: ${overThreshold.length} active locale(s) exceed identity-threshold ${IDENTITY_THRESHOLD} (--threshold=${IDENTITY_THRESHOLD}):`,
+  );
+  for (const [locale, v] of overThreshold) {
+    console.error(`  ${locale}: identity=${v.identity}`);
+  }
   process.exit(1);
 }
 if (STRICT) {
