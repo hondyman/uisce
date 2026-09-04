@@ -499,8 +499,11 @@ temporary scram rule during an incident). Replace with
 `log.Fatal("DATABASE_URL is required")`. 5-line code change, zero
 dependencies.
 
-**Finding P — Schema drift: `tenants.is_gold_copy` absent from migrations** 🟢
-(database-backed, committed in this sprint as `20260904_001_capture_unmanaged_schema_drift`):
+**Finding P — Schema drift: `tenants.is_gold_copy` absent from migrations** 🟡
+(database-backed, partially resolved — capture migration committed, full drift still open):
+
+> **Status note**: The `is_gold_copy` column is captured by migration `20260904_001`.
+> But the broader drift (~1,300 tables) remains open — see "Open question" below.
 
 The `oms.migration_log` runner (`backend/internal/migrations/runner.go`)
 applies **only** `db/migrations/*.up.sql` in lexicographic order.
@@ -533,9 +536,13 @@ No drift here; Go code matches DB exactly. Finding K confirmed resolved.
 
 **Implication**: the running DB's schema cannot be reproduced from the repo.
 The `db/migrations/` runner is incomplete for fresh builds. This is the
-"works on my machine" failure mode in its purest form. A full capture of
-the 1300-table drift is tracked in `backend/schema-drift.diff`; the
-capture migration captures only the Studio's datapipeline dependencies.
+"works on my machine" failure mode in its purest form. The capture migration
+covers only the Studio's datapipeline dependencies (`is_gold_copy`).
+The ~1,300-table drift is tracked in `backend/schema-drift.diff` and
+**requires an explicit decision** on whether `backend/migrations/` (legacy)
+becomes authoritative (migrated into `db/migrations/`), or is retired
+and replaced by a full re-baseline. **Finding P is open until that
+decision is made and acted upon.**
 
 ---
 
@@ -651,7 +658,7 @@ Findings count by package (precise counts; no percentages):
 | `internal/validation/` | 7 verified items (DispatchTrigger wired, sync+async dispatch paths, trigger types 8/13, etc.) | 2 partial (outbox own-tx, created_by not enforced) | 1 doc-only (no Studio UI surface for trigger→pipeline binding) | 0 |
 | `internal/oms/{account,position,security,trade_order}/` | 6 verified per-entity items (tenant-isolated reads, soft-delete via valid_to, bitemporal populated, 401 on Nil, service interfaces, validate tests) | 2 per-entity (no RBAC, error leakage) | 1 per-entity (no rate limiting) | 0 |
 | `internal/catalog/` | 4 verified items (Stage 1 TTL loader, Stage 3 column scanner, Stage 4 semantic linker, tests per stage) | 2 partial (no-op `_ = strings.Title`, two parallel subtype_registry loaders) | 0 | 0 |
-| **Schema / cross-cutting** | — | — | Schema drift: `tenants.is_gold_copy` absent from `db/migrations/`; ~1300 tables not created by oms.migration_log runner; full drift in `backend/schema-drift.diff`; capture migration committed (`20260904_001_capture_unmanaged_schema_drift`) | 0 |
+| **Schema / cross-cutting** | — | — | Schema drift: `tenants.is_gold_copy` captured by `20260904_001`; ~1,300 tables not created by oms.migration_log runner; full drift in `backend/schema-drift.diff` | 1 — full 1300-table drift requires decision: migrate `backend/migrations/` authority or re-baseline |
 
 The Studio is what the UI claims it is — partially. The engine exists,
 the loaders work, the triggers fire pipelines. The gaps are surgical
