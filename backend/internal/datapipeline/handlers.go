@@ -96,10 +96,13 @@ func claimTenantIDFromRequest(r *http.Request) (uuid.UUID, bool) {
 }
 
 func (h *DataPipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("compact") == "true" {
+		h.listPipelinesCompact(w, r)
+		return
+	}
 	tenantID := h.getTenantID(r)
 
 	if h.db == nil {
-		// Mock list
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode([]PipelineDefinition{
 			{
@@ -142,8 +145,45 @@ func (h *DataPipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Reque
 	var list []PipelineDefinition
 	err := h.db.SelectContext(r.Context(), &list, query, tenantID)
 	if err != nil {
-		// Table might not be migrated yet in mock, return empty list
 		list = []PipelineDefinition{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(list)
+}
+
+func (h *DataPipelineHandler) listPipelinesCompact(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := claimTenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	if h.db == nil {
+		http.Error(w, "database not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	type compactPipeline struct {
+		ID            uuid.UUID `json:"id" db:"id"`
+		Name          string    `json:"name" db:"name"`
+		SourceTable   string    `json:"source_table,omitempty" db:"source_table"`
+		SinkLabel     string    `json:"sink_label,omitempty" db:"sink_label"`
+	}
+
+	query := `
+		SELECT id, name,
+		       COALESCE(target_entity, '') AS source_table,
+		       COALESCE(mode, '') AS sink_label
+		FROM data_pipeline_definitions
+		WHERE tenant_id = $1 AND is_active = true
+		ORDER BY last_modified_at DESC
+	`
+	var list []compactPipeline
+	err := h.db.SelectContext(r.Context(), &list, query, tenantID)
+	if err != nil {
+		http.Error(w, "query failed: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
