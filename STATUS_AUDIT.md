@@ -499,6 +499,44 @@ temporary scram rule during an incident). Replace with
 `log.Fatal("DATABASE_URL is required")`. 5-line code change, zero
 dependencies.
 
+**Finding P — Schema drift: `tenants.is_gold_copy` absent from migrations** 🟢
+(database-backed, committed in this sprint as `20260904_001_capture_unmanaged_schema_drift`):
+
+The `oms.migration_log` runner (`backend/internal/migrations/runner.go`)
+applies **only** `db/migrations/*.up.sql` in lexicographic order.
+The live DB at `100.84.50.65:5432` (alpha) has **~1300 tables not created
+by any `db/migrations/` migration**. Core tables (`public.tenants`,
+`public.business_objects`, etc.) are created by `backend/migrations/`
+(legacy directory, not tracked by the current runner).
+
+**Confirmed by migration replay**: Built a fresh DB (`uisce_drift_baseline`)
+by replaying all `db/migrations/*.up.sql` against a new database. The
+resulting schema is missing `public.tenants` entirely — the table is not
+created by any migration in the authoritative `db/migrations/` directory.
+
+`tenants.is_gold_copy`: the column EXISTS in the live DB but is NOT created
+by any `db/migrations/` migration. This means:
+- All 4 raw `is_gold_copy` reads that "work at runtime" (findings J/K,
+  now confirmed) work only because the column exists via untracked
+  mechanism (manual ALTER or `backend/migrations/`).
+- A fresh dev environment, CI run, or disaster-recovery rebuild will **fail**
+  on those 4 queries — the column won't exist.
+
+**Capture migration**: `backend/db/migrations/20260904_001_capture_unmanaged_schema_drift.up.sql`
+adds `tenants.is_gold_copy IF NOT EXISTS` (idempotent; checks table
+existence first). Tested against live DB: no-op (column already present).
+Full drift artifact: `backend/schema-drift.diff` (~105K lines; 98K additions
+vs baseline).
+
+**`catalog_node_unique`**: correctly created by `20260825_001_repopulate_business_objects_from_subtype_registry.up.sql`.
+No drift here; Go code matches DB exactly. Finding K confirmed resolved.
+
+**Implication**: the running DB's schema cannot be reproduced from the repo.
+The `db/migrations/` runner is incomplete for fresh builds. This is the
+"works on my machine" failure mode in its purest form. A full capture of
+the 1300-table drift is tracked in `backend/schema-drift.diff`; the
+capture migration captures only the Studio's datapipeline dependencies.
+
 ---
 
 ## 7. Stale completion docs (queued for `git rm`)
@@ -613,6 +651,7 @@ Findings count by package (precise counts; no percentages):
 | `internal/validation/` | 7 verified items (DispatchTrigger wired, sync+async dispatch paths, trigger types 8/13, etc.) | 2 partial (outbox own-tx, created_by not enforced) | 1 doc-only (no Studio UI surface for trigger→pipeline binding) | 0 |
 | `internal/oms/{account,position,security,trade_order}/` | 6 verified per-entity items (tenant-isolated reads, soft-delete via valid_to, bitemporal populated, 401 on Nil, service interfaces, validate tests) | 2 per-entity (no RBAC, error leakage) | 1 per-entity (no rate limiting) | 0 |
 | `internal/catalog/` | 4 verified items (Stage 1 TTL loader, Stage 3 column scanner, Stage 4 semantic linker, tests per stage) | 2 partial (no-op `_ = strings.Title`, two parallel subtype_registry loaders) | 0 | 0 |
+| **Schema / cross-cutting** | — | — | Schema drift: `tenants.is_gold_copy` absent from `db/migrations/`; ~1300 tables not created by oms.migration_log runner; full drift in `backend/schema-drift.diff`; capture migration committed (`20260904_001_capture_unmanaged_schema_drift`) | 0 |
 
 The Studio is what the UI claims it is — partially. The engine exists,
 the loaders work, the triggers fire pipelines. The gaps are surgical
