@@ -61,18 +61,41 @@ async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
  * Fetch the bindings available for a Business Object.
  */
 export async function fetchBusinessObjectBindings(boId: string): Promise<BindingView[]> {
-  const data = await fetchJSON<unknown>(`/api/business-objects/${encodeURIComponent(boId)}/bindings`);
+  const data = await fetchJSON<unknown>(`/api/business-objects/bindings?bo_id=${encodeURIComponent(boId)}`);
   const raw = Array.isArray(data) ? data : (data as any)?.bindings || [];
 
   return raw.map((b: any): BindingView => ({
-    bindingId: b.bindingId || b.bo_binding_id || b.id || '',
-    bindingName: b.bindingName || b.binding_name || b.name || 'Binding',
-    backendId: b.backendId || b.backend_id || '',
-    backendName: b.backendName || b.backend_name || 'Backend',
-    drivingTableId: b.drivingNodeId || b.driving_node_id || b.driving_table_id,
-    drivingTableName: b.drivingTableName || b.driving_table_name,
+    bindingId: b.id || b.bindingId || b.binding_id || '',
+    bindingName: b.displayName || b.display_name || b.backendType || b.backend_type || 'Binding',
+    backendId: b.alphaDatasourceId || b.alpha_datasource_id || '',
+    backendName: b.displayName || b.display_name || b.backendType || b.backend_type || 'Datasource',
+    drivingTableId: b.drivingNodeId || b.driving_node_id,
     isDefault: b.isDefault ?? b.is_default ?? false,
   }));
+}
+
+/**
+ * Resolve a binding's declared datasource slot to this tenant's own
+ * connection (tenant_product_datasource.id) — the value to send as
+ * X-Datasource-Id on Preview/Execute, and what the query-builder picker
+ * compares against the tenant-scoped datasource to pick a default. Returns
+ * undefined if this tenant has no connection wired for that binding's
+ * datasource type.
+ */
+export async function resolveBindingDatasource(
+  boId: string,
+  bindingId?: string
+): Promise<string | undefined> {
+  const params = bindingId ? `?binding_id=${encodeURIComponent(bindingId)}` : '';
+  try {
+    const data = await fetchJSON<{ datasource_id?: string }>(
+      `/api/business-objects/${encodeURIComponent(boId)}/resolve-datasource${params}`
+    );
+    return data.datasource_id || undefined;
+  } catch (err) {
+    devError('[QueryBuilder] Failed to resolve binding datasource', boId, bindingId, err);
+    return undefined;
+  }
 }
 
 /**

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -80,7 +81,6 @@ func main() {
 		req           models.CreateBusinessObjectRequest
 		bindingName   string
 		physicalTable string
-		bindingMode   metadata.BindingMode
 	}{
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -97,7 +97,6 @@ func main() {
 			},
 			bindingName:   "oms_orders_primary",
 			physicalTable: "oms.orders",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -113,7 +112,6 @@ func main() {
 			},
 			bindingName:   "oms_execution_primary",
 			physicalTable: "oms.execution",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -130,7 +128,6 @@ func main() {
 			},
 			bindingName:   "oms_position_lots_primary",
 			physicalTable: "oms.position_lots",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -147,7 +144,6 @@ func main() {
 			},
 			bindingName:   "mds_security_master_primary",
 			physicalTable: "mds.security_master",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -164,7 +160,6 @@ func main() {
 			},
 			bindingName:   "mds_account_primary",
 			physicalTable: "mds.account",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 	}
 
@@ -210,11 +205,8 @@ func main() {
 			binding := metadata.BusinessObjectBinding{
 				TenantID:          tenantID,
 				BOID:              boID,
-				BindingName:       boDef.bindingName,
-				BindingMode:       boDef.bindingMode,
-				DatasourceID:       alphaDatasourceID,
-				PhysicalTableName: boDef.physicalTable,
-				IsPrimary:         true,
+				AlphaDatasourceID: sql.NullString{String: alphaDatasourceID, Valid: true},
+				IsDefault:         true,
 			}
 			err = bindingService.SaveBinding(ctx, binding)
 			if err != nil {

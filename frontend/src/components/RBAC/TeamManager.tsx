@@ -119,7 +119,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
   const fetchTeams = async () => {
     try {
       setLoading(true);
-      const data = await apiClient<Team[]>('/api/rbac/teams');
+      const data = await apiClient<Team[]>(`/api/rbac/teams?tenant_id=${tenant.id}`);
       setTeams(data || []);
     } catch (error) {
       console.error('Failed to fetch teams:', error);
@@ -130,7 +130,7 @@ export const TeamManager: React.FC<TeamManagerProps> = ({ tenant, datasource }) 
 
   const fetchTeamMembers = async (teamId: string) => {
     try {
-      const data = await apiClient<TeamMember[]>(`/api/rbac/teams/${teamId}/members`);
+      const data = await apiClient<TeamMember[]>(`/api/rbac/teams/${teamId}/members?tenant_id=${tenant.id}`);
       setTeamMembers(data || []);
     } catch (error) {
       console.error('Failed to fetch team members:', error);

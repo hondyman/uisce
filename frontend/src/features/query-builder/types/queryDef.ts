@@ -120,8 +120,19 @@ export interface SemanticTermView {
 export interface BindingView {
   bindingId: string;
   bindingName: string;
+  /** Logical datasource type (alpha_datasource id) this binding targets. */
   backendId: string;
   backendName: string;
+  /**
+   * This tenant's actual connection for backendId's datasource type
+   * (tenant_product_datasource.id) — the same id the tenant-scope picker
+   * calls "the scoped datasource". Resolved separately (not part of the
+   * bindings list response) via GET
+   * /business-objects/{boId}/resolve-datasource?binding_id=... — see
+   * resolveBindingDatasource. Undefined until resolved, or when this tenant
+   * has no connection wired for that datasource type yet.
+   */
+  tenantDatasourceId?: string;
   drivingTableId?: string;
   drivingTableName?: string;
   isDefault?: boolean;

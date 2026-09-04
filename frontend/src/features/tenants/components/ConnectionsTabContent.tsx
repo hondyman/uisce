@@ -271,7 +271,7 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
             console.log(`    Found datasource with connection_id/id: ${effectiveConnId}`);
             // Use effectiveConnId as the key to avoid duplicates
             if (!connectionsMap.has(effectiveConnId)) {
-              console.log(`[DEBUG] Building connection for ds: ${effectiveConnId}, ds.config:`, JSON.stringify(ds.config, null, 2));
+              console.log(`[DEBUG] Building connection for ds: ${effectiveConnId}, host: ${ds.config?.host || ds.host || ''}, database: ${ds.config?.database || ds.database || ''}, auth_type: ${ds.config?.auth_type || ''}`);
               const displayName =
                 ds.alpha_datasource?.datasource_name ||
                 ds.connection_name ||

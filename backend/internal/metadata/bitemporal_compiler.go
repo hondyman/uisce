@@ -201,35 +201,15 @@ func compilePostgresQuery(req PolyglotQueryRequest, cols string, result *Polyglo
 	return sb.String()
 }
 
-// ResolveBindingForQuery selects the correct binding for a BO query based on whether
-// historical time-travel is requested (→ OLAP) or live data (→ OLTP)
+// ResolveBindingForQuery selected a binding by BindingMode (OLTP_CRUD /
+// BI_TEMPORAL_OLAP / OLAP_READONLY) for time-travel vs. live queries. Removed:
+// the live business_object_bindings table has no binding_mode column (see
+// BusinessObjectBinding's docstring in binding_service.go) and never has —
+// this function was already unreachable dead code (no caller outside its own
+// package) built against a schema that was never applied. If per-mode
+// binding selection is needed again, it needs a real column to read, not a
+// revived version of this.
 func ResolveBindingForQuery(bindings []BusinessObjectBinding, asOfTime string) *BusinessObjectBinding {
-	if asOfTime == "" {
-		// Live query: prefer OLTP_CRUD primary binding
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLTPCRUD && bindings[i].IsPrimary {
-				return &bindings[i]
-			}
-		}
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLTPCRUD {
-				return &bindings[i]
-			}
-		}
-	} else {
-		// Historical query: prefer BI_TEMPORAL_OLAP binding
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeBiTemporalOLAP {
-				return &bindings[i]
-			}
-		}
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLAPReadOnly {
-				return &bindings[i]
-			}
-		}
-	}
-	// Fallback: first available binding
 	if len(bindings) > 0 {
 		return &bindings[0]
 	}

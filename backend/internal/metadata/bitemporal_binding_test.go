@@ -1,7 +1,6 @@
 package metadata
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,17 +20,3 @@ func TestBuildBiTemporalWhereClause(t *testing.T) {
 	assert.Contains(t, whereClause, "AND")
 }
 
-func TestBindingService_Validation(t *testing.T) {
-	svc := NewBindingService(nil)
-
-	validCol := ""
-	invalidBinding := BusinessObjectBinding{
-		BOID:              "customers",
-		BindingName:       "iceberg_bitemporal",
-		BindingMode:       BindingModeBiTemporalOLAP,
-		ValidTimeStartCol: &validCol,
-	}
-
-	err := svc.SaveBinding(context.Background(), invalidBinding)
-	assert.Error(t, err, "BI_TEMPORAL_OLAP mode must require valid_time_start_col")
-}

@@ -76,6 +76,7 @@ import {
   fetchBOSchema,
   previewQuery,
   executeQuery,
+  resolveBindingDatasource,
 } from '../services/queryBuilderApi';
 import { QueryEngineIndicator, EngineRouteState } from '../../../components/BusinessObjectManager/QueryEngineIndicator';
 import {
@@ -209,6 +210,10 @@ const BusinessObjectQueryBuilder: React.FC = () => {
   const [selectedBO, setSelectedBO] = useState<BusinessObject | null>(null);
   const [bindings, setBindings] = useState<BindingView[]>([]);
   const [selectedBindingId, setSelectedBindingId] = useState<string>('');
+  // Keyed by tenantDatasourceId when the binding resolves to one (the
+  // tenant's actual connection), else by backendId (the logical datasource
+  // type) as a fallback for bindings with no resolved connection yet.
+  const [selectedDatasourceKey, setSelectedDatasourceKey] = useState<string>('');
   const [terms, setTerms] = useState<SemanticTermView[]>([]);
   const [boSchema, setBoSchema] = useState<BOSchema | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -297,12 +302,17 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     load();
   }, [tenantId, datasource?.id]);
 
-  // Fetch bindings when BO changes
+  // Fetch bindings when BO changes. Default to the binding whose resolved
+  // tenant datasource matches the tenant-scoped datasource (the one the
+  // user picked in the app chrome) — falling back to isDefault, then the
+  // first binding, when no binding resolves to the scoped datasource (e.g.
+  // it isn't wired to this BO, or the tenant has no connection for it yet).
   useEffect(() => {
     setIncludedRelatedBOs({});
     if (!selectedBO || !tenantId) {
       setBindings([]);
       setSelectedBindingId('');
+      setSelectedDatasourceKey('');
       setTerms([]);
       setQueryDef(null);
       return;
@@ -312,13 +322,29 @@ const BusinessObjectQueryBuilder: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const b = await fetchBusinessObjectBindings(selectedBO.id);
+        const raw = await fetchBusinessObjectBindings(selectedBO.id);
+        // Resolve each binding's declared datasource slot to this tenant's
+        // actual connection, so the default can match the tenant-scoped
+        // datasource rather than just whatever the BO's author marked
+        // isDefault.
+        const b = await Promise.all(
+          raw.map(async (binding) => ({
+            ...binding,
+            tenantDatasourceId: await resolveBindingDatasource(selectedBO.id, binding.bindingId),
+          }))
+        );
         setBindings(b);
 
-        const defaultBinding = b.find((x) => x.isDefault) || b[0];
+        const scopedMatch = datasource?.id
+          ? b.find((x) => x.tenantDatasourceId === datasource.id)
+          : undefined;
+        const defaultBinding = scopedMatch || b.find((x) => x.isDefault) || b[0];
         if (defaultBinding) {
           setSelectedBindingId(defaultBinding.bindingId);
+          setSelectedDatasourceKey(defaultBinding.tenantDatasourceId || defaultBinding.backendId);
         } else {
+          setSelectedBindingId('');
+          setSelectedDatasourceKey('');
           setError('No binding found for this Business Object');
         }
       } catch (err) {
@@ -330,20 +356,58 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     };
 
     load();
-  }, [selectedBO, tenantId]);
+  }, [selectedBO, tenantId, datasource?.id]);
 
-  // Fetch related business objects when the subject area changes, so the
-  // user can see (and jump to) BOs reachable from this one via its driving
-  // table's relationship graph.
+  // Datasources available for the current BO, derived from its bindings
+  // (each binding targets exactly one datasource type). Lets the user pick
+  // a datasource directly instead of hunting through binding names.
+  const availableDatasources = useMemo(() => {
+    const byKey = new Map<string, { key: string; name: string }>();
+    for (const b of bindings) {
+      const key = b.tenantDatasourceId || b.backendId;
+      if (key && !byKey.has(key)) {
+        byKey.set(key, { key, name: b.backendName });
+      }
+    }
+    return Array.from(byKey.values());
+  }, [bindings]);
+
+  // Switching datasource picks that datasource's default (or first) binding.
+  // Switching binding directly keeps the datasource selector in sync so the
+  // two controls never disagree about which datasource is active.
+  const handleSelectDatasource = (key: string) => {
+    setSelectedDatasourceKey(key);
+    const candidates = bindings.filter((b) => (b.tenantDatasourceId || b.backendId) === key);
+    const next = candidates.find((b) => b.isDefault) || candidates[0];
+    if (next) setSelectedBindingId(next.bindingId);
+  };
+
+  const handleSelectBinding = (bindingId: string) => {
+    setSelectedBindingId(bindingId);
+    const b = bindings.find((x) => x.bindingId === bindingId);
+    if (b) setSelectedDatasourceKey(b.tenantDatasourceId || b.backendId);
+  };
+
+  // Fetch related business objects when the subject area, binding, or
+  // datasource changes, so the user can see (and jump to) BOs reachable
+  // from this one via its driving table's relationship graph.
+  //
+  // NOTE: the backend currently resolves related objects from the BO's own
+  // driver_table_id, not from a per-binding driving table — bindings have
+  // no catalog-node reference to key off of (only a raw physical table
+  // name). So today this refetches on binding/datasource change (matching
+  // the expected interaction) but the result set doesn't yet vary by
+  // binding; making it actually binding-aware needs a driving-node link on
+  // business_object_bindings, which is a schema change, not a query change.
   useEffect(() => {
-    if (!selectedBO || !tenantId) {
+    if (!selectedBO || !tenantId || !selectedBindingId) {
       setRelatedBOs([]);
       return;
     }
 
     let cancelled = false;
     apiClient<{ relatedObjects?: RelatedBusinessObject[] }>(
-      `/business-objects/${selectedBO.id}/relationships`,
+      `/business-objects/${selectedBO.id}/relationships?binding_id=${encodeURIComponent(selectedBindingId)}`,
       { headers: { 'X-Tenant-ID': tenantId, ...(datasource?.id ? { 'X-Tenant-Datasource-ID': datasource.id } : {}) } }
     )
       .then((data) => {
@@ -357,7 +421,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedBO, tenantId, datasource?.id]);
+  }, [selectedBO, tenantId, selectedBindingId, selectedDatasourceKey, datasource?.id]);
 
   // Fetch terms when binding changes
   useEffect(() => {
@@ -465,8 +529,17 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
     setRelatedTermsLoading(rel.targetObjectId);
     try {
-      const relBindings = await fetchBusinessObjectBindings(rel.targetObjectId);
-      const defaultBinding = relBindings.find((b) => b.isDefault) || relBindings[0];
+      const rawRelBindings = await fetchBusinessObjectBindings(rel.targetObjectId);
+      const relBindings = await Promise.all(
+        rawRelBindings.map(async (binding) => ({
+          ...binding,
+          tenantDatasourceId: await resolveBindingDatasource(rel.targetObjectId, binding.bindingId),
+        }))
+      );
+      const scopedMatch = datasource?.id
+        ? relBindings.find((b) => b.tenantDatasourceId === datasource.id)
+        : undefined;
+      const defaultBinding = scopedMatch || relBindings.find((b) => b.isDefault) || relBindings[0];
       if (!defaultBinding) {
         devError('No binding found for related BO', rel.targetObjectId);
         return;
@@ -770,9 +843,33 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           </TextField>
         </Box>
 
-        {/* Binding Selector */}
+        {/* Datasource + Binding Selectors */}
         {selectedBO && bindings.length > 0 && (
           <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
+            {availableDatasources.length > 1 && (
+              <>
+                <Typography variant="overline" color="text.secondary">
+                  Datasource
+                </Typography>
+                <TextField
+                  select
+                  fullWidth
+                  size="small"
+                  value={selectedDatasourceKey}
+                  onChange={(e) => handleSelectDatasource(e.target.value)}
+                  SelectProps={{ native: true }}
+                  inputProps={{ 'aria-label': 'Datasource' }}
+                  sx={{ mt: 1, mb: 2 }}
+                >
+                  {availableDatasources.map((ds) => (
+                    <option key={ds.key} value={ds.key}>
+                      {ds.name}
+                      {ds.key === datasource?.id ? ' (scoped)' : ''}
+                    </option>
+                  ))}
+                </TextField>
+              </>
+            )}
             <Typography variant="overline" color="text.secondary">
               Binding
             </Typography>
@@ -781,16 +878,18 @@ const BusinessObjectQueryBuilder: React.FC = () => {
               fullWidth
               size="small"
               value={selectedBindingId}
-              onChange={(e) => setSelectedBindingId(e.target.value)}
+              onChange={(e) => handleSelectBinding(e.target.value)}
               SelectProps={{ native: true }}
               inputProps={{ 'aria-label': 'Binding' }}
               sx={{ mt: 1 }}
             >
-              {bindings.map((b) => (
-                <option key={b.bindingId} value={b.bindingId}>
-                  {b.bindingName} ({b.backendName})
-                </option>
-              ))}
+              {bindings
+                .filter((b) => availableDatasources.length <= 1 || (b.tenantDatasourceId || b.backendId) === selectedDatasourceKey)
+                .map((b) => (
+                  <option key={b.bindingId} value={b.bindingId}>
+                    {b.bindingName} ({b.backendName})
+                  </option>
+                ))}
             </TextField>
           </Box>
         )}

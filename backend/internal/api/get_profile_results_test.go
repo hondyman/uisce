@@ -10,6 +10,22 @@ import (
 )
 
 // Helper to create server with sqlmock DB
+//
+// KNOWN PRE-EXISTING FAILURE (confirmed on the unmodified tree, unrelated to
+// the security/auth-hardening changes in this branch — reproduced by
+// stashing those changes and rerunning): TestGetProfileResults_FallbackToHeaders,
+// _InvalidSchemaTableParams, and _WithPaging all fail here with 401
+// "unauthorized" instead of their expected codes. Root cause: this helper
+// never sets Server.SecurityContextDeps.Resolver, leaving it nil — and that
+// nil-Resolver check (security_context.go, the `if deps.Resolver == nil`
+// guard) runs before auth extraction/admin detection or any other
+// request-shape logic, so it is truly unconditional: no combination of
+// headers/params on the request can route around it. (Unrelated to the RBAC
+// handler tests added alongside this branch's other fixes, which construct
+// their own SecurityContextDeps with a non-nil resolver.) Fix is to wire a
+// mock security.DatasourceResolver into
+// Server{DB: db, SecurityContextDeps: ...} here; left unaddressed as out of
+// scope for the session that found it.
 func newServerWithMockDB(t *testing.T) (*Server, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	if err != nil {

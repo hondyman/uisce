@@ -120,15 +120,13 @@ type Role struct {
 // a role authored once in the gold-copy tenant would never be visible to
 // any other tenant, which defeats the inheritance model entirely.
 func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
-	if err != nil {
-		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+	_, tenantID, ok := h.requireTenantID(w, r)
+	if !ok {
 		return
 	}
-	tenantID := secCtx.TenantID
 
 	var roles []Role
-	err = h.db.Select(&roles, `
+	err := h.db.Select(&roles, `
 		SELECT * FROM bp_roles
 		WHERE is_active = true
 		  AND (tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
@@ -1076,13 +1074,28 @@ func (h *RBACHandlers) logDelegationUsage(w http.ResponseWriter, r *http.Request
 // TEAMS
 // ============================================================================
 
-func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
+// requireTenantID resolves the security context and validates that it
+// carries a real tenant UUID, converting the otherwise-inevitable Postgres
+// 22P02 (invalid uuid: "") into a clean 4xx. Returns ok=false after already
+// writing the error response.
+func (h *RBACHandlers) requireTenantID(w http.ResponseWriter, r *http.Request) (*security.Context, string, bool) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
 		http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		return nil, "", false
+	}
+	if _, err := uuid.Parse(secCtx.TenantID); err != nil {
+		http.Error(w, "tenant context required", http.StatusBadRequest)
+		return nil, "", false
+	}
+	return secCtx, secCtx.TenantID, true
+}
+
+func (h *RBACHandlers) listTeams(w http.ResponseWriter, r *http.Request) {
+	secCtx, tenantID, ok := h.requireTenantID(w, r)
+	if !ok {
 		return
 	}
-	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
 
 	var query string
@@ -1215,14 +1228,19 @@ func (h *RBACHandlers) removeTeamMember(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *RBACHandlers) getTeamMembers(w http.ResponseWriter, r *http.Request) {
+	_, tenantID, ok := h.requireTenantID(w, r)
+	if !ok {
+		return
+	}
 	teamID := chi.URLParam(r, "teamId")
 
 	rows, err := h.db.Query(`
-		SELECT user_id, role_in_team, joined_at
-		FROM bp_team_members
-		WHERE team_id = $1 AND is_active = true
-		ORDER BY joined_at
-	`, teamID)
+		SELECT tm.user_id, tm.role_in_team, tm.joined_at
+		FROM bp_team_members tm
+		JOIN bp_teams t ON t.id = tm.team_id
+		WHERE tm.team_id = $1 AND tm.is_active = true AND t.tenant_id = $2
+		ORDER BY tm.joined_at
+	`, teamID, tenantID)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch team members: %v", err), http.StatusInternalServerError)

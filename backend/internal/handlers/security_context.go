@@ -85,6 +85,16 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 		targetTenantID = strings.TrimSpace(r.URL.Query().Get("tenant_id"))
 	}
 	if targetTenantID != "" {
+		// The client-supplied tenant must be validated against the JWT-issued
+		// tenant list BEFORE it is merged in. Merging first and validating
+		// after (the prior behavior) checks the value against a list that
+		// already contains it — a tautology that let any authenticated user
+		// impersonate an arbitrary tenant via X-Tenant-ID/?tenant_id=.
+		if !isGlobalAdmin && !tenantAllowedForRequest(auth.TenantIDs, targetTenantID) {
+			err := fmt.Errorf("tenant %s is not assigned to this user", targetTenantID)
+			logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user=%s attempted to access unassigned tenant=%s (assigned=%v)", auth.UserID, targetTenantID, auth.TenantIDs)
+			return nil, r.Context(), err
+		}
 		if len(auth.TenantIDs) == 0 {
 			auth.TenantIDs = []string{targetTenantID}
 		} else {
@@ -141,6 +151,18 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	// Inject security context into request context for downstream use
 	ctx := security.WithContext(r.Context(), secCtx)
 	return secCtx, ctx, nil
+}
+
+// tenantAllowedForRequest reports whether targetTenantID is present in the
+// JWT-issued tenant list, i.e. whether the caller is actually assigned to
+// the tenant they're asking to operate as.
+func tenantAllowedForRequest(assignedTenantIDs []string, targetTenantID string) bool {
+	for _, t := range assignedTenantIDs {
+		if strings.TrimSpace(t) == targetTenantID {
+			return true
+		}
+	}
+	return false
 }
 
 func mergeRoles(existing, additional []string) []string {
