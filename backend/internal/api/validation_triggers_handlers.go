@@ -189,10 +189,12 @@ func (h *ValidationTriggersHandler) HandleCreateTrigger(w http.ResponseWriter, r
 	}
 
 	var req struct {
-		TriggerType  string   `json:"trigger_type"`
+		TriggerType   string   `json:"trigger_type"`
 		TargetEntity string   `json:"target_entity"`
 		StepName     *string  `json:"step_name"`
 		RuleIDs      []string `json:"rule_ids"`
+		PipelineID   *string  `json:"pipeline_id"`
+		DispatchMode string   `json:"dispatch_mode"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -205,24 +207,41 @@ func (h *ValidationTriggersHandler) HandleCreateTrigger(w http.ResponseWriter, r
 		return
 	}
 
+	if req.DispatchMode == "" {
+		req.DispatchMode = "sync"
+	}
+	if req.DispatchMode != "sync" && req.DispatchMode != "async" {
+		http.Error(w, "dispatch_mode must be 'sync' or 'async'", http.StatusBadRequest)
+		return
+	}
+
 	triggerID := uuid.New().String()
 
-	// Convert rule_ids to pq.StringArray format
 	ruleIDsJSON, err := json.Marshal(req.RuleIDs)
 	if err != nil {
 		http.Error(w, "invalid rule_ids", http.StatusBadRequest)
 		return
 	}
 
+	var pipelineID *uuid.UUID
+	if req.PipelineID != nil && *req.PipelineID != "" {
+		parsed, err := uuid.Parse(*req.PipelineID)
+		if err != nil {
+			http.Error(w, "invalid pipeline_id", http.StatusBadRequest)
+			return
+		}
+		pipelineID = &parsed
+	}
+
 	q := `
-    INSERT INTO validation_triggers (id, tenant_id, trigger_type, target_entity, step_name, rule_ids, created_by, created_at)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+    INSERT INTO validation_triggers (id, tenant_id, trigger_type, target_entity, step_name, rule_ids, pipeline_id, dispatch_mode, created_by, created_at)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
   `
 
-	_, err = h.db.ExecContext(ctx, q, triggerID, tenantID, req.TriggerType, req.TargetEntity, req.StepName, ruleIDsJSON, actorID)
+	_, err = h.db.ExecContext(ctx, q, triggerID, tenantID, req.TriggerType, req.TargetEntity, req.StepName, ruleIDsJSON, pipelineID, req.DispatchMode, actorID)
 	if err != nil {
 		log.Printf("HandleCreateTrigger: exec error: %v", err)
-		http.Error(w, "create failed", http.StatusInternalServerError)
+		http.Error(w, "create failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
