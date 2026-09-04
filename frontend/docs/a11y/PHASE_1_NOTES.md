@@ -482,3 +482,57 @@ Keycloak admin credentials are in `infrastructure/keycloak/` defaults
   baseline.spec.ts no longer depends on it)
 - `scripts/devjwt` — binary (backend `cmd/devjwt`, built for this platform)
 - `scripts/generate-e2e-jwt.mjs` — Node.js version (fixed: uses raw UTF-8 secret, not base64)
+
+### Update 2026-09-04 (later session)
+
+Real Keycloak token obtained via password grant from the seeded `uisce` realm.
+Keycloak admin credentials (master realm) sourced from `infrastructure/keycloak/import-realm.sh`
+defaults: `admin / <real-password>`.
+
+`semlayer-frontend` client had `directAccessGrantsEnabled: false` — enabled via
+Admin REST API to allow password grant. Token confirmed working against both backend
+`/health` and Keycloak userinfo endpoint.
+
+```bash
+export E2E_JWT=$(curl -s -X POST \
+  "https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/token" \
+  -d "grant_type=password&username=<keycloak-user>&password=<password>&client_id=semlayer-frontend&scope=openid profile email" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+```
+
+With real JWT: all 9 routes stay on correct page (auth guard passes). Same
+violation counts as with fake JWT — confirms the fake JWT was sufficient for
+route-level axe scanning (localStorage auth), but API calls fail silently.
+
+The auth guard now fully operational. Remaining work: expand route list to full
+~140-route inventory from AppRoutes.tsx + 6 unprefixed routes.
+
+### Update 2026-09-04 (full crawl)
+
+Full 150-route baseline run completed. Auth setup now fetches Keycloak token at
+fixture setup time if `E2E_KC_USER` + `E2E_KC_PASS` are set; falls back to fake JWT.
+
+Credentials removed from this file — use `.env.test` (gitignored) or CI secret vars.
+
+**Baseline results (150 routes, Chromium, ~3.4 min):**
+- 62 routes with violations / 88 routes clean
+- 85 total violations across 11 rules
+
+| Rule | Count | Impact |
+|------|-------|--------|
+| button-name | 24 | critical |
+| aria-input-field-name | 15 | serious |
+| aria-progressbar-name | 13 | serious |
+| label | 9 | critical |
+| scrollable-region-focusable | 6 | serious |
+| select-name | 5 | critical |
+| list | 4 | serious |
+| nested-interactive | 3 | serious |
+| aria-prohibited-attr | 3 | serious |
+| aria-command-name | 2 | serious |
+| listitem | 1 | serious |
+
+Per-route JSON artifacts committed to `frontend/test-results/a11y/`.
+
+**Phase 1 status:** Phase 0 complete. Phase 2 (sizing/remediation) pending —
+do not extrapolate from partial route sample; use full-crawl artifacts above.
