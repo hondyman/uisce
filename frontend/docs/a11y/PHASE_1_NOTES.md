@@ -169,6 +169,28 @@ locales. Of that, ~440 strings each for es/fr (filling in the 40%
 gap), ~510 strings each for de/ar/pt-BR/zh-CN/ja (full skeleton). Vendor
 order sizing input for Phase 2 kickoff.
 
+### Vendor plural notes (per CLDR plural categories)
+
+Native suffix plurals mean the number of suffix variants per key depends
+on the target language's CLDR categories. Vendor brief MUST specify
+this so the order isn't six keys per string for languages that only
+have one:
+
+| Locale | Required suffixes | Notes |
+|--------|-------------------|-------|
+| en      | `_one`, `_other`    | CLDR: 2 categories |
+| es      | `_one`, `_other`    | CLDR: 2 categories |
+| fr      | `_one`, `_other`    | CLDR: 2 categories (≥2) |
+| de      | `_one`, `_other`    | CLDR: 2 categories |
+| ja      | `_other`            | CLDR: **1 category** — no plural distinction |
+| zh-CN   | `_other`            | CLDR: 1 category |
+| pt-BR   | `_one`, `_other`    | CLDR: 2 categories |
+| **ar**  | **`_zero`, `_one`, `_two`, `_few`, `_many`, `_other`** | CLDR: **6 categories** — must ship all six |
+
+This prevents paying for six keys per Japanese/Chinese string (which only
+need one) while ensuring Arabic gets all six variants it needs for correct
+plural rendering.
+
 ## Files
 
 **Modified**
