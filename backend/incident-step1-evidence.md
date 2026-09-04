@@ -38,11 +38,28 @@
 ----------------------------------
  /mnt/docker-ssd/postgres/18/main
 
-## ca.key custody search (sudo find / -name 'ca.key')
+## ca.key custody — FIND OR REGENERATE (operator decision required)
 
-Result: NOT FOUND on this Mac (workspace). The ca.key is not present in the
-filesystem accessible from this workspace. Operator should verify on the dev Mac
-and move to durable custody (encrypted vault or similar, not scratch tree).
+Result: NOT FOUND on this Mac. `~/.uisce/certs/` contains:
+  - ca.crt (public CA certificate, 1704 bytes)
+  - postgres-client.crt + postgres-client.key (client cert/key pair)
+  - postgres-client.pk8 (encrypted key format)
+
+The `ca.key` (CA private key) is ABSENT from this machine. Without it, the
+CA cannot issue new client certificates. This matters because:
+  - Client certs expire; rotation requires the CA private key to sign new certs
+  - The existing `postgres-client.crt` will expire (check: openssl x509 -in ca.crt -noout -dates)
+  - If this CA is used for ANYTHING beyond postgres mTLS (Keycloak, service mesh, etc.),
+    its absence strands those systems
+
+Operator options (pick one):
+  1. FIND: search the dev Mac's scratch directories, keychains, backup drives
+     for the original ca.key — it existed when the certs were generated
+  2. REGENERATE: create a new CA and re-issue all service certificates
+     (postgres, keycloak, temporal, nessie, etc.) — significant operational event
+
+This is NOT a blocking security incident — existing certs work until they expire.
+But it becomes one the moment any cert needs renewal.
 
 ## Infisical init logs
 
