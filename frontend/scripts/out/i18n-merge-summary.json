@@ -1,0 +1,47 @@
+{
+  "date": "2026-09-03T22:11:02.741Z",
+  "summary": {
+    "en": {
+      "added": 355,
+      "filled": 353
+    },
+    "es": {
+      "added": 409,
+      "filled": 406
+    },
+    "fr": {
+      "added": 409,
+      "filled": 406
+    },
+    "de": {
+      "added": 450,
+      "filled": 447,
+      "total": 450,
+      "new": true
+    },
+    "pt-BR": {
+      "added": 452,
+      "filled": 448,
+      "total": 452,
+      "new": true
+    },
+    "ja": {
+      "added": 448,
+      "filled": 446,
+      "total": 448,
+      "new": true
+    },
+    "zh-CN": {
+      "added": 448,
+      "filled": 446,
+      "total": 448,
+      "new": true
+    },
+    "ar": {
+      "added": 458,
+      "filled": 451,
+      "total": 458,
+      "new": true
+    }
+  }
+}
