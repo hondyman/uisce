@@ -21,6 +21,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ACTIVE_LOCALES,
   DEFAULT_LOCALE,
+  getPreferredLocale,
   isRtl,
   matchActiveLocale,
   resolveLocaleRoute,
@@ -118,5 +119,50 @@ describe('matchActiveLocale — auto-detection restrictions', () => {
 
   it('falls through to DEFAULT_LOCALE when no candidate is in ACTIVE_LOCALES', () => {
     expect(matchActiveLocale(['de-DE', 'ko-KR'], ACTIVE_LOCALES)).toBe(DEFAULT_LOCALE);
+  });
+});
+
+describe('getPreferredLocale — cache + candidates resolution', () => {
+  it('honors ACTIVE_LOCALES cache hit', () => {
+    expect(getPreferredLocale('es', ['en-US', 'en'])).toBe('es');
+    expect(getPreferredLocale('fr', ['en-US', 'en'])).toBe('fr');
+  });
+
+  it('REJECTS skeleton-locale cache hit — the cache-shaped hole fix', () => {
+    // An explicit /ja visit sets localStorage.appLocale='ja' via i18next.
+    // Without this filter, every un-prefixed URL would heal to /ja/ with
+    // skeleton English, bypassing the ACTIVE_LOCALES gate through the side
+    // door. getPreferredLocale must filter the cache through ACTIVE too.
+    expect(getPreferredLocale('ja', ['en-US', 'en'])).not.toBe('ja');
+    expect(getPreferredLocale('ja', ['en-US', 'en'])).toBe(DEFAULT_LOCALE);
+    expect(getPreferredLocale('de', ['en-US', 'en'])).toBe(DEFAULT_LOCALE);
+    expect(getPreferredLocale('zh-CN', ['en-US', 'en'])).toBe(DEFAULT_LOCALE);
+    expect(getPreferredLocale('ar', ['en-US', 'en'])).toBe(DEFAULT_LOCALE);
+  });
+
+  it('falls back to candidate matching when cache is empty', () => {
+    expect(getPreferredLocale(null, ['es-MX', 'es'])).toBe('es');
+    expect(getPreferredLocale(null, ['fr-FR', 'fr'])).toBe('fr');
+    expect(getPreferredLocale(null, ['en-US', 'en'])).toBe('en');
+  });
+
+  it('falls back to candidate matching when cache is skeleton but candidates are ACTIVE', () => {
+    expect(getPreferredLocale('ja', ['es-MX', 'es'])).toBe('es');
+    expect(getPreferredLocale('de', ['fr-FR', 'fr'])).toBe('fr');
+  });
+
+  it('falls back to DEFAULT_LOCALE when nothing matches', () => {
+    expect(getPreferredLocale(null, [])).toBe(DEFAULT_LOCALE);
+    expect(getPreferredLocale(null, ['ko-KR', 'de-DE'])).toBe(DEFAULT_LOCALE);
+    expect(getPreferredLocale('ja', ['ko-KR'])).toBe(DEFAULT_LOCALE);
+  });
+
+  it('treats null vs empty vs unknown cache the same', () => {
+    const a = getPreferredLocale(null, ['en-US']);
+    const b = getPreferredLocale('', ['en-US']);
+    const c = getPreferredLocale('xx-unknown', ['en-US']);
+    expect(a).toBe('en');
+    expect(b).toBe('en');
+    expect(c).toBe('en');
   });
 });

@@ -58,6 +58,33 @@ export function matchActiveLocale(
   return DEFAULT_LOCALE;
 }
 
+/**
+ * Where to send an un-prefixed URL.
+ *
+ * Order of preference:
+ *   1. Cached appLocale from localStorage — but ONLY if it's in ACTIVE_LOCALES.
+ *      An explicit visit to /ja sets this to 'ja'; we must not honor that
+ *      for the heal / redirect path, or a stale cache silently bypasses the
+ *      ACTIVE_LOCALES gate. (Explicit URL prefixes still work via the
+ *      LocaleLayout branch.)
+ *   2. Best match from `candidates` (typically `navigator.languages`)
+ *      against ACTIVE_LOCALES.
+ *   3. DEFAULT_LOCALE.
+ *
+ * Pure: pass `cached` and `candidates` explicitly so this is unit-testable
+ * without localStorage or navigator.
+ */
+export function getPreferredLocale(
+  cached: string | null,
+  candidates: readonly string[],
+  active: readonly Locale[] = ACTIVE_LOCALES,
+): Locale {
+  const cachedLocale = normalizeLocale(cached);
+  if (cachedLocale && active.includes(cachedLocale)) return cachedLocale;
+  const matched = matchActiveLocale(candidates, active);
+  return matched ?? DEFAULT_LOCALE;
+}
+
 export function localePath(locale: Locale, rest = '/'): string {
   const suffix = rest === '/' ? '' : rest.startsWith('/') ? rest : `/${rest}`;
   return `/${locale}${suffix}`;

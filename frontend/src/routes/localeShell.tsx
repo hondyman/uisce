@@ -5,8 +5,7 @@ import {
   ACTIVE_LOCALES,
   DEFAULT_LOCALE,
   Locale,
-  matchActiveLocale,
-  normalizeLocale,
+  getPreferredLocale,
   resolveLocaleRoute,
 } from '../i18n/locales';
 import i18n from '../i18n';
@@ -21,16 +20,18 @@ import PageStudioPage from '../pages/page-studio/PageStudioPage';
 import { PageRuntimeRenderer as RuntimePage } from '../pages/PageRuntimeRenderer';
 import ChangeReviewPage from '../pages/ChangeReviewPage';
 
+function getBrowserLanguages(): readonly string[] {
+  if (typeof navigator === 'undefined') return [];
+  return navigator.languages ?? [navigator.language];
+}
+
+function getCachedLocale(): string | null {
+  if (typeof localStorage === 'undefined') return null;
+  return localStorage.getItem('appLocale');
+}
+
 function RootRedirect() {
-  // Cached locale from a prior visit takes precedence; otherwise fall
-  // through to ACTIVE_LOCALES-only auto-detection so a ja-JP browser
-  // doesn't land on /ja and render English. Explicit URL prefixes still
-  // work — the user can navigate to /ar/dashboard directly.
-  const cached =
-    typeof localStorage !== 'undefined' ? localStorage.getItem('appLocale') : null;
-  const target =
-    normalizeLocale(cached) ??
-    matchActiveLocale(navigator.languages ?? [navigator.language], ACTIVE_LOCALES);
+  const target = getPreferredLocale(getCachedLocale(), getBrowserLanguages());
   return <Navigate to={`/${target}`} replace />;
 }
 
@@ -49,12 +50,10 @@ export function LocaleLayout() {
 
   // Single source of truth for "what should the shell do with this URL?".
   // All branches of locale-shell.test.ts verify this function's output.
-  const preferred: Locale =
-    normalizeLocale(
-      typeof localStorage !== 'undefined' ? localStorage.getItem('appLocale') : null,
-    ) ??
-    matchActiveLocale(navigator.languages ?? [navigator.language], ACTIVE_LOCALES) ??
-    DEFAULT_LOCALE;
+  const preferred: Locale = getPreferredLocale(
+    getCachedLocale(),
+    getBrowserLanguages(),
+  ) ?? DEFAULT_LOCALE;
 
   const route = resolveLocaleRoute(pathname, search, hash, preferred);
 
