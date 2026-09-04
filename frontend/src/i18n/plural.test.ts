@@ -39,6 +39,17 @@ describe('native suffix plurals', () => {
     // count. Document the contract.
     expect(i18n.t('search.results_count')).toBe('search.results_count');
   });
+
+  it('es plural — the only ACTIVE non-en locale; runtime-verifies its translation', () => {
+    // ES CLDR plural rules: 1 → 'one', everything else → 'other'
+    // This guards against a vendor delivery or hand-edit dropping the
+    // es translation or breaking its placeholder substitution.
+    return i18n.changeLanguage('es').then(() => {
+      expect(i18n.t('search.results_count', { count: 1 })).toBe('1 resultado');
+      expect(i18n.t('search.results_count', { count: 5 })).toBe('5 resultados');
+      expect(i18n.t('search.results_count', { count: 0 })).toBe('0 resultados');
+    });
+  });
 });
 
 describe('lang/dir sync handler', () => {
