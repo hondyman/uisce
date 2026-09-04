@@ -45,7 +45,7 @@ import { ExecutionTelemetryHUD } from '../components/ExecutionTelemetryHUD';
 import { LiveSimulationModal } from '../components/LiveSimulationModal';
 import { PIPELINE_TEMPLATES, PipelineTemplate } from '../constants/pipelineTemplates';
 import { PipelineDefinition, PipelineExecutionRun, PipelineNodeData } from '../types/pipeline';
-import { usePipelineTelemetry, createStreamToken } from '../hooks/usePipelineTelemetry';
+import { usePipelineTelemetry } from '../hooks/usePipelineTelemetry';
 
 const nodeTypes = {
   pipelineTile: PipelineTileNode,
@@ -75,7 +75,6 @@ export const DataPipelineStudioPage: React.FC = () => {
   const [isExecuting, setIsExecuting] = useState(false);
   const [currentRun, setCurrentRun] = useState<PipelineExecutionRun | null>(null);
   const [durableRunId, setDurableRunId] = useState<string | null>(null);
-  const [durableToken, setDurableToken] = useState<string>('');
   const [isDurableRun, setIsDurableRun] = useState(false);
   const [showSimModal, setShowSimModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -225,11 +224,7 @@ export const DataPipelineStudioPage: React.FC = () => {
           pipeline: def,
         });
         const runId = res.data.run_id;
-        const workflowId = res.data.workflow_id;
         setDurableRunId(runId);
-
-        const tokenRes = await createStreamToken(runId);
-        setDurableToken(tokenRes.token);
         setCurrentRun({
           run_id: runId,
           pipeline_id: def.id ?? '',
@@ -249,7 +244,6 @@ export const DataPipelineStudioPage: React.FC = () => {
         });
         setCurrentRun(res.data);
         setDurableRunId(null);
-        setDurableToken('');
 
         // Update node visual status based on step telemetry
         if (res.data?.step_telemetry) {
@@ -285,14 +279,12 @@ export const DataPipelineStudioPage: React.FC = () => {
 
   usePipelineTelemetry({
     runId: durableRunId ?? '',
-    token: durableToken,
     onEvent: (event) => {
       if (event.run) {
         setCurrentRun(event.run);
         if (event.type === 'completion') {
           setIsExecuting(false);
           setDurableRunId(null);
-          setDurableToken('');
           setIsDurableRun(false);
         }
       }
