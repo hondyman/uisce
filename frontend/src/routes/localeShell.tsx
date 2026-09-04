@@ -2,11 +2,12 @@ import React from 'react';
 import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { useEffect } from 'react';
 import {
+  ACTIVE_LOCALES,
   DEFAULT_LOCALE,
   Locale,
-  localePath,
-  matchLocale,
+  matchActiveLocale,
   normalizeLocale,
+  resolveLocaleRoute,
 } from '../i18n/locales';
 import i18n from '../i18n';
 import { AppRoutes } from '../AppRoutes';
@@ -21,12 +22,16 @@ import { PageRuntimeRenderer as RuntimePage } from '../pages/PageRuntimeRenderer
 import ChangeReviewPage from '../pages/ChangeReviewPage';
 
 function RootRedirect() {
+  // Cached locale from a prior visit takes precedence; otherwise fall
+  // through to ACTIVE_LOCALES-only auto-detection so a ja-JP browser
+  // doesn't land on /ja and render English. Explicit URL prefixes still
+  // work — the user can navigate to /ar/dashboard directly.
   const cached =
     typeof localStorage !== 'undefined' ? localStorage.getItem('appLocale') : null;
   const target =
     normalizeLocale(cached) ??
-    matchLocale(navigator.languages ?? [navigator.language]);
-  return <Navigate to={localePath(target)} replace />;
+    matchActiveLocale(navigator.languages ?? [navigator.language], ACTIVE_LOCALES);
+  return <Navigate to={`/${target}`} replace />;
 }
 
 function LocaleSync() {
@@ -41,24 +46,20 @@ function LocaleSync() {
 
 export function LocaleLayout() {
   const { pathname, search, hash } = useLocation();
-  const trailing = `${search}${hash}`;
-  const m = pathname.match(/^\/([^/]+)(\/.*)?$/);
-  const raw = m?.[1] ?? '';
-  const rest = m?.[2] ?? '/';
-  const locale = normalizeLocale(raw);
 
-  // Un-prefixed or non-canonical first segment: heal to the user's preferred
-  // locale. Preserves search + hash so auth callbacks, filters, and hash
-  // anchors survive the round-trip.
-  if (!locale) {
-    const preferred =
-      normalizeLocale(
-        typeof localStorage !== 'undefined' ? localStorage.getItem('appLocale') : null,
-      ) ?? matchLocale(navigator.languages ?? [navigator.language]);
-    return <Navigate to={`${localePath(preferred, pathname)}${trailing}`} replace />;
-  }
-  if (raw !== locale) {
-    return <Navigate to={`${localePath(locale, rest)}${trailing}`} replace />;
+  // Single source of truth for "what should the shell do with this URL?".
+  // All branches of locale-shell.test.ts verify this function's output.
+  const preferred: Locale =
+    normalizeLocale(
+      typeof localStorage !== 'undefined' ? localStorage.getItem('appLocale') : null,
+    ) ??
+    matchActiveLocale(navigator.languages ?? [navigator.language], ACTIVE_LOCALES) ??
+    DEFAULT_LOCALE;
+
+  const route = resolveLocaleRoute(pathname, search, hash, preferred);
+
+  if (route.kind === 'redirect') {
+    return <Navigate to={route.to} replace />;
   }
 
   return (

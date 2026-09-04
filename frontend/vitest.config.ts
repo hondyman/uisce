@@ -19,7 +19,12 @@ export default defineConfig({
     globals: true,
     root: path.resolve(__dirname),
     // Only include tests that live under src/vitest/**
-    include: ['src/vitest/**/*.test.ts', 'src/vitest/**/*.test.tsx'],
+    include: [
+      'src/vitest/**/*.test.ts',
+      'src/vitest/**/*.test.tsx',
+      'src/i18n/**/*.test.ts',
+      'src/i18n/**/*.test.tsx',
+    ],
 
     // Explicitly exclude legacy Jest tests and spec files
     exclude: [

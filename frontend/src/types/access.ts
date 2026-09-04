@@ -137,7 +137,6 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/fabric/custom-components': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/policy-management': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/api-catalog': { minScope: 'instance', minAccess: 'tenant_user' },
-  '/views': { minScope: 'instance', minAccess: 'tenant_user' },
   '/core/glossary': { minScope: 'tenant', minAccess: 'tenant_user' },
   '/core/domains': { minScope: 'tenant', minAccess: 'tenant_user' },
   '/core/validation-rules': { minScope: 'instance', minAccess: 'tenant_user' },

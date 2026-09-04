@@ -57,23 +57,7 @@ const UpgradeCenterPage: FC = () => {
           </Card>
         </Grid>
 
-        <Grid    size={{ xs: 12, sm: 6, md: 4 }}>
-          <Card variant="outlined">
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <AssessmentIcon color="primary" />
-                <Typography variant="h6">Views Catalog</Typography>
-              </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Browse generated and resolved views, search, and export.
-              </Typography>
-              <Button variant="outlined" component={BlockableLink} to="/views">
-                Browse
-              </Button>
-            </CardContent>
-          </Card>
         </Grid>
-      </Grid>
     </Box>
   );
 };

@@ -7,7 +7,8 @@
     "mainContent": "Contenido principal"
   },
   "nav": {
-    "language": "Idioma"
+    "language": "Idioma",
+    "languageComingSoon": "Próximamente — traducción pendiente"
   },
   "relationships": {
     "id": "ID",
@@ -81,7 +82,10 @@
         "dependencies": "Dependencias",
         "notifications": "Notificaciones",
         "advanced": "Avanzado"
-      }
+      },
+      "searchPlaceholder": "Search jobs by name...",
+      "selectAll": "Select all jobs",
+      "priority": "Priority"
     },
     "executions": {
       "title": "Ejecuciones",
@@ -194,7 +198,10 @@
         "sla_breach": "Violación de SLA",
         "retry": "Reintento",
         "skipped": "Trabajo Omitido"
-      }
+      },
+      "description": "Configure multi-channel notifications for job events like start, completion, failure, and SLA breaches.",
+      "saveFirst": "Save the job first to add notifications",
+      "channelsHelp": "Send notifications via Email, SMS, Slack, Teams, or Webhooks"
     },
     "compliance": {
       "title": "Cumplimiento y Auditoría",
@@ -255,7 +262,13 @@
         "custom": "Condición Personalizada"
       },
       "lag": "Retraso (minutos)",
-      "noDependencies": "No se encontraron dependencias"
+      "noDependencies": "No se encontraron dependencias",
+      "description": "Configure job dependencies to create complex workflows with finish-to-start, start-to-start, and other dependency types.",
+      "saveFirst": "Save the job first to add dependencies",
+      "current": "Current Dependencies",
+      "none": "No dependencies configured",
+      "add": "Add Dependency",
+      "selectJob": "Select a job to depend on:"
     },
     "schedule": {
       "types": {
@@ -328,6 +341,409 @@
       "none": "Ninguno",
       "yes": "Sí",
       "no": "No"
+    },
+    "confirmDeleteCalendar": "Are you sure you want to delete this calendar?",
+    "businessCalendars": "Business Calendars",
+    "businessCalendarsDesc": "Manage business calendars, holidays, and working hours",
+    "createCalendar": "Create Calendar",
+    "searchCalendars": "Search calendars...",
+    "filterByTimezone": "Filter by timezone",
+    "allTimezones": "All Timezones",
+    "retry": "Retry",
+    "noCalendarsMatch": "No calendars match your filters",
+    "noCalendars": "No business calendars yet",
+    "createFirstCalendar": "Create Your First Calendar",
+    "default": "Default",
+    "edit": "Edit",
+    "delete": "Delete",
+    "timezone": "Timezone",
+    "holidays": "Holidays",
+    "workingHours": "Working Hours",
+    "dayOff": "Day Off",
+    "upcomingHolidays": "Upcoming Holidays",
+    "validation": {
+      "nameRequired": "Template name is required"
+    },
+    "editCalendar": "Edit Calendar",
+    "calendarEditorDesc": "Configure business calendar settings",
+    "tabs": {
+      "general": "General",
+      "workingHours": "Working Hours",
+      "holidays": "Holidays",
+      "overview": "Overview",
+      "auditLogs": "Audit Logs",
+      "slaTracking": "SLA Tracking",
+      "reports": "Reports",
+      "content": "Content",
+      "recipients": "Recipients",
+      "preview": "Preview"
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "timezone": "Timezone",
+      "date": "Date",
+      "recurring": "Recurring",
+      "timestamp": "Timestamp",
+      "action": "Action",
+      "entity": "Entity",
+      "user": "User",
+      "ip": "IP Address",
+      "details": "Details",
+      "id": "ID",
+      "entityType": "Entity Type",
+      "entityId": "Entity ID",
+      "userAgent": "User Agent",
+      "changes": "Changes",
+      "job": "Job",
+      "runs": "Runs",
+      "successRate": "Success Rate",
+      "avgDuration": "Avg Duration",
+      "slaTarget": "SLA Target",
+      "breaches": "Breaches",
+      "compliance": "Compliance",
+      "type": "Job Type",
+      "priority": "Priority",
+      "status": "Status",
+      "duration": "Duration",
+      "executionId": "Execution ID",
+      "jobId": "Job ID",
+      "triggeredBy": "Triggered By",
+      "correlationId": "Correlation ID",
+      "workerId": "Worker ID",
+      "workerHost": "Worker Host",
+      "memoryUsed": "Memory Used",
+      "cpuTime": "CPU Time",
+      "started": "Started",
+      "attempt": "Attempt",
+      "category": "Category",
+      "enabled": "Status",
+      "tags": "Tags",
+      "payload": "Job Payload (JSON)",
+      "scheduleType": "Schedule Type",
+      "runAt": "Run At",
+      "cronExpression": "Cron Expression",
+      "pattern": "Recurrence Pattern",
+      "interval": "Interval",
+      "daysOfWeek": "Days of Week",
+      "dayOfMonth": "Day of Month",
+      "timeOfDay": "Time of Day",
+      "calendar": "Business Calendar",
+      "validFrom": "Valid From",
+      "validUntil": "Valid Until",
+      "skipOptions": "Skip Options",
+      "timeout": "Timeout (seconds)",
+      "maxRetries": "Max Retries",
+      "retryDelay": "Retry Delay (seconds)",
+      "slaDeadline": "SLA Deadline (minutes)",
+      "approval": "Approval Required",
+      "channel": "Channel",
+      "eventType": "Event Type",
+      "subject": "Subject",
+      "body": "Body",
+      "recipients": "Recipients",
+      "slackChannel": "Slack Channel",
+      "webhookUrl": "Webhook URL"
+    },
+    "placeholder": {
+      "calendarName": "e.g., US Business Calendar",
+      "calendarDescription": "Describe this calendar...",
+      "holidayName": "e.g., Christmas",
+      "templateName": "e.g., Job Failed Alert",
+      "subject": "e.g., Job {{job_name}} has {{status}}",
+      "body": "Enter notification content..."
+    },
+    "setAsDefault": "Set as default calendar",
+    "defaultCalendarHelp": "The default calendar will be used when no calendar is specified for a job.",
+    "workingHoursDesc": "Define the business hours for each day of the week. Leave empty for non-working days.",
+    "day": "Day",
+    "start": "Start",
+    "end": "End",
+    "status": {
+      "completed": "Completed",
+      "running": "Running",
+      "failed": "Failed",
+      "pending": "Pending",
+      "queued": "Queued",
+      "cancelled": "Cancelled",
+      "paused": "Paused",
+      "waitingDependency": "Waiting for Dependency",
+      "waitingCalendar": "Waiting for Calendar",
+      "retrying": "Retrying",
+      "skipped": "Skipped"
+    },
+    "startForDay": "Start for day",
+    "endForDay": "End for day",
+    "working": "Working",
+    "setStandard9to5": "Set Standard 9-5",
+    "set24x7": "Set 24/7",
+    "addHoliday": "Add Holiday",
+    "noHolidays": "No holidays configured",
+    "addFirstHoliday": "Add First Holiday",
+    "actions": "Actions",
+    "yearly": "Yearly",
+    "remove": "Remove",
+    "importHolidays": "Import Holidays",
+    "importUS": "US Federal Holidays",
+    "importUK": "UK Bank Holidays",
+    "complianceDashboard": "Compliance Dashboard",
+    "complianceDashboardDesc": "Audit logs, SLA tracking, and compliance reporting",
+    "refresh": "Refresh",
+    "exportReport": "Export Report",
+    "metrics": {
+      "totalExecutions": "Total Executions",
+      "successRate": "Success Rate",
+      "slaBreaches": "SLA Breaches",
+      "avgRetries": "Avg Retries"
+    },
+    "statusDistribution": "Status Distribution",
+    "dailyTrend": "Daily Execution Trend",
+    "recentActivity": "Recent Activity",
+    "viewAll": "View All",
+    "filterByAction": "Filter by action",
+    "allActions": "All Actions",
+    "action": {
+      "create": "Create",
+      "update": "Update",
+      "delete": "Delete",
+      "execute": "Execute",
+      "cancel": "Cancel",
+      "resubmit": "Resubmit"
+    },
+    "filterByEntity": "Filter by entity",
+    "allEntities": "All Entities",
+    "entity": {
+      "job": "Job",
+      "execution": "Execution",
+      "schedule": "Schedule",
+      "calendar": "Calendar",
+      "notification": "Notification"
+    },
+    "searchByUser": "Search by user...",
+    "auditLogs": "Audit Logs",
+    "entries": "entries",
+    "noAuditLogs": "No audit logs found for the selected filters",
+    "system": "System",
+    "page": "Page",
+    "of": "of",
+    "auditLogDetail": "Audit Log Detail",
+    "jobsWithSLA": "Jobs with SLA",
+    "totalBreaches": "Total Breaches",
+    "overallCompliance": "Overall Compliance",
+    "slaPerformance": "SLA Performance by Job",
+    "reports": {
+      "executionSummary": "Execution Summary",
+      "executionSummaryDesc": "Summary of all job executions including success/failure rates",
+      "slaCompliance": "SLA Compliance Report",
+      "slaComplianceDesc": "Detailed SLA compliance analysis by job and time period",
+      "auditTrail": "Audit Trail Report",
+      "auditTrailDesc": "Complete audit log of all system activities",
+      "failureAnalysis": "Failure Analysis",
+      "failureAnalysisDesc": "Analysis of job failures with root cause breakdown",
+      "resourceUtilization": "Resource Utilization",
+      "resourceUtilizationDesc": "CPU, memory, and execution time analysis",
+      "trendAnalysis": "Trend Analysis",
+      "trendAnalysisDesc": "Historical trends and pattern analysis"
+    },
+    "reportGenerating": "Report is being generated. It will be available for download shortly.",
+    "generate": "Generate",
+    "scheduledReports": "Scheduled Reports",
+    "scheduleReport": "Schedule Report",
+    "noScheduledReports": "No scheduled reports configured",
+    "dependencyVisualizer": "Dependency Visualizer",
+    "dependencyVisualizerDesc": "Interactive visualization of job dependencies and execution flow",
+    "dagView": "DAG View",
+    "treeView": "Tree View",
+    "listView": "List View",
+    "legend": "Legend",
+    "noDependencies": "No jobs with dependencies found",
+    "createJob": "Create Job",
+    "nodeStatus": "Node Status",
+    "dependencyTypes": "Dependency Types",
+    "dependency": {
+      "finishToStart": "Finish to Start",
+      "startToStart": "Start to Start",
+      "finishToFinish": "Finish to Finish",
+      "startToFinish": "Start to Finish"
+    },
+    "dependents": "Dependents",
+    "viewJob": "View Job",
+    "editJob": "Edit Job",
+    "backToExecutions": "Back to Executions",
+    "execution": {
+      "run": "Run",
+      "attempt": "Attempt",
+      "logs": "Execution Logs",
+      "logFilter": "Log Filter"
+    },
+    "cancel": "Cancel",
+    "resubmitting": "Resubmitting...",
+    "resubmit": "Resubmit",
+    "logs": {
+      "all": "All Levels",
+      "debug": "Debug",
+      "info": "Info",
+      "warn": "Warning",
+      "error": "Error"
+    },
+    "autoScroll": "Auto-scroll",
+    "noLogs": "No logs available",
+    "completedIn": "Completed in",
+    "failedAfter": "Failed after",
+    "attempts": "attempts",
+    "nextRetryAt": "Next retry at",
+    "processing": "Processing...",
+    "step": "Step",
+    "elapsed": "elapsed",
+    "errorDetails": "Error Details",
+    "hideStack": "Hide Stack Trace",
+    "showStack": "Show Stack Trace",
+    "executionDetails": "Execution Details",
+    "timeline": {
+      "scheduled": "Scheduled",
+      "queued": "Queued",
+      "started": "Started",
+      "completed": "Completed",
+      "title": "Timeline"
+    },
+    "totalDuration": "Total Duration",
+    "output": "Output",
+    "confirmBulkCancel": "Cancel selected executions?",
+    "confirmBulkResubmit": "Resubmit selected executions?",
+    "executionsDesc": "View and manage all job executions",
+    "filterByStatus": "Filter by status",
+    "allStatuses": "All Statuses",
+    "from": "From",
+    "to": "To",
+    "clearFilters": "Clear",
+    "selected": "selected",
+    "clearSelection": "Clear Selection",
+    "noExecutionsMatch": "No executions match your filters",
+    "noExecutions": "No executions yet",
+    "selectAll": "Select all",
+    "select": "Select a calendar...",
+    "viewDetails": "View Details",
+    "total": "total",
+    "errors": {
+      "nameRequired": "Job name is required",
+      "typeRequired": "Job type is required",
+      "invalidPayload": "Invalid JSON payload"
+    },
+    "saving": "Saving...",
+    "save": "Save",
+    "jobTypes": {
+      "etl": "ETL / Data Pipeline",
+      "report": "Report Generation",
+      "export": "Data Export",
+      "import": "Data Import",
+      "notification": "Notification",
+      "cleanup": "Cleanup / Maintenance",
+      "backup": "Backup",
+      "sync": "Data Sync",
+      "calculation": "Calculation",
+      "validation": "Validation",
+      "workflow": "Business Workflow",
+      "custom": "Custom"
+    },
+    "placeholders": {
+      "name": "Enter job name",
+      "description": "Describe what this job does",
+      "category": "e.g., Finance, HR, Operations",
+      "tag": "Add a tag...",
+      "optional": "Optional"
+    },
+    "priority": {
+      "critical": "Critical",
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "add": "Add",
+    "scheduleTypes": {
+      "once": "Run Once",
+      "recurring": "Recurring",
+      "cron": "Cron Expression",
+      "calendar": "Calendar Based",
+      "event": "Event Driven"
+    },
+    "cronHelp": "Format: minute hour day month weekday (e.g., 0 9 * * MON-FRI for 9 AM on weekdays)",
+    "patterns": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "biweekly": "Bi-weekly",
+      "monthly": "Monthly",
+      "quarterly": "Quarterly",
+      "yearly": "Yearly"
+    },
+    "every": "Every",
+    "skipHolidays": "Skip Holidays",
+    "skipWeekends": "Skip Weekends",
+    "timeoutHelp": "Maximum time allowed for job execution",
+    "slaHelp": "Alert if job takes longer than this",
+    "requireApproval": "Require approval before execution",
+    "filters": {
+      "status": "Status filter",
+      "allStatuses": "All Statuses",
+      "priority": "Priority filter",
+      "allPriorities": "All Priorities",
+      "enabled": "Enabled Only",
+      "allJobs": "All Jobs",
+      "disabled": "Disabled Only"
+    },
+    "pause": "Pause",
+    "resume": "Resume",
+    "runNow": "Run Now",
+    "view": "View",
+    "pagination": {
+      "showing": "Showing",
+      "of": "of",
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "confirmDeleteTemplate": "Are you sure you want to delete this template?",
+    "notificationTemplates": "Notification Templates",
+    "notificationTemplatesDesc": "Configure multi-channel notifications for job events",
+    "createTemplate": "Create Template",
+    "totalTemplates": "Total Templates",
+    "activeTemplates": "Active",
+    "emailTemplates": "Email",
+    "slackTemplates": "Slack",
+    "filterByChannel": "Filter by channel",
+    "allChannels": "All Channels",
+    "filterByEvent": "Filter by event",
+    "allEvents": "All Events",
+    "event": {
+      "jobStarted": "Job Started",
+      "jobCompleted": "Job Completed",
+      "jobFailed": "Job Failed",
+      "jobRetrying": "Job Retrying",
+      "jobCancelled": "Job Cancelled",
+      "slaWarning": "SLA Warning",
+      "slaBreach": "SLA Breach"
+    },
+    "noTemplatesMatch": "No templates match your filters",
+    "noTemplates": "No notification templates yet",
+    "createFirstTemplate": "Create Your First Template",
+    "deactivate": "Deactivate",
+    "activate": "Activate",
+    "inactive": "Inactive",
+    "subject": "Subject",
+    "languages": "Languages",
+    "recipients": "recipients",
+    "editTemplate": "Edit Template",
+    "templateActive": "Template is active",
+    "contentByLanguage": "Content by Language",
+    "selectLanguage": "Select preview language",
+    "addLanguage": "Add Language",
+    "availableVariables": "Available Variables",
+    "preview": "Preview",
+    "help": {
+      "emailRecipients": "Enter email addresses separated by commas",
+      "slackRecipients": "Enter Slack channels (#channel) or users (@user) separated by commas",
+      "smsRecipients": "Enter phone numbers with country code separated by commas",
+      "recipients": "Enter recipients separated by commas"
     }
   },
   "node_type": {
@@ -337,24 +753,149 @@
     "database_column": "Columna de base de datos",
     "semantic_model": "Modelo semántico"
   },
-  "global_search": { "placeholder": "Buscar términos comerciales y semánticos..." },
-  "tab": { "add_business_term": "Agregar término comercial", "add_semantic_term": "Agregar término semántico", "business_terms": "Términos comerciales", "semantic_terms": "Términos semánticos" },
-  "stats": { "total_business_terms": "Total de términos comerciales", "with_relationships": "Con relaciones", "without_relationships": "Sin relaciones" },
-  "terms": { "no_semantic_terms": "No se encontraron términos semánticos" },
-  "global_loading": { "business_glossary": "Cargando glosario comercial...", "business_terms": "Cargando términos comerciales..." },
-  "global_error": { "business_glossary": "Error al cargar glosario comercial", "business_terms": "Error al cargar términos comerciales" },
-  "metadata": { "type": "Tipo:", "id": "ID:" },
-  "term": { "edit": "Editar término", "details": "Detalles del término", "delete": "Eliminar término" },
-  "view": { "tree": "Vista de árbol", "flat": "Vista plana" },
-  "no_results": { "title": "No se encontraron términos", "description": "Ningún término coincide con su búsqueda" },
-  "glossary": { "title": "Glosario comercial - Relaciones" },
-  "node": { "untitled": "Sin título" },
-  "field": { "description": "Descripción", "type": "Tipo", "status": "Estado" },
-  "button": { "close": "Cerrar" },
-  "status": { "active": "Activo", "inactive": "Inactivo" },
-  "language": { "label": "Idioma" },
-  "search": { "placeholder": "Escriba para buscar...", "clear": "Borrar búsqueda", "results_count": "{count, plural, =0 {# resultados} one {# resultado} other {# resultados}}", "keyboard_hint": "↑↓ para navegar • Enter para seleccionar • Esc para cerrar", "no_results": "No se encontraron resultados", "no_results_subtext": "Intente ajustar sus términos de búsqueda" },
-  "relationships_table": { "source": "Nodo de origen", "target": "Nodo de destino", "relationship_type": "Tipo de relación", "edge_type_id": "ID de tipo de arista", "created": "Creado", "none_found": "No se encontraron relaciones para este término" },
-  "filters": { "with_relationships": "Con relaciones", "without_relationships": "Sin relaciones", "clear_filter": "Borrar filtro" },
-  "back": { "to_overview": "Volver a la vista general" }
+  "global_search": {
+    "placeholder": "Buscar términos comerciales y semánticos..."
+  },
+  "tab": {
+    "add_business_term": "Agregar término comercial",
+    "add_semantic_term": "Agregar término semántico",
+    "business_terms": "Términos comerciales",
+    "semantic_terms": "Términos semánticos",
+    "calculation_terms": "Calculated Values"
+  },
+  "stats": {
+    "total_business_terms": "Total de términos comerciales",
+    "with_relationships": "Con relaciones",
+    "without_relationships": "Sin relaciones",
+    "total_semantic_terms": "Total Semantic Terms",
+    "mapped_to_business": "Mapped to Business Terms",
+    "unmapped_from_business": "Unmapped from Business Terms"
+  },
+  "terms": {
+    "no_semantic_terms": "No se encontraron términos semánticos"
+  },
+  "global_loading": {
+    "business_glossary": "Cargando glosario comercial...",
+    "business_terms": "Cargando términos comerciales..."
+  },
+  "global_error": {
+    "business_glossary": "Error al cargar glosario comercial",
+    "business_terms": "Error al cargar términos comerciales"
+  },
+  "metadata": {
+    "type": "Tipo:",
+    "id": "ID:"
+  },
+  "term": {
+    "edit": "Editar término",
+    "details": "Detalles del término",
+    "delete": "Eliminar término",
+    "delete_selected": "Delete selected terms"
+  },
+  "view": {
+    "tree": "Vista de árbol",
+    "flat": "Vista plana",
+    "expand_all": "Expand All",
+    "collapse_all": "Collapse All"
+  },
+  "no_results": {
+    "title": "No se encontraron términos",
+    "description": "Ningún término coincide con su búsqueda"
+  },
+  "glossary": {
+    "title": "Glosario comercial - Relaciones"
+  },
+  "node": {
+    "untitled": "Sin título"
+  },
+  "field": {
+    "description": "Descripción",
+    "type": "Tipo",
+    "status": "Estado"
+  },
+  "button": {
+    "close": "Cerrar"
+  },
+  "status": {
+    "active": "Activo",
+    "inactive": "Inactivo"
+  },
+  "language": {
+    "label": "Idioma"
+  },
+  "search": {
+    "placeholder": "Escriba para buscar...",
+    "clear": "Borrar búsqueda",
+    "keyboard_hint": "↑↓ para navegar • Enter para seleccionar • Esc para cerrar",
+    "no_results": "No se encontraron resultados",
+    "no_results_subtext": "Intente ajustar sus términos de búsqueda",
+    "results_count_one": "{{count}} resultado",
+    "results_count_other": "{{count}} resultados"
+  },
+  "relationships_table": {
+    "source": "Nodo de origen",
+    "target": "Nodo de destino",
+    "relationship_type": "Tipo de relación",
+    "edge_type_id": "ID de tipo de arista",
+    "created": "Creado",
+    "none_found": "No se encontraron relaciones para este término"
+  },
+  "filters": {
+    "with_relationships": "Con relaciones",
+    "without_relationships": "Sin relaciones",
+    "clear_filter": "Borrar filtro"
+  },
+  "back": {
+    "to_overview": "Volver a la vista general"
+  },
+  "no_terms": {
+    "title": "No Business Terms",
+    "description": "No business terms are available"
+  },
+  "select": {
+    "all_visible": "Select all visible",
+    "term": "Select term"
+  },
+  "filter": {
+    "hide_unlinked": "Hide Unlinked Terms",
+    "show_unlinked": "Show Unlinked Terms",
+    "all": "All",
+    "mapped": "Mapped",
+    "unmapped": "Unmapped"
+  },
+  "no_semantic_assets": {
+    "title": "No Semantic Assets",
+    "description": "No semantic assets are available"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "save": "Save"
+  },
+  "error": {
+    "loading": "Error Loading"
+  },
+  "action": {
+    "add_term": "Add Term",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "empty": {
+    "no_terms": "No terms found"
+  },
+  "type": {
+    "calculation": "Calculation"
+  },
+  "label": {
+    "details": "Details",
+    "name": "Name",
+    "description": "Description",
+    "none": "None",
+    "path": "Qualified Path"
+  },
+  "confirm": {
+    "delete_multiple_one": "Are you sure you want to delete {{count}} terms?",
+    "delete_multiple_many": "Are you sure you want to delete {{count}} terms?",
+    "delete_multiple_other": "Are you sure you want to delete {{count}} terms?"
+  }
 }

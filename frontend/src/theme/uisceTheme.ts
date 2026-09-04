@@ -71,11 +71,18 @@ function categoryDark(key: keyof typeof categoryColors) {
 const BASE_FONT_FAMILY = [
   'Inter',
   'Outfit',
+  // Script-aware fallbacks (browser picks per-glyph; no bundling in Phase 1)
+  '"Noto Sans"',
+  '"Noto Sans Arabic"',
+  '"Noto Sans JP"',
+  '"Noto Sans SC"',
+  '"Noto Sans KR"',
+  '"Noto Sans Devanagari"',
   '-apple-system',
   'BlinkMacSystemFont',
   '"Segoe UI"',
   'Roboto',
-  'Helvetica Neue',
+  '"Helvetica Neue"',
   'Arial',
   'sans-serif',
 ].join(', ');
@@ -215,6 +222,18 @@ export function createUisceTheme(
           },
           html: {
             scrollBehavior: 'smooth',
+          },
+          // WCAG 2.3.3 — disable animations when user prefers reduced motion.
+          // Placed AFTER html scrollBehavior so equal-specificity ordering
+          // gives this media block precedence.
+          '@media (prefers-reduced-motion: reduce)': {
+            html: { scrollBehavior: 'auto' },
+            '*, *::before, *::after': {
+              animationDuration: '0.01ms !important',
+              animationIterationCount: '1 !important',
+              transitionDuration: '0.01ms !important',
+              scrollBehavior: 'auto !important',
+            },
           },
           // ── Aurora wave animation (dark) / Tidal shimmer (light) ──────
           '@keyframes uisce-aurora': {

@@ -1,16 +1,20 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
+import RtlProvider from '@mui/system/RtlProvider';
+import { isRtl } from './locales';
 
 /**
- * RTL bootstrap. MUI v7 + theme.direction handles MUI-generated styles; an
- * Emotion cache + stylis-plugin-rtl is needed for sx / custom emotion
- * styles, and plain `.css` files need postcss-rtlcss (already installed)
- * since `dir=rtl` only flips CSS logical properties that the author used.
+ * RTL bootstrap. In MUI v7, the RtlProvider sets up a React context that
+ * components like Drawer/MenuItem/Popper read to flip their physical properties
+ * (borderLeft/Right, left/Right anchors) when dir=rtl. Without it, the
+ * `theme.direction: 'rtl'` flag on its own only affects MUI-generated styles
+ * via styleOverrides — every component using `borderLeft` etc. directly
+ * stays LTR.
  *
- * Stubbed: pure pass-through while we verify what `ar` actually flips on
- * its own. Will be replaced with:
- *   const rtlCache = createCache({ key: 'mui-rtl', stylisPlugins: [prefixer, rtlPlugin] });
- * after the ar locale smoke test.
+ * The export is from `@mui/system/RtlProvider` as the default export.
+ * (`@mui/material` does not re-export it; `useRtl` is the named hook export.)
  */
 export function DirectionProvider({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  const { i18n } = useTranslation();
+  return isRtl(i18n.language) ? <RtlProvider>{children}</RtlProvider> : <>{children}</>;
 }

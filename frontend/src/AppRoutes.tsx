@@ -19,8 +19,6 @@ import DashboardPage from "./features/fabric/pages/DashboardPage";
 import AuditLogsPage from "./features/fabric/pages/AuditLogsPage";
 import SettingsPage from "./features/fabric/pages/SettingsPage";
 import TenantsManagementPage from "./features/fabric/pages/TenantsManagementPage";
-import ViewsCatalogPage from "./features/views/pages/ViewsCatalogPage";
-import ViewDetailsPage from "./features/views/pages/ViewDetailsPage";
 import BundleListPage from "./pages/bundles/BundleListPage";
 import BundleEditor from "./pages/bundles/BundleEditor";
 import RoleListPage from "./pages/roles/RoleListPage";
@@ -291,8 +289,6 @@ function ProtectedApp() {
         <Route path="business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
         <Route path="business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
         <Route path="semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
-        <Route path="views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
-        <Route path="views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
         <Route path="fabric/bundles" element={<ProtectedRoute><BundleListPage /></ProtectedRoute>} />
         <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />

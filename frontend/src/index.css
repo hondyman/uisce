@@ -1,6 +1,10 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v3 directives removed — package.json declares tailwindcss@4
+ * (which uses @import "tailwindcss") and no PostCSS pipeline processes these.
+ * The @tailwind at-rules were inert debris. CSS variables below continue to
+ * drive theming; Tailwind utility classes in JSX (if any) were already not
+ * rendering under this config and remain in a non-functional state. The
+ * tailwindcss@4 dependency is itself a candidate for removal in a follow-up
+ * commit — see docs/a11y/PHASE_1_NOTES.md. */
 
 @layer base {
   :root {

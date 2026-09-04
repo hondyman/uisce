@@ -691,10 +691,10 @@ function ListView({ jobs, executions, selectedNode, onNodeClick, t }: ListViewPr
                   <StatusBadge status={execution?.status} />
                 </td>
                 <td>
-                  {job.dependencies?.length || 0} {t('scheduler.jobs', 'jobs')}
+                  {job.dependencies?.length || 0} {t('scheduler.jobs.title', 'Jobs')}
                 </td>
                 <td>
-                  {dependents.length} {t('scheduler.jobs', 'jobs')}
+                  {dependents.length} {t('scheduler.jobs.title', 'Jobs')}
                 </td>
               </tr>
             );

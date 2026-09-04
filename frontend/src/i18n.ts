@@ -1,7 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
-import ICU from 'i18next-icu';
 import en from './locales/en.json';
 import { DEFAULT_LOCALE, LOCALES, isRtl, normalizeLocale } from './i18n/locales';
 
@@ -26,9 +25,17 @@ const urlLocale =
     ? normalizeLocale(window.location.pathname.split('/')[1])
     : null;
 
+// WCAG 3.1.1 / 3.1.2 — set <html lang> and dir synchronously based on the URL
+// before init resolves the language asynchronously via languageChanged.
+// languageChanged event timing on the init path isn't contractual, so we
+// also set it here deterministically.
+if (typeof document !== 'undefined' && urlLocale) {
+  document.documentElement.lang = urlLocale;
+  document.documentElement.dir = isRtl(urlLocale) ? 'rtl' : 'ltr';
+}
+
 i18n
   .use(LanguageDetector)
-  .use(ICU)
   .use({
     type: 'backend',
     read: (lng: string, _ns: string, cb: (err: unknown, data: unknown) => void) =>

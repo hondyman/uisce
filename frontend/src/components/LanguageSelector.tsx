@@ -1,12 +1,29 @@
 import React, { useState } from 'react';
-import { IconButton, Menu, MenuItem, ListItemText } from '@mui/material';
+import { IconButton, Menu, MenuItem, ListItemText, Divider } from '@mui/material';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LOCALES, NATIVE_NAMES, Locale, localePath } from '../i18n/locales';
+import {
+  LOCALES,
+  NATIVE_NAMES,
+  Locale,
+  localePath,
+} from '../i18n/locales';
 import { useLocale } from '../i18n/useLocale';
 import useUserAPI from '../hooks/useUserAPI';
 import { useAuth } from '../contexts/AuthContext';
+
+// Locales with full translation files. Other LOCALES entries have skeleton
+// files with English defaults but no human translation yet.
+const AVAILABLE_LOCALES: Locale[] = ['en', 'es', 'fr'];
+
+const COMING_SOON: { code: Locale; nativeName: string }[] = [
+  { code: 'de', nativeName: NATIVE_NAMES.de },
+  { code: 'pt-BR', nativeName: NATIVE_NAMES['pt-BR'] },
+  { code: 'ja', nativeName: NATIVE_NAMES.ja },
+  { code: 'zh-CN', nativeName: NATIVE_NAMES['zh-CN'] },
+  { code: 'ar', nativeName: NATIVE_NAMES.ar },
+];
 
 const LanguageSelector: React.FC = () => {
   const { i18n, t } = useTranslation();
@@ -27,9 +44,9 @@ const LanguageSelector: React.FC = () => {
     const hash = window.location.hash;
     handleClose();
 
-    // If the current path is un-prefixed (e.g. /login, /api-studio), don't
-    // navigate — there's no locale segment to rewrite. Just change language
-    // and persist; the locale will apply to the next navigation.
+    // If the current path is un-prefixed (e.g. /login, /api-studio), there's
+    // no locale segment to rewrite. Change language + persist; the locale
+    // applies to the next navigation.
     if (!pathname.split('/')[1] || !LOCALES.includes(pathname.split('/')[1] as Locale)) {
       try {
         await i18n.changeLanguage(code);
@@ -40,7 +57,11 @@ const LanguageSelector: React.FC = () => {
       navigate(`${localePath(code, rest)}${search}${hash}`);
     }
 
-    try { localStorage.setItem('appLocale', code); } catch { /* ignore */ }
+    try {
+      localStorage.setItem('appLocale', code);
+    } catch {
+      /* ignore */
+    }
 
     try {
       if (auth?.user?.id) {
@@ -62,12 +83,8 @@ const LanguageSelector: React.FC = () => {
       >
         <TranslateIcon />
       </IconButton>
-      <Menu
-        anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
-        onClose={handleClose}
-      >
-        {LOCALES.map((lang) => (
+      <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleClose}>
+        {AVAILABLE_LOCALES.map((lang) => (
           <MenuItem
             key={lang}
             onClick={() => handleChangeLanguage(lang)}
@@ -75,6 +92,22 @@ const LanguageSelector: React.FC = () => {
             lang={lang}
           >
             <ListItemText>{NATIVE_NAMES[lang]}</ListItemText>
+          </MenuItem>
+        ))}
+        <Divider />
+        {COMING_SOON.map(({ code, nativeName }) => (
+          <MenuItem
+            key={code}
+            disabled
+            aria-disabled
+            tabIndex={-1}
+            lang={code}
+            sx={{ opacity: 0.55 }}
+          >
+            <ListItemText
+              primary={nativeName}
+              secondary={t('nav.languageComingSoon')}
+            />
           </MenuItem>
         ))}
       </Menu>
