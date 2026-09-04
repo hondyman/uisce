@@ -1,6 +1,10 @@
 package datapipeline
 
 import (
+	"context"
+	"crypto/rand"
+	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -54,6 +58,7 @@ func (h *DataPipelineHandler) RegisterRoutes(r chi.Router) {
 
 		r.Get("/runs/{runId}", h.GetRunStatus)
 		r.Get("/runs/{runId}/telemetry", h.StreamTelemetrySSE)
+		r.Post("/runs/{runId}/stream-token", h.CreateStreamToken)
 	})
 }
 
@@ -70,6 +75,24 @@ func (h *DataPipelineHandler) getTenantID(r *http.Request) uuid.UUID {
 		}
 	}
 	return uuid.MustParse("00000000-0000-0000-0000-000000000001")
+}
+
+// claimTenantIDFromRequest returns the tenant from JWT claims, or false if
+// the request has no valid JWT. Used for endpoints that must 401 on missing
+// auth rather than falling back to the Gold Copy tenant.
+func claimTenantIDFromRequest(r *http.Request) (uuid.UUID, bool) {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims == nil {
+		return uuid.Nil, false
+	}
+	if claims.TenantID == "" {
+		return uuid.Nil, false
+	}
+	parsed, err := uuid.Parse(claims.TenantID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return parsed, true
 }
 
 func (h *DataPipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +418,22 @@ func (h *DataPipelineHandler) GetRunStatus(w http.ResponseWriter, r *http.Reques
 func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "runId")
 
+	token := r.URL.Query().Get("token")
+
+	if token != "" {
+		validatedTenantID, ok := h.validateStreamToken(r.Context(), runID, token)
+		if !ok {
+			http.Error(w, "unauthorized or token invalid/expired", http.StatusUnauthorized)
+			return
+		}
+		_ = validatedTenantID
+	} else {
+		if _, ok := claimTenantIDFromRequest(r); !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -443,6 +482,101 @@ func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.
 			}
 		}
 	}
+}
+
+func (h *DataPipelineHandler) CreateStreamToken(w http.ResponseWriter, r *http.Request) {
+	runIDStr := chi.URLParam(r, "runId")
+	runID, err := uuid.Parse(runIDStr)
+	if err != nil {
+		http.Error(w, "invalid run_id", http.StatusBadRequest)
+		return
+	}
+
+	tenantID, ok := claimTenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		TenantID  string `json:"tenant_id"`
+		ExpiresIn int    `json:"expires_in"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.TenantID != "" && req.TenantID != tenantID.String() {
+		http.Error(w, "tenant_id mismatch", http.StatusForbidden)
+		return
+	}
+
+	expiresIn := req.ExpiresIn
+	if expiresIn <= 0 {
+		expiresIn = 60
+	}
+	if expiresIn > 3600 {
+		expiresIn = 3600
+	}
+
+	rawToken := make([]byte, 32)
+	if _, err := rand.Read(rawToken); err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+	rawTokenHex := hex.EncodeToString(rawToken)
+
+	tokenHash := fmt.Sprintf("sha256:%s", rawTokenHex)
+
+	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
+
+	_, err = h.db.ExecContext(r.Context(),
+		`INSERT INTO pipeline_stream_tokens (run_id, tenant_id, token_hash, expires_at)
+         VALUES ($1, $2, $3, $4)`,
+		runID, tenantID, tokenHash, expiresAt)
+	if err != nil {
+		http.Error(w, "failed to store token: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"token":      rawTokenHex,
+		"expires_at": expiresAt.Format(time.RFC3339),
+		"run_id":     runID.String(),
+	})
+}
+
+// validateStreamToken atomically consumes a stream token for a specific run.
+// Returns (tenantID, true) if the token is valid, unexpired, and unconsumed.
+// Returns (uuid.Nil, false) if the token is invalid, expired, already used,
+// or belongs to a different run. The token is consumed on success so it
+// cannot be replayed.
+func (h *DataPipelineHandler) validateStreamToken(ctx context.Context, runID, rawToken string) (uuid.UUID, bool) {
+	if rawToken == "" {
+		return uuid.Nil, false
+	}
+
+	var tenantID uuid.UUID
+	err := h.db.QueryRowContext(ctx,
+		`UPDATE pipeline_stream_tokens
+         SET used_at = NOW()
+         WHERE token_hash = 'sha256:' || encode(sha256($1::bytea), 'hex')
+           AND run_id = $2
+           AND used_at IS NULL
+           AND expires_at > NOW()
+         RETURNING tenant_id`,
+		rawToken, runID,
+	).Scan(&tenantID)
+
+	if err == sql.ErrNoRows {
+		return uuid.Nil, false
+	}
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return tenantID, true
 }
 
 func (h *DataPipelineHandler) GetBOSchema(w http.ResponseWriter, r *http.Request) {

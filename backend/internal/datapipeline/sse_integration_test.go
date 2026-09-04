@@ -89,7 +89,7 @@ func TestSSEHandler_BusListenDeliversEvents(t *testing.T) {
 	}
 }
 
-func TestSSEHandler_503WhenBusNotConfigured(t *testing.T) {
+func TestSSEHandler_401WhenNoAuthNoToken(t *testing.T) {
 	db := &sqlx.DB{}
 	engine := NewPipelineEngine(nil, nil, nil)
 	h := &DataPipelineHandler{db: db, engine: engine, bus: nil}
@@ -99,8 +99,8 @@ func TestSSEHandler_503WhenBusNotConfigured(t *testing.T) {
 
 	h.StreamTelemetrySSE(w, req)
 
-	if w.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", w.Code)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 when no auth and no token, got %d", w.Code)
 	}
 }
 
