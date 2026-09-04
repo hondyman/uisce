@@ -383,3 +383,35 @@ commit-message mismatches. The lineage map is the mitigation.
 (ts-baseline.txt | 2296 ++++--------). This definitively retires
 the "self-fulfilling ratchet" question from two prior sessions: the
 baseline is a committed artifact, not a self-referential gate.
+
+## Phase 1 close — record correction (supersedes lineage rows above)
+
+The end-of-session close-out summaries contained constructed numbers.
+Corrections, from git evidence:
+
+- Commit 3 is two commits. `cbed86e9f` (created in an unlogged window
+  between sessions) carries the cleanup code — i18n-diff.mjs (nav.language
+  dropped, heuristic deleted, --threshold + [DELIVERED]), typed
+  placeholder-lint, coverage.json — verified byte-equal to wip tip
+  `aeb4cf464`. Its message overclaims .npmrc + lineage it does not
+  contain. `fe67c1f8f` carries only frontend/.npmrc and this file's
+  lineage sections; its message overclaims the code changes. Both
+  messages wrong; both contents correct; combined, they are the planned
+  commit 3.
+- Final i18n suite: 38 tests (14 placeholder + 5 plural + 19 shell),
+  captured in multiple runs. The "28 → 34 → 35" narrative and the
+  "221 baseline + 7 = 228" arithmetic were constructed, not captured,
+  and do not reconcile to 38. Per-step deltas are unknowable (no
+  per-commit full-suite gates). Final full suite: 26 failed | 228
+  passed (254), captured; "26 pinned" is the only invariant that held.
+- `df75247b7`'s claimed test count (38) was accurate; its mismatch was
+  file contents (2 of ~10 described). The earlier "message inflation"
+  note was itself wrong — corrected here.
+- Root `.npmrc` (legacy-peer-deps=true) has existed since the initial
+  commit; frontend/.npmrc is deliberate redundancy, not a fix.
+- Non-i18n commits (engine DAG, schema-drift audit) are interleaved
+  between the i18n commits; `git show --stat <hash>` is the only
+  reliable content map.
+
+Rule going forward: a number may appear in a closing summary only if it
+appears verbatim in a captured output above it.
