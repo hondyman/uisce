@@ -3,6 +3,7 @@ package datapipeline
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -565,8 +566,8 @@ func (h *DataPipelineHandler) CreateStreamToken(w http.ResponseWriter, r *http.R
 		return
 	}
 	rawTokenHex := hex.EncodeToString(rawToken)
-
-	tokenHash := fmt.Sprintf("sha256:%s", rawTokenHex)
+	hash := sha256.Sum256(rawToken)
+	tokenHash := fmt.Sprintf("sha256:%x", hash)
 
 	expiresAt := time.Now().Add(time.Duration(expiresIn) * time.Second)
 
@@ -602,7 +603,7 @@ func (h *DataPipelineHandler) validateStreamToken(ctx context.Context, runID, ra
 	err := h.db.QueryRowContext(ctx,
 		`UPDATE pipeline_stream_tokens
          SET used_at = NOW()
-         WHERE token_hash = 'sha256:' || encode(sha256($1::bytea), 'hex')
+         WHERE token_hash = 'sha256:' || encode(sha256(decode($1, 'hex')), 'hex')
            AND run_id = $2
            AND used_at IS NULL
            AND expires_at > NOW()
