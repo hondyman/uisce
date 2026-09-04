@@ -317,6 +317,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <TimelineIcon />,
         items: [
           { label: 'Data Pipeline Studio', path: '/pipelines/studio', icon: <TimelineIcon />, description: 'Parallel visual ETL/ELT pipeline platform', badge: { label: 'New', color: 'primary' } },
+          { label: 'Validation Triggers', path: '/pipelines/triggers/new', icon: <PlayCircleOutlineIcon />, description: 'Bind pipelines to BO write events' },
           { label: 'Pipeline Flows', path: '/core/flow-builder', icon: <AccountTreeIcon />, description: 'Visual pipeline flows' },
         ]
       },

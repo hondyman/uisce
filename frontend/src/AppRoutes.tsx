@@ -47,6 +47,7 @@ import { ValidationRulesBuilderPage } from "./pages/ValidationRulesBuilderPage";
 import { UisceBuilderPage } from "./pages/UisceBuilderPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { DataPipelineStudioPage } from "./features/data-pipelines/pages/DataPipelineStudioPage";
+import { TriggerAuthoringPage } from "./features/data-pipelines/pages/TriggerAuthoringPage";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
 import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
@@ -300,6 +301,7 @@ function ProtectedApp() {
         <Route path="core/data-pipelines" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
         <Route path="pipelines/studio" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
         <Route path="pipelines/studio/:id" element={<ProtectedRoute><DataPipelineStudioPage /></ProtectedRoute>} />
+        <Route path="pipelines/triggers/new" element={<ProtectedRoute><TriggerAuthoringPage /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
         <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
         <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
