@@ -1,0 +1,453 @@
+=== Applying 000063_fix_identity_profile_mappings.up.sql ===
+CREATE TABLE
+DO
+CREATE INDEX
+=== Applying 20260201_create_analytics_assets.up.sql ===
+                                        ^
+HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
+psql:backend/db/migrations/20260201_create_analytics_assets.up.sql:14: ERROR:  relation "public.analytics_assets" does not exist
+=== Applying 20260729_execution_telemetry.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260730_bitemporal_crud_bindings.up.sql ===
+psql:backend/db/migrations/20260730_bitemporal_crud_bindings.up.sql:35: NOTICE:  column "binding_mode" of relation "business_object_bindings" already exists, skipping
+ALTER TABLE
+CREATE INDEX
+=== Applying 20260730_bo_data_contracts.up.sql ===
+CREATE TABLE
+=== Applying 20260730_channel_auditing_billing.up.sql ===
+DO
+ALTER TABLE
+CREATE INDEX
+=== Applying 20260730_maker_checker_governance.up.sql ===
+psql:backend/db/migrations/20260730_maker_checker_governance.up.sql:35: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:backend/db/migrations/20260730_maker_checker_governance.up.sql:37: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+=== Applying 20260730_page_layouts.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260730_tenant_custom_attributes.up.sql ===
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260731_agentic_maker_checker.up.sql ===
+DO
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260731_calc_fields.up.sql ===
+CREATE INDEX
+ALTER TABLE
+CREATE POLICY
+=== Applying 20260731_cryptographic_audit.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260731_financial_superpowers.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260731_notification_outbox.up.sql ===
+COMMENT
+COMMENT
+COMMENT
+=== Applying 20260731_pg_trgm.up.sql ===
+CREATE EXTENSION
+=== Applying 20260731_semantic_term_tags.up.sql ===
+psql:backend/db/migrations/20260731_semantic_term_tags.up.sql:23: ERROR:  relation "public.semantic_term_tags" does not exist
+psql:backend/db/migrations/20260731_semantic_term_tags.up.sql:25: ERROR:  relation "public.semantic_term_tags" does not exist
+psql:backend/db/migrations/20260731_semantic_term_tags.up.sql:30: ERROR:  relation "public.semantic_term_tags" does not exist
+=== Applying 20260731_simulation_scenarios.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260731_survivorship_rules.up.sql ===
+DO
+psql:backend/db/migrations/20260731_survivorship_rules.up.sql:32: ERROR:  relation "public.legacy_business_objects" does not exist
+psql:backend/db/migrations/20260731_survivorship_rules.up.sql:34: ERROR:  relation "public.survivorship_rules" does not exist
+=== Applying 20260802_shadow_replay.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260812000003_promote_inline_calc_fields_to_catalog.up.sql ===
+QUERY:  SELECT id               FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 7 at SQL statement
+ROLLBACK
+=== Applying 20260812000004_add_binding_config.up.sql ===
+psql:backend/db/migrations/20260812000004_add_binding_config.up.sql:21: NOTICE:  Added config JSONB column to business_object_bindings
+DO
+COMMIT
+=== Applying 20260812000005_warn_inline_calc_fields.up.sql ===
+END $$"
+LINE 1: $$;
+        ^
+=== Applying 20260823_001_oms_subtype_registry.up.sql ===
+CREATE SCHEMA
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260823_010_oms_investment_trading_subtypes.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260823_011_oms_alternatives_and_cash_flow_subtypes.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260823_012_master_directory_subtypes.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260824_002_ai_learning_engine.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260824_002_compliance_pretrade_audit_ledger.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260824_003_ai_semantic_cache.up.sql ===
+                             ^
+psql:backend/db/migrations/20260824_003_ai_semantic_cache.up.sql:13: ERROR:  relation "ai_semantic_cache" does not exist
+psql:backend/db/migrations/20260824_003_ai_semantic_cache.up.sql:17: ERROR:  relation "ai_semantic_cache" does not exist
+=== Applying 20260824_007_seed_gold_copy_demo_data.up.sql ===
+DO
+=== Applying 20260824_008_add_missing_bo_fields_and_seed_data.up.sql ===
+                                               ^
+QUERY:  SELECT id                         FROM business_objects WHERE tenant_id = gold_copy_tenant_id AND key = 'oms.position/settled_long'
+CONTEXT:  PL/pgSQL function inline_code_block line 24 at SQL statement
+=== Applying 20260824_009_add_parent_bo_fields_and_cashflow_subtypes.up.sql ===
+                                          ^
+QUERY:  SELECT id                    FROM business_objects WHERE tenant_id = gold_copy_tenant_id AND key = 'oms.account'
+CONTEXT:  PL/pgSQL function inline_code_block line 17 at SQL statement
+=== Applying 20260824_010_seed_altinv_alternative_investment.up.sql ===
+DO
+=== Applying 20260824_100_chat_history.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260824_filters.up.sql ===
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+=== Applying 20260825_001_repopulate_business_objects_from_subtype_registry.up.sql ===
+          AND EXISTS (SELECT 1 FROM tenants t WHERE t.id = sr.tenant_id)
+CONTEXT:  PL/pgSQL function inline_code_block line 23 at FOR over SELECT rows
+ROLLBACK
+=== Applying 20260825_create_report_shares.up.sql ===
+psql:backend/db/migrations/20260825_create_report_shares.up.sql:74: ERROR:  relation "public.report_share_audit_log" does not exist
+psql:backend/db/migrations/20260825_create_report_shares.up.sql:76: ERROR:  relation "public.report_shares" does not exist
+psql:backend/db/migrations/20260825_create_report_shares.up.sql:77: ERROR:  relation "public.report_share_audit_log" does not exist
+=== Applying 20260825_okf_attested_knowledge_engine.up.sql ===
+psql:backend/db/migrations/20260825_okf_attested_knowledge_engine.up.sql:33: ERROR:  relation "public.okf_concept_manifest" does not exist
+psql:backend/db/migrations/20260825_okf_attested_knowledge_engine.up.sql:35: ERROR:  relation "public.okf_concept_manifest" does not exist
+psql:backend/db/migrations/20260825_okf_attested_knowledge_engine.up.sql:36: ERROR:  relation "public.okf_concept_manifest" does not exist
+=== Applying 20260825_okf_core_vs_custom_engine.up.sql ===
+                OR tenant_id = NULLIF(current_setting('uisce.current_tenant', true), '')::uuid -- Active Custom
+            )"
+PL/pgSQL function inline_code_block line 6 at SQL statement
+=== Applying 20260825_seed_alpha_wealth_users.up.sql ===
+psql:backend/db/migrations/20260825_seed_alpha_wealth_users.up.sql:201: ERROR:  relation "public.app_user" does not exist
+LINE 1: UPDATE public.app_user
+               ^
+=== Applying 20260826_001_data_explorer_saved_queries.up.sql ===
+ALTER TABLE
+CREATE POLICY
+COMMENT
+=== Applying 20260826_001_subtype_relationship_allowlist.up.sql ===
+ALTER TABLE
+COMMENT
+CREATE INDEX
+=== Applying 20260827_001_fix_parent_bo_corefields.up.sql ===
+psql:backend/db/migrations/20260827_001_fix_parent_bo_corefields.up.sql:70: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:backend/db/migrations/20260827_001_fix_parent_bo_corefields.up.sql:88: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+=== Applying 20260827_001_page_designer_registry.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260828_002_tenant_domains.up.sql ===
+CREATE SCHEMA
+psql:backend/db/migrations/20260828_002_tenant_domains.up.sql:14: ERROR:  relation "tenants" does not exist
+psql:backend/db/migrations/20260828_002_tenant_domains.up.sql:16: ERROR:  relation "security.tenant_domains" does not exist
+=== Applying 20260829_001_bo_row_event_trigger_types.up.sql ===
+psql:backend/db/migrations/20260829_001_bo_row_event_trigger_types.up.sql:9: ERROR:  relation "trigger_types" does not exist
+LINE 1: INSERT INTO trigger_types (id, key, label, description, cate...
+                    ^
+=== Applying 20260829_differential_privacy_cleanrooms.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260829_self_healing_schema_drift.up.sql ===
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260830_001_reassign_subtype_fields_to_child_bos.up.sql ===
+LINE 1: UPDATE business_object_fields
+               ^
+ROLLBACK
+=== Applying 20260830_native_regulatory_pack_synthesizer.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260831_001_platform_exceptions.up.sql ===
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260831_001_studio_event_trigger_types.up.sql ===
+psql:backend/db/migrations/20260831_001_studio_event_trigger_types.up.sql:13: ERROR:  relation "trigger_types" does not exist
+LINE 1: INSERT INTO trigger_types (id, key, label, description, cate...
+                    ^
+=== Applying 20260831_002_exception_autofix_policy.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260831_002_studio_definitions_schema.up.sql ===
+psql:backend/db/migrations/20260831_002_studio_definitions_schema.up.sql:34: ERROR:  relation "trigger_types" does not exist
+LINE 1: INSERT INTO trigger_types (id, key, label, description, cate...
+                    ^
+=== Applying 20260831_003_calculation_preagg_map.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260831_004_bo_entitlement_policies.up.sql ===
+LINE 1: CREATE TABLE IF NOT EXISTS semantic.bo_entitlement_policies ...
+                                   ^
+psql:backend/db/migrations/20260831_004_bo_entitlement_policies.up.sql:35: ERROR:  schema "semantic" does not exist
+=== Applying 20260831_005_tenant_identity_providers.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260831_bitemporal_simulation_sandbox.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE TABLE
+=== Applying 20260832_vendor_dictionaries_and_vector_mesh.up.sql ===
+LINE 4:     embedding_vector vector(1536) NOT NULL,
+                             ^
+psql:backend/db/migrations/20260832_vendor_dictionaries_and_vector_mesh.up.sql:45: ERROR:  relation "catalog_vendor.vendor_field_embeddings" does not exist
+=== Applying 20260901_001_create_data_pipelines.up.sql ===
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260901_002_add_bloomberg_fields_node_type.up.sql ===
+                       ^
+QUERY:  SELECT id FROM tenants
+CONTEXT:  PL/pgSQL function inline_code_block line 6 at FOR over SELECT rows
+=== Applying 20260901_003_create_calculations_table.up.sql ===
+psql:backend/db/migrations/20260901_003_create_calculations_table.up.sql:30: ERROR:  relation "calculations" does not exist
+psql:backend/db/migrations/20260901_003_create_calculations_table.up.sql:31: ERROR:  relation "calculations" does not exist
+psql:backend/db/migrations/20260901_003_create_calculations_table.up.sql:34: ERROR:  relation "calculations" does not exist
+=== Applying 20260901_ai_telemetry_and_feedback.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+=== Applying 20260902_001_calculations_tier_persistence.up.sql ===
+psql:backend/db/migrations/20260902_001_calculations_tier_persistence.up.sql:14: ERROR:  relation "calculations" does not exist
+psql:backend/db/migrations/20260902_001_calculations_tier_persistence.up.sql:17: ERROR:  relation "calculations" does not exist
+psql:backend/db/migrations/20260902_001_calculations_tier_persistence.up.sql:20: ERROR:  relation "calculations" does not exist
+=== Applying 20260903_001_create_semantic_ai_bridge.up.sql ===
+psql:backend/db/migrations/20260903_001_create_semantic_ai_bridge.up.sql:40: ERROR:  relation "public.tenants" does not exist
+psql:backend/db/migrations/20260903_001_create_semantic_ai_bridge.up.sql:42: ERROR:  relation "catalog_ai.ai_bridge_targets" does not exist
+psql:backend/db/migrations/20260903_001_create_semantic_ai_bridge.up.sql:43: ERROR:  relation "catalog_ai.ai_bridge_sync_logs" does not exist
+=== Applying 20260903_002_ai_bridge_ledger_integrity.up.sql ===
+psql:backend/db/migrations/20260903_002_ai_bridge_ledger_integrity.up.sql:11: ERROR:  relation "catalog_ai.ai_bridge_sync_logs" does not exist
+psql:backend/db/migrations/20260903_002_ai_bridge_ledger_integrity.up.sql:14: ERROR:  relation "catalog_ai.ai_bridge_sync_logs" does not exist
+=== Applying 20260903_003_ai_bridge_credential_rotation.up.sql ===
+psql:backend/db/migrations/20260903_003_ai_bridge_credential_rotation.up.sql:6: ERROR:  relation "catalog_ai.ai_bridge_targets" does not exist
+=== Applying 20260903_drill_down_metadata.up.sql ===
+CREATE SCHEMA
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260903_migrate_legacy_pipelines.up.sql ===
+DO
+=== Applying 20260903_multi_agent_swarm_passports.up.sql ===
+CREATE SCHEMA
+CREATE TABLE
+CREATE TABLE
+=== Applying 20260903_validation_trigger_pipeline_binding.up.sql ===
+psql:backend/db/migrations/20260903_validation_trigger_pipeline_binding.up.sql:9: ERROR:  relation "validation_triggers" does not exist
+psql:backend/db/migrations/20260903_validation_trigger_pipeline_binding.up.sql:11: ERROR:  relation "validation_triggers" does not exist
+psql:backend/db/migrations/20260903_validation_trigger_pipeline_binding.up.sql:12: ERROR:  relation "validation_triggers" does not exist
+=== Applying 20260904_multimodal_document_footnote_graph.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260905_ambient_tribal_knowledge_pipeline.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260906_collective_intelligence_and_shadow_replay.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+=== Applying 20260907_context_eval_harness.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260907_unsupervised_mining_and_recommendations.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+=== Applying 20260908_ast_normalization_and_mv_advisor.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+=== Applying 20260908_multibook_synchronization_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260909_tax_alpha_optimizer_kernel.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260909_unified_multibook_and_tax_alpha.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260910_regulatory_generation_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260911_corporate_actions_lifecycle.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260912_zk_cleanroom_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260913_enterprise_mdm_engine.up.sql ===
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+=== Applying 20260914_unified_compliance_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260915_predictive_compliance_ai.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260916_impact_simulator_and_drift_healer.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260917_ai_native_mdm_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260918_cc_dsar_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260919_universal_golden_master_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260920_streaming_cdc_mastering.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260921_mdm_exception_studio.up.sql ===
+CREATE TABLE
+psql:backend/db/migrations/20260921_mdm_exception_studio.up.sql:40: NOTICE:  relation "agentic_triage_proposals" already exists, skipping
+CREATE TABLE
+=== Applying 20260922_mcp_agentic_audit.up.sql ===
+CREATE SCHEMA
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260924_corporate_actions_engine.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260925_lei_hierarchy_mesh.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260926_dq_health_scorecards.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260927_ai_fuzzy_xref.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260930_000_create_report_definitions_table.up.sql ===
+CREATE INDEX
+ALTER TABLE
+CREATE POLICY
+=== Applying 20260930_001_fix_gold_copy_subtype_registry.up.sql ===
+QUERY:  SELECT id          FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 5 at SQL statement
+ROLLBACK
+=== Applying 20260930_002_seed_core_report_definitions.up.sql ===
+QUERY:  SELECT id          FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 7 at SQL statement
+ROLLBACK
+=== Applying 20260930_003_seed_parent_business_objects.up.sql ===
+QUERY:  SELECT id          FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 6 at SQL statement
+ROLLBACK
+=== Applying 20260930_004_seed_subtype_business_objects.up.sql ===
+QUERY:  SELECT id          FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 6 at SQL statement
+ROLLBACK
+=== Applying 20260930_005_seed_bo_fields.up.sql ===
+QUERY:  SELECT id          FROM public.tenants WHERE gold_copy = true LIMIT 1
+CONTEXT:  PL/pgSQL function inline_code_block line 5 at SQL statement
+ROLLBACK
+=== Applying 20260930_006_bo_fields_compat_view.up.sql ===
+psql:backend/db/migrations/20260930_006_bo_fields_compat_view.up.sql:41: ERROR:  relation "public.bo_fields" does not exist
+LINE 35: FROM public.bo_fields;
+              ^
+=== Applying 20260930_110_collective_intelligence_mesh.up.sql ===
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260930_120_enterprise_mesh_foundations.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260930_130_personalized_calculation_suggestions.up.sql ===
+CREATE INDEX
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260930_140_calculation_reinforcement_feedback_loop.up.sql ===
+ALTER TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20260930_cognitive_data_explorer.up.sql ===
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+=== Applying 20261001_001_dashboard_visuals.up.sql ===
+psql:backend/db/migrations/20261001_001_dashboard_visuals.up.sql:42: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+psql:backend/db/migrations/20261001_001_dashboard_visuals.up.sql:43: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+=== Applying 20261001_institutional_competitive_engine.up.sql ===
+psql:backend/db/migrations/20261001_institutional_competitive_engine.up.sql:50: ERROR:  relation "catalog_governance.cryptographic_merkle_ledger" does not exist
+psql:backend/db/migrations/20261001_institutional_competitive_engine.up.sql:64: ERROR:  relation "public.tenants" does not exist
+psql:backend/db/migrations/20261001_institutional_competitive_engine.up.sql:67: ERROR:  relation "catalog_calc.cow_simulation_sandboxes" does not exist
+=== Applying 20261002_business_object_studio_engine.up.sql ===
+psql:backend/db/migrations/20261002_business_object_studio_engine.up.sql:95: ERROR:  relation "public.field_bindings" does not exist
+psql:backend/db/migrations/20261002_business_object_studio_engine.up.sql:111: ERROR:  relation "tenants" does not exist
+psql:backend/db/migrations/20261002_business_object_studio_engine.up.sql:121: ERROR:  relation "tenants" does not exist
+=== Applying 20261003_001_bof_consolidation.up.sql ===
+psql:backend/db/migrations/20261003_001_bof_consolidation.up.sql:35: ERROR:  relation "public.business_object_fields" does not exist
+psql:backend/db/migrations/20261003_001_bof_consolidation.up.sql:39: ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ROLLBACK
+=== Applying 20261016_predictive_finops_and_smoothing.up.sql ===
+psql:backend/db/migrations/20261016_predictive_finops_and_smoothing.up.sql:107: ERROR:  relation "public.tenants" does not exist
+psql:backend/db/migrations/20261016_predictive_finops_and_smoothing.up.sql:110: ERROR:  relation "finops.prewarm_execution_ledger" does not exist
+psql:backend/db/migrations/20261016_predictive_finops_and_smoothing.up.sql:114: ERROR:  relation "finops.prewarm_execution_ledger" does not exist
+=== Applying 20261017_create_catalog_view_definitions.up.sql ===
+CREATE INDEX
+CREATE INDEX
+COMMENT
+=== Applying 20261017_forecast_feedback_loop.up.sql ===
+psql:backend/db/migrations/20261017_forecast_feedback_loop.up.sql:48: ERROR:  relation "finops.forecast_feedback" does not exist
+psql:backend/db/migrations/20261017_forecast_feedback_loop.up.sql:61: ERROR:  relation "public.tenants" does not exist
+psql:backend/db/migrations/20261017_forecast_feedback_loop.up.sql:65: ERROR:  relation "finops.forecast_calibration_state" does not exist
+=== Applying 20261018_prewarm_job_tracking.up.sql ===
+psql:backend/db/migrations/20261018_prewarm_job_tracking.up.sql:14: ERROR:  relation "finops.prewarm_execution_ledger" does not exist
+psql:backend/db/migrations/20261018_prewarm_job_tracking.up.sql:17: ERROR:  relation "finops.prewarm_execution_ledger" does not exist
+psql:backend/db/migrations/20261018_prewarm_job_tracking.up.sql:20: ERROR:  relation "finops.prewarm_execution_ledger" does not exist
+=== Applying 20261019_workflow_definitions.up.sql ===
+COMMENT
+COMMENT
+INSERT 0 4
