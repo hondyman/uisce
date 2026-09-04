@@ -11,10 +11,25 @@ import path from 'node:path';
  * Output: test-results/a11y/{route}.json per route.
  *
  * SCOPE NOTE: /api-studio is excluded — Vite dev server returns 404 for this
- * path (pre-existing bug: the route is defined in AppRoutes.tsx but the dev
- * server rejects it before React Router can handle it). File scope decision:
- * fix the Vite dev server routing first, then re-add.
+ * path (pre-existing bug; scope decision: fix the Vite routing first).
  */
+
+const E2E_JWT = process.env.E2E_JWT ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
+
+const E2E_USER = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'a11y@example.com',
+  name: 'A11y Fixture',
+  role: 'admin',
+  organization: 'E2E Test',
+  permissions: [],
+  is_active: true,
+  roles: ['admin', 'user'],
+  is_core_admin: true,
+  isCoreAdmin: true,
+  is_admin: true,
+  is_global_admin: true,
+};
 
 const ROUTES = [
   '/',
@@ -28,22 +43,41 @@ const ROUTES = [
   '/login',
 ];
 
+const EXPIRES_AT = Date.now() + 86400 * 1000;
+
+const AUTH_STORAGE = {
+  auth_token: E2E_JWT,
+  auth_user: JSON.stringify(E2E_USER),
+  auth_expires_at: EXPIRES_AT.toString(),
+  selected_tenant: JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', display_name: 'Dev Tenant' }),
+  appLocale: 'en',
+};
+
 test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
-  test.use({ dependencies: ['auth'] });
+  test.beforeEach(async ({ page, context }) => {
+    await context.addInitScript(
+      (auth) => {
+        for (const [k, v] of Object.entries(auth)) {
+          localStorage.setItem(k, v);
+        }
+      },
+      AUTH_STORAGE,
+    );
+  });
 
   for (const route of ROUTES) {
     test(`axe: ${route}`, async ({ page }) => {
-      await page.goto(route, { waitUntil: 'networkidle' });
+      await page.goto(route, { waitUntil: 'load' });
 
-      // NOTE: auth guard disabled pending real Keycloak token (oidc-client validates
-      // tokens against Keycloak on load; the fake JWT causes redirect to /login).
-      // The guard WILL be re-enabled once E2E_JWT points to a real Keycloak access_token.
-      // With the guard disabled, the spec records violations on whatever page loads — if
-      // auth fails, that's a 0-violation audit of /login, which is a false negative.
-      // Run: export E2E_JWT=$(curl -s -X POST "https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/token" \
-      //   -d "grant_type=password&username=USER&password=PASS&client_id=semlayer-frontend&scope=openid profile email" \
-      //   | node -e "process.stdin.on('data',d=>console.log(JSON.parse(d).access_token))")
-      // expect(page.url(), `auth lost on ${route}`).not.toContain('/login');
+      const url = page.url();
+      const authLost = route !== '/login' && url.includes('/login');
+      if (authLost) {
+        throw new Error(
+          `auth lost on ${route} — app redirected to ${url}. ` +
+          `This means the fake JWT was rejected by oidc-client. ` +
+          `Set E2E_JWT to a real Keycloak access_token to fix.`,
+        );
+      }
 
       const results = await new AxeBuilder({ page })
         .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
@@ -57,9 +91,6 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         JSON.stringify(results, null, 2),
       );
 
-      // Phase 0 record mode: violations are written to JSON as the baseline
-      // artifact. Flip the comment below to enable the gate for Phase 1.
-      // expect(results.violations, `${route}: WCAG violations`).toHaveLength(0);
       test.info().annotations.push({
         type: 'axe-summary',
         description: `${results.violations.length} rule violations, ${results.passes.length} passes`,

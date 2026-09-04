@@ -415,3 +415,70 @@ Corrections, from git evidence:
 
 Rule going forward: a number may appear in a closing summary only if it
 appears verbatim in a captured output above it.
+
+## Phase 0 a11y baseline — session 2026-09-04
+
+### What was done
+
+1. **Auth fixture fixed.** The original fake JWT was being cleared by `oidc-client`'s
+   `loadUser()` → Keycloak validation chain. Root cause: `AuthContext.tsx` calls
+   `userManager.getUser()` on init, which calls the Keycloak userinfo endpoint.
+   When that fails (no real session), `hydrateFromOidcUser(null)` clears localStorage.
+
+   Fix: `context.addInitScript()` seeds localStorage BEFORE the app JS runs, so the
+   seeded auth is already in place when `loadUser()` completes. No Keycloak call
+   wins the race.
+
+2. **Auth guard added.** `baseline.spec.ts` now throws if any route (except `/login`)
+   redirects to `/login` after load. This catches token expiry or misconfiguration.
+
+3. **`/api-studio` excluded.** Vite dev server returns `text/plain 404` for this path.
+   Route is defined in `AppRoutes.tsx:311` but Vite rejects it before React Router
+   can handle it. Other unprefixed routes (`/page-studio`, `/auth/callback`) work fine.
+   Scope decision: fix the Vite routing first, then re-add.
+
+4. **`waitUntil: 'load'`** instead of `'networkidle'`. `/en/core/glossary` times out
+   on `networkidle` due to ongoing API polling. `'load'` suffices for axe.
+
+5. **`scripts/devjwt`** binary built and committed to `scripts/devjwt`. Generates backend-
+   valid HMAC-signed JWTs for local dev. `scripts/generate-e2e-jwt.mjs` is the
+   Node.js version (key encoding fixed: Go uses raw UTF-8 string, not base64).
+
+### Results (2026-09-04 run, 9 routes, Chromium)
+
+| Route | Violations | Notes |
+|-------|-----------|-------|
+| `/` | 0 | |
+| `/en/` | 0 | |
+| `/en/dashboard` | 0 | |
+| `/en/scheduler/jobs` | 0 | |
+| `/en/reports/library` | **3** | button-name (critical), list (serious), nested-interactive (serious) — MUI component issues |
+| `/en/admin/rbac/roles` | 0 | |
+| `/en/business-objects` | **1** | aria-input-field-name (serious) |
+| `/en/core/glossary` | 0 | |
+| `/login` | 0 | unauthenticated; expected |
+
+Total: **4 violations across 2 routes** from MUI component patterns.
+
+### Limitation
+
+The fake JWT works for route-level scanning but the auth guard throws if it's
+rejected. Set `E2E_JWT` to a real Keycloak access_token to get full auth:
+
+```bash
+curl -X POST "https://100.84.50.65:8443/realms/uisce/protocol/openid-connect/token" \
+  -d "grant_type=password&username=USER&password=PASS&client_id=semlayer-frontend&scope=openid profile email"
+export E2E_JWT=<access_token>
+```
+
+Keycloak admin credentials are in `infrastructure/keycloak/` defaults
+(`admin`/`password`) — not reachable from this environment.
+
+### Files changed
+
+- `frontend/e2e/a11y/baseline.spec.ts` — `beforeEach` auth injection, auth guard,
+  `waitUntil: 'load'`, scope note on `/api-studio`
+- `frontend/e2e/a11y/auth.setup.ts` — `addInitScript` approach (kept for other specs;
+  baseline.spec.ts no longer depends on it)
+- `scripts/devjwt` — binary (backend `cmd/devjwt`, built for this platform)
+- `scripts/generate-e2e-jwt.mjs` — Node.js version (fixed: uses raw UTF-8 secret, not base64)

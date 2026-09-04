@@ -8,14 +8,13 @@ import { test as setup } from '@playwright/test';
  * with a JWT-shaped payload and a tenant, then expose it via storageState so
  * axe specs run authenticated.
  *
- * oidc-client validates tokens against Keycloak on load; the fake JWT is accepted
- * because loadUser() returns null (Keycloak unreachable from test env) and the
- * stored auth is retained. Token expiry is set far in the future to prevent
- * isTokenExpired() triggering a redirect.
+ * oidc-client's loadUser() calls Keycloak on init and clears auth on failure.
+ * We use page.addInitScript() to seed localStorage BEFORE the app bootstraps,
+ * so the seeded auth is in place when loadUser() runs. This prevents the
+ * Keycloak call from racing against our seed.
  *
  * To upgrade to real auth: obtain a Keycloak access_token for a seeded test user
- * and set E2E_JWT in the environment. Without it, the fixture falls back to the
- * fake JWT which suffices for route-level axe scanning.
+ * and set E2E_JWT in the environment.
  */
 const E2E_JWT = process.env.E2E_JWT ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
 const EXPIRES_AT = Date.now() + 86400 * 1000;
@@ -35,9 +34,8 @@ const E2E_USER = {
   is_global_admin: true,
 };
 
-setup('seed auth storage', async ({ page, context }) => {
-  await page.goto('/');
-  await page.evaluate(
+setup('seed auth storage via addInitScript', async ({ page, context }) => {
+  await page.context().addInitScript(
     ({ jwt, user, expiresAt }) => {
       localStorage.setItem('auth_token', jwt);
       localStorage.setItem('auth_user', JSON.stringify(user));

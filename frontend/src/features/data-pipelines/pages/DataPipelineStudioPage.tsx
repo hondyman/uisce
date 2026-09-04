@@ -45,6 +45,7 @@ import { ExecutionTelemetryHUD } from '../components/ExecutionTelemetryHUD';
 import { LiveSimulationModal } from '../components/LiveSimulationModal';
 import { PIPELINE_TEMPLATES, PipelineTemplate } from '../constants/pipelineTemplates';
 import { PipelineDefinition, PipelineExecutionRun, PipelineNodeData } from '../types/pipeline';
+import { usePipelineTelemetry, createStreamToken } from '../hooks/usePipelineTelemetry';
 
 const nodeTypes = {
   pipelineTile: PipelineTileNode,
@@ -73,6 +74,9 @@ export const DataPipelineStudioPage: React.FC = () => {
   // Execution & Simulation states
   const [isExecuting, setIsExecuting] = useState(false);
   const [currentRun, setCurrentRun] = useState<PipelineExecutionRun | null>(null);
+  const [durableRunId, setDurableRunId] = useState<string | null>(null);
+  const [durableToken, setDurableToken] = useState<string>('');
+  const [isDurableRun, setIsDurableRun] = useState(false);
   const [showSimModal, setShowSimModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSampleOutputModal, setShowSampleOutputModal] = useState(false);
@@ -210,38 +214,67 @@ export const DataPipelineStudioPage: React.FC = () => {
   };
 
   // Trigger high-speed parallel run
-  const handleExecuteParallelRun = async () => {
+  const handleExecuteParallelRun = async (durable = false) => {
     try {
       setIsExecuting(true);
+      setIsDurableRun(durable);
       const def = getCurrentPipelineDef();
-      const res = await axios.post('/api/v1/data-pipelines/run', {
-        pipeline: def,
-      });
-      setCurrentRun(res.data);
 
-      // Update node visual status based on step telemetry
-      if (res.data?.step_telemetry) {
-        setNodes((nds) =>
-          nds.map((n) => {
-            const step = res.data.step_telemetry[n.id];
-            if (step) {
-              return {
-                ...n,
-                data: {
-                  ...n.data,
-                  metrics: {
-                    status: step.status,
-                    recordsIn: step.records_in,
-                    recordsOut: step.records_out,
-                    recordsError: step.records_error,
-                    rowsPerSec: step.rows_per_sec,
+      if (durable) {
+        const res = await axios.post('/api/v1/data-pipelines/run?durable=true', {
+          pipeline: def,
+        });
+        const runId = res.data.run_id;
+        const workflowId = res.data.workflow_id;
+        setDurableRunId(runId);
+
+        const tokenRes = await createStreamToken(runId);
+        setDurableToken(tokenRes.token);
+        setCurrentRun({
+          run_id: runId,
+          pipeline_id: def.id ?? '',
+          tenant_id: '',
+          status: 'queued',
+          start_time: new Date().toISOString(),
+          total_records_in: 0,
+          total_records_out: 0,
+          total_errors: 0,
+          peak_throughput_rows_sec: 0,
+          step_telemetry: {},
+        });
+      } else {
+        const res = await axios.post('/api/v1/data-pipelines/run', {
+          pipeline: def,
+          durable: false,
+        });
+        setCurrentRun(res.data);
+        setDurableRunId(null);
+        setDurableToken('');
+
+        // Update node visual status based on step telemetry
+        if (res.data?.step_telemetry) {
+          setNodes((nds) =>
+            nds.map((n) => {
+              const step = res.data.step_telemetry[n.id];
+              if (step) {
+                return {
+                  ...n,
+                  data: {
+                    ...n.data,
+                    metrics: {
+                      status: step.status,
+                      recordsIn: step.records_in,
+                      recordsOut: step.records_out,
+                      recordsError: step.records_error,
+                      rowsPerSec: step.rows_per_sec,
+                    },
                   },
-                },
-              };
-            }
-            return n;
-          })
-        );
+                };
+              }
+              return n;
+            })
+          );
+        }
       }
     } catch (err: any) {
       alert('Pipeline execution failed: ' + (err.message || 'Unknown error'));
@@ -249,6 +282,25 @@ export const DataPipelineStudioPage: React.FC = () => {
       setIsExecuting(false);
     }
   };
+
+  usePipelineTelemetry({
+    runId: durableRunId ?? '',
+    token: durableToken,
+    onEvent: (event) => {
+      if (event.run) {
+        setCurrentRun(event.run);
+        if (event.type === 'completion') {
+          setIsExecuting(false);
+          setDurableRunId(null);
+          setDurableToken('');
+          setIsDurableRun(false);
+        }
+      }
+    },
+    onError: (err) => {
+      console.error('SSE error:', err);
+    },
+  });
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden', backgroundColor: theme.palette.background.default }}>
@@ -358,8 +410,8 @@ export const DataPipelineStudioPage: React.FC = () => {
             size="small"
             variant="contained"
             color="primary"
-            startIcon={isExecuting ? <CircularProgress size={16} color="inherit" /> : <Play size={16} />}
-            onClick={handleExecuteParallelRun}
+            startIcon={isExecuting && !isDurableRun ? <CircularProgress size={16} color="inherit" /> : <Play size={16} />}
+            onClick={() => handleExecuteParallelRun(false)}
             disabled={isExecuting}
             sx={{
               height: 36,
@@ -367,7 +419,24 @@ export const DataPipelineStudioPage: React.FC = () => {
               background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
             }}
           >
-            {isExecuting ? 'Streaming...' : 'Run Parallel Job'}
+            {isExecuting && !isDurableRun ? 'Running...' : 'Run Sync'}
+          </Button>
+
+          <Button
+            size="small"
+            variant="outlined"
+            color="info"
+            startIcon={isExecuting && isDurableRun ? <CircularProgress size={16} color="inherit" /> : <Zap size={16} />}
+            onClick={() => handleExecuteParallelRun(true)}
+            disabled={isExecuting}
+            sx={{
+              height: 36,
+              fontWeight: 700,
+              borderColor: '#7c3aed',
+              color: '#7c3aed',
+            }}
+          >
+            {isExecuting && isDurableRun ? 'Streaming...' : 'Run Durable'}
           </Button>
 
           <Button
