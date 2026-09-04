@@ -148,11 +148,14 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 
 	e.notifySubscribers(*run)
 
-	// Topologically order nodes or follow linear sequence
 	currentRecords := inputRecords
 
-	// If source node is present and no inputRecords provided, execute source reader
-	for _, node := range dag.Nodes {
+	orderedNodes, err := topologicalOrder(*dag)
+	if err != nil {
+		return nil, fmt.Errorf("ExecuteRun: invalid DAG: %w", err)
+	}
+
+	for _, node := range orderedNodes {
 		stepStart := time.Now()
 		stepMetric := StepMetrics{
 			NodeID:    node.ID,
