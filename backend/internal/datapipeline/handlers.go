@@ -405,29 +405,41 @@ func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ch, cleanup := h.engine.SubscribeRun(runID)
-	defer cleanup()
-
-	// Send current state immediately if available
-	if current, exists := h.engine.GetRun(runID); exists {
-		bytes, _ := json.Marshal(current)
+	sendJSON := func(w http.ResponseWriter, data interface{}) {
+		bytes, _ := json.Marshal(data)
 		fmt.Fprintf(w, "data: %s\n\n", bytes)
 		flusher.Flush()
+	}
+
+	if h.bus == nil {
+		http.Error(w, "telemetry bus not configured", http.StatusServiceUnavailable)
+		return
+	}
+
+	ch, cleanup := h.bus.Listen(runID)
+	defer cleanup()
+
+	if current, exists := h.engine.GetRun(runID); exists {
+		sendJSON(w, current)
 	}
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case run, ok := <-ch:
+		case n, ok := <-ch:
 			if !ok {
 				return
 			}
-			bytes, _ := json.Marshal(run)
-			fmt.Fprintf(w, "data: %s\n\n", bytes)
-			flusher.Flush()
-			if run.Status == "completed" || run.Status == "failed" {
-				return
+			if n.Run != nil {
+				sendJSON(w, n.Run)
+				if n.Run.Status == "completed" || n.Run.Status == "failed" {
+					return
+				}
+			} else if n.Step != nil {
+				if current, exists := h.engine.GetRun(runID); exists {
+					sendJSON(w, current)
+				}
 			}
 		}
 	}
