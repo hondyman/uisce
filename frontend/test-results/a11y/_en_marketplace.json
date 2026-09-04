@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:24.543Z",
+  "timestamp": "2026-09-04T21:27:15.007Z",
   "url": "http://localhost:5173/en/marketplace?",
   "toolOptions": {
     "runOnly": {
@@ -3051,24 +3051,6 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"_retryBtn_1l4ph_564\">Retry</button>",
-          "target": [
-            "._retryBtn_1l4ph_564"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
           "html": "<button class=\"_btn_1l4ph_442 _secondary_1l4ph_462\">Close</button>",
           "target": [
             "._btn_1l4ph_442"
@@ -3658,24 +3640,6 @@
           "html": "<button class=\"_toggleBtn_1l4ph_36 \">Summary</button>",
           "target": [
             "._toggleBtn_1l4ph_36:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"_retryBtn_1l4ph_564\">Retry</button>",
-          "target": [
-            "._retryBtn_1l4ph_564"
           ]
         },
         {

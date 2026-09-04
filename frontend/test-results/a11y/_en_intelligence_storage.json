@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:20.430Z",
+  "timestamp": "2026-09-04T21:27:11.691Z",
   "url": "http://localhost:5173/en/intelligence/storage?",
   "toolOptions": {
     "runOnly": {
@@ -1710,134 +1710,6 @@
           "target": [
             "svg[data-testid=\"SettingsIcon\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ArrowBackIcon\"><path d=\"M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"ArrowBackIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium header-icon css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"LayersIcon\"><path d=\"m11.99 18.54-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27z\"></path></svg>",
-          "target": [
-            ".header-icon"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium card-icon css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"TrendingDownIcon\"><path d=\"m16 18 2.29-2.29-4.88-4.88-4 4L2 7.41 3.41 6l6 6 4-4 6.3 6.29L22 12v6z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"TrendingDownIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium card-icon css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"LayersIcon\"><path d=\"m11.99 18.54-7.37-5.73L3 14.07l9 7 9-7-1.63-1.27zM12 16l7.36-5.73L21 9l-9-7-9 7 1.63 1.27z\"></path></svg>",
-          "target": [
-            ".card-icon.css-1umw9bq-MuiSvgIcon-root[data-testid=\"LayersIcon\"]"
-          ]
         }
       ]
     },
@@ -2673,7 +2545,7 @@
           "impact": null,
           "html": "<header class=\"MuiPaper-root MuiPaper-elevation MuiPaper-elevation1 MuiAppBar-root MuiAppBar-colorPrimary MuiAppBar-positionStatic css-15tw7tx-MuiPaper-root-MuiAppBar-root\" style=\"--Paper-shadow: 0 1px 2px rgba(255, 255, 255, 0.06);\">",
           "target": [
-            ".MuiPaper-root"
+            "header"
           ]
         },
         {
@@ -3056,87 +2928,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeMedium css-ryb9ft-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Settings and account menu\">",
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"back-btn\"><svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ArrowBackIcon\"><path d=\"M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z\"></path></svg> Back</button>",
-          "target": [
-            ".back-btn"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"generate-btn\">Refresh Analysis</button>",
-          "target": [
-            ".generate-btn"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "bypass",
-      "impact": null,
-      "tags": [
-        "cat.keyboard",
-        "wcag2a",
-        "wcag241",
-        "section508",
-        "section508.22.o",
-        "TTv5",
-        "TT9.a",
-        "EN-301-549",
-        "EN-9.2.4.1"
-      ],
-      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
-      "help": "Page must have means to bypass repeated blocks",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "header-present",
-              "data": null,
-              "relatedNodes": [
-                {
-                  "html": "<h1>Storage Tiering</h1>",
-                  "target": [
-                    "h1"
-                  ]
-                }
-              ],
-              "impact": "serious",
-              "message": "Page has a heading"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
-          "target": [
-            "html"
           ]
         }
       ]
@@ -3565,46 +3356,64 @@
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
           ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"back-btn\"><svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ArrowBackIcon\"><path d=\"M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z\"></path></svg> Back</button>",
-          "target": [
-            ".back-btn"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"generate-btn\">Refresh Analysis</button>",
-          "target": [
-            ".generate-btn"
-          ]
         }
       ]
     }
   ],
-  "incomplete": [],
+  "incomplete": [
+    {
+      "id": "bypass",
+      "impact": "serious",
+      "tags": [
+        "cat.keyboard",
+        "wcag2a",
+        "wcag241",
+        "section508",
+        "section508.22.o",
+        "TTv5",
+        "TT9.a",
+        "EN-301-549",
+        "EN-9.2.4.1"
+      ],
+      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
+      "help": "Page must have means to bypass repeated blocks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "internal-link-present",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "No valid skip link found"
+            },
+            {
+              "id": "header-present",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Page does not have a heading"
+            },
+            {
+              "id": "landmark",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Page does not have a landmark region"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "target": [
+            "html"
+          ],
+          "failureSummary": "Fix any of the following:\n  No valid skip link found\n  Page does not have a heading\n  Page does not have a landmark region"
+        }
+      ]
+    }
+  ],
   "violations": []
 }

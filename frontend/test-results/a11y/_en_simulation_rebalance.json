@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:04:13.516Z",
+  "timestamp": "2026-09-04T21:28:17.115Z",
   "url": "http://localhost:5173/en/simulation/rebalance?",
   "toolOptions": {
     "runOnly": {
@@ -2691,7 +2691,7 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div style=\"opacity: 0; transform: translateX(-2.19528px);\">",
+          "html": "<div style=\"opacity: 0; transform: translateX(-2.40517px);\">",
           "target": [
             ".bg-gray-800\\/40 > div"
           ]

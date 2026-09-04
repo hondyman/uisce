@@ -13,8 +13,8 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:26:22.533Z",
-  "url": "http://localhost:5173/en/core/validation?",
+  "timestamp": "2026-09-04T21:23:46.435Z",
+  "url": "http://localhost:5173/auth/callback?",
   "toolOptions": {
     "runOnly": {
       "type": "tag",
@@ -446,23 +446,6 @@
       "description": "Ensure every form element has a label",
       "help": "Form elements must have labels",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/label?application=playwright",
-      "nodes": []
-    },
-    {
-      "id": "link-in-text-block",
-      "impact": null,
-      "tags": [
-        "cat.color",
-        "wcag2a",
-        "wcag141",
-        "TTv5",
-        "TT13.a",
-        "EN-301-549",
-        "EN-9.1.4.1"
-      ],
-      "description": "Ensure links are distinguished from surrounding text in a way that does not rely on color",
-      "help": "Links must be distinguishable without relying on color",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/link-in-text-block?application=playwright",
       "nodes": []
     },
     {
@@ -1644,7 +1627,7 @@
           "impact": null,
           "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-sun w-5 h-5\" aria-hidden=\"true\">",
           "target": [
-            ".lucide-sun"
+            ".lucide"
           ]
         },
         {
@@ -1709,38 +1692,6 @@
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SettingsIcon\">",
           "target": [
             "svg[data-testid=\"SettingsIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-circle-alert w-6 h-6 text-blue-600 dark:text-blue-400\" aria-hidden=\"true\">",
-          "target": [
-            ".lucide-circle-alert"
           ]
         }
       ]
@@ -2511,7 +2462,7 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "html": "<html lang=\"en\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
           "target": [
             "html"
           ]
@@ -2609,7 +2560,7 @@
           "impact": null,
           "html": "<a href=\"/\" style=\"display: inline-flex; align-items: center;\">",
           "target": [
-            "a"
+            "a[href=\"/\"]"
           ]
         },
         {
@@ -2965,6 +2916,51 @@
       ]
     },
     {
+      "id": "bypass",
+      "impact": null,
+      "tags": [
+        "cat.keyboard",
+        "wcag2a",
+        "wcag241",
+        "section508",
+        "section508.22.o",
+        "TTv5",
+        "TT9.a",
+        "EN-301-549",
+        "EN-9.2.4.1"
+      ],
+      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
+      "help": "Page must have means to bypass repeated blocks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "header-present",
+              "data": null,
+              "relatedNodes": [
+                {
+                  "html": "<h1 class=\"mb-2 text-xl font-semibold text-red-800 dark:text-red-200\">Authentication failed</h1>",
+                  "target": [
+                    "h1"
+                  ]
+                }
+              ],
+              "impact": "serious",
+              "message": "Page has a heading"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": null,
+          "html": "<html lang=\"en\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "target": [
+            "html"
+          ]
+        }
+      ]
+    },
+    {
       "id": "document-title",
       "impact": null,
       "tags": [
@@ -2994,7 +2990,7 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "html": "<html lang=\"en\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
           "target": [
             "html"
           ]
@@ -3031,7 +3027,7 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "html": "<html lang=\"en\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
           "target": [
             "html"
           ]
@@ -3068,9 +3064,66 @@
             }
           ],
           "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "html": "<html lang=\"en\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
           "target": [
             "html"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "link-in-text-block",
+      "impact": null,
+      "tags": [
+        "cat.color",
+        "wcag2a",
+        "wcag141",
+        "TTv5",
+        "TT13.a",
+        "EN-301-549",
+        "EN-9.1.4.1"
+      ],
+      "description": "Ensure links are distinguished from surrounding text in a way that does not rely on color",
+      "help": "Links must be distinguishable without relying on color",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/link-in-text-block?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "link-in-text-block",
+              "data": null,
+              "relatedNodes": [
+                {
+                  "html": "<div class=\"rounded-lg border border-red-200 bg-red-50 p-8 text-center dark:border-red-900 dark:bg-red-950\">",
+                  "target": [
+                    ".border"
+                  ]
+                }
+              ],
+              "impact": "serious",
+              "message": "Links can be distinguished from surrounding text in some way other than by color"
+            },
+            {
+              "id": "link-in-text-block-style",
+              "data": null,
+              "relatedNodes": [
+                {
+                  "html": "<div class=\"rounded-lg border border-red-200 bg-red-50 p-8 text-center dark:border-red-900 dark:bg-red-950\">",
+                  "target": [
+                    ".border"
+                  ]
+                }
+              ],
+              "impact": "serious",
+              "message": "Links can be distinguished from surrounding text by visual styling"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": null,
+          "html": "<a href=\"/login\" class=\"mt-4 inline-block rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700\">Back to login</a>",
+          "target": [
+            ".mt-4"
           ]
         }
       ]
@@ -3119,7 +3172,33 @@
           "impact": null,
           "html": "<a href=\"/\" style=\"display: inline-flex; align-items: center;\">",
           "target": [
-            "a"
+            "a[href=\"/\"]"
+          ]
+        },
+        {
+          "any": [
+            {
+              "id": "has-visible-text",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element has text that is visible to screen readers"
+            }
+          ],
+          "all": [],
+          "none": [
+            {
+              "id": "focusable-no-name",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element is not in tab order or has accessible text"
+            }
+          ],
+          "impact": null,
+          "html": "<a href=\"/login\" class=\"mt-4 inline-block rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700\">Back to login</a>",
+          "target": [
+            ".mt-4"
           ]
         }
       ]
@@ -3392,60 +3471,6 @@
       ]
     }
   ],
-  "incomplete": [
-    {
-      "id": "bypass",
-      "impact": "serious",
-      "tags": [
-        "cat.keyboard",
-        "wcag2a",
-        "wcag241",
-        "section508",
-        "section508.22.o",
-        "TTv5",
-        "TT9.a",
-        "EN-301-549",
-        "EN-9.2.4.1"
-      ],
-      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
-      "help": "Page must have means to bypass repeated blocks",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "internal-link-present",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No valid skip link found"
-            },
-            {
-              "id": "header-present",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Page does not have a heading"
-            },
-            {
-              "id": "landmark",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Page does not have a landmark region"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": "serious",
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
-          "target": [
-            "html"
-          ],
-          "failureSummary": "Fix any of the following:\n  No valid skip link found\n  Page does not have a heading\n  Page does not have a landmark region"
-        }
-      ]
-    }
-  ],
+  "incomplete": [],
   "violations": []
 }

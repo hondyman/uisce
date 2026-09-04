@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:49.577Z",
+  "timestamp": "2026-09-04T21:27:46.577Z",
   "url": "http://localhost:5173/en/reports/queries?",
   "toolOptions": {
     "runOnly": {
@@ -824,7 +824,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -1016,7 +1016,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -1140,7 +1140,7 @@
           "impact": null,
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ]
         },
         {
@@ -1500,7 +1500,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"PublicIcon\">",
           "target": [
-            ".MuiSvgIcon-fontSizeSmall"
+            ".MuiButton-startIcon > .MuiSvgIcon-fontSizeSmall"
           ]
         },
         {
@@ -1780,7 +1780,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -1904,7 +1904,7 @@
           "impact": null,
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ]
         },
         {
@@ -2002,7 +2002,7 @@
           "impact": null,
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ]
         },
         {
@@ -2178,7 +2178,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -2394,7 +2394,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -2739,7 +2739,7 @@
           "impact": null,
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ]
         },
         {
@@ -2914,7 +2914,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -3348,7 +3348,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".MuiIconButton-sizeSmall"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -3438,7 +3438,7 @@
           "impact": null,
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ]
         }
       ]
@@ -3545,7 +3545,7 @@
           "impact": "serious",
           "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-spv6aq-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ":root"
           ],
           "failureSummary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
         }

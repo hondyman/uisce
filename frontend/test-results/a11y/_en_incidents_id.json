@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:15.886Z",
+  "timestamp": "2026-09-04T21:27:03.252Z",
   "url": "http://localhost:5173/en/incidents/:id?",
   "toolOptions": {
     "runOnly": {

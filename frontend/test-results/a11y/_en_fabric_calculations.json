@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:02:59.675Z",
+  "timestamp": "2026-09-04T21:26:40.301Z",
   "url": "http://localhost:5173/en/fabric/calculations?",
   "toolOptions": {
     "runOnly": {
@@ -739,7 +739,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -922,32 +922,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Semantic Layer Metrics</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -1242,7 +1216,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -1369,24 +1343,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Semantic Layer Metrics</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -1672,7 +1628,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1708,7 +1664,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1744,7 +1700,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1780,7 +1736,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1816,7 +1772,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1852,7 +1808,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -1906,7 +1862,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -3293,42 +3249,6 @@
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorInfo MuiAlert-standardInfo MuiAlert-standard css-7r5hyz-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
             ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(103) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorInfo.MuiAlert-standardInfo.css-7r5hyz-MuiPaper-root-MuiAlert-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<div role=\"presentation\" class=\"MuiSnackbar-root MuiSnackbar-anchorOriginBottomRight css-1dnmzgk-MuiSnackbar-root\">",
-          "target": [
-            ".MuiSnackbar-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-wp5zj7-MuiPaper-root-MuiAlert-root\" role=\"alert\" direction=\"up\" style=\"--Paper-shadow: none; opacity: 1; transform: scale(1, 1); transition: opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);\">",
-          "target": [
-            ".css-wp5zj7-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -4936,7 +4856,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -5864,7 +5784,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -6216,7 +6136,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -6376,7 +6296,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -6536,7 +6456,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -6696,7 +6616,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -7368,7 +7288,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
           ]
         },
         {
@@ -17930,70 +17850,6 @@
           "target": [
             ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(103) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardActions-root.MuiCardActions-spacing.css-1q4nm6f-MuiCardActions-root > .MuiButton-textPrimary.css-q6als3-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary > .MuiButton-iconSizeSmall.css-1in3o51-MuiButton-startIcon.MuiButton-startIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"TrendingUpIcon\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SuccessOutlinedIcon\">",
-          "target": [
-            ".css-wp5zj7-MuiPaper-root-MuiAlert-root > .MuiAlert-icon.css-14xrxj8-MuiAlert-icon > .MuiSvgIcon-fontSizeInherit.css-1ckov0h-MuiSvgIcon-root[data-testid=\"SuccessOutlinedIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CloseIcon\"><path d=\"M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"CloseIcon\"]"
-          ]
         }
       ]
     },
@@ -18080,7 +17936,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -18207,24 +18063,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Semantic Layer Metrics</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -18510,7 +18348,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18546,7 +18384,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18582,7 +18420,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18618,7 +18456,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18654,7 +18492,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18690,7 +18528,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -18744,7 +18582,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20131,42 +19969,6 @@
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorInfo MuiAlert-standardInfo MuiAlert-standard css-7r5hyz-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
             ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(103) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorInfo.MuiAlert-standardInfo.css-7r5hyz-MuiPaper-root-MuiAlert-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div role=\"presentation\" class=\"MuiSnackbar-root MuiSnackbar-anchorOriginBottomRight css-1dnmzgk-MuiSnackbar-root\">",
-          "target": [
-            ".MuiSnackbar-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-wp5zj7-MuiPaper-root-MuiAlert-root\" role=\"alert\" direction=\"up\" style=\"--Paper-shadow: none; opacity: 1; transform: scale(1, 1); transition: opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);\">",
-          "target": [
-            ".css-wp5zj7-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20734,7 +20536,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20798,7 +20600,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20862,7 +20664,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20926,7 +20728,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -20990,7 +20792,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -21054,7 +20856,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -21150,7 +20952,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -23644,70 +23446,6 @@
             }
           ],
           "impact": null,
-          "html": "<div role=\"presentation\" class=\"MuiSnackbar-root MuiSnackbar-anchorOriginBottomRight css-1dnmzgk-MuiSnackbar-root\">",
-          "target": [
-            ".MuiSnackbar-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-wp5zj7-MuiPaper-root-MuiAlert-root\" role=\"alert\" direction=\"up\" style=\"--Paper-shadow: none; opacity: 1; transform: scale(1, 1); transition: opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);\">",
-          "target": [
-            ".css-wp5zj7-MuiPaper-root-MuiAlert-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
@@ -23854,7 +23592,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -24079,38 +23817,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Semantic Layer Metrics</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -24230,7 +23936,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -24357,24 +24063,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Semantic Layer Metrics</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -24793,7 +24481,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(1) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25145,7 +24833,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(10) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25305,7 +24993,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(13) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25401,7 +25089,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(14) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25497,7 +25185,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(15) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25593,7 +25281,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(16) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -25881,7 +25569,7 @@
           "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-3o933j-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .css-3o933j-MuiPaper-root-MuiAlert-root.MuiAlert-colorSuccess.MuiAlert-standardSuccess"
+            ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(22) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardContent-root.css-14ilubd-MuiCardContent-root > .MuiAlert-colorSuccess.MuiAlert-standardSuccess.css-3o933j-MuiPaper-root-MuiAlert-root"
           ]
         },
         {
@@ -30967,38 +30655,6 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorSuccess MuiAlert-standardSuccess MuiAlert-standard css-wp5zj7-MuiPaper-root-MuiAlert-root\" role=\"alert\" direction=\"up\" style=\"--Paper-shadow: none; opacity: 1; transform: scale(1, 1); transition: opacity 225ms cubic-bezier(0.4, 0, 0.2, 1), transform 150ms cubic-bezier(0.4, 0, 0.2, 1);\">",
-          "target": [
-            ".css-wp5zj7-MuiPaper-root-MuiAlert-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
@@ -31144,7 +30800,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -34987,31 +34643,6 @@
           "target": [
             ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(103) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardActions-root.MuiCardActions-spacing.css-1q4nm6f-MuiCardActions-root > .MuiButton-textPrimary.css-q6als3-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
           ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-label",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-label attribute exists and is not empty"
-            },
-            {
-              "id": "non-empty-title",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has a title attribute"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
-          ]
         }
       ]
     },
@@ -36285,7 +35916,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".css-axw7ok.MuiBox-root:nth-child(6) > .css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
           ]
         },
         {
@@ -40444,24 +40075,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-q6als3-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
             ".MuiGrid-grid-xs-12.MuiGrid-grid-sm-6.MuiGrid-grid-md-4:nth-child(103) > .MuiCard-root.css-1s777mc-MuiPaper-root-MuiCard-root.MuiPaper-elevation0 > .MuiCardActions-root.MuiCardActions-spacing.css-1q4nm6f-MuiCardActions-root > .MuiButton-textPrimary.css-q6als3-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         }
       ]

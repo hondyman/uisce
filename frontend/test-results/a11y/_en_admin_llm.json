@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:01:12.931Z",
+  "timestamp": "2026-09-04T21:24:10.491Z",
   "url": "http://localhost:5173/en/admin/llm?",
   "toolOptions": {
     "runOnly": {
@@ -3083,7 +3083,7 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button disabled=\"\" class=\"btn btn-secondary\" title=\"Please enter a test question\">Test Configuration</button>",
+          "html": "<button disabled=\"\" class=\"btn btn-secondary\" title=\"Loading config...\">Test Configuration</button>",
           "target": [
             ".btn-secondary"
           ]
@@ -4134,7 +4134,7 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button disabled=\"\" class=\"btn btn-secondary\" title=\"Please enter a test question\">Test Configuration</button>",
+          "html": "<button disabled=\"\" class=\"btn btn-secondary\" title=\"Loading config...\">Test Configuration</button>",
           "target": [
             ".btn-secondary"
           ]

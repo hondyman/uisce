@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:13.740Z",
+  "timestamp": "2026-09-04T21:26:58.037Z",
   "url": "http://localhost:5173/en/global-intelligence?",
   "toolOptions": {
     "runOnly": {
@@ -3015,7 +3015,7 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div style=\"align-self: flex-start; max-width: 85%; opacity: 0; transform: translateY(16.3259px);\">",
+          "html": "<div style=\"align-self: flex-start; max-width: 85%; opacity: 0; transform: translateY(13.6238px);\">",
           "target": [
             ".css-10pjcet > div:nth-child(1)"
           ]

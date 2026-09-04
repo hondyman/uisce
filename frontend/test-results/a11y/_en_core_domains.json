@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:02:25.239Z",
+  "timestamp": "2026-09-04T21:25:52.379Z",
   "url": "http://localhost:5173/en/core/domains?",
   "toolOptions": {
     "runOnly": {
@@ -119,21 +119,6 @@
       "description": "Ensure every ARIA meter node has an accessible name",
       "help": "ARIA meter nodes must have an accessible name",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-meter-name?application=playwright",
-      "nodes": []
-    },
-    {
-      "id": "aria-progressbar-name",
-      "impact": null,
-      "tags": [
-        "cat.aria",
-        "wcag2a",
-        "wcag111",
-        "EN-301-549",
-        "EN-9.1.1.1"
-      ],
-      "description": "Ensure every ARIA progressbar node has an accessible name",
-      "help": "ARIA progressbar nodes must have an accessible name",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
       "nodes": []
     },
     {
@@ -790,7 +775,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -921,32 +906,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Abbreviations</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -1060,7 +1019,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -1151,24 +1110,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Abbreviations</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -1290,9 +1231,9 @@
             }
           ],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiLinearProgress-root MuiLinearProgress-colorPrimary MuiLinearProgress-indeterminate css-1qsw31k-MuiLinearProgress-root\" role=\"progressbar\">",
           "target": [
-            ".MuiAlert-root"
+            ".MuiLinearProgress-root"
           ]
         },
         {
@@ -1652,7 +1593,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"PublicIcon\">",
           "target": [
-            "svg[data-testid=\"PublicIcon\"]"
+            ".MuiSvgIcon-fontSizeSmall"
           ]
         },
         {
@@ -1878,70 +1819,6 @@
           "target": [
             "svg[data-testid=\"AddIcon\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ErrorOutlineIcon\">",
-          "target": [
-            ".MuiSvgIcon-fontSizeInherit"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CloseIcon\"><path d=\"M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"CloseIcon\"]"
-          ]
         }
       ]
     },
@@ -2028,7 +1905,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -2119,24 +1996,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Abbreviations</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -2258,9 +2117,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiLinearProgress-root MuiLinearProgress-colorPrimary MuiLinearProgress-indeterminate css-1qsw31k-MuiLinearProgress-root\" role=\"progressbar\">",
           "target": [
-            ".MuiAlert-root"
+            ".MuiLinearProgress-root"
           ]
         },
         {
@@ -2538,9 +2397,9 @@
             }
           ],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiLinearProgress-root MuiLinearProgress-colorPrimary MuiLinearProgress-indeterminate css-1qsw31k-MuiLinearProgress-root\" role=\"progressbar\">",
           "target": [
-            ".MuiAlert-root"
+            ".MuiLinearProgress-root"
           ]
         },
         {
@@ -2716,7 +2575,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -2877,38 +2736,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Abbreviations</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -3028,7 +2855,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -3119,24 +2946,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-textColorPrimary css-2q6kal-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">Abbreviations</button>",
           "target": [
             ".MuiTab-root.MuiTab-textColorPrimary.css-2q6kal-MuiButtonBase-root-MuiTab-root:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         },
         {
@@ -3489,41 +3298,9 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
-          "target": [
-            ".MuiAlert-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
           "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 css-tjpo1q-MuiPaper-root\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".css-tjpo1q-MuiPaper-root"
+            ".MuiPaper-rounded"
           ]
         },
         {
@@ -3698,7 +3475,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -3832,31 +3609,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-contained MuiButton-containedPrimary MuiButton-sizeMedium MuiButton-containedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-ul6720-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
             ".MuiButton-contained"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-label",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-label attribute exists and is not empty"
-            },
-            {
-              "id": "non-empty-title",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has a title attribute"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
-          "target": [
-            "button[aria-label=\"Close\"]"
           ]
         }
       ]
@@ -4256,7 +4008,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            "button[aria-label=\"Language\"]"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -4398,9 +4150,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Close\" title=\"Close\">",
+          "html": "<span class=\"MuiLinearProgress-root MuiLinearProgress-colorPrimary MuiLinearProgress-indeterminate css-1qsw31k-MuiLinearProgress-root\" role=\"progressbar\">",
           "target": [
-            "button[aria-label=\"Close\"]"
+            ".MuiLinearProgress-root"
           ]
         }
       ]
@@ -4442,10 +4194,12 @@
           ]
         }
       ]
-    },
+    }
+  ],
+  "incomplete": [
     {
       "id": "th-has-data-cells",
-      "impact": null,
+      "impact": "serious",
       "tags": [
         "cat.tables",
         "wcag2a",
@@ -4467,21 +4221,80 @@
             {
               "id": "th-has-data-cells",
               "data": null,
-              "relatedNodes": [],
+              "relatedNodes": [
+                {
+                  "html": "<th class=\"MuiTableCell-root MuiTableCell-head MuiTableCell-sizeSmall css-wmyra4-MuiTableCell-root\" scope=\"col\">Actions</th>",
+                  "target": [
+                    "th:nth-child(5)"
+                  ]
+                }
+              ],
               "impact": "serious",
-              "message": "All table header cells refer to data cells"
+              "message": "Table data cells are missing or empty"
             }
           ],
           "none": [],
-          "impact": null,
+          "impact": "serious",
           "html": "<table class=\"MuiTable-root css-fsx2h8-MuiTable-root\">",
           "target": [
             "table"
-          ]
+          ],
+          "failureSummary": "Fix all of the following:\n  Table data cells are missing or empty"
         }
       ]
     }
   ],
-  "incomplete": [],
-  "violations": []
+  "violations": [
+    {
+      "id": "aria-progressbar-name",
+      "impact": "serious",
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag111",
+        "EN-301-549",
+        "EN-9.1.1.1"
+      ],
+      "description": "Ensure every ARIA progressbar node has an accessible name",
+      "help": "ARIA progressbar nodes must have an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "aria-label",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "aria-label attribute does not exist or is empty"
+            },
+            {
+              "id": "aria-labelledby",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty"
+            },
+            {
+              "id": "non-empty-title",
+              "data": {
+                "messageKey": "noAttr"
+              },
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element has no title attribute"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<span class=\"MuiLinearProgress-root MuiLinearProgress-colorPrimary MuiLinearProgress-indeterminate css-1qsw31k-MuiLinearProgress-root\" role=\"progressbar\">",
+          "target": [
+            ".MuiLinearProgress-root"
+          ],
+          "failureSummary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+        }
+      ]
+    }
+  ]
 }

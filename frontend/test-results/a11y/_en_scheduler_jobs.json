@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:03:59.341Z",
+  "timestamp": "2026-09-04T21:27:57.381Z",
   "url": "http://localhost:5173/en/scheduler/jobs",
   "toolOptions": {
     "runOnly": {
@@ -3094,7 +3094,7 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div class=\"card-content\" style=\"padding: 0px;\"><div class=\"empty-state\"><div class=\"empty-state-icon\">⚠️</div><div class=\"empty-state-text\">API Error (500): </div></div></div>",
+          "html": "<div class=\"card-content\" style=\"padding: 0px;\"><div class=\"empty-state\"><div class=\"empty-state-icon\">⚠️</div><div class=\"empty-state-text\">API Error (404): 404 page not found\n</div></div></div>",
           "target": [
             ".card-content"
           ]

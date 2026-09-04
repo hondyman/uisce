@@ -13,8 +13,8 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:01:07.035Z",
-  "url": "http://localhost:5173/en/admin/ai-semantic-bridge?",
+  "timestamp": "2026-09-04T21:24:00.182Z",
+  "url": "http://localhost:5173/login",
   "toolOptions": {
     "runOnly": {
       "type": "tag",
@@ -134,6 +134,36 @@
       "description": "Ensure every ARIA progressbar node has an accessible name",
       "help": "ARIA progressbar nodes must have an accessible name",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
+      "nodes": []
+    },
+    {
+      "id": "aria-required-children",
+      "impact": null,
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag131",
+        "EN-301-549",
+        "EN-9.1.3.1"
+      ],
+      "description": "Ensure elements with an ARIA role that require child roles contain them",
+      "help": "Certain ARIA roles must contain particular children",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-required-children?application=playwright",
+      "nodes": []
+    },
+    {
+      "id": "aria-required-parent",
+      "impact": null,
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag131",
+        "EN-301-549",
+        "EN-9.1.3.1"
+      ],
+      "description": "Ensure elements with an ARIA role that require parent roles are contained by them",
+      "help": "Certain ARIA roles must be contained by particular parents",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-required-parent?application=playwright",
       "nodes": []
     },
     {
@@ -522,6 +552,25 @@
       "nodes": []
     },
     {
+      "id": "scrollable-region-focusable",
+      "impact": null,
+      "tags": [
+        "cat.keyboard",
+        "wcag2a",
+        "wcag211",
+        "wcag213",
+        "TTv5",
+        "TT4.a",
+        "EN-301-549",
+        "EN-9.2.1.1",
+        "EN-9.2.1.3"
+      ],
+      "description": "Ensure elements that have scrollable content are accessible by keyboard",
+      "help": "Scrollable region must have keyboard access",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable?application=playwright",
+      "nodes": []
+    },
+    {
       "id": "select-name",
       "impact": null,
       "tags": [
@@ -757,7 +806,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -809,7 +858,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -888,136 +937,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeMedium css-ryb9ft-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Settings and account menu\">",
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         },
         {
@@ -1095,7 +1014,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -1131,7 +1050,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -1201,96 +1120,6 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
@@ -1328,96 +1157,6 @@
           "html": "<div class=\"scope-badge\" role=\"region\" aria-label=\"Current scope\"></div>",
           "target": [
             "div[aria-label=\"Current scope\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<div role=\"tablist\" class=\"MuiTabs-list MuiTabs-flexContainer css-m9849h-MuiTabs-list\">",
-          "target": [
-            ".MuiTabs-list"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         },
         {
@@ -1521,7 +1260,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"KeyboardArrowDownIcon\"><path d=\"M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z\"></path></svg>",
           "target": [
-            ".css-mlff0j-MuiButtonBase-root-MuiButton-root > .css-1wyk03i-MuiButton-endIcon.MuiButton-iconSizeMedium.MuiButton-endIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
+            ".css-mlff0j-MuiButtonBase-root-MuiButton-root > .MuiButton-endIcon.css-1wyk03i-MuiButton-endIcon.MuiButton-icon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
           ]
         },
         {
@@ -1551,73 +1290,9 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"BusinessIcon\">",
+          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CategoryIcon\"><path d=\"m12 2-5.5 9h11z\"></path><circle cx=\"17.5\" cy=\"17.5\" r=\"4.5\"></circle><path d=\"M3 13.5h8v8H3z\"></path></svg>",
           "target": [
-            "svg[data-testid=\"BusinessIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"KeyboardArrowDownIcon\"><path d=\"M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z\"></path></svg>",
-          "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(1) > .css-1wyk03i-MuiButton-endIcon.MuiButton-iconSizeMedium.MuiButton-endIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SecurityIcon\">",
-          "target": [
-            ".css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"SecurityIcon\"]"
+            "svg[data-testid=\"CategoryIcon\"]"
           ]
         },
         {
@@ -1649,7 +1324,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"KeyboardArrowDownIcon\"><path d=\"M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z\"></path></svg>",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(2) > .css-1wyk03i-MuiButton-endIcon.MuiButton-iconSizeMedium.MuiButton-endIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(1) > .MuiButton-endIcon.css-1wyk03i-MuiButton-endIcon.MuiButton-icon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
           ]
         },
         {
@@ -1679,9 +1354,9 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SystemUpdateAltIcon\">",
+          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"StorageIcon\"><path d=\"M2 20h20v-4H2zm2-3h2v2H4zM2 4v4h20V4zm4 3H4V5h2zm-4 7h20v-4H2zm2-3h2v2H4z\"></path></svg>",
           "target": [
-            "svg[data-testid=\"SystemUpdateAltIcon\"]"
+            "svg[data-testid=\"StorageIcon\"]"
           ]
         },
         {
@@ -1713,39 +1388,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"KeyboardArrowDownIcon\"><path d=\"M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z\"></path></svg>",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(3) > .css-1wyk03i-MuiButton-endIcon.MuiButton-iconSizeMedium.MuiButton-endIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiChip-icon MuiChip-iconSmall MuiChip-iconColorWarning css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SupervisorAccountIcon\">",
-          "target": [
-            ".MuiChip-iconColorWarning"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(2) > .MuiButton-endIcon.css-1wyk03i-MuiButton-endIcon.MuiButton-icon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"KeyboardArrowDownIcon\"]"
           ]
         },
         {
@@ -1777,7 +1420,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"PublicIcon\">",
           "target": [
-            "svg[data-testid=\"PublicIcon\"]"
+            ".MuiSvgIcon-fontSizeSmall"
           ]
         },
         {
@@ -1809,7 +1452,7 @@
           "impact": null,
           "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ExpandMoreIcon\"><path d=\"M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z\"></path></svg>",
           "target": [
-            ".css-1wyk03i-MuiButton-endIcon.MuiButton-iconSizeMedium.MuiButton-endIcon > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ExpandMoreIcon\"]"
+            "svg[data-testid=\"ExpandMoreIcon\"]"
           ]
         },
         {
@@ -1971,1126 +1614,6 @@
           "target": [
             "svg[data-testid=\"SettingsIcon\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"HubIcon\">",
-          "target": [
-            ".css-1nbeujd-MuiAvatar-root > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"HubIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"AddIcon\"><path d=\"M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"AddIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"IntegrationInstructionsIcon\">",
-          "target": [
-            ".MuiButton-outlinedSecondary > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"IntegrationInstructionsIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"RefreshIcon\">",
-          "target": [
-            ":root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"HubIcon\">",
-          "target": [
-            ".css-x648te-MuiAvatar-root > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"HubIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CloudSyncIcon\">",
-          "target": [
-            "svg[data-testid=\"CloudSyncIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SpeedIcon\">",
-          "target": [
-            "svg[data-testid=\"SpeedIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"AccountTreeIcon\"><path d=\"M22 11V3h-7v3H9V3H2v8h7V8h2v10h4v3h7v-8h-7v3h-2V8h2v3z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"AccountTreeIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall MuiTab-iconWrapper MuiTab-icon css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"HubIcon\">",
-          "target": [
-            ".MuiTab-iconWrapper.MuiTab-icon[data-testid=\"HubIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall MuiTab-iconWrapper MuiTab-icon css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CompareArrowsIcon\"><path d=\"M9.01 14H2v2h7.01v3L13 15l-3.99-4zm5.98-1v-3H22V8h-7.01V5L11 9z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"CompareArrowsIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall MuiTab-iconWrapper MuiTab-icon css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"SecurityIcon\">",
-          "target": [
-            ".MuiTab-iconWrapper.MuiTab-icon[data-testid=\"SecurityIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeSmall MuiTab-iconWrapper MuiTab-icon css-120dh41-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CodeIcon\"><path d=\"M9.4 16.6 4.8 12l4.6-4.6L8 6l-6 6 6 6zm5.2 0 4.6-4.6-4.6-4.6L16 6l6 6-6 6z\"></path></svg>",
-          "target": [
-            "svg[data-testid=\"CodeIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiChip-icon MuiChip-iconSmall MuiChip-iconColorSuccess css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-action.css-116l9hl-MuiCardHeader-action > .MuiChip-filled.MuiChip-colorSuccess.MuiChip-filledSuccess > .MuiChip-iconColorSuccess.MuiChip-icon.MuiChip-iconSmall"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ExpandMoreIcon\"><path d=\"M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z\"></path></svg>",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit > .css-dp0v3c-MuiButton-endIcon.MuiButton-endIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ExpandMoreIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(1) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(2) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(3) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(4) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"VisibilityIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"VisibilityIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ShieldIcon\"><path d=\"M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5z\"></path></svg>",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ShieldIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiChip-icon MuiChip-iconSmall MuiChip-iconColorSuccess css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-action.css-116l9hl-MuiCardHeader-action > .MuiChip-filled.MuiChip-colorSuccess.MuiChip-filledSuccess > .MuiChip-iconColorSuccess.MuiChip-icon.MuiChip-iconSmall"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ExpandMoreIcon\"><path d=\"M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z\"></path></svg>",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit > .css-dp0v3c-MuiButton-endIcon.MuiButton-endIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ExpandMoreIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(1) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(2) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(3) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(4) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"VisibilityIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"VisibilityIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ShieldIcon\"><path d=\"M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5z\"></path></svg>",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ShieldIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium MuiChip-icon MuiChip-iconSmall MuiChip-iconColorSuccess css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-action.css-116l9hl-MuiCardHeader-action > .MuiChip-filled.MuiChip-colorSuccess.MuiChip-filledSuccess > .MuiChip-iconColorSuccess.MuiChip-icon.MuiChip-iconSmall"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ExpandMoreIcon\"><path d=\"M16.59 8.59 12 13.17 7.41 8.59 6 10l6 6 6-6z\"></path></svg>",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit > .css-dp0v3c-MuiButton-endIcon.MuiButton-endIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"ExpandMoreIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(1) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(2) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(3) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-colorSuccess MuiSvgIcon-fontSizeMedium css-42qshf-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"CheckCircleIcon\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .MuiCollapse-root.MuiCollapse-hidden.css-cwrbtg-MuiCollapse-root > .MuiCollapse-wrapper.css-1x6hinx-MuiCollapse-wrapper.MuiCollapse-vertical > .MuiCollapse-wrapperInner.css-1i4ywhz-MuiCollapse-wrapperInner.MuiCollapse-vertical > ul > li:nth-child(4) > .MuiListItemIcon-root.css-17np58m-MuiListItemIcon-root > .MuiSvgIcon-colorSuccess.css-42qshf-MuiSvgIcon-root[data-testid=\"CheckCircleIcon\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeMedium css-1umw9bq-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"IntegrationInstructionsIcon\">",
-          "target": [
-            ".MuiButton-textSecondary > .css-1in3o51-MuiButton-startIcon.MuiButton-startIcon.MuiButton-iconSizeSmall > .css-1umw9bq-MuiSvgIcon-root.MuiSvgIcon-fontSizeMedium[data-testid=\"IntegrationInstructionsIcon\"]"
-          ]
         }
       ]
     },
@@ -3141,7 +1664,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -3177,7 +1700,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -3247,96 +1770,6 @@
             }
           ],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
@@ -3389,221 +1822,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<div role=\"tablist\" class=\"MuiTabs-list MuiTabs-flexContainer css-m9849h-MuiTabs-list\">",
-          "target": [
-            ".MuiTabs-list"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "aria-required-children",
-      "impact": null,
-      "tags": [
-        "cat.aria",
-        "wcag2a",
-        "wcag131",
-        "EN-301-549",
-        "EN-9.1.3.1"
-      ],
-      "description": "Ensure elements with an ARIA role that require child roles contain them",
-      "help": "Certain ARIA roles must contain particular children",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-required-children?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "aria-required-children",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Required ARIA children are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div role=\"tablist\" class=\"MuiTabs-list MuiTabs-flexContainer css-m9849h-MuiTabs-list\">",
-          "target": [
-            ".MuiTabs-list"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "aria-required-parent",
-      "impact": null,
-      "tags": [
-        "cat.aria",
-        "wcag2a",
-        "wcag131",
-        "EN-301-549",
-        "EN-9.1.3.1"
-      ],
-      "description": "Ensure elements with an ARIA role that require parent roles are contained by them",
-      "help": "Certain ARIA roles must be contained by particular parents",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-required-parent?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "aria-required-parent",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Required ARIA parent role present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-parent",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Required ARIA parent role present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-parent",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Required ARIA parent role present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-parent",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Required ARIA parent role present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         }
       ]
@@ -3652,166 +1873,6 @@
           "html": "<div class=\"scope-badge\" role=\"region\" aria-label=\"Current scope\"></div>",
           "target": [
             "div[aria-label=\"Current scope\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<div role=\"tablist\" class=\"MuiTabs-list MuiTabs-flexContainer css-m9849h-MuiTabs-list\">",
-          "target": [
-            ".MuiTabs-list"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         },
         {
@@ -3923,7 +1984,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -3987,7 +2048,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -4084,166 +2145,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeMedium css-ryb9ft-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Settings and account menu\">",
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         },
         {
@@ -4327,7 +2228,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -4363,7 +2264,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -4418,96 +2319,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeMedium css-ryb9ft-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Settings and account menu\">",
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
           ]
         },
         {
@@ -4638,7 +2449,7 @@
           "impact": null,
           "html": "<header class=\"MuiPaper-root MuiPaper-elevation MuiPaper-elevation1 MuiAppBar-root MuiAppBar-colorPrimary MuiAppBar-positionStatic css-15tw7tx-MuiPaper-root-MuiAppBar-root\" style=\"--Paper-shadow: 0 1px 2px rgba(255, 255, 255, 0.06);\">",
           "target": [
-            ".MuiPaper-elevation1"
+            ":root"
           ]
         },
         {
@@ -4796,102 +2607,6 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<header class=\"MuiPaper-root MuiPaper-elevation MuiPaper-elevation0 MuiAppBar-root MuiAppBar-colorDefault MuiAppBar-positionSticky css-l20sf4-MuiPaper-root-MuiAppBar-root\" style=\"--Paper-shadow: none;\">",
-          "target": [
-            ".MuiPaper-elevation0"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"MuiTabs-scroller MuiTabs-hideScrollbar MuiTabs-scrollableX css-1afximb-MuiTabs-scroller\" style=\"margin-bottom: 0px;\">",
-          "target": [
-            ".MuiTabs-scroller"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<span class=\"MuiTabs-indicator css-1cuf5ir-MuiTabs-indicator\" style=\"left: 0px; width: 190.906px;\"></span>",
-          "target": [
-            ".MuiTabs-indicator"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
@@ -4949,9 +2664,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
+          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-86de3o-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(1)"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(1)"
           ]
         },
         {
@@ -4967,27 +2682,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
+          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-86de3o-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(3)"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(2)"
           ]
         },
         {
@@ -5012,7 +2709,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -5037,7 +2734,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -5117,363 +2814,6 @@
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeMedium css-ryb9ft-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Settings and account menu\">",
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-rb10bt-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-rb10bt-MuiButtonBase-root-MuiButton-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedSecondary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorSecondary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedSecondary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorSecondary MuiButton-disableElevation css-ymlb7c-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".MuiButton-outlinedSecondary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-label",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-label attribute exists and is not empty"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-17svxug-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1t3k8ec-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-17svxug-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1t3k8ec-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "button-has-visible-text",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Element has inner text that is visible to screen readers"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorSecondary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorSecondary MuiButton-disableElevation css-r4cv9g-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".MuiButton-textSecondary"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "bypass",
-      "impact": null,
-      "tags": [
-        "cat.keyboard",
-        "wcag2a",
-        "wcag241",
-        "section508",
-        "section508.22.o",
-        "TTv5",
-        "TT9.a",
-        "EN-301-549",
-        "EN-9.2.4.1"
-      ],
-      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
-      "help": "Page must have means to bypass repeated blocks",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "header-present",
-              "data": null,
-              "relatedNodes": [
-                {
-                  "html": "<h6 class=\"MuiTypography-root MuiTypography-h6 css-8ln8bv-MuiTypography-root\">AI Semantic Distribution Hub</h6>",
-                  "target": [
-                    ".MuiTypography-h6"
-                  ]
-                },
-                {
-                  "html": "<h5 class=\"MuiTypography-root MuiTypography-h5 css-1fqnw5z-MuiTypography-root\">3</h5>",
-                  "target": [
-                    ":root"
-                  ]
-                },
-                {
-                  "html": "<h5 class=\"MuiTypography-root MuiTypography-h5 css-vn8tm9-MuiTypography-root\">47</h5>",
-                  "target": [
-                    ":root"
-                  ]
-                },
-                {
-                  "html": "<h5 class=\"MuiTypography-root MuiTypography-h5 css-q59sja-MuiTypography-root\">312 ms</h5>",
-                  "target": [
-                    ":root"
-                  ]
-                },
-                {
-                  "html": "<h5 class=\"MuiTypography-root MuiTypography-h5 css-18tmf02-MuiTypography-root\">3,841</h5>",
-                  "target": [
-                    ":root"
-                  ]
-                },
-                {
-                  "html": "<h6 class=\"MuiTypography-root MuiTypography-subtitle1 css-9nbgth-MuiTypography-root\">Snowflake Cortex Analyst</h6>",
-                  "target": [
-                    ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-content.css-1jkp9bu-MuiCardHeader-content > .MuiTypography-subtitle1.css-9nbgth-MuiTypography-root"
-                  ]
-                },
-                {
-                  "html": "<h6 class=\"MuiTypography-root MuiTypography-subtitle1 css-9nbgth-MuiTypography-root\">Databricks Genie Space</h6>",
-                  "target": [
-                    ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-content.css-1jkp9bu-MuiCardHeader-content > .MuiTypography-subtitle1.css-9nbgth-MuiTypography-root"
-                  ]
-                },
-                {
-                  "html": "<h6 class=\"MuiTypography-root MuiTypography-subtitle1 css-9nbgth-MuiTypography-root\">MCP Agent Gateway</h6>",
-                  "target": [
-                    ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardHeader-root.css-ryv6m5-MuiCardHeader-root > .MuiCardHeader-content.css-1jkp9bu-MuiCardHeader-content > .MuiTypography-subtitle1.css-9nbgth-MuiTypography-root"
-                  ]
-                }
-              ],
-              "impact": "serious",
-              "message": "Page has a heading"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
-          "target": [
-            "html"
           ]
         }
       ]
@@ -5754,9 +3094,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
+          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-86de3o-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(1)"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(1)"
           ]
         },
         {
@@ -5772,27 +3112,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
+          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-86de3o-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
           "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeMedium MuiButton-textSizeMedium MuiButton-colorInherit MuiButton-disableElevation css-n5ejqr-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-n5ejqr-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeMedium.MuiButton-sizeMedium:nth-child(3)"
+            ".css-86de3o-MuiButtonBase-root-MuiButton-root.MuiButton-text.MuiButton-textInherit:nth-child(2)"
           ]
         },
         {
@@ -5810,7 +3132,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeMedium MuiButton-outlinedSizeMedium MuiButton-colorPrimary MuiButton-disableElevation css-gpzm0n-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Current Operating Scope: All Tenants\" data-mui-internal-clone-element=\"true\">",
           "target": [
-            ".MuiButton-outlinedSizeMedium"
+            ".MuiButton-outlined"
           ]
         },
         {
@@ -5828,7 +3150,7 @@
           "impact": null,
           "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-colorInherit MuiIconButton-sizeSmall css-vhmnxx-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Language\" title=\"Language\">",
           "target": [
-            ".css-vhmnxx-MuiButtonBase-root-MuiIconButton-root"
+            ".MuiIconButton-sizeSmall"
           ]
         },
         {
@@ -5902,426 +3224,64 @@
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
           ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedPrimary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-rb10bt-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-rb10bt-MuiButtonBase-root-MuiButton-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-outlined MuiButton-outlinedSecondary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorSecondary MuiButton-disableElevation MuiButton-root MuiButton-outlined MuiButton-outlinedSecondary MuiButton-sizeSmall MuiButton-outlinedSizeSmall MuiButton-colorSecondary MuiButton-disableElevation css-ymlb7c-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".MuiButton-outlinedSecondary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiIconButton-root MuiIconButton-sizeSmall css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root\" tabindex=\"0\" type=\"button\" aria-label=\"Refresh state\" data-mui-internal-clone-element=\"true\">",
-          "target": [
-            ".css-1yzs6ul-MuiButtonBase-root-MuiIconButton-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary Mui-selected css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"0\" type=\"button\" role=\"tab\" aria-selected=\"true\">",
-          "target": [
-            ".Mui-selected"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-6nbda3-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-6nbda3-MuiButtonBase-root-MuiTab-root.MuiTab-root.MuiTab-labelIcon:nth-child(3)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiTab-root MuiTab-labelIcon MuiTab-textColorPrimary css-ozzvm2-MuiButtonBase-root-MuiTab-root\" tabindex=\"-1\" type=\"button\" role=\"tab\" aria-selected=\"false\">",
-          "target": [
-            ".css-ozzvm2-MuiButtonBase-root-MuiTab-root"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(4)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-17svxug-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1t3k8ec-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(1) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(4)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textPrimary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorPrimary MuiButton-disableElevation css-17svxug-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .MuiButton-textPrimary.css-17svxug-MuiButtonBase-root-MuiButton-root.MuiButton-colorPrimary"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1t3k8ec-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(2) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .MuiCardActions-root.MuiCardActions-spacing.css-edxggw-MuiCardActions-root > .css-1t3k8ec-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(2)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textInherit MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorInherit MuiButton-disableElevation css-1xad7ws-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > .css-1agxp8w-MuiCardContent-root.MuiCardContent-root > .css-1xad7ws-MuiButtonBase-root-MuiButton-root.MuiButton-textSizeSmall.MuiButton-textInherit"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<hr class=\"MuiDivider-root MuiDivider-fullWidth css-mycgvw-MuiDivider-root\">",
-          "target": [
-            ".css-17fpwt7-MuiGrid-root.MuiGrid-root.MuiGrid-direction-xs-row:nth-child(3) > .css-1dmnvqt-MuiPaper-root-MuiCard-root.MuiCard-root.MuiPaper-outlined > hr:nth-child(4)"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<button class=\"MuiButtonBase-root MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorSecondary MuiButton-disableElevation MuiButton-root MuiButton-text MuiButton-textSecondary MuiButton-sizeSmall MuiButton-textSizeSmall MuiButton-colorSecondary MuiButton-disableElevation css-r4cv9g-MuiButtonBase-root-MuiButton-root\" tabindex=\"0\" type=\"button\">",
-          "target": [
-            ".MuiButton-textSecondary"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "scrollable-region-focusable",
-      "impact": null,
-      "tags": [
-        "cat.keyboard",
-        "wcag2a",
-        "wcag211",
-        "wcag213",
-        "TTv5",
-        "TT4.a",
-        "EN-301-549",
-        "EN-9.2.1.1",
-        "EN-9.2.1.3"
-      ],
-      "description": "Ensure elements that have scrollable content are accessible by keyboard",
-      "help": "Scrollable region must have keyboard access",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element contains focusable elements"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"MuiBox-root css-oa138a\">",
-          "target": [
-            ".css-oa138a"
-          ]
         }
       ]
     }
   ],
-  "incomplete": [],
+  "incomplete": [
+    {
+      "id": "bypass",
+      "impact": "serious",
+      "tags": [
+        "cat.keyboard",
+        "wcag2a",
+        "wcag241",
+        "section508",
+        "section508.22.o",
+        "TTv5",
+        "TT9.a",
+        "EN-301-549",
+        "EN-9.2.4.1"
+      ],
+      "description": "Ensure each page has at least one mechanism for a user to bypass navigation and jump straight to the content",
+      "help": "Page must have means to bypass repeated blocks",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/bypass?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "internal-link-present",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "No valid skip link found"
+            },
+            {
+              "id": "header-present",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Page does not have a heading"
+            },
+            {
+              "id": "landmark",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Page does not have a landmark region"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
+          "target": [
+            "html"
+          ],
+          "failureSummary": "Fix any of the following:\n  No valid skip link found\n  Page does not have a heading\n  Page does not have a landmark region"
+        }
+      ]
+    }
+  ],
   "violations": []
 }

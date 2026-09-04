@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:01:05.945Z",
+  "timestamp": "2026-09-04T21:23:55.778Z",
   "url": "http://localhost:5173/en/app/data-product/:pageKey?",
   "toolOptions": {
     "runOnly": {
@@ -119,6 +119,21 @@
       "description": "Ensure every ARIA meter node has an accessible name",
       "help": "ARIA meter nodes must have an accessible name",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-meter-name?application=playwright",
+      "nodes": []
+    },
+    {
+      "id": "aria-progressbar-name",
+      "impact": null,
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag111",
+        "EN-301-549",
+        "EN-9.1.1.1"
+      ],
+      "description": "Ensure every ARIA progressbar node has an accessible name",
+      "help": "ARIA progressbar nodes must have an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
       "nodes": []
     },
     {
@@ -1157,9 +1172,9 @@
             }
           ],
           "impact": null,
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-wr7oxn-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ".MuiPaper-rounded"
           ]
         },
         {
@@ -1713,6 +1728,38 @@
           "target": [
             "svg[data-testid=\"SettingsIcon\"]"
           ]
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "focusable-modal-open",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "No focusable elements while a modal is open"
+            },
+            {
+              "id": "focusable-disabled",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "No focusable elements contained within element"
+            },
+            {
+              "id": "focusable-not-tabbable",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "No focusable elements contained within element"
+            }
+          ],
+          "none": [],
+          "impact": null,
+          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ErrorOutlineIcon\">",
+          "target": [
+            ".MuiSvgIcon-fontSizeInherit"
+          ]
         }
       ]
     },
@@ -1921,9 +1968,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-wr7oxn-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ".MuiPaper-rounded"
           ]
         },
         {
@@ -2019,9 +2066,9 @@
             }
           ],
           "impact": null,
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-wr7oxn-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ".MuiPaper-rounded"
           ]
         },
         {
@@ -2756,9 +2803,9 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-wr7oxn-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
           "target": [
-            ".MuiCircularProgress-root"
+            ".MuiPaper-rounded"
           ]
         },
         {
@@ -3441,24 +3488,6 @@
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
           ]
-        },
-        {
-          "any": [
-            {
-              "id": "no-focusable-content",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element does not have focusable descendants"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
-          "target": [
-            ".MuiCircularProgress-root"
-          ]
         }
       ]
     }
@@ -3518,57 +3547,5 @@
       ]
     }
   ],
-  "violations": [
-    {
-      "id": "aria-progressbar-name",
-      "impact": "serious",
-      "tags": [
-        "cat.aria",
-        "wcag2a",
-        "wcag111",
-        "EN-301-549",
-        "EN-9.1.1.1"
-      ],
-      "description": "Ensure every ARIA progressbar node has an accessible name",
-      "help": "ARIA progressbar nodes must have an accessible name",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "aria-label",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "aria-label attribute does not exist or is empty"
-            },
-            {
-              "id": "aria-labelledby",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty"
-            },
-            {
-              "id": "non-empty-title",
-              "data": {
-                "messageKey": "noAttr"
-              },
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Element has no title attribute"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": "serious",
-          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
-          "target": [
-            ".MuiCircularProgress-root"
-          ],
-          "failureSummary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
-        }
-      ]
-    }
-  ]
+  "violations": []
 }

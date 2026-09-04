@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:04:10.836Z",
+  "timestamp": "2026-09-04T21:28:09.456Z",
   "url": "http://localhost:5173/en/simulation?",
   "toolOptions": {
     "runOnly": {
@@ -2884,9 +2884,41 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div class=\"p-6 bg-gray-800/50 border border-gray-700/50 rounded-xl backdrop-blur-sm\" style=\"opacity: 0; transform: translateY(9.66413px);\">",
+          "html": "<div class=\"p-6 bg-gray-800/50 border border-gray-700/50 rounded-xl backdrop-blur-sm\" style=\"opacity: 0; transform: translateY(-2.28425px);\">",
           "target": [
             ".bg-gray-800\\/50.border-gray-700\\/50.backdrop-blur-sm:nth-child(1)"
+          ]
+        },
+        {
+          "any": [],
+          "all": [
+            {
+              "id": "important-letter-spacing",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
+            },
+            {
+              "id": "important-word-spacing",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
+            },
+            {
+              "id": "important-line-height",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
+            }
+          ],
+          "none": [],
+          "impact": null,
+          "html": "<div class=\"p-6 bg-gray-800/50 border border-gray-700/50 rounded-xl backdrop-blur-sm\" style=\"opacity: 0; transform: translateY(10.8112px);\">",
+          "target": [
+            ".bg-gray-800\\/50.border-gray-700\\/50.backdrop-blur-sm:nth-child(2)"
           ]
         },
         {

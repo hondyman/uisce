@@ -220,6 +220,7 @@ const APP_ROUTES = [
  */
 const UNPREFIXED_ROUTES = [
   '/',
+  '/auth/callback',
   '/change-review',
   '/login',
   '/page-studio',

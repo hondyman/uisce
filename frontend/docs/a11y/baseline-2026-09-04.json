@@ -1,0 +1,1290 @@
+{
+  "metadata": {
+    "generated": "2026-09-04T21:28:37.682Z",
+    "tool": "axe-core playwright",
+    "browser": "chromium",
+    "totalRoutes": 151,
+    "paramRoutes": 17,
+    "cleanParamRoutes": 12,
+    "totalViolations": 95,
+    "totalPasses": 3313,
+    "routesWithViolations": 66,
+    "byRule": {
+      "button-name": {
+        "count": 25,
+        "impact": "critical",
+        "description": "Ensure buttons have discernible text"
+      },
+      "aria-progressbar-name": {
+        "count": 19,
+        "impact": "serious",
+        "description": "Ensure every ARIA progressbar node has an accessible name"
+      },
+      "aria-input-field-name": {
+        "count": 15,
+        "impact": "serious",
+        "description": "Ensure every ARIA input field has an accessible name"
+      },
+      "label": {
+        "count": 8,
+        "impact": "critical",
+        "description": "Ensure every form element has a label"
+      },
+      "scrollable-region-focusable": {
+        "count": 7,
+        "impact": "serious",
+        "description": "Ensure elements that have scrollable content are accessible by keyboard"
+      },
+      "list": {
+        "count": 5,
+        "impact": "serious",
+        "description": "Ensure that lists are structured correctly"
+      },
+      "select-name": {
+        "count": 5,
+        "impact": "critical",
+        "description": "Ensure select element has an accessible name"
+      },
+      "aria-prohibited-attr": {
+        "count": 4,
+        "impact": "serious",
+        "description": "Ensure ARIA attributes are not prohibited for an element's role"
+      },
+      "nested-interactive": {
+        "count": 4,
+        "impact": "serious",
+        "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies"
+      },
+      "aria-command-name": {
+        "count": 2,
+        "impact": "serious",
+        "description": "Ensure every ARIA button, link and menuitem has an accessible name"
+      },
+      "listitem": {
+        "count": 1,
+        "impact": "serious",
+        "description": "Ensure <li> elements are used semantically"
+      }
+    },
+    "routes": [
+      {
+        "route": "/",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/app/data/product/pageKey",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/auth/callback",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/change/review",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/abbreviations",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/access/explanation",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/ai/semantic/bridge",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/entitlements",
+        "violations": 0,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/entitlements/profiles/profileKey",
+        "violations": 0,
+        "passes": 24,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/entitlements/profiles/profileKey/components",
+        "violations": 0,
+        "passes": 27,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/llm",
+        "violations": 0,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/delegations",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/field/permissions",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/group/role/mappings",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/identity/providers",
+        "violations": 1,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/admin/rbac/roles",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/teams",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/user/roles",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/user/tenants",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/admin/rbac/users",
+        "violations": 1,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/admin/seeding",
+        "violations": 1,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/admin/temporal/ops",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/ai/assistant",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/analytics/advisor/dashboard",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/analytics/factors",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/analytics/factors/portfolioID/",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/analytics/rebalancer",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/analytics/scenario/analysis",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/api/designer",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/aso",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/audit",
+        "violations": 2,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/bp/console",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/bp/console/instances",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/bp/console/queues",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/bp/console/tab",
+        "violations": 2,
+        "passes": 26,
+        "isParam": true,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/bundle/explorer",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/bundles",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/business/objects",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/business/objects/id",
+        "violations": 2,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": [
+          "aria-progressbar-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/business/objects/new",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/calendar",
+        "violations": 1,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/calendar/conflicts",
+        "violations": 1,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/catalog/ai/suggestions",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/catalog/api/inventory",
+        "violations": 2,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/catalog/business/terms",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/catalog/business/terms/id",
+        "violations": 1,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/catalog/edge/types",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/catalog/edge/types/id",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/catalog/node/types",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/catalog/node/types/id",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/catalog/semantic/terms",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/catalog/view/definitions",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/change/reviews",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/change/reviews/id",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/client/portal/rules/editor",
+        "violations": 4,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "button-name",
+          "label",
+          "list",
+          "nested-interactive"
+        ]
+      },
+      {
+        "route": "/en/client/portal/workflow/studio",
+        "violations": 2,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/core/abbreviations",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/core/approval/inbox",
+        "violations": 0,
+        "passes": 9,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/approval/workflows",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/audit/explorer",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/business/terms",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/calculated/fields",
+        "violations": 4,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name",
+          "button-name",
+          "list",
+          "nested-interactive"
+        ]
+      },
+      {
+        "route": "/en/core/data/pipelines",
+        "violations": 1,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/core/domains",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/core/flow/builder",
+        "violations": 2,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "button-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/core/genui/chat",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/core/genui/inbox",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/genui/proposal",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/glossary",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/notifications",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/notifications/preferences",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/notifications/templates",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/process/catalog",
+        "violations": 1,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/core/semantic/mapper",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "route": "/en/core/semantic/terms",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/sla/dashboard",
+        "violations": 0,
+        "passes": 27,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/uisce/builder",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/validation",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/validation/rules",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/core/workflow/designer",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/crypto/portfolio",
+        "violations": 1,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/dynamic/ui",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-command-name"
+        ]
+      },
+      {
+        "route": "/en/fabric/audit/logs",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/fabric/bundles",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/fabric/bundles/bundleId/edit",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/fabric/bundles/create",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/fabric/calculations",
+        "violations": 5,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "button-name",
+          "label",
+          "list",
+          "listitem",
+          "nested-interactive"
+        ]
+      },
+      {
+        "route": "/en/fabric/custom/components",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/fabric/dashboard",
+        "violations": 1,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/fabric/ip/whitelist",
+        "violations": 1,
+        "passes": 27,
+        "isParam": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/fabric/preaggregations",
+        "violations": 0,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/fabric/settings",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/fabric/tenants",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/fixed/income",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/flow/builder",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/global/intelligence",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/glossary",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/governance/changesets",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/incidents/id",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/intelligence",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/intelligence/data/quality",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/intelligence/index/advisor",
+        "violations": 1,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "route": "/en/intelligence/storage",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/jit/request",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/marketplace",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/marketplace/components",
+        "violations": 0,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/nlq",
+        "violations": 1,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/observability",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/observability/slos",
+        "violations": 1,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/optimization",
+        "violations": 1,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/optimization/optimizationId",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/page/designer",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-command-name"
+        ]
+      },
+      {
+        "route": "/en/page/studio",
+        "violations": 1,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/pipelines/studio",
+        "violations": 1,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/pipelines/studio/id",
+        "violations": 1,
+        "passes": 26,
+        "isParam": true,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/pipelines/triggers/new",
+        "violations": 1,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/private/markets",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/query/builder",
+        "violations": 2,
+        "passes": 27,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "list"
+        ]
+      },
+      {
+        "route": "/en/rbac",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/reports/builder",
+        "violations": 3,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/reports/expressions",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/reports/library",
+        "violations": 3,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": [
+          "button-name",
+          "list",
+          "nested-interactive"
+        ]
+      },
+      {
+        "route": "/en/reports/models",
+        "violations": 0,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/reports/queries",
+        "violations": 2,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/reports/reportId/edit",
+        "violations": 3,
+        "passes": 24,
+        "isParam": true,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/scheduler",
+        "violations": 1,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "route": "/en/scheduler/calendars",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/calendars/calendarId/edit",
+        "violations": 0,
+        "passes": 25,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/calendars/new",
+        "violations": 0,
+        "passes": 25,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/executions",
+        "violations": 0,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/executions/executionId",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/intelligence",
+        "violations": 1,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "route": "/en/scheduler/jobs",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/jobs/jobId",
+        "violations": 1,
+        "passes": 24,
+        "isParam": true,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/scheduler/jobs/jobId/edit",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/scheduler/jobs/new",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "route": "/en/schema/explorer",
+        "violations": 1,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "route": "/en/secrets/audit",
+        "violations": 1,
+        "passes": 24,
+        "isParam": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "route": "/en/secrets/config",
+        "violations": 0,
+        "passes": 22,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/secrets/monitoring",
+        "violations": 1,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "route": "/en/semantic/health",
+        "violations": 1,
+        "passes": 26,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "route": "/en/simulation",
+        "violations": 0,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/simulation/compare",
+        "violations": 0,
+        "passes": 20,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/simulation/id",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/simulation/rebalance",
+        "violations": 1,
+        "passes": 23,
+        "isParam": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "route": "/en/tenants",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/tenants/tenantId",
+        "violations": 0,
+        "passes": 19,
+        "isParam": true,
+        "violationIds": []
+      },
+      {
+        "route": "/en/validation/rules",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/en/wealth/feed",
+        "violations": 0,
+        "passes": 9,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/login",
+        "violations": 0,
+        "passes": 19,
+        "isParam": false,
+        "violationIds": []
+      },
+      {
+        "route": "/page/studio",
+        "violations": 1,
+        "passes": 21,
+        "isParam": false,
+        "violationIds": [
+          "button-name"
+        ]
+      }
+    ]
+  }
+}

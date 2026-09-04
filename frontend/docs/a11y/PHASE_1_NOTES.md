@@ -514,25 +514,50 @@ fixture setup time if `E2E_KC_USER` + `E2E_KC_PASS` are set; falls back to fake 
 
 Credentials removed from this file — use `.env.test` (gitignored) or CI secret vars.
 
-**Baseline results (150 routes, Chromium, ~3.4 min):**
-- 62 routes with violations / 88 routes clean
-- 85 total violations across 11 rules
+**Baseline results (150 routes, Chromium, ~3.4 min, fresh run):**
+- 64 routes with violations / 86 routes clean
+- 91 total violations across 11 rules
+
+> Committed baseline (85/62 from commit `85fb4fcc5`) used a slightly different token;
+> fresh runs produce ~91 violations. Use the durable aggregate below.
 
 | Rule | Count | Impact |
 |------|-------|--------|
-| button-name | 24 | critical |
-| aria-input-field-name | 15 | serious |
-| aria-progressbar-name | 13 | serious |
-| label | 9 | critical |
-| scrollable-region-focusable | 6 | serious |
-| select-name | 5 | critical |
-| list | 4 | serious |
-| nested-interactive | 3 | serious |
-| aria-prohibited-attr | 3 | serious |
-| aria-command-name | 2 | serious |
-| listitem | 1 | serious |
+| button-name | ~24 | critical |
+| aria-input-field-name | ~15 | serious |
+| aria-progressbar-name | ~13 | serious |
+| label | ~9 | critical |
+| scrollable-region-focusable | ~6 | serious |
+| select-name | ~5 | critical |
+| list | ~4 | serious |
+| nested-interactive | ~3 | serious |
+| aria-prohibited-attr | ~3 | serious |
+| aria-command-name | ~2 | serious |
+| listitem | ~1 | serious |
 
-Per-route JSON artifacts committed to `frontend/test-results/a11y/`.
+**Denominator caveat — param routes:** 17 of 150 routes contain `:param` patterns
+(`tenants/:tenantId`, `business-objects/:id`, etc.). Visited literally, `:param`
+matches the literal string and hits a catch-all/error/redirect state — not real content.
+13 of the 17 param routes scored 0 violations (non-representative clean).
+**Effective representative denominator: ~133 routes** (150 − 17 param = 133, minus
+any that legitimately have no dynamic segments). Flag `isParam: true` in the
+aggregate JSON.
+
+**Artifacts:**
+- Per-route JSON: `frontend/test-results/a11y/*.json` (Playwright output directory —
+  refreshed on every run; committed versions are in git and serve as the durable
+  historical baseline).
+- Aggregate: `frontend/docs/a11y/baseline-2026-09-04.json` (durable, never touched
+  by Playwright).
+- Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — run after each baseline
+  crawl to refresh the durable aggregate.
+- Committed crawl result: `85fb4fcc5`.
+
+**Known gaps:**
+- `/auth/callback` (unprefixed, public — no auth needed) was not scanned. Add to
+  UNPREFIXED_ROUTES to cover it.
+- `scripts/aggregate-a11y-baseline.mjs` created this session; add to CI pipeline
+  to refresh `docs/a11y/baseline-{date}.json` on every baseline run.
 
 **Phase 1 status:** Phase 0 complete. Phase 2 (sizing/remediation) pending —
 do not extrapolate from partial route sample; use full-crawl artifacts above.

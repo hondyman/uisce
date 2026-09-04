@@ -13,7 +13,7 @@
     "orientationAngle": 0,
     "orientationType": "landscape-primary"
   },
-  "timestamp": "2026-09-04T21:01:50.534Z",
+  "timestamp": "2026-09-04T21:24:57.543Z",
   "url": "http://localhost:5173/en/business-objects/:id?",
   "toolOptions": {
     "runOnly": {
@@ -119,21 +119,6 @@
       "description": "Ensure every ARIA meter node has an accessible name",
       "help": "ARIA meter nodes must have an accessible name",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-meter-name?application=playwright",
-      "nodes": []
-    },
-    {
-      "id": "aria-progressbar-name",
-      "impact": null,
-      "tags": [
-        "cat.aria",
-        "wcag2a",
-        "wcag111",
-        "EN-301-549",
-        "EN-9.1.1.1"
-      ],
-      "description": "Ensure every ARIA progressbar node has an accessible name",
-      "help": "ARIA progressbar nodes must have an accessible name",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
       "nodes": []
     },
     {
@@ -262,6 +247,21 @@
       "description": "Ensure <dt> and <dd> elements are contained by a <dl>",
       "help": "<dt> and <dd> elements must be contained by a <dl>",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/dlitem?application=playwright",
+      "nodes": []
+    },
+    {
+      "id": "duplicate-id-aria",
+      "impact": null,
+      "tags": [
+        "cat.parsing",
+        "wcag2a",
+        "wcag412",
+        "EN-301-549",
+        "EN-9.4.1.2"
+      ],
+      "description": "Ensure every id attribute value used in ARIA and in labels is unique",
+      "help": "IDs used in ARIA and labels must be unique",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/duplicate-id-aria?application=playwright",
       "nodes": []
     },
     {
@@ -534,25 +534,6 @@
       "description": "Ensure [role=\"img\"] elements have alternative text",
       "help": "[role=\"img\"] elements must have an alternative text",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/role-img-alt?application=playwright",
-      "nodes": []
-    },
-    {
-      "id": "scrollable-region-focusable",
-      "impact": null,
-      "tags": [
-        "cat.keyboard",
-        "wcag2a",
-        "wcag211",
-        "wcag213",
-        "TTv5",
-        "TT4.a",
-        "EN-301-549",
-        "EN-9.2.1.1",
-        "EN-9.2.1.3"
-      ],
-      "description": "Ensure elements that have scrollable content are accessible by keyboard",
-      "help": "Scrollable region must have keyboard access",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable?application=playwright",
       "nodes": []
     },
     {
@@ -949,32 +930,6 @@
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-allowed-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attributes are used correctly for the defined role"
-            }
-          ],
-          "none": [
-            {
-              "id": "aria-unsupported-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
-          ]
         }
       ]
     },
@@ -1135,24 +1090,6 @@
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-conditional-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
-          ]
         }
       ]
     },
@@ -1201,9 +1138,9 @@
             }
           ],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiPaper-rounded"
+            ":root"
           ]
         },
         {
@@ -1222,24 +1159,6 @@
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "deprecatedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "minor",
-              "message": "ARIA role is not deprecated"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
           ]
         }
       ]
@@ -1775,38 +1694,6 @@
           "target": [
             "svg[data-testid=\"SettingsIcon\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "focusable-modal-open",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements while a modal is open"
-            },
-            {
-              "id": "focusable-disabled",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            },
-            {
-              "id": "focusable-not-tabbable",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "No focusable elements contained within element"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<svg class=\"MuiSvgIcon-root MuiSvgIcon-fontSizeInherit css-1ckov0h-MuiSvgIcon-root\" focusable=\"false\" aria-hidden=\"true\" viewBox=\"0 0 24 24\" data-testid=\"ErrorOutlineIcon\">",
-          "target": [
-            ".MuiSvgIcon-fontSizeInherit"
-          ]
         }
       ]
     },
@@ -1967,24 +1854,6 @@
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "aria-prohibited-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "ARIA attribute is allowed"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
-          ]
         }
       ]
     },
@@ -2033,9 +1902,9 @@
           "all": [],
           "none": [],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiPaper-rounded"
+            ":root"
           ]
         },
         {
@@ -2054,24 +1923,6 @@
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-required-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "All required ARIA attributes are present"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
           ]
         }
       ]
@@ -2149,9 +2000,9 @@
             }
           ],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiPaper-rounded"
+            ":root"
           ]
         },
         {
@@ -2184,38 +2035,6 @@
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [],
-          "none": [
-            {
-              "id": "invalidrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is valid"
-            },
-            {
-              "id": "abstractrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Abstract roles are not used"
-            },
-            {
-              "id": "unsupportedrole",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA role is supported"
-            }
-          ],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
           ]
         }
       ]
@@ -2489,38 +2308,6 @@
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
           ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "aria-valid-attr-value",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute values are valid"
-            },
-            {
-              "id": "aria-errormessage",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-errormessage exists and references elements visible to screen readers that use a supported aria-errormessage technique"
-            },
-            {
-              "id": "aria-level",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "aria-level values are valid"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
-          ]
         }
       ]
     },
@@ -2680,24 +2467,6 @@
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        },
-        {
-          "any": [
-            {
-              "id": "aria-valid-attr",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "ARIA attribute name is valid"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
           ]
         }
       ]
@@ -2968,9 +2737,9 @@
           ],
           "none": [],
           "impact": null,
-          "html": "<div class=\"MuiPaper-root MuiPaper-elevation MuiPaper-rounded MuiPaper-elevation0 MuiAlert-root MuiAlert-colorError MuiAlert-standardError MuiAlert-standard css-i92cq0-MuiPaper-root-MuiAlert-root\" role=\"alert\" style=\"--Paper-shadow: none;\">",
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
           "target": [
-            ".MuiPaper-rounded"
+            ":root"
           ]
         },
         {
@@ -3003,102 +2772,6 @@
           "html": "<div role=\"region\" aria-label=\"Notifications (F8)\" tabindex=\"-1\" style=\"pointer-events: none;\"><ol tabindex=\"-1\" class=\"fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]\"></ol></div>",
           "target": [
             "div[aria-label=\"Notifications (F8)\"]"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1475592160 go1671063245\" style=\"pointer-events: all; overflow: visible; min-height: 0px; transition: height 300ms cubic-bezier(0.4, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1)"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"notistack-CollapseWrapper\" style=\"display: flex; width: 100%;\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper"
-          ]
-        },
-        {
-          "any": [],
-          "all": [
-            {
-              "id": "important-letter-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "Letter-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-word-spacing",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "word-spacing in the style attribute is not set to !important, or meets the minimum"
-            },
-            {
-              "id": "important-line-height",
-              "data": null,
-              "relatedNodes": [],
-              "impact": "serious",
-              "message": "line-height in the style attribute is not set to !important, or meets the minimum"
-            }
-          ],
-          "none": [],
-          "impact": null,
-          "html": "<div class=\"go1888806478 notistack-MuiContent notistack-MuiContent-error go167266335 go3651055292 go3162094071\" role=\"alert\" aria-describedby=\"notistack-snackbar\" style=\"transform: none; transition: transform 225ms cubic-bezier(0, 0, 0.2, 1);\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478"
           ]
         }
       ]
@@ -3358,40 +3031,6 @@
           "html": "<html lang=\"en\" dir=\"ltr\" data-mantine-color-scheme=\"light\" style=\"--nav-accent: #D4A017; --nav-bg: #F5F0E8; --nav-text: #1A0F08; --nav-appbar-bg: rgba(245, 240, 232, 0.85); --nav-appbar-border: rgba(26, 15, 8, 0.08); --nav-border-accent: rgba(212, 160, 23, 0.5); --nav-accent-muted: rgba(212, 160, 23, 0.10); --nav-hover-fill: rgba(212, 160, 23, 0.06); --nav-glass-bg: rgba(245, 240, 232, 0.96); --nav-glass-border: rgba(26, 15, 8, 0.08); --nav-menu-shadow: 0 4px 12px rgba(26, 15, 8, 0.08), 0 16px 40px rgba(26, 15, 8, 0.10); --nav-item-active: rgba(212, 160, 23, 0.10); --nav-item-text: #1A0F08; --nav-item-hover: rgba(212, 160, 23, 0.06); --nav-sidebar-bg: #ffffff; --nav-sidebar-border: rgba(26, 15, 8, 0.08); --nav-rail-accent: #D4A017; --nav-text-dim: #8B7D6B; --nav-glow-color: rgba(212, 160, 23, 0.3);\">",
           "target": [
             "html"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "duplicate-id-aria",
-      "impact": null,
-      "tags": [
-        "cat.parsing",
-        "wcag2a",
-        "wcag412",
-        "EN-301-549",
-        "EN-9.4.1.2"
-      ],
-      "description": "Ensure every id attribute value used in ARIA and in labels is unique",
-      "help": "IDs used in ARIA and labels must be unique",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/duplicate-id-aria?application=playwright",
-      "nodes": [
-        {
-          "any": [
-            {
-              "id": "duplicate-id-aria",
-              "data": "notistack-snackbar",
-              "relatedNodes": [],
-              "impact": "critical",
-              "message": "Document has no elements referenced with ARIA or labels that share the same id attribute"
-            }
-          ],
-          "all": [],
-          "none": [],
-          "impact": null,
-          "html": "<div id=\"notistack-snackbar\" class=\"go946087465\">",
-          "target": [
-            ".go1475592160:nth-child(1) > .notistack-CollapseWrapper > .notistack-Snackbar > .go1888806478 > .go946087465"
           ]
         }
       ]
@@ -3783,6 +3422,24 @@
           "target": [
             "button[aria-label=\"Settings and account menu\"]"
           ]
+        },
+        {
+          "any": [
+            {
+              "id": "no-focusable-content",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element does not have focusable descendants"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": null,
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "target": [
+            ":root"
+          ]
         }
       ]
     }
@@ -3842,5 +3499,103 @@
       ]
     }
   ],
-  "violations": []
+  "violations": [
+    {
+      "id": "aria-progressbar-name",
+      "impact": "serious",
+      "tags": [
+        "cat.aria",
+        "wcag2a",
+        "wcag111",
+        "EN-301-549",
+        "EN-9.1.1.1"
+      ],
+      "description": "Ensure every ARIA progressbar node has an accessible name",
+      "help": "ARIA progressbar nodes must have an accessible name",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/aria-progressbar-name?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "aria-label",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "aria-label attribute does not exist or is empty"
+            },
+            {
+              "id": "aria-labelledby",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty"
+            },
+            {
+              "id": "non-empty-title",
+              "data": {
+                "messageKey": "noAttr"
+              },
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element has no title attribute"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<span class=\"MuiCircularProgress-root MuiCircularProgress-indeterminate MuiCircularProgress-colorPrimary css-kf6pw8-MuiCircularProgress-root\" role=\"progressbar\" style=\"width: 40px; height: 40px;\">",
+          "target": [
+            ":root"
+          ],
+          "failureSummary": "Fix any of the following:\n  aria-label attribute does not exist or is empty\n  aria-labelledby attribute does not exist, references elements that do not exist or references elements that are empty\n  Element has no title attribute"
+        }
+      ]
+    },
+    {
+      "id": "scrollable-region-focusable",
+      "impact": "serious",
+      "tags": [
+        "cat.keyboard",
+        "wcag2a",
+        "wcag211",
+        "wcag213",
+        "TTv5",
+        "TT4.a",
+        "EN-301-549",
+        "EN-9.2.1.1",
+        "EN-9.2.1.3"
+      ],
+      "description": "Ensure elements that have scrollable content are accessible by keyboard",
+      "help": "Scrollable region must have keyboard access",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.10/scrollable-region-focusable?application=playwright",
+      "nodes": [
+        {
+          "any": [
+            {
+              "id": "focusable-content",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element should have focusable content"
+            },
+            {
+              "id": "focusable-element",
+              "data": null,
+              "relatedNodes": [],
+              "impact": "serious",
+              "message": "Element should be focusable"
+            }
+          ],
+          "all": [],
+          "none": [],
+          "impact": "serious",
+          "html": "<div class=\"MuiBox-root css-oa138a\">",
+          "target": [
+            ".css-oa138a"
+          ],
+          "failureSummary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
+        }
+      ]
+    }
+  ]
 }
