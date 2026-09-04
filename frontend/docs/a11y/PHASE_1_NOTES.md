@@ -507,57 +507,55 @@ route-level axe scanning (localStorage auth), but API calls fail silently.
 The auth guard now fully operational. Remaining work: expand route list to full
 ~140-route inventory from AppRoutes.tsx + 6 unprefixed routes.
 
-### Update 2026-09-04 (full crawl)
+### Update 2026-09-04 (full crawl, authoritative — workers=1)
 
-Full 150-route baseline run completed. Auth setup now fetches Keycloak token at
-fixture setup time if `E2E_KC_USER` + `E2E_KC_PASS` are set; falls back to fake JWT.
+Full 151-route baseline run completed at `--workers=1` (~5.6 min, Chromium).
+Self-describing JSONs: each route file now contains `{ routePattern, finalUrl, axe }`.
+`isParam` derived from `':' in routePattern` — no hardcoded list.
 
-Credentials removed from this file — use `.env.test` (gitignored) or CI secret vars.
+Auth setup fetches Keycloak token at fixture time if `E2E_KC_USER`+`E2E_KC_PASS`
+are set; falls back to fake JWT with console warning.
 
-**Baseline results (150 routes, Chromium, ~3.4 min, fresh run):**
-- 64 routes with violations / 86 routes clean
-- 91 total violations across 11 rules
-
-> Committed baseline (85/62 from commit `85fb4fcc5`) used a slightly different token;
-> fresh runs produce ~91 violations. Use the durable aggregate below.
+**Baseline results (151 routes, 21 param routes, representative denominator: 139):**
+- 68 routes with violations / 83 routes clean (representative)
+- 92 total violations across 11 rules
 
 | Rule | Count | Impact |
 |------|-------|--------|
-| button-name | ~24 | critical |
-| aria-input-field-name | ~15 | serious |
-| aria-progressbar-name | ~13 | serious |
-| label | ~9 | critical |
-| scrollable-region-focusable | ~6 | serious |
-| select-name | ~5 | critical |
-| list | ~4 | serious |
-| nested-interactive | ~3 | serious |
-| aria-prohibited-attr | ~3 | serious |
-| aria-command-name | ~2 | serious |
-| listitem | ~1 | serious |
+| button-name | 23 | critical |
+| aria-progressbar-name | 22 | serious |
+| aria-input-field-name | 14 | serious |
+| label | 9 | critical |
+| scrollable-region-focusable | 8 | serious |
+| select-name | 5 | critical |
+| list | 3 | serious |
+| nested-interactive | 3 | serious |
+| aria-command-name | 2 | serious |
+| aria-prohibited-attr | 2 | serious |
+| listitem | 1 | serious |
 
-**Denominator caveat — param routes:** 17 of 150 routes contain `:param` patterns
-(`tenants/:tenantId`, `business-objects/:id`, etc.). Visited literally, `:param`
-matches the literal string and hits a catch-all/error/redirect state — not real content.
-13 of the 17 param routes scored 0 violations (non-representative clean).
-**Effective representative denominator: ~133 routes** (150 − 17 param = 133, minus
-any that legitimately have no dynamic segments). Flag `isParam: true` in the
-aggregate JSON.
+> Prior runs at `--workers=4` produced 85/91/95 due to concurrency+timing variance.
+> `--workers=1` is the authoritative run; commit `e2018dd3f` (amended) is baseline of record.
+
+**Param route accounting:** 21 routes contain `:` in their pattern. 12 of those scored
+0 violations — their literal `:param` segment matched nothing and hit catch-all/error
+state (non-representative clean). Effective representative denominator: 139 routes.
 
 **Artifacts:**
-- Per-route JSON: `frontend/test-results/a11y/*.json` (Playwright output directory —
-  refreshed on every run; committed versions are in git and serve as the durable
-  historical baseline).
+- Per-route JSON: `frontend/test-results/a11y/*.json` (self-describing format:
+  `{ routePattern, finalUrl, axe }`). Committed to git — durable.
 - Aggregate: `frontend/docs/a11y/baseline-2026-09-04.json` (durable, never touched
-  by Playwright).
-- Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — run after each baseline
-  crawl to refresh the durable aggregate.
-- Committed crawl result: `85fb4fcc5`.
+  by Playwright). Updated by `scripts/aggregate-a11y-baseline.mjs`.
+- Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — derives `isParam` from
+  `':' in routePattern`; run after each baseline crawl to refresh the aggregate.
 
-**Known gaps:**
-- `/auth/callback` (unprefixed, public — no auth needed) was not scanned. Add to
-  UNPREFIXED_ROUTES to cover it.
-- `scripts/aggregate-a11y-baseline.mjs` created this session; add to CI pipeline
-  to refresh `docs/a11y/baseline-{date}.json` on every baseline run.
+**Known gaps (resolved this session):**
+- `/auth/callback` — added to UNPREFIXED_ROUTES.
+- `scripts/aggregate-a11y-baseline.mjs` — created and committed.
+- Self-describing JSONs — `routePattern` and `finalUrl` now written per route.
+- Auth fail-loud — console.warn when using fallback fake JWT (not a hard failure;
+  the auth guard detects redirect-to-login which is the relevant failure mode).
 
-**Phase 1 status:** Phase 0 complete. Phase 2 (sizing/remediation) pending —
-do not extrapolate from partial route sample; use full-crawl artifacts above.
+**Phase 1 status:** Phase 0 complete. Baseline of record: `e2018dd3f` (amended).
+Phase 2 (sizing/remediation) pending — component-level triage of the 92 violations,
+grouped by rule → shared component root cause, not per-route.

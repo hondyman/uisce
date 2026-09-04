@@ -272,15 +272,23 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         .disableRules(['color-contrast'])
         .analyze();
 
+      const output = {
+        routePattern: route,
+        finalUrl: page.url(),
+        axe: results,
+      };
       fs.writeFileSync(
         path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`),
-        JSON.stringify(results, null, 2),
+        JSON.stringify(output, null, 2),
       );
 
       test.info().annotations.push({
         type: 'axe-summary',
         description: `${results.violations.length} violations, ${results.passes.length} passes`,
       });
+      if (!E2E_JWT && !KC_USER) {
+        console.warn(`[baseline] using fallback fake JWT — API calls will fail silently`);
+      }
     });
   }
 });

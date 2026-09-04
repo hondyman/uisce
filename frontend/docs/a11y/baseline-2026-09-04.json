@@ -1,57 +1,52 @@
 {
   "metadata": {
-    "generated": "2026-09-04T21:28:37.682Z",
+    "generated": "2026-09-04T22:04:15.735Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
-    "paramRoutes": 17,
+    "paramRoutes": 21,
     "cleanParamRoutes": 12,
-    "totalViolations": 95,
-    "totalPasses": 3313,
-    "routesWithViolations": 66,
+    "totalViolations": 92,
+    "totalPasses": 3267,
+    "routesWithViolations": 68,
     "byRule": {
       "button-name": {
-        "count": 25,
+        "count": 23,
         "impact": "critical",
         "description": "Ensure buttons have discernible text"
       },
       "aria-progressbar-name": {
-        "count": 19,
+        "count": 22,
         "impact": "serious",
         "description": "Ensure every ARIA progressbar node has an accessible name"
       },
       "aria-input-field-name": {
-        "count": 15,
+        "count": 14,
         "impact": "serious",
         "description": "Ensure every ARIA input field has an accessible name"
       },
       "label": {
-        "count": 8,
+        "count": 9,
         "impact": "critical",
         "description": "Ensure every form element has a label"
       },
       "scrollable-region-focusable": {
-        "count": 7,
+        "count": 8,
         "impact": "serious",
         "description": "Ensure elements that have scrollable content are accessible by keyboard"
-      },
-      "list": {
-        "count": 5,
-        "impact": "serious",
-        "description": "Ensure that lists are structured correctly"
       },
       "select-name": {
         "count": 5,
         "impact": "critical",
         "description": "Ensure select element has an accessible name"
       },
-      "aria-prohibited-attr": {
-        "count": 4,
+      "list": {
+        "count": 3,
         "impact": "serious",
-        "description": "Ensure ARIA attributes are not prohibited for an element's role"
+        "description": "Ensure that lists are structured correctly"
       },
       "nested-interactive": {
-        "count": 4,
+        "count": 3,
         "impact": "serious",
         "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies"
       },
@@ -59,6 +54,11 @@
         "count": 2,
         "impact": "serious",
         "description": "Ensure every ARIA button, link and menuitem has an accessible name"
+      },
+      "aria-prohibited-attr": {
+        "count": 2,
+        "impact": "serious",
+        "description": "Ensure ARIA attributes are not prohibited for an element's role"
       },
       "listitem": {
         "count": 1,
@@ -68,436 +68,550 @@
     },
     "routes": [
       {
-        "route": "/",
+        "routePattern": "/",
+        "finalUrl": "http://localhost:5173/en?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/app/data/product/pageKey",
-        "violations": 0,
-        "passes": 19,
+        "routePattern": "/app/data-product/:pageKey",
+        "finalUrl": "http://localhost:5173/en/app/data-product/:pageKey?",
         "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/auth/callback",
-        "violations": 0,
-        "passes": 21,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/change/review",
-        "violations": 0,
-        "passes": 19,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/abbreviations",
-        "violations": 2,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": [
-          "aria-prohibited-attr",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/access/explanation",
-        "violations": 0,
-        "passes": 19,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/ai/semantic/bridge",
-        "violations": 0,
-        "passes": 19,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/entitlements",
-        "violations": 0,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/entitlements/profiles/profileKey",
-        "violations": 0,
-        "passes": 24,
-        "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/entitlements/profiles/profileKey/components",
-        "violations": 0,
-        "passes": 27,
-        "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/llm",
-        "violations": 0,
-        "passes": 25,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/rbac/delegations",
-        "violations": 0,
-        "passes": 20,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/rbac/field/permissions",
-        "violations": 0,
-        "passes": 20,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/rbac/group/role/mappings",
-        "violations": 0,
-        "passes": 24,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/admin/rbac/identity/providers",
         "violations": 1,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/admin/rbac/roles",
-        "violations": 0,
-        "passes": 20,
+        "routePattern": "/auth/callback",
+        "finalUrl": "http://localhost:5173/auth/callback?",
         "isParam": false,
+        "violations": 0,
+        "passes": 21,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/admin/rbac/teams",
-        "violations": 0,
-        "passes": 20,
+        "routePattern": "/change-review",
+        "finalUrl": "http://localhost:5173/change-review?",
         "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/admin/rbac/user/roles",
-        "violations": 0,
-        "passes": 20,
+        "routePattern": "/en/abbreviations",
+        "finalUrl": "http://localhost:5173/en/core/abbreviations?",
         "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/admin/rbac/user/tenants",
+        "routePattern": "/en/access-explanation",
+        "finalUrl": "http://localhost:5173/en/access-explanation?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/ai-semantic-bridge",
+        "finalUrl": "http://localhost:5173/login",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/entitlements",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/entitlements/profiles/:profileKey",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey?",
+        "isParam": true,
         "violations": 0,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/admin/rbac/users",
+        "routePattern": "/en/admin/entitlements/profiles/:profileKey/components",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey/components?",
+        "isParam": true,
+        "violations": 0,
+        "passes": 27,
+        "wasNonRepClean": true,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/llm",
+        "finalUrl": "http://localhost:5173/en/admin/llm?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 25,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/delegations",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/delegations?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/field-permissions",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/field-permissions?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/group-role-mappings",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/group-role-mappings?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/rbac/identity-providers",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/identity-providers?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/rbac/roles",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/teams",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/teams?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/user-roles",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/user-roles?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/user-tenants",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/user-tenants?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/rbac/users",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/users?",
+        "isParam": false,
         "violations": 1,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/admin/seeding",
+        "routePattern": "/en/admin/seeding",
+        "finalUrl": "http://localhost:5173/en/admin/seeding?",
+        "isParam": false,
         "violations": 1,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "label"
         ]
       },
       {
-        "route": "/en/admin/temporal/ops",
+        "routePattern": "/en/admin/temporal-ops",
+        "finalUrl": "http://localhost:5173/en/admin/temporal-ops?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/ai/assistant",
+        "routePattern": "/en/ai-assistant",
+        "finalUrl": "http://localhost:5173/en/ai-assistant?",
+        "isParam": false,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/analytics/advisor/dashboard",
+        "routePattern": "/en/analytics/advisor-dashboard",
+        "finalUrl": "http://localhost:5173/en/analytics/advisor-dashboard?",
+        "isParam": false,
         "violations": 0,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/analytics/factors",
+        "routePattern": "/en/analytics/factors",
+        "finalUrl": "http://localhost:5173/en/analytics/factors?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/analytics/factors/portfolioID/",
-        "violations": 0,
-        "passes": 19,
+        "routePattern": "/en/analytics/factors/:portfolioID?",
+        "finalUrl": "http://localhost:5173/en/analytics/factors/:portfolioID?",
         "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/en/analytics/rebalancer",
-        "violations": 0,
-        "passes": 22,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/analytics/scenario/analysis",
-        "violations": 0,
-        "passes": 22,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/api/designer",
-        "violations": 0,
-        "passes": 21,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/aso",
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/audit",
-        "violations": 2,
+        "routePattern": "/en/analytics/rebalancer",
+        "finalUrl": "http://localhost:5173/en/analytics/rebalancer?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 22,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/analytics/scenario-analysis",
+        "finalUrl": "http://localhost:5173/en/analytics/scenario-analysis?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 22,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/api-designer",
+        "finalUrl": "http://localhost:5173/en/api-studio?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 21,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/aso",
+        "finalUrl": "http://localhost:5173/en/optimization?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/audit",
+        "finalUrl": "http://localhost:5173/en/audit?",
+        "isParam": false,
+        "violations": 1,
         "passes": 23,
-        "isParam": false,
-        "violationIds": [
-          "aria-input-field-name",
-          "aria-progressbar-name"
-        ]
-      },
-      {
-        "route": "/en/bp/console",
-        "violations": 2,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": [
-          "aria-progressbar-name",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/bp/console/instances",
-        "violations": 2,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": [
-          "aria-progressbar-name",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/bp/console/queues",
-        "violations": 2,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": [
-          "aria-progressbar-name",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/bp/console/tab",
-        "violations": 2,
-        "passes": 26,
-        "isParam": true,
-        "violationIds": [
-          "aria-progressbar-name",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/bundle/explorer",
-        "violations": 0,
-        "passes": 19,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/bundles",
-        "violations": 0,
-        "passes": 19,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/business/objects",
-        "violations": 1,
-        "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/business/objects/id",
+        "routePattern": "/en/bp-console",
+        "finalUrl": "http://localhost:5173/en/bp-console?",
+        "isParam": false,
+        "violations": 2,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/instances",
+        "finalUrl": "http://localhost:5173/en/bp-console/instances?",
+        "isParam": false,
+        "violations": 2,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/queues",
+        "finalUrl": "http://localhost:5173/en/bp-console/queues?",
+        "isParam": false,
+        "violations": 2,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/:tab",
+        "finalUrl": "http://localhost:5173/en/bp-console/:tab?",
+        "isParam": true,
+        "violations": 2,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bundle-explorer",
+        "finalUrl": "http://localhost:5173/en/bundle-explorer?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/bundles",
+        "finalUrl": "http://localhost:5173/en/bundles?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/business-objects",
+        "finalUrl": "http://localhost:5173/en/business-objects?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 24,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/business-objects/:id",
+        "finalUrl": "http://localhost:5173/en/business-objects/:id?",
+        "isParam": true,
         "violations": 2,
         "passes": 19,
-        "isParam": true,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name",
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/business/objects/new",
+        "routePattern": "/en/business-objects/new",
+        "finalUrl": "http://localhost:5173/en/business-objects/new?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/calendar",
+        "routePattern": "/en/calendar",
+        "finalUrl": "http://localhost:5173/en/calendar?",
+        "isParam": false,
         "violations": 1,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/calendar/conflicts",
+        "routePattern": "/en/calendar/conflicts",
+        "finalUrl": "http://localhost:5173/en/calendar/conflicts?",
+        "isParam": false,
         "violations": 1,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/catalog/ai/suggestions",
-        "violations": 0,
-        "passes": 22,
+        "routePattern": "/en/catalog/ai-suggestions",
+        "finalUrl": "http://localhost:5173/en/catalog/ai-suggestions?",
         "isParam": false,
-        "violationIds": []
+        "violations": 1,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
-        "route": "/en/catalog/api/inventory",
+        "routePattern": "/en/catalog/api-inventory",
+        "finalUrl": "http://localhost:5173/en/catalog/api-inventory?",
+        "isParam": false,
         "violations": 2,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name",
           "button-name"
         ]
       },
       {
-        "route": "/en/catalog/business/terms",
+        "routePattern": "/en/catalog/business-terms",
+        "finalUrl": "http://localhost:5173/en/catalog/business-terms?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/catalog/business/terms/id",
+        "routePattern": "/en/catalog/business-terms/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/business-terms/:id?",
+        "isParam": true,
         "violations": 1,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/catalog/edge/types",
+        "routePattern": "/en/catalog/edge-types",
+        "finalUrl": "http://localhost:5173/en/catalog/edge-types?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/catalog/edge/types/id",
+        "routePattern": "/en/catalog/edge-types/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/edge-types/:id?",
+        "isParam": true,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/catalog/node/types",
+        "routePattern": "/en/catalog/node-types",
+        "finalUrl": "http://localhost:5173/en/catalog/node-types?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/catalog/node/types/id",
+        "routePattern": "/en/catalog/node-types/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/node-types/:id?",
+        "isParam": true,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/catalog/semantic/terms",
+        "routePattern": "/en/catalog/semantic-terms",
+        "finalUrl": "http://localhost:5173/en/catalog/semantic-terms?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/catalog/view/definitions",
+        "routePattern": "/en/catalog/view-definitions",
+        "finalUrl": "http://localhost:5173/en/catalog/view-definitions?",
+        "isParam": false,
         "violations": 0,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/change/reviews",
+        "routePattern": "/en/change-reviews",
+        "finalUrl": "http://localhost:5173/en/governance/changesets?",
+        "isParam": false,
         "violations": 0,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/change/reviews/id",
+        "routePattern": "/en/change-reviews/:id",
+        "finalUrl": "http://localhost:5173/en/change-reviews/:id?",
+        "isParam": true,
         "violations": 0,
         "passes": 19,
-        "isParam": true,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/client/portal/rules/editor",
+        "routePattern": "/en/client-portal/rules-editor",
+        "finalUrl": "http://localhost:5173/en/client-portal/rules-editor?",
+        "isParam": false,
         "violations": 4,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name",
           "label",
@@ -506,261 +620,323 @@
         ]
       },
       {
-        "route": "/en/client/portal/workflow/studio",
-        "violations": 2,
-        "passes": 19,
+        "routePattern": "/en/client-portal/workflow-studio",
+        "finalUrl": "http://localhost:5173/en/client-portal/workflow-studio?",
         "isParam": false,
+        "violations": 3,
+        "passes": 26,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name",
+          "button-name",
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/core/abbreviations",
-        "violations": 2,
-        "passes": 26,
+        "routePattern": "/en/core/abbreviations",
+        "finalUrl": "http://localhost:5173/en/core/abbreviations?",
         "isParam": false,
-        "violationIds": [
-          "aria-prohibited-attr",
-          "button-name"
-        ]
-      },
-      {
-        "route": "/en/core/approval/inbox",
-        "violations": 0,
-        "passes": 9,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/core/approval/workflows",
-        "violations": 0,
-        "passes": 22,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/core/audit/explorer",
-        "violations": 0,
-        "passes": 23,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/core/business/terms",
-        "violations": 0,
-        "passes": 23,
-        "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/core/calculated/fields",
-        "violations": 4,
-        "passes": 25,
-        "isParam": false,
-        "violationIds": [
-          "aria-input-field-name",
-          "button-name",
-          "list",
-          "nested-interactive"
-        ]
-      },
-      {
-        "route": "/en/core/data/pipelines",
-        "violations": 1,
-        "passes": 26,
-        "isParam": false,
-        "violationIds": [
-          "aria-input-field-name"
-        ]
-      },
-      {
-        "route": "/en/core/domains",
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/core/flow/builder",
+        "routePattern": "/en/core/approval-inbox",
+        "finalUrl": "http://localhost:5173/en/core/approval-inbox?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 9,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/approval-workflows",
+        "finalUrl": "http://localhost:5173/en/core/approval-workflows?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 22,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/audit-explorer",
+        "finalUrl": "http://localhost:5173/en/core/audit-explorer?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 23,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/business-terms",
+        "finalUrl": "http://localhost:5173/en/core/business-terms?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 23,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/calculated-fields",
+        "finalUrl": "http://localhost:5173/en/core/calculated-fields?",
+        "isParam": false,
+        "violations": 2,
+        "passes": 23,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/data-pipelines",
+        "finalUrl": "http://localhost:5173/en/core/data-pipelines?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/domains",
+        "finalUrl": "http://localhost:5173/en/core/domains?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 23,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/flow-builder",
+        "finalUrl": "http://localhost:5173/en/core/flow-builder?",
+        "isParam": false,
         "violations": 2,
         "passes": 26,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name",
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/core/genui/chat",
+        "routePattern": "/en/core/genui-chat",
+        "finalUrl": "http://localhost:5173/en/core/genui-chat?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/core/genui/inbox",
+        "routePattern": "/en/core/genui-inbox",
+        "finalUrl": "http://localhost:5173/en/core/genui-inbox?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/genui/proposal",
+        "routePattern": "/en/core/genui-proposal",
+        "finalUrl": "http://localhost:5173/en/core/genui-proposal?",
+        "isParam": false,
         "violations": 0,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/glossary",
+        "routePattern": "/en/core/glossary",
+        "finalUrl": "http://localhost:5173/en/core/glossary?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/notifications",
+        "routePattern": "/en/core/notifications",
+        "finalUrl": "http://localhost:5173/en/core/notifications?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/notifications/preferences",
+        "routePattern": "/en/core/notifications/preferences",
+        "finalUrl": "http://localhost:5173/en/core/notifications/preferences?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/notifications/templates",
+        "routePattern": "/en/core/notifications/templates",
+        "finalUrl": "http://localhost:5173/en/core/notifications/templates?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/process/catalog",
+        "routePattern": "/en/core/process-catalog",
+        "finalUrl": "http://localhost:5173/en/core/process-catalog?",
+        "isParam": false,
         "violations": 1,
         "passes": 26,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "label"
         ]
       },
       {
-        "route": "/en/core/semantic/mapper",
+        "routePattern": "/en/core/semantic-mapper",
+        "finalUrl": "http://localhost:5173/en/core/semantic-mapper?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "select-name"
         ]
       },
       {
-        "route": "/en/core/semantic/terms",
+        "routePattern": "/en/core/semantic-terms",
+        "finalUrl": "http://localhost:5173/en/core/semantic-terms?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/sla/dashboard",
+        "routePattern": "/en/core/sla-dashboard",
+        "finalUrl": "http://localhost:5173/en/core/sla-dashboard?",
+        "isParam": false,
         "violations": 0,
         "passes": 27,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/uisce/builder",
+        "routePattern": "/en/core/uisce-builder",
+        "finalUrl": "http://localhost:5173/en/core/uisce-builder?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/validation",
+        "routePattern": "/en/core/validation",
+        "finalUrl": "http://localhost:5173/en/core/validation?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/validation/rules",
+        "routePattern": "/en/core/validation-rules",
+        "finalUrl": "http://localhost:5173/en/core/validation-rules?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/core/workflow/designer",
+        "routePattern": "/en/core/workflow-designer",
+        "finalUrl": "http://localhost:5173/en/core/workflow-designer?",
+        "isParam": false,
         "violations": 0,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/crypto/portfolio",
+        "routePattern": "/en/crypto/portfolio",
+        "finalUrl": "http://localhost:5173/en/crypto/portfolio?",
+        "isParam": false,
         "violations": 1,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/dynamic/ui",
+        "routePattern": "/en/dynamic-ui",
+        "finalUrl": "http://localhost:5173/en/dynamic-ui?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-command-name"
         ]
       },
       {
-        "route": "/en/fabric/audit/logs",
+        "routePattern": "/en/fabric/audit-logs",
+        "finalUrl": "http://localhost:5173/en/fabric/audit-logs?",
+        "isParam": false,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/fabric/bundles",
+        "routePattern": "/en/fabric/bundles",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/fabric/bundles/bundleId/edit",
+        "routePattern": "/en/fabric/bundles/:bundleId/edit",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles/:bundleId/edit?",
+        "isParam": true,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/fabric/bundles/create",
+        "routePattern": "/en/fabric/bundles/create",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles/create?",
+        "isParam": false,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/fabric/calculations",
+        "routePattern": "/en/fabric/calculations",
+        "finalUrl": "http://localhost:5173/en/fabric/calculations?",
+        "isParam": false,
         "violations": 5,
         "passes": 26,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name",
           "label",
@@ -770,265 +946,328 @@
         ]
       },
       {
-        "route": "/en/fabric/custom/components",
+        "routePattern": "/en/fabric/custom-components",
+        "finalUrl": "http://localhost:5173/en/fabric/custom-components?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/fabric/dashboard",
+        "routePattern": "/en/fabric/dashboard",
+        "finalUrl": "http://localhost:5173/en/fabric/dashboard?",
+        "isParam": false,
         "violations": 1,
         "passes": 22,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/fabric/ip/whitelist",
+        "routePattern": "/en/fabric/ip-whitelist",
+        "finalUrl": "http://localhost:5173/en/fabric/ip-whitelist?",
+        "isParam": false,
         "violations": 1,
         "passes": 27,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "label"
         ]
       },
       {
-        "route": "/en/fabric/preaggregations",
+        "routePattern": "/en/fabric/preaggregations",
+        "finalUrl": "http://localhost:5173/en/fabric/preaggregations?",
+        "isParam": false,
         "violations": 0,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/fabric/settings",
+        "routePattern": "/en/fabric/settings",
+        "finalUrl": "http://localhost:5173/en/fabric/settings?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "label"
         ]
       },
       {
-        "route": "/en/fabric/tenants",
+        "routePattern": "/en/fabric/tenants",
+        "finalUrl": "http://localhost:5173/en",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/fixed/income",
+        "routePattern": "/en/fixed-income",
+        "finalUrl": "http://localhost:5173/en/fixed-income?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/flow/builder",
+        "routePattern": "/en/flow-builder",
+        "finalUrl": "http://localhost:5173/en/core/flow-builder?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/global/intelligence",
+        "routePattern": "/en/global-intelligence",
+        "finalUrl": "http://localhost:5173/en/global-intelligence?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/glossary",
+        "routePattern": "/en/glossary",
+        "finalUrl": "http://localhost:5173/en/core/glossary?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/governance/changesets",
+        "routePattern": "/en/governance/changesets",
+        "finalUrl": "http://localhost:5173/en/governance/changesets?",
+        "isParam": false,
         "violations": 0,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/incidents/id",
-        "violations": 0,
-        "passes": 19,
+        "routePattern": "/en/incidents/:id",
+        "finalUrl": "http://localhost:5173/en/incidents/:id?",
         "isParam": true,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/intelligence",
+        "routePattern": "/en/intelligence",
+        "finalUrl": "http://localhost:5173/en/intelligence?",
+        "isParam": false,
         "violations": 0,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/intelligence/data/quality",
+        "routePattern": "/en/intelligence/data-quality",
+        "finalUrl": "http://localhost:5173/en/intelligence/data-quality?",
+        "isParam": false,
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/intelligence/index/advisor",
+        "routePattern": "/en/intelligence/index-advisor",
+        "finalUrl": "http://localhost:5173/en/intelligence/index-advisor?",
+        "isParam": false,
         "violations": 1,
         "passes": 22,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "select-name"
         ]
       },
       {
-        "route": "/en/intelligence/storage",
+        "routePattern": "/en/intelligence/storage",
+        "finalUrl": "http://localhost:5173/en/intelligence/storage?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/jit/request",
+        "routePattern": "/en/jit-request",
+        "finalUrl": "http://localhost:5173/en/jit-request?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/marketplace",
+        "routePattern": "/en/marketplace",
+        "finalUrl": "http://localhost:5173/en/marketplace?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/marketplace/components",
+        "routePattern": "/en/marketplace/components",
+        "finalUrl": "http://localhost:5173/en/marketplace/components?",
+        "isParam": false,
         "violations": 0,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/nlq",
+        "routePattern": "/en/nlq",
+        "finalUrl": "http://localhost:5173/en/nlq?",
+        "isParam": false,
         "violations": 1,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/observability",
+        "routePattern": "/en/observability",
+        "finalUrl": "http://localhost:5173/en/observability?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/observability/slos",
-        "violations": 1,
-        "passes": 20,
+        "routePattern": "/en/observability/slos",
+        "finalUrl": "http://localhost:5173/en/observability/slos?",
         "isParam": false,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "passes": 20,
+        "wasNonRepClean": false,
+        "violationIds": []
       },
       {
-        "route": "/en/optimization",
+        "routePattern": "/en/optimization",
+        "finalUrl": "http://localhost:5173/en/optimization?",
+        "isParam": false,
         "violations": 1,
         "passes": 22,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/optimization/optimizationId",
+        "routePattern": "/en/optimization/:optimizationId",
+        "finalUrl": "http://localhost:5173/en/optimization/:optimizationId?",
+        "isParam": true,
         "violations": 0,
         "passes": 19,
-        "isParam": true,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/page/designer",
+        "routePattern": "/en/page-designer",
+        "finalUrl": "http://localhost:5173/en/page-designer?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-command-name"
         ]
       },
       {
-        "route": "/en/page/studio",
+        "routePattern": "/en/page-studio",
+        "finalUrl": "http://localhost:5173/en/page-studio?",
+        "isParam": false,
         "violations": 1,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/pipelines/studio",
-        "violations": 1,
-        "passes": 26,
+        "routePattern": "/en/pipelines/studio",
+        "finalUrl": "http://localhost:5173/en/pipelines/studio?",
         "isParam": false,
-        "violationIds": [
-          "aria-input-field-name"
-        ]
-      },
-      {
-        "route": "/en/pipelines/studio/id",
         "violations": 1,
         "passes": 26,
-        "isParam": true,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/pipelines/triggers/new",
+        "routePattern": "/en/pipelines/studio/:id",
+        "finalUrl": "http://localhost:5173/en/pipelines/studio/:id?",
+        "isParam": true,
+        "violations": 1,
+        "passes": 26,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/pipelines/triggers/new",
+        "finalUrl": "http://localhost:5173/en/pipelines/triggers/new?",
+        "isParam": false,
         "violations": 1,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name"
         ]
       },
       {
-        "route": "/en/private/markets",
+        "routePattern": "/en/private-markets",
+        "finalUrl": "http://localhost:5173/en/private-markets?",
+        "isParam": false,
         "violations": 0,
         "passes": 22,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/query/builder",
-        "violations": 2,
-        "passes": 27,
+        "routePattern": "/en/query-builder",
+        "finalUrl": "http://localhost:5173/en/query-builder?",
         "isParam": false,
+        "violations": 1,
+        "passes": 27,
+        "wasNonRepClean": false,
         "violationIds": [
-          "aria-progressbar-name",
-          "list"
+          "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/rbac",
+        "routePattern": "/en/rbac",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/reports/builder",
+        "routePattern": "/en/reports/builder",
+        "finalUrl": "http://localhost:5173/en/reports/builder?",
+        "isParam": false,
         "violations": 3,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name",
           "aria-prohibited-attr",
@@ -1036,19 +1275,23 @@
         ]
       },
       {
-        "route": "/en/reports/expressions",
+        "routePattern": "/en/reports/expressions",
+        "finalUrl": "http://localhost:5173/en/reports/expressions?",
+        "isParam": false,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/reports/library",
+        "routePattern": "/en/reports/library",
+        "finalUrl": "http://localhost:5173/en/reports/library?",
+        "isParam": false,
         "violations": 3,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name",
           "list",
@@ -1056,27 +1299,33 @@
         ]
       },
       {
-        "route": "/en/reports/models",
+        "routePattern": "/en/reports/models",
+        "finalUrl": "http://localhost:5173/en/reports/models?",
+        "isParam": false,
         "violations": 0,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/reports/queries",
+        "routePattern": "/en/reports/queries",
+        "finalUrl": "http://localhost:5173/en/reports/queries?",
+        "isParam": false,
         "violations": 2,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name",
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/reports/reportId/edit",
+        "routePattern": "/en/reports/:reportId/edit",
+        "finalUrl": "http://localhost:5173/en/reports/:reportId/edit?",
+        "isParam": true,
         "violations": 3,
         "passes": 24,
-        "isParam": true,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-input-field-name",
           "aria-prohibited-attr",
@@ -1084,203 +1333,255 @@
         ]
       },
       {
-        "route": "/en/scheduler",
+        "routePattern": "/en/scheduler",
+        "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
+        "isParam": false,
         "violations": 1,
         "passes": 22,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "select-name"
         ]
       },
       {
-        "route": "/en/scheduler/calendars",
+        "routePattern": "/en/scheduler/calendars",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars?",
+        "isParam": false,
         "violations": 0,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/scheduler/calendars/calendarId/edit",
+        "routePattern": "/en/scheduler/calendars/:calendarId/edit",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars/:calendarId/edit?",
+        "isParam": true,
         "violations": 0,
         "passes": 25,
-        "isParam": true,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/scheduler/calendars/new",
+        "routePattern": "/en/scheduler/calendars/new",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars/new?",
+        "isParam": false,
         "violations": 0,
         "passes": 25,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/scheduler/executions",
-        "violations": 0,
-        "passes": 24,
+        "routePattern": "/en/scheduler/executions",
+        "finalUrl": "http://localhost:5173/en/scheduler/executions?",
         "isParam": false,
-        "violationIds": []
-      },
-      {
-        "route": "/en/scheduler/executions/executionId",
-        "violations": 0,
-        "passes": 19,
-        "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/en/scheduler/intelligence",
-        "violations": 1,
-        "passes": 22,
-        "isParam": false,
-        "violationIds": [
-          "select-name"
-        ]
-      },
-      {
-        "route": "/en/scheduler/jobs",
         "violations": 0,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/scheduler/jobs/jobId",
-        "violations": 1,
-        "passes": 24,
+        "routePattern": "/en/scheduler/executions/:executionId",
+        "finalUrl": "http://localhost:5173/en/scheduler/executions/:executionId?",
         "isParam": true,
-        "violationIds": [
-          "label"
-        ]
-      },
-      {
-        "route": "/en/scheduler/jobs/jobId/edit",
         "violations": 0,
         "passes": 19,
-        "isParam": true,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/scheduler/jobs/new",
+        "routePattern": "/en/scheduler-intelligence",
+        "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 22,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/jobs",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs",
+        "isParam": false,
+        "violations": 0,
+        "passes": 23,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/jobs/:jobId",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId?",
+        "isParam": true,
         "violations": 1,
         "passes": 24,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "label"
         ]
       },
       {
-        "route": "/en/schema/explorer",
+        "routePattern": "/en/scheduler/jobs/:jobId/edit",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId/edit?",
+        "isParam": true,
+        "violations": 1,
+        "passes": 24,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/jobs/new",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/new?",
+        "isParam": false,
+        "violations": 1,
+        "passes": 24,
+        "wasNonRepClean": false,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/schema-explorer",
+        "finalUrl": "http://localhost:5173/en/schema-explorer?",
+        "isParam": false,
         "violations": 1,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "scrollable-region-focusable"
         ]
       },
       {
-        "route": "/en/secrets/audit",
-        "violations": 1,
-        "passes": 24,
+        "routePattern": "/en/secrets/audit",
+        "finalUrl": "http://localhost:5173/en/secrets/audit?",
         "isParam": false,
-        "violationIds": [
-          "aria-input-field-name"
-        ]
-      },
-      {
-        "route": "/en/secrets/config",
         "violations": 0,
-        "passes": 22,
-        "isParam": false,
+        "passes": 9,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/secrets/monitoring",
+        "routePattern": "/en/secrets/config",
+        "finalUrl": "http://localhost:5173/en/secrets/config?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 9,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/secrets/monitoring",
+        "finalUrl": "http://localhost:5173/en/secrets/monitoring?",
+        "isParam": false,
         "violations": 1,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "aria-progressbar-name"
         ]
       },
       {
-        "route": "/en/semantic/health",
+        "routePattern": "/en/semantic-health",
+        "finalUrl": "http://localhost:5173/en/semantic-health?",
+        "isParam": false,
         "violations": 1,
         "passes": 26,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
       },
       {
-        "route": "/en/simulation",
-        "violations": 0,
-        "passes": 23,
+        "routePattern": "/en/simulation",
+        "finalUrl": "http://localhost:5173/en/simulation?",
         "isParam": false,
+        "violations": 0,
+        "passes": 22,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/simulation/compare",
+        "routePattern": "/en/simulation/compare",
+        "finalUrl": "http://localhost:5173/en/simulation/compare?",
+        "isParam": false,
         "violations": 0,
         "passes": 20,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/simulation/id",
+        "routePattern": "/en/simulation/:id",
+        "finalUrl": "http://localhost:5173/en/simulation/:id?",
+        "isParam": true,
         "violations": 0,
         "passes": 19,
-        "isParam": true,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/simulation/rebalance",
+        "routePattern": "/en/simulation/rebalance",
+        "finalUrl": "http://localhost:5173/en/simulation/rebalance?",
+        "isParam": false,
         "violations": 1,
         "passes": 23,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "select-name"
         ]
       },
       {
-        "route": "/en/tenants",
+        "routePattern": "/en/tenants",
+        "finalUrl": "http://localhost:5173/en/tenants?",
+        "isParam": false,
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/en/tenants/tenantId",
-        "violations": 0,
-        "passes": 19,
+        "routePattern": "/en/tenants/:tenantId",
+        "finalUrl": "http://localhost:5173/en/tenants/:tenantId?",
         "isParam": true,
-        "violationIds": []
-      },
-      {
-        "route": "/en/validation/rules",
         "violations": 0,
         "passes": 19,
-        "isParam": false,
+        "wasNonRepClean": true,
         "violationIds": []
       },
       {
-        "route": "/en/wealth/feed",
+        "routePattern": "/en/validation-rules",
+        "finalUrl": "http://localhost:5173/en/core/validation-rules?",
+        "isParam": false,
+        "violations": 0,
+        "passes": 19,
+        "wasNonRepClean": false,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/wealth/feed",
+        "finalUrl": "http://localhost:5173/en/wealth/feed?",
+        "isParam": false,
         "violations": 0,
         "passes": 9,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/login",
+        "routePattern": "/login",
+        "finalUrl": "http://localhost:5173/en",
+        "isParam": false,
         "violations": 0,
-        "passes": 19,
-        "isParam": false,
+        "passes": 15,
+        "wasNonRepClean": false,
         "violationIds": []
       },
       {
-        "route": "/page/studio",
+        "routePattern": "/page-studio",
+        "finalUrl": "http://localhost:5173/page-studio?",
+        "isParam": false,
         "violations": 1,
         "passes": 21,
-        "isParam": false,
+        "wasNonRepClean": false,
         "violationIds": [
           "button-name"
         ]
