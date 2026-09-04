@@ -65,7 +65,7 @@ func main() {
 	}
 	sweepCancel()
 
-	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil)
+	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil, dbURL)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Starting main Uisce Unified API server on %s...\n", addr)

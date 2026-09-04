@@ -765,7 +765,7 @@ func (a *redisClientAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
-func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
+func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps, rawDSN string) *chi.Mux {
 
 	// Create chi router and helper services required for setup
 	fmt.Println("DEBUG: SetupRouter INVOKED! [Version 3]")
@@ -1575,6 +1575,17 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	}
 	dataPipelineEngine := datapipeline.NewPipelineEngine(sqlxDB, dataPipelineRuleEngine, temporalClient)
 	dataPipelineHandler := datapipeline.NewDataPipelineHandler(sqlxDB, dataPipelineEngine)
+
+	if rawDSN != "" {
+		bus := datapipeline.NewTelemetryBus(sqlxDB)
+		if err := bus.Start(context.Background(), rawDSN); err != nil {
+			fmt.Printf("WARN: failed to start telemetry bus: %v\n", err)
+		} else {
+			dataPipelineEngine.AttachTelemetryBus(bus)
+			dataPipelineHandler.SetBus(bus)
+		}
+	}
+
 	dataPipelineHandler.RegisterRoutes(r)
 	srv.DataPipelineEngine = dataPipelineEngine
 

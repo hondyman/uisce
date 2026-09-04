@@ -17,6 +17,7 @@ import (
 type DataPipelineHandler struct {
 	db     *sqlx.DB
 	engine *PipelineEngine
+	bus    *TelemetryBus
 }
 
 // NewDataPipelineHandler creates a new handler instance
@@ -25,6 +26,11 @@ func NewDataPipelineHandler(db *sqlx.DB, engine *PipelineEngine) *DataPipelineHa
 		db:     db,
 		engine: engine,
 	}
+}
+
+// SetBus injects the TelemetryBus so the SSE handler can fan out via bus.Listen.
+func (h *DataPipelineHandler) SetBus(bus *TelemetryBus) {
+	h.bus = bus
 }
 
 // RegisterRoutes mounts the data pipeline routes on Chi router
