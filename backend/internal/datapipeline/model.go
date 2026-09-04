@@ -85,6 +85,7 @@ type PipelineExecutionRun struct {
 	TotalErrors     int64                  `json:"total_errors"`
 	PeakThroughput  float64                `json:"peak_throughput_rows_sec"`
 	StepTelemetry   map[string]StepMetrics `json:"step_telemetry"`
+	StepOrder      []string               `json:"step_order"` // node IDs in actual execution order
 	ErrorDetails    []string               `json:"error_details,omitempty"`
 	SampleOutput    []PipelineRecord       `json:"sample_output,omitempty"`
 }

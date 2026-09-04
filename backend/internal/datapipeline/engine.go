@@ -137,6 +137,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 		Status:        "running",
 		StartTime:     time.Now().UTC(),
 		StepTelemetry: make(map[string]StepMetrics),
+		StepOrder:     make([]string, 0),
 	}
 	if isDryRun {
 		run.Status = "simulated"
@@ -210,6 +211,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 		}
 
 		run.StepTelemetry[node.ID] = stepMetric
+		run.StepOrder = append(run.StepOrder, node.ID)
 		currentRecords = stepOut
 
 		if stepMetric.RowsPerSec > run.PeakThroughput {
