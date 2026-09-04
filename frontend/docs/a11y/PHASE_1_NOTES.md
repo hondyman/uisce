@@ -347,3 +347,39 @@ tests must stay paired.
   i18next suffix plurals.
 - Locale-shell routing matrix (10 tests, all passing): exercises
   `resolveLocaleRoute` — the single pure function the shell calls.
+
+## Lineage and multi-agent provenance
+
+This initiative was built by three agents with partial mutual visibility.
+The rule: draw lineage from `git branch --contains` / `git merge-base`
+outputs, never from commit-message prose.
+
+**Branch topology (studio-wireup is canonical):**
+
+| Commit | Author | Description |
+|--------|--------|-------------|
+| `4a89443654` | opencode | Phase 1 foundation: i18n, RTL, resolveLocaleRoute, ICU drop |
+| `df75247b7` | opencode | Claims: placeholder-lint + ACTIVE_LOCALES cache-hole fix. Stat: 2 files. Message/stat mismatch. |
+| `aeb4cf464` | opencode | Consolidation onto `wip/i18n-l10n-phase2`: all fixes in one commit. Verified fidelity via `git diff` against source. |
+| `809ad1a76` | (this session) | Phase 1 close: cache-hole fix (3 files), verified empty diff against aeb4cf464 |
+| `54fa9829c` | (this session) | Phase 1 close: es plural smoke test (1 file) |
+
+`security/auth-hardening` branch was examined as a recovery candidate but
+`security/auth-hardening:locales.ts` has zero hits for `getPreferredLocale` —
+its i18n content predates the function. No recovery there.
+
+`wip/i18n-l10n-phase2` (tip `aeb4cf464`) is the verified source for the
+Phase 1 close. Tip hash: `aeb4cf46498da2d9a8723270887d3f02275a72dc`.
+Branch deleted after content absorption (reflog holds ~90d).
+
+**Multi-agent context:** opencode authored the earlier Phase 1 commits and the
+df75247b7 mismatch; this session verified fidelity and closed Phase 1.
+Three independent agents with partial pictures is the root cause of the three
+commit-message mismatches. The lineage map is the mitigation.
+
+## Baseline provenance
+
+`docs/ts-baseline.txt` was regenerated and committed in `4a89443654`
+(ts-baseline.txt | 2296 ++++--------). This definitively retires
+the "self-fulfilling ratchet" question from two prior sessions: the
+baseline is a committed artifact, not a self-referential gate.
