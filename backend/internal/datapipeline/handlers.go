@@ -347,16 +347,17 @@ func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request
 	}
 
 	if durable {
-		workflowID, err := h.engine.ExecuteRunAsWorkflow(r.Context(), tenantID, payload.Pipeline, payload.Records)
+		workflowID, runID, err := h.engine.ExecuteRunAsWorkflow(r.Context(), tenantID, payload.Pipeline, payload.Records)
 		if err != nil {
 			http.Error(w, "Failed to start durable pipeline run: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(map[string]string{
+		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":      "submitted",
 			"workflow_id": workflowID,
+			"run_id":      runID.String(),
 		})
 		return
 	}

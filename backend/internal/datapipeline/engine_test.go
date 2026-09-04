@@ -367,3 +367,40 @@ func TestEngine_ValidatorNodeDispatch(t *testing.T) {
 		t.Fatalf("Expected 1 validation error, got %d: %v", len(errs), errs)
 	}
 }
+
+func TestExecuteRunWithRunID_HonorsPreallocatedID(t *testing.T) {
+	engine := NewPipelineEngine(nil, nil, nil)
+
+	dag := PipelineDAG{
+		Nodes: []PipelineNode{
+			{ID: "a", Type: "source", SubType: "raw_json", Label: "Source",
+				Config: map[string]interface{}{
+					"raw_data": []interface{}{
+						map[string]interface{}{"name": "alpha", "value": float64(100)},
+					},
+				}},
+			{ID: "b", Type: "loader", SubType: "catalog_graph", Label: "Sink",
+				Config: map[string]interface{}{
+					"node_type_id": "68d6d495-0992-4d92-ad2f-7f66dc1e7d78",
+				}},
+		},
+		Edges: []PipelineEdge{
+			{ID: "e1", Source: "a", Target: "b"},
+		},
+	}
+
+	preallocatedID := uuid.New()
+	tenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+
+	run, err := engine.executeRunWithRunID(context.Background(), tenantID, preallocatedID, PipelineDefinition{
+		ID:       uuid.New(),
+		TenantID: tenantID,
+		DAGJSON:  mustMarshal(dag),
+	}, nil, true)
+	if err != nil {
+		t.Fatalf("executeRunWithRunID failed: %v", err)
+	}
+	if run.RunID != preallocatedID {
+		t.Errorf("RunID: expected %s, got %s", preallocatedID.String(), run.RunID.String())
+	}
+}

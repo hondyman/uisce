@@ -95,7 +95,7 @@ func NewPipelineTriggerOutboxHandler(engine *PipelineEngine) events.EventHandler
 		}
 
 		if engine.temporalClient != nil {
-			_, err := engine.ExecuteRunAsWorkflow(ctx, tenantID, *def, []PipelineRecord{record})
+			_, _, err := engine.ExecuteRunAsWorkflow(ctx, tenantID, *def, []PipelineRecord{record})
 			return err
 		}
 		// No Temporal client configured (e.g. dev/test worker): fall back

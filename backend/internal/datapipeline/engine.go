@@ -135,14 +135,21 @@ func (e *PipelineEngine) CompileDAG(rawJSON json.RawMessage) (*PipelineDAG, erro
 	return &dag, nil
 }
 
-// ExecuteRun executes a pipeline DAG in parallel with full telemetry
+// ExecuteRun executes a pipeline DAG in parallel with full telemetry.
+// RunID is auto-generated via uuid.New().
 func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool) (*PipelineExecutionRun, error) {
+	return e.executeRunWithRunID(ctx, tenantID, uuid.New(), def, inputRecords, isDryRun)
+}
+
+// executeRunWithRunID is the internal implementation. runID may be pre-allocated
+// by the caller (e.g. ExecuteRunAsWorkflow) so the runID is known before
+// execution begins, enabling SSE subscription before the run starts.
+func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.UUID, runID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool) (*PipelineExecutionRun, error) {
 	dag, err := e.CompileDAG(def.DAGJSON)
 	if err != nil {
 		return nil, err
 	}
 
-	runID := uuid.New()
 	concurrency := def.Concurrency
 	if concurrency <= 0 {
 		concurrency = 8
@@ -175,7 +182,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 
 	orderedNodes, err := topologicalOrder(*dag)
 	if err != nil {
-		return nil, fmt.Errorf("ExecuteRun: invalid DAG: %w", err)
+		return nil, fmt.Errorf("executeRunWithRunID: invalid DAG: %w", err)
 	}
 
 	for _, node := range orderedNodes {
@@ -198,7 +205,6 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 			stepOut, stepErrs, stepErr = e.executeTransform(ctx, tenantID, node, currentRecords, concurrency)
 		case "loader", "writer", "sink":
 			if isDryRun {
-				// In dry-run simulation, mock the load without writing to DB
 				stepOut = currentRecords
 			} else {
 				stepOut, stepErr = e.executeLoader(ctx, tenantID, node, currentRecords, concurrency, batchSize)
@@ -256,7 +262,6 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 	if len(inputRecords) > 0 {
 		run.TotalRecordsIn = int64(len(inputRecords))
 	} else if len(run.StepTelemetry) > 0 {
-		// Take first step's records
 		for _, s := range run.StepTelemetry {
 			if s.NodeType == "source" || s.NodeType == "reader" {
 				run.TotalRecordsIn = s.RecordsOut
@@ -266,7 +271,6 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 	}
 	run.TotalRecordsOut = int64(len(currentRecords))
 
-	// Include sample preview
 	if len(currentRecords) > 10 {
 		run.SampleOutput = currentRecords[:10]
 	} else {
@@ -325,12 +329,17 @@ func (e *PipelineEngine) loadPipelineDefinition(ctx context.Context, tenantID uu
 // worker (cmd/worker), which polls workflows.DeployedBPTaskQueue
 // ("bp_queue") — NOT workflows.BPTaskQueue ("bp-framework-queue"), which no
 // deployed worker polls.
-func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord) (string, error) {
+// ExecuteRunAsWorkflow starts a durable, Temporal-backed execution of the
+// given pipeline definition and returns both the workflowID and the pre-allocated
+// runID. The runID is known before the activity starts so callers (e.g. SSE
+// subscription handlers) can subscribe to telemetry before execution begins.
+func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord) (workflowID string, runID uuid.UUID, err error) {
 	if e.temporalClient == nil {
-		return "", fmt.Errorf("pipeline engine has no temporal client configured")
+		return "", uuid.Nil, fmt.Errorf("pipeline engine has no temporal client configured")
 	}
 
-	workflowID := fmt.Sprintf("data-pipeline-%s-%d", def.ID, time.Now().UnixNano())
+	runID = uuid.New()
+	workflowID = fmt.Sprintf("data-pipeline-%s-%d", def.ID, time.Now().UnixNano())
 	options := client.StartWorkflowOptions{
 		ID:        workflowID,
 		TaskQueue: workflows.DeployedBPTaskQueue,
@@ -340,13 +349,14 @@ func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid
 		TenantID:     tenantID,
 		Definition:   def,
 		InputRecords: inputRecords,
+		RunID:        runID,
 	}
 
 	run, err := e.temporalClient.ExecuteWorkflow(ctx, options, RunPipelineDAGWorkflow, input)
 	if err != nil {
-		return "", fmt.Errorf("failed to start durable pipeline workflow: %w", err)
+		return "", uuid.Nil, fmt.Errorf("failed to start durable pipeline workflow: %w", err)
 	}
-	return run.GetID(), nil
+	return run.GetID(), runID, nil
 }
 
 func (e *PipelineEngine) executeSource(ctx context.Context, tenantID uuid.UUID, node PipelineNode) ([]PipelineRecord, error) {
