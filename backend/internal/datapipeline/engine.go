@@ -104,7 +104,13 @@ func (e *PipelineEngine) notifySubscribers(run PipelineExecutionRun, nodeID stri
 		}
 	}
 
-	if e.telemetryBus != nil && nodeID != "" {
+	if e.telemetryBus == nil {
+		return
+	}
+
+	if nodeID == "" {
+		_ = e.telemetryBus.NotifyCompletion(context.Background(), run)
+	} else {
 		_ = e.telemetryBus.NotifyStep(context.Background(), run, nodeID)
 	}
 }

@@ -124,25 +124,25 @@ func (b *TelemetryBus) NotifyStep(ctx context.Context, run PipelineExecutionRun,
 	}
 
 	step, ok := run.StepTelemetry[stepKey]
-	stepMap := map[string]interface{}{
-		"node_id":       step.NodeID,
-		"node_label":    step.NodeLabel,
-		"node_type":     step.NodeType,
-		"status":        step.Status,
-		"records_in":    step.RecordsIn,
-		"records_out":   step.RecordsOut,
-		"records_error": step.RecordsError,
-		"duration_ms":   step.Duration.Milliseconds(),
-		"rows_per_sec": step.RowsPerSec,
-	}
 	if !ok {
-		stepMap = nil
+		return nil
+	}
+
+	stepMap := map[string]interface{}{
+		"node_id":        step.NodeID,
+		"node_label":     step.NodeLabel,
+		"node_type":      step.NodeType,
+		"status":         step.Status,
+		"records_in":     step.RecordsIn,
+		"records_out":    step.RecordsOut,
+		"records_error":  step.RecordsError,
+		"duration_ms":    step.Duration.Milliseconds(),
+		"rows_per_sec":   step.RowsPerSec,
 	}
 
 	n := runNotification{
 		RunID: run.RunID.String(),
 		Step:  stepMap,
-		Run:   &run,
 	}
 
 	payload, err := json.Marshal(n)
@@ -152,6 +152,28 @@ func (b *TelemetryBus) NotifyStep(ctx context.Context, run PipelineExecutionRun,
 
 	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", pipelineRunChannel, string(payload)); err != nil {
 		return fmt.Errorf("pg_notify: %w", err)
+	}
+
+	return nil
+}
+
+func (b *TelemetryBus) NotifyCompletion(ctx context.Context, run PipelineExecutionRun) error {
+	if b.db == nil {
+		return nil
+	}
+
+	n := runNotification{
+		RunID: run.RunID.String(),
+		Run:   &run,
+	}
+
+	payload, err := json.Marshal(n)
+	if err != nil {
+		return fmt.Errorf("marshal completion notification: %w", err)
+	}
+
+	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", pipelineRunChannel, string(payload)); err != nil {
+		return fmt.Errorf("pg_notify completion: %w", err)
 	}
 
 	return nil
