@@ -35,6 +35,10 @@ type PipelineEngine struct {
 	runsMut     sync.RWMutex
 	activeRuns  map[string]*PipelineExecutionRun
 	subscribers map[string][]chan PipelineExecutionRun
+
+	// telemetryBus broadcasts run events via Postgres LISTEN/NOTIFY for
+	// external consumers (e.g. SSE bridges). May be nil.
+	telemetryBus *TelemetryBus
 }
 
 // NewPipelineEngine creates a new pipeline execution engine. ruleEngine and
@@ -53,6 +57,14 @@ func NewPipelineEngine(db *sqlx.DB, ruleEngine *rules.RuleEngine, temporalClient
 		activeRuns:     make(map[string]*PipelineExecutionRun),
 		subscribers:    make(map[string][]chan PipelineExecutionRun),
 	}
+}
+
+// AttachTelemetryBus wires a Postgres-backed TelemetryBus into the engine.
+// Calls NotifyRun on every subscriber notification, enabling SSE bridges and
+// other out-of-process consumers to receive real-time run events. May be nil
+// (e.g. in unit tests) — NotifyRun is a no-op when bus is unset.
+func (e *PipelineEngine) AttachTelemetryBus(bus *TelemetryBus) {
+	e.telemetryBus = bus
 }
 
 // SubscribeRun attaches a channel to stream live execution progress updates
@@ -90,6 +102,10 @@ func (e *PipelineEngine) notifySubscribers(run PipelineExecutionRun) {
 			default:
 			}
 		}
+	}
+
+	if e.telemetryBus != nil {
+		_ = e.telemetryBus.NotifyRun(run)
 	}
 }
 
