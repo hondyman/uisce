@@ -50,7 +50,6 @@ func (c *CatalogDriver) UpsertCatalogNode(ctx context.Context, tenantID uuid.UUI
 		qualifiedPath = nodeName
 	}
 	nodeTypeID, _ := node["node_type_id"].(string)
-	catalogType, _ := node["catalog_type"].(string)
 	description, _ := node["description"].(string)
 
 	propsJSON := "{}"
@@ -76,14 +75,13 @@ func (c *CatalogDriver) UpsertCatalogNode(ctx context.Context, tenantID uuid.UUI
 	query := `
 		INSERT INTO catalog_node (
 			id, tenant_id, node_name, qualified_path, node_type_id,
-			catalog_type, description, properties, core_id, is_active, created_at, updated_at
+			description, properties, core_id, is_active, created_at, updated_at
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9, true, NOW(), NOW()
+			$1, $2, $3, $4, $5, $6, $7::jsonb, $8, true, NOW(), NOW()
 		)
-		ON CONFLICT (tenant_id, qualified_path) DO UPDATE SET
+		ON CONFLICT (tenant_id, node_type_id, qualified_path) DO UPDATE SET
 			node_name = EXCLUDED.node_name,
 			node_type_id = COALESCE(EXCLUDED.node_type_id, catalog_node.node_type_id),
-			catalog_type = COALESCE(EXCLUDED.catalog_type, catalog_node.catalog_type),
 			description = COALESCE(EXCLUDED.description, catalog_node.description),
 			properties = catalog_node.properties || EXCLUDED.properties,
 			core_id = COALESCE(EXCLUDED.core_id, catalog_node.core_id),
@@ -94,7 +92,7 @@ func (c *CatalogDriver) UpsertCatalogNode(ctx context.Context, tenantID uuid.UUI
 	var returnedID uuid.UUID
 	err := c.db.QueryRowContext(ctx, query,
 		nodeID, tenantID, nodeName, qualifiedPath, nodeTypeID,
-		catalogType, description, propsJSON, coreID,
+		description, propsJSON, coreID,
 	).Scan(&returnedID)
 
 	if err != nil {

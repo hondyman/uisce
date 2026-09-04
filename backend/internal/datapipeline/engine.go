@@ -90,7 +90,7 @@ func (e *PipelineEngine) SubscribeRun(runID string) (chan PipelineExecutionRun, 
 	return ch, cleanup
 }
 
-func (e *PipelineEngine) notifySubscribers(run PipelineExecutionRun) {
+func (e *PipelineEngine) notifySubscribers(run PipelineExecutionRun, nodeID string) {
 	e.runsMut.RLock()
 	subs, ok := e.subscribers[run.RunID.String()]
 	e.runsMut.RUnlock()
@@ -104,8 +104,8 @@ func (e *PipelineEngine) notifySubscribers(run PipelineExecutionRun) {
 		}
 	}
 
-	if e.telemetryBus != nil {
-		_ = e.telemetryBus.NotifyRun(run)
+	if e.telemetryBus != nil && nodeID != "" {
+		_ = e.telemetryBus.NotifyStep(context.Background(), run, nodeID)
 	}
 }
 
@@ -163,7 +163,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 	e.activeRuns[runID.String()] = run
 	e.runsMut.Unlock()
 
-	e.notifySubscribers(*run)
+	e.notifySubscribers(*run, "")
 
 	currentRecords := inputRecords
 
@@ -219,7 +219,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 				now := time.Now().UTC()
 				run.EndTime = &now
 				run.StepTelemetry[node.ID] = stepMetric
-				e.notifySubscribers(*run)
+				e.notifySubscribers(*run, node.ID)
 				return run, stepErr
 			}
 		} else {
@@ -234,7 +234,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 			run.PeakThroughput = stepMetric.RowsPerSec
 		}
 
-		e.notifySubscribers(*run)
+		e.notifySubscribers(*run, node.ID)
 	}
 
 	now := time.Now().UTC()
@@ -267,7 +267,7 @@ func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def
 		run.SampleOutput = currentRecords
 	}
 
-	e.notifySubscribers(*run)
+	e.notifySubscribers(*run, "")
 	return run, nil
 }
 
@@ -620,11 +620,17 @@ func (e *PipelineEngine) executeLoader(ctx context.Context, tenantID uuid.UUID, 
 		var nodeRecords []PipelineRecord
 		var edgeRecords []PipelineRecord
 
+		nodeTypeID, _ := node.Config["node_type_id"].(string)
+
 		for _, r := range records {
 			if gType, ok := r["__graph_type"].(string); ok && gType == "edge" {
 				edgeRecords = append(edgeRecords, r)
 			} else {
-				nodeRecords = append(nodeRecords, r)
+				rec := cloneRecord(r)
+				if nodeTypeID != "" {
+					rec["node_type_id"] = nodeTypeID
+				}
+				nodeRecords = append(nodeRecords, rec)
 			}
 		}
 
@@ -658,4 +664,12 @@ func chunkRecords(records []PipelineRecord, size int) [][]PipelineRecord {
 		chunks = append(chunks, records[i:end])
 	}
 	return chunks
+}
+
+func cloneRecord(r PipelineRecord) PipelineRecord {
+	out := make(PipelineRecord)
+	for k, v := range r {
+		out[k] = v
+	}
+	return out
 }

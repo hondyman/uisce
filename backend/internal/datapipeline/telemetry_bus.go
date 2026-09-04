@@ -11,23 +11,28 @@ import (
 	"github.com/lib/pq"
 )
 
-const pipelineRunChannelPrefix = "pipeline_run_"
+const pipelineRunChannel = "pipeline_runs"
+
+type runNotification struct {
+	RunID string                 `json:"run_id"`
+	Step  map[string]interface{} `json:"step,omitempty"`
+	Run   *PipelineExecutionRun  `json:"run,omitempty"`
+}
 
 type TelemetryBus struct {
 	db *sqlx.DB
 
 	mut       sync.RWMutex
-	listeners map[string]chan PipelineExecutionRun
+	listeners map[string]chan *runNotification
 	done      chan struct{}
 
-	lsn     *pq.Listener
-	connStr string
+	lsn *pq.Listener
 }
 
 func NewTelemetryBus(db *sqlx.DB) *TelemetryBus {
 	return &TelemetryBus{
 		db:        db,
-		listeners: make(map[string]chan PipelineExecutionRun),
+		listeners: make(map[string]chan *runNotification),
 		done:      make(chan struct{}),
 	}
 }
@@ -37,24 +42,19 @@ func (b *TelemetryBus) Start(ctx context.Context, connStr string) error {
 		return fmt.Errorf("telemetry bus has no database")
 	}
 
-	b.connStr = connStr
-
 	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
 			fmt.Printf("telemetry bus listener error: %v\n", err)
 		}
 	}
 
-	minReconnect := 10 * time.Second
-	maxReconnect := time.Minute
-
-	b.lsn = pq.NewListener(connStr, minReconnect, maxReconnect, reportProblem)
+	b.lsn = pq.NewListener(connStr, 10*time.Second, time.Minute, reportProblem)
 	if b.lsn == nil {
 		return fmt.Errorf("failed to create pq listener")
 	}
 
-	if err := b.lsn.Listen(pipelineRunChannelPrefix + "all"); err != nil {
-		return fmt.Errorf("listen on wildcard channel: %w", err)
+	if err := b.lsn.Listen(pipelineRunChannel); err != nil {
+		return fmt.Errorf("listen %s: %w", pipelineRunChannel, err)
 	}
 
 	go b.dispatchLoop(ctx)
@@ -80,39 +80,33 @@ func (b *TelemetryBus) dispatchLoop(ctx context.Context) {
 }
 
 func (b *TelemetryBus) dispatch(notification *pq.Notification) {
-	if notification == nil {
+	if notification == nil || len(notification.Extra) == 0 {
 		return
 	}
 
-	if len(notification.Extra) == 0 {
+	var n runNotification
+	if err := json.Unmarshal([]byte(notification.Extra), &n); err != nil {
+		fmt.Printf("telemetry bus: failed to unmarshal notification: %v\n", err)
 		return
 	}
-
-	var run PipelineExecutionRun
-	if err := json.Unmarshal([]byte(notification.Extra), &run); err != nil {
-		fmt.Printf("telemetry bus: failed to unmarshal run: %v\n", err)
-		return
-	}
-
-	runID := run.RunID.String()
 
 	b.mut.RLock()
-	ch, ok := b.listeners[runID]
+	ch, ok := b.listeners[n.RunID]
 	b.mut.RUnlock()
 
 	if ok {
 		select {
-		case ch <- run:
+		case ch <- &n:
 		default:
 		}
 	}
 }
 
-func (b *TelemetryBus) Listen(runID string) (chan PipelineExecutionRun, func()) {
+func (b *TelemetryBus) Listen(runID string) (chan *runNotification, func()) {
 	b.mut.Lock()
 	defer b.mut.Unlock()
 
-	ch := make(chan PipelineExecutionRun, 10)
+	ch := make(chan *runNotification, 10)
 	b.listeners[runID] = ch
 
 	cleanup := func() {
@@ -124,36 +118,39 @@ func (b *TelemetryBus) Listen(runID string) (chan PipelineExecutionRun, func()) 
 	return ch, cleanup
 }
 
-func (b *TelemetryBus) NotifyRun(run PipelineExecutionRun) error {
+func (b *TelemetryBus) NotifyStep(ctx context.Context, run PipelineExecutionRun, stepKey string) error {
 	if b.db == nil {
 		return nil
 	}
 
-	payload, err := json.Marshal(run)
+	step, ok := run.StepTelemetry[stepKey]
+	stepMap := map[string]interface{}{
+		"node_id":       step.NodeID,
+		"node_label":    step.NodeLabel,
+		"node_type":     step.NodeType,
+		"status":        step.Status,
+		"records_in":    step.RecordsIn,
+		"records_out":   step.RecordsOut,
+		"records_error": step.RecordsError,
+		"duration_ms":   step.Duration.Milliseconds(),
+		"rows_per_sec": step.RowsPerSec,
+	}
+	if !ok {
+		stepMap = nil
+	}
+
+	n := runNotification{
+		RunID: run.RunID.String(),
+		Step:  stepMap,
+		Run:   &run,
+	}
+
+	payload, err := json.Marshal(n)
 	if err != nil {
-		return fmt.Errorf("marshal run for notify: %w", err)
+		return fmt.Errorf("marshal notification: %w", err)
 	}
 
-	channel := pipelineRunChannelPrefix + run.RunID.String()
-	if _, err := b.db.ExecContext(context.Background(), "SELECT pg_notify($1, $2)", channel, string(payload)); err != nil {
-		return fmt.Errorf("pg_notify: %w", err)
-	}
-
-	return nil
-}
-
-func (b *TelemetryBus) NotifyRunCtx(ctx context.Context, run PipelineExecutionRun) error {
-	if b.db == nil {
-		return nil
-	}
-
-	payload, err := json.Marshal(run)
-	if err != nil {
-		return fmt.Errorf("marshal run for notify: %w", err)
-	}
-
-	channel := pipelineRunChannelPrefix + run.RunID.String()
-	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", channel, string(payload)); err != nil {
+	if _, err := b.db.ExecContext(ctx, "SELECT pg_notify($1, $2)", pipelineRunChannel, string(payload)); err != nil {
 		return fmt.Errorf("pg_notify: %w", err)
 	}
 

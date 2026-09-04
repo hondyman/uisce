@@ -3,6 +3,8 @@ package datapipeline
 import (
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestTelemetryBus_ListenAndCleanup(t *testing.T) {
@@ -28,13 +30,15 @@ func TestTelemetryBus_ListenAndCleanup(t *testing.T) {
 	}
 }
 
-func TestTelemetryBus_NotifyRun_NopWhenNoDB(t *testing.T) {
+func TestTelemetryBus_NotifyStep_NopWhenNoDB(t *testing.T) {
 	bus := NewTelemetryBus(nil)
 
-	run := PipelineExecutionRun{}
-	err := bus.NotifyRun(run)
+	run := PipelineExecutionRun{
+		RunID: uuid.New(),
+	}
+	err := bus.NotifyStep(nil, run, "node-a")
 	if err != nil {
-		t.Errorf("NotifyRun with nil DB should be no-op, got: %v", err)
+		t.Errorf("NotifyStep with nil DB should be no-op, got: %v", err)
 	}
 }
 

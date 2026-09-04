@@ -29,69 +29,51 @@ func TestEngine_DiamondDAG_PersistsToCatalogAndRespectsOrder(t *testing.T) {
 
 	tenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
 	nodeTypeID := uuid.MustParse("68d6d495-0992-4d92-ad2f-7f66dc1e7d78")
+	runAID := uuid.New()
+	runBID := uuid.New()
+	patternA := runAID.String()[:8]
+	patternB := runBID.String()[:8]
 
 	engine := NewPipelineEngine(db, nil, nil)
 
-	dagForward := PipelineDAG{
-		Nodes: []PipelineNode{
-			{ID: "a", Type: "source", SubType: "raw_json", Label: "Source",
-				Config: map[string]interface{}{
-					"raw_data": []interface{}{
-						map[string]interface{}{"name": "alpha", "value": float64(100)},
-						map[string]interface{}{"name": "beta", "value": float64(200)},
-					},
-				}},
+	dag := func(pattern string) PipelineDAG {
+		return PipelineDAG{
+			Nodes: []PipelineNode{
+				{ID: "a", Type: "source", SubType: "raw_json", Label: "Source",
+					Config: map[string]interface{}{
+						"raw_data": []interface{}{
+							map[string]interface{}{
+								"qualified_path": "diamond/test-" + pattern + "/alpha",
+								"node_name":      "alpha",
+								"value":          float64(100),
+							},
+							map[string]interface{}{
+								"qualified_path": "diamond/test-" + pattern + "/beta",
+								"node_name":      "beta",
+								"value":          float64(200),
+							},
+						},
+					}},
 			{ID: "b", Type: "transform", SubType: "column_mapper", Label: "BranchB",
 				Config: map[string]interface{}{
-					"mappings": map[string]interface{}{"out_name": "name", "out_val": "value"},
+					"mappings": map[string]interface{}{"node_name": "node_name", "value": "value"},
 				}},
 			{ID: "c", Type: "transform", SubType: "column_mapper", Label: "BranchC",
 				Config: map[string]interface{}{
-					"mappings": map[string]interface{}{"out_name": "name", "out_val": "value"},
+					"mappings": map[string]interface{}{"node_name": "node_name", "value": "value"},
 				}},
-			{ID: "d", Type: "loader", SubType: "catalog_graph", Label: "CatalogSink",
-				Config: map[string]interface{}{
-					"node_type_id": nodeTypeID.String(),
-					"catalog_type": "diamond_sink",
-				}},
-		},
-		Edges: []PipelineEdge{
-			{ID: "e1", Source: "a", Target: "b"},
-			{ID: "e2", Source: "a", Target: "c"},
-			{ID: "e3", Source: "b", Target: "d"},
-			{ID: "e4", Source: "c", Target: "d"},
-		},
-	}
-
-	dagReversed := PipelineDAG{
-		Nodes: []PipelineNode{
-			{ID: "d", Type: "loader", SubType: "catalog_graph", Label: "CatalogSink",
-				Config: map[string]interface{}{
-					"node_type_id": nodeTypeID.String(),
-					"catalog_type": "diamond_sink",
-				}},
-			{ID: "b", Type: "transform", SubType: "column_mapper", Label: "BranchB",
-				Config: map[string]interface{}{
-					"mappings": map[string]interface{}{"out_name": "name", "out_val": "value"},
-				}},
-			{ID: "c", Type: "transform", SubType: "column_mapper", Label: "BranchC",
-				Config: map[string]interface{}{
-					"mappings": map[string]interface{}{"out_name": "name", "out_val": "value"},
-				}},
-			{ID: "a", Type: "source", SubType: "raw_json", Label: "Source",
-				Config: map[string]interface{}{
-					"raw_data": []interface{}{
-						map[string]interface{}{"name": "alpha", "value": float64(100)},
-						map[string]interface{}{"name": "beta", "value": float64(200)},
-					},
-				}},
-		},
-		Edges: []PipelineEdge{
-			{ID: "e1", Source: "a", Target: "b"},
-			{ID: "e2", Source: "a", Target: "c"},
-			{ID: "e3", Source: "b", Target: "d"},
-			{ID: "e4", Source: "c", Target: "d"},
-		},
+				{ID: "d", Type: "loader", SubType: "catalog_graph", Label: "CatalogSink",
+					Config: map[string]interface{}{
+						"node_type_id": nodeTypeID.String(),
+					}},
+			},
+			Edges: []PipelineEdge{
+				{ID: "e1", Source: "a", Target: "b"},
+				{ID: "e2", Source: "a", Target: "c"},
+				{ID: "e3", Source: "b", Target: "d"},
+				{ID: "e4", Source: "c", Target: "d"},
+			},
+		}
 	}
 
 	preClean := "DELETE FROM catalog_node WHERE qualified_path LIKE 'diamond/test-%'"
@@ -100,26 +82,26 @@ func TestEngine_DiamondDAG_PersistsToCatalogAndRespectsOrder(t *testing.T) {
 	}
 
 	runA, err := engine.ExecuteRun(ctx, tenantID, PipelineDefinition{
-		ID:          uuid.New(),
+		ID:          runAID,
 		TenantID:    tenantID,
 		Name:        "Diamond Forward",
-		DAGJSON:     mustMarshal(dagForward),
+		DAGJSON:     mustMarshal(dag(patternA)),
 		Concurrency: 4,
 		BatchSize:   100,
-		ErrorPolicy: "skip_and_log",
+		ErrorPolicy: "fail_fast",
 	}, nil, false)
 	if err != nil {
 		t.Fatalf("forward run failed: %v", err)
 	}
 
 	runB, err := engine.ExecuteRun(ctx, tenantID, PipelineDefinition{
-		ID:          uuid.New(),
+		ID:          runBID,
 		TenantID:    tenantID,
 		Name:        "Diamond Reversed",
-		DAGJSON:     mustMarshal(dagReversed),
+		DAGJSON:     mustMarshal(dag(patternB)),
 		Concurrency: 4,
 		BatchSize:   100,
-		ErrorPolicy: "skip_and_log",
+		ErrorPolicy: "fail_fast",
 	}, nil, false)
 	if err != nil {
 		t.Fatalf("reversed run failed: %v", err)
@@ -158,8 +140,41 @@ func TestEngine_DiamondDAG_PersistsToCatalogAndRespectsOrder(t *testing.T) {
 		t.Errorf("forward run produced 0 records")
 	}
 
-	afterClean := "DELETE FROM catalog_node WHERE qualified_path LIKE 'diamond/test-%'"
-	if _, err := db.ExecContext(ctx, afterClean); err != nil {
+	var countA int
+	err = db.GetContext(ctx, &countA,
+		"SELECT COUNT(*) FROM catalog_node WHERE tenant_id = $1 AND qualified_path LIKE 'diamond/test-"+patternA+"%'",
+		tenantID)
+	if err != nil {
+		t.Fatalf("catalog query A failed: %v", err)
+	}
+	if countA != 2 {
+		t.Errorf("forward run: expected 2 rows in catalog_node, got %d (qualified_path LIKE 'diamond/test-%s%%')", countA, patternA)
+	}
+
+	var countB int
+	err = db.GetContext(ctx, &countB,
+		"SELECT COUNT(*) FROM catalog_node WHERE tenant_id = $1 AND qualified_path LIKE 'diamond/test-"+patternB+"%'",
+		tenantID)
+	if err != nil {
+		t.Fatalf("catalog query B failed: %v", err)
+	}
+	if countB != 2 {
+		t.Errorf("reversed run: expected 2 rows in catalog_node, got %d (qualified_path LIKE 'diamond/test-%s%%')", countB, patternB)
+	}
+
+	var nodeNameA string
+	err = db.GetContext(ctx, &nodeNameA,
+		"SELECT node_name FROM catalog_node WHERE tenant_id = $1 AND qualified_path = 'diamond/test-"+patternA+"/alpha' LIMIT 1",
+		tenantID)
+	if err != nil {
+		t.Fatalf("node_name query failed: %v", err)
+	}
+	if nodeNameA != "alpha" {
+		t.Errorf("node_name mismatch: expected 'alpha', got %q", nodeNameA)
+	}
+
+	postClean := "DELETE FROM catalog_node WHERE qualified_path LIKE 'diamond/test-%'"
+	if _, err := db.ExecContext(ctx, postClean); err != nil {
 		t.Logf("post-cleanup failed (non-fatal): %v", err)
 	}
 }
