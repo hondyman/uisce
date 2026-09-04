@@ -74,8 +74,8 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
       if (authLost) {
         throw new Error(
           `auth lost on ${route} — app redirected to ${url}. ` +
-          `This means the fake JWT was rejected by oidc-client. ` +
-          `Set E2E_JWT to a real Keycloak access_token to fix.`,
+          `Token may be expired or rejected by oidc-client. ` +
+          `Set E2E_JWT to a real Keycloak access_token.`,
         );
       }
 
