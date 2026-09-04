@@ -8,31 +8,47 @@ import { test as setup } from '@playwright/test';
  * with a JWT-shaped payload and a tenant, then expose it via storageState so
  * axe specs run authenticated.
  *
- * NOTE: this is a structural fixture for offline/CI use; the real JWT comes
- * from the auth-service in production. Replace LOCAL_STORAGE_AUTH with an
- * apiClient login call when the auth fixture is wired up.
+ * oidc-client validates tokens against Keycloak on load; the fake JWT is accepted
+ * because loadUser() returns null (Keycloak unreachable from test env) and the
+ * stored auth is retained. Token expiry is set far in the future to prevent
+ * isTokenExpired() triggering a redirect.
+ *
+ * To upgrade to real auth: obtain a Keycloak access_token for a seeded test user
+ * and set E2E_JWT in the environment. Without it, the fixture falls back to the
+ * fake JWT which suffices for route-level axe scanning.
  */
-const LOCAL_STORAGE_AUTH = {
-  auth_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake',
-  user: {
-    id: '00000000-0000-0000-0000-000000000001',
-    username: 'a11y-fixture',
-    email: 'a11y@example.com',
-    role: 'admin',
-  },
-  selected_tenant: JSON.stringify({
-    id: '00000000-0000-0000-0000-000000000000',
-    display_name: 'Dev Tenant',
-  }),
-  appLocale: 'en',
+const E2E_JWT = process.env.E2E_JWT ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
+const EXPIRES_AT = Date.now() + 86400 * 1000;
+
+const E2E_USER = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'a11y@example.com',
+  name: 'A11y Fixture',
+  role: 'admin',
+  organization: 'E2E Test',
+  permissions: [],
+  is_active: true,
+  roles: ['admin', 'user'],
+  is_core_admin: true,
+  isCoreAdmin: true,
+  is_admin: true,
+  is_global_admin: true,
 };
 
 setup('seed auth storage', async ({ page, context }) => {
   await page.goto('/');
-  await page.evaluate((auth) => {
-    for (const [k, v] of Object.entries(auth)) {
-      localStorage.setItem(k, v);
-    }
-  }, LOCAL_STORAGE_AUTH);
+  await page.evaluate(
+    ({ jwt, user, expiresAt }) => {
+      localStorage.setItem('auth_token', jwt);
+      localStorage.setItem('auth_user', JSON.stringify(user));
+      localStorage.setItem('auth_expires_at', expiresAt.toString());
+      localStorage.setItem('selected_tenant', JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000000',
+        display_name: 'Dev Tenant',
+      }));
+      localStorage.setItem('appLocale', 'en');
+    },
+    { jwt: E2E_JWT, user: E2E_USER, expiresAt: EXPIRES_AT },
+  );
   await context.storageState({ path: 'e2e/a11y/.auth-storage.json' });
 });
