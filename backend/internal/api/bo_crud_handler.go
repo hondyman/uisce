@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -183,6 +184,14 @@ func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingT
 	return "", false
 }
 
+// extractTenantUUIDFromRequest resolves the tenant that OLTP writes (record
+// create/update/delete) are scoped to. It NEVER trusts the raw X-Tenant-ID
+// header directly: the header is only honored when security.AuthInfo
+// (populated by AuthContextMiddleware from a verified JWT) confirms the
+// caller is a global admin/ops, or the header names a tenant already in the
+// caller's own JWT-issued tenant list. Any unauthorized/unauthenticated
+// request resolves to uuid.Nil so callers must reject it, rather than
+// silently falling back to a default tenant.
 func extractTenantUUIDFromRequest(r *http.Request) uuid.UUID {
 	claims := jwtmiddleware.GetClaimsFromContext(r)
 	if claims != nil && claims.TenantID != "" {
@@ -190,18 +199,47 @@ func extractTenantUUIDFromRequest(r *http.Request) uuid.UUID {
 			return id
 		}
 	}
+
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return uuid.Nil
+	}
+
 	tenantHeader := r.Header.Get("X-Tenant-ID")
-	if tenantHeader != "" {
-		if id, err := uuid.Parse(tenantHeader); err == nil {
-			return id
+	if tenantHeader == "" {
+		if len(auth.TenantIDs) > 0 {
+			if id, err := uuid.Parse(auth.TenantIDs[0]); err == nil {
+				return id
+			}
+		}
+		return uuid.Nil
+	}
+
+	authorized := auth.IsGlobalAdmin
+	if !authorized {
+		for _, tid := range auth.TenantIDs {
+			if tid == tenantHeader {
+				authorized = true
+				break
+			}
 		}
 	}
-	return uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	if !authorized {
+		return uuid.Nil
+	}
+	if id, err := uuid.Parse(tenantHeader); err == nil {
+		return id
+	}
+	return uuid.Nil
 }
 
 // HandleUpdateBORecord commits validated OLTP mutations with Cardinal Rule 7 tenant scoping
 func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -299,6 +337,10 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 // HandleCreateBORecord creates a new record in the driving table
 func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	var payload map[string]interface{}
@@ -381,6 +423,10 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 // HandleGetBORecord hydrates a single record by ID
 func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -432,6 +478,10 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 // HandleListBORecords provides paginated / infinite-scroll chunk loading
 func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
@@ -509,6 +559,10 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 // HandleDeleteBORecord deletes or soft-deletes a record
 func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -556,6 +610,10 @@ type TopologyRelationship struct {
 // HandleGetBOTopologySummary inspects the catalog graph and subtype registry
 func (h *BOCRUDHandler) HandleGetBOTopologySummary(w http.ResponseWriter, r *http.Request) {
 	tenantID := extractTenantUUIDFromRequest(r)
+	if tenantID == uuid.Nil {
+		http.Error(w, `{"error":"unauthorized: valid tenant context required"}`, http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	// 1. Discover Subtypes from oms.subtype_registry

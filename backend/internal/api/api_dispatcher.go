@@ -189,10 +189,11 @@ type CreateFieldRequest struct {
 
 // ListApiDatasources lists all inventoried API datasources
 func (h *ApiDispatcherHandler) ListApiDatasources(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 
 	query := `
 		SELECT cn.id, cn.node_name, cn.qualified_path, cn.description, 
@@ -254,10 +255,11 @@ func (h *ApiDispatcherHandler) ListApiDatasources(w http.ResponseWriter, r *http
 
 // ListApiEndpoints lists all endpoints with their parent API, resource, and counts
 func (h *ApiDispatcherHandler) ListApiEndpoints(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 
 	query := `
 		SELECT ep.id, ep.node_name, ep.qualified_path, ep.description,
@@ -329,10 +331,11 @@ func (h *ApiDispatcherHandler) ListApiEndpoints(w http.ResponseWriter, r *http.R
 // GetApiEndpointDetail returns detailed metadata for a single endpoint
 func (h *ApiDispatcherHandler) GetApiEndpointDetail(w http.ResponseWriter, r *http.Request) {
 	endpointID := chi.URLParam(r, "id")
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 
 	query := `
 		SELECT ep.id, ep.node_name, ep.qualified_path, ep.description,
@@ -470,10 +473,11 @@ func (h *ApiDispatcherHandler) ListApiFields(w http.ResponseWriter, r *http.Requ
 
 // ListSemanticTerms lists searchable semantic terms for mapping
 func (h *ApiDispatcherHandler) ListSemanticTerms(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 	search := r.URL.Query().Get("q")
 
 	query := `
@@ -841,10 +845,11 @@ func (h *ApiDispatcherHandler) GetApiLineage(w http.ResponseWriter, r *http.Requ
 
 // GetTenantConnection returns the tenant's instance URL and credentials
 func (h *ApiDispatcherHandler) GetTenantConnection(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 	dsID := r.URL.Query().Get("api_datasource_id")
 	if tenantID == "" || dsID == "" {
 		http.Error(w, "tenant_id and api_datasource_id are required", http.StatusBadRequest)
@@ -1031,12 +1036,16 @@ func (h *ApiDispatcherHandler) ExecuteEndpoint(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	tenantID := req.TenantID
-	if tenantID == "" {
-		tenantID = r.URL.Query().Get("tenant_id")
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it. req.TenantID (request body) is
+	// client-supplied too, so it is only honored as a fallback for verified
+	// global admins/ops — never trusted for a regular tenant-scoped caller.
+	tenantID := getSecureTenantID(r)
+	if tenantID == "" && req.TenantID != "" {
+		if auth, ok := security.AuthInfoFromContext(r.Context()); ok && auth.IsGlobalAdmin {
+			tenantID = req.TenantID
+		}
 	}
 
 	// 1. Fetch endpoint node, parent resource, and parent datasource
@@ -1562,10 +1571,11 @@ func (h *ApiDispatcherHandler) writeAuditEntry(ctx context.Context, entry auditE
 // tenant. When endpoint_id is supplied, only entries for that endpoint are
 // returned. Results are limited to the most recent N rows.
 func (h *ApiDispatcherHandler) ListDispatchAudit(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header /
+	// tenant_id query param against the caller's JWT-issued tenant list /
+	// global-admin status before trusting it; it never trusts either raw
+	// client-supplied value directly.
+	tenantID := getSecureTenantID(r)
 	if tenantID == "" {
 		http.Error(w, "tenant_id is required", http.StatusBadRequest)
 		return

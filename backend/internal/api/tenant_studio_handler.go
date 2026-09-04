@@ -39,12 +39,20 @@ func (h *TenantStudioHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
+// getTenantID resolves the tenant for tenant-studio operations (entitlement
+// management). It NEVER trusts the raw X-Tenant-ID header directly: the
+// header (and jwtmiddleware.GetTenantIDFromContext, which is never actually
+// populated in this app) are only honored as a fallback for verified global
+// admins/ops (per security.AuthInfo, populated by AuthContextMiddleware from
+// a verified JWT).
 func (h *TenantStudioHandler) getTenantID(r *http.Request) (uuid.UUID, error) {
-	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok && len(authInfo.TenantIDs) > 0 {
+	authInfo, ok := security.AuthInfoFromContext(r.Context())
+	if ok && len(authInfo.TenantIDs) > 0 {
 		return uuid.Parse(authInfo.TenantIDs[0])
 	}
+
 	tenantIDStr := jwtmiddleware.GetTenantIDFromContext(r)
-	if tenantIDStr == "" {
+	if tenantIDStr == "" && ok && authInfo.IsGlobalAdmin {
 		tenantIDStr = r.Header.Get("X-Tenant-ID")
 	}
 	if tenantIDStr == "" {

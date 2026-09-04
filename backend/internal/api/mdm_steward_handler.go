@@ -39,10 +39,10 @@ func NewMDMStewardHandler(db *sqlx.DB, tc client.Client, outbox *audit.Transacti
 
 func (h *MDMStewardHandler) GetExceptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	if tenantIDStr == "" {
-		tenantIDStr = r.URL.Query().Get("tenantId")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts a raw header/query param directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)
@@ -106,10 +106,10 @@ func (h *MDMStewardHandler) GetExceptions(w http.ResponseWriter, r *http.Request
 
 func (h *MDMStewardHandler) ApplyOverride(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	if tenantIDStr == "" {
-		tenantIDStr = r.URL.Query().Get("tenantId")
-	}
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts a raw header/query param directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)

@@ -41,7 +41,10 @@ func (h *ReportScheduleHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *ReportScheduleHandler) ListCalendars(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		// Fallback mock calendars if tenant id header not present or invalid
@@ -85,7 +88,10 @@ func (h *ReportScheduleHandler) ListCalendars(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ReportScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -141,7 +147,10 @@ type CreateScheduleRequest struct {
 }
 
 func (h *ReportScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		tenantID = uuid.New()
@@ -284,7 +293,10 @@ func (h *ReportScheduleHandler) GetBatchTelemetry(w http.ResponseWriter, r *http
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		// Fallback tenant query if header missing
@@ -310,7 +322,10 @@ func (h *ReportScheduleHandler) RetryBatchDLQ(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		_ = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
@@ -343,7 +358,10 @@ func (h *ReportScheduleHandler) SyncCalendarHolidays(w http.ResponseWriter, r *h
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		_ = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.tenant_exchange_calendars WHERE id = $1`, calendarID)

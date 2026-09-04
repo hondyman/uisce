@@ -35,14 +35,17 @@ func (h *ShadowHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *ShadowHandler) HandleStartJob(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
+	// getSecureTenantID (helpers.go) validates the X-Tenant-ID header against
+	// the caller's JWT-issued tenant list / global-admin status before
+	// trusting it; it never trusts the raw header directly.
+	tenantIDStr := getSecureTenantID(r)
 	if tenantIDStr == "" {
-		http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
+		http.Error(w, "valid tenant context is required", http.StatusUnauthorized)
 		return
 	}
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
-		http.Error(w, "invalid X-Tenant-ID header", http.StatusBadRequest)
+		http.Error(w, "invalid tenant context", http.StatusBadRequest)
 		return
 	}
 

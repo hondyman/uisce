@@ -297,6 +297,64 @@ func TestSecurityContextFromRequest_InvalidRegion(t *testing.T) {
 	assert.Contains(t, err.Error(), "not configured")
 }
 
+// TestSecurityContextFromRequest_TenantIsolation proves that a client cannot
+// use the X-Tenant-ID header (or tenant_id query param) to impersonate a
+// tenant that is not in their own JWT-issued tenant list. Before the fix,
+// the client-supplied value was merged into auth.TenantIDs *before* the
+// "is this tenant allowed" check ran, making that check tautological.
+func TestSecurityContextFromRequest_TenantIsolation(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Datasource-Id", "ds-123")
+	req.Header.Set("X-Region", "us-east-1")
+	// Attacker-controlled header claims a tenant the user does not belong to.
+	req.Header.Set("X-Tenant-ID", "tenant-victim")
+
+	authInfo := security.AuthInfo{
+		UserID:    "user-attacker",
+		Roles:     []string{"user"}, // not global_admin
+		TenantIDs: []string{"tenant-attacker"},
+	}
+	ctx := security.WithAuthInfo(req.Context(), authInfo)
+	req = req.WithContext(ctx)
+
+	deps := SecurityContextDeps{
+		Resolver: &MockDatasourceResolver{},
+	}
+
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
+
+	require.Error(t, err, "a non-admin user must not be able to access a tenant outside their JWT tenant list via X-Tenant-ID")
+	assert.Nil(t, secCtx)
+	assert.Contains(t, err.Error(), "not authorized")
+}
+
+// TestSecurityContextFromRequest_TenantIsolation_GlobalAdminAllowed proves
+// that a global admin (whose whole point is cross-tenant access) can still
+// use X-Tenant-ID to select a tenant.
+func TestSecurityContextFromRequest_TenantIsolation_GlobalAdminAllowed(t *testing.T) {
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("X-Datasource-Id", "ds-123")
+	req.Header.Set("X-Region", "us-east-1")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+
+	authInfo := security.AuthInfo{
+		UserID:    "user-admin",
+		Roles:     []string{"global_admin"},
+		TenantIDs: []string{},
+	}
+	ctx := security.WithAuthInfo(req.Context(), authInfo)
+	req = req.WithContext(ctx)
+
+	deps := SecurityContextDeps{
+		Resolver: &MockDatasourceResolver{},
+	}
+
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
+
+	require.NoError(t, err)
+	assert.Equal(t, "tenant-123", secCtx.TenantID)
+}
+
 func TestSecurityContextFromRequest_NilResolver(t *testing.T) {
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("X-Datasource-Id", "ds-123")

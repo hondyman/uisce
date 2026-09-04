@@ -21,7 +21,7 @@ func NewQueryRouter(auditor *QueryExecutionAuditor) *QueryRouter {
 func (r *QueryRouter) HandleSemanticQuery(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	tenantID, err := uuid.Parse(req.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(req))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context (Rule 7)"}`, http.StatusBadRequest)
 		return
@@ -83,7 +83,7 @@ func (r *QueryRouter) HandleSemanticQuery(w http.ResponseWriter, req *http.Reque
 func (r *QueryRouter) HandleSSRSReportRender(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	tenantID, err := uuid.Parse(req.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(req))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context (Rule 7)"}`, http.StatusBadRequest)
 		return

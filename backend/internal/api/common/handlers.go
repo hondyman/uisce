@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -147,9 +148,29 @@ func GetTenantScope(r *http.Request) (tenantID, datasourceID string, err error) 
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
 		tenantID = claims.TenantID
 	}
-	// Try headers
+	// Fall back to the X-Tenant-ID header only when security.AuthInfo
+	// (populated by AuthContextMiddleware from a verified JWT) actually
+	// authorizes it: the caller is a global admin/ops, or the header names a
+	// tenant already present in the caller's JWT-issued tenant list. Never
+	// trust the raw header for an unauthenticated or unauthorized caller.
 	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+		if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+			headerTenant := r.Header.Get("X-Tenant-ID")
+			if headerTenant != "" {
+				if auth.IsGlobalAdmin {
+					tenantID = headerTenant
+				} else {
+					for _, tid := range auth.TenantIDs {
+						if tid == headerTenant {
+							tenantID = headerTenant
+							break
+						}
+					}
+				}
+			} else if len(auth.TenantIDs) > 0 {
+				tenantID = auth.TenantIDs[0]
+			}
+		}
 	}
 	datasourceID = r.Header.Get("X-Tenant-Datasource-ID")
 

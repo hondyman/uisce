@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -31,16 +32,30 @@ func (h *DataQualityHandler) RegisterRoutes(r chi.Router) {
 	r.Patch("/business-objects/{id}/fields/{fieldId}/fallback", h.SetFieldFallback)
 }
 
+// extractTenantID resolves the tenant for data-quality audit/gatekeeper
+// operations. It NEVER trusts the raw X-Tenant-ID header: the header is
+// only honored when a valid JWT is present and ValidateTenantAccess
+// confirms that JWT is entitled to the requested tenant (including
+// core/global admins, who may select any tenant).
 func (h *DataQualityHandler) extractTenantID(r *http.Request) uuid.UUID {
-	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
+	claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
+	if err != nil || claims == nil {
+		return uuid.Nil
+	}
+
+	headerTid := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if headerTid == "" {
 		if tid, err := uuid.Parse(claims.TenantID); err == nil {
 			return tid
 		}
+		return uuid.Nil
 	}
-	if headerTid := r.Header.Get("X-Tenant-ID"); headerTid != "" {
-		if tid, err := uuid.Parse(headerTid); err == nil {
-			return tid
-		}
+
+	if verr := jwtmiddleware.ValidateTenantAccess(claims, headerTid); verr != nil {
+		return uuid.Nil
+	}
+	if tid, err := uuid.Parse(headerTid); err == nil {
+		return tid
 	}
 	return uuid.Nil
 }

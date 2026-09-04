@@ -65,11 +65,38 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 		targetTenantID = strings.TrimSpace(r.URL.Query().Get("tenant_id"))
 	}
 	if targetTenantID != "" {
+		// SECURITY: the client-supplied tenant value must be validated against
+		// the JWT-issued tenant list (or the caller must be a global admin)
+		// BEFORE it is trusted. Never merge an unvalidated client value into
+		// auth.TenantIDs first — that would make the "is this tenant allowed"
+		// check tautological.
+		allowed := isGlobalAdmin
+		if !allowed {
+			for _, tid := range auth.TenantIDs {
+				if tid == targetTenantID {
+					allowed = true
+					break
+				}
+			}
+		}
+		if !allowed {
+			err := fmt.Errorf("tenant %s is not authorized for this user", targetTenantID)
+			logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user=%s requested tenant=%s not in JWT tenantIDs=%v and not global admin: %v", auth.UserID, targetTenantID, auth.TenantIDs, err)
+			return nil, r.Context(), err
+		}
+		// Value is now validated: put it first so BuildContext treats it as the
+		// primary scoped tenant (needed for global admins acting on a tenant
+		// outside their own JWT tenant list).
 		if len(auth.TenantIDs) == 0 {
 			auth.TenantIDs = []string{targetTenantID}
 		} else {
-			// Prepend targetTenantID so BuildContext treats it as the primary scoped tenant
-			auth.TenantIDs = append([]string{targetTenantID}, auth.TenantIDs...)
+			filtered := make([]string, 0, len(auth.TenantIDs))
+			for _, tid := range auth.TenantIDs {
+				if tid != targetTenantID {
+					filtered = append(filtered, tid)
+				}
+			}
+			auth.TenantIDs = append([]string{targetTenantID}, filtered...)
 		}
 	}
 

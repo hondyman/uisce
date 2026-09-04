@@ -40,9 +40,12 @@ type tagSuggestionInput struct {
 
 func handleListSemanticTags(db *sqlx.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.Header.Get("X-Tenant-ID")
+		// getSecureTenantID (helpers.go) validates the X-Tenant-ID header
+		// against the caller's JWT-issued tenant list / global-admin status
+		// before trusting it; it never trusts the raw header directly.
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "X-Tenant-ID header is required", "missing_tenant", nil)
+			writeJSONError(w, http.StatusBadRequest, "valid tenant context is required", "missing_tenant", nil)
 			return
 		}
 
@@ -81,9 +84,12 @@ func handleListSemanticTags(db *sqlx.DB) http.HandlerFunc {
 
 func handleSuggestSemanticTags(db *sqlx.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		tenantID := r.Header.Get("X-Tenant-ID")
+		// getSecureTenantID (helpers.go) validates the X-Tenant-ID header
+		// against the caller's JWT-issued tenant list / global-admin status
+		// before trusting it; it never trusts the raw header directly.
+		tenantID := getSecureTenantID(r)
 		if tenantID == "" {
-			writeJSONError(w, http.StatusBadRequest, "X-Tenant-ID header is required", "missing_tenant", nil)
+			writeJSONError(w, http.StatusBadRequest, "valid tenant context is required", "missing_tenant", nil)
 			return
 		}
 

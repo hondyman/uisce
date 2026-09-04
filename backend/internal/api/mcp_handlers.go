@@ -31,7 +31,7 @@ func (h *MCPHandler) ListTools(w http.ResponseWriter, r *http.Request) {
 // ExecuteTool handles standardized MCP tool calls
 func (h *MCPHandler) ExecuteTool(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantID, err := uuid.Parse(r.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(r))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)
 		return
@@ -58,7 +58,7 @@ func (h *MCPHandler) ExecuteTool(w http.ResponseWriter, r *http.Request) {
 // OmniboxSearch coordinates natural language intent classification and AST compilation
 func (h *MCPHandler) OmniboxSearch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantID, err := uuid.Parse(r.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(r))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)
 		return

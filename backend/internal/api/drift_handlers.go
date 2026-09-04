@@ -26,7 +26,7 @@ func NewDriftHandler(db *sqlx.DB, patchService *drift.PatchService) *DriftHandle
 // GetPendingProposals returns all pending schema drift remediation proposals
 func (h *DriftHandler) GetPendingProposals(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantID, err := uuid.Parse(r.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(r))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)
 		return
@@ -72,7 +72,7 @@ func (h *DriftHandler) GetPendingProposals(w http.ResponseWriter, r *http.Reques
 // ApplyProposal executes atomic 1-click hot-swap patch
 func (h *DriftHandler) ApplyProposal(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	tenantID, err := uuid.Parse(r.Header.Get("X-Tenant-ID"))
+	tenantID, err := uuid.Parse(getSecureTenantID(r))
 	if err != nil {
 		http.Error(w, `{"error":"invalid tenant context"}`, http.StatusBadRequest)
 		return

@@ -45,11 +45,29 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 	})
 }
 
+// getTenantIDFromRequest resolves the tenant to operate on. It NEVER trusts
+// the client-supplied X-Tenant-ID header directly: the header is only
+// honored when a valid JWT is present and that JWT grants access to the
+// requested tenant (via ValidateTenantAccess, which also allows core/global
+// admins to select any tenant). If JWT validation fails or the header names
+// a tenant the caller isn't authorized for, this returns "" and the caller
+// must reject the request rather than silently trusting an unvalidated
+// value.
 func getTenantIDFromRequest(r *http.Request) string {
-	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
+	claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
+	if err != nil || claims == nil {
+		return ""
+	}
+
+	headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if headerTenant == "" {
 		return claims.TenantID
 	}
-	return r.Header.Get("X-Tenant-ID")
+
+	if verr := jwtmiddleware.ValidateTenantAccess(claims, headerTenant); verr != nil {
+		return ""
+	}
+	return headerTenant
 }
 
 // handleListConnections lists all connections for a tenant

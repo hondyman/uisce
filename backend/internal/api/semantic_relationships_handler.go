@@ -8,9 +8,47 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/security"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
+
+// secureTenantIDFromRequest resolves the tenant to scope semantic
+// relationship reads/writes to. It NEVER trusts the raw X-Tenant-ID header
+// directly: the header is only honored when security.AuthInfo (populated by
+// AuthContextMiddleware from a verified JWT) confirms the caller is a
+// global admin/ops, or the header names a tenant already in the caller's
+// own JWT-issued tenant list. Returns "" for an unauthorized/unauthenticated
+// caller, which callers must treat as a rejection.
+func secureTenantIDFromRequest(r *http.Request) string {
+	claims := jwtmiddleware.GetClaimsFromContext(r)
+	if claims != nil && claims.TenantID != "" {
+		return claims.TenantID
+	}
+
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return ""
+	}
+
+	headerTenant := r.Header.Get("X-Tenant-ID")
+	if headerTenant == "" {
+		if len(auth.TenantIDs) > 0 {
+			return auth.TenantIDs[0]
+		}
+		return ""
+	}
+
+	if auth.IsGlobalAdmin {
+		return headerTenant
+	}
+	for _, tid := range auth.TenantIDs {
+		if tid == headerTenant {
+			return headerTenant
+		}
+	}
+	return ""
+}
 
 // SemanticRelationshipsHandler handles API requests for term relationships, differentiators, and AI prompt context.
 type SemanticRelationshipsHandler struct {
@@ -54,14 +92,7 @@ func (h *SemanticRelationshipsHandler) GetRelatedTerms(w http.ResponseWriter, r 
 		return
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
 	disambiguation, err := h.relService.GetRelatedTerms(r.Context(), tenantID, datasourceID, termIDOrName)
@@ -86,14 +117,7 @@ func (h *SemanticRelationshipsHandler) SuggestRelatedForColumn(w http.ResponseWr
 		entityName = r.URL.Query().Get("table")
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
 	suggestions, err := h.relService.SuggestRelatedTermsForColumn(r.Context(), tenantID, datasourceID, columnName, entityName)
@@ -122,14 +146,7 @@ func (h *SemanticRelationshipsHandler) GetAIContext(w http.ResponseWriter, r *ht
 		req.TermIDs = nil
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
 	payload, err := h.relService.BuildAIContext(r.Context(), tenantID, datasourceID, req.TermIDs, req.Domain)
@@ -163,14 +180,7 @@ func (h *SemanticRelationshipsHandler) CreateRelationshipEdge(w http.ResponseWri
 		return
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
 
 	edgeID, err := h.relService.CreateTermRelationship(
@@ -215,17 +225,10 @@ func (h *SemanticRelationshipsHandler) RecordRejection(w http.ResponseWriter, r 
 		return
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
+	tenantID := secureTenantIDFromRequest(r)
 	rejectedBy := "user"
-	if claims != nil {
-		tenantID = claims.TenantID
-		if claims.Email != "" {
-			rejectedBy = claims.Email
-		}
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.Email != "" {
+		rejectedBy = claims.Email
 	}
 
 	err := h.relService.RecordRejection(
@@ -252,14 +255,7 @@ func (h *SemanticRelationshipsHandler) RecordRejection(w http.ResponseWriter, r 
 func (h *SemanticRelationshipsHandler) ListRejections(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 
 	records, err := h.relService.ListRejections(r.Context(), tenantID)
 	if err != nil {
@@ -277,14 +273,7 @@ func (h *SemanticRelationshipsHandler) DeleteRejection(w http.ResponseWriter, r 
 	w.Header().Set("Content-Type", "application/json")
 	rejectionID := chi.URLParam(r, "id")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 
 	err := h.relService.DeleteRejection(r.Context(), tenantID, rejectionID)
 	if err != nil {
@@ -301,14 +290,7 @@ func (h *SemanticRelationshipsHandler) DeleteRejection(w http.ResponseWriter, r 
 func (h *SemanticRelationshipsHandler) ListL3Classifications(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 
 	classifications, err := h.relService.ListL3Classifications(r.Context(), tenantID)
 	if err != nil {
@@ -352,14 +334,7 @@ func (h *SemanticRelationshipsHandler) ClassifyTerm(w http.ResponseWriter, r *ht
 		return
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := ""
-	if claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secureTenantIDFromRequest(r)
 
 	err := h.relService.ClassifyTerm(r.Context(), tenantID, req.TermID, req.L3NodeID)
 	if err != nil {
@@ -387,13 +362,16 @@ func (h *SemanticRelationshipsHandler) VisualizeLens(w http.ResponseWriter, r *h
 		req.LensType = analytics.LensSubtypeAndPeers
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	tenantID := req.TenantID
-	if tenantID == "" && claims != nil {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	// req.TenantID (body) and X-Tenant-ID (header) are both client-supplied
+	// and must not be trusted directly; secureTenantIDFromRequest validates
+	// against the caller's JWT-issued tenant list / global-admin status.
+	// The JWT's own tenant takes priority; a body/header value is only
+	// consulted as an authorized global-admin tenant selection.
+	tenantID := secureTenantIDFromRequest(r)
+	if tenantID == "" && req.TenantID != "" {
+		if auth, ok := security.AuthInfoFromContext(r.Context()); ok && auth.IsGlobalAdmin {
+			tenantID = req.TenantID
+		}
 	}
 
 	graphData, err := h.relService.VisualizeLens(r.Context(), tenantID, nodeID, req)

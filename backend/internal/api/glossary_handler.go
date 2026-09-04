@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/jmoiron/sqlx"
 
@@ -1667,9 +1668,39 @@ type CreateTechnicalAssetsRequest struct {
 }
 
 func (h *GlossaryHandler) CreateTechnicalAssets(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
+	// SECURITY: the tenant_id query param / X-Tenant-ID header are
+	// client-supplied and must be validated against the caller's
+	// JWT-issued tenant list (via security.AuthInfo, populated by
+	// AuthContextMiddleware) before use — never trusted directly. Global
+	// admins/ops may select any tenant via the param/header; everyone else
+	// must already have that tenant in their own JWT tenant list.
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+	requestedTenantID := r.URL.Query().Get("tenant_id")
+	if requestedTenantID == "" {
+		requestedTenantID = r.Header.Get("X-Tenant-ID")
+	}
+	var tenantID string
+	if requestedTenantID == "" {
+		if len(auth.TenantIDs) > 0 {
+			tenantID = auth.TenantIDs[0]
+		}
+	} else if auth.IsGlobalAdmin {
+		tenantID = requestedTenantID
+	} else {
+		for _, tid := range auth.TenantIDs {
+			if tid == requestedTenantID {
+				tenantID = requestedTenantID
+				break
+			}
+		}
+	}
 	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+		http.Error(w, `{"error":"not authorized for requested tenant"}`, http.StatusForbidden)
+		return
 	}
 
 	var req CreateTechnicalAssetsRequest

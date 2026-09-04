@@ -8,8 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
 )
 
 // =============================================================================
@@ -1278,18 +1279,49 @@ func (h *Handler) GetRuleStats(w http.ResponseWriter, r *http.Request) {
 // HELPER FUNCTIONS
 // =============================================================================
 
+// getTenantID resolves the tenant that this rule/policy request is scoped
+// to. It NEVER trusts the raw X-Tenant-ID header or tenant_id query param
+// directly: they are only honored when security.AuthInfo (populated by
+// AuthContextMiddleware from a verified JWT) confirms the caller is a
+// global admin/ops, or the value names a tenant already in the caller's own
+// JWT-issued tenant list. Note: jwtmiddleware.GetClaimsFromContext is never
+// populated in this app (no middleware wires it up), so calling
+// .TenantID on its nil result used to panic on every request that reached
+// here — this rewrite both fixes that crash and closes the IDOR.
 func getTenantID(r *http.Request) (uuid.UUID, error) {
-	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
-	if tenantIDStr == "" {
-		tenantIDStr = r.Header.Get("X-Tenant-ID")
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return uuid.Parse(claims.TenantID)
 	}
-	if tenantIDStr == "" {
-		tenantIDStr = r.URL.Query().Get("tenant_id")
+
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return uuid.Nil, fmt.Errorf("authentication required")
 	}
-	if tenantIDStr == "" {
+
+	requested := r.Header.Get("X-Tenant-ID")
+	if requested == "" {
+		requested = r.URL.Query().Get("tenant_id")
+	}
+	if requested == "" {
+		if len(auth.TenantIDs) > 0 {
+			return uuid.Parse(auth.TenantIDs[0])
+		}
 		return uuid.Nil, fmt.Errorf("tenant_id is required")
 	}
-	return uuid.Parse(tenantIDStr)
+
+	if !auth.IsGlobalAdmin {
+		authorized := false
+		for _, tid := range auth.TenantIDs {
+			if tid == requested {
+				authorized = true
+				break
+			}
+		}
+		if !authorized {
+			return uuid.Nil, fmt.Errorf("not authorized for requested tenant")
+		}
+	}
+	return uuid.Parse(requested)
 }
 
 func getDatasourceID(r *http.Request) uuid.UUID {

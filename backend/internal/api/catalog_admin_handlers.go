@@ -18,14 +18,17 @@ func RegisterCatalogAdminRoutes(r chi.Router, db *sql.DB, tenantMgr *tenant.Tena
 	linker := catalog.NewSubtypeSemanticLinker()
 
 	r.Post("/api/catalog/admin/sync-subtypes", func(w http.ResponseWriter, r *http.Request) {
-		tenantIDStr := r.Header.Get("X-Tenant-ID")
+		// getSecureTenantID (helpers.go) validates the X-Tenant-ID header
+		// against the caller's JWT-issued tenant list / global-admin status
+		// before trusting it; it never trusts the raw header directly.
+		tenantIDStr := getSecureTenantID(r)
 		if tenantIDStr == "" {
-			http.Error(w, "X-Tenant-ID header is required", http.StatusBadRequest)
+			http.Error(w, "valid tenant context is required", http.StatusUnauthorized)
 			return
 		}
 		tenantID, err := uuid.Parse(tenantIDStr)
 		if err != nil {
-			http.Error(w, "Invalid X-Tenant-ID UUID format", http.StatusBadRequest)
+			http.Error(w, "Invalid tenant context", http.StatusBadRequest)
 			return
 		}
 
