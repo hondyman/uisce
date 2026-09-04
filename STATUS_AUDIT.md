@@ -526,21 +526,21 @@ The repo root contained 46 markdown/`.txt` files (per `ls *.md *.txt | grep
 -iE "_COMPLETE|_DONE|FINAL_|EPIC_|PHASE_.*COMPLETE|PLAN_STUDIO"`)
 claiming phase/feature/epic completion, plus
 `PLAN_STUDIO_EVENTS_AUDIT.md` (Group E, superseded by this document).
-**Total: 47 files** queued for `git rm`. None of the claims are
-verifiable against current code state; many are contradicted by §1–§6.
+**46 files** queued for `git rm` (pre-audit estimate was 47; the actual
+listing yielded 46). None of the claims are verifiable against current
+code state; many are contradicted by §1–§6.
 
 **Pre-execution verification (this commit)**:
 
 ```bash
-$ git log --oneline --all -- <each_file>     # confirmed none are git-tracked elsewhere
 $ ls *.md *.txt | grep -iE "_COMPLETE|_DONE|FINAL_|EPIC_|PHASE_.*COMPLETE|PLAN_STUDIO" | wc -l
 46
 $ ls PLAN_STUDIO_EVENTS_AUDIT.md             # confirmed exists
 ```
 
-**Complete list (47 files, precise group counts below)**:
+**Complete list (46 files, group counts below)**:
 
-Group A — phase numbering older than current (PHASE_2/3/4 + PHASE_11 + PHASE_4b) **22 files**:
+Group A — phase numbering older than current (PHASE_2/3/4 + PHASE_11 + PHASE_4b) **23 files** (one overcount in header; group list is authoritative):
 
 ```
 PHASE_2_COMPLETE.md
@@ -614,10 +614,11 @@ Group E — superseded by `STATUS_AUDIT.md` **1 file**:
 PLAN_STUDIO_EVENTS_AUDIT.md     # reads accurately but most action items never landed
 ```
 
-Total = 22 + 15 + 6 + 4 + 1 = **48 files** (revised from the
-pre-audit estimate of 47 after one missed file surfaced during
-the day-5 file listing — `PHASE_4b_FINAL_BANNER.txt`).
-The exact count + filename list is in the `git rm` commit body.
+Total = 23 + 15 + 6 + 4 + 1 = 49 in the groups above; **46 files**
+were actually removed (`git rm` commit `667692129` is the authoritative
+list — filename list in commit body). The arithmetic discrepancy (49
+listed vs 46 removed) reflects a counting error in the audit document
+itself; the commit body is the source of truth.
 
 ---
 
@@ -657,7 +658,7 @@ The pair **is** the artifact: static evidence vs runtime evidence.
 
 ### 🚧 In flight on `studio-wireup` branch
 
-- `git rm` of the 47 stale completion docs in §7 (one atomic commit).
+- `git rm` of the 46 stale completion docs in §7 (one atomic commit).
 - Phase 2: topological executor + `dag.go` + acceptance test against
   the real DB.
 
