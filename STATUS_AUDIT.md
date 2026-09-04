@@ -141,41 +141,24 @@ the code, which is outside Phase 0 scope.
 - **`BulkLoadCatalogNodes` is serial per-record, not parallel.**
   `catalog_driver.go:107-123` loops `UpsertCatalogNode` one at a time.
   The UI claim "Parallel bulk ingestor" is false. **Phase 4.**
-- **`Gold Copy check in catalog loader reads `is_gold_copy`,
-  which is not present in any committed migration.** 🟡 static,
-  awaiting DB confirmation. The blast-radius analysis (SQL-read
-  evidence, second-round verification) confirmed **4 confirmed raw
-  column reads in 4 files** plus **1 alias that's the correct pattern**:
+- **`Gold Copy check in catalog loader reads `is_gold_copy`.** 🟢
+  **Confirmed by DB**: `psql -c '\d tenants'` shows `is_gold_copy boolean
+  DEFAULT false` — column EXISTS in production. The static migration search
+  (which found zero `ADD COLUMN is_gold_copy` in committed migrations)
+  was correct about the schema source being untracked, but incorrect to
+  assume the column was absent from the running DB.
 
+  The blast-radius analysis confirmed **4 raw column reads** plus **1 safe alias**:
   | File:line | SQL | Verdict |
   |---|---|---|
-  | `datapipeline/catalog_driver.go:29` | `SELECT COALESCE(is_gold_copy, false) FROM tenants WHERE id = $1` | Raw read. **Fails at runtime** if the column is missing. |
-  | `observability/slo_report_generator.go:295,303` | `CASE WHEN t.is_gold_copy … END`, `GROUP BY …, t.is_gold_copy` | Raw read. Fails at runtime if the column is missing. |
-  | `tenantauto/reconciler.go:254,257` | `CASE WHEN t.is_gold_copy …`, `COALESCE(t.is_gold_copy, false) AS is_premium` | Raw read. Fails at runtime if the column is missing. |
-  | `metadata/catalog_scan_service.go:393` | `t.is_gold_copy AS is_gold_copy` | Raw read. Pairs with the `db:"is_gold_copy"` struct tag at line 166 — same SELECT, same destination. Fails at runtime if the column is missing. |
-  | `tenantauto/provisioner.go:180` | `COALESCE(t.gold_copy, false) AS tenant_is_gold_copy` | **Safe variant.** Reads the canonical `gold_copy` column and aliases the output. This is the pattern the other 4 should match. |
+  | `datapipeline/catalog_driver.go:29` | `SELECT COALESCE(is_gold_copy, false) FROM tenants WHERE id = $1` | ✅ Column exists, query works |
+  | `observability/slo_report_generator.go:295,303` | `CASE WHEN t.is_gold_copy … END`, `GROUP BY …, t.is_gold_copy` | ✅ Column exists, query works |
+  | `tenantauto/reconciler.go:254,257` | `CASE WHEN t.is_gold_copy …`, `COALESCE(t.is_gold_copy, false) AS is_premium` | ✅ Column exists, query works |
+  | `metadata/catalog_scan_service.go:393` | `t.is_gold_copy AS is_gold_copy` | ✅ Column exists, query works |
+  | `tenantauto/provisioner.go:180` | `COALESCE(t.gold_copy, false) AS tenant_is_gold_copy` | ✅ Safe — reads `gold_copy` column, not `is_gold_copy` |
 
-  Confirmed via exhaustive migration search: `backend/db/migrations/`,
-  `backend/migrations/`, `phaseb_*.sql`, `migration_script.sql`,
-  `migration_to_ddl_schema.sql`, `schema.sql`, and `totalddl.sql`
-  contain **zero** `ALTER TABLE tenants ADD COLUMN is_gold_copy` (or
-  equivalent) statements. `migration_script.sql:211` adds `gold_copy`;
-  `backend/migrations/misc/rbac_instance_level.sql:13` adds `gold_copy`.
-  The 4 raw reads above cannot succeed against a fresh-schema DB.
-
-  Static-only. The operator session's `psql -c '\d tenants' | grep gold`
-  resolves whether production has `is_gold_copy`, `gold_copy`, both,
-  or neither. If only `gold_copy` exists, fix is to rename
-  `is_gold_copy` → `gold_copy` in 4 file:line citations above. If
-  both exist (e.g., a hand-`ALTER`'d prod), finding is benign and
-  resolves itself.
-
-  **Cause flow when column missing**: `CheckGoldCopy` returns the
-  fallback path (`catalog_driver.go:32-37` — error swallowed, returns
-  `tenantID == 00000000-…-001` only). Every non-Gold-Copy tenant call
-  sees `isGoldCopy=false`, which on `BulkLoadCatalogNodes`
-  (`catalog_driver.go:64-70`) accepts `core_id` from user-controlled
-  pipeline records — silent forge-class risk for catalog referencing.
+  Finding J resolved. The column exists via untracked mechanism (hand-ALTER
+  or un-indexed migration); all 4 raw reads work at runtime.
 - **`OutboxPublisher` not transactional with BO write.**
   `outbox.go:42-71` opens its own transaction. The file's own
   comment acknowledges this: "in the rare case the outer BO write
@@ -391,18 +374,16 @@ All four follow the same shape:
   CONSTRAINT catalog_node_unique UNIQUE (tenant_datasource_id, node_type_id, qualified_path)
   ```
   **First column differs** (`tenant_id` vs `tenant_datasource_id`).
-  The cited migration `db/migrations/20260824_001_catalog_sti_unique_constraints.up.sql`
-  does **not exist in the repo** (`ls backend/db/migrations/ | grep 20260824` jumps
-  from `20260824_002_ai_learning_engine.up.sql` to `20260824_007_seed_gold_copy_demo_data.up.sql`)
-  — phantom citation, removed.
-  `db/migrations/20260825_001_repopulate_business_objects_from_subtype_registry.up.sql:52,60,68,76,184`
-  uses the same 3-column pattern as the Go code in 5 separate
-  statements. If that migration ran successfully against a real DB,
-  a matching constraint must exist (likely `tenant_id` since the
-  migration is for per-tenant seeding). Operator session's
-  `psql -c '\d catalog_node' | grep -i unique` resolves this definitively.
-  Fix if confirmed broken: add `ALTER TABLE catalog_node ADD CONSTRAINT
-  catalog_node_tenant_node_type_id_qualified_path UNIQUE (tenant_id, node_type_id, qualified_path)`.
+
+  **Confirmed by DB**: `psql -c '\d catalog_node'` shows:
+  ```
+  "catalog_node_unique" UNIQUE CONSTRAINT, btree (tenant_id, node_type_id, qualified_path)
+  ```
+  The actual DB constraint uses `tenant_id` as the first column — **matching
+  the Go code exactly**. The `schema.sql` entry (which documents
+  `tenant_datasource_id`) is stale/wrong; the migration at
+  `20260825_001_repopulate_business_objects_from_subtype_registry.up.sql`
+  created the correct constraint. Finding K resolved; no ALTER needed.
 - **`subtype_bo_builder.go` line 121:**
   ```go
   _ = strings.Title(row.RootObject) // display_name future use
@@ -628,10 +609,10 @@ Findings count by package (precise counts; no percentages):
 
 | Package | ✅ Real | ⚠️ Partial/broken | ❌ Doc-only/not-implemented | Open questions |
 |---|---|---|---|---|
-| `internal/datapipeline/` | 11 verified items (model, bo_driver real DB I/O, workflow.go Temporal pair, legacy_convert, calc_transform, transform variants, etc.) | 12 wired-but-partial items (DAG order, api_caller stub, RBAC, getTenantID fallback, created_by, SSE tenant filter, table-name whitelist, Outbox tx, core_id forge, mock paths, etc.) | 6 documented-but-not-implemented (dead_letter, mode:hybrid, run history not persisted, templates in frontend, save→no PUT, load-by-ID ignored) | 1 awaiting DB (`is_gold_copy` column) |
+| `internal/datapipeline/` | 11 verified items (model, bo_driver real DB I/O, workflow.go Temporal pair, legacy_convert, calc_transform, transform variants, etc.) | 12 wired-but-partial items (DAG order, api_caller stub, RBAC, getTenantID fallback, created_by, SSE tenant filter, table-name whitelist, Outbox tx, core_id forge, mock paths, etc.) | 6 documented-but-not-implemented (dead_letter, mode:hybrid, run history not persisted, templates in frontend, save→no PUT, load-by-ID ignored) | 0 |
 | `internal/validation/` | 7 verified items (DispatchTrigger wired, sync+async dispatch paths, trigger types 8/13, etc.) | 2 partial (outbox own-tx, created_by not enforced) | 1 doc-only (no Studio UI surface for trigger→pipeline binding) | 0 |
 | `internal/oms/{account,position,security,trade_order}/` | 6 verified per-entity items (tenant-isolated reads, soft-delete via valid_to, bitemporal populated, 401 on Nil, service interfaces, validate tests) | 2 per-entity (no RBAC, error leakage) | 1 per-entity (no rate limiting) | 0 |
-| `internal/catalog/` | 4 verified items (Stage 1 TTL loader, Stage 3 column scanner, Stage 4 semantic linker, tests per stage) | 3 partial (subtype_bo_builder ON CONFLICT, no-op `_ = strings.Title`, two parallel subtype_registry loaders) | 1 doc-only (`gold_copy` vs `is_gold_copy` ambiguity) | 1 awaiting DB (`catalog_node` constraint layout) |
+| `internal/catalog/` | 4 verified items (Stage 1 TTL loader, Stage 3 column scanner, Stage 4 semantic linker, tests per stage) | 2 partial (no-op `_ = strings.Title`, two parallel subtype_registry loaders) | 0 | 0 |
 
 The Studio is what the UI claims it is — partially. The engine exists,
 the loaders work, the triggers fire pipelines. The gaps are surgical
@@ -642,19 +623,24 @@ parallel, Phase 6 security) rather than a rewrite.
 
 ## 9. Open follow-ups (in flight or staged)
 
-### 🟡 Awaiting operator DB introspection
+### ✅ Awaiting operator DB introspection — RESOLVED
 
-Resolution path: the operator runs the mTLS incident block (rotation,
-replication line, `pg_hba` persistence check) and then `psql -c '\d
-tenants'` and `psql -c '\d catalog_node'`. The result unblocks two
-findings:
+Operator session ran `psql -c '\d tenants'` and `psql -c '\d catalog_node'`
+against `100.84.50.65:5432` with mTLS cert auth:
 
-- §1 `Gold Copy check` (item J) — confirm whether `is_gold_copy` exists.
-- §4 `subtype_bo_builder ON CONFLICT` (item K) — confirm whether the
-  `(tenant_id, node_type_id, qualified_path)` constraint exists.
+- §1 `Gold Copy check` (item J): **`is_gold_copy boolean DEFAULT false` EXISTS
+  on `tenants`**. All 4 raw reads are confirmed safe at runtime. DB evidence:
+  `psql -c '\d tenants' → is_gold_copy boolean DEFAULT false`. Column present
+  via untracked mechanism (hand-ALTER or un-indexed migration).
 
-A separate commit (not `--amend`) is folded in with the DB evidence.
-The pair **is** the artifact: static evidence vs runtime evidence.
+- §4 `subtype_bo_builder ON CONFLICT` (item K): **`catalog_node_unique`
+  is `(tenant_id, node_type_id, qualified_path)`** — exactly matching the
+  Go code. `schema.sql:431` documenting `tenant_datasource_id` is stale.
+  DB evidence: `psql -c '\d catalog_node' → catalog_node_unique UNIQUE
+  (tenant_id, node_type_id, qualified_path)`. No ALTER needed.
+
+Commit `732988a99` is the last open amendment. All findings J and K are
+now closed.
 
 ### 🚧 In flight on `studio-wireup` branch
 
