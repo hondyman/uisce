@@ -116,7 +116,7 @@ Move semantics (delete source after rename) is available as an explicit opt-in v
 
 ### Commits
 
-- `78934abbcb` — fix(datapipeline): ColumnMapper renames copy by default, not move
+- `78934abcb` — fix(datapipeline): ColumnMapper renames copy by default, not move
 
 **Refs:** [#3](https://github.com/hondyman/uisce/issues/3)
 
