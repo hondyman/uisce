@@ -9,7 +9,21 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+)
+
+// TriggerDispatchPhase controls which class of trigger dispatch modes run.
+type TriggerDispatchPhase int
+
+const (
+	// TriggerPhaseSync runs only "sync" and nil DispatchMode triggers.
+	// These run before the BO write and can veto it.
+	TriggerPhaseSync TriggerDispatchPhase = iota
+	// TriggerPhaseAsync runs only "async" DispatchMode triggers.
+	// The tx parameter (if non-nil) is passed through to the outbox publisher
+	// so the outbox row rides the caller's transaction.
+	TriggerPhaseAsync
 )
 
 // ValidationTrigger represents a trigger that ties actions to validation rules
@@ -129,67 +143,169 @@ func (tve *TriggerValidationEngine) WithTestRules(rules map[string]ValidationRul
 
 // TriggerValidate enforces triggers for a given action/entity payload.
 // Returns nil when all validation rules pass; returns an error describing the first failure otherwise.
+//
+// TriggerValidate is the legacy entry point that runs sync then async triggers
+// back-to-back in a single call. For transactional atomicity (async triggers
+// riding the BO write's transaction), use DispatchWithPhase directly.
 func (tve *TriggerValidationEngine) TriggerValidate(ctx context.Context, tenantID uuid.UUID, triggerType, entity, stepName string, data map[string]interface{}) error {
-	// Allow test-only in-memory overrides to be used without a DB connection.
 	if tve.db == nil && tve.testRules == nil && len(tve.testTriggers) == 0 {
 		return fmt.Errorf("trigger validation: db not configured")
 	}
 
-	// 1. fetch triggers for tenant/triggerType/entity (stepName may be empty)
 	triggers, err := tve.fetchTriggers(ctx, tenantID.String(), triggerType, entity, stepName)
 	if err != nil {
 		tve.logger.Error("fetchTriggers failed", "error", err.Error())
 		return fmt.Errorf("fetch triggers: %w", err)
 	}
 
-	// 2. for each trigger, evaluate each rule
+	// Walk triggers twice: sync phase (pre-write, can veto) then async phase.
 	for _, t := range triggers {
-		for _, rid := range t.RuleIDs {
-			rule, err := tve.fetchRuleByID(ctx, rid)
-			if err != nil {
-				// log and continue - missing rule should not panic
-				tve.logger.Warn("TriggerValidate: missing rule", "rule_id", rid, "err", err.Error())
-				continue
-			}
+		if err := tve.evaluateTriggerRulesAndDispatchPhase(ctx, tenantID, t, data, TriggerPhaseSync, nil); err != nil {
+			return err
+		}
+	}
+	for _, t := range triggers {
+		if err := tve.evaluateTriggerRulesAndDispatchPhase(ctx, tenantID, t, data, TriggerPhaseAsync, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
-			// Convert condition JSON to map (unwrapping the required
-			// schema_version/authored_mode/payload envelope — see
-			// UnwrapConditionPayload)
-			condition, err := UnwrapConditionPayload(rule.ConditionJSON)
-			if err != nil {
-				tve.logger.Error("TriggerValidate: unmarshal condition failed", "rule_id", rid, "err", err.Error())
-				continue
-			}
+// DispatchWithPhase evaluates and dispatches triggers for a specific phase.
+// Rules are always evaluated (both phases). The pipeline dispatch is gated by phase:
+//   - TriggerPhaseSync: dispatches only "sync"/"" DispatchMode triggers;
+//     errors are returned and can veto the BO write.
+//   - TriggerPhaseAsync: dispatches only "async" DispatchMode triggers;
+//     if tx is non-nil the outbox row rides that transaction (atomic with the
+//     BO write). Async errors are logged, never returned.
+func (tve *TriggerValidationEngine) DispatchWithPhase(
+	ctx context.Context,
+	phase TriggerDispatchPhase,
+	tx *sqlx.Tx,
+	tenantID uuid.UUID,
+	triggerType string,
+	entity string,
+	stepName string,
+	data map[string]interface{},
+) error {
+	if tve.db == nil && tve.testRules == nil && len(tve.testTriggers) == 0 {
+		return fmt.Errorf("trigger validation: db not configured")
+	}
 
-			// Evaluate rule via ExecutionContext
-			result := tve.Execute(ExecutionContext{
-				RuleID:       rid,
-				RuleType:     rule.RuleType,
-				TargetEntity: entity,
-				Condition:    condition,
-				Data:         data,
-			})
+	triggers, err := tve.fetchTriggers(ctx, tenantID.String(), triggerType, entity, stepName)
+	if err != nil {
+		tve.logger.Error("fetchTriggers failed", "error", err.Error())
+		return fmt.Errorf("fetch triggers: %w", err)
+	}
 
-			if !result.Passed {
-				// rule failed -> bubble error message (prefer rule's ErrorMessage over result.Message)
-				msg := rule.ErrorMessage
-				if msg == "" {
-					msg = result.Message
-				}
-				return fmt.Errorf("%s: %s", rule.RuleName, msg)
-			}
+	for _, t := range triggers {
+		if err := tve.evaluateTriggerRulesAndDispatchPhase(ctx, tenantID, t, data, phase, tx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// evaluateTriggerRulesAndDispatchPhase evaluates rules for a single trigger and
+// dispatches its pipeline for the given phase. Rules are always evaluated;
+// the pipeline dispatch is gated by phase. Errors from failed rules are returned
+// (can veto the BO write); async dispatch errors are logged only.
+func (tve *TriggerValidationEngine) evaluateTriggerRulesAndDispatchPhase(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	t ValidationTrigger,
+	data map[string]interface{},
+	phase TriggerDispatchPhase,
+	tx *sqlx.Tx,
+) error {
+	for _, rid := range t.RuleIDs {
+		rule, err := tve.fetchRuleByID(ctx, rid)
+		if err != nil {
+			tve.logger.Warn("TriggerValidate: missing rule", "rule_id", rid, "err", err.Error())
+			continue
 		}
 
-		// All rule checks passed for this trigger — dispatch its bound
-		// pipeline (if any), sync or async per DispatchMode.
-		if t.PipelineID != nil {
-			if err := tve.dispatchTriggerPipeline(ctx, tenantID, t, data); err != nil {
-				return err
+		condition, err := UnwrapConditionPayload(rule.ConditionJSON)
+		if err != nil {
+			tve.logger.Error("TriggerValidate: unmarshal condition failed", "rule_id", rid, "err", err.Error())
+			continue
+		}
+
+		result := tve.Execute(ExecutionContext{
+			RuleID:       rid,
+			RuleType:     rule.RuleType,
+			TargetEntity: t.TargetEntity,
+			Condition:    condition,
+			Data:         data,
+		})
+
+		if !result.Passed {
+			msg := rule.ErrorMessage
+			if msg == "" {
+				msg = result.Message
 			}
+			return fmt.Errorf("%s: %s", rule.RuleName, msg)
 		}
 	}
 
+	if t.PipelineID != nil {
+		return tve.dispatchPipelineForPhase(ctx, phase, tx, tenantID, t, data)
+	}
 	return nil
+}
+
+// dispatchPipelineForPhase dispatches a trigger's pipeline filtered by phase.
+// This is the single method that handles both sync and async dispatch, distinguished
+// by phase. Kept separate from evaluateTriggerRulesAndDispatchPhase so rule
+// evaluation and dispatch are independently testable.
+func (tve *TriggerValidationEngine) dispatchPipelineForPhase(
+	ctx context.Context,
+	phase TriggerDispatchPhase,
+	tx *sqlx.Tx,
+	tenantID uuid.UUID,
+	t ValidationTrigger,
+	data map[string]interface{},
+) error {
+	switch phase {
+	case TriggerPhaseSync:
+		if t.DispatchMode != "sync" && t.DispatchMode != "" {
+			return nil
+		}
+		if tve.pipelineExecutor == nil {
+			tve.logger.Warn("dispatchPipelineForPhase: sync dispatch requested but no pipeline executor configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
+			return nil
+		}
+		if err := tve.pipelineExecutor.RunPipelineSync(ctx, tenantID, *t.PipelineID, data); err != nil {
+			return fmt.Errorf("pipeline '%s' failed: %w", t.PipelineID.String(), err)
+		}
+		return nil
+
+	case TriggerPhaseAsync:
+		if t.DispatchMode != "async" {
+			return nil
+		}
+		if tve.outboxPublisher == nil {
+			tve.logger.Warn("dispatchPipelineForPhase: async dispatch requested but no outbox publisher configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
+			return nil
+		}
+		if pubTx, ok := tve.outboxPublisher.(interface {
+			PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+		}); ok {
+			if err := pubTx.PublishPipelineTriggerTx(ctx, tx, tenantID, *t.PipelineID, data); err != nil {
+				tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
+			}
+		} else {
+			if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, data); err != nil {
+				tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger (legacy)", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
+			}
+		}
+		return nil
+
+	default:
+		tve.logger.Warn("dispatchPipelineForPhase: unknown phase, skipping", "trigger_id", t.ID, "phase", phase)
+		return nil
+	}
 }
 
 // dispatchTriggerPipeline runs (sync) or enqueues (async) the pipeline
