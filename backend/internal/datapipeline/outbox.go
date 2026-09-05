@@ -3,6 +3,7 @@ package datapipeline
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -27,18 +28,10 @@ type pipelineTriggerPayload struct {
 // (events.ProcessOutbox, wired in cmd/worker) later routes those rows to
 // PipelineEngine.ExecuteRunAsWorkflow via NewPipelineTriggerOutboxHandler.
 //
-// NOTE: this begins its own short-lived transaction rather than joining the
-// caller's BO-write transaction — internal/validation.TriggerValidationEngine
-// only holds a *sql.DB, not the transaction the BO write path
-// (internal/metadata/businessobject_service.go,
-// internal/services/business_object_service.go) uses, and threading that
-// transaction handle through the validation engine's public API was out of
-// scope for this pass. This is an at-least-once, not exactly-once dispatch:
-// in the rare case the outer BO write later fails/rolls back after this
-// commits, a pipeline trigger can fire for a write that didn't happen.
-// Follow-up: accept an *sqlx.Tx on TriggerValidate/DispatchTrigger so this
-// publish can join the caller's transaction like the existing
-// "BusinessObject.CatalogSync" event does.
+// Transactional guarantee: PublishPipelineTriggerTx accepts a *sqlx.Tx so the
+// outbox row is committed atomically with the originating BO write. The legacy
+// PublishPipelineTrigger opens its own transaction and is NOT atomic with the BO
+// write — callers should migrate to PublishPipelineTriggerTx.
 type OutboxPublisher struct {
 	db *sqlx.DB
 }
@@ -48,16 +41,30 @@ func NewOutboxPublisher(db *sqlx.DB) *OutboxPublisher {
 	return &OutboxPublisher{db: db}
 }
 
-// PublishPipelineTrigger implements validation.PipelineOutboxPublisher.
+// PublishPipelineTrigger is the legacy method. Prefer PublishPipelineTriggerTx.
+// Kept for backward compatibility with callers that haven't migrated to pass
+// the caller's transaction.
 func (p *OutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+	log.Printf("[WARN] OutboxPublisher.PublishPipelineTrigger (legacy) called — migrate to PublishPipelineTriggerTx for transactional atomicity")
+	return p.PublishPipelineTriggerTx(ctx, nil, tenantID, pipelineID, record)
+}
+
+// PublishPipelineTriggerTx writes the outbox row inside the caller's transaction
+// (if tx is non-nil) or its own short-lived transaction (if tx is nil, compat path).
+func (p *OutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
 	if p.db == nil {
 		return fmt.Errorf("outbox publisher has no database configured")
 	}
-	tx, err := p.db.BeginTxx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin outbox tx: %w", err)
+	ownsTx := false
+	if tx == nil {
+		var err error
+		tx, err = p.db.BeginTxx(ctx, nil)
+		if err != nil {
+			return fmt.Errorf("begin outbox tx: %w", err)
+		}
+		ownsTx = true
+		defer tx.Rollback() //nolint:errcheck
 	}
-	defer tx.Rollback() //nolint:errcheck
 
 	payload := pipelineTriggerPayload{
 		TenantID:   tenantID.String(),
@@ -67,7 +74,10 @@ func (p *OutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID u
 	if err := events.PublishEvent(ctx, tx, PipelineTriggerEventType, payload); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if ownsTx {
+		return tx.Commit()
+	}
+	return nil
 }
 
 // NewPipelineTriggerOutboxHandler returns an events.EventHandlerFunc that

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 )
@@ -395,6 +396,11 @@ type fakeOutboxPublisher struct {
 }
 
 func (f *fakeOutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+	f.calls++
+	return f.failErr
+}
+
+func (f *fakeOutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
 	f.calls++
 	return f.failErr
 }
