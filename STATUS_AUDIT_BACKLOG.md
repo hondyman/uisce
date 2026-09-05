@@ -4,6 +4,39 @@
 
 ---
 
+## Finding: Three A11y Crawl Routes Return 404 — Missing or Miswired Backend Endpoints
+
+**Name:** `A11y-404-Missing-Backend-Routes`
+**Severity:** HIGH
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+Three routes in the a11y crawl return HTTP 404, meaning the frontend pages are calling API endpoints that don't exist or are registered at different paths. These 404s are NOT crawl noise — they represent permanently broken data-fetch paths in the running application.
+
+| Route (frontend) | Backend Registration | Issue |
+|---|---|---|
+| `secrets/audit-logs` | `/v1/admin/tenants/audit-logs` (api.go:1940) | URL mismatch: frontend calls `secrets/audit-logs`, backend serves `admin/tenants/audit-logs` |
+| `wealth/approvals/pending` | `/api/v1/approvals/pending` (rules_handler.go:77) | Path prefix mismatch: frontend calls `wealth/approvals/pending` |
+| `wealth/feed` | Not found in any backend route registration | Missing endpoint: no backend handler exists |
+
+### Impact
+
+- Pages render empty/error states against 404 responses — never real content
+- Any violation counts for these routes are measured against empty/error responses, not real content
+- `SecretsAuditPage` guard (`if (result.error) { guard }`) is permanently guarding a path that never returns data
+- The floor's denominator (total routes measured) includes these routes — they depress the aggregate violation rate with vacuous-clean results
+
+### Required Action
+
+1. `wealth/feed`: determine if the endpoint should be built (product decision) or the page should gracefully handle empty
+2. `secrets/audit-logs`: check frontend route definition — is it calling the wrong path, or should the backend route be aliased at `secrets/audit-logs`?
+3. `wealth/approvals/pending`: check frontend URL construction — is `wealth/` prefix correct or a typo?
+4. Mark these routes as non-representative in the baseline artifact until fixed
+
+---
+
 ## Finding: APICallerTransformer — Phase 3 Stub Never Executed
 
 **Name:** `APICallerTransformer-Unimplemented`
