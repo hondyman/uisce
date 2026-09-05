@@ -289,11 +289,13 @@ func (tve *TriggerValidationEngine) dispatchPipelineForPhase(
 			tve.logger.Warn("dispatchPipelineForPhase: async dispatch requested but no outbox publisher configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
 			return nil
 		}
-		if pubTx, ok := tve.outboxPublisher.(interface {
-			PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
-		}); ok {
-			if err := pubTx.PublishPipelineTriggerTx(ctx, tx, tenantID, *t.PipelineID, data); err != nil {
-				tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
+		if tx != nil {
+			if pubTx, ok := tve.outboxPublisher.(interface {
+				PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+			}); ok {
+				if err := pubTx.PublishPipelineTriggerTx(ctx, tx, tenantID, *t.PipelineID, data); err != nil {
+					tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
+				}
 			}
 		} else {
 			if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, data); err != nil {
