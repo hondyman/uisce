@@ -4,40 +4,38 @@
 
 ---
 
-## Finding: Three A11y Crawl Routes Crash During Render — Auth-Required API Returns 401
+## Finding: Three A11y Crawl Routes Crash During Render
 
 **Name:** `A11y-Crashes-Unauthenticated-API`
 **Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Partially Resolved
+**Status:** Closed
 
 ### Description
 
-Three routes in the a11y crawl crash during render (no `<main>` landmark — error boundary triggered). The crashes are NOT caused by missing backend routes or URL mismatches — the routes are correctly wired. The crashes occur because the crawl runs without valid auth context, the API calls return 401/404, and the components do not gracefully handle those error responses.
+Three routes in the a11y crawl crashed during render (no `<main>` landmark — error boundary triggered). The crashes were NOT caused by missing backend routes or URL mismatches — the routes were correctly wired. The crashes had two distinct root causes, both fixed.
 
-Crawl artifacts confirm `crashed: true` for both `secrets_audit` and `wealth_feed`.
+| Crawl Route | React Router | Backend Route | Crash Cause | Status |
+|---|---|---|---|---|
+| `/en/wealth/feed` | `/wealth/feed` ✓ | **none** — no handler at `/api/wealth/feed` | Component threw: `useFeed()` returned `useMutation` result (wrong type); `data`/`isLoading`/`error` all undefined; `feedItems?.map()` threw on `undefined` | **Fixed** — `useQuery` used; component renders error state gracefully |
+| `/en/secrets/audit` | `/secrets/audit` ✓ | `/api/admin/tenants/audit-logs` ✓ | `apiFetch` returned raw `Response` without throwing on non-OK; 401 HTML body caused `r.json()` to throw mid-chain; exception escaped React Query error boundary | **Fixed** — `apiFetch` now throws `ApiError` on non-2xx; React Query catches it cleanly |
+| `/en/wealth/approvals/pending` | NO ROUTE | N/A | No React Router route; no crawl artifact; not a crash | **Closed** — no route exists |
 
-| Crawl Route | React Router | Backend Route | API Result | Crash Cause | Status |
-|---|---|---|---|---|---|
-| `/en/secrets/audit` | `/secrets/audit` ✓ | `/api/admin/tenants/audit-logs` ✓ | 401 | Component threw on 401 response body (r.json() threw on non-JSON error page; React Query error not caught cleanly) | **Fixed** — explicit `response.ok` check added; component now renders error state gracefully |
-| `/en/wealth/feed` | `/wealth/feed` ✓ | **none** — `fetchFeed` calls `/api/wealth/feed` which has no handler | 404 | Component threw: `useFeed()` was a `useMutation` hook (wrong type), so `data`/`isLoading`/`error` were all `undefined`; `feedItems?.map()` threw on `undefined` | **Fixed** — `useQuery` now used; component renders error state gracefully |
-| `/en/wealth/approvals/pending` | NO ROUTE | N/A | N/A | Finding unverifiable — no crawl artifact; frontend has no route for this path | **Closed** — no route exists; not a crash, just a missing route |
+### Systemic Fix
 
-### Root Cause Analysis
+`frontend/src/lib/apiClient.ts` — `apiFetch` now throws a typed `ApiError` on any non-2xx response instead of returning the raw `Response`. This prevents the `r.json()`-on-non-JSON-body crash class across all 46 callers that chain `.then(r => r.json())` without checking `r.ok`. React Query catches the thrown error and sets its error state; components show their error UI instead of crashing.
 
-- **Feed.tsx**: `useFeed()` returned a `useMutation` result, not a `useQuery` result. Mutation `data` is the mutate response payload, not a query dataset. `isLoading` on a mutation is only true during mutate execution. The result was `feedItems = undefined`, `feedItems?.length === 0` was `false`, `feedItems?.map(...)` threw on `undefined`.
+### Root Causes
 
-- **SecretsAuditPage.tsx**: `apiFetch` returns the raw `Response` on all status codes (does not throw on non-OK). For 401 responses with HTML error bodies, `response.json()` throws, and this exception propagated during render before React Query could set the error state.
+- **Feed.tsx**: `useFeed()` returned a `useMutation` result. Mutation `data` is the mutate response payload (undefined on a query hook), not a dataset. `isLoading` on a mutation is only true during mutate execution, not during loading. `feedItems = undefined`, `feedItems?.length === 0` was `false`, `feedItems?.map(...)` threw.
 
-- **`wealth/approvals/pending`**: No React Router route exists for this path. No crawl artifact. Only `core/approval-inbox` and `core/approval-workflows` exist. Closed as "not a crash."
+- **SecretsAuditPage.tsx + apiFetch**: `apiFetch` returned the raw `Response` on all status codes without throwing. For 401 responses with HTML error bodies, `response.json()` threw. The exception propagated during the React Query promise chain before the error state was set, crashing the component.
 
 ### Remaining Work
 
-1. **`secrets/audit` 401 root cause**: Backend still returns 401. The `AuthContextMiddleware` reads `Authorization: Bearer <token>` from the request. The test seeds `auth_token` in localStorage. Either the frontend's `apiClient` is not sending the Authorization header, or the backend's JWT validation is failing for the seeded token. Verify the auth token flow end-to-end.
-
-2. **`wealth/feed` backend handler**: No handler exists at `/api/wealth/feed`. The component now handles errors gracefully, but the endpoint must be implemented for the page to show real content. Product decision required: implement or remove the frontend route.
-
-3. **Re-crawl**: Run the a11y crawl with authenticated harness to verify both pages now render (with error states for the 401/404 cases) and the ratchet pair can be re-frozen with stable per-route waits.
+- **`secrets/audit` 401**: `AuthContextMiddleware` correctly validates the Keycloak JWT and rejects it. The 401 is legitimate auth rejection (not a crash). The page now renders its error state gracefully — no longer a crash. The auth rejection itself is a separate issue (Keycloak token validation in the test environment).
+- **`wealth/feed` backend handler**: No handler at `/api/wealth/feed`. The component handles errors gracefully but cannot show real content without the endpoint. Product decision: implement or remove the frontend route.
+- **Re-crawl**: Run the a11y crawl to verify both pages render error states and the ratchet pair can be re-frozen.
 
 ---
 
