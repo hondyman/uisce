@@ -106,3 +106,58 @@ Note: this finding was created after a live incident where the migration was app
 ### Fix Direction
 
 Audit all migrations in `backend/db/migrations/` for non-idempotent `CREATE INDEX`/`CREATE TABLE` statements. Apply `IF NOT EXISTS` / `IF NOT EXISTS ... ON CONFLICT DO NOTHING` pattern consistently. Add a migration-review checklist item.
+
+---
+
+## Finding: Migration Runner Silently No-Ops Based on Launch CWD (SEV-HIGH)
+
+**Name:** `Migration-Runner-CWD-Dependent`
+**Severity:** HIGH (deployment hazard)
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+`ApplyMigrations` in `backend/internal/migrations/runner.go` resolves `db/migrations` relative to the process current working directory. When the binary is started from a directory other than `backend/`, both `db/migrations` and `../db/migrations` fail to resolve, and the runner silently skips all migrations — no warning, no error, no log entry. The server starts, functional, with zero migrations applied.
+
+Evidence (2026-09-05):
+- Server started from `backend/`: runner logs `✅ Applied migration: 20260909_001...`
+- Same binary, started from repo root or `/tmp`: runner logs nothing, skips silently
+
+The runner's own diagnostic (`⚠️ Migrations directory ... not found; skipping`) only fires when `os.Stat` fails, which does not happen when the directory doesn't exist — `os.Stat` returns `os.IsNotExist` on both `db/migrations` and `../db/migrations` from wrong cwd.
+
+### Fix Direction
+
+Add `MIGRATIONS_DIR` env var as an explicit absolute path override. Bake absolute path at build time via `ldflags -X` or resolve from `os.Executable()`. The runner must either find the directory or fail with a fatal error, not silently skip. Consider: if migrations are required for correct operation, a missing migrations directory should be fatal at startup.
+
+---
+
+## Finding: ListPipelines Endpoint Unauthenticated (SEV-MEDIUM)
+
+**Name:** `Unauthenticated-Pipeline-List`
+**Severity:** MEDIUM
+**Found:** 2026-09-05
+**Status:** Closed (fixed in commit de2a60f7e)
+
+### Description
+
+`GET /api/v1/data-pipelines` (without `compact=true`) used `getTenantID` Gold Copy fallback, returning pipeline definitions to any unauthenticated caller. The `compact=true` variant was already hardened. Fix: `ListPipelines` now uses `claimTenantIDFromRequest` like the compact path.
+
+---
+
+## Finding: Evidence Table Dropped During Provenance Test
+
+**Name:** `Evidence-Table-Dropped`
+**Severity:** Low (operational hygiene)
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+During the migration provenance test cycle, `data_pipeline_runs` and `data_pipeline_step_telemetry` were dropped to test clean re-application. This destroyed the durable-run evidence rows including `83c0605c` (the Gold Copy tenant execution proof). Four silent-deletion events in this engagement: stashed WIP, `placeholder-lint.test.ts`, commits reset away, and this table drop.
+
+Pattern: even "just test data" deletions should name what they destroy in the commit message or a tracking artifact.
+
+### Fix Direction
+
+Establish a rule: table/data deletions include the object name in the operation description. For test evidence, snapshot rows to a file before destructive tests.
