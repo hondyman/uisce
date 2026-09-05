@@ -539,19 +539,3 @@ func (s *SemanticGraphService) getNodeTypeID(nodeType NodeType) uuid.UUID {
 	}
 }
 
-func formatNodeTypeName(nodeType string) string {
-	switch nodeType {
-	case "calculation_term":
-		return "Calculation Term"
-	case "semantic_term":
-		return "Semantic Term"
-	case "business_object":
-		return "Business Object"
-	case "table":
-		return "Physical Table"
-	case "column":
-		return "Physical Column"
-	default:
-		return nodeType
-	}
-}
