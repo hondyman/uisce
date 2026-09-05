@@ -440,38 +440,53 @@ go test ./internal/api/middleware/... -run "TestRequirePermission|TestTenantIDFr
 
 ---
 
-## Finding: GetClaimsFromContext Callers in Standalone Services — Audit Complete
+## Finding: GetClaimsFromContext Direct Access Without Nil Check — Main Server Internal Handlers
 
-**Name:** `GetClaimsFromContext-ServiceLayer-Audit`
-**Severity:** MEDIUM
+**Name:** `GetClaimsFromContext-MainServer-NilDeref`
+**Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Closed
+**Status:** Open
 
 ### Description
 
-`jwtmiddleware.GetClaimsFromContext` was called in ~100 places across the codebase. The pattern `claims := GetClaimsFromContext(r); claims != nil && claims.TenantID != ""` is correct for standalone services that wire their own middleware to set `"jwt_claims"`. It is incorrect for handlers in the main API server where `AuthContextMiddleware` sets `security.AuthInfo` instead.
+`jwtmiddleware.GetClaimsFromContext` was called in ~100 places across the codebase. The standalone services (validation-service, notifications-service, rule-engine-service) were audited and are clean — they wire `JWTMiddleware` which sets `jwt_claims`, and all 19 handlers fail closed on nil.
 
-### Audit Results
+The **main server's `internal/` packages** are the actual risk: `AuthContextMiddleware` sets `security.AuthInfo`, NOT `jwt_claims`. Every handler in `internal/` that calls `GetClaimsFromContext` gets `nil` unless `AuthContextMiddleware` also set `jwt_claims`. If a handler then does `claims.TenantID` without a nil check, it panics.
 
-All 19 call sites across 3 standalone services were audited manually:
+### Audit Results — Main Server Internal Call Sites
 
-| Service | Handlers | Auth Middleware | Fallback to Header? | Fail-Closed on Nil? |
-|---------|----------|-----------------|---------------------|---------------------|
-| `cmd/validation-service/main.go` | 6 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
-| `cmd/notifications-service/main.go` | 2 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
-| `cmd/rule-engine-service/main.go` | 11 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
+Approximately **25-30 call sites** across `internal/` directly access `.TenantID` or `.UserID` without nil checks:
 
-All 19 handlers follow the same pattern: `claims := jwtmiddleware.GetClaimsFromContext(r); if claims == nil { 401 }; return`. No silent fallbacks. No header-based tenant resolution.
+| File | Risk Level | Pattern |
+|------|------------|---------|
+| `apistudio/runtime.go:112` | CRITICAL | `tenantIDStr := GetClaimsFromContext(r).TenantID` — no nil check |
+| `apistudio/odata.go:84` | CRITICAL | Same pattern |
+| `nba/websocket.go:190` | CRITICAL | WebSocket handler — may bypass middleware |
+| `onboarding/handlers.go:37` | CRITICAL | `tenantIDStr := GetClaimsFromContext(r).TenantID` |
+| `billing_handlers.go:62` | CRITICAL | `tenantID = GetClaimsFromContext(r).TenantID` |
+| `internal_event_handler.go:56` | CRITICAL | Same pattern |
+| `temporal_admin.go` (8+ sites) | CRITICAL | Multiple direct accesses |
+| `handlers/cbo_handler.go` | HIGH | Multiple direct accesses |
+| `handlers/ai_handler.go` | HIGH | `uuid.Parse(GetClaimsFromContext(r).TenantID)` — ignores error |
+| `handlers/scheduler_handlers.go` | HIGH | `normalizeTenantID(GetClaimsFromContext(r).TenantID)` |
+| `handlers/export_handlers.go` | HIGH | Same pattern |
+| `reporting/handler.go:599` | HIGH | `getTenantContext` utility |
+| `simulation/handler.go:50` | HIGH | `req.TenantID = GetClaimsFromContext(r).TenantID` |
 
-### Conclusion
+These are reachable from `main.go` via `SetupRouter`. Each is a latent panic if the JWT token fails to populate `jwt_claims` in the context — which happens for any request where `AuthContextMiddleware` sets `security.AuthInfo` but not `jwt_claims`.
 
-These three standalone services form a consistent auth world: `JWTMiddleware` sets `jwt_claims`, handlers read from `jwt_claims` via `GetClaimsFromContext`, and all fail closed on nil. This is correct behavior — they are not susceptible to the `AuthInfo`/`jwt_claims` mismatch that existed on the main server.
+### Fix
 
-The main server's `GetClaimsFromContext` callers (trigger handlers, RBAC handlers, etc.) have been addressed via the canonical `TenantIDFromRequest` helper, which checks `AuthInfo` first then `jwt_claims` as fallback.
+Replace each call site with the canonical `TenantIDFromRequest(r)` helper, which checks `security.AuthInfoFromContext` first, then `jwtmiddleware.GetClaimsFromContext` as fallback, and returns `("", false)` if neither is populated. Handlers should then fail-closed (401) when `ok == false`.
+
+### Also: Audit Logs Empty Reply — Suspected Panic
+
+`/api/admin/tenants/audit-logs` returns "empty reply from server" (connection closed) with a valid Keycloak token, while the same token works for `/api/v1/triggers`. Without server logs, the cause is unconfirmed, but the pattern is consistent with a panic in the handler or middleware when `ValidateIssuerTenant` rejects the e2e Keycloak issuer and triggers a nil-deref in the fallback path. This is likely another instance of the same `AuthInfo`/`jwt_claims` mismatch class.
 
 ### Remaining
 
-- `pkg/meta/api.go` and `local/cmd/proxy/main.go` were not in scope for this audit. These are lower-traffic paths but should be checked if they expose tenant-scoped data.
+- GitNexus reindex running — bulk reachability query from `main.go` will confirm which Category 1 call sites are live-panic vs. dead-code
+- `pkg/meta/api.go` and `local/cmd/proxy/main.go` not yet audited
 
 ---
 
