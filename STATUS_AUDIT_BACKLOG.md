@@ -127,15 +127,18 @@ Move semantics (delete source after rename) is available as an explicit opt-in v
 **Name:** `TriggerSurface-CreateOnly`
 **Severity:** MEDIUM
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed (2026-09-05)
 
 ### Description
 
 The trigger-binding UI (TriggerAuthoringPage) can create bindings but cannot edit, deactivate, or view firing history. Event-driven pipelines stop being a demo only when operators can see which events fired which runs, and control when they fire.
 
-### Fix Direction
+### Fix Applied
 
-Add: trigger list view with last-fired timestamp and run link; activate/deactivate toggle; run-history page per trigger.
+Full lifecycle support shipped in commit 07e32a451:
+- Backend: trigger_id FK on data_pipeline_runs; dispatch gate (is_active=true); last_fired_at LATERAL join; toggle endpoint; runs-per-trigger handler
+- Integration tests: is_active=false prevents dispatch (verified against live DB)
+- Frontend: trigger list table with is_active Switch (PUT /api/v1/triggers/{id}), last_fired_at, runs link
 
 **Refs:** [#4](https://github.com/hondyman/uisce/issues/4)
 
