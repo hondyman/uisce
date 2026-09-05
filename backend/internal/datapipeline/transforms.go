@@ -24,6 +24,7 @@ type Transformer interface {
 type ColumnMapper struct {
 	Mappings map[string]string // TargetKey -> SourceKey
 	Types    map[string]string // TargetKey -> "string" | "int" | "float" | "bool" | "date" | "uuid"
+	Move     bool             // If true, delete source key after rename (move semantics). Default false (copy semantics).
 }
 
 func (m *ColumnMapper) Transform(ctx context.Context, input []PipelineRecord) ([]PipelineRecord, []string, error) {
@@ -41,7 +42,7 @@ func (m *ColumnMapper) Transform(ctx context.Context, input []PipelineRecord) ([
 		for targetKey, srcKey := range m.Mappings {
 			if val, exists := record[srcKey]; exists {
 				transformed[targetKey] = val
-				if targetKey != srcKey {
+				if m.Move && targetKey != srcKey {
 					delete(transformed, srcKey)
 				}
 			}

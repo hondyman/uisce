@@ -46,6 +46,50 @@ func TestTransforms_ColumnMapper(t *testing.T) {
 	if out[0]["balance"] != 54000.50 {
 		t.Errorf("Expected balance 54000.50, got %v", out[0]["balance"])
 	}
+	if _, exists := out[0]["acc_no"]; !exists {
+		t.Errorf("Source key 'acc_no' should be retained after rename (copy semantics), but it is missing")
+	}
+	if _, exists := out[0]["amt"]; !exists {
+		t.Errorf("Source key 'amt' should be retained after rename (copy semantics), but it is missing")
+	}
+}
+
+func TestTransforms_ColumnMapper_MoveSemantics(t *testing.T) {
+	ctx := context.Background()
+	mapper := &ColumnMapper{
+		Mappings: map[string]string{
+			"account_number": "acc_no",
+			"balance":        "amt",
+		},
+		Move: true,
+	}
+
+	input := []PipelineRecord{
+		{"acc_no": "ACC-100", "amt": "54000.50", "subtype_code": "institutional"},
+	}
+
+	out, errs, err := mapper.Transform(ctx, input)
+	if err != nil {
+		t.Fatalf("Transform failed: %v", err)
+	}
+	if len(errs) > 0 {
+		t.Fatalf("Expected 0 errors, got: %v", errs)
+	}
+	if len(out) != 1 {
+		t.Fatalf("Expected 1 record, got %d", len(out))
+	}
+	if out[0]["account_number"] != "ACC-100" {
+		t.Errorf("Expected account_number 'ACC-100', got %v", out[0]["account_number"])
+	}
+	if v := out[0]["balance"]; v != "54000.50" {
+		t.Errorf("Expected balance '54000.50', got %v (type %T)", v, v)
+	}
+	if _, exists := out[0]["acc_no"]; exists {
+		t.Errorf("Source key 'acc_no' should be deleted after rename when Move=true, but it is present")
+	}
+	if _, exists := out[0]["amt"]; exists {
+		t.Errorf("Source key 'amt' should be deleted after rename when Move=true, but it is present")
+	}
 }
 
 func TestTransforms_AllowlistEnforcer(t *testing.T) {

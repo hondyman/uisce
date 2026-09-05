@@ -524,7 +524,8 @@ func (e *PipelineEngine) executeTransform(ctx context.Context, tenantID uuid.UUI
 				types[k] = fmt.Sprintf("%v", v)
 			}
 		}
-		mapper := &ColumnMapper{Mappings: mappings, Types: types}
+		move, _ := node.Config["move"].(bool)
+		mapper := &ColumnMapper{Mappings: mappings, Types: types, Move: move}
 		return mapper.Transform(ctx, records)
 
 	case "filter":
