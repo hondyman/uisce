@@ -868,28 +868,26 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
                 <TableCell>{v.parent_id || '—'}</TableCell>
                 <TableCell align="right">
                   <Tooltip title={v.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
-                    <span>
-                      <IconButton
-                        size="small"
-                        onClick={() => setEditValue({ id: v.id, value: v.name, label: v.label || v.name, parent_id: v.parent_id || null })}
-                        disabled={v.tenant_id !== tenantId}
-                        color="primary"
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </span>
+                    <IconButton
+                      aria-label={v.tenant_id === tenantId ? 'Edit value' : 'Read Only'}
+                      size="small"
+                      onClick={() => setEditValue({ id: v.id, value: v.name, label: v.label || v.name, parent_id: v.parent_id || null })}
+                      disabled={v.tenant_id !== tenantId}
+                      color="primary"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
                   </Tooltip>
                   <Tooltip title={v.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
-                    <span>
-                      <IconButton
-                        size="small"
-                        onClick={() => onRequestDelete?.(v.id)}
-                        disabled={v.tenant_id !== tenantId}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </span>
+                    <IconButton
+                      aria-label={v.tenant_id === tenantId ? 'Delete value' : 'Read Only'}
+                      size="small"
+                      onClick={() => onRequestDelete?.(v.id)}
+                      disabled={v.tenant_id !== tenantId}
+                      color="error"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
                   </Tooltip>
                 </TableCell>
               </TableRow>
