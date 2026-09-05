@@ -235,6 +235,12 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
     test(`axe: ${route}`, async ({ page }) => {
       await page.goto(route, { waitUntil: 'load' });
 
+      let settled = true;
+      await page.waitForSelector(
+        '.MuiCircularProgress-root, .MuiLinearProgress-root, .MuiSkeleton-root',
+        { state: 'detached', timeout: 10_000 },
+      ).catch(() => { settled = false; });
+
       const url = page.url();
       const authLost = route !== '/login' && url.includes('/login');
       if (authLost) {
@@ -252,6 +258,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
       const output: Record<string, unknown> = {
         routePattern: route,
         finalUrl: page.url(),
+        settled,
         violations: results.violations,
         violationIds: results.violations.map((v: { id: string }) => v.id),
       };

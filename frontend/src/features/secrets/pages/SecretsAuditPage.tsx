@@ -64,7 +64,9 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
     enabled: !!tenantId,
   });
 
-  const logs: AuditLog[] = data || [];
+  const logs: AuditLog[] = Array.isArray(data)
+    ? data
+    : (data?.data ?? []);
 
   const filteredLogs = logs.filter((log) => {
     if (actionFilter !== 'all' && log.action !== actionFilter) return false;

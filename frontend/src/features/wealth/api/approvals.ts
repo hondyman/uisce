@@ -23,7 +23,8 @@ export interface ApproveRequest {
 }
 
 export const fetchPendingApprovals = async (): Promise<ApprovalRequest[]> => {
-    return await apiGet('wealth/approvals/pending');
+    const response = await apiGet('wealth/approvals/pending');
+    return Array.isArray(response) ? response : (response?.data ?? []);
 };
 
 export const approveRequest = async (id: string, data: ApproveRequest): Promise<ApprovalRequest> => {
