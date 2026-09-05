@@ -4,36 +4,37 @@
 
 ---
 
-## Finding: Three A11y Crawl Routes Return 404 — Missing or Miswired Backend Endpoints
+## Finding: Three A11y Crawl Routes Crash During Render — Auth-Required API Returns 401
 
-**Name:** `A11y-404-Missing-Backend-Routes`
+**Name:** `A11y-Crashes-Unauthenticated-API`
 **Severity:** HIGH
 **Found:** 2026-09-05
 **Status:** Open
 
 ### Description
 
-Three routes in the a11y crawl return HTTP 404, meaning the frontend pages are calling API endpoints that don't exist or are registered at different paths. These 404s are NOT crawl noise — they represent permanently broken data-fetch paths in the running application.
+Three routes in the a11y crawl crash during render (no `<main>` landmark — error boundary triggered). The crashes are NOT caused by missing backend routes or URL mismatches — the routes are correctly wired. The crashes occur because the crawl runs without auth cookies, the API calls return 401, and the components do not gracefully handle the unauthenticated state.
 
-| Route (frontend) | Backend Registration | Issue |
-|---|---|---|
-| `secrets/audit-logs` | `/v1/admin/tenants/audit-logs` (api.go:1940) | URL mismatch: frontend calls `secrets/audit-logs`, backend serves `admin/tenants/audit-logs` |
-| `wealth/approvals/pending` | `/api/v1/approvals/pending` (rules_handler.go:77) | Path prefix mismatch: frontend calls `wealth/approvals/pending` |
-| `wealth/feed` | Not found in any backend route registration | Missing endpoint: no backend handler exists |
+Crawl artifacts confirm `crashed: true` for both `secrets_audit` and `wealth_feed`.
+
+| Crawl Route | React Router | Backend Route | API Result (no auth) | Crash Cause |
+|---|---|---|---|---|
+| `/en/secrets/audit` | `/secrets/audit` ✓ | `/api/admin/tenants/audit-logs` ✓ | 401 | Component throws on 401 response |
+| `/en/wealth/feed` | `/wealth/feed` ✓ | none — `fetchFeed` calls `/api/wealth/feed` which doesn't exist | 404 | Component throws on 404 response |
+| `/en/wealth/approvals/pending` | NO ROUTE | N/A | N/A | Finding unverifiable — no crawl artifact |
 
 ### Impact
 
-- Pages render empty/error states against 404 responses — never real content
-- Any violation counts for these routes are measured against empty/error responses, not real content
-- `SecretsAuditPage` guard (`if (result.error) { guard }`) is permanently guarding a path that never returns data
-- The floor's denominator (total routes measured) includes these routes — they depress the aggregate violation rate with vacuous-clean results
+- Pages crash to error boundary, making a11y violations for these routes unmeasurable
+- Aggregate violation rate is depressed by routes that can't render content
+- `wealth/feed` additionally has no backend handler — even with auth the page would fail
 
 ### Required Action
 
-1. `wealth/feed`: determine if the endpoint should be built (product decision) or the page should gracefully handle empty
-2. `secrets/audit-logs`: check frontend route definition — is it calling the wrong path, or should the backend route be aliased at `secrets/audit-logs`?
-3. `wealth/approvals/pending`: check frontend URL construction — is `wealth/` prefix correct or a typo?
-4. Mark these routes as non-representative in the baseline artifact until fixed
+1. `secrets/audit`: Verify auth context is injected before page load (crawl has no session) — if pages must be crawlable, add public/unauthenticated rendering path; otherwise acknowledge crawl limitation
+2. `wealth/feed`: No backend handler exists at `/api/wealth/feed`. Determine: build the endpoint (product decision) or remove the frontend route
+3. `wealth/approvals/pending`: Crawl artifact missing — cannot verify. Frontend has no route for this path; only `core/approval-inbox` and `core/approval-workflows` exist
+4. Consider adding `errorBoundary` fallback for auth-401 cases so pages render an empty-but-crawlable state instead of crashing
 
 ---
 
