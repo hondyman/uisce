@@ -2349,3 +2349,38 @@ func (s *TermRelationshipService) VisualizeLens(ctx context.Context, tenantID, n
 	}, nil
 }
 
+// resolveOrCreateEdgeTypeID looks up the UUID of a catalog_edge_type row by
+// name (preferring a tenant-scoped row, falling back to any tenant's, e.g. a
+// shared/gold-copy definition), creating a tenant-scoped row if the name is
+// unknown anywhere. Shared by TermRelationshipService and
+// SemanticMappingService so both write through the same edge-type vocabulary
+// instead of each maintaining their own resolution logic.
+func resolveOrCreateEdgeTypeID(ctx context.Context, db *sqlx.DB, tenantID, edgeTypeName string) (string, error) {
+	if db == nil {
+		return uuid.Nil.String(), nil
+	}
+
+	var edgeTypeID string
+	if err := db.GetContext(ctx, &edgeTypeID, `
+		SELECT id FROM catalog_edge_type
+		WHERE edge_type_name = $1
+		ORDER BY (tenant_id = $2) DESC
+		LIMIT 1
+	`, edgeTypeName, tenantID); err != nil && err != sql.ErrNoRows {
+		return "", err
+	}
+	if edgeTypeID != "" {
+		return edgeTypeID, nil
+	}
+
+	if err := db.GetContext(ctx, &edgeTypeID, `
+		INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at)
+		VALUES ($1, $2, NOW(), NOW())
+		ON CONFLICT (tenant_id, edge_type_name) DO UPDATE SET edge_type_name = EXCLUDED.edge_type_name
+		RETURNING id
+	`, tenantID, edgeTypeName); err != nil {
+		return "", err
+	}
+	return edgeTypeID, nil
+}
+
