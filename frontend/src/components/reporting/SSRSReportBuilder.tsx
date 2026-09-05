@@ -1099,12 +1099,15 @@ const SSRSReportBuilderContent: React.FC = () => {
             {/* Left: action icons */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flex: '0 0 auto' }}>
               <Tooltip title={isReadOnlyCore ? "Core template (read-only). Click Clone to create a custom tenant copy." : "Save (Ctrl+S)"}>
-                <span>
-                  <IconButton size="small" onClick={handleSaveReport} disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
-                    sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <SaveIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label={isReadOnlyCore ? "Core template (read-only)" : "Save (Ctrl+S)"}
+                  size="small"
+                  onClick={handleSaveReport}
+                  disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
+                  sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <SaveIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
 
               <Tooltip title="Clone as Tenant Custom Report">
@@ -1132,20 +1135,26 @@ const SSRSReportBuilderContent: React.FC = () => {
 
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.1)', mx: 0.5 }} />
               <Tooltip title="Undo">
-                <span>
-                  <IconButton size="small" onClick={undo} disabled={!canUndo || isReadOnlyCore}
-                    sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <UndoIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label="Undo"
+                  size="small"
+                  onClick={undo}
+                  disabled={!canUndo || isReadOnlyCore}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <UndoIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
               <Tooltip title="Redo">
-                <span>
-                  <IconButton size="small" onClick={redo} disabled={!canRedo || isReadOnlyCore}
-                    sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <RedoIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label="Redo"
+                  size="small"
+                  onClick={redo}
+                  disabled={!canRedo || isReadOnlyCore}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <RedoIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.1)', mx: 0.5 }} />
               <Tooltip title="Preview">

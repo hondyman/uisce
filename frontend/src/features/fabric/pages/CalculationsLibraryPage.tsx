@@ -594,6 +594,7 @@ const CalculationsLibraryPage: React.FC<CalculationsLibraryPageProps> = () => {
                   />
                   {category.subcategories.length > 0 && (
                     <IconButton
+                      aria-label={expandedCategories.has(category.name) ? 'Collapse category' : 'Expand category'}
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();

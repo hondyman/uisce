@@ -322,28 +322,26 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
               <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{abbrev.notes || '—'}</TableCell>
               <TableCell align="right">
                 <Tooltip title={abbrev.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleEditAbbreviation(abbrev)}
-                      disabled={abbrev.tenant_id !== tenantId}
-                      color="primary"
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                  </span>
+                  <IconButton
+                    aria-label={abbrev.tenant_id === tenantId ? 'Edit abbreviation' : 'Read Only'}
+                    size="small"
+                    onClick={() => handleEditAbbreviation(abbrev)}
+                    disabled={abbrev.tenant_id !== tenantId}
+                    color="primary"
+                  >
+                    <EditIcon fontSize="small" />
+                  </IconButton>
                 </Tooltip>
                 <Tooltip title={abbrev.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
-                  <span>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteAbbreviation(abbrev.id)}
-                      disabled={abbrev.tenant_id !== tenantId}
-                      color="error"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </span>
+                  <IconButton
+                    aria-label={abbrev.tenant_id === tenantId ? 'Delete abbreviation' : 'Read Only'}
+                    size="small"
+                    onClick={() => handleDeleteAbbreviation(abbrev.id)}
+                    disabled={abbrev.tenant_id !== tenantId}
+                    color="error"
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                 </Tooltip>
               </TableCell>
             </TableRow>
@@ -374,28 +372,26 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
             <Divider />
             <Box sx={{ p: 2, display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
               <Tooltip title={abbrev.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleEditAbbreviation(abbrev)}
-                    disabled={abbrev.tenant_id !== tenantId}
-                    color="primary"
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label={abbrev.tenant_id === tenantId ? 'Edit abbreviation' : 'Read Only'}
+                  size="small"
+                  onClick={() => handleEditAbbreviation(abbrev)}
+                  disabled={abbrev.tenant_id !== tenantId}
+                  color="primary"
+                >
+                  <EditIcon fontSize="small" />
+                </IconButton>
               </Tooltip>
               <Tooltip title={abbrev.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleDeleteAbbreviation(abbrev.id)}
-                    disabled={abbrev.tenant_id !== tenantId}
-                    color="error"
-                  >
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label={abbrev.tenant_id === tenantId ? 'Delete abbreviation' : 'Read Only'}
+                  size="small"
+                  onClick={() => handleDeleteAbbreviation(abbrev.id)}
+                  disabled={abbrev.tenant_id !== tenantId}
+                  color="error"
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
               </Tooltip>
             </Box>
           </Card>

@@ -95,33 +95,33 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
         }}
       >
         <Tooltip title="Continue (F5)">
-          <IconButton size="small" onClick={onContinue} disabled={!isDebugging} sx={{ color: '#4fc1ff' }}>
+          <IconButton aria-label="Continue" size="small" onClick={onContinue} disabled={!isDebugging} sx={{ color: '#4fc1ff' }}>
             <PlayIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="Step Over (F10)">
-          <IconButton size="small" onClick={onStep} disabled={!isDebugging} sx={{ color: '#4fc1ff' }}>
+          <IconButton aria-label="Step over" size="small" onClick={onStep} disabled={!isDebugging} sx={{ color: '#4fc1ff' }}>
             <StepOverIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="Step Into (F11)">
-          <IconButton size="small" disabled sx={{ color: '#6a6a6a' }}>
+          <IconButton aria-label="Step into" size="small" disabled sx={{ color: '#6a6a6a' }}>
             <StepIntoIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="Step Out (Shift+F11)">
-          <IconButton size="small" disabled sx={{ color: '#6a6a6a' }}>
+          <IconButton aria-label="Step out" size="small" disabled sx={{ color: '#6a6a6a' }}>
             <StepOutIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Divider orientation="vertical" flexItem sx={{ bgcolor: '#3c3c3c', mx: 1 }} />
         <Tooltip title="Restart (Ctrl+Shift+F5)">
-          <IconButton size="small" onClick={onRestart} sx={{ color: '#89d185' }}>
+          <IconButton aria-label="Restart" size="small" onClick={onRestart} sx={{ color: '#89d185' }}>
             <RestartIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="Stop (Shift+F5)">
-          <IconButton size="small" onClick={onStop} sx={{ color: '#f48771' }}>
+          <IconButton aria-label="Stop" size="small" onClick={onStop} sx={{ color: '#f48771' }}>
             <StopIcon fontSize="small" />
           </IconButton>
         </Tooltip>
@@ -156,8 +156,9 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
         {/* Tab Bar */}
         <Box sx={{ width: 40, bgcolor: '#333333', display: 'flex', flexDirection: 'column', alignItems: 'center', py: 1 }}>
           <Tooltip title="Call Stack" placement="right">
-            <IconButton 
-              size="small" 
+            <IconButton
+              aria-label="Call stack"
+              size="small"
               onClick={() => setActiveTab('stack')}
               sx={{ color: activeTab === 'stack' ? '#4fc1ff' : '#858585' }}
             >
@@ -165,8 +166,9 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
             </IconButton>
           </Tooltip>
           <Tooltip title="Variables" placement="right">
-            <IconButton 
-              size="small" 
+            <IconButton
+              aria-label="Variables"
+              size="small"
               onClick={() => setActiveTab('variables')}
               sx={{ color: activeTab === 'variables' ? '#4fc1ff' : '#858585' }}
             >
@@ -174,8 +176,9 @@ const DebugPanel: React.FC<DebugPanelProps> = ({
             </IconButton>
           </Tooltip>
           <Tooltip title="Console" placement="right">
-            <IconButton 
-              size="small" 
+            <IconButton
+              aria-label="Console"
+              size="small"
               onClick={() => setActiveTab('console')}
               sx={{ color: activeTab === 'console' ? '#4fc1ff' : '#858585' }}
             >
