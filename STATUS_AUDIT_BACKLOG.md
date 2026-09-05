@@ -28,6 +28,8 @@ Bind to the server-side API Studio endpoint registry (no arbitrary URLs — SSRF
 - `backend/internal/datapipeline/transforms.go` — `APICallerTransformer` stub
 - API Studio endpoint registry (platform component, not yet wired)
 
+**Refs:** [#1](https://github.com/hondyman/uisce/issues/1)
+
 ---
 
 ## Finding: Outbox Publish Outside BO Write Transaction
@@ -48,6 +50,8 @@ Any pipeline wired to fire on BO create/update will fire spuriously when the ori
 ### Fix Direction
 
 Refactor `PublishPipelineTrigger` to accept the BO write's `*sqlx.Tx` and participate in the same transaction. One interface change — the outbox row and the BO write commit or roll back atomically. Pipelines fire only when the event that triggered them is durable.
+
+**Refs:** [#2](https://github.com/hondyman/uisce/issues/2)
 
 ---
 
@@ -84,6 +88,8 @@ Remove `delete(transformed, srcKey)`. Default-copy behavior gives rename-without
 - `backend/internal/datapipeline/transforms.go:41-46`
 - `backend/internal/datapipeline/diamond_persistence_test.go`
 
+**Refs:** [#3](https://github.com/hondyman/uisce/issues/3)
+
 ---
 
 ## Finding: Trigger Surface — Create-Only, No Visibility or Lifecycle
@@ -100,6 +106,8 @@ The trigger-binding UI (TriggerAuthoringPage) can create bindings but cannot edi
 ### Fix Direction
 
 Add: trigger list view with last-fired timestamp and run link; activate/deactivate toggle; run-history page per trigger.
+
+**Refs:** [#4](https://github.com/hondyman/uisce/issues/4)
 
 ---
 
