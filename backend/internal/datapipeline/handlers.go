@@ -395,7 +395,11 @@ func (h *DataPipelineHandler) SimulatePipeline(w http.ResponseWriter, r *http.Re
 }
 
 func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request) {
-	tenantID := h.getTenantID(r)
+	tenantID, ok := claimTenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 
 	var payload struct {
 		Pipeline PipelineDefinition `json:"pipeline"`
@@ -445,9 +449,20 @@ func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request
 }
 
 func (h *DataPipelineHandler) GetRunStatus(w http.ResponseWriter, r *http.Request) {
-	runID := chi.URLParam(r, "runId")
-	run, ok := h.engine.GetRun(runID)
+	tenantID, ok := claimTenantIDFromRequest(r)
 	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	runID := chi.URLParam(r, "runId")
+	run, ok := h.engine.GetRunWithFallback(r.Context(), runID)
+	if !ok {
+		http.Error(w, "Run not found", http.StatusNotFound)
+		return
+	}
+
+	if run.TenantID != tenantID {
 		http.Error(w, "Run not found", http.StatusNotFound)
 		return
 	}
