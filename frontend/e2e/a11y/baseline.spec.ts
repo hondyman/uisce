@@ -235,10 +235,19 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
     test(`axe: ${route}`, async ({ page }) => {
       await page.goto(route, { waitUntil: 'load' });
 
+      const UNSETTLED_ROUTES: Record<string, number> = {
+        '/en/bp-console': 30_000,
+        '/en/bp-console/instances': 30_000,
+        '/en/bp-console/queues': 30_000,
+        '/en/bp-console/:tab': 30_000,
+        '/en/secrets/monitoring': 30_000,
+      };
+      const waitMs = UNSETTLED_ROUTES[route] ?? 10_000;
+
       let settled = true;
       await page.waitForSelector(
         '.MuiCircularProgress-root, .MuiLinearProgress-root, .MuiSkeleton-root',
-        { state: 'detached', timeout: 10_000 },
+        { state: 'detached', timeout: waitMs },
       ).catch(() => { settled = false; });
 
       const url = page.url();

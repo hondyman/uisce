@@ -59,7 +59,7 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
     queryKey: ['audit-logs', tenantId],
     queryFn: () => {
       const params = new URLSearchParams({ tenant_id: tenantId, limit: '100', offset: '0' });
-      return apiFetch(`/api/rest/secrets/audit-logs?${params}`).then(r => r.json());
+      return apiFetch(`/api/admin/tenants/audit-logs?${params}`).then(r => r.json());
     },
     enabled: !!tenantId,
   });

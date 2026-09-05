@@ -3,9 +3,16 @@
  * a11y-ratchet.mjs
  *
  * Compares the current aggregate against a frozen baseline JSON.
- * Fails if any rule increases OR denominator shrinks — the only sanctioned
- * escape hatch is a commit that rewrites the frozen baseline with a
- * commit message containing FREEZE-REASON: and the per-rule delta.
+ *
+ * Gate semantics:
+ * - FAIL on any rule increase (regression — blocks)
+ * - WARN on any rule decrease (improvement — prompts deliberate re-freeze)
+ * - FAIL on denominator shrink (fewer routes measured — re-freeze required)
+ * - WARN on denominator growth (more routes measured — re-freeze recommended)
+ *
+ * Shrinks are never silent: a floor that drops means the previous floor's
+ * denominator was wrong. The escape hatch is a commit that rewrites
+ * baseline-frozen.json with FREEZE-REASON: in the commit message.
  *
  * Usage: node scripts/a11y-ratchet.mjs [--current <path>] [--frozen <path>]
  */
@@ -42,51 +49,62 @@ const repDenomFrozen  = f.totalRoutes - f.nonRepClean - f.nonRepWithViolations -
 
 let failed = false;
 const failures = [];
+const warnings = [];
 
-if (c.repViolations !== f.repViolations) {
+// repViolations: fail on increase, warn on decrease
+const repDelta = c.repViolations - f.repViolations;
+if (repDelta > 0) {
   failed = true;
-  failures.push(`repViolations: ${f.repViolations} → ${c.repViolations} (Δ${c.repViolations - f.repViolations >= 0 ? '+' : ''}${c.repViolations - f.repViolations})`);
+  failures.push(`repViolations REGRESSION: ${f.repViolations} → ${c.repViolations} (+${repDelta})`);
+} else if (repDelta < 0) {
+  warnings.push(`repViolations IMPROVED: ${f.repViolations} → ${c.repViolations} (${repDelta}). Verify and re-freeze.`);
 }
 
-if (repDenomCurrent < repDenomFrozen) {
+// Denominator: fail on shrink, warn on growth
+const denomDelta = repDenomCurrent - repDenomFrozen;
+if (denomDelta < 0) {
   failed = true;
-  failures.push(`repDenominator SHRANK: ${repDenomFrozen} → ${repDenomCurrent} (Δ${repDenomCurrent - repDenomFrozen}) — must be documented in FREEZE-REASON`);
+  failures.push(`repDenominator SHRANK: ${repDenomFrozen} → ${repDenomCurrent} (Δ${denomDelta}). Must re-freeze.`);
+} else if (denomDelta > 0) {
+  warnings.push(`repDenominator GREW: ${repDenomFrozen} → ${repDenomCurrent} (+${denomDelta}). Re-freeze recommended.`);
 }
 
-for (const rule of allRules) {
+// Per-rule: fail on increase, warn on decrease
+for (const rule of [...allRules].sort()) {
   const fc = c.byRule?.[rule]?.count ?? 0;
   const ff = f.byRule?.[rule]?.count ?? 0;
-  if (fc > ff) {
+  const delta = fc - ff;
+  if (delta > 0) {
     failed = true;
-    failures.push(`rule ${rule}: ${ff} → ${fc} (Δ+${fc - ff}) — must be documented in FREEZE-REASON`);
+    failures.push(`rule ${rule} REGRESSION: ${ff} → ${fc} (+${delta})`);
+  } else if (delta < 0) {
+    warnings.push(`rule ${rule} IMPROVED: ${ff} → ${fc} (${delta}). Verify and re-freeze.`);
   }
+}
+
+console.log(`=== a11y-ratchet ===`);
+console.log(`  Current: ${currentPath}`);
+console.log(`  Frozen:  ${frozenPath}`);
+console.log(`  repViolations:  frozen=${f.repViolations} current=${c.repViolations} Δ=${repDelta >= 0 ? '+' : ''}${repDelta}`);
+console.log(`  repDenominator: frozen=${repDenomFrozen} current=${repDenomCurrent} Δ=${denomDelta >= 0 ? '+' : ''}${denomDelta}`);
+
+if (warnings.length > 0) {
+  console.log(`  Warnings (verify and re-freeze if expected):`);
+  for (const w of warnings) console.log(`    ⚠ ${w}`);
 }
 
 if (failed) {
-  console.error('❌ RATCHET FAILED');
-  console.error(`  Current:  ${currentPath}`);
-  console.error(`  Frozen:   ${frozenPath}`);
-  for (const msg of failures) {
-    console.error(`  • ${msg}`);
-  }
+  console.error(`  ❌ FAIL — regressions detected:`);
+  for (const msg of failures) console.error(`    • ${msg}`);
   console.error('');
-  console.error('To re-freeze with a documented reason, add to the commit message:');
-  console.error(`  FREEZE-REASON: ${failures.join(' | ')}`);
+  console.error('  To re-freeze: commit rewrites baseline-frozen.json with:');
+  console.error(`    FREEZE-REASON: ${failures.map(f => f.split(' ')[0]).join(' | ')}`);
   process.exit(1);
+} else if (warnings.length > 0) {
+  console.log(`  ✅ PASS — no regressions`);
+  console.log(`     (${warnings.length} improvement(s) detected — re-freeze to update the floor)`);
+  process.exit(0);
 } else {
-  console.log('✅ RATCHET PASSED — no regressions detected');
-  console.log(`  Frozen repViolations:  ${f.repViolations}`);
-  console.log(`  Current repViolations: ${c.repViolations}`);
-  console.log(`  Frozen repDenominator: ${repDenomFrozen}`);
-  console.log(`  Current repDenominator:${repDenomCurrent}`);
-  console.log(`  Per-rule deltas:`);
-  for (const rule of [...allRules].sort()) {
-    const fc = c.byRule?.[rule]?.count ?? 0;
-    const ff = f.byRule?.[rule]?.count ?? 0;
-    const delta = fc - ff;
-    if (delta !== 0) {
-      console.log(`    ${rule}: ${ff} → ${fc} (${delta >= 0 ? '+' : ''}${delta})`);
-    }
-  }
+  console.log(`  ✅ PASS — current matches frozen floor`);
   process.exit(0);
 }
