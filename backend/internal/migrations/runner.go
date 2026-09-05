@@ -47,11 +47,19 @@ func ApplyMigrations(db *sql.DB) error {
 	migrationsDir := "db/migrations"
 	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
 		migrationsDir = "../db/migrations"
+		if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+			// 3rd fallback: MIGRATIONS_DIR env var (absolute path, set by deploy)
+			migrationsDir = os.Getenv("MIGRATIONS_DIR")
+			if migrationsDir == "" {
+				log.Printf("⚠️  Migrations directory not found (tried db/migrations, ../db/migrations, MIGRATIONS_DIR); skipping auto-migration.")
+				return nil
+			}
+		}
 	}
 
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
-		log.Printf("⚠️  Migrations directory %s not found; skipping auto-migration.", migrationsDir)
+		log.Printf("⚠️  Migrations directory %s unreadable; skipping auto-migration: %v", migrationsDir, err)
 		return nil
 	}
 

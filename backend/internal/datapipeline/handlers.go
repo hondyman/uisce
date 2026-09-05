@@ -101,7 +101,11 @@ func (h *DataPipelineHandler) ListPipelines(w http.ResponseWriter, r *http.Reque
 		h.listPipelinesCompact(w, r)
 		return
 	}
-	tenantID := h.getTenantID(r)
+	tenantID, ok := claimTenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
 
 	if h.db == nil {
 		w.Header().Set("Content-Type", "application/json")
