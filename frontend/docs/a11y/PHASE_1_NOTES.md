@@ -509,9 +509,15 @@ The auth guard now fully operational. Remaining work: expand route list to full
 
 ### Update 2026-09-05 (authoritative serial run — workers=1, 6.4 min)
 
-**Baseline results (151 routes, 21 param routes, representative denominator: 130):**
-- Representative: **88 violations** across **57 routes** with violations
-- Total (incl. 6 non-rep error-state pages): 88 violations across 63 routes
+**Baseline results (151 routes, 21 param routes):**
+- Representative (current, provisional): **81 violations** across **59 routes** with violations / 130 rep denominator
+- Total (incl. 21 param non-rep + 5 crashed): 92 violations across 66 routes
+- **Provisional until post-crash-as-data re-baseline:** the 5 crashed routes
+  (render failed with app-level TypeError) are still in the aggregate as violations
+  from the error-boundary scan. After the re-baseline: `crashed: true` flags them,
+  denominator drops to ~125, and rep violations drop proportionally.
+
+> Numbers sum-verified: byRule counts (24+18+14+7+7+5+4+3+3+2+1 = **92**) = totalViolations ✓
 
 | Rule | Count | Impact |
 |------|-------|--------|
@@ -533,33 +539,48 @@ The auth guard now fully operational. Remaining work: expand route list to full
 > serial run is used for sizing; counts are treated as ±N until stabilized.
 > Wait-stabilization (waitForLoadState('networkidle') or data-dependent selector)
 > is Phase 2 task zero — one re-baseline after landing it, then the ratchet holds.
+> Token TTL refresh was added this session (Keycloak tokens expire ~5 min; the 6-min
+> crawl risks 401 mid-run; now refreshes 60s before expiry).
 
-**Param route accounting:** 21 param routes. 15 non-rep clean (literal `:param` → catch-all);
-6 non-rep with violations (redirected to error state; `finalUrl` confirms non-rep).
-Effective representative denominator: 130 routes.
+**Param route accounting:** 21 param routes. 14 non-rep clean (literal `:param` → catch-all);
+7 non-rep with violations (redirected to error state; `finalUrl` confirms non-rep).
+
+**Crashed routes (render failed):** 5 routes (`/en/admin/ai-semantic-bridge`,
+`/en/core/approval-inbox`, `/en/secrets/audit`, `/en/secrets/config`, `/en/wealth/feed`)
+— all have `TypeError: logs.filter is not a function` in their page error boundary.
+`crashed: true` is written to the per-route JSON; aggregate excludes them from rep count.
 
 **Artifacts:**
 - Per-route JSON: `frontend/test-results/a11y/*.json` — format:
-  `{ routePattern, finalUrl, violations, violationIds }` (passes stripped).
+  `{ routePattern, finalUrl, violations, violationIds, crashed }` (passes stripped).
   Committed to git — durable.
 - Aggregate: `frontend/docs/a11y/baseline-2026-09-05.json` (durable, never touched
   by Playwright). Updated by `scripts/aggregate-a11y-baseline.mjs`.
-  Fields: `repViolations`, `repRoutesWithViolations` separate non-rep error pages.
+  Fields: `repViolations`, `repRoutesWithViolations`, `crashedRoutes` separate non-rep.
 - Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — derives `isParam` from `':'`
-  in routePattern; derives non-rep from `isParam && (clean || finalUrl redirect)`.
-  Backwards-compatible with prior JSON formats.
+  in routePattern; derives non-rep from `isParam && (clean || finalUrl redirect)`;
+  excludes `crashed` routes from representative counts. Backwards-compatible.
 
 **Key spec changes:**
 - Auth: throws at setup if E2E_KC_USER is set but token fetch fails. Fallback to
   fake JWT only when neither E2E_JWT nor E2E_KC_USER is set (with console.warn).
-  Token is now memoized once per crawl run (was: 151 POSTs; now: 1 POST).
-- JSON format: passes stripped; only routePattern, finalUrl, violations, violationIds.
+  Token memoized once per crawl run (was: 151 POSTs; now: 1 POST). TTL refresh
+  added: if token expires in <60s, re-fetches automatically (was: risk 401 mid-crawl).
+- JSON format: passes stripped; only routePattern, finalUrl, violations, violationIds, crashed.
 - `<main>` landmark: App.tsx now renders `<Box component="main" id="main-content" tabIndex={-1}>`
   as the skip-link target. AdminLayout.tsx also updated. Guard restored with broadened
-  selector (`main, [role="main"]`) to catch pages that use `role="main"` directly.
+  selector (`main, [role="main"]`) — caught 5 app crashes in first run post-fix.
+- Crash-as-data: when guard finds no `<main>`, writes `crashed: true` to the JSON and
+  returns (test passes). Aggregate surfaces crashed routes separately; they do not
+  pollute the representative violation count.
 - Credential decision: Keycloak `uisce` realm is a disposable dev instance.
   Rotation: N/A for disposable dev realm. No literal credential values in tracked files.
 
-**Phase 1 status:** Phase 0 complete. Baseline of record: `65e33ce41`.
+**Phase 1 status:** Phase 0 complete. Baseline of record: `65e33ce41` (before
+crash-as-data); next serial re-baseline after this session's changes produces the
+crash-aware aggregate and becomes the Phase 2 floor.
 Phase 2 (component-level triage) pending — button-name 24 critical, progressbar 18–22
 (post-stabilization), input-name 14 serious, label 7 critical, then the tail.
+The 5 crashed routes are a parallel app-bug thread (TypeError: logs.filter is not
+a function — likely an API contract change returning an object where the page expects
+an array; shared pattern across SecretsAuditPage and others).

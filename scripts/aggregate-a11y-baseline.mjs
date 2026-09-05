@@ -38,6 +38,7 @@ const result = {
     paramRoutes: 0,
     nonRepClean: 0,
     nonRepWithViolations: 0,
+    crashedRoutes: 0,
     repRoutesWithViolations: 0,
     repViolations: 0,
     totalViolations: 0,
@@ -51,35 +52,32 @@ for (const file of files) {
   const raw = readFileSync(join(RESULTS_DIR, file), 'utf8');
   const d = JSON.parse(raw);
 
-  // New stripped format: { routePattern, finalUrl, violations, violationIds }
+  // New stripped format: { routePattern, finalUrl, violations, violationIds, crashed }
   // Legacy format: { routePattern, finalUrl, axe: { violations, passes, ... } }
   // Oldest format: { violations, passes, ... } at root level (no routePattern)
   const routePattern = d.routePattern ?? ('/' + file.replace(/^_/, '').replace(/_/g, '/').replace(/\.json$/, ''));
   const finalUrl = d.finalUrl ?? null;
+  const crashed = d.crashed === true;
   let violations;
   if (Array.isArray(d.violations)) {
-    // New stripped format: violations at root
     violations = d.violations;
   } else if (d.axe && Array.isArray(d.axe.violations)) {
-    // Legacy wrapped format
     violations = d.axe.violations;
   } else {
-    // Oldest format
     violations = d.violations ?? [];
   }
   const isParam = routePattern.includes(':');
   const wasRedirected = finalUrl && finalUrl !== `http://localhost:5173${routePattern}`;
-  // Non-representative: param route visited literally (non-rep clean),
-  // OR param route that redirected (caught by the router's fallback/error handler)
   const wasNonRep = isParam && (violations.length === 0 || wasRedirected);
 
   if (isParam) result.metadata.paramRoutes++;
   if (wasNonRep && violations.length === 0) result.metadata.nonRepClean++;
   if (wasNonRep && violations.length > 0) result.metadata.nonRepWithViolations++;
+  if (crashed) result.metadata.crashedRoutes++;
   result.metadata.totalViolations += violations.length;
   if (violations.length > 0) result.metadata.routesWithViolations++;
-  if (!wasNonRep && violations.length > 0) result.metadata.repRoutesWithViolations++;
-  if (!wasNonRep) result.metadata.repViolations += violations.length;
+  if (!wasNonRep && !crashed && violations.length > 0) result.metadata.repRoutesWithViolations++;
+  if (!wasNonRep && !crashed) result.metadata.repViolations += violations.length;
 
   for (const v of violations) {
     result.metadata.byRule[v.id] = result.metadata.byRule[v.id] ||
@@ -92,6 +90,7 @@ for (const file of files) {
     finalUrl,
     isParam,
     wasNonRep,
+    crashed,
     violations: violations.length,
     violationIds: violations.map(v => v.id),
   });
@@ -105,7 +104,9 @@ writeFileSync(outputPath, JSON.stringify(result, null, 2));
 console.log(`Written: ${outputPath}`);
 console.log(`  Routes: ${result.metadata.totalRoutes}`);
 console.log(`  Param routes: ${result.metadata.nonRepClean} clean non-rep + ${result.metadata.nonRepWithViolations} non-rep w/violations / ${result.metadata.paramRoutes} total`);
-console.log(`  Representative denominator: ${result.metadata.totalRoutes - result.metadata.nonRepClean - result.metadata.nonRepWithViolations}`);
+console.log(`  Crashed routes (render failed): ${result.metadata.crashedRoutes}`);
+const repDenom = result.metadata.totalRoutes - result.metadata.nonRepClean - result.metadata.nonRepWithViolations - result.metadata.crashedRoutes;
+console.log(`  Representative denominator: ${repDenom}`);
 console.log(`  Representative violations: ${result.metadata.repViolations} across ${result.metadata.repRoutesWithViolations} routes`);
 console.log(`  Total violations (incl. non-rep): ${result.metadata.totalViolations} across ${result.metadata.routesWithViolations} routes`);
 console.log(`  Rules: ${Object.keys(result.metadata.byRule).length}`);

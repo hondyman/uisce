@@ -2,5 +2,7 @@
   "routePattern": "/en/core/approval-inbox",
   "finalUrl": "http://localhost:5173/en/core/approval-inbox?",
   "violations": [],
-  "violationIds": []
+  "violationIds": [],
+  "crashed": true,
+  "crashReason": "no <main> landmark — app crashed or error boundary rendered"
 }

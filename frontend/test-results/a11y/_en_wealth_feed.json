@@ -2,5 +2,7 @@
   "routePattern": "/en/wealth/feed",
   "finalUrl": "http://localhost:5173/en/wealth/feed?",
   "violations": [],
-  "violationIds": []
+  "violationIds": [],
+  "crashed": true,
+  "crashReason": "no <main> landmark — app crashed or error boundary rendered"
 }

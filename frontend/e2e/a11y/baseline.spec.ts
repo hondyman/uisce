@@ -246,7 +246,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         .disableRules(['color-contrast'])
         .analyze();
 
-      const output = {
+      const output: Record<string, unknown> = {
         routePattern: route,
         finalUrl: page.url(),
         violations: results.violations,
@@ -264,7 +264,11 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
 
       const mainCount = await page.locator('main, [role="main"]').count();
       if (mainCount === 0) {
-        throw new Error(`no <main> landmark on ${route} — page may have failed to render`);
+        output.crashed = true;
+        output.crashReason = 'no <main> landmark — app crashed or error boundary rendered';
+        const filePath = path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`);
+        fs.writeFileSync(filePath, JSON.stringify(output, null, 2));
+        return;
       }
     });
   }

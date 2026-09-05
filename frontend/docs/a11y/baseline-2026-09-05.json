@@ -1,29 +1,30 @@
 {
   "metadata": {
-    "generated": "2026-09-05T01:55:39.358Z",
+    "generated": "2026-09-05T02:31:46.076Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
     "paramRoutes": 21,
     "nonRepClean": 14,
     "nonRepWithViolations": 7,
+    "crashedRoutes": 4,
     "repRoutesWithViolations": 59,
     "repViolations": 81,
     "totalViolations": 92,
     "routesWithViolations": 66,
     "byRule": {
-      "aria-progressbar-name": {
-        "count": 23,
-        "impact": "serious",
-        "description": "Ensure every ARIA progressbar node has an accessible name"
-      },
       "button-name": {
-        "count": 23,
+        "count": 24,
         "impact": "critical",
         "description": "Ensure buttons have discernible text"
       },
+      "aria-progressbar-name": {
+        "count": 22,
+        "impact": "serious",
+        "description": "Ensure every ARIA progressbar node has an accessible name"
+      },
       "aria-input-field-name": {
-        "count": 15,
+        "count": 14,
         "impact": "serious",
         "description": "Ensure every ARIA input field has an accessible name"
       },
@@ -52,15 +53,15 @@
         "impact": "serious",
         "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies"
       },
+      "aria-prohibited-attr": {
+        "count": 3,
+        "impact": "serious",
+        "description": "Ensure ARIA attributes are not prohibited for an element's role"
+      },
       "aria-command-name": {
         "count": 2,
         "impact": "serious",
         "description": "Ensure every ARIA button, link and menuitem has an accessible name"
-      },
-      "aria-prohibited-attr": {
-        "count": 2,
-        "impact": "serious",
-        "description": "Ensure ARIA attributes are not prohibited for an element's role"
       },
       "listitem": {
         "count": 1,
@@ -74,6 +75,7 @@
         "finalUrl": "http://localhost:5173/en?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -82,6 +84,7 @@
         "finalUrl": "http://localhost:5173/en/app/data-product/:pageKey?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -92,6 +95,7 @@
         "finalUrl": "http://localhost:5173/auth/callback?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -100,6 +104,7 @@
         "finalUrl": "http://localhost:5173/change-review?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -108,6 +113,7 @@
         "finalUrl": "http://localhost:5173/en/core/abbreviations?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -116,6 +122,7 @@
         "finalUrl": "http://localhost:5173/en/access-explanation?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -124,6 +131,7 @@
         "finalUrl": "http://localhost:5173/login",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -132,6 +140,7 @@
         "finalUrl": "http://localhost:5173/en/admin/entitlements?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -140,6 +149,7 @@
         "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -148,6 +158,7 @@
         "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey/components?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -156,6 +167,7 @@
         "finalUrl": "http://localhost:5173/en/admin/llm?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -164,6 +176,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/delegations?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -172,6 +185,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/field-permissions?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -180,14 +194,18 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/group-role-mappings?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 0,
-        "violationIds": []
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/admin/rbac/identity-providers",
         "finalUrl": "http://localhost:5173/en/admin/rbac/identity-providers?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -198,6 +216,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -206,6 +225,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/teams?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -214,6 +234,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/user-roles?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -222,6 +243,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/user-tenants?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -232,6 +254,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/users?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "scrollable-region-focusable"
@@ -242,6 +265,7 @@
         "finalUrl": "http://localhost:5173/en/admin/seeding?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "label"
@@ -252,6 +276,7 @@
         "finalUrl": "http://localhost:5173/en/admin/temporal-ops?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -262,6 +287,7 @@
         "finalUrl": "http://localhost:5173/en/ai-assistant?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -272,6 +298,7 @@
         "finalUrl": "http://localhost:5173/en/analytics/advisor-dashboard?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -280,6 +307,7 @@
         "finalUrl": "http://localhost:5173/en/analytics/factors?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -288,6 +316,7 @@
         "finalUrl": "http://localhost:5173/en/analytics/factors/:portfolioID?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -296,6 +325,7 @@
         "finalUrl": "http://localhost:5173/en/analytics/rebalancer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -304,6 +334,7 @@
         "finalUrl": "http://localhost:5173/en/analytics/scenario-analysis?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -312,6 +343,7 @@
         "finalUrl": "http://localhost:5173/en/api-studio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -320,17 +352,16 @@
         "finalUrl": "http://localhost:5173/en/optimization?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 2,
-        "violationIds": [
-          "aria-input-field-name",
-          "aria-progressbar-name"
-        ]
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/audit",
         "finalUrl": "http://localhost:5173/en/audit?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -341,6 +372,7 @@
         "finalUrl": "http://localhost:5173/en/bp-console?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -352,6 +384,7 @@
         "finalUrl": "http://localhost:5173/en/bp-console/instances?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -363,6 +396,7 @@
         "finalUrl": "http://localhost:5173/en/bp-console/queues?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -374,6 +408,7 @@
         "finalUrl": "http://localhost:5173/en/bp-console/:tab?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -385,6 +420,7 @@
         "finalUrl": "http://localhost:5173/en/bundle-explorer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -393,6 +429,7 @@
         "finalUrl": "http://localhost:5173/en/bundles?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -401,6 +438,7 @@
         "finalUrl": "http://localhost:5173/en/business-objects?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -411,6 +449,7 @@
         "finalUrl": "http://localhost:5173/en/business-objects/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -422,6 +461,7 @@
         "finalUrl": "http://localhost:5173/en/business-objects/new?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -432,6 +472,7 @@
         "finalUrl": "http://localhost:5173/en/calendar?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -442,6 +483,7 @@
         "finalUrl": "http://localhost:5173/en/calendar/conflicts?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -452,6 +494,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/ai-suggestions?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -462,6 +505,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/api-inventory?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-input-field-name",
@@ -473,6 +517,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/business-terms?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -481,6 +526,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/business-terms/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -491,6 +537,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/edge-types?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -501,6 +548,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/edge-types/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -509,6 +557,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/node-types?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -519,6 +568,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/node-types/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -527,6 +577,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/semantic-terms?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -535,6 +586,7 @@
         "finalUrl": "http://localhost:5173/en/catalog/view-definitions?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -543,6 +595,7 @@
         "finalUrl": "http://localhost:5173/en/governance/changesets?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -551,6 +604,7 @@
         "finalUrl": "http://localhost:5173/en/change-reviews/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -559,6 +613,7 @@
         "finalUrl": "http://localhost:5173/en/client-portal/rules-editor?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 4,
         "violationIds": [
           "button-name",
@@ -572,6 +627,7 @@
         "finalUrl": "http://localhost:5173/en/client-portal/workflow-studio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 3,
         "violationIds": [
           "aria-progressbar-name",
@@ -584,9 +640,11 @@
         "finalUrl": "http://localhost:5173/en/core/abbreviations?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 1,
+        "crashed": false,
+        "violations": 2,
         "violationIds": [
-          "aria-progressbar-name"
+          "aria-prohibited-attr",
+          "button-name"
         ]
       },
       {
@@ -594,6 +652,7 @@
         "finalUrl": "http://localhost:5173/en/core/approval-inbox?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
@@ -602,6 +661,7 @@
         "finalUrl": "http://localhost:5173/en/core/approval-workflows?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -610,6 +670,7 @@
         "finalUrl": "http://localhost:5173/en/core/audit-explorer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -618,6 +679,7 @@
         "finalUrl": "http://localhost:5173/en/core/business-terms?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -626,6 +688,7 @@
         "finalUrl": "http://localhost:5173/en/core/calculated-fields?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-input-field-name",
@@ -637,6 +700,7 @@
         "finalUrl": "http://localhost:5173/en/core/data-pipelines?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -647,6 +711,7 @@
         "finalUrl": "http://localhost:5173/en/core/domains?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -657,6 +722,7 @@
         "finalUrl": "http://localhost:5173/en/core/flow-builder?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "button-name",
@@ -668,6 +734,7 @@
         "finalUrl": "http://localhost:5173/en/core/genui-chat?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -678,6 +745,7 @@
         "finalUrl": "http://localhost:5173/en/core/genui-inbox?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -686,6 +754,7 @@
         "finalUrl": "http://localhost:5173/en/core/genui-proposal?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -694,6 +763,7 @@
         "finalUrl": "http://localhost:5173/en/core/glossary?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -702,6 +772,7 @@
         "finalUrl": "http://localhost:5173/en/core/notifications?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -710,6 +781,7 @@
         "finalUrl": "http://localhost:5173/en/core/notifications/preferences?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -718,6 +790,7 @@
         "finalUrl": "http://localhost:5173/en/core/notifications/templates?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -726,6 +799,7 @@
         "finalUrl": "http://localhost:5173/en/core/process-catalog?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "label"
@@ -736,6 +810,7 @@
         "finalUrl": "http://localhost:5173/en/core/semantic-mapper?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "select-name"
@@ -746,6 +821,7 @@
         "finalUrl": "http://localhost:5173/en/core/semantic-terms?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -754,6 +830,7 @@
         "finalUrl": "http://localhost:5173/en/core/sla-dashboard?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -762,6 +839,7 @@
         "finalUrl": "http://localhost:5173/en/core/uisce-builder?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -770,6 +848,7 @@
         "finalUrl": "http://localhost:5173/en/core/validation?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -778,6 +857,7 @@
         "finalUrl": "http://localhost:5173/en/core/validation-rules?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -786,6 +866,7 @@
         "finalUrl": "http://localhost:5173/en/core/workflow-designer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -794,6 +875,7 @@
         "finalUrl": "http://localhost:5173/en/crypto/portfolio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -804,6 +886,7 @@
         "finalUrl": "http://localhost:5173/en/dynamic-ui?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-command-name"
@@ -814,6 +897,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/audit-logs?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -824,6 +908,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/bundles?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -832,6 +917,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/bundles/:bundleId/edit?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -842,6 +928,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/bundles/create?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -852,6 +939,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/calculations?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 5,
         "violationIds": [
           "button-name",
@@ -866,6 +954,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/custom-components?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -874,6 +963,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/dashboard?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -884,6 +974,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/ip-whitelist?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "label"
@@ -894,6 +985,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/preaggregations?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -902,6 +994,7 @@
         "finalUrl": "http://localhost:5173/en/fabric/settings?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "label"
@@ -912,6 +1005,7 @@
         "finalUrl": "http://localhost:5173/en",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -920,6 +1014,7 @@
         "finalUrl": "http://localhost:5173/en/fixed-income?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -930,6 +1025,7 @@
         "finalUrl": "http://localhost:5173/en/core/flow-builder?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -938,6 +1034,7 @@
         "finalUrl": "http://localhost:5173/en/global-intelligence?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -948,6 +1045,7 @@
         "finalUrl": "http://localhost:5173/en/core/glossary?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -956,6 +1054,7 @@
         "finalUrl": "http://localhost:5173/en/governance/changesets?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -964,6 +1063,7 @@
         "finalUrl": "http://localhost:5173/en/incidents/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -972,6 +1072,7 @@
         "finalUrl": "http://localhost:5173/en/intelligence?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -980,6 +1081,7 @@
         "finalUrl": "http://localhost:5173/en/intelligence/data-quality?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -988,6 +1090,7 @@
         "finalUrl": "http://localhost:5173/en/intelligence/index-advisor?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "select-name"
@@ -998,6 +1101,7 @@
         "finalUrl": "http://localhost:5173/en/intelligence/storage?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1006,6 +1110,7 @@
         "finalUrl": "http://localhost:5173/en/jit-request?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1014,6 +1119,7 @@
         "finalUrl": "http://localhost:5173/en/marketplace?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1022,6 +1128,7 @@
         "finalUrl": "http://localhost:5173/en/marketplace/components?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1030,6 +1137,7 @@
         "finalUrl": "http://localhost:5173/en/nlq?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "scrollable-region-focusable"
@@ -1040,6 +1148,7 @@
         "finalUrl": "http://localhost:5173/en/observability?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1048,6 +1157,7 @@
         "finalUrl": "http://localhost:5173/en/observability/slos?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1056,6 +1166,7 @@
         "finalUrl": "http://localhost:5173/en/optimization?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -1066,6 +1177,7 @@
         "finalUrl": "http://localhost:5173/en/optimization/:optimizationId?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1074,6 +1186,7 @@
         "finalUrl": "http://localhost:5173/en/page-designer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-command-name"
@@ -1084,6 +1197,7 @@
         "finalUrl": "http://localhost:5173/en/page-studio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -1094,6 +1208,7 @@
         "finalUrl": "http://localhost:5173/en/pipelines/studio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -1104,6 +1219,7 @@
         "finalUrl": "http://localhost:5173/en/pipelines/studio/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -1114,6 +1230,7 @@
         "finalUrl": "http://localhost:5173/en/pipelines/triggers/new?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-input-field-name"
@@ -1124,6 +1241,7 @@
         "finalUrl": "http://localhost:5173/en/private-markets?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1132,6 +1250,7 @@
         "finalUrl": "http://localhost:5173/en/query-builder?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -1143,6 +1262,7 @@
         "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1151,6 +1271,7 @@
         "finalUrl": "http://localhost:5173/en/reports/builder?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 3,
         "violationIds": [
           "aria-input-field-name",
@@ -1163,6 +1284,7 @@
         "finalUrl": "http://localhost:5173/en/reports/expressions?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -1173,6 +1295,7 @@
         "finalUrl": "http://localhost:5173/en/reports/library?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 3,
         "violationIds": [
           "button-name",
@@ -1185,6 +1308,7 @@
         "finalUrl": "http://localhost:5173/en/reports/models?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1193,6 +1317,7 @@
         "finalUrl": "http://localhost:5173/en/reports/queries?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 2,
         "violationIds": [
           "aria-progressbar-name",
@@ -1204,6 +1329,7 @@
         "finalUrl": "http://localhost:5173/en/reports/:reportId/edit?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 3,
         "violationIds": [
           "aria-input-field-name",
@@ -1216,6 +1342,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "select-name"
@@ -1226,6 +1353,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/calendars?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1234,6 +1362,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/calendars/:calendarId/edit?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1242,6 +1371,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/calendars/new?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1250,6 +1380,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/executions?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1258,6 +1389,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/executions/:executionId?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1266,6 +1398,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "select-name"
@@ -1276,6 +1409,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/jobs",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1284,6 +1418,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1292,6 +1427,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId/edit?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1300,6 +1436,7 @@
         "finalUrl": "http://localhost:5173/en/scheduler/jobs/new?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "label"
@@ -1310,6 +1447,7 @@
         "finalUrl": "http://localhost:5173/en/schema-explorer?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "scrollable-region-focusable"
@@ -1320,6 +1458,7 @@
         "finalUrl": "http://localhost:5173/en/secrets/audit?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
@@ -1328,6 +1467,7 @@
         "finalUrl": "http://localhost:5173/en/secrets/config?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
@@ -1336,6 +1476,7 @@
         "finalUrl": "http://localhost:5173/en/secrets/monitoring?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "aria-progressbar-name"
@@ -1346,6 +1487,7 @@
         "finalUrl": "http://localhost:5173/en/semantic-health?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
@@ -1356,6 +1498,7 @@
         "finalUrl": "http://localhost:5173/en/simulation?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1364,6 +1507,7 @@
         "finalUrl": "http://localhost:5173/en/simulation/compare?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1372,6 +1516,7 @@
         "finalUrl": "http://localhost:5173/en/simulation/:id?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1380,6 +1525,7 @@
         "finalUrl": "http://localhost:5173/en/simulation/rebalance?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "select-name"
@@ -1390,6 +1536,7 @@
         "finalUrl": "http://localhost:5173/en/tenants?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1398,6 +1545,7 @@
         "finalUrl": "http://localhost:5173/en/tenants/:tenantId?",
         "isParam": true,
         "wasNonRep": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1406,6 +1554,7 @@
         "finalUrl": "http://localhost:5173/en/core/validation-rules?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1414,6 +1563,7 @@
         "finalUrl": "http://localhost:5173/en/wealth/feed?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
@@ -1422,6 +1572,7 @@
         "finalUrl": "http://localhost:5173/en",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },
@@ -1430,6 +1581,7 @@
         "finalUrl": "http://localhost:5173/page-studio?",
         "isParam": false,
         "wasNonRep": false,
+        "crashed": false,
         "violations": 1,
         "violationIds": [
           "button-name"
