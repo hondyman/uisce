@@ -271,7 +271,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
           const output: Record<string, unknown> = {
             routePattern: route,
             finalUrl: page.url(),
-            settled,
+            settled: settled === undefined ? null : settled,
             crashed: true,
             crashReason: `navigation-during-scan: ${navError}`,
             violations: [],
@@ -289,7 +289,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
       const output: Record<string, unknown> = {
         routePattern: route,
         finalUrl: page.url(),
-        settled,
+        settled: settled === undefined ? null : settled,
         violations: results.violations,
         violationIds: results.violations.map((v: { id: string }) => v.id),
       };
@@ -307,6 +307,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
       if (mainCount === 0) {
         output.crashed = true;
         output.crashReason = 'no <main> landmark — app crashed or error boundary rendered';
+        output.settled = output.settled === undefined ? null : output.settled;
         const filePath = path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`);
         fs.writeFileSync(filePath, JSON.stringify(output, null, 2));
         return;

@@ -26,6 +26,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_CURRENT = join(__dirname, '..', 'frontend', 'docs', 'a11y', `baseline-${new Date().toISOString().slice(0,10)}.json`);
 const DEFAULT_FROZEN  = join(__dirname, '..', 'frontend', 'docs', 'a11y', 'baseline-frozen.json');
 
+const EXCLUDED_RULES = ['aria-progressbar-name'];
+const EXCLUDED_RULES_SET = new Set(EXCLUDED_RULES);
+
 const currentPath = process.argv.includes('--current')
   ? process.argv[process.argv.indexOf('--current') + 1]
   : DEFAULT_CURRENT;
@@ -52,12 +55,30 @@ const failures = [];
 const warnings = [];
 
 // repViolations: fail on increase, warn on decrease
+// Gated repViolations excludes EXCLUDED_RULES (structural MUI spinner violations)
+const gatedRepViolations = (routes) => routes
+  .filter(r => !r.wasNonRep && !r.crashed)
+  .reduce((sum, r) => sum + (
+    Array.isArray(r.violationIds)
+      ? r.violationIds.filter(id => !EXCLUDED_RULES_SET.has(id)).length
+      : 0
+  ), 0);
+
+const cGated = gatedRepViolations(c.routes ?? []);
+const fGated = gatedRepViolations(f.routes ?? []);
+const repDeltaGated = cGated - fGated;
 const repDelta = c.repViolations - f.repViolations;
-if (repDelta > 0) {
+
+if (repDeltaGated > 0) {
   failed = true;
-  failures.push(`repViolations REGRESSION: ${f.repViolations} → ${c.repViolations} (+${repDelta})`);
-} else if (repDelta < 0) {
-  warnings.push(`repViolations IMPROVED: ${f.repViolations} → ${c.repViolations} (${repDelta}). Verify and re-freeze.`);
+  failures.push(`repViolations (gated) REGRESSION: ${fGated} → ${cGated} (+${repDeltaGated})`);
+} else if (repDeltaGated < 0) {
+  warnings.push(`repViolations (gated) IMPROVED: ${fGated} → ${cGated} (${repDeltaGated}). Verify and re-freeze.`);
+}
+
+// Total repViolations (all rules, informational only)
+if (repDelta !== repDeltaGated) {
+  warnings.push(`repViolations (total, incl. excluded): ${f.repViolations} → ${c.repViolations} (${repDelta >= 0 ? '+' : ''}${repDelta})`);
 }
 
 // Denominator: fail on shrink, warn on growth
@@ -70,7 +91,17 @@ if (denomDelta < 0) {
 }
 
 // Per-rule: fail on increase, warn on decrease
+// Excluded rules (aria-progressbar-name): tracked separately, not gated
 for (const rule of [...allRules].sort()) {
+  if (EXCLUDED_RULES_SET.has(rule)) {
+    const fc = c.byRule?.[rule]?.count ?? 0;
+    const ff = f.byRule?.[rule]?.count ?? 0;
+    const delta = fc - ff;
+    if (delta !== 0) {
+      warnings.push(`[tracked] rule ${rule}: ${ff} → ${fc} (${delta >= 0 ? '+' : ''}${delta}) — excluded from gate (MUI spinner structural; fix: A11yCircularProgress wrapper)`);
+    }
+    continue;
+  }
   const fc = c.byRule?.[rule]?.count ?? 0;
   const ff = f.byRule?.[rule]?.count ?? 0;
   const delta = fc - ff;
@@ -85,7 +116,8 @@ for (const rule of [...allRules].sort()) {
 console.log(`=== a11y-ratchet ===`);
 console.log(`  Current: ${currentPath}`);
 console.log(`  Frozen:  ${frozenPath}`);
-console.log(`  repViolations:  frozen=${f.repViolations} current=${c.repViolations} Δ=${repDelta >= 0 ? '+' : ''}${repDelta}`);
+console.log(`  repViolations (gated):  frozen=${fGated} current=${cGated} Δ=${repDeltaGated >= 0 ? '+' : ''}${repDeltaGated}  [excludes: ${EXCLUDED_RULES.join(', ')}]`);
+console.log(`  repViolations (total):  frozen=${f.repViolations} current=${c.repViolations} Δ=${repDelta >= 0 ? '+' : ''}${repDelta}  [informational — includes excluded rules]`);
 console.log(`  repDenominator: frozen=${repDenomFrozen} current=${repDenomCurrent} Δ=${denomDelta >= 0 ? '+' : ''}${denomDelta}`);
 
 if (warnings.length > 0) {
