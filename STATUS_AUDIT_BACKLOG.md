@@ -439,7 +439,8 @@ go test ./internal/api/middleware/... -run "TestRequirePermission|TestTenantIDFr
 
 ### Commits
 
-[pending]
+- `fcc42adf1` — SEV-HIGH: RBAC nil-deref fix — canonical tenant helper, fail-closed middleware (already on main)
+- `28045f5d3` (PR #11) — fix: migrate 30 TenantID call sites from GetClaimsFromContext to TenantIDFromRequest
 
 ---
 
@@ -448,7 +449,7 @@ go test ./internal/api/middleware/... -run "TestRequirePermission|TestTenantIDFr
 **Name:** `GetClaimsFromContext-MainServer-NilDeref`
 **Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed (PR #11 — 30 sites migrated)
 
 ### Description
 
@@ -478,9 +479,25 @@ Approximately **25-30 call sites** across `internal/` directly access `.TenantID
 
 These are reachable from `main.go` via `SetupRouter`. Each is a latent panic if the JWT token fails to populate `jwt_claims` in the context — which happens for any request where `AuthContextMiddleware` sets `security.AuthInfo` but not `jwt_claims`.
 
-### Fix
+### Fix (Closed — PR #11)
 
-Replace each call site with the canonical `TenantIDFromRequest(r)` helper, which checks `security.AuthInfoFromContext` first, then `jwtmiddleware.GetClaimsFromContext` as fallback, and returns `("", false)` if neither is populated. Handlers should then fail-closed (401) when `ok == false`.
+Replaced each call site with the canonical `TenantIDFromRequest(r)` helper from `helpers.go` (added in fcc42adf1): checks `security.AuthInfoFromContext` first, then `jwtmiddleware.GetClaimsFromContext` as fallback, returns `("", false)` if neither is populated.
+
+**9 live files migrated (30 sites):**
+- `api/billing_handlers.go` (1) — 401 on unresolved tenant
+- `api/node_types_routes.go` (1)
+- `api/api.go` (2): `debugProxyHeaders`, `startProfile`
+- `handlers/ai_handler.go` (5)
+- `handlers/export_handlers.go` (5)
+- `handlers/scheduler_handlers.go` (6)
+- `handlers/source_preference_handler.go` (1)
+- `nba/websocket.go` (1)
+- `onboarding/handlers.go` (1)
+
+Handlers use `security.AuthInfoFromContext` directly (different package from `helpers.go`); api files use `TenantIDFromRequest` from same package.
+
+**15 dead files not migrated** (not registered in `SetupRouter` — confirm dead before deletion):
+`aso_handler.go`, `internal_event_handler.go`, `temporal_admin.go` (9 sites), `apistudio/odata.go`, `apistudio/runtime.go`, `clientportal/handlers.go`, `cbo_handler.go` (4), `observability_handler.go`, `pre_aggregation_handler.go`, `pricing_handler.go`, `rules_handler_impl.go` (2), `slo_handler.go`, `term_metadata_handler.go`, `reporting/handler.go`, `rulefabric/handler.go`
 
 ### Audit Logs Empty Reply — Confirmed Panic, Fixed
 
@@ -490,8 +507,8 @@ Fixed in PR #7: `safeVal(col int)` closure checks `col < len(resp.Records) && ro
 
 ### Remaining
 
-- GitNexus reindex complete — bulk reachability query needed to split 47 unsafe call sites into live vs. dead
-- `pkg/meta/api.go` and `local/cmd/proxy/main.go` not yet audited
+- Dead handler file deletion (15 files, confirmed not registered in `SetupRouter`) — file removal PR pending
+- `apps/analytics-api`, `apps/genui-api`, `apps/orchestration-api` — own `JWTMiddleware` wiring, clean (confirmed by prior audit)
 
 ---
 
