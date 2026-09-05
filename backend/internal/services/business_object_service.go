@@ -55,6 +55,35 @@ func (s *BusinessObjectService) dispatchInstanceTrigger(ctx context.Context, ten
 	return nil
 }
 
+// dispatchInstanceTriggerSync runs only sync-mode triggers for a BO instance write.
+// Used pre-write to veto the operation on sync pipeline failure.
+func (s *BusinessObjectService) dispatchInstanceTriggerSync(ctx context.Context, tenantID string, action validation.TriggerType, entity string, data map[string]interface{}) error {
+	if s.triggerEngine == nil {
+		return nil
+	}
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("dispatchInstanceTriggerSync: invalid tenant id %q, skipping trigger dispatch: %v", tenantID, err)
+		return nil
+	}
+	return s.triggerEngine.DispatchWithPhase(ctx, validation.TriggerPhaseSync, nil, tid, string(action), entity, "", data)
+}
+
+// dispatchInstanceTriggerAsync runs only async-mode triggers for a BO instance write,
+// riding the caller's *sqlx.Tx so the outbox row is committed atomically with the BO write.
+// Must be called after the write but before commit.
+func (s *BusinessObjectService) dispatchInstanceTriggerAsync(ctx context.Context, tx *sqlx.Tx, tenantID string, action validation.TriggerType, entity string, data map[string]interface{}) error {
+	if s.triggerEngine == nil {
+		return nil
+	}
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("dispatchInstanceTriggerAsync: invalid tenant id %q, skipping trigger dispatch: %v", tenantID, err)
+		return nil
+	}
+	return s.triggerEngine.DispatchWithPhase(ctx, validation.TriggerPhaseAsync, tx, tid, string(action), entity, "", data)
+}
+
 // NewBusinessObjectService creates a new BusinessObjectService with database connection
 func NewBusinessObjectService(db interface{}) *BusinessObjectService {
 	if sqlxDB, ok := db.(*sqlx.DB); ok {
@@ -812,7 +841,8 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 	for k, v := range instance.CustomFieldValues {
 		triggerData[k] = v
 	}
-	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeCreate, entityKey, triggerData); err != nil {
+
+	if err := s.dispatchInstanceTriggerSync(ctx, tenantID, validation.TriggerTypeCreate, entityKey, triggerData); err != nil {
 		return nil, err
 	}
 
@@ -826,17 +856,31 @@ func (s *BusinessObjectService) CreateInstance(ctx context.Context, tenantID, us
 		return nil, fmt.Errorf("failed to marshal custom attributes: %w", err)
 	}
 
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
 	query := `
-		INSERT INTO business_object_instances 
+		INSERT INTO business_object_instances
 		(id, tenant_id, business_object_id, core_attributes, custom_attributes, created_by, created_at, last_modified_at)
 		VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 		RETURNING created_at, last_modified_at
 	`
 
-	err = s.db.QueryRowContext(ctx, query, instance.ID, tenantID, instance.BusinessObjectID, coreJSON, customJSON, userID).
+	err = tx.QueryRowContext(ctx, query, instance.ID, tenantID, instance.BusinessObjectID, coreJSON, customJSON, userID).
 		Scan(&instance.CreatedAt, &instance.LastModifiedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create instance: %w", err)
+	}
+
+	if err := s.dispatchInstanceTriggerAsync(ctx, tx, tenantID, validation.TriggerTypeCreate, entityKey, triggerData); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	return instance, nil
@@ -1074,9 +1118,15 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 	for k, v := range custom {
 		triggerData[k] = v
 	}
-	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeSave, entityKey, triggerData); err != nil {
+	if err := s.dispatchInstanceTriggerSync(ctx, tenantID, validation.TriggerTypeSave, entityKey, triggerData); err != nil {
 		return nil, err
 	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
 
 	whereParts := []string{"tenant_id = $3", "id = $4"}
 	if decision.RowPredicate != "" {
@@ -1089,7 +1139,7 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 	inst := &models.BusinessObjectInstance{}
 	var returnedCoreJSON, returnedCustomJSON []byte
 
-	err = s.db.QueryRowContext(ctx, query, coreJSON, customJSON, tenantID, instanceID).
+	err = tx.QueryRowContext(ctx, query, coreJSON, customJSON, tenantID, instanceID).
 		Scan(&inst.ID, &inst.BusinessObjectID, &returnedCoreJSON, &returnedCustomJSON,
 			&inst.CreatedBy, &inst.CreatedAt, &inst.LastModifiedAt)
 	if err == sql.ErrNoRows {
@@ -1104,6 +1154,14 @@ func (s *BusinessObjectService) UpdateInstance(ctx context.Context, tenantID, in
 	}
 	if len(returnedCustomJSON) > 0 {
 		json.Unmarshal(returnedCustomJSON, &inst.CustomFieldValues)
+	}
+
+	if err := s.dispatchInstanceTriggerAsync(ctx, tx, tenantID, validation.TriggerTypeSave, entityKey, triggerData); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
 	}
 
 	applyColumnMasksToInstance(inst, decision.ColumnMasks)
@@ -1131,9 +1189,16 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 	if bo, err := s.GetBusinessObject(ctx, tenantID, boID); err == nil {
 		entityKey = bo.Key
 	}
-	if err := s.dispatchInstanceTrigger(ctx, tenantID, validation.TriggerTypeDelete, entityKey, map[string]interface{}{"id": instanceID}); err != nil {
+	triggerData := map[string]interface{}{"id": instanceID}
+	if err := s.dispatchInstanceTriggerSync(ctx, tenantID, validation.TriggerTypeDelete, entityKey, triggerData); err != nil {
 		return err
 	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
 
 	whereParts := []string{"tenant_id = $1", "id = $2"}
 	if decision.RowPredicate != "" {
@@ -1142,7 +1207,7 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 
 	query := "DELETE FROM business_object_instances WHERE " + strings.Join(whereParts, " AND ")
 
-	result, err := s.db.ExecContext(ctx, query, tenantID, instanceID)
+	result, err := tx.ExecContext(ctx, query, tenantID, instanceID)
 	if err != nil {
 		return fmt.Errorf("failed to delete instance: %w", err)
 	}
@@ -1154,6 +1219,14 @@ func (s *BusinessObjectService) DeleteInstance(ctx context.Context, tenantID, in
 
 	if rows == 0 {
 		return fmt.Errorf("instance not found")
+	}
+
+	if err := s.dispatchInstanceTriggerAsync(ctx, tx, tenantID, validation.TriggerTypeDelete, entityKey, triggerData); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	return nil
