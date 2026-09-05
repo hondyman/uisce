@@ -693,23 +693,28 @@ Two bugs fixed this session:
 2. Ratchet gated gate excludes `aria-progressbar-name` — structurally oscillating MUI
    spinner issue. Tracked separately; re-enters when A11yCircularProgress wrapper lands.
 
-### Per-rule table (frozen, from baseline-frozen.json)
+### Per-rule table (all-routes byRule, from baseline-frozen.json metadata)
 
-| Rule | Count | Impact | Gate |
-|------|-------|--------|------|
+> **Note on counting:** `metadata.byRule` counts violations on **all** routes (rep + non-rep +
+> crashed). `repViolations` (gated 62 / total 65) counts violations on **rep routes only**,
+> excluding crashed routes. The table below is all-routes; the headline numbers above are
+> rep-only. `repByRule sum = 65` ✓, `repByRule sum without progressbar = 62` ✓.
+
+| Rule | All-routes count | Impact | Gate |
+|------|-----------------|--------|------|
 | button-name | 21 | critical | gated |
 | aria-input-field-name | 16 | serious | gated |
 | label | 9 | critical | gated |
 | scrollable-region-focusable | 6 | serious | gated |
 | select-name | 5 | critical | gated |
-| aria-progressbar-name | 3 | serious | **excluded** |
+| aria-progressbar-name | 3 | serious | **excluded** (oscillates ±10; noisy in total until wrapper) |
 | list | 3 | serious | gated |
 | nested-interactive | 3 | serious | gated |
 | aria-prohibited-attr | 3 | serious | gated |
 | aria-command-name | 2 | serious | gated |
 | listitem | 1 | serious | gated |
 
-Sum check: 72 = 72 ✓
+All-routes sum check: 72 = 72 ✓
 
 ### Aggregate summary
 
@@ -722,6 +727,12 @@ Sum check: 72 = 72 ✓
 | repViolations (total) | 65 |
 | repViolations (gated) | 62 |
 | repRoutesWithViolations | 49 |
+
+> **Informational-total note:** `repViolations (total) = 65` includes `aria-progressbar-name`
+> (3 this run). That rule oscillates ±10 per run from MUI spinner timing variance and is
+> excluded from the gated count. The **gated number (62) is authoritative** for Phase 2
+> triage decisions. `total` is informational only and will remain noisy until the
+> `A11yCircularProgress` wrapper lands.
 
 ### Crashed routes (excluded from rep count — oscillates between runs)
 
