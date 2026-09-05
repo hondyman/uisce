@@ -3920,6 +3920,11 @@ func (s *Server) registerTriggerEngineRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 	// Register chi-based trigger routes directly on the chi router
 	RegisterTriggerRoutesChi(r, sqlxDB, triggerEngine)
+
+	// Register ValidationTriggersHandler for /api/admin/validation-triggers/*
+	// (admin-facing: list/create, fires validation rules on BO writes)
+	validationEngine := validation.NewTriggerValidationEngine(sqlxDB.DB, &validation.SimpleLogger{})
+	RegisterValidationTriggersRoutes(r, sqlxDB.DB, validationEngine)
 }
 
 // registerBOCRUDRoutes mounts the live Business Object record CRUD endpoints
