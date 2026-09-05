@@ -36,45 +36,44 @@ const E2E_USER = {
   is_global_admin: true,
 };
 
-async function fetchKeycloakToken(): Promise<string | null> {
-  if (!KC_USER || !KC_PASS) return null;
-  try {
-    const res = await fetch(
-      `${KC_ISSUER}/protocol/openid-connect/token`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'password',
-          username: KC_USER,
-          password: KC_PASS,
-          client_id: 'semlayer-frontend',
-          scope: 'openid profile email',
-        }),
-      },
-    );
-    if (!res.ok) {
-      console.warn(`[auth.setup] Keycloak token fetch failed: ${res.status} ${await res.text()}`);
-      return null;
-    }
-    const data = await res.json() as { access_token: string };
-    return data.access_token ?? null;
-  } catch (err) {
-    console.warn(`[auth.setup] Keycloak unreachable: ${err}`);
-    return null;
+async function fetchKeycloakToken(): Promise<string> {
+  if (!KC_USER || !KC_PASS) throw new Error('E2E_KC_USER or E2E_KC_PASS not set');
+  const res = await fetch(
+    `${KC_ISSUER}/protocol/openid-connect/token`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'password',
+        username: KC_USER,
+        password: KC_PASS,
+        client_id: 'semlayer-frontend',
+        scope: 'openid profile email',
+      }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Keycloak token fetch failed: ${res.status} ${body}`);
   }
+  const data = await res.json() as { access_token: string };
+  return data.access_token ?? (() => { throw new Error('No access_token in Keycloak response'); })();
 }
 
 const FALLBACK_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
 
 setup('seed auth storage via addInitScript', async ({ page, context }) => {
-  const jwt = E2E_JWT ?? (await fetchKeycloakToken()) ?? FALLBACK_JWT;
-
-  if (!E2E_JWT && !KC_USER) {
+  let jwt: string;
+  if (E2E_JWT) {
+    jwt = E2E_JWT;
+  } else if (KC_USER) {
+    jwt = await fetchKeycloakToken();
+  } else {
     console.warn(
       '[auth.setup] No E2E_JWT and no E2E_KC_USER — using fallback fake JWT. ' +
       'API calls will fail silently. Set both env vars for a real token.',
     );
+    jwt = FALLBACK_JWT;
   }
 
   await page.context().addInitScript(

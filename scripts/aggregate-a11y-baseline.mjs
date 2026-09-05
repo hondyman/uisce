@@ -36,9 +36,9 @@ const result = {
     browser: 'chromium',
     totalRoutes: files.length,
     paramRoutes: 0,
-    cleanParamRoutes: 0,
+    nonRepClean: 0,
+    nonRepWithViolations: 0,
     totalViolations: 0,
-    totalPasses: 0,
     routesWithViolations: 0,
     byRule: {},
     routes: [],
@@ -49,20 +49,32 @@ for (const file of files) {
   const raw = readFileSync(join(RESULTS_DIR, file), 'utf8');
   const d = JSON.parse(raw);
 
-  // New self-describing format: { routePattern, finalUrl, axe: { violations, passes, ... } }
-  // Old format: { violations, passes, ... } at root level
-  const isNewFormat = 'axe' in d;
+  // New stripped format: { routePattern, finalUrl, violations, violationIds }
+  // Legacy format: { routePattern, finalUrl, axe: { violations, passes, ... } }
+  // Oldest format: { violations, passes, ... } at root level (no routePattern)
   const routePattern = d.routePattern ?? ('/' + file.replace(/^_/, '').replace(/_/g, '/').replace(/\.json$/, ''));
   const finalUrl = d.finalUrl ?? null;
-  const violations = isNewFormat ? d.axe.violations : d.violations;
-  const passes = isNewFormat ? d.axe.passes : d.passes;
+  let violations;
+  if (Array.isArray(d.violations)) {
+    // New stripped format: violations at root
+    violations = d.violations;
+  } else if (d.axe && Array.isArray(d.axe.violations)) {
+    // Legacy wrapped format
+    violations = d.axe.violations;
+  } else {
+    // Oldest format
+    violations = d.violations ?? [];
+  }
   const isParam = routePattern.includes(':');
-  const wasNonRepClean = isParam && violations.length === 0;
+  const wasRedirected = finalUrl && finalUrl !== `http://localhost:5173${routePattern}`;
+  // Non-representative: param route visited literally (non-rep clean),
+  // OR param route that redirected (caught by the router's fallback/error handler)
+  const wasNonRep = isParam && (violations.length === 0 || wasRedirected);
 
   if (isParam) result.metadata.paramRoutes++;
-  if (wasNonRepClean) result.metadata.cleanParamRoutes++;
+  if (wasNonRep && violations.length === 0) result.metadata.nonRepClean++;
+  if (wasNonRep && violations.length > 0) result.metadata.nonRepWithViolations++;
   result.metadata.totalViolations += violations.length;
-  result.metadata.totalPasses += passes.length;
   if (violations.length > 0) result.metadata.routesWithViolations++;
 
   for (const v of violations) {
@@ -75,9 +87,8 @@ for (const file of files) {
     routePattern,
     finalUrl,
     isParam,
+    wasNonRep,
     violations: violations.length,
-    passes: passes.length,
-    wasNonRepClean,
     violationIds: violations.map(v => v.id),
   });
 }
@@ -89,7 +100,7 @@ result.metadata.byRule = Object.entries(result.metadata.byRule)
 writeFileSync(outputPath, JSON.stringify(result, null, 2));
 console.log(`Written: ${outputPath}`);
 console.log(`  Routes: ${result.metadata.totalRoutes}`);
-console.log(`  Param routes: ${result.metadata.cleanParamRoutes} clean non-rep / ${result.metadata.paramRoutes} total`);
-console.log(`  Representative denominator: ${result.metadata.totalRoutes - result.metadata.cleanParamRoutes}`);
+console.log(`  Param routes: ${result.metadata.nonRepClean} clean non-rep + ${result.metadata.nonRepWithViolations} non-rep w/violations / ${result.metadata.paramRoutes} total`);
+console.log(`  Representative denominator: ${result.metadata.totalRoutes - result.metadata.nonRepClean - result.metadata.nonRepWithViolations}`);
 console.log(`  Violations: ${result.metadata.totalViolations} across ${result.metadata.routesWithViolations} routes`);
 console.log(`  Rules: ${Object.keys(result.metadata.byRule).length}`);

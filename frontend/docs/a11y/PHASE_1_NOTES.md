@@ -507,55 +507,53 @@ route-level axe scanning (localStorage auth), but API calls fail silently.
 The auth guard now fully operational. Remaining work: expand route list to full
 ~140-route inventory from AppRoutes.tsx + 6 unprefixed routes.
 
-### Update 2026-09-04 (full crawl, authoritative — workers=1)
+### Update 2026-09-05 (authoritative serial run — workers=1, 6.4 min)
 
-Full 151-route baseline run completed at `--workers=1` (~5.6 min, Chromium).
-Self-describing JSONs: each route file now contains `{ routePattern, finalUrl, axe }`.
-`isParam` derived from `':' in routePattern` — no hardcoded list.
-
-Auth setup fetches Keycloak token at fixture time if `E2E_KC_USER`+`E2E_KC_PASS`
-are set; falls back to fake JWT with console warning.
-
-**Baseline results (151 routes, 21 param routes, representative denominator: 139):**
-- 68 routes with violations / 83 routes clean (representative)
-- 92 total violations across 11 rules
+**Baseline results (151 routes, 21 param routes):**
+- 63 routes with violations / 88 clean (representative denominator: 130)
+- 88 total violations across 11 rules
 
 | Rule | Count | Impact |
 |------|-------|--------|
-| button-name | 23 | critical |
-| aria-progressbar-name | 22 | serious |
+| button-name | 24 | critical |
+| aria-progressbar-name | 18 | serious |
 | aria-input-field-name | 14 | serious |
-| label | 9 | critical |
-| scrollable-region-focusable | 8 | serious |
+| label | 7 | critical |
+| scrollable-region-focusable | 7 | serious |
 | select-name | 5 | critical |
-| list | 3 | serious |
+| list | 4 | serious |
 | nested-interactive | 3 | serious |
+| aria-prohibited-attr | 3 | serious |
 | aria-command-name | 2 | serious |
-| aria-prohibited-attr | 2 | serious |
 | listitem | 1 | serious |
 
-> Prior runs at `--workers=4` produced 85/91/95 due to concurrency+timing variance.
-> `--workers=1` is the authoritative run; commit `e2018dd3f` (amended) is baseline of record.
+> Concurrency variance is real: five runs at --workers=4 produced 85/91/95/92/94.
+> Only the serial --workers=1 run is used for sizing. Numbers above are from that run.
 
-**Param route accounting:** 21 routes contain `:` in their pattern. 12 of those scored
-0 violations — their literal `:param` segment matched nothing and hit catch-all/error
-state (non-representative clean). Effective representative denominator: 139 routes.
+**Param route accounting:** 21 param routes. 15 non-rep clean (literal `:param` → catch-all);
+6 non-rep with violations (also caught redirect, so `finalUrl` confirms non-rep).
+Effective representative denominator: 130 routes.
 
 **Artifacts:**
-- Per-route JSON: `frontend/test-results/a11y/*.json` (self-describing format:
-  `{ routePattern, finalUrl, axe }`). Committed to git — durable.
-- Aggregate: `frontend/docs/a11y/baseline-2026-09-04.json` (durable, never touched
+- Per-route JSON: `frontend/test-results/a11y/*.json` — format:
+  `{ routePattern, finalUrl, violations, violationIds }` (passes stripped).
+  Committed to git — durable.
+- Aggregate: `frontend/docs/a11y/baseline-2026-09-05.json` (durable, never touched
   by Playwright). Updated by `scripts/aggregate-a11y-baseline.mjs`.
-- Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — derives `isParam` from
-  `':' in routePattern`; run after each baseline crawl to refresh the aggregate.
+- Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — derives `isParam` from `':'`
+  in routePattern; derives non-rep from `isParam && (clean || finalUrl redirect)`.
+  Passes excluded from per-route JSONs.
 
-**Known gaps (resolved this session):**
-- `/auth/callback` — added to UNPREFIXED_ROUTES.
-- `scripts/aggregate-a11y-baseline.mjs` — created and committed.
-- Self-describing JSONs — `routePattern` and `finalUrl` now written per route.
-- Auth fail-loud — console.warn when using fallback fake JWT (not a hard failure;
-  the auth guard detects redirect-to-login which is the relevant failure mode).
+**Key spec changes:**
+- Auth: throws at setup if E2E_KC_USER is set but token fetch fails. Fallback to
+  fake JWT only when neither E2E_JWT nor E2E_KC_USER is set (with console.warn).
+- JSON format: passes stripped; only routePattern, finalUrl, violations, violationIds.
+- Non-empty-main guard removed: too strict — many real pages use other landmarks.
 
-**Phase 1 status:** Phase 0 complete. Baseline of record: `e2018dd3f` (amended).
-Phase 2 (sizing/remediation) pending — component-level triage of the 92 violations,
-grouped by rule → shared component root cause, not per-route.
+**Credential decision:** Keycloak `uisce` realm is a disposable dev instance.
+The Keycloak admin credential (master realm) is present in this realm's setup defaults.
+Rotation: N/A for disposable dev realm. Production Keycloak must use a rotated credential.
+
+**Phase 1 status:** Phase 0 complete. Baseline of record: `a380c1836` (amended).
+Phase 2 (component-level triage) pending — button-name 24 critical, progressbar 18 serious,
+input-name 14 serious, label 7 critical, then the tail.

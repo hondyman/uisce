@@ -247,7 +247,15 @@ function authStorage(jwt: string) {
 
 test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
   test.beforeEach(async ({ page, context }) => {
-    const jwt = E2E_JWT ?? (KC_USER ? await fetchKeycloakToken().catch(() => FALLBACK_JWT) : FALLBACK_JWT);
+    let jwt: string;
+    if (E2E_JWT) {
+      jwt = E2E_JWT;
+    } else if (KC_USER) {
+      jwt = await fetchKeycloakToken();
+    } else {
+      console.warn('[baseline] using fallback fake JWT — set E2E_JWT or E2E_KC_USER+E2E_KC_PASS');
+      jwt = FALLBACK_JWT;
+    }
     await context.addInitScript(
       (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },
       authStorage(jwt),
@@ -275,7 +283,8 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
       const output = {
         routePattern: route,
         finalUrl: page.url(),
-        axe: results,
+        violations: results.violations,
+        violationIds: results.violations.map((v: { id: string }) => v.id),
       };
       fs.writeFileSync(
         path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`),
@@ -284,11 +293,8 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
 
       test.info().annotations.push({
         type: 'axe-summary',
-        description: `${results.violations.length} violations, ${results.passes.length} passes`,
+        description: `${results.violations.length} violations`,
       });
-      if (!E2E_JWT && !KC_USER) {
-        console.warn(`[baseline] using fallback fake JWT — API calls will fail silently`);
-      }
     });
   }
 });
