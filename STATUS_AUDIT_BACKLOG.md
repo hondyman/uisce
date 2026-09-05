@@ -37,19 +37,26 @@ Bind to the server-side API Studio endpoint registry (no arbitrary URLs — SSRF
 **Name:** `Outbox-Event-Transactional-Gap`
 **Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed (fixes landed across 4 commits)
 
 ### Description
 
-BO event-driven pipeline triggers use an outbox pattern where `PublishPipelineTrigger` opens its own transaction, independent of the BO write transaction. A BO write can roll back *after* the trigger event commits, causing a pipeline to fire for data that doesn't exist. This is an eventual-consistency bug at the exact seam event-driven pipelines are built on.
+BO event-driven pipeline triggers used an outbox pattern where `PublishPipelineTrigger` opened its own transaction, independent of the BO write transaction. A BO write could roll back *after* the trigger event committed, causing a pipeline to fire for data that doesn't exist.
 
-### Production Impact
+### Fix Applied
 
-Any pipeline wired to fire on BO create/update will fire spuriously when the originating write fails after the trigger event commits. Operators will see pipeline runs with no corresponding BO change.
+`PublishPipelineTriggerTx` added as a new interface; `PublishPipelineTrigger` kept as legacy adapter with deprecation warning. Services layer (`CreateInstance`/`UpdateInstance`/`DeleteInstance`) now wraps writes in `BeginTxx`/`Commit` with `dispatchInstanceTriggerAsync` called in-tx. Atomicity proven by T1/T2/T3 tests (rollback wipes row, commit persists row, legacy path still works).
 
-### Fix Direction
+### Pending End-to-End Verification
 
-Refactor `PublishPipelineTrigger` to accept the BO write's `*sqlx.Tx` and participate in the same transaction. One interface change — the outbox row and the BO write commit or roll back atomically. Pipelines fire only when the event that triggered them is durable.
+Tests ran against `localhost:5432` with `search_path` routing to `test_outbox_schema.outbox` — tx semantics proven. One manual check against the deployed dev DB still recommended: bind an async trigger to a BO, write a record, force a write failure, confirm no pipeline dispatch.
+
+### Commits
+
+- `9b4b0f50e` — feat(validation): add phase-aware dispatch (DispatchWithPhase)
+- `a3de512c1` — feat(datapipeline): widen outbox publisher to accept caller tx (adapter staged)
+- `db0423dae` — fix(datapipeline): outbox events ride services BO write transaction (#2)
+- `10f0b163f` — fix(validation): nil-tx regression in async legacy path + T1/T2/T3 PASS
 
 **Refs:** [#2](https://github.com/hondyman/uisce/issues/2)
 
