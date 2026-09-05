@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/models"
 )
 
 // ForeignKeyColumn represents a single column pair in a FK relationship
@@ -83,12 +84,13 @@ type EntityRelationshipFromFK struct {
 // ForeignKeyDiscoveryEngine provides methods to discover entity relationships
 // by analyzing foreign keys in the database catalog
 type ForeignKeyDiscoveryEngine struct {
-	db *sql.DB
+	db          *sql.DB
+	cardinality *CardinalityResolver
 }
 
 // NewForeignKeyDiscoveryEngine creates a new FK discovery engine
 func NewForeignKeyDiscoveryEngine(db *sql.DB) *ForeignKeyDiscoveryEngine {
-	return &ForeignKeyDiscoveryEngine{db: db}
+	return &ForeignKeyDiscoveryEngine{db: db, cardinality: NewCardinalityResolver(db)}
 }
 
 // DiscoverForeignKeysForTable returns all foreign keys (inbound and outbound)
@@ -184,11 +186,14 @@ func (e *ForeignKeyDiscoveryEngine) DiscoverForeignKeysForTable(
 			constraintID = fmt.Sprintf("%v", constraints[0])
 		}
 
-		// Infer cardinality
-		cardinality := e.inferCardinality(direction)
+		// Resolve cardinality from real PK/unique constraints where the FK's
+		// columns are known; fall back to the direction-based heuristic
+		// otherwise (e.g. legacy edges whose properties never captured
+		// column mappings).
+		cardinality := e.resolveCardinality(ctx, sourceTable, targetTable, direction, columns)
 
 		// Infer relationship type
-		relType := e.inferRelationType(direction, cardinality)
+		relType := e.inferRelationType(direction, string(cardinality))
 
 		fk := ForeignKeyRelationship{
 			EdgeID:       edgeID,
@@ -197,7 +202,7 @@ func (e *ForeignKeyDiscoveryEngine) DiscoverForeignKeysForTable(
 			TargetTable:  targetTable,
 			Columns:      columns,
 			Direction:    direction,
-			Cardinality:  cardinality,
+			Cardinality:  string(cardinality),
 			RelationType: relType,
 			CreatedAt:    createdAt,
 		}
@@ -245,6 +250,20 @@ func (e *ForeignKeyDiscoveryEngine) DiscoverEntityRelationshipsFromFK(
 				"Failed to discover FKs for table %s: %v", backingTable.TableName, err,
 			)
 			continue
+		}
+
+		// If this entity's backing table is itself an associative/junction
+		// table (e.g. order_items between orders and products), also
+		// synthesize a single MANY_TO_MANY relationship directly between
+		// its two parent entities. The two raw FK relationships discovered
+		// above (junction -> parentA, junction -> parentB) are kept as-is;
+		// this is additive, not a replacement.
+		if junctionRel, err := e.discoverJunctionRelationship(ctx, tenantID, datasourceID, backingTable.TableName); err != nil {
+			logging.GetLogger().Sugar().Debugf(
+				"junction detection skipped for %s: %v", backingTable.TableName, err,
+			)
+		} else if junctionRel != nil {
+			allRelationships = append(allRelationships, *junctionRel)
 		}
 
 		// For each FK, find the target entity
@@ -321,6 +340,76 @@ func (e *ForeignKeyDiscoveryEngine) DiscoverEntityRelationshipsFromFK(
 	return allRelationships, nil
 }
 
+// discoverJunctionRelationship checks whether tableName is an associative
+// table (via CardinalityResolver.DetectJunctionTable) and, if both of its
+// parent tables are backed by known entities, returns a single synthesized
+// MANY_TO_MANY relationship between those two entities. Returns (nil, nil)
+// when tableName isn't a junction table, or when one/both parent entities
+// aren't discoverable (e.g. haven't been scanned/registered as entities).
+func (e *ForeignKeyDiscoveryEngine) discoverJunctionRelationship(
+	ctx context.Context,
+	tenantID, datasourceID, tableName string,
+) (*EntityRelationshipFromFK, error) {
+	if e.cardinality == nil {
+		return nil, nil
+	}
+
+	junction, err := e.cardinality.DetectJunctionTable(ctx, "public", tableName)
+	if err != nil {
+		return nil, fmt.Errorf("detecting junction table: %w", err)
+	}
+	if junction == nil {
+		return nil, nil
+	}
+
+	parentAEntity, err := e.findEntityByBackingTable(ctx, tenantID, datasourceID, junction.ParentA)
+	if err != nil {
+		return nil, fmt.Errorf("no entity for junction parent %s: %w", junction.ParentA, err)
+	}
+	parentBEntity, err := e.findEntityByBackingTable(ctx, tenantID, datasourceID, junction.ParentB)
+	if err != nil {
+		return nil, fmt.Errorf("no entity for junction parent %s: %w", junction.ParentB, err)
+	}
+
+	sourceEntityID, err := uuid.Parse(parentAEntity.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse parent entity ID %s: %w", parentAEntity.ID, err)
+	}
+	targetEntityID, err := uuid.Parse(parentBEntity.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse parent entity ID %s: %w", parentBEntity.ID, err)
+	}
+
+	rel := &EntityRelationshipFromFK{
+		SourceEntityID:   sourceEntityID,
+		SourceEntityName: parentAEntity.Name,
+		TargetEntityID:   targetEntityID,
+		TargetEntityName: parentBEntity.Name,
+		ForeignKey: ForeignKeyRelationship{
+			SourceTable:  junction.ParentA,
+			TargetTable:  junction.ParentB,
+			Cardinality:  string(models.CardinalityManyToMany),
+			RelationType: "association",
+		},
+		Cardinality:   string(models.CardinalityManyToMany),
+		RelationType:  "association",
+		DiscoveryCode: "fk_junction",
+		Confidence:    1.0,
+		EdgeProperties: map[string]interface{}{
+			"discovery_method": "junction_table_analysis",
+			"junction_table":   junction.TableName,
+			"source_table":     junction.ParentA,
+			"target_table":     junction.ParentB,
+			"cardinality":      string(models.CardinalityManyToMany),
+			"relation_type":    "association",
+			"discovery_code":   "fk_junction",
+			"discovered_at":    time.Now().Format(time.RFC3339),
+		},
+	}
+
+	return rel, nil
+}
+
 // extractColumnMappings extracts column pairs from FK properties
 func (e *ForeignKeyDiscoveryEngine) extractColumnMappings(props map[string]interface{}) []ForeignKeyColumn {
 	var columns []ForeignKeyColumn
@@ -374,43 +463,80 @@ func (e *ForeignKeyDiscoveryEngine) extractColumnMappings(props map[string]inter
 	return columns
 }
 
-// inferCardinality infers the cardinality based on FK direction
-func (e *ForeignKeyDiscoveryEngine) inferCardinality(direction string) string {
-	// Outbound FK = Many-to-One
-	// (Many rows in source table have One row in target table)
-	if direction == "outbound" {
-		return "many-to-one"
+// resolveCardinality computes the real cardinality of a "this table
+// references source/target via columns" edge, taking the FK's direction
+// into account so the result is always expressed from tableName's (the
+// table DiscoverForeignKeysForTable was called for) perspective.
+//
+// direction "outbound" means tableName is the FK-holding (source) side, so
+// CardinalityResolver's source/target map directly. direction "inbound"
+// means tableName is the referenced (target) side, so the resolver's result
+// must be inverted before returning it.
+func (e *ForeignKeyDiscoveryEngine) resolveCardinality(
+	ctx context.Context,
+	sourceTable, targetTable, direction string,
+	columns []ForeignKeyColumn,
+) models.Cardinality {
+	if e.cardinality == nil || len(columns) == 0 {
+		return legacyInferCardinality(direction)
 	}
 
-	// Inbound FK = One-to-Many
-	// (One row in target table has Many rows in source table)
+	sourceCols := make([]string, len(columns))
+	targetCols := make([]string, len(columns))
+	for i, c := range columns {
+		sourceCols[i] = c.SourceColumn
+		targetCols[i] = c.TargetColumn
+	}
+
+	resolved, err := e.cardinality.ResolveEdgeCardinality(
+		ctx, "public", sourceTable, sourceCols, "public", targetTable, targetCols,
+	)
+	if err != nil || resolved == models.CardinalityUnknown {
+		logging.GetLogger().Sugar().Debugf(
+			"falling back to direction-based cardinality for %s -> %s: %v", sourceTable, targetTable, err,
+		)
+		return legacyInferCardinality(direction)
+	}
+
+	// ResolveEdgeCardinality is expressed from the FK-holder's (outbound)
+	// perspective. When this table is the inbound/referenced side, flip it.
 	if direction == "inbound" {
-		return "one-to-many"
+		return resolved.Inverse()
 	}
+	return resolved
+}
 
-	return "unknown"
+// legacyInferCardinality is the pre-existing direction-only heuristic,
+// kept as a fallback for edges whose FK columns aren't known (so real
+// constraint inspection isn't possible).
+func legacyInferCardinality(direction string) models.Cardinality {
+	if direction == "outbound" {
+		return models.CardinalityManyToOne
+	}
+	if direction == "inbound" {
+		return models.CardinalityOneToMany
+	}
+	return models.CardinalityUnknown
 }
 
 // inferRelationType infers the relationship type semantics
-func (e *ForeignKeyDiscoveryEngine) inferRelationType(_, cardinality string) string {
-	// Many-to-One = Reference
-	// (Child references Parent)
-	if cardinality == "many-to-one" {
+func (e *ForeignKeyDiscoveryEngine) inferRelationType(_ string, cardinality string) string {
+	switch models.Cardinality(cardinality) {
+	// Many-to-One = Reference (Child references Parent)
+	case models.CardinalityManyToOne:
 		return "reference"
-	}
-
-	// One-to-Many = Composition
-	// (Parent owns/contains Children)
-	if cardinality == "one-to-many" {
+	// One-to-Many = Composition (Parent owns/contains Children)
+	case models.CardinalityOneToMany:
 		return "composition"
-	}
-
 	// One-to-One = Association
-	if cardinality == "one-to-one" {
+	case models.CardinalityOneToOne:
+		return "association"
+	// Many-to-Many = Association
+	case models.CardinalityManyToMany:
+		return "association"
+	default:
 		return "association"
 	}
-
-	return "association"
 }
 
 // getEntityBackingTables retrieves the table(s) that back an entity

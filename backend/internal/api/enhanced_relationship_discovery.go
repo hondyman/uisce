@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/lib/pq"
 )
 
@@ -89,13 +90,15 @@ type RelationshipPathNode struct {
 
 // EnhancedRelationshipDiscoveryService extends the basic discovery with semantic context
 type EnhancedRelationshipDiscoveryService struct {
-	db *sql.DB
+	db          *sql.DB
+	cardinality *CardinalityResolver
 }
 
 // NewEnhancedRelationshipDiscoveryService creates a new enhanced discovery service
 func NewEnhancedRelationshipDiscoveryService(db *sql.DB) *EnhancedRelationshipDiscoveryService {
 	return &EnhancedRelationshipDiscoveryService{
-		db: db,
+		db:          db,
+		cardinality: NewCardinalityResolver(db),
 	}
 }
 
@@ -328,6 +331,31 @@ LIMIT 100;
 
 		// Use source_table for consistency
 		entity.TableName = entity.SourceTable
+
+		// The CTE's cardinality CASE only checks whether the FK constraint
+		// spans multiple columns, which does not detect real 1:1 or N:M
+		// relationships. Override it with a real PK/unique-constraint-based
+		// resolution when the FK's columns are known.
+		if s.cardinality != nil && entity.SourceColumn != "" && entity.TargetColumn != "" {
+			resolved, err := s.cardinality.ResolveEdgeCardinality(
+				ctx, "public", entity.SourceTable, []string{entity.SourceColumn},
+				"public", entity.TargetTable, []string{entity.TargetColumn},
+			)
+			if err != nil {
+				logging.GetLogger().Sugar().Debugf(
+					"cardinality resolution failed for %s.%s -> %s.%s: %v",
+					entity.SourceTable, entity.SourceColumn, entity.TargetTable, entity.TargetColumn, err,
+				)
+			} else if resolved != models.CardinalityUnknown {
+				// Keep the DB-canonical form (ONE_TO_ONE, etc.) here: this
+				// value is written verbatim into entity_relationship.cardinality
+				// by SaveDiscoveredRelationship below, whose CHECK constraint
+				// only accepts the canonical vocabulary. Callers rendering
+				// this for the frontend should go through
+				// models.ParseCardinality(...).Display() at the API boundary.
+				entity.Cardinality = string(resolved)
+			}
+		}
 
 		entities = append(entities, entity)
 	}

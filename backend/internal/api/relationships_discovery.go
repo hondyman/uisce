@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/models"
 )
 
 // RelatedEntity represents an entity that can be linked to the source entity
@@ -33,12 +34,13 @@ type RelatedObjectsResponse struct {
 
 // RelationshipDiscoveryService handles discovery of entity relationships
 type RelationshipDiscoveryService struct {
-	db *sql.DB
+	db          *sql.DB
+	cardinality *CardinalityResolver
 }
 
 // NewRelationshipDiscoveryService creates a new relationship discovery service
 func NewRelationshipDiscoveryService(db *sql.DB) *RelationshipDiscoveryService {
-	return &RelationshipDiscoveryService{db: db}
+	return &RelationshipDiscoveryService{db: db, cardinality: NewCardinalityResolver(db)}
 }
 
 // isValidUUID checks if a string is a valid UUID
@@ -142,20 +144,21 @@ direct_foreign_keys AS (
 ),
 
 target_table_nodes AS (
-  -- Get the target table nodes - these are the related entities
+  -- Get the target table nodes - these are the related entities.
+  -- Cardinality is NOT computed here: it needs real PK/unique constraint
+  -- inspection (see CardinalityResolver), which this query intentionally
+  -- leaves to the Go layer below rather than guessing from FK direction.
   SELECT DISTINCT
-    CASE 
+    CASE
       WHEN direction = 'outbound' THEN dfk.target_node_id
       ELSE dfk.source_node_id
     END as entity_id,
-    CASE 
+    CASE
       WHEN direction = 'outbound' THEN dfk.target_table_name
       ELSE dfk.source_table_name
     END as entity_name,
-    CASE 
-      WHEN direction = 'outbound' THEN 'one-to-many'
-      ELSE 'many-to-one'
-    END as cardinality,
+    dfk.source_table_name,
+    dfk.target_table_name,
     direction as link_type,
     dfk.edge_id,
     dfk.created_at
@@ -168,8 +171,9 @@ SELECT DISTINCT
   ttn.entity_name as semantic_name,
   ttn.entity_name as table_name,
   ttn.link_type,
-  ttn.cardinality,
-  CASE 
+  ttn.source_table_name,
+  ttn.target_table_name,
+  CASE
     WHEN ttn.link_type = 'outbound' THEN 'This table has a foreign key to ' || ttn.entity_name
     ELSE ttn.entity_name || ' has a foreign key to this table'
   END as link_reason,
@@ -190,23 +194,44 @@ ORDER BY ttn.entity_name;
 
 	for rows.Next() {
 		var (
-			entityID       string
-			entityName     string
-			semanticName   string
-			tableName      string
-			linkType       string
-			cardinality    string
-			linkReason     string
-			foreignKeyPath string
-			discoveredAt   time.Time
+			entityID        string
+			entityName      string
+			semanticName    string
+			tableName       string
+			linkType        string
+			sourceTableName string
+			targetTableName string
+			linkReason      string
+			foreignKeyPath  string
+			discoveredAt    time.Time
 		)
 
 		if err := rows.Scan(
 			&entityID, &entityName, &semanticName, &tableName,
-			&linkType, &cardinality, &linkReason, &foreignKeyPath, &discoveredAt,
+			&linkType, &sourceTableName, &targetTableName, &linkReason, &foreignKeyPath, &discoveredAt,
 		); err != nil {
 			logging.GetLogger().Sugar().Warnf("Failed to scan related entity row: %v", err)
 			continue
+		}
+
+		cardinality := models.CardinalityUnknown
+		if s.cardinality != nil {
+			// Express cardinality from the queried entity's perspective:
+			// when this table is the FK holder (outbound), it maps
+			// directly; when the related table holds the FK back to this
+			// one (inbound), swap source/target before resolving.
+			queriedTable, relatedTable := sourceTableName, targetTableName
+			if linkType == "inbound" {
+				queriedTable, relatedTable = targetTableName, sourceTableName
+			}
+			resolved, err := s.cardinality.ResolveByTableNames(ctx, "public", queriedTable, "public", relatedTable, linkType)
+			if err != nil {
+				logging.GetLogger().Sugar().Debugf(
+					"cardinality resolution failed for %s -> %s: %v", queriedTable, relatedTable, err,
+				)
+			} else {
+				cardinality = resolved
+			}
 		}
 
 		related := RelatedEntity{
@@ -215,7 +240,7 @@ ORDER BY ttn.entity_name;
 			SemanticName:   semanticName,
 			TableName:      tableName,
 			LinkType:       linkType,
-			Cardinality:    cardinality,
+			Cardinality:    cardinality.Display(),
 			LinkReason:     linkReason,
 			ForeignKeyPath: foreignKeyPath,
 			DiscoveredAt:   discoveredAt,
@@ -261,36 +286,6 @@ func (s *RelationshipDiscoveryService) DiscoverRelationshipsForSemanticTerm(
 
 	// Use the semantic name to discover relationships
 	return s.DiscoverLinkableEntities(ctx, tenantID, datasourceID, semanticName)
-}
-
-// GetRelationshipCardinality determines the cardinality between two tables
-// based on foreign key properties
-func (s *RelationshipDiscoveryService) GetRelationshipCardinality(
-	ctx context.Context,
-	datasourceID string,
-	sourceMappings, targetMappings []string,
-) (string, error) {
-	// Query to check if there's a unique constraint on the FK columns in source
-	query := `
-		SELECT COUNT(*) > 0 as has_unique
-		FROM information_schema.table_constraints tc
-		WHERE tc.constraint_type = 'UNIQUE'
-		  AND tc.table_schema = 'public'
-		LIMIT 1;
-	`
-
-	var hasUnique bool
-	err := s.db.QueryRowContext(ctx, query).Scan(&hasUnique)
-
-	if err != nil && err != sql.ErrNoRows {
-		return "one-to-many", nil // Default cardinality
-	}
-
-	if hasUnique {
-		return "one-to-one", nil
-	}
-
-	return "one-to-many", nil
 }
 
 // ConvertNodeNameToTableName attempts to infer a table name from a node name

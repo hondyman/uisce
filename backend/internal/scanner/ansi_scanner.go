@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -9,8 +10,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/cardinality"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	cardinalitymodels "github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/models"
 )
 
@@ -34,6 +37,7 @@ type AnsiScanner struct {
 	goldCopyNodes      map[string]db.GoldCopyNodeInfo
 	isGoldCopy         bool
 	schemaWhitelist    []string
+	cardinality        *cardinality.Resolver
 }
 
 // NewAnsiScanner creates a new scanner instance
@@ -52,6 +56,7 @@ func NewAnsiScanner(db *sql.DB, tenantId, tenantDatasourceId uuid.UUID, sourceSy
 		isGoldCopy:         isGoldCopy,
 		edges:              []models.CatalogEdge{}, // Initialize edges slice
 		schemaWhitelist:    schemaWhitelist,
+		cardinality:        cardinality.NewResolver(db),
 	}, nil
 }
 
@@ -391,8 +396,11 @@ func (s *AnsiScanner) processForeignKeys() error {
 		// Use the first constraint name for the edge, but list all in properties
 		primaryConstraint := rel.constraints[0]
 
-		// Infer cardinality from column count and relationship structure
-		cardinality := s.inferFKCardinality(len(rel.columns), rel.sourceSchema, rel.sourceTable)
+		// Resolve real cardinality from PK/unique constraints (composite-key
+		// aware), rather than guessing from column count/direction alone —
+		// see inferFKCardinality's doc comment for why that heuristic is
+		// wrong for 1:1 and can't detect N:M at all.
+		relCardinality := s.resolveFKCardinality(rel.sourceSchema, rel.sourceTable, rel.targetSchema, rel.targetTable, rel.columns)
 
 		// Build properties with all constraint names
 		props := map[string]interface{}{
@@ -407,7 +415,7 @@ func (s *AnsiScanner) processForeignKeys() error {
 			"initially_deferred":      rel.initiallyDeferred,
 			// Enhanced for semantic discovery
 			"edge_type_name": "foreign_key",
-			"cardinality":    cardinality,
+			"cardinality":    relCardinality,
 			"source_table":   rel.sourceTable,
 			"target_table":   rel.targetTable,
 			"source_schema":  rel.sourceSchema,
@@ -461,18 +469,185 @@ func (s *AnsiScanner) processForeignKeys() error {
 	edgesCreated := len(s.edges) - edgesBefore
 	logging.GetLogger().Sugar().Infof("Created %d unique foreign key relationship edges", edgesCreated)
 
+	var sourceTables []scannedTableRef
+	seenSourceTables := map[scannedTableRef]bool{}
+	for _, rel := range relationships {
+		ref := scannedTableRef{schema: rel.sourceSchema, table: rel.sourceTable}
+		if !seenSourceTables[ref] {
+			seenSourceTables[ref] = true
+			sourceTables = append(sourceTables, ref)
+		}
+	}
+	s.detectAndAppendJunctionEdges(sourceTables)
+
 	return nil
 }
 
-// inferFKCardinality infers the cardinality of a foreign key relationship
-// This is a heuristic; actual cardinality depends on unique constraints on both sides
-func (s *AnsiScanner) inferFKCardinality(columnCount int, sourceSchema, sourceTable string) string {
-	// By default, FK columns reference a PK or unique key on the target table
-	// So the relationship is typically many-to-one from source to target (N:1)
-	// unless the FK columns themselves are the PK (then it's 1:1)
+// scannedTableRef identifies a table by schema+name within a single scan.
+type scannedTableRef struct{ schema, table string }
 
-	// Query to check if FK columns are primary key on source table
-	// For now, return the most common cardinality
+// detectAndAppendJunctionEdges checks every distinct source table that held
+// at least one FK in this scan for the associative/junction-table pattern
+// (e.g. order_items between orders and products: two FKs whose combined
+// columns are covered by the table's own PK/unique constraint), and — when
+// found — appends one additional synthesized MANY_TO_MANY edge directly
+// between the two parent tables. This is additive: the two raw FK edges
+// (junction -> parentA, junction -> parentB) created above are unaffected.
+//
+// Without this, a plain FK-direction scan can never produce a true N:M
+// relationship: two MANY_TO_ONE edges are structurally correct on their
+// own, but nothing else stands for "these two tables are related many rows
+// to many rows through this junction" the way page/report/query designers
+// need to decide between a reference control and an embedded grid.
+func (s *AnsiScanner) detectAndAppendJunctionEdges(sourceTables []scannedTableRef) {
+	if s.cardinality == nil {
+		return
+	}
+
+	ctx := context.Background()
+	for _, t := range sourceTables {
+		junction, err := s.cardinality.DetectJunctionTable(ctx, t.schema, t.table)
+		if err != nil {
+			logging.GetLogger().Sugar().Debugf("junction detection failed for %s.%s: %v", t.schema, t.table, err)
+			continue
+		}
+		if junction == nil {
+			continue
+		}
+
+		parentAPath := fmt.Sprintf("/%s/%s", t.schema, junction.ParentA)
+		parentATableID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_TABLE.String(), parentAPath)
+		parentBPath := fmt.Sprintf("/%s/%s", t.schema, junction.ParentB)
+		parentBTableID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_TABLE.String(), parentBPath)
+
+		if parentATableID == parentBTableID {
+			continue
+		}
+
+		props := map[string]interface{}{
+			"edge_type_name": "many_to_many_junction",
+			"cardinality":    string(cardinalitymodels.CardinalityManyToMany),
+			"junction_table": junction.TableName,
+			"source_table":   junction.ParentA,
+			"target_table":   junction.ParentB,
+			"source_schema":  t.schema,
+			"target_schema":  t.schema,
+		}
+		propsJSON, err := json.Marshal(props)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Error marshaling junction edge properties for %s: %v", junction.TableName, err)
+			continue
+		}
+
+		edgeID := generateID(
+			s.tenantDatasourceId.String(),
+			"many_to_many_junction",
+			parentATableID.String(),
+			parentBTableID.String(),
+			junction.TableName,
+		)
+
+		s.edges = append(s.edges, models.CatalogEdge{
+			ID:                 edgeID,
+			CoreID:             uuid.NullUUID{Valid: false},
+			TenantID:           s.tenantId,
+			TenantDatasourceId: s.tenantDatasourceId,
+			SourceNodeID:       parentATableID,
+			TargetNodeID:       parentBTableID,
+			Properties:         propsJSON,
+			CreatedAt:          time.Now(),
+			EdgeTypeID:         EDGE_TYPE_FOREIGN_KEY,
+			EdgeTypeName:       "many_to_many_junction",
+		})
+
+		logging.GetLogger().Sugar().Infof(
+			"Detected junction table %s.%s: synthesized MANY_TO_MANY edge %s <-> %s",
+			t.schema, junction.TableName, junction.ParentA, junction.ParentB,
+		)
+
+		// Tag the two raw FK edges (junction -> parentA, junction -> parentB)
+		// the main relationship loop already created, so consumers can tell
+		// a raw junction-side edge apart from an ordinary FK edge, and know
+		// which synthesized M:M edge it rolls up into — without this, the
+		// two forms are indistinguishable in catalog_edge.
+		junctionPath := fmt.Sprintf("/%s/%s", t.schema, t.table)
+		junctionTableID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_TABLE.String(), junctionPath)
+		s.tagRawJunctionEdges(junctionTableID, junction.TableName)
+	}
+}
+
+// tagRawJunctionEdges finds the raw FK edges whose source is junctionTableID
+// (i.e. edges from the junction table to one of its parents, created by the
+// main relationship loop in processForeignKeys) and adds a "junction_table"
+// property to each, so a consumer reading catalog_edge can distinguish a
+// junction-side raw edge from an ordinary FK edge and associate it with the
+// synthesized MANY_TO_MANY edge detectAndAppendJunctionEdges appends.
+func (s *AnsiScanner) tagRawJunctionEdges(junctionTableID uuid.UUID, junctionTableName string) {
+	for i := range s.edges {
+		if s.edges[i].SourceNodeID != junctionTableID {
+			continue
+		}
+		var props map[string]interface{}
+		if err := json.Unmarshal(s.edges[i].Properties, &props); err != nil {
+			logging.GetLogger().Sugar().Warnf("Failed to unmarshal properties while tagging junction edge: %v", err)
+			continue
+		}
+		props["junction_table"] = junctionTableName
+		propsJSON, err := json.Marshal(props)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("Failed to re-marshal properties while tagging junction edge: %v", err)
+			continue
+		}
+		s.edges[i].Properties = propsJSON
+	}
+}
+
+// resolveFKCardinality determines the real cardinality of a foreign-key
+// relationship by inspecting whether the source/target columns are covered
+// by a PRIMARY KEY/UNIQUE constraint (via s.cardinality, backed by the same
+// live connection this scan is reading from), returning the DB-canonical
+// wire value (e.g. "MANY_TO_ONE") that downstream readers normalize via
+// models.ParseCardinality. Falls back to the direction-only heuristic
+// (inferFKCardinality) when columns are missing or resolution fails, so a
+// scan never aborts over a single relationship's cardinality lookup.
+func (s *AnsiScanner) resolveFKCardinality(sourceSchema, sourceTable, targetSchema, targetTable string, columns []map[string]interface{}) string {
+	if s.cardinality == nil || len(columns) == 0 {
+		return s.inferFKCardinality(len(columns), sourceSchema, sourceTable)
+	}
+
+	var sourceCols, targetCols []string
+	for _, c := range columns {
+		src, _ := c["source_column"].(string)
+		tgt, _ := c["target_column"].(string)
+		if src == "" || tgt == "" {
+			continue
+		}
+		sourceCols = append(sourceCols, src)
+		targetCols = append(targetCols, tgt)
+	}
+	if len(sourceCols) == 0 {
+		return s.inferFKCardinality(len(columns), sourceSchema, sourceTable)
+	}
+
+	resolved, err := s.cardinality.ResolveEdgeCardinality(
+		context.Background(), sourceSchema, sourceTable, sourceCols, targetSchema, targetTable, targetCols,
+	)
+	if err != nil || resolved == cardinalitymodels.CardinalityUnknown {
+		logging.GetLogger().Sugar().Debugf(
+			"falling back to heuristic cardinality for %s.%s -> %s.%s: %v",
+			sourceSchema, sourceTable, targetSchema, targetTable, err,
+		)
+		return s.inferFKCardinality(len(columns), sourceSchema, sourceTable)
+	}
+
+	return string(resolved)
+}
+
+// inferFKCardinality is the pre-existing direction-only heuristic, kept as
+// a fallback for relationships whose FK columns aren't known (so real
+// constraint inspection isn't possible). It cannot distinguish 1:1 or
+// detect N:M — see resolveFKCardinality, which is the primary path.
+func (s *AnsiScanner) inferFKCardinality(columnCount int, sourceSchema, sourceTable string) string {
 	return "N:1" // Foreign key: many-to-one
 }
 
