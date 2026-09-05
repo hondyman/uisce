@@ -83,6 +83,7 @@ import {
 } from '@mui/icons-material';
 import { useTenant } from '../../../contexts/TenantContext';
 import { useNavigate } from 'react-router-dom';
+import { type Cardinality, isToMany } from '../../../types/cardinality';
 
 // ============================================================================
 // WORLD-CLASS REPORT BUILDER
@@ -93,7 +94,7 @@ export interface RelatedObjectSource {
   id: string;
   name: string;
   displayName: string;
-  cardinality: '1:1' | '1:N' | 'M:1' | 'M:N';
+  cardinality: Cardinality;
   joinType: 'LEFT' | 'INNER' | 'FULL';
   fields: Field[];
 }
@@ -121,7 +122,7 @@ interface Field {
   isRequired?: boolean;
   description?: string;
   sourceObjectName?: string;
-  sourceCardinality?: '1:1' | '1:N' | 'M:1' | 'M:N';
+  sourceCardinality?: Cardinality;
 }
 
 interface Measure {
@@ -222,14 +223,14 @@ const SAMPLE_DATA_SOURCES: DataSource[] = [
         id: 'rel_cust_orders',
         name: 'orders',
         displayName: 'Customer Orders',
-        cardinality: '1:N',
+        cardinality: '1:M',
         joinType: 'LEFT',
         fields: [
-          { id: 'rel_f10', name: 'order_id', label: 'Order ID', type: 'number', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
-          { id: 'rel_f13', name: 'order_date', label: 'Order Date', type: 'date', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
-          { id: 'rel_f16', name: 'freight', label: 'Freight Amount', type: 'currency', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
-          { id: 'rel_f17', name: 'ship_name', label: 'Ship Name', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
-          { id: 'rel_f18', name: 'ship_city', label: 'Ship City', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:N' },
+          { id: 'rel_f10', name: 'order_id', label: 'Order ID', type: 'number', sourceObjectName: 'Customer Orders', sourceCardinality: '1:M' },
+          { id: 'rel_f13', name: 'order_date', label: 'Order Date', type: 'date', sourceObjectName: 'Customer Orders', sourceCardinality: '1:M' },
+          { id: 'rel_f16', name: 'freight', label: 'Freight Amount', type: 'currency', sourceObjectName: 'Customer Orders', sourceCardinality: '1:M' },
+          { id: 'rel_f17', name: 'ship_name', label: 'Ship Name', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:M' },
+          { id: 'rel_f18', name: 'ship_city', label: 'Ship City', type: 'string', sourceObjectName: 'Customer Orders', sourceCardinality: '1:M' },
         ],
       },
     ],
@@ -271,11 +272,11 @@ const SAMPLE_DATA_SOURCES: DataSource[] = [
         id: 'rel_order_prod',
         name: 'products',
         displayName: 'Line Item Products',
-        cardinality: 'M:N',
+        cardinality: 'M:M',
         joinType: 'LEFT',
         fields: [
-          { id: 'rel_f21_o', name: 'product_name', label: 'Product Name', type: 'string', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:N' },
-          { id: 'rel_f25_o', name: 'units_in_stock', label: 'Units in Stock', type: 'number', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:N' },
+          { id: 'rel_f21_o', name: 'product_name', label: 'Product Name', type: 'string', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:M' },
+          { id: 'rel_f25_o', name: 'units_in_stock', label: 'Units in Stock', type: 'number', sourceObjectName: 'Line Item Products', sourceCardinality: 'M:M' },
         ],
       },
     ],
@@ -443,7 +444,7 @@ export const WorldClassReportBuilder: React.FC = () => {
   }, [config.dataSource, includedRelatedIds]);
 
   const hasFanOutColumn = useMemo(() => {
-    return config.columns.some(col => col.field.sourceCardinality === '1:N' || col.field.sourceCardinality === 'M:N');
+    return config.columns.some(col => isToMany(col.field.sourceCardinality));
   }, [config.columns]);
 
   const handleSelectDataSource = (source: DataSource) => {
@@ -834,11 +835,11 @@ export const WorldClassReportBuilder: React.FC = () => {
                                     <Chip
                                       size="small"
                                       label={
-                                        rel.cardinality === '1:N'
+                                        rel.cardinality === '1:M'
                                           ? '1:N ⚠️ Fan-Out'
                                           : rel.cardinality === 'M:1'
                                           ? 'M:1 Lookup'
-                                          : rel.cardinality === 'M:N'
+                                          : rel.cardinality === 'M:M'
                                           ? 'M:N Bridge'
                                           : '1:1 Single'
                                       }
@@ -846,19 +847,16 @@ export const WorldClassReportBuilder: React.FC = () => {
                                         fontWeight: 'bold',
                                         fontSize: '10px',
                                         height: 22,
-                                        bgcolor:
-                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
-                                            ? 'rgba(245, 158, 11, 0.2)'
-                                            : 'rgba(20, 184, 166, 0.2)',
-                                        color:
-                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
-                                            ? '#FCD34D'
-                                            : '#5EEAD4',
+                                        bgcolor: isToMany(rel.cardinality)
+                                          ? 'rgba(245, 158, 11, 0.2)'
+                                          : 'rgba(20, 184, 166, 0.2)',
+                                        color: isToMany(rel.cardinality)
+                                          ? '#FCD34D'
+                                          : '#5EEAD4',
                                         border: '1px solid',
-                                        borderColor:
-                                          rel.cardinality === '1:N' || rel.cardinality === 'M:N'
-                                            ? 'rgba(245, 158, 11, 0.4)'
-                                            : 'rgba(20, 184, 166, 0.4)',
+                                        borderColor: isToMany(rel.cardinality)
+                                          ? 'rgba(245, 158, 11, 0.4)'
+                                          : 'rgba(20, 184, 166, 0.4)',
                                       }}
                                     />
                                   </Box>
@@ -914,8 +912,8 @@ export const WorldClassReportBuilder: React.FC = () => {
                                               height: 18,
                                               fontSize: '9px',
                                               fontWeight: 600,
-                                              bgcolor: field.sourceCardinality === '1:N' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(20, 184, 166, 0.15)',
-                                              color: field.sourceCardinality === '1:N' ? '#D97706' : '#0D9488',
+                                              bgcolor: isToMany(field.sourceCardinality) ? 'rgba(245, 158, 11, 0.15)' : 'rgba(20, 184, 166, 0.15)',
+                                              color: isToMany(field.sourceCardinality) ? '#D97706' : '#0D9488',
                                             }}
                                           />
                                         )}

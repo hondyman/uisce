@@ -1,10 +1,12 @@
 /**
  * CRUD UI Generator Types
- * 
+ *
  * These types define the configuration schema for dynamically generating
  * CRUD (Create, Read, Update, Delete) pages from Business Object definitions
  * and their relationships.
  */
+
+import type { Cardinality } from './cardinality';
 
 // ============================================================================
 // Field Configuration
@@ -120,8 +122,9 @@ export interface FieldConfig {
 // Relationship Configuration
 // ============================================================================
 
-/** Types of relationships */
-export type RelationshipType = '1:1' | '1:M' | 'M:1' | 'M:M';
+/** Types of relationships. Alias of the shared Cardinality type (types/cardinality.ts)
+ *  used consistently across the query builder, page designer and report designer. */
+export type RelationshipType = Cardinality;
 
 /** UI roles for relationships */
 export type UIRole = 'lookup' | 'detail' | 'child_collection' | 'association';

@@ -3609,6 +3609,18 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 		logging.GetLogger().Sugar().Warnf("Failed to fetch related objects for BO %s: %v", boID, err)
 	}
 
+	// Normalize cardinality to the single wire vocabulary ("1:1"/"1:M"/"M:1"/"M:M")
+	// consumers (query builder, page/report designers) expect. The stored value
+	// can be the DB-canonical form written by newer discovery (ONE_TO_MANY, ...),
+	// a legacy loose string from older edges, or the unresolved '1:N' default
+	// above when no relationship metadata exists at all.
+	for i := range response.RelatedObjects {
+		parsed := models.ParseCardinality(response.RelatedObjects[i].Cardinality)
+		if parsed != models.CardinalityUnknown {
+			response.RelatedObjects[i].Cardinality = parsed.Display()
+		}
+	}
+
 	// 3. Find semantic field mappings
 	// Find columns of the driver table (parent_id = driver_table_id) that have edges to other nodes (semantic terms)
 	// We assume semantic terms have a specific kind or we just list all non-structural edges

@@ -16,6 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
 import { dedupeFields } from '../../utils/dedupeFields';
+import { isToMany } from '../../types/cardinality';
 
 export interface BOField {
   name: string;
@@ -118,17 +119,13 @@ interface BOFieldsPaletteProps {
   onAddAllAsTable: (fields: BOField[]) => void;
 }
 
-// Best-effort classification of a relationship's cardinality string
-// ("1:M", "M:1", "1:1", "M:M") into whether fields from that related object
-// fan out relative to the selected BO's row. Authoritative fan-out
-// detection happens server-side when the query actually runs (via the
-// resolved join path's TraversalCardinality) — this is a UI hint shown
-// before that, so the report author knows up front that a related object's
-// fields belong in a child grid, not a flat column.
-const isManyCardinality = (cardinality?: string): boolean => {
-  const norm = (cardinality || '').toUpperCase().replace(/\s/g, '');
-  return norm === '1:M' || norm === '1:N' || norm === 'M:M' || norm === 'N:N';
-};
+// Classification of a relationship's cardinality string into whether
+// fields from that related object fan out relative to the selected BO's
+// row. Authoritative fan-out detection happens server-side when the query
+// actually runs (via the resolved join path's TraversalCardinality) — this
+// is a UI hint shown before that, so the report author knows up front that
+// a related object's fields belong in a child grid, not a flat column.
+const isManyCardinality = isToMany;
 
 export const BOFieldsPalette: React.FC<BOFieldsPaletteProps> = ({
   selectedBO,

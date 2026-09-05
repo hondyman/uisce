@@ -6,6 +6,8 @@
  * into dialect-specific SQL by the backend SQL Generator.
  */
 
+import type { Cardinality } from '../../../types/cardinality';
+
 export type QueryRole = 'DIMENSION' | 'MEASURE' | 'CALCULATED';
 
 export type BindingStatus = 'RESOLVED' | 'PARTIAL' | 'UNRESOLVED';
@@ -192,6 +194,8 @@ export interface BOSchemaRelationship {
   targetBoId: string;
   joinType: string;
   conditions: string[];
+  /** Cardinality of this relationship, from the driving BO's perspective. */
+  cardinality?: Cardinality;
 }
 
 export interface BOSchema {

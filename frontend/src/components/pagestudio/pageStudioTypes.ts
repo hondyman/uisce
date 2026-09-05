@@ -1,5 +1,6 @@
 import type { BOField } from '../reporting/BOFieldsPalette';
 import type { DynamicFieldUIConfig } from '../pagedesigner/DynamicPropertyTypes';
+import { isToMany as sharedIsToMany, type Cardinality } from '../../types/cardinality';
 
 export interface ContainerStyle {
   backgroundColor?: string;
@@ -40,17 +41,14 @@ export interface RelationshipResult {
   relatedBoKey: string;
   targetObjectId: string;
   relationshipType: string;
-  cardinality: string; // '1:1' | '1:M' | 'M:1' | 'M:M' (older '1:N' style values may still appear)
+  cardinality: Cardinality | string; // older/unnormalized values may still appear; see normalizeCardinality
   description?: string;
   joinCondition?: string;
   sourceDriverTable?: string;
   targetDriverTable?: string;
 }
 
-export function isToMany(cardinality: string | undefined | null): boolean {
-  const c = (cardinality || '').toUpperCase().replace(/\s/g, '');
-  return c === '1:M' || c === 'M:M' || c === '1:N'; // tolerate the older '1:N' convention too
-}
+export const isToMany = sharedIsToMany;
 
 export interface CanvasWidgetBase {
   id: string;
