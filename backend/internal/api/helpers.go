@@ -112,16 +112,30 @@ func clientTenantHeaderTrusted(r *http.Request) bool {
 	return ok && auth.IsGlobalAdmin
 }
 
+// TenantIDFromRequest resolves the tenant ID for an incoming request.
+// Resolution order: (1) security.AuthInfo set by AuthContextMiddleware (production).
+// (2) jwtmiddleware.GetClaimsFromContext (standalone services with their own wiring).
+// (3) empty string, false — caller should respond 401.
+// This is the single canonical source of truth for tenant resolution; do not add
+// other helpers that read different context keys or header fallbacks without
+// consolidating them here.
+func TenantIDFromRequest(r *http.Request) (string, bool) {
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		return auth.TenantIDs[0], true
+	}
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID, true
+	}
+	return "", false
+}
+
 // extractTenantContext extracts tenant context from request headers (JWT-validated)
 // WARNING: This function intentionally does NOT fall back to URL query params for security.
 // Tenant ID must come from validated JWT claims; the X-Tenant-ID header is only
 // trusted for verified global admins/ops (see clientTenantHeaderTrusted).
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
-	var tenantID string
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		tenantID = claims.TenantID
-	}
-	if tenantID == "" && clientTenantHeaderTrusted(r) {
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok && clientTenantHeaderTrusted(r) {
 		tenantID = r.Header.Get("X-Tenant-ID")
 	}
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
