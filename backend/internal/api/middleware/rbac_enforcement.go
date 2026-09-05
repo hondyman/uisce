@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -36,11 +37,14 @@ func (re *RBACEnforcer) RequirePermission(permissionKey string) func(http.Handle
 			}
 
 			// Extract tenant/datasource from query or headers
-			tenantID := getTenantIDFromRequest(r)
+			tenantID, ok := tenantIDFromRequest(r)
+			if !ok {
+				http.Error(w, "Unauthorized: cannot resolve tenant from context", http.StatusUnauthorized)
+				return
+			}
 			datasourceID := getDatasourceIDFromRequest(r)
-
-			if tenantID == "" || datasourceID == "" {
-				http.Error(w, "Bad Request: tenant_id and datasource_id required", http.StatusBadRequest)
+			if datasourceID == "" {
+				http.Error(w, "Bad Request: datasource_id required", http.StatusBadRequest)
 				return
 			}
 
@@ -75,11 +79,14 @@ func (re *RBACEnforcer) RequireAnyPermission(permissions ...string) func(http.Ha
 				return
 			}
 
-			tenantID := getTenantIDFromRequest(r)
+			tenantID, ok := tenantIDFromRequest(r)
+			if !ok {
+				http.Error(w, "Unauthorized: cannot resolve tenant from context", http.StatusUnauthorized)
+				return
+			}
 			datasourceID := getDatasourceIDFromRequest(r)
-
-			if tenantID == "" || datasourceID == "" {
-				http.Error(w, "Bad Request: tenant_id and datasource_id required", http.StatusBadRequest)
+			if datasourceID == "" {
+				http.Error(w, "Bad Request: datasource_id required", http.StatusBadRequest)
 				return
 			}
 
@@ -115,11 +122,14 @@ func (re *RBACEnforcer) RequireAllPermissions(permissions ...string) func(http.H
 				return
 			}
 
-			tenantID := getTenantIDFromRequest(r)
+			tenantID, ok := tenantIDFromRequest(r)
+			if !ok {
+				http.Error(w, "Unauthorized: cannot resolve tenant from context", http.StatusUnauthorized)
+				return
+			}
 			datasourceID := getDatasourceIDFromRequest(r)
-
-			if tenantID == "" || datasourceID == "" {
-				http.Error(w, "Bad Request: tenant_id and datasource_id required", http.StatusBadRequest)
+			if datasourceID == "" {
+				http.Error(w, "Bad Request: datasource_id required", http.StatusBadRequest)
 				return
 			}
 
@@ -160,11 +170,14 @@ func (re *RBACEnforcer) RequireRole(roleKey string) func(http.Handler) http.Hand
 				return
 			}
 
-			tenantID := getTenantIDFromRequest(r)
+			tenantID, ok := tenantIDFromRequest(r)
+			if !ok {
+				http.Error(w, "Unauthorized: cannot resolve tenant from context", http.StatusUnauthorized)
+				return
+			}
 			datasourceID := getDatasourceIDFromRequest(r)
-
-			if tenantID == "" || datasourceID == "" {
-				http.Error(w, "Bad Request: tenant_id and datasource_id required", http.StatusBadRequest)
+			if datasourceID == "" {
+				http.Error(w, "Bad Request: datasource_id required", http.StatusBadRequest)
 				return
 			}
 
@@ -206,11 +219,14 @@ func (re *RBACEnforcer) RequireRoleLevel(minLevel string) func(http.Handler) htt
 				return
 			}
 
-			tenantID := getTenantIDFromRequest(r)
+			tenantID, ok := tenantIDFromRequest(r)
+			if !ok {
+				http.Error(w, "Unauthorized: cannot resolve tenant from context", http.StatusUnauthorized)
+				return
+			}
 			datasourceID := getDatasourceIDFromRequest(r)
-
-			if tenantID == "" || datasourceID == "" {
-				http.Error(w, "Bad Request: tenant_id and datasource_id required", http.StatusBadRequest)
+			if datasourceID == "" {
+				http.Error(w, "Bad Request: datasource_id required", http.StatusBadRequest)
 				return
 			}
 
@@ -336,9 +352,18 @@ func getUserIDFromContext(ctx context.Context) string {
 	return userID
 }
 
-// Extract tenant ID from headers only (NOT from URL query params per security policy)
-func getTenantIDFromRequest(r *http.Request) string {
-	return jwtmiddleware.GetClaimsFromContext(r).TenantID
+// tenantIDFromRequest resolves tenant ID with fail-closed semantics.
+// Resolution order: (1) security.AuthInfo set by AuthContextMiddleware (production).
+// (2) jwtmiddleware.GetClaimsFromContext (standalone services with their own wiring).
+// Returns (tenantID, true) if found, ("", false) if not — caller responds 401.
+func tenantIDFromRequest(r *http.Request) (string, bool) {
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		return auth.TenantIDs[0], true
+	}
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID, true
+	}
+	return "", false
 }
 
 // Extract datasource ID from headers only (NOT from URL query params per security policy)
