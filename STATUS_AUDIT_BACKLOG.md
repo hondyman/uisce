@@ -9,32 +9,35 @@
 **Name:** `A11y-Crashes-Unauthenticated-API`
 **Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Partially Resolved
 
 ### Description
 
-Three routes in the a11y crawl crash during render (no `<main>` landmark — error boundary triggered). The crashes are NOT caused by missing backend routes or URL mismatches — the routes are correctly wired. The crashes occur because the crawl runs without auth cookies, the API calls return 401, and the components do not gracefully handle the unauthenticated state.
+Three routes in the a11y crawl crash during render (no `<main>` landmark — error boundary triggered). The crashes are NOT caused by missing backend routes or URL mismatches — the routes are correctly wired. The crashes occur because the crawl runs without valid auth context, the API calls return 401/404, and the components do not gracefully handle those error responses.
 
 Crawl artifacts confirm `crashed: true` for both `secrets_audit` and `wealth_feed`.
 
-| Crawl Route | React Router | Backend Route | API Result (no auth) | Crash Cause |
-|---|---|---|---|---|
-| `/en/secrets/audit` | `/secrets/audit` ✓ | `/api/admin/tenants/audit-logs` ✓ | 401 | Component throws on 401 response |
-| `/en/wealth/feed` | `/wealth/feed` ✓ | none — `fetchFeed` calls `/api/wealth/feed` which doesn't exist | 404 | Component throws on 404 response |
-| `/en/wealth/approvals/pending` | NO ROUTE | N/A | N/A | Finding unverifiable — no crawl artifact |
+| Crawl Route | React Router | Backend Route | API Result | Crash Cause | Status |
+|---|---|---|---|---|---|
+| `/en/secrets/audit` | `/secrets/audit` ✓ | `/api/admin/tenants/audit-logs` ✓ | 401 | Component threw on 401 response body (r.json() threw on non-JSON error page; React Query error not caught cleanly) | **Fixed** — explicit `response.ok` check added; component now renders error state gracefully |
+| `/en/wealth/feed` | `/wealth/feed` ✓ | **none** — `fetchFeed` calls `/api/wealth/feed` which has no handler | 404 | Component threw: `useFeed()` was a `useMutation` hook (wrong type), so `data`/`isLoading`/`error` were all `undefined`; `feedItems?.map()` threw on `undefined` | **Fixed** — `useQuery` now used; component renders error state gracefully |
+| `/en/wealth/approvals/pending` | NO ROUTE | N/A | N/A | Finding unverifiable — no crawl artifact; frontend has no route for this path | **Closed** — no route exists; not a crash, just a missing route |
 
-### Impact
+### Root Cause Analysis
 
-- Pages crash to error boundary, making a11y violations for these routes unmeasurable
-- Aggregate violation rate is depressed by routes that can't render content
-- `wealth/feed` additionally has no backend handler — even with auth the page would fail
+- **Feed.tsx**: `useFeed()` returned a `useMutation` result, not a `useQuery` result. Mutation `data` is the mutate response payload, not a query dataset. `isLoading` on a mutation is only true during mutate execution. The result was `feedItems = undefined`, `feedItems?.length === 0` was `false`, `feedItems?.map(...)` threw on `undefined`.
 
-### Required Action
+- **SecretsAuditPage.tsx**: `apiFetch` returns the raw `Response` on all status codes (does not throw on non-OK). For 401 responses with HTML error bodies, `response.json()` throws, and this exception propagated during render before React Query could set the error state.
 
-1. `secrets/audit`: Verify auth context is injected before page load (crawl has no session) — if pages must be crawlable, add public/unauthenticated rendering path; otherwise acknowledge crawl limitation
-2. `wealth/feed`: No backend handler exists at `/api/wealth/feed`. Determine: build the endpoint (product decision) or remove the frontend route
-3. `wealth/approvals/pending`: Crawl artifact missing — cannot verify. Frontend has no route for this path; only `core/approval-inbox` and `core/approval-workflows` exist
-4. Consider adding `errorBoundary` fallback for auth-401 cases so pages render an empty-but-crawlable state instead of crashing
+- **`wealth/approvals/pending`**: No React Router route exists for this path. No crawl artifact. Only `core/approval-inbox` and `core/approval-workflows` exist. Closed as "not a crash."
+
+### Remaining Work
+
+1. **`secrets/audit` 401 root cause**: Backend still returns 401. The `AuthContextMiddleware` reads `Authorization: Bearer <token>` from the request. The test seeds `auth_token` in localStorage. Either the frontend's `apiClient` is not sending the Authorization header, or the backend's JWT validation is failing for the seeded token. Verify the auth token flow end-to-end.
+
+2. **`wealth/feed` backend handler**: No handler exists at `/api/wealth/feed`. The component now handles errors gracefully, but the endpoint must be implemented for the page to show real content. Product decision required: implement or remove the frontend route.
+
+3. **Re-crawl**: Run the a11y crawl with authenticated harness to verify both pages now render (with error states for the 401/404 cases) and the ratchet pair can be re-frozen with stable per-route waits.
 
 ---
 
