@@ -290,7 +290,7 @@ const CustomNode = ({ data, selected }: NodeProps) => {
             {data.label}
             </Typography>
         </Box>
-        <IconButton size="small" sx={{ opacity: 0.5, width: 20, height: 20 }}>
+        <IconButton aria-label="Node options" size="small" sx={{ opacity: 0.5, width: 20, height: 20 }}>
             <MoreVertIcon fontSize="inherit" />
         </IconButton>
       </Box>
