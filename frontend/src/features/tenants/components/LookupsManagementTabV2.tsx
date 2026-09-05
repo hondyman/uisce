@@ -410,30 +410,30 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
               </TableCell>
               <TableCell align="right">
                 <Tooltip title="View Values">
-                  <IconButton size="small" onClick={() => openValues(lk.id)} color="primary">
+                  <IconButton aria-label="View lookup values" size="small" onClick={() => openValues(lk.id)} color="primary">
                     <VisibilityIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Export Values">
-                  <IconButton size="small" onClick={() => handleOpenExportDialog(lk.id)} color="primary">
+                  <IconButton aria-label="Export lookup values" size="small" onClick={() => handleOpenExportDialog(lk.id)} color="primary">
                     <DownloadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title="Import Values">
-                  <IconButton size="small" onClick={() => handleOpenImportDialog(lk.id)} color="primary">
+                  <IconButton aria-label="Import lookup values" size="small" onClick={() => handleOpenImportDialog(lk.id)} color="primary">
                     <UploadIcon fontSize="small" />
                   </IconButton>
                 </Tooltip>
                 <Tooltip title={lk.tenant_id === tenantId ? 'Edit Lookup' : 'Read Only'}>
                   <span>
-                    <IconButton size="small" onClick={() => handleOpenEditLookup(lk)} color="primary" disabled={lk.tenant_id !== tenantId}>
+                    <IconButton aria-label={lk.tenant_id === tenantId ? 'Edit lookup' : 'Read Only'} size="small" onClick={() => handleOpenEditLookup(lk)} color="primary" disabled={lk.tenant_id !== tenantId}>
                       <EditIcon fontSize="small" />
                     </IconButton>
                   </span>
                 </Tooltip>
                 <Tooltip title={lk.tenant_id === tenantId ? 'Delete Lookup' : 'Read Only'}>
                   <span>
-                    <IconButton size="small" onClick={() => setConfirmDelete({ open: true, type: 'lookup', id: lk.id })} color="error" disabled={lk.tenant_id !== tenantId}>
+                    <IconButton aria-label={lk.tenant_id === tenantId ? 'Delete lookup' : 'Read Only'} size="small" onClick={() => setConfirmDelete({ open: true, type: 'lookup', id: lk.id })} color="error" disabled={lk.tenant_id !== tenantId}>
                       <DeleteIcon fontSize="small" />
                     </IconButton>
                   </span>
@@ -464,30 +464,30 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
             <Divider />
             <Box sx={{ p: 2, display: 'flex', gap: 0.5, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
               <Tooltip title="View Values">
-                <IconButton size="small" onClick={() => openValues(lk.id)} color="primary">
+                <IconButton aria-label="View lookup values" size="small" onClick={() => openValues(lk.id)} color="primary">
                   <VisibilityIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Export Values">
-                <IconButton size="small" onClick={() => handleOpenExportDialog(lk.id)} color="primary">
+                <IconButton aria-label="Export lookup values" size="small" onClick={() => handleOpenExportDialog(lk.id)} color="primary">
                   <DownloadIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
               <Tooltip title="Import Values">
-                <IconButton size="small" onClick={() => handleOpenImportDialog(lk.id)} color="primary">
+                <IconButton aria-label="Import lookup values" size="small" onClick={() => handleOpenImportDialog(lk.id)} color="primary">
                   <UploadIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
               <Tooltip title={lk.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
                 <span>
-                  <IconButton size="small" onClick={() => handleOpenEditLookup(lk)} color="primary" disabled={lk.tenant_id !== tenantId}>
+                  <IconButton aria-label={lk.tenant_id === tenantId ? 'Edit lookup' : 'Read Only'} size="small" onClick={() => handleOpenEditLookup(lk)} color="primary" disabled={lk.tenant_id !== tenantId}>
                     <EditIcon fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
               <Tooltip title={lk.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
                 <span>
-                  <IconButton size="small" onClick={() => setConfirmDelete({ open: true, type: 'lookup', id: lk.id })} color="error" disabled={lk.tenant_id !== tenantId}>
+                  <IconButton aria-label={lk.tenant_id === tenantId ? 'Delete lookup' : 'Read Only'} size="small" onClick={() => setConfirmDelete({ open: true, type: 'lookup', id: lk.id })} color="error" disabled={lk.tenant_id !== tenantId}>
                     <DeleteIcon fontSize="small" />
                   </IconButton>
                 </span>
@@ -870,6 +870,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
                   <Tooltip title={v.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
                     <span>
                       <IconButton
+                        aria-label={v.tenant_id === tenantId ? 'Edit value' : 'Read Only'}
                         size="small"
                         onClick={() => setEditValue({ id: v.id, value: v.name, label: v.label || v.name, parent_id: v.parent_id || null })}
                         disabled={v.tenant_id !== tenantId}
@@ -882,6 +883,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
                   <Tooltip title={v.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
                     <span>
                       <IconButton
+                        aria-label={v.tenant_id === tenantId ? 'Delete value' : 'Read Only'}
                         size="small"
                         onClick={() => onRequestDelete?.(v.id)}
                         disabled={v.tenant_id !== tenantId}

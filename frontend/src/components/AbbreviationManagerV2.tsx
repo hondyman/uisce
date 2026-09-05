@@ -324,6 +324,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                 <Tooltip title={abbrev.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
                   <span>
                     <IconButton
+                      aria-label={abbrev.tenant_id === tenantId ? 'Edit abbreviation' : 'Read Only'}
                       size="small"
                       onClick={() => handleEditAbbreviation(abbrev)}
                       disabled={abbrev.tenant_id !== tenantId}
@@ -336,6 +337,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                 <Tooltip title={abbrev.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
                   <span>
                     <IconButton
+                      aria-label={abbrev.tenant_id === tenantId ? 'Delete abbreviation' : 'Read Only'}
                       size="small"
                       onClick={() => handleDeleteAbbreviation(abbrev.id)}
                       disabled={abbrev.tenant_id !== tenantId}
@@ -376,6 +378,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
               <Tooltip title={abbrev.tenant_id === tenantId ? 'Edit' : 'Read Only'}>
                 <span>
                   <IconButton
+                    aria-label={abbrev.tenant_id === tenantId ? 'Edit abbreviation' : 'Read Only'}
                     size="small"
                     onClick={() => handleEditAbbreviation(abbrev)}
                     disabled={abbrev.tenant_id !== tenantId}
@@ -388,6 +391,7 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
               <Tooltip title={abbrev.tenant_id === tenantId ? 'Delete' : 'Read Only'}>
                 <span>
                   <IconButton
+                    aria-label={abbrev.tenant_id === tenantId ? 'Delete abbreviation' : 'Read Only'}
                     size="small"
                     onClick={() => handleDeleteAbbreviation(abbrev.id)}
                     disabled={abbrev.tenant_id !== tenantId}
@@ -491,12 +495,13 @@ export const AbbreviationManager: React.FC<AbbreviationManagerProps> = ({
                     </ToggleButton>
                   </ToggleButtonGroup>
                   <Tooltip title="Add new abbreviation">
-                    <IconButton size="small" onClick={() => handleTabChange('add')} color="primary">
+                    <IconButton aria-label="Add new abbreviation" size="small" onClick={() => handleTabChange('add')} color="primary">
                       <AddIcon fontSize="small" />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Export">
                     <IconButton
+                      aria-label="Export abbreviations"
                       size="small"
                       onClick={() => {
                         const format = window.confirm('Export as CSV? (Cancel for JSON)') ? 'csv' : 'json';
