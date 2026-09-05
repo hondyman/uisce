@@ -35,7 +35,8 @@ Three routes in the a11y crawl crashed during render (no `<main>` landmark — e
 
 ### Remaining Work
 
-- **`secrets/audit` 401**: Root cause is `ValidateIssuerTenant` rejecting the e2e Keycloak token because `KEYCLOAK_ISSUER_URL` (server-side env) doesn't match the e2e Keycloak issuer (`https://100.84.50.65:8443/realms/uisce`). This is a **harness configuration gap**: the e2e test's Keycloak instance is not registered as a trusted issuer in the backend. Fix: either set `KEYCLOAK_ISSUER_URL=https://100.84.50.65:8443/realms/uisce` on the test server, or use the same Keycloak instance for e2e that the server trusts. The page renders its error state gracefully — crash is fixed, 401 is a harness/config issue.
+- **`secrets/audit` 401 (superseded)**: Prior diagnosis attributed the failure to `KEYCLOAK_ISSUER_URL` issuer mismatch — this was a misdiagnosis. The actual root cause was a panic in `HandleGetAuditLogs` (`backend/internal/handlers/audit_handler.go:187`) caused by DataFusion returning rows where column slices had unequal lengths (`index out of range [3] with length 3`). The panic produced the "empty reply" (HTTP 000) that was misread as a 401. Fixed in PR #7 — `safeVal()` closure added bounds checks. The page now returns HTTP 200 with real audit entries. No issuer mismatch existed.
+- **`secrets/audit` nil rows (new — partial fix)**: The same DataFusion ragged-column condition that caused the panic now surfaces as fully-null entries (`{"id":"<nil>","tenantId":"<nil>",...}`) instead of crashing. `safeVal()` prevented the panic but silently admits garbage rows. Fix belongs either in the DataFusion query/aggregation (ensure uniform column lengths) or by skipping rows where `safeVal(0)` is nil. Root condition is the same as the panic fix.
 - **`wealth/feed` backend handler**: No handler at `/api/wealth/feed`. The component handles errors gracefully but cannot show real content without the endpoint. Product decision: implement or remove the frontend route.
 - **Re-crawl**: Run the a11y crawl to verify both pages render error states and the ratchet pair can be re-frozen.
 
@@ -481,13 +482,15 @@ These are reachable from `main.go` via `SetupRouter`. Each is a latent panic if 
 
 Replace each call site with the canonical `TenantIDFromRequest(r)` helper, which checks `security.AuthInfoFromContext` first, then `jwtmiddleware.GetClaimsFromContext` as fallback, and returns `("", false)` if neither is populated. Handlers should then fail-closed (401) when `ok == false`.
 
-### Also: Audit Logs Empty Reply — Suspected Panic
+### Audit Logs Empty Reply — Confirmed Panic, Fixed
 
-`/api/admin/tenants/audit-logs` returns "empty reply from server" (connection closed) with a valid Keycloak token, while the same token works for `/api/v1/triggers`. Without server logs, the cause is unconfirmed, but the pattern is consistent with a panic in the handler or middleware when `ValidateIssuerTenant` rejects the e2e Keycloak issuer and triggers a nil-deref in the fallback path. This is likely another instance of the same `AuthInfo`/`jwt_claims` mismatch class.
+`/api/admin/tenants/audit-logs` with a valid Keycloak token returned "empty reply from server" (HTTP 000, connection closed). Confirmed root cause: `runtime error: index out of range [3] with length 3` at `audit_handler.go:187`. The `colCount >= 9` check validated the number of column slices but not the length of each inner row. When column 4 (user_name) had fewer elements than `resp.RowCount`, indexing `resp.Records[3][rowIdx]` panicked.
+
+Fixed in PR #7: `safeVal(col int)` closure checks `col < len(resp.Records) && rowIdx < len(resp.Records[col])` before every access. Request now returns HTTP 200 with real audit entries. Remaining: nil rows (see above, same root condition).
 
 ### Remaining
 
-- GitNexus reindex running — bulk reachability query from `main.go` will confirm which Category 1 call sites are live-panic vs. dead-code
+- GitNexus reindex complete — bulk reachability query needed to split 47 unsafe call sites into live vs. dead
 - `pkg/meta/api.go` and `local/cmd/proxy/main.go` not yet audited
 
 ---
@@ -516,3 +519,49 @@ The `Require*Permission` middleware in `rbac_enforcement.go` was the panic case;
 ### Required Action
 
 Audit all 14 call sites in `connections_routes.go` to determine whether the header fallback is intentional (e.g., for API key auth where the header is trusted) or a bug. Replace with canonical `TenantIDFromRequest` after audit.
+
+---
+
+## Finding: Multi-Issuer JWKS Trust — Deferred
+
+**Name:** `Multi-Issuer-IDP-Trust`
+**Severity:** HIGH
+**Found:** 2026-09-05
+**Status:** Deferred
+
+### Rationale for Deferral
+
+Extraction was previously justified by a suspected `KEYCLOAK_ISSUER_URL` vs. e2e issuer mismatch causing `/api/admin/tenants/audit-logs` to return 401. The actual root cause was confirmed to be a panic in `HandleGetAuditLogs` (fixed in PR #7). No issuer mismatch existed. The multi-issuer work's primary use case was the misdiagnosed failure; with that failure closed, the extraction loses its urgency.
+
+### What Exists on `cleanup-node-edge-deadcode`
+
+The branch contains a full multi-issuer JWKS trust implementation spanning ~7 commits:
+
+| Component | File | Type | Extraction Risk |
+|----------|------|------|----------------|
+| `IssuerRegistry` interface + `DBIssuerRegistry` | `backend/internal/security/idp_registry.go` | New file — cherry-pick clean | Trivial |
+| `FetchJWKS` / `FetchAllTrustedKeys` | `backend/internal/security/jwks.go` | New file — cherry-pick clean | Trivial |
+| `ValidateIssuerTenant` | `backend/internal/services/idp_refresh.go` | New file — cherry-pick clean | Trivial |
+| `refreshAllTrustedKeys` | `backend/internal/api/helpers.go` (+64 lines) | Modifies existing — cherry-pick clean | Trivial |
+| `SecurityManager.StartIssuerKeyRefresh` | `backend/internal/services/security_manager.go` | Modifies existing — cherry-pick clean | Trivial |
+| `AuthContextMiddleware` signature + rewrite | `backend/internal/middleware/auth_context.go` (380-line diff) | Full rewrite — requires manual review | **Significant** |
+| `SetupRouter` idpRegistry wiring | `backend/cmd/server/main.go`, `backend/internal/api/api.go` | Adds IssuerRegistry param to middleware calls | Manual |
+
+### Commit History (branch `cleanup-node-edge-deadcode`)
+
+```
+0cb8099481 — feat(security): enforce per-tenant IDP/issuer trust on external JWTs
+28715bea68 — security: Mitigate JWT trust inversion and enforce alg/iss validation
+04eff75d4a — security: Strip identity headers, enforce fail-closed structural auth dispatch
+508d38a11a — security: Add positive/negative auth matrix test suite, reject legacy impersonation
+ac2d340266 — fix(security): Add nil db guards in api aggregates setup and idp registry
+c8b752086d — security: Protect SSE endpoint with AuthContextMiddleware, add WS unit tests
+```
+
+### Extraction Note
+
+`04eff75d4a` alone touches 382 lines of `auth_context.go` (header stripping + structural dispatch) and should be reviewed as a separate commit. The `auth_context.go` rewrite is the hard part — not the four new files. When this work is eventually landed, it should be a reviewed re-implementation on `main`, not cherry-picks.
+
+### Sequencing Note
+
+The 47-site `GetClaimsFromContext` migration and the `auth_context.go` rewrite both live in the identity layer. Landing the rewrite first would churn the exact middleware whose contract (`security.AuthInfo` in context) the 47 sites depend on. Correct order: migrate handlers first on stable middleware, then rewrite the middleware.
