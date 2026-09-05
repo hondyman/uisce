@@ -90,33 +90,33 @@ Tests ran against `localhost:5432` with `search_path` routing to `test_outbox_sc
 **Name:** `ColumnMapper-Delete-On-Rename`
 **Severity:** MEDIUM
 **Found:** 2026-09-04
-**Status:** Open
+**Status:** Closed
 
 ### Description
 
-`ColumnMapper.Transform` in `backend/internal/datapipeline/transforms.go` deletes source fields when mapping to a different name. Given `Mappings: {"out_name": "node_name"}`:
+`ColumnMapper.Transform` in `backend/internal/datapipeline/transforms.go` deleted source fields when mapping to a different name. Given `Mappings: {"out_name": "node_name"}`:
 
 1. `transformed[targetKey] = val` — copies value to `out_name`
-2. `delete(transformed, srcKey)` — **deletes** `node_name`
+2. `delete(transformed, srcKey)` — **deleted** `node_name`
 
-Any downstream node that expects both `out_name` AND `node_name` receives only `out_name`. The data loss is silent.
+Any downstream node that expected both `out_name` AND `node_name` received only `out_name`. The data loss was silent.
 
-### Production Impact
+### Fix Applied
 
-All pipeline authors configuring `column_mapper` nodes with rename-style mappings will silently lose the source field. Any loader or subsequent transform reading the original field name gets an empty value. Severity is MEDIUM: annoying and discoverable in testing, recoverable by re-running with fixed mappings — not the same class as tenant isolation voids or transactional event gaps that corrupt *trust* in the system.
+`delete(transformed, srcKey)` removed. Rename now uses copy semantics: source field is retained at its original key and the value is also placed at the target key. Rename-without-loss is now the default.
 
-### Workaround in Tests
+Move semantics (delete source after rename) is available as an explicit opt-in via `ColumnMapper.Move = true` or `config.move = true`.
 
-`diamond_persistence_test.go` uses self-referential mappings: `Mappings: {"node_name": "node_name", "value": "value"}` — copies without deleting.
+### Test Results
 
-### Fix Direction
+`go test -count=1 -v ./internal/datapipeline/...`
+- `TestTransforms_ColumnMapper` PASS — rename preserves source key (copy semantics)
+- `TestTransforms_ColumnMapper_MoveSemantics` PASS — `Move=true` deletes source key after rename
+- All other datapipeline tests PASS
 
-Remove `delete(transformed, srcKey)`. Default-copy behavior gives rename-without-loss semantics. If move semantics are needed, make it an explicit opt-in flag.
+### Commits
 
-### References
-
-- `backend/internal/datapipeline/transforms.go:41-46`
-- `backend/internal/datapipeline/diamond_persistence_test.go`
+- `78934abbcb` — fix(datapipeline): ColumnMapper renames copy by default, not move
 
 **Refs:** [#3](https://github.com/hondyman/uisce/issues/3)
 
