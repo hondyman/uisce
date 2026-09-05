@@ -183,21 +183,27 @@ func HandleGetAuditLogs(w http.ResponseWriter, r *http.Request) {
 		if colCount < 9 {
 			continue
 		}
-		e := AuditLogEntry{
-			ID:           fmt.Sprintf("%v", resp.Records[0][rowIdx]),
-			TenantID:     fmt.Sprintf("%v", resp.Records[1][rowIdx]),
-			UserName:     fmt.Sprintf("%v", resp.Records[3][rowIdx]),
-			UserEmail:    fmt.Sprintf("%v", resp.Records[4][rowIdx]),
-			Action:       fmt.Sprintf("%v", resp.Records[5][rowIdx]),
-			Resource:     fmt.Sprintf("%v", resp.Records[6][rowIdx]),
-			ResourceType: fmt.Sprintf("%v", resp.Records[7][rowIdx]),
+		safeVal := func(col int) interface{} {
+			if col < len(resp.Records) && rowIdx < len(resp.Records[col]) {
+				return resp.Records[col][rowIdx]
+			}
+			return nil
 		}
-		if tsStr := fmt.Sprintf("%v", resp.Records[2][rowIdx]); tsStr != "" {
+		e := AuditLogEntry{
+			ID:           fmt.Sprintf("%v", safeVal(0)),
+			TenantID:     fmt.Sprintf("%v", safeVal(1)),
+			UserName:     fmt.Sprintf("%v", safeVal(3)),
+			UserEmail:    fmt.Sprintf("%v", safeVal(4)),
+			Action:       fmt.Sprintf("%v", safeVal(5)),
+			Resource:     fmt.Sprintf("%v", safeVal(6)),
+			ResourceType: fmt.Sprintf("%v", safeVal(7)),
+		}
+		if tsStr := fmt.Sprintf("%v", safeVal(2)); tsStr != "" && tsStr != "<nil>" {
 			if parsedTs, err := time.Parse(time.RFC3339, tsStr); err == nil {
 				e.Timestamp = parsedTs
 			}
 		}
-		if detailsStr := fmt.Sprintf("%v", resp.Records[8][rowIdx]); detailsStr != "" {
+		if detailsStr := fmt.Sprintf("%v", safeVal(8)); detailsStr != "" && detailsStr != "<nil>" {
 			var detailsMap map[string]interface{}
 			if err := json.Unmarshal([]byte(detailsStr), &detailsMap); err == nil {
 				e.Details = detailsMap
