@@ -1,9 +1,13 @@
 # STATUS_AUDIT_BACKLOG.md — Open Findings
 
+**Severity scale:** `SEV-HIGH` = tenant isolation / production-correctness void · `HIGH` = silent failure in default path / deployment hazard · `MEDIUM` = capability gap, steady-state hazard · `LOW` = hygiene, governance, dead code already neutralized
+
+---
+
 ## Finding: APICallerTransformer — Phase 3 Stub Never Executed
 
 **Name:** `APICallerTransformer-Unimplemented`
-**Severity:** HIGH (live footgun)
+**Severity:** HIGH
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -29,7 +33,7 @@ Bind to the server-side API Studio endpoint registry (no arbitrary URLs — SSRF
 ## Finding: Outbox Publish Outside BO Write Transaction
 
 **Name:** `Outbox-Event-Transactional-Gap`
-**Severity:** HIGH (silent eventual-consistency bug)
+**Severity:** HIGH
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -50,7 +54,7 @@ Refactor `PublishPipelineTrigger` to accept the BO write's `*sqlx.Tx` and partic
 ## Finding: ColumnMapper Delete-On-Rename (Silent Data Loss)
 
 **Name:** `ColumnMapper-Delete-On-Rename`
-**Severity:** Medium (silent data-loss footgun)
+**Severity:** MEDIUM
 **Found:** 2026-09-04
 **Status:** Open
 
@@ -65,7 +69,7 @@ Any downstream node that expects both `out_name` AND `node_name` receives only `
 
 ### Production Impact
 
-All pipeline authors configuring `column_mapper` nodes with rename-style mappings will silently lose the source field. Any loader or subsequent transform reading the original field name gets an empty value.
+All pipeline authors configuring `column_mapper` nodes with rename-style mappings will silently lose the source field. Any loader or subsequent transform reading the original field name gets an empty value. Severity is MEDIUM: annoying and discoverable in testing, recoverable by re-running with fixed mappings — not the same class as tenant isolation voids or transactional event gaps that corrupt *trust* in the system.
 
 ### Workaround in Tests
 
@@ -85,7 +89,7 @@ Remove `delete(transformed, srcKey)`. Default-copy behavior gives rename-without
 ## Finding: Trigger Surface — Create-Only, No Visibility or Lifecycle
 
 **Name:** `TriggerSurface-CreateOnly`
-**Severity:** MEDIUM (event-driven is half-built)
+**Severity:** MEDIUM
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -102,7 +106,7 @@ Add: trigger list view with last-fired timestamp and run link; activate/deactiva
 ## Finding: Event Coalescing / Debouncing Missing — Thundering Herd at Production Scale
 
 **Name:** `Event-Coalescing-Missing`
-**Severity:** MEDIUM (scalability hazard)
+**Severity:** MEDIUM
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -119,7 +123,7 @@ Add windowed event coalescing ("collect events for 30s, run once with the batch"
 ## Finding: Dead-Letter Quarantine Unimplemented
 
 **Name:** `DeadLetter-Quarantine-Unimplemented`
-**Severity:** MEDIUM (reliability loop incomplete)
+**Severity:** MEDIUM
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -136,7 +140,7 @@ Failed records land in a quarantine table with the triggering event payload atta
 ## Finding: WorkflowCallerTransformer — Synchronous Execution Blocks Pipeline Run
 
 **Name:** `WorkflowCallerTransformer-SyncBlocking`
-**Severity:** MEDIUM (pipeline/workflow coupling)
+**Severity:** MEDIUM
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -153,7 +157,7 @@ Make always-async with a correlation-ID handshake: pipeline emits run_id, workfl
 ## Finding: Lineage Auto-Write Missing
 
 **Name:** `Lineage-AutoWrite-Missing`
-**Severity:** MEDIUM (flagship differentiator unbuilt)
+**Severity:** MEDIUM
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -170,7 +174,7 @@ Stitch persisted run→step→catalog-node rows to the semantic layer and lineag
 ## Finding: Pipeline-as-Code Missing
 
 **Name:** `PipelineAsCode-Missing`
-**Severity:** LOW (governance gap)
+**Severity:** LOW
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -187,7 +191,7 @@ Export/import pipeline definitions in the bundle format. CI dry-run validation a
 ## Finding: DB Runtime Connection Uses Postgres Superuser With BYPASSRLS
 
 **Name:** `DBRuntime-Superuser-BYPASSRLS`
-**Severity:** SEV-HIGH (multi-tenant isolation not database-guaranteed)
+**Severity:** SEV-HIGH
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -201,10 +205,10 @@ Demote the runtime connection to a role with only required permissions. Row-leve
 
 ---
 
-## Finding: Migration Runner Silently No-Ops Based on Launch CWD (SEV-HIGH)
+## Finding: Migration Runner Silently No-Ops Based on Launch CWD
 
 **Name:** `Migration-Runner-CWD-Dependent`
-**Severity:** HIGH (deployment hazard)
+**Severity:** HIGH
 **Found:** 2026-09-05
 **Status:** Open (workaround: `MIGRATIONS_DIR` env var)
 
@@ -226,7 +230,7 @@ Resolve from `os.Executable()` or bake absolute path at build time. Missing migr
 ## Finding: GetGoldCopyInfo — Invalid Temporal Activity Signature (Dead Code)
 
 **Name:** `GetGoldCopyInfo-Invalid-Activity-Signature`
-**Severity:** Low (dead code, commented out)
+**Severity:** LOW
 **Found:** 2026-09-04
 **Status:** Open
 
@@ -243,7 +247,7 @@ Remove the function or convert to a proper 2-return signature.
 ## Finding: Evidence Table Dropped During Provenance Test
 
 **Name:** `Evidence-Table-Dropped`
-**Severity:** Low (operational hygiene)
+**Severity:** LOW
 **Found:** 2026-09-05
 **Status:** Open
 
@@ -260,7 +264,7 @@ Establish a rule: table/data deletions include the object name in the operation 
 ## Finding: Non-Idempotent Migration Causes Server Crash on Deploy
 
 **Name:** `Non-Idempotent-Migration-API-Crash`
-**Severity:** HIGH (deployment hazard)
+**Severity:** HIGH
 **Found:** 2026-09-04
 **Status:** Closed (migration made idempotent in 20260909_001)
 
@@ -274,7 +278,7 @@ Audit all migrations for non-idempotent `CREATE INDEX`/`CREATE TABLE`. Add a mig
 
 ---
 
-## Finding: Unauthenticated Pipeline Run Execution (SEV-HIGH)
+## Finding: Unauthenticated Pipeline Run Execution
 
 **Name:** `Unauthenticated-Pipeline-Run-Execution`
 **Severity:** HIGH
@@ -287,7 +291,7 @@ Audit all migrations for non-idempotent `CREATE INDEX`/`CREATE TABLE`. Add a mig
 
 ---
 
-## Finding: ListPipelines Endpoint Unauthenticated (SEV-MEDIUM)
+## Finding: ListPipelines Endpoint Unauthenticated
 
 **Name:** `Unauthenticated-Pipeline-List`
 **Severity:** MEDIUM
