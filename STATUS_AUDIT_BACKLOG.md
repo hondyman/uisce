@@ -9,24 +9,47 @@
 **Name:** `APICallerTransformer-Unimplemented`
 **Severity:** HIGH
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed
 
 ### Description
 
-`APICallerTransformer` in `backend/internal/datapipeline/transforms.go` is a Phase 3 transformer that stamps `{"verified": true}` without making any HTTP call. It is registered in the transform palette and selectable by pipeline authors. A transformer that declares it calls an external API but doesn't is a silent correctness failure — pipeline authors trust the output of a "verified" step that made no external request.
+`APICallerTransformer` in `backend/internal/datapipeline/transforms.go` was a Phase 3 transformer that stamped `{"verified": true}` without making any HTTP call. It was registered in the transform palette and selectable by pipeline authors. A transformer that declared it calls an external API but doesn't is a silent correctness failure — pipeline authors trust the output of a "verified" step that made no external request.
 
 ### Production Impact
 
-Pipelines using `api_caller` in a production context will produce outputs claiming verification was performed when no API was contacted. Downstream decisions made on that output are based on fabricated data.
+Pipelines using `api_caller` in a production context would produce outputs claiming verification was performed when no API was contacted. Downstream decisions made on that output were based on fabricated data.
 
-### Fix Direction
+### Fix Applied
 
-Bind to the server-side API Studio endpoint registry (no arbitrary URLs — SSRF prevention). Support service-held auth tokens (OAuth2 client credentials, API keys). Cap responses at 1MB. Propagate real HTTP errors through the pipeline failure path.
+`APICallerTransformer` fully implemented as a real HTTP transformer. A KYC-class silent-success scenario is no longer possible: an `api_caller` step either makes a real HTTP call to a registered API Studio endpoint or fails the pipeline visibly with the actual error surfaced (SSRF block, 4xx/5xx, timeout, 1MB cap exceeded).
 
-### References
+Key implementation details:
+- Bound to API Studio endpoint registry via `endpoint_id` — no `endpoint_url`, no arbitrary URLs, SSRF guard enforced by default
+- Auth injection: bearer token, API key, Basic, OAuth2 client-credentials, or none — resolved from secrets vault per endpoint config
+- 1MB response cap enforced on body read (not `Content-Length` header — chunked encoding makes it unreliable)
+- Per-invocation telemetry INSERT into `api_telemetry` (endpoint, status, latency, error)
+- OAuth2 in-memory token cache keyed by endpoint/secret_id, 30s pre-expiry refresh
 
-- `backend/internal/datapipeline/transforms.go` — `APICallerTransformer` stub
-- API Studio endpoint registry (platform component, not yet wired)
+### Test Results
+
+`go test -count=1 -v ./internal/datapipeline/... -run TestAPICaller`
+- T1  PASS — RealCall_Success
+- T2  PASS — 5xx_ReturnsError
+- T3a PASS — SSRF_PrivateIPBlocked
+- T3b PASS — SSRF_LoopbackAllowedWithExemption
+- T4  PASS — 1MB_Cap
+- T5  PASS — MissingEndpointID_ReturnsError
+- T6  PASS — EndpointNotFoundError
+- T7  PASS — NoBaseURL_ReturnsError
+- T8  PASS — BearerAuth
+- T9  PASS — Timeout
+- T10 PASS — PostMethod_WithRequestTemplate
+- T11 PASS — MergeOutput
+- T12 PASS — TargetField
+
+### Commits
+
+- `fb7389b9a` — feat(datapipeline): implement APICallerTransformer — real HTTP, SSRF guard, auth injection, 1MB cap
 
 **Refs:** [#1](https://github.com/hondyman/uisce/issues/1)
 
