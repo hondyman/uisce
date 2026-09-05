@@ -830,3 +830,20 @@ green meaningless.
   crashing when its API returns 200, the hang theory is wrong and the crash class is
   "API failure → component crash" (which the `apiFetch` fix may already address for
   routes using that client). Verify before spending time on auth layer.
+
+---
+
+### Standing protocol (non-negotiable)
+
+> **No fix is "done" until the ratchet has run against it.**
+> **No gate is "optional" while a number still exists.**
+
+The freeze history (77→73→76 arc, three wrong explanations, five re-freezes) is the map of what
+happens when "just this once" compounds. The protocol isn't ceremony — it's the compressed cost of
+every session it replaces. Every future session will have a reason to skip: crawl's slow, ratchet's
+noisy on one rule, eslint fights a MUI component. None of those reasons produce a number that holds.
+The protocol does.
+
+This is the only standard that ever mattered: every number traces to a captured output, every
+output is verifiable, every fix gates on the ratchet passing. The floor survives because the
+instrument does.
