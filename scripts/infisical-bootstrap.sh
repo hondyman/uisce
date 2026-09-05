@@ -153,11 +153,13 @@ generate_env_file() {
 
 generate_composite_secrets() {
     local output_path="$1"
-    local db_pass="${POSTGRES_PASSWORD:-postgres}"
     local db_user="${POSTGRES_USER:-postgres}"
     local db_host="${DB_HOST:-100.84.50.65}"
     local db_port="${DB_PORT:-5432}"
     local db_name="${DB_NAME:-alpha}"
+    local pg_sslcert="${POSTGRES_SSLCERT:-$HOME/.uisce/certs/postgres-client.crt}"
+    local pg_sslkey="${POSTGRES_SSLKEY:-$HOME/.uisce/certs/postgres-client.key}"
+    local pg_sslrootcert="${POSTGRES_SSLROOTCERT:-$HOME/.uisce/certs/ca.crt}"
 
     if [ -n "${DRY_RUN:-}" ]; then
         log "[DRY-RUN] Would generate composite secrets in $output_path"
@@ -165,10 +167,10 @@ generate_composite_secrets() {
     fi
 
     if ! grep -q "^DATABASE_URL=" "$output_path"; then
-        echo "DATABASE_URL=postgres://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        echo "DATABASE_URL=\"postgres://${db_user}@${db_host}:${db_port}/${db_name}?sslmode=verify-full&sslcert=${pg_sslcert}&sslkey=${pg_sslkey}&sslrootcert=${pg_sslrootcert}\"" >> "$output_path"
     fi
     if ! grep -q "^POSTGRES_DSN=" "$output_path"; then
-        echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        echo "POSTGRES_DSN=\"postgresql://${db_user}@${db_host}:${db_port}/${db_name}?sslmode=verify-full&sslcert=${pg_sslcert}&sslkey=${pg_sslkey}&sslrootcert=${pg_sslrootcert}\"" >> "$output_path"
     fi
     if ! grep -q "^REDIS_URL=" "$output_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
