@@ -812,6 +812,11 @@ green meaningless.
 
 ### Outstanding work
 
+- **eslint-plugin-jsx-a11y gate** ✅ **DONE** — wired in `eslint.config.cjs`. Seven rules enabled as
+  `warn` (1646 violations currently in src/ — won't block builds; surfaces in CI output).
+  Upgrade to `error` rule-by-rule as violations are fixed. axe-core rules with no jsx-a11y
+  equivalent: button-name, select-name, aria-progressbar-name, list, listitem — these are
+  handled by the Playwright axe-core crawler only.
 - **A11yCircularProgress wrapper** (Phase 2.5, after triage): default `aria-label="Loading"`
   on MUI CircularProgress/LinearProgress. 100+ usages across 60+ files — too large for
   same-session pull-forward. `aria-progressbar-name` remains in the informational total
