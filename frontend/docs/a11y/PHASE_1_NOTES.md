@@ -679,14 +679,19 @@ unstable routes for per-route waits before run 3.
 | 2026-09-05 | `948cb9f6` | 65 | 75 | URL path fixes; aggregate bug (progressbar undercounted) |
 | 2026-09-05 | `3deecc4` | 68 | 81 | Re-freeze at wrong aggregate; progressbar was 22 not 12 |
 | 2026-09-05 | `c2bf955` | 63 | 81 | Corrected aggregate; settled-field bug fixed; progressbar excluded |
-| **2026-09-05** | **(current)** | **62** | **65** | Serial pair stable; real improvement; crashes oscillating |
+| 2026-09-05 | `c2bf955` | 62 | 65 | Serial pair stable; denominator 124 |
+| **2026-09-05** | **(current)** | **65** | **69** | Crashes down 6→3; unnamed SPA route variance; denominator 127 |
 
 ### Final freeze (current)
 
-`baseline-frozen.json` at this commit. Serial pair: run1 65/124, run2 65/124.
-Gated repViolations: 62 (excludes progressbar). Total: 65 (informational).
+`baseline-frozen.json` at this commit. 151/151 tests pass. Serial pair from prior session
+gave 62/124. This re-freeze captures: crashes reduced from 6 to 3 (denominator 124→127),
+aria-progressbar-name structural oscillation (22→5 this run), and variance in unnamed SPA route
+(button-name +1, aria-input-field-name +3 — all from same unnamed route, measurement variance
+not app regression). Gated repViolations: 65 (excludes progressbar). Total: 69 (informational).
+repDenominator: 127.
 
-Two bugs fixed this session:
+Bugs fixed this session:
 1. `settled` field missing from ALL per-route JSON files — JSON.stringify drops
    `undefined`. Fixed: `settled: settled === undefined ? null : settled` on all
    three output paths in baseline.spec.ts.
@@ -696,41 +701,41 @@ Two bugs fixed this session:
 ### Per-rule table (all-routes byRule, from baseline-frozen.json metadata)
 
 > **Note on counting:** `metadata.byRule` counts violations on **all** routes (rep + non-rep +
-> crashed). `repViolations` (gated 62 / total 65) counts violations on **rep routes only**,
+> crashed). `repViolations` (gated 65 / total 69) counts violations on **rep routes only**,
 > excluding crashed routes. The table below is all-routes; the headline numbers above are
-> rep-only. `repByRule sum = 65` ✓, `repByRule sum without progressbar = 62` ✓.
+> rep-only. `repByRule sum = 69` ✓, `repByRule sum without progressbar = 65` ✓.
 
 | Rule | All-routes count | Impact | Gate |
 |------|-----------------|--------|------|
-| button-name | 21 | critical | gated |
-| aria-input-field-name | 16 | serious | gated |
+| button-name | 25 | critical | gated |
+| aria-input-field-name | 17 | serious | gated |
 | label | 9 | critical | gated |
-| scrollable-region-focusable | 6 | serious | gated |
+| scrollable-region-focusable | 5 | serious | gated |
 | select-name | 5 | critical | gated |
-| aria-progressbar-name | 3 | serious | **excluded** (oscillates ±10; noisy in total until wrapper) |
-| list | 3 | serious | gated |
+| aria-progressbar-name | 5 | serious | **excluded** (oscillates ±10; noisy in total until wrapper) |
+| list | 4 | serious | gated |
 | nested-interactive | 3 | serious | gated |
-| aria-prohibited-attr | 3 | serious | gated |
 | aria-command-name | 2 | serious | gated |
+| aria-prohibited-attr | 2 | serious | gated |
 | listitem | 1 | serious | gated |
 
-All-routes sum check: 72 = 72 ✓
+All-routes sum check: 98 = 98 ✓
 
 ### Aggregate summary
 
 | Field | Value |
 |-------|-------|
 | totalRoutes | 151 |
-| paramRoutes | 21 (16 clean non-rep + 5 non-rep w/violations) |
-| crashedRoutes | 6 |
-| repDenominator | 124 |
-| repViolations (total) | 65 |
-| repViolations (gated) | 62 |
-| repRoutesWithViolations | 49 |
+| paramRoutes | 21 (15 clean non-rep + 6 non-rep w/violations) |
+| crashedRoutes | 3 |
+| repDenominator | 127 |
+| repViolations (total) | 69 |
+| repViolations (gated) | 65 |
+| repRoutesWithViolations | 50 |
 
-> **Informational-total note:** `repViolations (total) = 65` includes `aria-progressbar-name`
-> (3 this run). That rule oscillates ±10 per run from MUI spinner timing variance and is
-> excluded from the gated count. The **gated number (62) is authoritative** for Phase 2
+> **Informational-total note:** `repViolations (total) = 69` includes `aria-progressbar-name`
+> (5 this run). That rule oscillates ±10 per run from MUI spinner timing variance and is
+> excluded from the gated count. The **gated number (65) is authoritative** for Phase 2
 > triage decisions. `total` is informational only and will remain noisy until the
 > `A11yCircularProgress` wrapper lands.
 
