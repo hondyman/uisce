@@ -2,5 +2,7 @@
   "routePattern": "/en/admin/ai-semantic-bridge",
   "finalUrl": "http://localhost:5173/login",
   "violations": [],
-  "violationIds": []
+  "violationIds": [],
+  "crashed": true,
+  "crashReason": "no <main> landmark — app crashed or error boundary rendered"
 }

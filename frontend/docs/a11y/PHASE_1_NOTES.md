@@ -109,6 +109,38 @@ pnpm i18n:diff
 node scripts/aggregate-a11y-baseline.mjs
 ```
 
+## Test protocol
+
+```bash
+# Serial baseline (authoritative — always use --workers=1)
+npx playwright test e2e/a11y/baseline.spec.ts --workers=1 --project=chromium
+node scripts/aggregate-a11y-baseline.mjs
+```
+
+**Fundamental rule: tests assert desired behavior, not current behavior.**
+
+When reality and the test disagree — the test is authoritative for the desired state,
+reality is wrong. Fix the code.
+
+Known gaps get `test.fixme(title, body, reason)` with a specific reason string
+referencing the backlog entry or Phase number, OR a tracker issue. Never invert an
+assertion to make a failing test pass — that converts the suite from "the spec holds"
+to "whatever the app currently does holds," which is how vacuous-clean quietly
+corrodes a compliance initiative from the inside.
+
+The cascade when a test fails after a change:
+1. Is the test asserting desired behavior (locked spec)? → fix the code, not the test.
+2. Is it asserting a known future gap? → `test.fixme` with reason + backlog entry.
+3. Is it a regression in unrelated code? → revert the offending change.
+
+**Suite invariants:**
+- All 151 baseline tests must pass at `--workers=1` before Phase 2 opens a ratchet.
+- Non-representative routes (param non-rep, crashed) are flagged per-route and excluded
+  from the representative violation count — they must not affect Phase 2 sizing.
+- Auth token is TTL-refreshed mid-crawl (Keycloak tokens expire ~5 min; the crawl
+  runs 5–6 min; a 60s pre-expiry refresh prevents 401 mid-run that would produce
+  vacuous-clean pages indistinguishable from real renders.
+
 ## Known follow-ups (Phase 2+)
 
 - [ ] **Plain CSS RTL** — activate postcss-rtlcss pipeline; only MUI v7

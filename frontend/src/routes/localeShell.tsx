@@ -31,8 +31,9 @@ function getCachedLocale(): string | null {
 }
 
 function RootRedirect() {
+  const { search, hash } = useLocation();
   const target = getPreferredLocale(getCachedLocale(), getBrowserLanguages());
-  return <Navigate to={`/${target}`} replace />;
+  return <Navigate to={`/${target}${search}${hash}`} replace />;
 }
 
 function LocaleSync() {

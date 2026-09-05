@@ -1,13 +1,13 @@
 {
   "metadata": {
-    "generated": "2026-09-05T02:31:46.076Z",
+    "generated": "2026-09-05T02:47:26.017Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
     "paramRoutes": 21,
     "nonRepClean": 14,
     "nonRepWithViolations": 7,
-    "crashedRoutes": 4,
+    "crashedRoutes": 5,
     "repRoutesWithViolations": 59,
     "repViolations": 81,
     "totalViolations": 92,
@@ -131,7 +131,7 @@
         "finalUrl": "http://localhost:5173/login",
         "isParam": false,
         "wasNonRep": false,
-        "crashed": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
