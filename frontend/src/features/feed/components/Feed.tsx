@@ -1,15 +1,20 @@
 import React from 'react';
-import { useFeed, FeedItem } from '../api/feed';
+import { useQuery } from '@tanstack/react-query';
+import { fetchFeed, FeedItem } from '../api/feed';
 import { FeedCard } from './FeedCard';
-import { CircularProgress as Loader2Icon } from '@mui/icons-material';
+import CircularProgress from '@mui/material/CircularProgress';
 
 export const Feed: React.FC = () => {
-  const { data: feedItems, isLoading, error } = useFeed();
+  const { data: feedItems, isLoading, error } = useQuery({
+    queryKey: ['wealth-feed'],
+    queryFn: fetchFeed,
+    refetchInterval: 30000,
+  });
 
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+        <CircularProgress className="h-8 w-8 animate-spin text-gray-400" />
       </div>
     );
   }
@@ -25,10 +30,10 @@ export const Feed: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-6">WealthStream Feed</h1>
-      {feedItems?.length === 0 ? (
+      {(!feedItems || feedItems.length === 0) ? (
         <p className="text-gray-500 text-center">No updates at this time.</p>
       ) : (
-        feedItems?.map((item: FeedItem) => <FeedCard key={item.card_id} item={item} />)
+        feedItems.map((item: FeedItem) => <FeedCard key={item.card_id} item={item} />)
       )}
     </div>
   );
