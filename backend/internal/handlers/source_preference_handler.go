@@ -8,8 +8,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/preference"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	"github.com/hondyman/uisce/backend/internal/security"
+	)
 
 // SourcePreferenceHandler handles all source preference, analytics, and exception routes
 type SourcePreferenceHandler struct {
@@ -203,7 +203,7 @@ func (h *SourcePreferenceHandler) ResolveException(w http.ResponseWriter, r *htt
 // ---- Shared helpers ----
 
 func mustTenantID(r *http.Request) uuid.UUID {
-	id, _ := uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	id, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	return id
 }
 

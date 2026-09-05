@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	"github.com/hondyman/uisce/backend/internal/security"
+	)
 
 // Handler handles onboarding HTTP requests
 type Handler struct {
@@ -34,7 +34,7 @@ func (h *Handler) CreateSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get tenant ID from header
-	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	tenantIDStr := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
 	tenantUUID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")

@@ -7,8 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/billing"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	)
 
 // BillingHandlers provides HTTP handlers for the platform billing API.
 type BillingHandlers struct {
@@ -58,8 +57,12 @@ func (h *BillingHandlers) RegisterRoutes(r chi.Router) {
 func (h *BillingHandlers) GetTenantBilling(w http.ResponseWriter, r *http.Request) {
 	tenantID := chi.URLParam(r, "tenantId")
 	if tenantID == "" {
-		// Fall back to header for multi-tenant auth
-		tenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+		// Fall back to JWT claims
+		tenantID, ok = TenantIDFromRequest(r)
+		if !ok {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 	}
 	if tenantID == "" {
 		http.Error(w, "tenantId is required", http.StatusBadRequest)

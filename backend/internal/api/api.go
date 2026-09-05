@@ -620,7 +620,7 @@ func (s *Server) debugProxyHeaders(w http.ResponseWriter, r *http.Request) {
 		"path":   r.URL.Path,
 		"method": r.Method,
 		"headers": map[string]string{
-			"X-Tenant-ID":            jwtmiddleware.GetClaimsFromContext(r).TenantID,
+			"X-Tenant-ID":            func() string { tid, _ := TenantIDFromRequest(r); return tid }(),
 			"X-Tenant-Datasource-ID": r.Header.Get("X-Tenant-Datasource-ID"),
 			"Host":                   r.Host,
 		},
@@ -2695,7 +2695,7 @@ func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set tenant and datasource from headers
-	req.TenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+	req.TenantID, _ = TenantIDFromRequest(r)
 	req.DatasourceID = r.Header.Get("X-Tenant-Datasource-ID")
 
 	// If node_ids are provided, resolve them to schema/tables

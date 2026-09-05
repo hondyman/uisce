@@ -23,6 +23,19 @@ import (
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
+// TenantIDFromRequest resolves the tenant ID for an incoming request.
+// Resolution order: (1) security.AuthInfo set by AuthContextMiddleware (production).
+// (2) jwtmiddleware.GetClaimsFromContext (standalone services with their own wiring).
+// (3) empty string, false — caller should respond 401.
+func TenantIDFromRequest(r *http.Request) (string, bool) {
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		return auth.TenantIDs[0], true
+	}
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID, true
+	}
+	return "", false
+}
 
 // refreshKeycloakJWKS fetches the current Keycloak JWKS document and loads
 // every RSA signing key into secMgr, keyed by "kid". Called at startup and on

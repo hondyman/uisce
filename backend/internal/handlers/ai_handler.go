@@ -8,9 +8,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/ai"
 	"github.com/hondyman/uisce/backend/internal/indexing"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/values"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	)
 
 type AIHandler struct {
 	Service *ai.AIService
@@ -80,7 +80,7 @@ func (h *AIHandler) ExplainPortfolio(w http.ResponseWriter, r *http.Request) {
 
 // GetRuleSuggestions returns AI-generated suggestions for a business object
 func (h *AIHandler) GetRuleSuggestions(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantID, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	bo := r.URL.Query().Get("business_object")
 
 	suggestions, err := h.Service.GetRuleSuggestions(r.Context(), tenantID, bo)
@@ -95,7 +95,7 @@ func (h *AIHandler) GetRuleSuggestions(w http.ResponseWriter, r *http.Request) {
 
 // AnalyzeImpact performs a what-if simulation for a rule suggestion
 func (h *AIHandler) AnalyzeImpact(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantID, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	var suggestion ai.RuleSuggestion
 	if err := json.NewDecoder(r.Body).Decode(&suggestion); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -114,7 +114,7 @@ func (h *AIHandler) AnalyzeImpact(w http.ResponseWriter, r *http.Request) {
 
 // GetDriftPredictions returns AI-generated drift predictions for a tenant
 func (h *AIHandler) GetDriftPredictions(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantID, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	params := ai.DriftPredictionParams{
 		BusinessObject: r.URL.Query().Get("business_object"),
 		SemanticTerm:   r.URL.Query().Get("semantic_term"),
@@ -133,7 +133,7 @@ func (h *AIHandler) GetDriftPredictions(w http.ResponseWriter, r *http.Request) 
 
 // SuggestRuleTemplates returns AI-generated rule templates based on usage clusters
 func (h *AIHandler) SuggestRuleTemplates(w http.ResponseWriter, r *http.Request) {
-	tenantID, _ := uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantID, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 
 	templates, err := h.Service.SuggestRuleTemplates(r.Context(), tenantID)
 	if err != nil {
@@ -153,7 +153,7 @@ func (h *AIHandler) SubmitFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if feedback.TenantID == uuid.Nil {
-		feedback.TenantID, _ = uuid.Parse(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+		feedback.TenantID, _ = uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	}
 
 	resp, err := h.Service.SubmitFeedback(r.Context(), feedback)

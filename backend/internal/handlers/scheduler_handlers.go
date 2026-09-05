@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	)
 
 // SchedulerHandlers provides scheduler API endpoints
 type SchedulerHandlers struct {
@@ -25,7 +25,7 @@ func NewSchedulerHandlers(ss services.SchedulerService) *SchedulerHandlers {
 
 // CreateScheduledJob creates a new scheduled job (POST /api/v1/schedules)
 func (h *SchedulerHandlers) CreateScheduledJob(w http.ResponseWriter, r *http.Request) {
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	var job services.ScheduledJob
@@ -69,7 +69,7 @@ func (h *SchedulerHandlers) GetSchedule(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	job, err := h.schedulerService.GetSchedule(ctx, scheduleID)
@@ -87,7 +87,7 @@ func (h *SchedulerHandlers) GetSchedule(w http.ResponseWriter, r *http.Request) 
 
 // ListSchedules lists all schedules for a tenant (GET /api/v1/schedules)
 func (h *SchedulerHandlers) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	tenantID, err := uuid.Parse(tenantNorm)
 	if err != nil {
 		sendError(w, http.StatusBadRequest, "Invalid tenant ID")
@@ -119,7 +119,7 @@ func (h *SchedulerHandlers) PauseSchedule(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	err = h.schedulerService.PauseSchedule(ctx, scheduleID)
@@ -149,7 +149,7 @@ func (h *SchedulerHandlers) ResumeSchedule(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	err = h.schedulerService.ResumeSchedule(ctx, scheduleID)
@@ -179,7 +179,7 @@ func (h *SchedulerHandlers) DeleteSchedule(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	tenantNorm := normalizeTenantID(jwtmiddleware.GetClaimsFromContext(r).TenantID)
+	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	err = h.schedulerService.DeleteSchedule(ctx, scheduleID)

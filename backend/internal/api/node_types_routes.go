@@ -9,8 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/handlers"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	)
 
 type NodeTypesHandler struct {
 	db           *sql.DB
@@ -195,7 +194,7 @@ func (h *NodeTypesHandler) handleCreateNodeType(w http.ResponseWriter, r *http.R
 	}
 
 	if nt.TenantID == "" {
-		nt.TenantID = jwtmiddleware.GetClaimsFromContext(r).TenantID
+		nt.TenantID, _ = TenantIDFromRequest(r)
 	}
 	if nt.TenantID == "" {
 		http.Error(w, "tenant_id is required", http.StatusBadRequest)

@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	"github.com/hondyman/uisce/backend/internal/security"
+	)
 
 // WebSocketHub manages WebSocket connections for real-time NBA updates
 type WebSocketHub struct {
@@ -187,7 +187,7 @@ func (h *WebSocketHub) ServeWs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantID := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	tenantID := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
