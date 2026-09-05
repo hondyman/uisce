@@ -231,12 +231,16 @@ func (h *TriggerHandler) GetValidationTriggers(w http.ResponseWriter, r *http.Re
 	targetEntity := r.URL.Query().Get("target_entity")
 
 	query := `
-		SELECT vt.id, vt.trigger_type_id, vt.target_entity, vt.event_id,
-		       vt.event_config, vt.condition_config, vt.action_config,
-		       vt.abac_policy_id, vt.enabled, vt.priority, vt.created_at,
-		       tt.key as trigger_key, tt.label as trigger_label
+		SELECT vt.id, vt.tenant_id, vt.trigger_type, vt.target_entity, vt.step_name,
+		       vt.rule_ids, vt.meta, vt.pipeline_id, vt.dispatch_mode,
+		       vt.is_active, vt.created_at,
+		       lr.last_fired_at
 		FROM validation_triggers vt
-		JOIN trigger_types tt ON vt.trigger_type_id = tt.id
+		LEFT JOIN LATERAL (
+		    SELECT MAX(r.start_time) AS last_fired_at
+		    FROM data_pipeline_runs r
+		    WHERE r.trigger_id = vt.id
+		) lr ON true
 		WHERE vt.tenant_id = $1`
 
 	args := []interface{}{tenantID}
@@ -244,7 +248,7 @@ func (h *TriggerHandler) GetValidationTriggers(w http.ResponseWriter, r *http.Re
 		query += ` AND vt.target_entity = $2`
 		args = append(args, targetEntity)
 	}
-	query += ` ORDER BY vt.priority ASC, vt.created_at DESC`
+	query += ` ORDER BY vt.created_at DESC`
 
 	var triggers []map[string]interface{}
 	rows, err := h.db.QueryxContext(r.Context(), query, args...)
@@ -283,7 +287,7 @@ func (h *TriggerHandler) UpdateValidationTrigger(w http.ResponseWriter, r *http.
 		EventConfig     json.RawMessage `json:"event_config"`
 		ConditionConfig json.RawMessage `json:"condition_config"`
 		ActionConfig    json.RawMessage `json:"action_config"`
-		Enabled         *bool           `json:"enabled"`
+		IsActive        *bool           `json:"is_active"`
 		Priority        *int            `json:"priority"`
 	}
 
@@ -299,7 +303,7 @@ func (h *TriggerHandler) UpdateValidationTrigger(w http.ResponseWriter, r *http.
 		SET event_config = COALESCE($1, event_config),
 		    condition_config = COALESCE($2, condition_config),
 		    action_config = COALESCE($3, action_config),
-		    enabled = COALESCE($4, enabled),
+		    is_active = COALESCE($4, is_active),
 		    priority = COALESCE($5, priority),
 		    updated_by = $6,
 		    updated_at = NOW()
@@ -310,7 +314,7 @@ func (h *TriggerHandler) UpdateValidationTrigger(w http.ResponseWriter, r *http.
 	var updatedAt time.Time
 	err := h.db.QueryRowxContext(r.Context(), query,
 		req.EventConfig, req.ConditionConfig, req.ActionConfig,
-		req.Enabled, req.Priority, userID, triggerID, tenantID,
+		req.IsActive, req.Priority, userID, triggerID, tenantID,
 	).Scan(&updatedID, &updatedAt)
 
 	if err == sql.ErrNoRows {

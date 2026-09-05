@@ -20,6 +20,7 @@ const PipelineTriggerEventType = "Pipeline.Trigger"
 type pipelineTriggerPayload struct {
 	TenantID   string                 `json:"tenant_id"`
 	PipelineID string                 `json:"pipeline_id"`
+	TriggerID  string                 `json:"trigger_id,omitempty"`
 	Record     map[string]interface{} `json:"record"`
 }
 
@@ -44,14 +45,14 @@ func NewOutboxPublisher(db *sqlx.DB) *OutboxPublisher {
 // PublishPipelineTrigger is the legacy method. Prefer PublishPipelineTriggerTx.
 // Kept for backward compatibility with callers that haven't migrated to pass
 // the caller's transaction.
-func (p *OutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+func (p *OutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error {
 	log.Printf("[WARN] OutboxPublisher.PublishPipelineTrigger (legacy) called — migrate to PublishPipelineTriggerTx for transactional atomicity")
-	return p.PublishPipelineTriggerTx(ctx, nil, tenantID, pipelineID, record)
+	return p.PublishPipelineTriggerTx(ctx, nil, tenantID, pipelineID, triggerID, record)
 }
 
 // PublishPipelineTriggerTx writes the outbox row inside the caller's transaction
 // (if tx is non-nil) or its own short-lived transaction (if tx is nil, compat path).
-func (p *OutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+func (p *OutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error {
 	if p.db == nil {
 		return fmt.Errorf("outbox publisher has no database configured")
 	}
@@ -69,6 +70,7 @@ func (p *OutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx
 	payload := pipelineTriggerPayload{
 		TenantID:   tenantID.String(),
 		PipelineID: pipelineID.String(),
+		TriggerID:  triggerID.String(),
 		Record:     record,
 	}
 	if err := events.PublishEvent(ctx, tx, PipelineTriggerEventType, payload); err != nil {
@@ -88,6 +90,7 @@ func NewPipelineTriggerOutboxHandler(engine *PipelineEngine) events.EventHandler
 	return func(ctx context.Context, payload map[string]interface{}) error {
 		tenantIDStr, _ := payload["tenant_id"].(string)
 		pipelineIDStr, _ := payload["pipeline_id"].(string)
+		triggerIDStr, _ := payload["trigger_id"].(string)
 		record, _ := payload["record"].(map[string]interface{})
 
 		tenantID, err := uuid.Parse(tenantIDStr)
@@ -99,18 +102,26 @@ func NewPipelineTriggerOutboxHandler(engine *PipelineEngine) events.EventHandler
 			return fmt.Errorf("invalid pipeline_id in Pipeline.Trigger event: %w", err)
 		}
 
+		var triggerID *uuid.UUID
+		if triggerIDStr != "" {
+			tid, err := uuid.Parse(triggerIDStr)
+			if err == nil {
+				triggerID = &tid
+			}
+		}
+
 		def, err := engine.loadPipelineDefinition(ctx, tenantID, pipelineID)
 		if err != nil {
 			return err
 		}
 
 		if engine.temporalClient != nil {
-			_, _, err := engine.ExecuteRunAsWorkflow(ctx, tenantID, *def, []PipelineRecord{record})
+			_, _, err := engine.ExecuteRunAsWorkflow(ctx, tenantID, *def, []PipelineRecord{record}, triggerID)
 			return err
 		}
 		// No Temporal client configured (e.g. dev/test worker): fall back
 		// to synchronous in-process execution so the trigger still runs.
-		_, err = engine.ExecuteRun(ctx, tenantID, *def, []PipelineRecord{record}, false)
+		_, err = engine.ExecuteRun(ctx, tenantID, *def, []PipelineRecord{record}, false, triggerID)
 		return err
 	}
 }

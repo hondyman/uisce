@@ -37,7 +37,7 @@ func TestOutboxPublishTx_Rollback_RowGone(t *testing.T) {
 		t.Fatalf("begin tx: %v", err)
 	}
 
-	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, record)
+	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, uuid.Nil, record)
 	if err != nil {
 		t.Fatalf("PublishPipelineTriggerTx: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestOutboxPublishTx_Commit_RowVisibleToAnotherConnection(t *testing.T) {
 		t.Fatalf("begin tx: %v", err)
 	}
 
-	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, record)
+	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, uuid.Nil, record)
 	if err != nil {
 		t.Fatalf("PublishPipelineTriggerTx: %v", err)
 	}
@@ -139,7 +139,7 @@ func TestOutboxPublish_LegacyAdapter_WarnsAndCompletes(t *testing.T) {
 
 	pub := NewOutboxPublisher(dbx)
 
-	err = pub.PublishPipelineTrigger(ctx, tenantID, pipelineID, record)
+	err = pub.PublishPipelineTrigger(ctx, tenantID, pipelineID, uuid.Nil, record)
 	if err != nil {
 		t.Fatalf("legacy PublishPipelineTrigger failed: %v", err)
 	}

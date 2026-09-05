@@ -175,14 +175,14 @@ func (e *PipelineEngine) CompileDAG(rawJSON json.RawMessage) (*PipelineDAG, erro
 
 // ExecuteRun executes a pipeline DAG in parallel with full telemetry.
 // RunID is auto-generated via uuid.New().
-func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool) (*PipelineExecutionRun, error) {
-	return e.executeRunWithRunID(ctx, tenantID, uuid.New(), def, inputRecords, isDryRun)
+func (e *PipelineEngine) ExecuteRun(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool, triggerID *uuid.UUID) (*PipelineExecutionRun, error) {
+	return e.executeRunWithRunID(ctx, tenantID, uuid.New(), def, inputRecords, isDryRun, triggerID)
 }
 
 // executeRunWithRunID is the internal implementation. runID may be pre-allocated
 // by the caller (e.g. ExecuteRunAsWorkflow) so the runID is known before
 // execution begins, enabling SSE subscription before the run starts.
-func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.UUID, runID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool) (*PipelineExecutionRun, error) {
+func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.UUID, runID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, isDryRun bool, triggerID *uuid.UUID) (*PipelineExecutionRun, error) {
 	dag, err := e.CompileDAG(def.DAGJSON)
 	if err != nil {
 		return nil, err
@@ -201,6 +201,7 @@ func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.
 		RunID:         runID,
 		PipelineID:    def.ID,
 		TenantID:      tenantID,
+		TriggerID:    triggerID,
 		Status:        "running",
 		StartTime:     time.Now().UTC(),
 		StepTelemetry: make(map[string]StepMetrics),
@@ -353,7 +354,7 @@ func (e *PipelineEngine) RunPipelineSync(ctx context.Context, tenantID uuid.UUID
 	if err != nil {
 		return err
 	}
-	run, err := e.ExecuteRun(ctx, tenantID, *def, []PipelineRecord{record}, false)
+	run, err := e.ExecuteRun(ctx, tenantID, *def, []PipelineRecord{record}, false, nil)
 	if err != nil {
 		return err
 	}
@@ -394,7 +395,7 @@ func (e *PipelineEngine) loadPipelineDefinition(ctx context.Context, tenantID uu
 // given pipeline definition and returns both the workflowID and the pre-allocated
 // runID. The runID is known before the activity starts so callers (e.g. SSE
 // subscription handlers) can subscribe to telemetry before execution begins.
-func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord) (workflowID string, runID uuid.UUID, err error) {
+func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid.UUID, def PipelineDefinition, inputRecords []PipelineRecord, triggerID *uuid.UUID) (workflowID string, runID uuid.UUID, err error) {
 	if e.temporalClient == nil {
 		return "", uuid.Nil, fmt.Errorf("pipeline engine has no temporal client configured")
 	}
@@ -411,6 +412,7 @@ func (e *PipelineEngine) ExecuteRunAsWorkflow(ctx context.Context, tenantID uuid
 		Definition:   def,
 		InputRecords: inputRecords,
 		RunID:        runID,
+		TriggerID:    triggerID,
 	}
 
 	run, err := e.temporalClient.ExecuteWorkflow(ctx, options, RunPipelineDAGWorkflow, input)

@@ -20,16 +20,18 @@ import (
 
 // DataPipelineHandler serves REST endpoints for pipeline management, test runs, and live telemetry
 type DataPipelineHandler struct {
-	db     *sqlx.DB
-	engine *PipelineEngine
-	bus    *TelemetryBus
+	db      *sqlx.DB
+	engine  *PipelineEngine
+	bus     *TelemetryBus
+	runRepo *RunRepository
 }
 
 // NewDataPipelineHandler creates a new handler instance
 func NewDataPipelineHandler(db *sqlx.DB, engine *PipelineEngine) *DataPipelineHandler {
 	return &DataPipelineHandler{
-		db:     db,
-		engine: engine,
+		db:      db,
+		engine:  engine,
+		runRepo: NewRunRepository(db),
 	}
 }
 
@@ -60,6 +62,7 @@ func (h *DataPipelineHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/runs/{runId}", h.GetRunStatus)
 		r.Get("/runs/{runId}/telemetry", h.StreamTelemetrySSE)
 		r.Post("/runs/{runId}/stream-token", h.CreateStreamToken)
+		r.Get("/triggers/{triggerId}/runs", h.ListTriggerRuns)
 	})
 }
 
@@ -386,7 +389,7 @@ func (h *DataPipelineHandler) SimulatePipeline(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	run, err := h.engine.ExecuteRun(r.Context(), tenantID, payload.Pipeline, payload.Sample, true)
+	run, err := h.engine.ExecuteRun(r.Context(), tenantID, payload.Pipeline, payload.Sample, true, nil)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -425,7 +428,7 @@ func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request
 	}
 
 	if durable {
-		workflowID, runID, err := h.engine.ExecuteRunAsWorkflow(r.Context(), tenantID, payload.Pipeline, payload.Records)
+		workflowID, runID, err := h.engine.ExecuteRunAsWorkflow(r.Context(), tenantID, payload.Pipeline, payload.Records, nil)
 		if err != nil {
 			http.Error(w, "Failed to start durable pipeline run: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -441,7 +444,7 @@ func (h *DataPipelineHandler) RunPipeline(w http.ResponseWriter, r *http.Request
 	}
 
 	// Default: synchronous in-process run (existing behavior, unchanged).
-	run, err := h.engine.ExecuteRun(r.Context(), tenantID, payload.Pipeline, payload.Records, false)
+	run, err := h.engine.ExecuteRun(r.Context(), tenantID, payload.Pipeline, payload.Records, false, nil)
 	if err != nil {
 		http.Error(w, "Execution failed: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -473,6 +476,37 @@ func (h *DataPipelineHandler) GetRunStatus(w http.ResponseWriter, r *http.Reques
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(run)
+}
+
+func (h *DataPipelineHandler) ListTriggerRuns(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := claimTenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	triggerIDStr := chi.URLParam(r, "triggerId")
+	triggerID, err := uuid.Parse(triggerIDStr)
+	if err != nil {
+		http.Error(w, "Invalid trigger ID", http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	runs, err := h.runRepo.ListRuns(r.Context(), tenantID, uuid.Nil, &triggerID, limit)
+	if err != nil {
+		http.Error(w, "Failed to list runs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(runs)
 }
 
 func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.Request) {

@@ -66,11 +66,11 @@ type PipelineTriggerExecutor interface {
 type PipelineOutboxPublisher interface {
 	// PublishPipelineTrigger is the legacy method. It opens its own transaction
 	// and is not atomic with the BO write. Prefer PublishPipelineTriggerTx.
-	PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+	PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error
 	// PublishPipelineTriggerTx writes the outbox row inside the caller's *sqlx.Tx
 	// (if non-nil) so the row is committed atomically with the BO write.
 	// If tx is nil, opens a short-lived transaction and logs a warning (compat path).
-	PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+	PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error
 }
 
 // TriggerDispatchContext holds metadata about the trigger dispatch event

@@ -77,6 +77,7 @@ type PipelineExecutionRun struct {
 	RunID           uuid.UUID              `json:"run_id"`
 	PipelineID      uuid.UUID              `json:"pipeline_id"`
 	TenantID        uuid.UUID              `json:"tenant_id"`
+	TriggerID       *uuid.UUID            `json:"trigger_id,omitempty"` // Validation trigger that dispatched this run, if any
 	Status          string                 `json:"status"` // "queued", "running", "completed", "failed", "simulated"
 	StartTime       time.Time              `json:"start_time"`
 	EndTime         *time.Time             `json:"end_time,omitempty"`

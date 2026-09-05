@@ -15,10 +15,8 @@ type PipelineWorkflowInput struct {
 	TenantID     uuid.UUID          `json:"tenant_id"`
 	Definition   PipelineDefinition `json:"definition"`
 	InputRecords []PipelineRecord   `json:"input_records"`
-	// RunID is pre-allocated by the API layer so the 202 response can
-	// include it before the activity starts. The activity must use this
-	// exact RunID so SSE subscribers can listen before the run begins.
-	RunID uuid.UUID `json:"run_id,omitempty"`
+	RunID        uuid.UUID          `json:"run_id,omitempty"`
+	TriggerID    *uuid.UUID        `json:"trigger_id,omitempty"`
 }
 
 // PipelineActivities holds the dependencies (namely the PipelineEngine,
@@ -57,7 +55,7 @@ func (a *PipelineActivities) ActivityExecutePipelineDAG(ctx context.Context, inp
 	if runID == uuid.Nil {
 		runID = uuid.New()
 	}
-	return a.Engine.executeRunWithRunID(ctx, input.TenantID, runID, input.Definition, input.InputRecords, false)
+	return a.Engine.executeRunWithRunID(ctx, input.TenantID, runID, input.Definition, input.InputRecords, false, input.TriggerID)
 }
 
 // RunPipelineDAGWorkflow is the thin Temporal workflow wrapper that gives a

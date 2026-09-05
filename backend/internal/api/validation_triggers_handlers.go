@@ -127,10 +127,17 @@ func (h *ValidationTriggersHandler) HandleListTriggers(w http.ResponseWriter, r 
 	}
 
 	q := `
-    SELECT id, tenant_id, trigger_type, target_entity, step_name, rule_ids
-    FROM validation_triggers
-    WHERE tenant_id = $1 AND target_entity = $2
-    ORDER BY created_at DESC
+    SELECT vt.id, vt.tenant_id, vt.trigger_type, vt.target_entity, vt.step_name, vt.rule_ids,
+           vt.is_active,
+           lr.last_fired_at
+    FROM validation_triggers vt
+    LEFT JOIN LATERAL (
+        SELECT MAX(r.start_time) AS last_fired_at
+        FROM data_pipeline_runs r
+        WHERE r.trigger_id = vt.id
+    ) lr ON true
+    WHERE vt.tenant_id = $1 AND vt.target_entity = $2
+    ORDER BY vt.created_at DESC
   `
 
 	rows, err := h.db.QueryContext(ctx, q, tenantID, entity)
@@ -146,8 +153,11 @@ func (h *ValidationTriggersHandler) HandleListTriggers(w http.ResponseWriter, r 
 		var id, tid, triggerType, targetEntity string
 		var stepName sql.NullString
 		var ruleIDsJSON []byte
+		var isActive bool
+		var lastFiredAt sql.NullTime
 
-		if err := rows.Scan(&id, &tid, &triggerType, &targetEntity, &stepName, &ruleIDsJSON); err != nil {
+		if err := rows.Scan(&id, &tid, &triggerType, &targetEntity, &stepName, &ruleIDsJSON, &isActive, &lastFiredAt); err != nil {
+			log.Printf("HandleListTriggers: scan error: %v", err)
 			continue
 		}
 
@@ -158,6 +168,10 @@ func (h *ValidationTriggersHandler) HandleListTriggers(w http.ResponseWriter, r 
 			"target_entity": targetEntity,
 			"step_name":     stepName.String,
 			"rule_ids":      string(ruleIDsJSON),
+			"is_active":     isActive,
+		}
+		if lastFiredAt.Valid {
+			t["last_fired_at"] = lastFiredAt.Time
 		}
 		triggers = append(triggers, t)
 	}

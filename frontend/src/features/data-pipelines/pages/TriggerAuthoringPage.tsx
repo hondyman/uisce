@@ -20,8 +20,18 @@ import {
   FormHelperText,
   Breadcrumbs,
   Link,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Switch,
+  FormControlLabel,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
-import { Save, X, Zap } from 'lucide-react';
+import { Save, X, Zap, PlayCircle, RefreshCw } from 'lucide-react';
 import { fetchAPI } from '@/api';
 import { PipelinePicker } from '../components/PipelinePicker';
 
@@ -40,6 +50,19 @@ interface TriggerFormData {
   rule_ids: string[];
   pipeline_id: string;
   dispatch_mode: 'sync' | 'async';
+}
+
+interface TriggerRow {
+  id: string;
+  tenant_id: string;
+  trigger_type: string;
+  target_entity: string;
+  step_name?: string;
+  rule_ids: string;
+  is_active: boolean;
+  pipeline_id?: string;
+  dispatch_mode?: string;
+  last_fired_at?: string;
 }
 
 const TRIGGER_TYPES = [
@@ -70,6 +93,9 @@ export const TriggerAuthoringPage: React.FC = () => {
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [triggers, setTriggers] = useState<TriggerRow[]>([]);
+  const [triggersLoading, setTriggersLoading] = useState(false);
+  const [triggersError, setTriggersError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAPI<{ rules: ValidationRule[] }>('/api/validation-rules?limit=100')
@@ -77,6 +103,49 @@ export const TriggerAuthoringPage: React.FC = () => {
       .catch(() => setRulesError('Failed to load validation rules'))
       .finally(() => setRulesLoading(false));
   }, []);
+
+  const fetchTriggers = (entity?: string) => {
+    setTriggersLoading(true);
+    setTriggersError(null);
+    const url = entity
+      ? `/api/admin/validation-triggers?target_entity=${encodeURIComponent(entity)}`
+      : '/api/admin/validation-triggers';
+    fetchAPI<TriggerRow[]>(url)
+      .then((res) => setTriggers(Array.isArray(res) ? res : []))
+      .catch(() => setTriggersError('Failed to load triggers'))
+      .finally(() => setTriggersLoading(false));
+  };
+
+  useEffect(() => {
+    fetchTriggers();
+  }, []);
+
+  useEffect(() => {
+    if (form.target_entity) {
+      fetchTriggers(form.target_entity);
+    } else {
+      fetchTriggers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.target_entity]);
+
+  const handleToggleActive = async (trigger: TriggerRow) => {
+    const newActive = !trigger.is_active;
+    setTriggers((prev) =>
+      prev.map((t) => (t.id === trigger.id ? { ...t, is_active: newActive } : t)),
+    );
+    try {
+      await fetchAPI(`/api/v1/triggers/${trigger.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: newActive }),
+      });
+    } catch {
+      setTriggers((prev) =>
+        prev.map((t) => (t.id === trigger.id ? { ...t, is_active: !newActive } : t)),
+      );
+    }
+  };
 
   const handleChange = (field: keyof TriggerFormData, value: string | string[]) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -160,6 +229,109 @@ export const TriggerAuthoringPage: React.FC = () => {
           </Typography>
         </Box>
       </Box>
+
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+              Existing Triggers
+            </Typography>
+            <Button size="small" startIcon={<RefreshCw size={14} />} onClick={() => fetchTriggers(form.target_entity || undefined)}>
+              Refresh
+            </Button>
+          </Box>
+          {triggersLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
+              <CircularProgress size={20} />
+            </Box>
+          ) : triggersError ? (
+            <Alert severity="error" sx={{ mb: 1 }}>{triggersError}</Alert>
+          ) : triggers.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No triggers found{form.target_entity ? ` for "${form.target_entity}"` : ''}.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Trigger Type</TableCell>
+                    <TableCell>Target Entity</TableCell>
+                    <TableCell>Pipeline</TableCell>
+                    <TableCell>Dispatch</TableCell>
+                    <TableCell>Last Fired</TableCell>
+                    <TableCell>Active</TableCell>
+                    <TableCell align="right">Runs</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {triggers.map((trig) => (
+                    <TableRow key={trig.id} hover>
+                      <TableCell>
+                        <Chip label={trig.trigger_type} size="small" sx={{ fontSize: '0.7rem' }} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                          {trig.target_entity}
+                        </Typography>
+                        {trig.step_name && (
+                          <Typography variant="caption" color="text.secondary">
+                            step: {trig.step_name}
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {trig.pipeline_id ? (
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.7rem' }}>
+                            {trig.pipeline_id.slice(0, 8)}…
+                          </Typography>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">—</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption">{trig.dispatch_mode || 'sync'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        {trig.last_fired_at ? (
+                          <Typography variant="caption">
+                            {new Date(trig.last_fired_at).toLocaleString()}
+                          </Typography>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">Never</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              size="small"
+                              checked={trig.is_active}
+                              onChange={() => handleToggleActive(trig)}
+                            />
+                          }
+                          label={trig.is_active ? 'On' : 'Off'}
+                          sx={{ mr: 0 }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Tooltip title="View runs">
+                          <IconButton
+                            size="small"
+                            onClick={() => navigate(`/pipelines/runs?trigger=${trig.id}`)}
+                          >
+                            <PlayCircle size={16} />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
 
       <Card sx={{ mb: 3 }}>
         <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>

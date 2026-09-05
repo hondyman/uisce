@@ -216,7 +216,7 @@ func TestPipelineEngine_SimulationRun(t *testing.T) {
 		ErrorPolicy: "skip_and_log",
 	}
 
-	run, err := engine.ExecuteRun(ctx, def.TenantID, def, nil, true)
+	run, err := engine.ExecuteRun(ctx, def.TenantID, def, nil, true, nil)
 	if err != nil {
 		t.Fatalf("ExecuteRun failed: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestExecuteRunWithRunID_HonorsPreallocatedID(t *testing.T) {
 		ID:       uuid.New(),
 		TenantID: tenantID,
 		DAGJSON:  mustMarshal(dag),
-	}, nil, true)
+	}, nil, true, nil)
 	if err != nil {
 		t.Fatalf("executeRunWithRunID failed: %v", err)
 	}

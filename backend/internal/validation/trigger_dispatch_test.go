@@ -3,12 +3,14 @@ package validation
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // test helpers
@@ -395,12 +397,12 @@ type fakeOutboxPublisher struct {
 	failErr error
 }
 
-func (f *fakeOutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+func (f *fakeOutboxPublisher) PublishPipelineTrigger(ctx context.Context, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error {
 	f.calls++
 	return f.failErr
 }
 
-func (f *fakeOutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error {
+func (f *fakeOutboxPublisher) PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error {
 	f.calls++
 	return f.failErr
 }
@@ -480,4 +482,99 @@ func TestDispatchTrigger_NoPipelineBinding_Unaffected(t *testing.T) {
 
 	err := engine.DispatchTrigger(ctx, tenantID, TriggerTypeCreate, "orders", map[string]interface{}{"total": 10.0})
 	assert.NoError(t, err, "triggers with no pipeline binding must behave exactly as before")
+}
+
+func testDBFromEnv(t *testing.T) *sqlx.DB {
+	if testing.Short() {
+		t.Skip("integration test skipped in short mode")
+	}
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set, skipping integration test")
+	}
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		t.Skipf("skipping: %v", err)
+		return nil
+	}
+	ctx := context.Background()
+	if err := db.PingContext(ctx); err != nil {
+		db.Close()
+		t.Skipf("skipping: %v", err)
+		return nil
+	}
+	t.Cleanup(func() { db.Close() })
+	return db
+}
+
+func TestDispatchTrigger_IsActiveGate_PreventsDispatch(t *testing.T) {
+	db := testDBFromEnv(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	pipelineID := uuid.New()
+	tenantID := uuid.New()
+	triggerID := uuid.New()
+
+	_, _ = db.ExecContext(ctx, `
+		INSERT INTO validation_triggers (id, tenant_id, trigger_type, target_entity, rule_ids, is_active, pipeline_id, dispatch_mode)
+		VALUES ($1, $2, 'create', 'orders', '{}', false, $3, 'async')
+		ON CONFLICT (id) DO UPDATE SET is_active = false, pipeline_id = $3, dispatch_mode = 'async'
+	`, triggerID, tenantID, pipelineID)
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM validation_triggers WHERE id = $1`, triggerID)
+	})
+
+	pub := &fakeOutboxPublisher{}
+	engine := NewTriggerValidationEngine(db.DB, &SimpleLogger{}).WithOutboxPublisher(pub)
+
+	err := engine.TriggerValidate(ctx, tenantID, "create", "orders", "", map[string]interface{}{"total": 10.0})
+	assert.NoError(t, err, "TriggerValidate must not error just because trigger is inactive")
+	assert.Equal(t, 0, pub.calls, "inactive trigger (is_active=false) must not trigger any outbox dispatch")
+
+	_, _ = db.ExecContext(ctx, `UPDATE validation_triggers SET is_active = true WHERE id = $1`, triggerID)
+
+	pub.calls = 0
+	err = engine.TriggerValidate(ctx, tenantID, "create", "orders", "", map[string]interface{}{"total": 10.0})
+	assert.NoError(t, err)
+	assert.Equal(t, 1, pub.calls, "active trigger (is_active=true) must produce exactly one outbox dispatch")
+}
+
+func TestDispatchTrigger_IsActiveGate_FetchTriggersFiltersInactive(t *testing.T) {
+	db := testDBFromEnv(t)
+	if db == nil {
+		return
+	}
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	inactiveID := uuid.New()
+	activeID := uuid.New()
+	pipelineID := uuid.New()
+
+	for _, tid := range []uuid.UUID{inactiveID, activeID} {
+		_, _ = db.ExecContext(ctx, `
+			INSERT INTO validation_triggers (id, tenant_id, trigger_type, target_entity, rule_ids, is_active, pipeline_id, dispatch_mode)
+			VALUES ($1, $2, 'save', 'orders', '{}', $3, $4, 'async')
+			ON CONFLICT (id) DO UPDATE SET is_active = $3, pipeline_id = $4
+		`, tid, tenantID, tid == activeID, pipelineID)
+	}
+	t.Cleanup(func() {
+		_, _ = db.ExecContext(ctx, `DELETE FROM validation_triggers WHERE id = ANY($1)`, pq.Array([]uuid.UUID{inactiveID, activeID}))
+	})
+
+	engine := NewTriggerValidationEngine(db.DB, &SimpleLogger{})
+
+	triggers, err := engine.fetchTriggers(ctx, tenantID.String(), "save", "orders", "")
+	require.NoError(t, err)
+
+	foundIDs := make(map[string]bool)
+	for _, tr := range triggers {
+		foundIDs[tr.ID] = true
+	}
+
+	assert.False(t, foundIDs[inactiveID.String()], "is_active=false trigger must NOT be returned by fetchTriggers")
+	assert.True(t, foundIDs[activeID.String()], "is_active=true trigger MUST be returned by fetchTriggers")
 }

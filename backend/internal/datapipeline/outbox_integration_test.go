@@ -85,7 +85,7 @@ func TestOutboxPublisher_TxAtomicity_Rollback(t *testing.T) {
 	require.NoError(t, err)
 	defer tx.Rollback()
 
-	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, record)
+	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, uuid.Nil, record)
 	require.NoError(t, err)
 
 	tx.Rollback()
@@ -116,7 +116,7 @@ func TestOutboxPublisher_TxAtomicity_Commit(t *testing.T) {
 	tx, err := db.BeginTxx(ctx, nil)
 	require.NoError(t, err)
 
-	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, record)
+	err = pub.PublishPipelineTriggerTx(ctx, tx, tenantID, pipelineID, uuid.Nil, record)
 	require.NoError(t, err)
 
 	require.NoError(t, tx.Commit())
@@ -148,7 +148,7 @@ func TestOutboxPublisher_Legacy_PublishTrigger(t *testing.T) {
 
 	pub := NewOutboxPublisher(db)
 
-	err := pub.PublishPipelineTrigger(ctx, tenantID, pipelineID, record)
+	err := pub.PublishPipelineTrigger(ctx, tenantID, pipelineID, uuid.Nil, record)
 	require.NoError(t, err)
 
 	n, err := outboxCount(db, ctx, pipelineID)

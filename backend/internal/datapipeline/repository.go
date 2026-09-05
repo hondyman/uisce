@@ -24,12 +24,12 @@ func (r *RunRepository) CreateRun(ctx context.Context, run *PipelineExecutionRun
 	}
 	stepOrder, _ := json.Marshal(run.StepOrder)
 	errorDetails, _ := json.Marshal(run.ErrorDetails)
-		query := `
+	query := `
 		INSERT INTO public.data_pipeline_runs
-		  (id, tenant_id, pipeline_id, status, start_time, step_order, error_details, dag_json)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		  (id, tenant_id, pipeline_id, trigger_id, status, start_time, step_order, error_details, dag_json)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 	_, err := r.db.ExecContext(ctx, query,
-		run.RunID, run.TenantID, run.PipelineID, run.Status, run.StartTime,
+		run.RunID, run.TenantID, run.PipelineID, run.TriggerID, run.Status, run.StartTime,
 		stepOrder, errorDetails, dagJSON,
 	)
 	if err != nil {
@@ -150,7 +150,7 @@ func (r *RunRepository) GetRun(ctx context.Context, runID uuid.UUID) (*PipelineE
 	return &run, nil
 }
 
-func (r *RunRepository) ListRuns(ctx context.Context, tenantID, pipelineID uuid.UUID, limit int) ([]PipelineExecutionRun, error) {
+func (r *RunRepository) ListRuns(ctx context.Context, tenantID, pipelineID uuid.UUID, triggerID *uuid.UUID, limit int) ([]PipelineExecutionRun, error) {
 	if r.db == nil {
 		return nil, fmt.Errorf("ListRuns: db is nil")
 	}
@@ -158,14 +158,16 @@ func (r *RunRepository) ListRuns(ctx context.Context, tenantID, pipelineID uuid.
 		limit = 50
 	}
 	query := `
-		SELECT id, tenant_id, pipeline_id, status, start_time, end_time,
+		SELECT id, tenant_id, pipeline_id, COALESCE(trigger_id, '00000000-0000-0000-0000-000000000000'::uuid), status, start_time, end_time,
 		       total_records_in, total_records_out, total_errors,
 		       peak_throughput_rows_sec, step_order, error_details
 		FROM public.data_pipeline_runs
-		WHERE tenant_id = $1 AND ($2 = $2 OR pipeline_id = $2)
+		WHERE tenant_id = $1
+		  AND ($2 = '00000000-0000-0000-0000-000000000000'::uuid OR pipeline_id = $2)
+		  AND ($3 = '00000000-0000-0000-0000-000000000000'::uuid OR trigger_id = $3)
 		ORDER BY start_time DESC
-		LIMIT $3`
-	rows, err := r.db.QueryContext(ctx, query, tenantID, pipelineID, limit)
+		LIMIT $4`
+	rows, err := r.db.QueryContext(ctx, query, tenantID, pipelineID, triggerID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("ListRuns: %w", err)
 	}
@@ -174,10 +176,14 @@ func (r *RunRepository) ListRuns(ctx context.Context, tenantID, pipelineID uuid.
 	for rows.Next() {
 		var run PipelineExecutionRun
 		var stepOrder, errorDetails []byte
-		if err := rows.Scan(&run.RunID, &run.TenantID, &run.PipelineID, &run.Status, &run.StartTime, &run.EndTime,
+		var triggerIDVal uuid.UUID
+		if err := rows.Scan(&run.RunID, &run.TenantID, &run.PipelineID, &triggerIDVal, &run.Status, &run.StartTime, &run.EndTime,
 			&run.TotalRecordsIn, &run.TotalRecordsOut, &run.TotalErrors,
 			&run.PeakThroughput, &stepOrder, &errorDetails); err != nil {
 			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		if triggerIDVal != uuid.Nil {
+			run.TriggerID = &triggerIDVal
 		}
 		if stepOrder != nil {
 			json.Unmarshal(stepOrder, &run.StepOrder)

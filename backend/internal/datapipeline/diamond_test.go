@@ -154,12 +154,12 @@ func TestEngine_DiamondDAG_OrderInvariantUnderNodeShuffle(t *testing.T) {
 		ErrorPolicy: "skip_and_log",
 	}
 
-	run1, err := engine.ExecuteRun(ctx, tenantID, def1, nil, true)
+	run1, err := engine.ExecuteRun(ctx, tenantID, def1, nil, true, nil)
 	if err != nil {
 		t.Fatalf("ExecuteRun forward failed: %v", err)
 	}
 
-	run2, err := engine.ExecuteRun(ctx, tenantID, def2, nil, true)
+	run2, err := engine.ExecuteRun(ctx, tenantID, def2, nil, true, nil)
 	if err != nil {
 		t.Fatalf("ExecuteRun reversed failed: %v", err)
 	}

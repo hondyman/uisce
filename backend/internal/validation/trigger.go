@@ -291,14 +291,16 @@ func (tve *TriggerValidationEngine) dispatchPipelineForPhase(
 		}
 		if tx != nil {
 			if pubTx, ok := tve.outboxPublisher.(interface {
-				PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, record map[string]interface{}) error
+				PublishPipelineTriggerTx(ctx context.Context, tx *sqlx.Tx, tenantID uuid.UUID, pipelineID uuid.UUID, triggerID uuid.UUID, record map[string]interface{}) error
 			}); ok {
-				if err := pubTx.PublishPipelineTriggerTx(ctx, tx, tenantID, *t.PipelineID, data); err != nil {
+				triggerID, _ := uuid.Parse(t.ID)
+				if err := pubTx.PublishPipelineTriggerTx(ctx, tx, tenantID, *t.PipelineID, triggerID, data); err != nil {
 					tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
 				}
 			}
 		} else {
-			if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, data); err != nil {
+			triggerID, _ := uuid.Parse(t.ID)
+			if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, triggerID, data); err != nil {
 				tve.logger.Error("dispatchPipelineForPhase: failed to enqueue async pipeline trigger (legacy)", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
 			}
 		}
@@ -325,7 +327,8 @@ func (tve *TriggerValidationEngine) dispatchTriggerPipeline(ctx context.Context,
 			tve.logger.Warn("dispatchTriggerPipeline: async dispatch requested but no outbox publisher configured", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String())
 			return nil
 		}
-		if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, data); err != nil {
+		triggerID, _ := uuid.Parse(t.ID)
+		if err := tve.outboxPublisher.PublishPipelineTrigger(ctx, tenantID, *t.PipelineID, triggerID, data); err != nil {
 			// Async dispatch must never block the write it validated.
 			tve.logger.Error("dispatchTriggerPipeline: failed to enqueue async pipeline trigger", "trigger_id", t.ID, "pipeline_id", t.PipelineID.String(), "err", err.Error())
 		}
@@ -381,6 +384,7 @@ func (tve *TriggerValidationEngine) fetchTriggers(ctx context.Context, tenantID,
 	  AND trigger_type = $2
 	  AND target_entity = $3
 	  AND (step_name IS NULL OR step_name = $4 OR step_name = '')
+	  AND is_active = true
 	ORDER BY created_at DESC
   `
 

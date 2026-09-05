@@ -89,7 +89,7 @@ func TestEngine_DiamondDAG_PersistsToCatalogAndRespectsOrder(t *testing.T) {
 		Concurrency: 4,
 		BatchSize:   100,
 		ErrorPolicy: "fail_fast",
-	}, nil, false)
+	}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("forward run failed: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestEngine_DiamondDAG_PersistsToCatalogAndRespectsOrder(t *testing.T) {
 		Concurrency: 4,
 		BatchSize:   100,
 		ErrorPolicy: "fail_fast",
-	}, nil, false)
+	}, nil, false, nil)
 	if err != nil {
 		t.Fatalf("reversed run failed: %v", err)
 	}
