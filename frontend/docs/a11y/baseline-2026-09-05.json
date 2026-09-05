@@ -1,50 +1,50 @@
 {
   "metadata": {
-    "generated": "2026-09-05T02:47:26.017Z",
+    "generated": "2026-09-05T04:20:08.850Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
     "paramRoutes": 21,
     "nonRepClean": 14,
     "nonRepWithViolations": 7,
-    "crashedRoutes": 5,
-    "repRoutesWithViolations": 59,
-    "repViolations": 81,
-    "totalViolations": 92,
-    "routesWithViolations": 66,
+    "crashedRoutes": 2,
+    "repRoutesWithViolations": 55,
+    "repViolations": 75,
+    "totalViolations": 85,
+    "routesWithViolations": 62,
     "byRule": {
       "button-name": {
         "count": 24,
         "impact": "critical",
         "description": "Ensure buttons have discernible text"
       },
+      "aria-input-field-name": {
+        "count": 15,
+        "impact": "serious",
+        "description": "Ensure every ARIA input field has an accessible name"
+      },
       "aria-progressbar-name": {
-        "count": 22,
+        "count": 14,
         "impact": "serious",
         "description": "Ensure every ARIA progressbar node has an accessible name"
       },
-      "aria-input-field-name": {
-        "count": 14,
-        "impact": "serious",
-        "description": "Ensure every ARIA input field has an accessible name"
+      "label": {
+        "count": 9,
+        "impact": "critical",
+        "description": "Ensure every form element has a label"
       },
       "scrollable-region-focusable": {
         "count": 7,
         "impact": "serious",
         "description": "Ensure elements that have scrollable content are accessible by keyboard"
       },
-      "label": {
-        "count": 7,
-        "impact": "critical",
-        "description": "Ensure every form element has a label"
-      },
       "select-name": {
-        "count": 5,
+        "count": 4,
         "impact": "critical",
         "description": "Ensure select element has an accessible name"
       },
       "list": {
-        "count": 4,
+        "count": 3,
         "impact": "serious",
         "description": "Ensure that lists are structured correctly"
       },
@@ -128,12 +128,14 @@
       },
       {
         "routePattern": "/en/admin/ai-semantic-bridge",
-        "finalUrl": "http://localhost:5173/login",
+        "finalUrl": "http://localhost:5173/en/admin/ai-semantic-bridge?",
         "isParam": false,
         "wasNonRep": false,
-        "crashed": true,
-        "violations": 0,
-        "violationIds": []
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/admin/entitlements",
@@ -195,10 +197,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/admin/rbac/identity-providers",
@@ -206,10 +206,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/admin/rbac/roles",
@@ -244,10 +242,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/admin/rbac/users",
@@ -450,11 +446,8 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 2,
-        "violationIds": [
-          "aria-progressbar-name",
-          "scrollable-region-focusable"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/business-objects/new",
@@ -495,10 +488,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/catalog/api-inventory",
@@ -527,10 +518,8 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/catalog/edge-types",
@@ -689,10 +678,9 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 2,
+        "violations": 1,
         "violationIds": [
-          "aria-input-field-name",
-          "aria-progressbar-name"
+          "aria-input-field-name"
         ]
       },
       {
@@ -712,10 +700,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/core/flow-builder",
@@ -1251,10 +1237,9 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 2,
+        "violations": 1,
         "violationIds": [
-          "aria-progressbar-name",
-          "list"
+          "scrollable-region-focusable"
         ]
       },
       {
@@ -1343,10 +1328,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "select-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/scheduler/calendars",
@@ -1419,8 +1402,10 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
       },
       {
         "routePattern": "/en/scheduler/jobs/:jobId/edit",
@@ -1428,8 +1413,10 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
       },
       {
         "routePattern": "/en/scheduler/jobs/new",
@@ -1458,16 +1445,18 @@
         "finalUrl": "http://localhost:5173/en/secrets/audit?",
         "isParam": false,
         "wasNonRep": false,
-        "crashed": true,
-        "violations": 0,
-        "violationIds": []
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
       },
       {
         "routePattern": "/en/secrets/config",
         "finalUrl": "http://localhost:5173/en/secrets/config?",
         "isParam": false,
         "wasNonRep": false,
-        "crashed": true,
+        "crashed": false,
         "violations": 0,
         "violationIds": []
       },

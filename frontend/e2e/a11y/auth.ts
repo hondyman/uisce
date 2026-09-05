@@ -9,14 +9,11 @@ interface KcTokenCache {
 }
 
 let _cachedKcToken: KcTokenCache | null = null;
-let _kcTokenAttempted = false;
 
 export async function getKeycloakToken(): Promise<string> {
   if (_cachedKcToken && Date.now() < _cachedKcToken.exp - 60_000) {
     return _cachedKcToken.token;
   }
-  if (_kcTokenAttempted) throw new Error('Keycloak token already attempted and failed');
-  _kcTokenAttempted = true;
   if (!KC_USER || !KC_PASS) throw new Error('E2E_KC_USER or E2E_KC_PASS not set');
   const res = await fetch(
     `${KC_ISSUER}/protocol/openid-connect/token`,

@@ -92,6 +92,12 @@ test.describe('Locale matrix', () => {
     expect(url).toContain('baz=qux');
   });
 
+  test('heal-path preserves query string (non-locale to locale redirect)', async ({ page }) => {
+    await page.goto('/dashboard?tab=2', { waitUntil: 'networkidle' });
+    const url = page.url();
+    expect(url).toMatch(/\/en\/dashboard\?tab=2/);
+  });
+
   test('locale-to-locale navigation preserves query string', async ({ page }) => {
     await page.goto('/en/catalog?view=table', { waitUntil: 'networkidle' });
     const enUrl = page.url();
