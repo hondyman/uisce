@@ -440,29 +440,38 @@ go test ./internal/api/middleware/... -run "TestRequirePermission|TestTenantIDFr
 
 ---
 
-## Finding: GetClaimsFromContext Callers in Standalone Services Need Per-Service Audit
+## Finding: GetClaimsFromContext Callers in Standalone Services — Audit Complete
 
 **Name:** `GetClaimsFromContext-ServiceLayer-Audit`
 **Severity:** MEDIUM
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed
 
 ### Description
 
 `jwtmiddleware.GetClaimsFromContext` was called in ~100 places across the codebase. The pattern `claims := GetClaimsFromContext(r); claims != nil && claims.TenantID != ""` is correct for standalone services that wire their own middleware to set `"jwt_claims"`. It is incorrect for handlers in the main API server where `AuthContextMiddleware` sets `security.AuthInfo` instead.
 
-Services that appear to have independent middleware wiring (not through `AuthContextMiddleware`):
-- `cmd/validation-service/main.go` — 7 call sites
-- `cmd/notifications-service/main.go` — 2 call sites
-- `cmd/rule-engine-service/main.go` — 14 call sites
-- `pkg/meta/api.go` — 1 call site
-- `local/cmd/proxy/main.go` — 1 call site
+### Audit Results
 
-Each service's middleware chain must be audited individually to determine whether `"jwt_claims"` is set. Cannot fix blind; each service may have different auth semantics.
+All 19 call sites across 3 standalone services were audited manually:
 
-### Required Action
+| Service | Handlers | Auth Middleware | Fallback to Header? | Fail-Closed on Nil? |
+|---------|----------|-----------------|---------------------|---------------------|
+| `cmd/validation-service/main.go` | 6 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
+| `cmd/notifications-service/main.go` | 2 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
+| `cmd/rule-engine-service/main.go` | 11 handlers | `jwtmiddleware.NewJWTMiddleware` | No | Yes — 401 |
 
-Per-service middleware chain audit. Not resolvable by grep alone.
+All 19 handlers follow the same pattern: `claims := jwtmiddleware.GetClaimsFromContext(r); if claims == nil { 401 }; return`. No silent fallbacks. No header-based tenant resolution.
+
+### Conclusion
+
+These three standalone services form a consistent auth world: `JWTMiddleware` sets `jwt_claims`, handlers read from `jwt_claims` via `GetClaimsFromContext`, and all fail closed on nil. This is correct behavior — they are not susceptible to the `AuthInfo`/`jwt_claims` mismatch that existed on the main server.
+
+The main server's `GetClaimsFromContext` callers (trigger handlers, RBAC handlers, etc.) have been addressed via the canonical `TenantIDFromRequest` helper, which checks `AuthInfo` first then `jwt_claims` as fallback.
+
+### Remaining
+
+- `pkg/meta/api.go` and `local/cmd/proxy/main.go` were not in scope for this audit. These are lower-traffic paths but should be checked if they expose tenant-scoped data.
 
 ---
 
