@@ -812,13 +812,21 @@ green meaningless.
 
 ### Outstanding work
 
-- **A11yCircularProgress wrapper**: default `aria-label="Loading"` on MUI spinner
-  components. Fixes WCAG 4.1.2 class wholesale and removes the progressbar
-  oscillation from the ratchet. Pull-forward candidate before Phase 2 triage.
-- **Auth bootstrap getUser() hang**: 5-6 routes persistently crash due to
-  `AuthContext.tsx` calling `userManager.getUser()` on every route mount. When
-  that call hangs, `isLoading` stays `true` and the spinner renders indefinitely.
-  Fix at the auth layer (not the a11y layer).
-- **Backend wiring**: `RuleHandler` in `rules_handler.go` not wired into main
-  router — `/api/v1/approvals/pending` returns 404 despite the route being
-  registered in the handler. Wire it up or deprecate the frontend page.
+- **A11yCircularProgress wrapper** (Phase 2.5, after triage): default `aria-label="Loading"`
+  on MUI CircularProgress/LinearProgress. 100+ usages across 60+ files — too large for
+  same-session pull-forward. `aria-progressbar-name` remains in the informational total
+  (noisy ±10) until wrapper lands; gated number (62) is authoritative. Scope requires
+  wrapper component + global find/replace across 60+ files.
+- **Backend wiring — RuleHandler** (`backend/internal/handlers/rules_handler.go:77`):
+  `/api/v1/approvals/pending` registered but `RuleHandler` not instantiated in main
+  router — returns 404. Two-line fix in `api.go` to wire `RuleHandler`. Worth doing
+  before Phase 2 triage because approval-inbox crash may be API-failure cascade, not auth
+  hang (the `apiFetch` fix `0a017bfc5` now throws ApiError on non-2xx, so React Query
+  should catch it — but approval-inbox still crashes, suggesting the page may not be
+  using `apiFetch` for that call, or the crash is at the component level before React
+  Query error boundary applies).
+- **Auth bootstrap getUser() hang**: 5-6 routes persistently crash. Theory: 0-for-2 on
+  predictions. Cheaper test: wire RuleHandler and re-run — if approval-inbox stops
+  crashing when its API returns 200, the hang theory is wrong and the crash class is
+  "API failure → component crash" (which the `apiFetch` fix may already address for
+  routes using that client). Verify before spending time on auth layer.
