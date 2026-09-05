@@ -22,11 +22,11 @@ func NewRepository(db *sqlx.DB) *Repository {
 func (r *Repository) SaveEndpoint(ctx context.Context, ep *APIEndpoint) error {
 	query := `
 		INSERT INTO semantic.api_endpoints (
-			id, env, tenant_id, name, path, method, type, bo_name, fields, filters, pagination, auth_policy, version,
+			id, env, tenant_id, name, path, method, type, bo_name, fields, filters, pagination, auth_policy, auth_type, auth_config, auth_secret_id, version,
 			status, semantic_version, previous_version_id, owner_team, deprecated_at, retired_at, request_schema_id, response_schema_id,
 			created_at, created_by
 		) VALUES (
-			:id, :env, :tenant_id, :name, :path, :method, :type, :bo_name, :fields, :filters, :pagination, :auth_policy, :version,
+			:id, :env, :tenant_id, :name, :path, :method, :type, :bo_name, :fields, :filters, :pagination, :auth_policy, :auth_type, :auth_config, :auth_secret_id, :version,
 			:status, :semantic_version, :previous_version_id, :owner_team, :deprecated_at, :retired_at, :request_schema_id, :response_schema_id,
 			:created_at, :created_by
 		) ON CONFLICT (id) DO UPDATE SET
@@ -39,6 +39,9 @@ func (r *Repository) SaveEndpoint(ctx context.Context, ep *APIEndpoint) error {
 			filters = EXCLUDED.filters,
 			pagination = EXCLUDED.pagination,
 			auth_policy = EXCLUDED.auth_policy,
+			auth_type = EXCLUDED.auth_type,
+			auth_config = EXCLUDED.auth_config,
+			auth_secret_id = EXCLUDED.auth_secret_id,
 			version = EXCLUDED.version,
 			status = EXCLUDED.status,
 			semantic_version = EXCLUDED.semantic_version,

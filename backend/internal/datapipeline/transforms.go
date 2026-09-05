@@ -247,56 +247,6 @@ func (g *GraphSynthesizer) Transform(ctx context.Context, input []PipelineRecord
 	return output, nil, nil
 }
 
-// APICallerTransformer invokes APIs configured in API Builder or external HTTP services
-type APICallerTransformer struct {
-	EndpointURL string                 `json:"endpoint_url"`
-	Method      string                 `json:"method"` // GET, POST, PUT, DELETE
-	Headers     map[string]string      `json:"headers"`
-	MergeOutput bool                   `json:"merge_output"`
-	TargetField string                 `json:"target_field"`
-}
-
-func (a *APICallerTransformer) Transform(ctx context.Context, input []PipelineRecord) ([]PipelineRecord, []string, error) {
-	output := make([]PipelineRecord, 0, len(input))
-	var errs []string
-
-	method := strings.ToUpper(a.Method)
-	if method == "" {
-		method = "GET"
-	}
-
-	for i, record := range input {
-		recCopy := make(PipelineRecord)
-		for k, v := range record {
-			recCopy[k] = v
-		}
-
-		// Emulate API execution and record augmentation
-		apiPayload := map[string]interface{}{
-			"status":     200,
-			"invoked_at": time.Now().Format(time.RFC3339),
-			"endpoint":   a.EndpointURL,
-			"method":     method,
-			"result":     map[string]interface{}{"verified": true, "routed": true},
-		}
-
-		if a.MergeOutput {
-			recCopy["_api_response"] = apiPayload
-		} else if a.TargetField != "" {
-			recCopy[a.TargetField] = apiPayload
-		} else {
-			recCopy["api_status"] = "success"
-			recCopy["api_invoked_at"] = apiPayload["invoked_at"]
-		}
-
-		output = append(output, recCopy)
-		if a.EndpointURL == "" {
-			errs = append(errs, fmt.Sprintf("row %d: warning, empty endpoint url configured", i+1))
-		}
-	}
-	return output, errs, nil
-}
-
 // WorkflowCallerTransformer triggers an existing Flow Builder / Temporal
 // workflow (workflows.RunStoredWorkflow) for each record. TemporalClient
 // must be set to actually dispatch; when nil it falls back to a mock

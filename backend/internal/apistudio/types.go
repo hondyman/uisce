@@ -21,6 +21,9 @@ type APIEndpoint struct {
 	Filters           json.RawMessage `db:"filters" json:"filters"`
 	Pagination        json.RawMessage `db:"pagination" json:"pagination"`
 	AuthPolicy        *string         `db:"auth_policy" json:"auth_policy,omitempty"`
+	AuthType          string          `db:"auth_type" json:"auth_type,omitempty"`
+	AuthConfig        json.RawMessage `db:"auth_config" json:"auth_config,omitempty"`
+	AuthSecretID      string          `db:"auth_secret_id" json:"auth_secret_id,omitempty"`
 	Version           int             `db:"version" json:"version"`
 	Status            string          `db:"status" json:"status"` // active | deprecated | retired
 	SemanticVersion   string          `db:"semantic_version" json:"semantic_version"`

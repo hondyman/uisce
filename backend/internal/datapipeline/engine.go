@@ -11,8 +11,10 @@ import (
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/client"
 
+	"github.com/hondyman/uisce/backend/internal/apistudio"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/internal/secrets"
 	"github.com/hondyman/uisce/backend/pkg/workflows"
 )
 
@@ -40,6 +42,12 @@ type PipelineEngine struct {
 	// telemetryBus broadcasts run events via Postgres LISTEN/NOTIFY for
 	// external consumers (e.g. SSE bridges). May be nil.
 	telemetryBus *TelemetryBus
+
+	// apiRepo backs APICallerTransformer (api_caller node type). Provides
+	// tenant-scoped endpoint lookup and telemetry logging. May be nil in tests
+	// (api_caller nodes return an error in that case).
+	apiRepo  *apistudio.Repository
+	secrets  secrets.Provider
 }
 
 // NewPipelineEngine creates a new pipeline execution engine. ruleEngine and
@@ -68,6 +76,15 @@ func NewPipelineEngine(db *sqlx.DB, ruleEngine *rules.RuleEngine, temporalClient
 // (e.g. in unit tests) — NotifyRun is a no-op when bus is unset.
 func (e *PipelineEngine) AttachTelemetryBus(bus *TelemetryBus) {
 	e.telemetryBus = bus
+}
+
+// SetAPIEndpointRepository wires the API Studio repository and secrets provider
+// into the engine for use by the api_caller transformer. Backward-compatible:
+// if apiRepo is nil, api_caller nodes return a clear error at Transform time
+// rather than silently stubbing.
+func (e *PipelineEngine) SetAPIEndpointRepository(apiRepo *apistudio.Repository, sp secrets.Provider) {
+	e.apiRepo = apiRepo
+	e.secrets = sp
 }
 
 // SubscribeRun attaches a channel to stream live execution progress updates
@@ -555,16 +572,22 @@ func (e *PipelineEngine) executeTransform(ctx context.Context, tenantID uuid.UUI
 		return synth.Transform(ctx, records)
 
 	case "api_caller", "api_builder_caller", "rest_caller":
-		endpoint, _ := node.Config["endpoint_url"].(string)
-		method, _ := node.Config["method"].(string)
+		endpointIDStr, _ := node.Config["endpoint_id"].(string)
+		if endpointIDStr == "" {
+			return records, nil, fmt.Errorf("api_caller transformer: endpoint_id is required in node config; endpoint_url is no longer accepted — register the endpoint in API Studio and reference endpoint_id")
+		}
+		endpointID, err := uuid.Parse(endpointIDStr)
+		if err != nil {
+			return records, nil, fmt.Errorf("api_caller transformer: invalid endpoint_id %q: %w", endpointIDStr, err)
+		}
+		requestTemplate, _ := node.Config["request_template"].(map[string]interface{})
 		targetField, _ := node.Config["target_field"].(string)
 		mergeOutput, _ := node.Config["merge_output"].(bool)
-		caller := &APICallerTransformer{
-			EndpointURL: endpoint,
-			Method:      method,
-			TargetField: targetField,
-			MergeOutput: mergeOutput,
-		}
+		caller := NewAPICallerTransformer(e.apiRepo, nil, e.secrets)
+		caller.APIEndpointID = endpointID
+		caller.RequestTemplate = requestTemplate
+		caller.TargetField = targetField
+		caller.MergeOutput = mergeOutput
 		return caller.Transform(ctx, records)
 
 	case "workflow_caller", "flow_builder_invoker":
