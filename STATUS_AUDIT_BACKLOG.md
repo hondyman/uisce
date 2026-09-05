@@ -33,7 +33,7 @@ Three routes in the a11y crawl crashed during render (no `<main>` landmark — e
 
 ### Remaining Work
 
-- **`secrets/audit` 401**: `AuthContextMiddleware` correctly validates the Keycloak JWT and rejects it. The 401 is legitimate auth rejection (not a crash). The page now renders its error state gracefully — no longer a crash. The auth rejection itself is a separate issue (Keycloak token validation in the test environment).
+- **`secrets/audit` 401**: Root cause is `ValidateIssuerTenant` rejecting the e2e Keycloak token because `KEYCLOAK_ISSUER_URL` (server-side env) doesn't match the e2e Keycloak issuer (`https://100.84.50.65:8443/realms/uisce`). This is a **harness configuration gap**: the e2e test's Keycloak instance is not registered as a trusted issuer in the backend. Fix: either set `KEYCLOAK_ISSUER_URL=https://100.84.50.65:8443/realms/uisce` on the test server, or use the same Keycloak instance for e2e that the server trusts. The page renders its error state gracefully — crash is fixed, 401 is a harness/config issue.
 - **`wealth/feed` backend handler**: No handler at `/api/wealth/feed`. The component handles errors gracefully but cannot show real content without the endpoint. Product decision: implement or remove the frontend route.
 - **Re-crawl**: Run the a11y crawl to verify both pages render error states and the ratchet pair can be re-frozen.
 
