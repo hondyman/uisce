@@ -185,7 +185,6 @@ type Server struct {
 	AbbreviationSvc         *services.AbbreviationService
 	Validate                *validator.Validate
 	SecMgr                  *services.SecurityManager
-	RelationshipSvc         *RelationshipService
 	SemanticCalculationSvc  *analytics.SemanticCalculationService
 	CalculationHandler      *handlers.CalculationHandler
 	ChartHandler            *handlers.ChartHandler
@@ -1296,9 +1295,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// catalogScanService initialized at top
 	srv.CatalogScanHandler = handlers.NewCatalogScanHandler(catalogScanService, handlers.SecurityContextDeps{Resolver: resolver})
 	srv.TestConnectionHandler = handlers.NewTestConnectionHandler(catalogScanService)
-
-	// Initialize relationship service
-	srv.RelationshipSvc = NewRelationshipService(db)
 
 	// Initialize relationship inference service and handler
 	relationshipInferenceService := analytics.NewRelationshipInferenceService(sqlxDB)
