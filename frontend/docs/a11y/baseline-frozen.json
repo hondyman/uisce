@@ -1,17 +1,17 @@
 {
   "metadata": {
-    "generated": "2026-09-05T16:45:14.774Z",
+    "generated": "2026-09-05T17:06:35.964Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
     "paramRoutes": 21,
-    "nonRepClean": 14,
-    "nonRepWithViolations": 7,
+    "nonRepClean": 13,
+    "nonRepWithViolations": 8,
     "crashedRoutes": 6,
-    "repRoutesWithViolations": 51,
-    "repViolations": 75,
-    "totalViolations": 86,
-    "routesWithViolations": 59,
+    "repRoutesWithViolations": 52,
+    "repViolations": 77,
+    "totalViolations": 89,
+    "routesWithViolations": 61,
     "byRule": {
       "button-name": {
         "count": 26,
@@ -24,7 +24,7 @@
         "description": "Ensure every ARIA input field has an accessible name"
       },
       "aria-progressbar-name": {
-        "count": 9,
+        "count": 12,
         "impact": "serious",
         "description": "Ensure every ARIA progressbar node has an accessible name"
       },
@@ -85,8 +85,10 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/auth/callback",
@@ -128,7 +130,7 @@
       },
       {
         "routePattern": "/en/admin/ai-semantic-bridge",
-        "finalUrl": "http://localhost:5173/en/core/glossary",
+        "finalUrl": "http://localhost:5173/login",
         "isParam": false,
         "wasNonRep": false,
         "crashed": true,
@@ -224,8 +226,11 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "scrollable-region-focusable"
+        ]
       },
       {
         "routePattern": "/en/admin/rbac/user-roles",
@@ -251,10 +256,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "scrollable-region-focusable"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/admin/seeding",
@@ -1524,8 +1527,10 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/tenants/:tenantId",
