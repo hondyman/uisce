@@ -23,7 +23,7 @@ func TestListWorkflowEvents_MissingTenant(t *testing.T) {
 	r := chi.NewRouter()
 	RegisterTriggerRoutesChi(r, sqlxDB, nil)
 
-	req := httptest.NewRequest("GET", "/api/v1/triggers/events", nil)
+	req := httptest.NewRequest("GET", "/v1/triggers/events", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -50,7 +50,7 @@ func TestListWorkflowEvents_WithTenantReturnsList(t *testing.T) {
 	r := chi.NewRouter()
 	RegisterTriggerRoutesChi(r, sqlxDB, nil)
 
-	req := httptest.NewRequest("GET", "/api/v1/triggers/events", nil)
+	req := httptest.NewRequest("GET", "/v1/triggers/events", nil)
 	req.Header.Set("X-Tenant-ID", "tenant-123")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)

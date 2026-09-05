@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -21,7 +22,10 @@ func tenantIDFromRequest(r *http.Request) string {
 			return s
 		}
 	}
-	return ""
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		return auth.TenantIDs[0]
+	}
+	return r.Header.Get("X-Tenant-ID")
 }
 
 func userIDFromRequest(r *http.Request) string {
@@ -37,28 +41,31 @@ func userIDFromRequest(r *http.Request) string {
 }
 
 // RegisterTriggerRoutesChi registers trigger-related endpoints on a chi router
+// Note: paths are relative to the router context this is called in.
+// Inside r.Route("/api", ...), use /v1/* paths (chi sub-router accumulates prefix).
+// Called with a bare chi.NewRouter() (e.g. in tests), use /api/v1/* paths.
 func RegisterTriggerRoutesChi(r chi.Router, db *sqlx.DB, engine *TriggerEngine) {
 	handler := NewTriggerHandler(db, engine)
 
 	// Admin metadata endpoints (public)
-	r.Get("/api/v1/triggers/types", handler.ListTriggerTypesHTTP)
-	r.Get("/api/v1/triggers/operators", handler.ListValidationOperatorsHTTP)
-	r.Get("/api/v1/triggers/events", handler.ListWorkflowEventsHTTP)
-	r.Get("/api/v1/triggers/objects", handler.ListBusinessObjectsHTTP)
+	r.Get("/v1/triggers/types", handler.ListTriggerTypesHTTP)
+	r.Get("/v1/triggers/operators", handler.ListValidationOperatorsHTTP)
+	r.Get("/v1/triggers/events", handler.ListWorkflowEventsHTTP)
+	r.Get("/v1/triggers/objects", handler.ListBusinessObjectsHTTP)
 
 	// Trigger CRUD (authenticated)
-	r.Post("/api/v1/triggers", handler.CreateValidationTriggerHTTP)
-	r.Get("/api/v1/triggers", handler.GetValidationTriggersHTTP)
-	r.Put("/api/v1/triggers/{id}", handler.UpdateValidationTriggerHTTP)
-	r.Delete("/api/v1/triggers/{id}", handler.DeleteValidationTriggerHTTP)
+	r.Post("/v1/triggers", handler.CreateValidationTriggerHTTP)
+	r.Get("/v1/triggers", handler.GetValidationTriggersHTTP)
+	r.Put("/v1/triggers/{id}", handler.UpdateValidationTriggerHTTP)
+	r.Delete("/v1/triggers/{id}", handler.DeleteValidationTriggerHTTP)
 
 	// Timeout management
-	r.Post("/api/v1/timeouts", handler.CreateTimeoutTriggerHTTP)
-	r.Get("/api/v1/timeouts/pending", handler.GetPendingTimeoutsHTTP)
-	r.Post("/api/v1/timeouts/{id}/escalate", handler.EscalateTimeoutHTTP)
+	r.Post("/v1/timeouts", handler.CreateTimeoutTriggerHTTP)
+	r.Get("/v1/timeouts/pending", handler.GetPendingTimeoutsHTTP)
+	r.Post("/v1/timeouts/{id}/escalate", handler.EscalateTimeoutHTTP)
 
 	// Audit / executions
-	r.Get("/api/v1/triggers/executions", handler.GetTriggerExecutionsHTTP)
+	r.Get("/v1/triggers/executions", handler.GetTriggerExecutionsHTTP)
 }
 
 // -------------------- HTTP handler implementations --------------------
@@ -216,20 +223,24 @@ func (h *TriggerHandler) GetValidationTriggersHTTP(w http.ResponseWriter, r *htt
 	targetEntity := r.URL.Query().Get("target_entity")
 
 	query := `
-        SELECT vt.id, vt.trigger_type_id, vt.target_entity, vt.event_id,
-               vt.event_config, vt.condition_config, vt.action_config,
-               vt.abac_policy_id, vt.enabled, vt.priority, vt.created_at,
-               tt.key as trigger_key, tt.label as trigger_label
-        FROM validation_triggers vt
-        JOIN trigger_types tt ON vt.trigger_type_id = tt.id
-        WHERE vt.tenant_id = $1`
+		SELECT vt.id, vt.tenant_id, vt.trigger_type, vt.target_entity, vt.step_name,
+		       vt.rule_ids, vt.meta, vt.pipeline_id, vt.dispatch_mode,
+		       vt.is_active, vt.created_at,
+		       lr.last_fired_at
+		FROM validation_triggers vt
+		LEFT JOIN LATERAL (
+		    SELECT MAX(r.start_time) AS last_fired_at
+		    FROM data_pipeline_runs r
+		    WHERE r.trigger_id = vt.id
+		) lr ON true
+		WHERE vt.tenant_id = $1`
 
 	args := []interface{}{tenantID}
 	if targetEntity != "" {
 		query += ` AND vt.target_entity = $2`
 		args = append(args, targetEntity)
 	}
-	query += ` ORDER BY vt.priority ASC, vt.created_at DESC`
+	query += ` ORDER BY vt.created_at DESC`
 
 	var triggers []map[string]interface{}
 	rows, err := h.db.QueryxContext(r.Context(), query, args...)
@@ -257,11 +268,11 @@ func (h *TriggerHandler) UpdateValidationTriggerHTTP(w http.ResponseWriter, r *h
 	triggerID := chi.URLParam(r, "id")
 
 	var req struct {
-		EventConfig     *json.RawMessage `json:"event_config"`
-		ConditionConfig *json.RawMessage `json:"condition_config"`
-		ActionConfig    *json.RawMessage `json:"action_config"`
-		Enabled         *bool            `json:"enabled"`
-		Priority        *int             `json:"priority"`
+		EventConfig  *json.RawMessage `json:"event_config"`
+		IsActive     *bool            `json:"is_active"`
+		Priority     *int             `json:"priority"`
+		PipelineID   *string          `json:"pipeline_id"`
+		DispatchMode *string          `json:"dispatch_mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -269,22 +280,21 @@ func (h *TriggerHandler) UpdateValidationTriggerHTTP(w http.ResponseWriter, r *h
 	}
 
 	query := `
-        UPDATE validation_triggers
-        SET event_config = COALESCE($1, event_config),
-            condition_config = COALESCE($2, condition_config),
-            action_config = COALESCE($3, action_config),
-            enabled = COALESCE($4, enabled),
-            priority = COALESCE($5, priority),
-            updated_by = $6,
-            updated_at = NOW()
-        WHERE id = $7 AND tenant_id = $8
-        RETURNING id, updated_at`
+		UPDATE validation_triggers
+		SET event_config = COALESCE($1, event_config),
+		    is_active = COALESCE($2, is_active),
+		    priority = COALESCE($3, priority),
+		    pipeline_id = COALESCE($4, pipeline_id),
+		    dispatch_mode = COALESCE($5, dispatch_mode),
+		    updated_by = $6,
+		    updated_at = NOW()
+		WHERE id = $7 AND tenant_id = $8
+		RETURNING id, updated_at`
 
 	var updatedID string
 	var updatedAt time.Time
 	err := h.db.QueryRowxContext(r.Context(), query,
-		req.EventConfig, req.ConditionConfig, req.ActionConfig,
-		req.Enabled, req.Priority, userID, triggerID, tenantID,
+		req.EventConfig, req.IsActive, req.Priority, req.PipelineID, req.DispatchMode, userID, triggerID, tenantID,
 	).Scan(&updatedID, &updatedAt)
 
 	if err == sql.ErrNoRows {

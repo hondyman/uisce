@@ -1514,9 +1514,9 @@ func (h *BusinessObjectHandler) ExecuteWorkflowAction(w http.ResponseWriter, r *
 // upfront (unlike most handlers here), since resolving one is the whole
 // point — only the tenant identity is needed.
 func (h *BusinessObjectHandler) ResolveBindingDatasource(w http.ResponseWriter, r *http.Request) {
-	tenantID := getTenantIDFromRequest(r)
-	if tenantID == "" {
-		writeJSONError(w, http.StatusBadRequest, "tenant_id is required", "missing_tenant", nil)
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		writeJSONError(w, http.StatusUnauthorized, "unauthorized: cannot resolve tenant from context", "missing_tenant", nil)
 		return
 	}
 

@@ -355,3 +355,103 @@ Audit all migrations for non-idempotent `CREATE INDEX`/`CREATE TABLE`. Add a mig
 ### Description
 
 `GET /api/v1/data-pipelines/runs/{id}/telemetry` with no token and no JWT returned 401 after the stream token fix (token-fix commit). Stream token auth is separate from JWT auth and is functioning correctly.
+
+---
+
+## Finding: RBAC Nil-Deref — Every Require*Permission Call Would Panic in Production
+
+**Name:** `RBAC-Nil-Deref-GetClaimsFromContext`
+**Severity:** SEV-HIGH
+**Found:** 2026-09-05
+**Status:** Closed
+
+### Description
+
+`internal/api/middleware/rbac_enforcement.go:getTenantIDFromRequest` called `jwtmiddleware.GetClaimsFromContext(r).TenantID` directly, with no nil guard. In production, `AuthContextMiddleware` sets `security.AuthInfo` in the context — it does NOT set the `"jwt_claims"` key that `GetClaimsFromContext` reads. The call always returned nil, and the subsequent `.TenantID` access was a nil-pointer dereference. Every request enforced by `RequirePermission`, `RequireAnyPermission`, `RequireAllPermissions`, `RequireRole`, or `RequireRoleLevel` would have panicked.
+
+Impact: if RBAC middleware was ever exercised in production, it crashed every such request. If it was never exercised, RBAC permissions were never actually enforced — a silent security failure of a different kind.
+
+### Fix Applied
+
+Canonical `TenantIDFromRequest(r *http.Request) (string, bool)` added to `internal/api/helpers.go`. Resolution order: (1) `security.AuthInfo` from `AuthContextMiddleware`, (2) `jwtmiddleware.GetClaimsFromContext` for standalone services with their own wiring, (3) `(""`, `false)`. Callers respond 401 on `false`.
+
+`rbac_enforcement.go` replaced `getTenantIDFromRequest` with `tenantIDFromRequest` returning `(string, bool)`. All 5 `Require*` functions now respond 401 when tenant cannot be resolved (not 400, since absent tenant in this context means auth context is absent — fail-closed).
+
+`business_object_handlers.go:ResolveBindingDatasource` updated to use canonical helper with 401.
+
+`extractTenantContext` in `helpers.go` similarly updated.
+
+### Files Changed
+
+- `backend/internal/api/helpers.go` — canonical `TenantIDFromRequest` + fixed `extractTenantContext`
+- `backend/internal/api/middleware/rbac_enforcement.go` — `tenantIDFromRequest` + 5 call sites
+- `backend/internal/api/business_object_handlers.go` — `ResolveBindingDatasource`
+- `backend/internal/api/middleware/rbac_enforcement_test.go` — 5 regression tests
+
+### Test Results
+
+```
+go test ./internal/api/middleware/... -run "TestRequirePermission|TestTenantIDFromRequest" -v
+- TestRequirePermission_NoAuthContext_Returns401NotPanic    PASS
+- TestRequirePermission_WithAuthInfo_ProceedsToPermissionCheck PASS
+- TestTenantIDFromRequest_AuthInfoOnly_ReturnsTenantID      PASS
+- TestTenantIDFromRequest_NoAuthNoClaims_ReturnsFalse       PASS
+- TestRequirePermission_MissingDatasource_Returns400         PASS
+```
+
+### Commits
+
+[pending]
+
+---
+
+## Finding: GetClaimsFromContext Callers in Standalone Services Need Per-Service Audit
+
+**Name:** `GetClaimsFromContext-ServiceLayer-Audit`
+**Severity:** MEDIUM
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+`jwtmiddleware.GetClaimsFromContext` was called in ~100 places across the codebase. The pattern `claims := GetClaimsFromContext(r); claims != nil && claims.TenantID != ""` is correct for standalone services that wire their own middleware to set `"jwt_claims"`. It is incorrect for handlers in the main API server where `AuthContextMiddleware` sets `security.AuthInfo` instead.
+
+Services that appear to have independent middleware wiring (not through `AuthContextMiddleware`):
+- `cmd/validation-service/main.go` — 7 call sites
+- `cmd/notifications-service/main.go` — 2 call sites
+- `cmd/rule-engine-service/main.go` — 14 call sites
+- `pkg/meta/api.go` — 1 call site
+- `local/cmd/proxy/main.go` — 1 call site
+
+Each service's middleware chain must be audited individually to determine whether `"jwt_claims"` is set. Cannot fix blind; each service may have different auth semantics.
+
+### Required Action
+
+Per-service middleware chain audit. Not resolvable by grep alone.
+
+---
+
+## Finding: connections_routes.go Header Fallback Resolves Tenant from Client-Controlled Header
+
+**Name:** `Connections-Tenant-Header-Fallback`
+**Severity:** MEDIUM
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+`internal/api/connections_routes.go:getTenantIDFromRequest` (separate implementation from the RBAC one) uses:
+```go
+if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
+    return claims.TenantID
+}
+return r.Header.Get("X-Tenant-ID")  // ← untrusted fallback
+```
+
+When `ValidateTokenFromRequest` fails or returns nil claims, the function falls back to reading `X-Tenant-ID` directly from the request header. This is the client-controlled input path. The token-validation failure could occur for reasons unrelated to identity (expired token, wrong signature key, etc.), and the fallback would accept any tenant ID the client sends.
+
+The `Require*Permission` middleware in `rbac_enforcement.go` was the panic case; this is the silent-authorization case — requests that fail token validation getting a different tenant than intended based on a client-supplied header.
+
+### Required Action
+
+Audit all 14 call sites in `connections_routes.go` to determine whether the header fallback is intentional (e.g., for API key auth where the header is trusted) or a bug. Replace with canonical `TenantIDFromRequest` after audit.
