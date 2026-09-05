@@ -147,7 +147,7 @@ const TemplateGallery: React.FC<TemplateGalleryProps> = ({ open, onClose, onAppl
             Start with a pre-built pipeline and customize it for your needs
           </Typography>
         </Box>
-        <IconButton onClick={onClose} size="small">
+        <IconButton aria-label="Close template gallery" onClick={onClose} size="small">
           <CloseIcon />
         </IconButton>
       </DialogTitle>

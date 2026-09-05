@@ -154,7 +154,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
             }}
           />
         </Box>
-        <IconButton size="small" sx={{ color: 'white' }}>
+        <IconButton aria-label={expanded ? 'Collapse AI panel' : 'Expand AI panel'} size="small" sx={{ color: 'white' }}>
           {expanded ? <CollapseIcon /> : <ExpandIcon />}
         </IconButton>
       </Box>
@@ -251,7 +251,7 @@ const CopilotPanel: React.FC<CopilotPanelProps> = ({
                 Generated Node
               </Typography>
               <Tooltip title={showCode ? 'Hide JSON' : 'Show JSON'}>
-                <IconButton size="small" onClick={() => setShowCode(!showCode)} sx={{ color: 'white' }}>
+                <IconButton aria-label={showCode ? 'Hide JSON' : 'Show JSON'} size="small" onClick={() => setShowCode(!showCode)} sx={{ color: 'white' }}>
                   <CodeIcon fontSize="small" />
                 </IconButton>
               </Tooltip>
