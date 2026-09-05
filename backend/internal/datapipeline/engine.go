@@ -21,6 +21,7 @@ type PipelineEngine struct {
 	db            *sqlx.DB
 	boDriver      *BODriver
 	catalogDriver *CatalogDriver
+	runRepo       *RunRepository
 
 	// ruleEngine backs the "validator" node type (RuleValidatorTransformer)
 	// with real CEL/VM rule evaluation. May be nil in tests/mock setups, in
@@ -47,11 +48,13 @@ type PipelineEngine struct {
 func NewPipelineEngine(db *sqlx.DB, ruleEngine *rules.RuleEngine, temporalClient client.Client) *PipelineEngine {
 	boDriver := NewBODriver(db)
 	catalogDriver := NewCatalogDriver(db)
+	runRepo := NewRunRepository(db)
 
 	return &PipelineEngine{
 		db:             db,
 		boDriver:       boDriver,
 		catalogDriver:  catalogDriver,
+		runRepo:        runRepo,
 		ruleEngine:     ruleEngine,
 		temporalClient: temporalClient,
 		activeRuns:     make(map[string]*PipelineExecutionRun),
@@ -123,6 +126,24 @@ func (e *PipelineEngine) GetRun(runID string) (*PipelineExecutionRun, bool) {
 	return run, ok
 }
 
+func (e *PipelineEngine) GetRunWithFallback(ctx context.Context, runID string) (*PipelineExecutionRun, bool) {
+	if run, ok := e.GetRun(runID); ok {
+		return run, true
+	}
+	if e.runRepo == nil {
+		return nil, false
+	}
+	uid, err := uuid.Parse(runID)
+	if err != nil {
+		return nil, false
+	}
+	run, err := e.runRepo.GetRun(ctx, uid)
+	if err != nil {
+		return nil, false
+	}
+	return run, true
+}
+
 // CompileDAG parses raw JSON DAG into a PipelineDAG
 func (e *PipelineEngine) CompileDAG(rawJSON json.RawMessage) (*PipelineDAG, error) {
 	var dag PipelineDAG
@@ -175,6 +196,13 @@ func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.
 	e.runsMut.Lock()
 	e.activeRuns[runID.String()] = run
 	e.runsMut.Unlock()
+
+	if e.runRepo != nil {
+		if err := e.runRepo.CreateRun(ctx, run, def.DAGJSON); err != nil {
+			// Log but don't fail the run — DB write is best-effort
+			fmt.Printf("WARNING: failed to persist run start: %v\n", err)
+		}
+	}
 
 	e.notifySubscribers(*run, "")
 
@@ -231,6 +259,10 @@ func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.
 				now := time.Now().UTC()
 				run.EndTime = &now
 				run.StepTelemetry[node.ID] = stepMetric
+				if e.runRepo != nil {
+					e.runRepo.UpsertStepTelemetry(ctx, runID, node.ID, stepMetric, len(run.StepOrder))
+					e.runRepo.UpdateRunCompletion(ctx, run)
+				}
 				e.notifySubscribers(*run, node.ID)
 				return run, stepErr
 			}
@@ -244,6 +276,12 @@ func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.
 
 		if stepMetric.RowsPerSec > run.PeakThroughput {
 			run.PeakThroughput = stepMetric.RowsPerSec
+		}
+
+		if e.runRepo != nil {
+			if err := e.runRepo.UpsertStepTelemetry(ctx, runID, node.ID, stepMetric, len(run.StepOrder)-1); err != nil {
+				fmt.Printf("WARNING: failed to persist step telemetry: %v\n", err)
+			}
 		}
 
 		e.notifySubscribers(*run, node.ID)
@@ -275,6 +313,12 @@ func (e *PipelineEngine) executeRunWithRunID(ctx context.Context, tenantID uuid.
 		run.SampleOutput = currentRecords[:10]
 	} else {
 		run.SampleOutput = currentRecords
+	}
+
+	if e.runRepo != nil {
+		if err := e.runRepo.UpdateRunCompletion(ctx, run); err != nil {
+			fmt.Printf("WARNING: failed to persist run completion: %v\n", err)
+		}
 	}
 
 	e.notifySubscribers(*run, "")

@@ -17,6 +17,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/semantic_bridge"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"go.temporal.io/sdk/client"
 )
 
 func main() {
@@ -65,7 +66,25 @@ func main() {
 	}
 	sweepCancel()
 
-	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil, dbURL)
+	// Create Temporal client synchronously so it can be passed to PipelineEngine.
+	// If unavailable, pipeline engine degrades gracefully (sync-only).
+	var temporalClient client.Client
+	host := os.Getenv("TEMPORAL_HOST")
+	if host == "" {
+		host = os.Getenv("TEMPORAL_ADDRESS")
+	}
+	if host == "" {
+		host = "temporal:7233"
+	}
+	tc, err := client.Dial(client.Options{HostPort: host})
+	if err != nil {
+		log.Printf("[WARN] Temporal client not available: %v (durable pipeline execution disabled)", err)
+	} else {
+		temporalClient = tc
+		log.Println("[INFO] Temporal client connected to", host)
+	}
+
+	router := api.SetupRouter(db, nil, nil, temporalClient, nil, nil, nil, nil, nil, dbURL)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Starting main Uisce Unified API server on %s...\n", addr)

@@ -123,7 +123,8 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 		w.RegisterActivity(provisioningActs.EmitProvisioningEvent)
 		w.RegisterActivity(provisioningActs.UpdateTenantStatus)
 		w.RegisterActivity(provisioningActs.UpdateInstanceStatus)
-		w.RegisterActivity(provisioningActs.GetGoldCopyInfo)
+		// GetGoldCopyInfo is not a valid Temporal activity (returns 4 values); not called by any workflow
+		// w.RegisterActivity(provisioningActs.GetGoldCopyInfo)
 		w.RegisterActivity(provisioningActs.HealthCheck)
 		log.Println("Tenant provisioning activities registered")
 	}

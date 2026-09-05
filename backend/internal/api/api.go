@@ -114,7 +114,6 @@ import (
 
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
-	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -1810,7 +1809,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerBillingRoutes(r)
 		srv.registerPlatformIntelligenceRoutes(r, sqlxDB)
 		srv.registerFeedbackRoutes(r)
-		srv.registerTemporalAdminRoutes(r, db)
+		srv.registerTemporalAdminRoutes(r, db, temporalClient)
 		srv.registerAlphaTemporalRoutes(r, temporalClient)
 		srv.registerSemanticMappingRoutes(r)
 		srv.registerCatalogNodeRoutes(r)
@@ -4617,21 +4616,10 @@ func (s *Server) handleRefreshCharts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// registerTemporalAdminRoutes handles the async initialization of Temporal client and registration of its admin routes
-func (s *Server) registerTemporalAdminRoutes(r chi.Router, db *sql.DB) {
+// registerTemporalAdminRoutes handles the async initialization of Temporal client and registration of its admin routes.
+// temporalClient is the shared client already created at startup (may be nil if connection failed).
+func (s *Server) registerTemporalAdminRoutes(r chi.Router, db *sql.DB, temporalClient temporalclient.Client) {
 	go func() {
-		var temporalClient temporalclient.Client
-		// Attempt to create a Temporal SDK client using the centralized
-		// helper (env-driven + retries). If it fails we'll continue and
-		// register routes without it so admin endpoints are still
-		// available (they'll return errors but will still log audits).
-		tc, err := temporalclientlib.NewClientWithRetry()
-		if err != nil {
-			logging.GetLogger().Sugar().Warnf("Temporal client not available at startup: %v", err)
-		} else {
-			temporalClient = tc
-		}
-
 		// Build AdminClient gRPC connection options
 		// Admin gRPC target: prefer explicit endpoint env var, otherwise
 		// fall back to the same service name used in Docker Compose so

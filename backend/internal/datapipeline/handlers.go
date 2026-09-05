@@ -499,8 +499,11 @@ func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.
 	ch, cleanup := h.bus.Listen(runID)
 	defer cleanup()
 
-	if current, exists := h.engine.GetRun(runID); exists {
+	if current, exists := h.engine.GetRunWithFallback(r.Context(), runID); exists {
 		sendJSON(w, current)
+		if current.Status == "completed" || current.Status == "failed" {
+			return
+		}
 	}
 
 	for {
@@ -517,7 +520,7 @@ func (h *DataPipelineHandler) StreamTelemetrySSE(w http.ResponseWriter, r *http.
 					return
 				}
 			} else if n.Step != nil {
-				if current, exists := h.engine.GetRun(runID); exists {
+				if current, exists := h.engine.GetRunWithFallback(r.Context(), runID); exists {
 					sendJSON(w, current)
 				}
 			}

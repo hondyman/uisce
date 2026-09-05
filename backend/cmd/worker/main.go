@@ -352,7 +352,8 @@ func main() {
 	w.RegisterActivity(provisioningActivities.EmitProvisioningEvent)
 	w.RegisterActivity(provisioningActivities.UpdateTenantStatus)
 	w.RegisterActivity(provisioningActivities.UpdateInstanceStatus)
-	w.RegisterActivity(provisioningActivities.GetGoldCopyInfo)
+	// GetGoldCopyInfo is not a valid Temporal activity (returns 4 values); not called by any workflow
+	// w.RegisterActivity(provisioningActivities.GetGoldCopyInfo)
 	w.RegisterActivity(provisioningActivities.HealthCheck)
 
 	// Register as safe for BP Designer
@@ -370,7 +371,8 @@ func main() {
 	pkgworkflows.RegisterSafeActivity("EmitProvisioningEvent", provisioningActivities.EmitProvisioningEvent)
 	pkgworkflows.RegisterSafeActivity("UpdateTenantStatus", provisioningActivities.UpdateTenantStatus)
 	pkgworkflows.RegisterSafeActivity("UpdateInstanceStatus", provisioningActivities.UpdateInstanceStatus)
-	pkgworkflows.RegisterSafeActivity("GetGoldCopyInfo", provisioningActivities.GetGoldCopyInfo)
+	// GetGoldCopyInfo is not a valid Temporal activity (returns 4 values); not called by any workflow
+	// pkgworkflows.RegisterSafeActivity("GetGoldCopyInfo", provisioningActivities.GetGoldCopyInfo)
 	pkgworkflows.RegisterSafeActivity("HealthCheck", provisioningActivities.HealthCheck)
 	log.Println("✅ Registered Tenant Provisioning Activities for BP Designer")
 
