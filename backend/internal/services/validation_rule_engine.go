@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -94,6 +93,12 @@ type ValidationRuleEngine interface {
 type ValidationRuleEngineImpl struct {
 	db       *sqlx.DB
 	resolver *rules.PathResolver
+	// operators delegates actual comparison semantics to RuleFabric's
+	// OperatorRegistry (backend/internal/rulefabric) so this engine and
+	// RuleFabric's tree-based rules share one implementation of what "=",
+	// ">", "contains", etc. mean, instead of maintaining two independently
+	// bug-prone copies.
+	operators *rulefabric.OperatorRegistry
 }
 
 // NewValidationRuleEngine creates a new rule engine
@@ -103,9 +108,32 @@ func NewValidationRuleEngine(db *sqlx.DB, instanceProvider rules.InstanceProvide
 		resolver = rules.NewPathResolver(instanceProvider)
 	}
 	return &ValidationRuleEngineImpl{
-		db:       db,
-		resolver: resolver,
+		db:        db,
+		resolver:  resolver,
+		operators: rulefabric.NewOperatorRegistry(),
 	}
+}
+
+// terseOperatorNames maps this engine's terse operator vocabulary (=, !=,
+// >, contains, startsWith, ...) onto RuleFabric's operator registry names
+// (equals, not_equals, greater_than, contains, starts_with, ...).
+var terseOperatorNames = map[string]string{
+	"=":          "equals",
+	"==":         "equals",
+	"!=":         "not_equals",
+	"<>":         "not_equals",
+	">":          "greater_than",
+	"<":          "less_than",
+	">=":         "greater_than_or_equals",
+	"<=":         "less_than_or_equals",
+	"contains":   "contains",
+	"startsWith": "starts_with",
+	"endsWith":   "ends_with",
+	"in":         "in",
+	"regex":      "matches_regex",
+	"isEmpty":    "is_null",
+	"isNotEmpty": "is_not_null",
+	"between":    "between",
 }
 
 // ============================================================================
@@ -295,130 +323,48 @@ func (vre *ValidationRuleEngineImpl) EvaluateBPStep(ctx context.Context, tenantI
 // ============================================================================
 
 // evaluateOperator applies operator-specific logic
+// evaluateOperator normalizes this engine's terse operator names and legacy
+// argument shapes (a comma-separated "in" string, a {min,max} "between" map)
+// onto RuleFabric's OperatorRegistry contract, then delegates to it - the
+// same comparison logic RuleFabric's condition-tree evaluator uses.
 func (vre *ValidationRuleEngineImpl) evaluateOperator(operator string, value interface{}, target interface{}) bool {
-	switch operator {
-	case "=", "==":
-		return vre.equals(value, target)
-
-	case "!=", "<>":
-		return !vre.equals(value, target)
-
-	case ">":
-		return vre.greaterThan(value, target)
-
-	case "<":
-		return vre.lessThan(value, target)
-
-	case ">=":
-		return vre.greaterThanOrEqual(value, target)
-
-	case "<=":
-		return vre.lessThanOrEqual(value, target)
-
-	case "contains":
-		return strings.Contains(fmt.Sprint(value), fmt.Sprint(target))
-
-	case "startsWith":
-		return strings.HasPrefix(fmt.Sprint(value), fmt.Sprint(target))
-
-	case "endsWith":
-		return strings.HasSuffix(fmt.Sprint(value), fmt.Sprint(target))
-
-	case "in":
-		return vre.isIn(value, target)
-
-	case "regex":
-		return vre.matchesRegex(fmt.Sprint(value), fmt.Sprint(target))
-
-	case "isEmpty":
-		return value == nil || value == "" || value == 0 || value == false
-
-	case "isNotEmpty":
-		return value != nil && value != "" && value != 0 && value != false
-
-	case "between":
-		return vre.between(value, target)
-
-	default:
+	name, ok := terseOperatorNames[operator]
+	if !ok {
 		log.Printf("[RuleEngine] Unknown operator: %s", operator)
 		return false
 	}
-}
 
-// Comparison helpers
-func (vre *ValidationRuleEngineImpl) equals(a, b interface{}) bool {
-	return fmt.Sprint(a) == fmt.Sprint(b)
-}
-
-func (vre *ValidationRuleEngineImpl) greaterThan(a, b interface{}) bool {
-	return vre.toFloat64(a) > vre.toFloat64(b)
-}
-
-func (vre *ValidationRuleEngineImpl) lessThan(a, b interface{}) bool {
-	return vre.toFloat64(a) < vre.toFloat64(b)
-}
-
-func (vre *ValidationRuleEngineImpl) greaterThanOrEqual(a, b interface{}) bool {
-	return vre.toFloat64(a) >= vre.toFloat64(b)
-}
-
-func (vre *ValidationRuleEngineImpl) lessThanOrEqual(a, b interface{}) bool {
-	return vre.toFloat64(a) <= vre.toFloat64(b)
-}
-
-func (vre *ValidationRuleEngineImpl) isIn(value interface{}, target interface{}) bool {
-	// Target should be a slice or comma-separated string
-	switch t := target.(type) {
-	case []interface{}:
-		for _, item := range t {
-			if vre.equals(value, item) {
-				return true
-			}
-		}
-	case string:
-		values := strings.Split(t, ",")
-		for _, v := range values {
-			if strings.TrimSpace(v) == fmt.Sprint(value) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (vre *ValidationRuleEngineImpl) matchesRegex(value string, pattern string) bool {
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		log.Printf("[RuleEngine] Invalid regex pattern: %v", err)
+	op, ok := vre.operators.Get(name)
+	if !ok {
+		log.Printf("[RuleEngine] Operator %q (mapped from %q) not found in shared registry", name, operator)
 		return false
 	}
-	return re.MatchString(value)
-}
 
-func (vre *ValidationRuleEngineImpl) between(value interface{}, target interface{}) bool {
-	// Target should be map with "min" and "max"
-	if m, ok := target.(map[string]interface{}); ok {
-		val := vre.toFloat64(value)
-		min := vre.toFloat64(m["min"])
-		max := vre.toFloat64(m["max"])
-		return val >= min && val <= max
+	switch operator {
+	case "in":
+		// Legacy shape: a comma-separated string is accepted alongside a
+		// real array.
+		if s, ok := target.(string); ok {
+			parts := strings.Split(s, ",")
+			list := make([]interface{}, len(parts))
+			for i, p := range parts {
+				list[i] = strings.TrimSpace(p)
+			}
+			target = list
+		}
+	case "between":
+		// Legacy shape: {"min": x, "max": y} instead of RuleFabric's [min, max].
+		if m, ok := target.(map[string]interface{}); ok {
+			target = []interface{}{m["min"], m["max"]}
+		}
 	}
-	return false
-}
 
-func (vre *ValidationRuleEngineImpl) toFloat64(v interface{}) float64 {
-	switch val := v.(type) {
-	case float64:
-		return val
-	case int:
-		return float64(val)
-	case int64:
-		return float64(val)
-	case string:
-		f, _ := strconv.ParseFloat(val, 64)
-		return f
+	passed, err := op.Evaluate(value, target)
+	if err != nil {
+		log.Printf("[RuleEngine] Operator %q evaluation error: %v", operator, err)
+		return false
 	}
-	return 0
+	return passed
 }
 
 // evaluateConditionTree recursively evaluates a condition tree which may contain

@@ -11,12 +11,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/generative-ai-go/genai"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
+	"google.golang.org/api/option"
 )
 
 // SemanticMappingService provides intelligent semantic term mapping with fuzzy logic
@@ -1330,7 +1332,7 @@ func (s *SemanticMappingService) InitializeGeminiProvider(apiKey string) error {
 	// Create a wrapper that implements the LLM provider interface
 	geminiProvider := &GeminiProviderWrapper{
 		apiKey: apiKey,
-		model:  "gemini-pro", // Default model
+		model:  "gemini-1.5-flash", // Default model
 	}
 
 	s.llmProvider = geminiProvider
@@ -1379,25 +1381,43 @@ type GeminiProviderWrapper struct {
 
 // GenerateContent calls Google Gemini API to generate content
 func (g *GeminiProviderWrapper) GenerateContent(ctx context.Context, prompt string) (string, error) {
-	// In production, this would call the actual Gemini API
-	// For now, return a placeholder implementation that demonstrates the interface
-
-	// Example implementation would be:
-	// 1. Create request with API key and prompt
-	// 2. Call https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent
-	// 3. Parse response and return generated text
-
-	// Placeholder: In real implementation, call Gemini API
 	if g.apiKey == "" {
 		return "", fmt.Errorf("Gemini API key not configured")
 	}
 
-	// This is where actual API call would happen:
-	// response, err := callGeminiAPI(ctx, g.apiKey, g.model, prompt)
-	// if err != nil { return "", err }
-	// return response.Text, nil
+	model := g.model
+	if model == "" {
+		model = "gemini-1.5-flash"
+	}
 
-	return "", fmt.Errorf("Gemini API client library not imported (requires github.com/google/generative-ai-go)")
+	client, err := genai.NewClient(ctx, option.WithAPIKey(g.apiKey))
+	if err != nil {
+		return "", fmt.Errorf("failed to create gemini client: %w", err)
+	}
+	defer client.Close()
+
+	gm := client.GenerativeModel(model)
+	gm.SetTemperature(0.0)
+	gm.SetMaxOutputTokens(4096)
+
+	resp, err := gm.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return "", fmt.Errorf("gemini API call failed: %w", err)
+	}
+	if len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		return "", fmt.Errorf("empty response from gemini")
+	}
+
+	var text strings.Builder
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if t, ok := part.(genai.Text); ok {
+			text.WriteString(string(t))
+		}
+	}
+	if text.Len() == 0 {
+		return "", fmt.Errorf("no text content in gemini response")
+	}
+	return text.String(), nil
 }
 
 // OpenAIProviderWrapper wraps OpenAI API for use as an LLM provider

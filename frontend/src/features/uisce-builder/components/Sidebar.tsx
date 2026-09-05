@@ -334,7 +334,11 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
                     <Typography variant="overline" color="text.secondary" fontWeight="bold" sx={{ fontSize: '0.65rem' }}>
                         {category.name}
                     </Typography>
-                    <IconButton size="small" sx={{ p: 0 }}>
+                    <IconButton
+                        aria-label={expandedCategories.has(category.name) ? 'Collapse category' : 'Expand category'}
+                        size="small"
+                        sx={{ p: 0 }}
+                    >
                         {expandedCategories.has(category.name) ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                     </IconButton>
                     </Box>

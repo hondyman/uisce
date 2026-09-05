@@ -41,10 +41,10 @@ func TestWithTenantTransaction(t *testing.T) {
 		tenantA := "00000000-0000-0000-0000-000000000001"
 		tenantB := "00000000-0000-0000-0000-000000000002"
 
-		if _, err := txA.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantA); err != nil {
+		if _, err := txA.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA); err != nil {
 			t.Fatalf("SET LOCAL A: %v", err)
 		}
-		if _, err := txB.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantB); err != nil {
+		if _, err := txB.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantB); err != nil {
 			t.Fatalf("SET LOCAL B: %v", err)
 		}
 

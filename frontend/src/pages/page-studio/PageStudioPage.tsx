@@ -58,6 +58,7 @@ const PageStudioPage: React.FC = () => {
             env,
             layout: { root: 'root', nodes: { 'root': { id: 'root', type: 'Row', children: [] } } },
             components: {},
+            dataSources: [],
             dataBindings: { sources: {}, bindings: [] },
             visibility: { roles: ['advisor'] },
             version: 1,
@@ -72,6 +73,7 @@ const PageStudioPage: React.FC = () => {
             env,
             layout: result.layout,
             components: result.components,
+            dataSources: result.dataSources || [],
             dataBindings: result.dataBindings,
             version: 1,
         };

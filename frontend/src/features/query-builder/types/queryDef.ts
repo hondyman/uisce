@@ -46,6 +46,12 @@ export interface QueryContext {
   bindingId: string;
   /** Tenant that owns the binding and the data. */
   tenantId: string;
+  /**
+   * Additional Business Objects joined into this query. The server resolves
+   * (and validates) the actual join path via the relationship graph — the
+   * UI only ever sends BO ids, never join SQL.
+   */
+  relatedBoIds?: string[];
 }
 
 export interface DimensionDef {
@@ -53,6 +59,8 @@ export interface DimensionDef {
   termNodeId: string;
   /** Output alias; must be unique within the query. */
   alias: string;
+  /** Business Object this term belongs to. Omit for the primary BO. */
+  boId?: string;
 }
 
 export interface MeasureDef {
@@ -60,6 +68,7 @@ export interface MeasureDef {
   alias: string;
   /** Aggregation to apply. For a bare column use 'NONE' or omit. */
   agg: AggregateFunction;
+  boId?: string;
 }
 
 export interface FilterDef {
@@ -67,6 +76,7 @@ export interface FilterDef {
   operator: FilterOperator;
   /** Scalar or array value depending on operator. For between, use [min, max]. */
   value?: string | number | boolean | string[] | number[] | null;
+  boId?: string;
 }
 
 export interface QueryModel {
@@ -98,6 +108,13 @@ export interface SemanticTermView {
   bindingStatus: BindingStatus;
   /** Default aggregation suggested for MEASURE terms. */
   defaultAggregation?: AggregateFunction;
+  /**
+   * Term node ids of successive drill-down levels, configured once on this
+   * term in the semantic layer and inherited by every BO field bound to it
+   * (e.g. region -> country -> state). Empty/absent means this field isn't
+   * part of a drill hierarchy.
+   */
+  drillPath?: string[];
 }
 
 export interface BindingView {
@@ -177,6 +194,15 @@ export interface BOSchema {
 export interface QueryResultColumn {
   name: string;
   type?: string;
+  /** Business Object this column was selected from. Empty = primary BO. */
+  boId?: string;
+  /**
+   * "one" | "many" relative to the primary BO's row. "many" means this
+   * column comes from a 1:M/M:M related BO (a PeopleSoft-style child
+   * "scroll level") and fans out — the UI must render it as a nested/
+   * grouped child collection, not flatten it into the primary row.
+   */
+  cardinality?: 'one' | 'many' | '';
 }
 
 export interface QueryExecuteResult {

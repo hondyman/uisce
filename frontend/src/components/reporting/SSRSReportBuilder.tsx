@@ -33,6 +33,8 @@ import { getCachedGoldCopyId } from '../../utils/goldCopy';
 import { readCachedSelection } from '../../utils/tenantScope';
 import { apiClient } from '../../utils/apiClient';
 import { getSelectedRegion } from '../../lib/region';
+import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
+import { devError } from '../../utils/devLogger';
 
 // Modular components & utils
 import ToolboxItem from './ToolboxItem';
@@ -73,6 +75,7 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import GridViewIcon from '@mui/icons-material/GridView';
 import ListAltIcon from '@mui/icons-material/ListAlt';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import SaveIcon from '@mui/icons-material/Save';
 import DownloadIcon from '@mui/icons-material/Download';
 import PrintIcon from '@mui/icons-material/Print';
@@ -817,7 +820,7 @@ const SSRSReportBuilderContent: React.FC = () => {
     setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}`, severity: 'success' });
   };
 
-  const handleAddToolboxItem = (type: string, targetSection: string = REPORT_SECTIONS.BODY) => {
+  const handleAddToolboxItem = async (type: string, targetSection: string = REPORT_SECTIONS.BODY) => {
     const defaultSizes: Record<string, { width: number; height: number }> = {
       [ELEMENT_TYPES.TEXTBOX]: { width: 180, height: 40 },
       [ELEMENT_TYPES.TABLE]: { width: 560, height: 180 },
@@ -830,7 +833,57 @@ const SSRSReportBuilderContent: React.FC = () => {
       [ELEMENT_TYPES.LINE]: { width: 240, height: 10 },
       [ELEMENT_TYPES.GAUGE]: { width: 160, height: 120 },
       [ELEMENT_TYPES.SPARKLINE]: { width: 180, height: 50 },
+      [ELEMENT_TYPES.SLICER]: { width: 220, height: 140 },
+      [ELEMENT_TYPES.FORM]: { width: 320, height: 320 },
     };
+
+    const dataBoundTypes = [ELEMENT_TYPES.TABLE, ELEMENT_TYPES.MATRIX, ELEMENT_TYPES.LIST, ELEMENT_TYPES.CHART, ELEMENT_TYPES.GAUGE, ELEMENT_TYPES.SPARKLINE, ELEMENT_TYPES.SLICER];
+    let dataBinding: Record<string, any> = {};
+
+    if (type === ELEMENT_TYPES.FORM && selectedBO?.id && tenant?.id) {
+      dataBinding = { boId: selectedBO.id, tenantId: tenant.id };
+    } else if (dataBoundTypes.includes(type as any) && selectedBO?.id && selectedBindingId && tenant?.id) {
+      try {
+        const boTerms = await fetchBOTerms(selectedBO.id, selectedBindingId);
+        const dims = boTerms.filter((t) => t.role === 'DIMENSION');
+        const measures = boTerms.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
+
+        if (type === ELEMENT_TYPES.SLICER) {
+          const d = dims[0];
+          if (d) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }] };
+        } else if (type === ELEMENT_TYPES.GAUGE) {
+          const m = measures[0] || dims[0];
+          if (m) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: measures[0] ? 'SUM' : 'COUNT' }] };
+        } else if (type === ELEMENT_TYPES.CHART || type === ELEMENT_TYPES.SPARKLINE) {
+          const d = dims[0];
+          const m = measures[0];
+          if (d && m) {
+            dataBinding = {
+              boId: selectedBO.id,
+              bindingId: selectedBindingId,
+              tenantId: tenant.id,
+              dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }],
+              measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: 'SUM' }],
+              chartType: 'bar',
+            };
+          }
+        } else {
+          // table / matrix / list: first few dimensions + measures as columns
+          const picked = [...dims.slice(0, 4), ...measures.slice(0, 2)];
+          if (picked.length > 0) {
+            dataBinding = {
+              boId: selectedBO.id,
+              bindingId: selectedBindingId,
+              tenantId: tenant.id,
+              dimensions: dims.slice(0, 4).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
+              measures: measures.slice(0, 2).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
+            };
+          }
+        }
+      } catch (err) {
+        devError('Failed to default-bind new report widget', err);
+      }
+    }
 
     const newElement = {
       id: `${type}_${Date.now()}`,
@@ -844,12 +897,14 @@ const SSRSReportBuilderContent: React.FC = () => {
         textColor: isDark ? '#E2E8F0' : '#1E293B',
         // Empty container scaffolding: tables/matrixes initialize with NO pre-populated columns
         columns: type === ELEMENT_TYPES.TABLE || type === ELEMENT_TYPES.MATRIX || type === ELEMENT_TYPES.LIST ? [] : undefined,
+        ...dataBinding,
       },
     };
 
     setElements([...elements, newElement]);
     setSelectedElement(newElement.id);
-    setSnackbar({ open: true, message: `Added ${type} empty container to ${targetSection}`, severity: 'success' });
+    const boundMsg = dataBinding.boId ? ` bound to ${selectedBO?.displayName || selectedBO?.name}` : '';
+    setSnackbar({ open: true, message: `Added ${type}${boundMsg} to ${targetSection}`, severity: 'success' });
   };
 
   const handleDragStart = (event: any) => {
@@ -971,7 +1026,9 @@ const SSRSReportBuilderContent: React.FC = () => {
     { type: ELEMENT_TYPES.RECTANGLE, icon: <SquareIcon sx={{ fontSize: 16 }} />, label: 'Rectangle' },
     { type: ELEMENT_TYPES.LINE, icon: <RemoveIcon sx={{ fontSize: 16 }} />, label: 'Line' },
     { type: ELEMENT_TYPES.GAUGE, icon: <SpeedIcon sx={{ fontSize: 16 }} />, label: 'Gauge / KPI' },
-    { type: ELEMENT_TYPES.SPARKLINE, icon: <TrendingUpIcon sx={{ fontSize: 16 }} />, label: 'Sparkline' }
+    { type: ELEMENT_TYPES.SPARKLINE, icon: <TrendingUpIcon sx={{ fontSize: 16 }} />, label: 'Sparkline' },
+    { type: ELEMENT_TYPES.SLICER, icon: <FilterListIcon sx={{ fontSize: 16 }} />, label: 'Slicer' },
+    { type: ELEMENT_TYPES.FORM, icon: <ListAltIcon sx={{ fontSize: 16 }} />, label: 'Form' }
   ];
 
   // Calculated fields handlers
@@ -1042,12 +1099,15 @@ const SSRSReportBuilderContent: React.FC = () => {
             {/* Left: action icons */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flex: '0 0 auto' }}>
               <Tooltip title={isReadOnlyCore ? "Core template (read-only). Click Clone to create a custom tenant copy." : "Save (Ctrl+S)"}>
-                <span>
-                  <IconButton size="small" onClick={handleSaveReport} disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
-                    sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <SaveIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label={isReadOnlyCore ? "Core template (read-only)" : "Save (Ctrl+S)"}
+                  size="small"
+                  onClick={handleSaveReport}
+                  disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
+                  sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <SaveIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
 
               <Tooltip title="Clone as Tenant Custom Report">
@@ -1075,20 +1135,26 @@ const SSRSReportBuilderContent: React.FC = () => {
 
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.1)', mx: 0.5 }} />
               <Tooltip title="Undo">
-                <span>
-                  <IconButton size="small" onClick={undo} disabled={!canUndo || isReadOnlyCore}
-                    sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <UndoIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label="Undo"
+                  size="small"
+                  onClick={undo}
+                  disabled={!canUndo || isReadOnlyCore}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <UndoIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
               <Tooltip title="Redo">
-                <span>
-                  <IconButton size="small" onClick={redo} disabled={!canRedo || isReadOnlyCore}
-                    sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
-                    <RedoIcon sx={{ fontSize: 19 }} />
-                  </IconButton>
-                </span>
+                <IconButton
+                  aria-label="Redo"
+                  size="small"
+                  onClick={redo}
+                  disabled={!canRedo || isReadOnlyCore}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                >
+                  <RedoIcon sx={{ fontSize: 19 }} />
+                </IconButton>
               </Tooltip>
               <Divider orientation="vertical" flexItem sx={{ borderColor: 'rgba(255,255,255,0.1)', mx: 0.5 }} />
               <Tooltip title="Preview">

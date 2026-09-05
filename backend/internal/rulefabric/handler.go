@@ -72,6 +72,15 @@ func RegisterRoutes(router chi.Router, db *sqlx.DB) error {
 			r.Delete("/{policyID}", handler.DeletePolicy)
 		})
 
+		// BO governance policies (WHEN/THEN policy rules, PolicyRuleBuilder.tsx)
+		r.Route("/bo/{boKey}/policies", func(r chi.Router) {
+			r.Get("/", handler.ListPoliciesForBO)
+			r.Post("/", handler.CreatePolicyForBO)
+			r.Post("/simulate", handler.SimulatePolicyExpr)
+			r.Put("/{policyID}", handler.UpdatePolicyForBO)
+			r.Delete("/{policyID}", handler.DeletePolicyForBO)
+		})
+
 		// Action types (reference data)
 		r.Get("/action-types", handler.ListActionTypes)
 		r.Get("/action-types/{category}", handler.GetActionTypesByCategory)
@@ -489,6 +498,20 @@ func (h *Handler) CreateRuleVersion(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Normalize condition_json to CEL - RuleFabric no longer stores
+	// AdvancedConditionBuilder trees; any tree submitted here is compiled
+	// to an equivalent CEL expression before it's persisted.
+	var unsupported []string
+	if len(req.ConditionJSON) > 0 {
+		normalized, notes, err := NormalizeConditionJSONToCEL(req.ConditionJSON)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("failed to compile condition to CEL: %v", err), http.StatusBadRequest)
+			return
+		}
+		req.ConditionJSON = normalized
+		unsupported = notes
+	}
+
 	// Get next version number
 	var maxVersion int
 	h.db.GetContext(ctx, &maxVersion, "SELECT COALESCE(MAX(version), 0) FROM rule_logic WHERE rule_id = $1", ruleID)
@@ -508,9 +531,10 @@ func (h *Handler) CreateRuleVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]interface{}{
-		"logic_id": logicID,
-		"version":  maxVersion + 1,
-		"message":  "Version created successfully",
+		"logic_id":    logicID,
+		"version":     maxVersion + 1,
+		"message":     "Version created successfully",
+		"unsupported": unsupported, // non-empty means part of the condition tree couldn't be compiled to CEL and was treated as always-true; needs manual review
 	})
 }
 
@@ -1256,6 +1280,9 @@ func (h *Handler) GetRuleStats(w http.ResponseWriter, r *http.Request) {
 
 func getTenantID(r *http.Request) (uuid.UUID, error) {
 	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	if tenantIDStr == "" {
+		tenantIDStr = r.Header.Get("X-Tenant-ID")
+	}
 	if tenantIDStr == "" {
 		tenantIDStr = r.URL.Query().Get("tenant_id")
 	}

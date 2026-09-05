@@ -16,6 +16,8 @@ export const ELEMENT_TYPES = {
   PARAMETER: 'parameter',
   GAUGE: 'gauge',
   SPARKLINE: 'sparkline',
+  SLICER: 'slicer',
+  FORM: 'form',
 } as const;
 
 export const REPORT_SECTIONS = {

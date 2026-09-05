@@ -345,8 +345,8 @@ export const ReportLibrary: React.FC = () => {
               exclusive
               onChange={(_, v) => v && setViewMode(v)}
             >
-              <ToggleButton value="list"><ListViewIcon /></ToggleButton>
-              <ToggleButton value="grid"><GridViewIcon /></ToggleButton>
+              <ToggleButton value="list" aria-label="List view"><ListViewIcon /></ToggleButton>
+              <ToggleButton value="grid" aria-label="Grid view"><GridViewIcon /></ToggleButton>
             </ToggleButtonGroup>
           </Box>
 

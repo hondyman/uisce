@@ -58,7 +58,7 @@ func TestValidationRulesAPI_ListRulesSuccess(t *testing.T) {
 		WithArgs(tenantID, datasourceID).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-	rows := sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entity_id", "target_entities", "target_entity_ids", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at", "script_content"}).
+	rows := sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entity_id", "target_entities", "target_entity_ids", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at"}).
 		AddRow(
 			"rule-1",
 			tenantID,
@@ -77,10 +77,9 @@ func TestValidationRulesAPI_ListRulesSuccess(t *testing.T) {
 			sql.NullString{},
 			now,
 			now,
-			"COUNT(*) > 1",
 		)
 
-	query := `(?s)SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,\s+target_entity_id, target_entities, target_entity_ids, condition_json,\s+severity, (?:COALESCE\(is_active, true\)|is_active), (?:COALESCE\(is_core, false\)|is_core), created_by, created_at, updated_at,\s+script_content\s+FROM catalog_validation_rules\s+WHERE tenant_id = \$1 AND datasource_id = \$2\s+ORDER BY rule_name\s+LIMIT \$(?:3|4) OFFSET \$(?:4|5)`
+	query := `(?s)SELECT id, tenant_id, datasource_id, rule_name, rule_type, description, target_entity,\s+target_entity_id, target_entities, target_entity_ids, condition_json,\s+severity, (?:COALESCE\(is_active, true\)|is_active), (?:COALESCE\(is_core, false\)|is_core), created_by, created_at, updated_at\s+FROM catalog_validation_rules\s+WHERE tenant_id = \$1 AND datasource_id = \$2\s+ORDER BY rule_name\s+LIMIT \$(?:3|4) OFFSET \$(?:4|5)`
 	mock.ExpectQuery(query).
 		WithArgs(tenantID, datasourceID, 20, 0).
 		WillReturnRows(rows)
@@ -160,10 +159,9 @@ func TestValidationRulesAPI_CreateRuleSuccess(t *testing.T) {
 			false,
 			sqlmock.AnyArg(), // created_at
 			sqlmock.AnyArg(), // updated_at
-			"",               // script_content
 		).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entities", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at", "script_content"}).
-			AddRow("rule-123", tenantID, datasourceID, "Exposure Limit", "business_logic", "", "portfolio", pq.StringArray{"portfolio"}, []byte("{\"maxPercentage\":25}"), "error", true, false, sql.NullString{}, now, now, ""))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entities", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at"}).
+			AddRow("rule-123", tenantID, datasourceID, "Exposure Limit", "business_logic", "", "portfolio", pq.StringArray{"portfolio"}, []byte("{\"maxPercentage\":25}"), "error", true, false, sql.NullString{}, now, now))
 
 	body := bytes.NewBufferString(`{"rule_name":"Exposure Limit","rule_type":"business_logic","target_entity":"portfolio","severity":"error","parameters":{"maxPercentage":25}}`)
 	req := httptest.NewRequest(http.MethodPost, "/validation-rules", body)
@@ -232,10 +230,9 @@ func TestValidationRulesAPI_CreateRuleHeaderFallback(t *testing.T) {
 			false,
 			sqlmock.AnyArg(), // created_at
 			sqlmock.AnyArg(), // updated_at
-			"",               // script_content
 		).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entities", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at", "script_content"}).
-			AddRow("rule-999", tenantID, datasourceID, "Rule via Header", "business_logic", "", "book", pq.StringArray{"book"}, []byte("{}"), "error", true, false, sql.NullString{}, now, now, ""))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "datasource_id", "rule_name", "rule_type", "description", "target_entity", "target_entities", "condition_json", "severity", "is_active", "is_core", "created_by", "created_at", "updated_at"}).
+			AddRow("rule-999", tenantID, datasourceID, "Rule via Header", "business_logic", "", "book", pq.StringArray{"book"}, []byte("{}"), "error", true, false, sql.NullString{}, now, now))
 
 	body := bytes.NewBufferString(`{"rule_name":"Rule via Header","rule_type":"business_logic","target_entity":"book"}`)
 	req := httptest.NewRequest(http.MethodPost, "/validation-rules", body)

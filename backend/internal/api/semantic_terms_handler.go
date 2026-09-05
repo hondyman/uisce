@@ -55,6 +55,62 @@ func (h *SemanticTermsHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/semantic-terms/suggest", h.SuggestSemanticTerms)
 	r.Get("/semantic-terms/explain", h.ExplainSemanticTerm)
 	r.Get("/semantic-terms/{id}/suggest-business-terms", h.SuggestBusinessTerms)
+	r.Put("/semantic-terms/{id}/drill-path", h.SetDrillPath)
+}
+
+// SetDrillPathRequest is the body for PUT /api/semantic-terms/{id}/drill-path.
+type SetDrillPathRequest struct {
+	// DrillPath lists term node ids for successive drill-down levels below
+	// this term (e.g. region -> [country term id, state term id]). Every BO
+	// field bound to this term inherits the path automatically — it is
+	// configured once here, not per report/page widget.
+	DrillPath []string `json:"drillPath"`
+}
+
+// SetDrillPath configures (or clears, with an empty array) the drill-down
+// hierarchy for a semantic term. Stored on the term's catalog_node so every
+// consumer (Report Builder, Page Studio, Query Builder) picks it up via
+// GET /business-objects/{boId}/terms without per-widget configuration.
+// PUT /api/semantic-terms/{id}/drill-path
+func (h *SemanticTermsHandler) SetDrillPath(w http.ResponseWriter, r *http.Request) {
+	termID := chi.URLParam(r, "id")
+	if termID == "" {
+		http.Error(w, "term id required", http.StatusBadRequest)
+		return
+	}
+
+	var req SetDrillPathRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.DrillPath == nil {
+		req.DrillPath = []string{}
+	}
+
+	drillPathJSON, err := json.Marshal(req.DrillPath)
+	if err != nil {
+		http.Error(w, "failed to encode drill path", http.StatusInternalServerError)
+		return
+	}
+
+	result, err := h.db.ExecContext(r.Context(), `
+		UPDATE catalog_node
+		SET properties = jsonb_set(COALESCE(properties, '{}'::jsonb), '{drill_path}', $2::jsonb, true)
+		WHERE id = $1::uuid
+	`, termID, string(drillPathJSON))
+	if err != nil {
+		http.Error(w, "failed to set drill path: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		http.Error(w, "semantic term not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "drillPath": req.DrillPath})
 }
 
 func (h *SemanticTermsHandler) CreateSemanticTerm(w http.ResponseWriter, r *http.Request) {

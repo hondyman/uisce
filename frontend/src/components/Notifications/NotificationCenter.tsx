@@ -88,22 +88,9 @@ export const NotificationCenter: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
-    // Dev fallback: if auth context is missing, use these hardcoded values (matching seeded data)
-    // ONLY in development mode.
-    const isDev = (import.meta as any).env?.DEV;
-    const effectiveTenantId = tenant?.id || (isDev ? '910638ba-a459-4a3f-bb2d-78391b0595f6' : '');
-    const effectiveDatasourceId = datasource?.id || (isDev ? '982aef38-418f-46dc-acd0-35fe8f3b97b0' : '');
-    const effectiveUserId = userId || (isDev ? 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a12' : '');
-
-    if (!effectiveTenantId || !effectiveUserId) {
-      if (isDev) console.warn('NotificationCenter: Missing tenant or user context.');
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
-      const url = `/api/bp-notifications/logs?tenant_id=${effectiveTenantId}&tenant_instance_id=${effectiveDatasourceId}&user_id=${effectiveUserId}`;
+      const url = `/api/bp-notifications/logs`;
       
       const data = await apiClient<any[]>(url);
       setNotifications(Array.isArray(data) ? data : []);
@@ -113,7 +100,7 @@ export const NotificationCenter: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id, datasource?.id, userId]);
+  }, []);
 
   useEffect(() => {
     fetchNotifications();

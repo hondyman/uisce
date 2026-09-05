@@ -13,12 +13,105 @@ import (
 // RelationshipInferenceService discovers and scores relationships between tables
 // using profile data (cardinality, uniqueness, value distributions).
 type RelationshipInferenceService struct {
-	db *sqlx.DB
+	db           *sqlx.DB
+	cache        *RelationshipCache
+	joinResolver *JoinPathResolver
 }
 
 // NewRelationshipInferenceService creates a new relationship inference service
 func NewRelationshipInferenceService(db *sqlx.DB) *RelationshipInferenceService {
-	return &RelationshipInferenceService{db: db}
+	return &RelationshipInferenceService{
+		db:           db,
+		cache:        NewRelationshipCache(),
+		joinResolver: NewJoinPathResolver(db),
+	}
+}
+
+// DrillTarget is where a drill-down term actually resolves for a given
+// starting BO: which BO has it bound as a field, and whether that BO is the
+// starting BO itself (same-BO drill, e.g. year -> quarter on one BO) or a
+// different one reached via the relationship graph (cross-BO drill, e.g.
+// region -> a related Geography BO's country field).
+type DrillTarget struct {
+	BOID       uuid.UUID `json:"boId"`
+	TermNodeID string    `json:"termNodeId"`
+	IsSameBO   bool      `json:"isSameBO"`
+}
+
+// ResolveDrillTarget answers "is this drill-path term actually usable from
+// here?" for a given starting BO. A term's drill_path is configured once on
+// the semantic layer (see SemanticTermView.DrillPath) and inherited by every
+// BO field bound to that term, but whether a specific report/page/query can
+// actually drill into it depends on whether the term is bound to a field on
+// the current BO, or on a BO reachable from it via BO_RELATES_TO_BO —
+// nothing is auto-added to a BO's field list just because a drill path
+// exists elsewhere. Note: this only enforces tenant scoping (via the
+// bo_fields/business_object_id join and datasourceID-scoped relationship
+// lookup) — there is currently no BO/field-level entitlement engine in this
+// codebase to layer on top (ABACEngine.Evaluate is a stub that always
+// returns true), so a drill target reachable within the tenant is treated
+// as available. Field-level entitlements should gate this once that engine
+// is real.
+func (s *RelationshipInferenceService) ResolveDrillTarget(
+	ctx context.Context,
+	tenantID, datasourceID, fromBOID uuid.UUID,
+	drillTermID string,
+) (*DrillTarget, error) {
+	// bo_fields.business_object_id values that have this term bound and
+	// resolved, scoped to the tenant via business_objects.tenant_id.
+	var candidateBOIDs []uuid.UUID
+	err := s.db.SelectContext(ctx, &candidateBOIDs, `
+		SELECT DISTINCT bf.business_object_id
+		FROM bo_fields bf
+		JOIN business_objects bo ON bo.id = bf.business_object_id
+		WHERE bf.semantic_term_id = $1::uuid
+		  AND bo.tenant_id = $2::uuid
+		  AND COALESCE(bf.binding_status, 'RESOLVED') = 'RESOLVED'
+	`, drillTermID, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up drill target term %s: %w", drillTermID, err)
+	}
+	if len(candidateBOIDs) == 0 {
+		return nil, nil // term isn't bound to any field in this tenant — not drillable
+	}
+
+	for _, boID := range candidateBOIDs {
+		if boID == fromBOID {
+			return &DrillTarget{BOID: boID, TermNodeID: drillTermID, IsSameBO: true}, nil
+		}
+	}
+
+	related, err := s.GetBORelationships(ctx, datasourceID, fromBOID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve related BOs for drill target: %w", err)
+	}
+	relatedSet := make(map[uuid.UUID]bool, len(related))
+	for _, rel := range related {
+		if rel.SourceBOID == fromBOID {
+			relatedSet[rel.TargetBOID] = true
+		} else {
+			relatedSet[rel.SourceBOID] = true
+		}
+	}
+	for _, boID := range candidateBOIDs {
+		if relatedSet[boID] {
+			return &DrillTarget{BOID: boID, TermNodeID: drillTermID, IsSameBO: false}, nil
+		}
+	}
+
+	return nil, nil // bound somewhere in the tenant, but not reachable from fromBOID
+}
+
+// ResolveJoinPathBetweenBOs returns the join path (table/column/join-type
+// steps) needed to combine two Business Objects in a single query, resolved
+// and cached via the datasource's TABLE_RELATES_TO_TABLE graph. Report
+// Builder, Query Builder, and Page Studio call this once a user adds a
+// related BO to a query/report/page data source.
+func (s *RelationshipInferenceService) ResolveJoinPathBetweenBOs(
+	ctx context.Context,
+	datasourceID, fromBONodeID, toBONodeID uuid.UUID,
+) (*JoinPath, error) {
+	return s.joinResolver.ResolveJoinPathBetweenBOs(ctx, datasourceID, fromBONodeID, toBONodeID, 3)
 }
 
 // ============================================================================
@@ -82,6 +175,14 @@ type BORelationshipEdge struct {
 	Description      string     `json:"description"`
 	Origin           string     `json:"origin"`
 	Confidence       float64    `json:"confidence"`
+	// SourceSubtypeID/TargetSubtypeID scope the edge to a specific BO subtype
+	// rather than the BO's driving table. Empty (uuid.Nil) means the edge
+	// applies at the BO/driving-table level. A subtype can relate to another
+	// BO (or another subtype) via its own subtype-specific table, which the
+	// driving-table-only inference in InheritBORelationshipsFromTable cannot
+	// discover on its own — see InheritBORelationshipsFromSubtypeTable.
+	SourceSubtypeID uuid.UUID `json:"source_subtype_id,omitempty"`
+	TargetSubtypeID uuid.UUID `json:"target_subtype_id,omitempty"`
 }
 
 // JoinStep represents a single step in a join path
@@ -427,6 +528,8 @@ func (s *RelationshipInferenceService) CreateTableRelationship(
 		return uuid.Nil, fmt.Errorf("failed to create table relationship edge: %w", err)
 	}
 
+	s.joinResolver.InvalidateDatasource(datasourceID)
+
 	return edgeID, nil
 }
 
@@ -515,17 +618,37 @@ func (s *RelationshipInferenceService) InheritBORelationshipsFromTable(
 	ctx context.Context,
 	tenantID, datasourceID, boNodeID, drivingTableNodeID uuid.UUID,
 ) ([]BORelationshipEdge, error) {
-	// Get physical relationships from driving table
-	tableRels, err := s.GetTableRelationships(ctx, datasourceID, drivingTableNodeID)
+	return s.inheritBORelationshipsFromTable(ctx, tenantID, datasourceID, boNodeID, uuid.Nil, drivingTableNodeID)
+}
+
+// InheritBORelationshipsFromSubtypeTable is the subtype-scoped counterpart of
+// InheritBORelationshipsFromTable: it discovers BO_RELATES_TO_BO edges that
+// originate from a subtype's own table (e.g. an "ira" subtype table with a
+// custodian_id column) rather than the parent BO's driving table, and stamps
+// the resulting edges with SourceSubtypeID so callers can tell a
+// subtype-level relationship apart from a BO-level one.
+func (s *RelationshipInferenceService) InheritBORelationshipsFromSubtypeTable(
+	ctx context.Context,
+	tenantID, datasourceID, boNodeID, subtypeDefID, subtypeTableNodeID uuid.UUID,
+) ([]BORelationshipEdge, error) {
+	return s.inheritBORelationshipsFromTable(ctx, tenantID, datasourceID, boNodeID, subtypeDefID, subtypeTableNodeID)
+}
+
+func (s *RelationshipInferenceService) inheritBORelationshipsFromTable(
+	ctx context.Context,
+	tenantID, datasourceID, boNodeID, subtypeDefID, tableNodeID uuid.UUID,
+) ([]BORelationshipEdge, error) {
+	// Get physical relationships from the table (driving table or subtype table)
+	tableRels, err := s.GetTableRelationships(ctx, datasourceID, tableNodeID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get the driving table name for building join paths
+	// Get the table name for building join paths
 	var drivingTableName string
 	_ = s.db.GetContext(ctx, &drivingTableName, `
 		SELECT node_name FROM catalog_node WHERE id = $1
-	`, drivingTableNodeID)
+	`, tableNodeID)
 
 	var boRels []BORelationshipEdge
 
@@ -565,6 +688,7 @@ func (s *RelationshipInferenceService) InheritBORelationshipsFromTable(
 		boRel := BORelationshipEdge{
 			SourceBOID:       boNodeID,
 			TargetBOID:       relatedBONodeID,
+			SourceSubtypeID:  subtypeDefID,
 			RelationshipType: tableRel.Cardinality,
 			JoinPath: []JoinStep{
 				{
@@ -582,10 +706,76 @@ func (s *RelationshipInferenceService) InheritBORelationshipsFromTable(
 			Confidence: tableRel.Confidence,
 		}
 
+		edgeID, err := s.CreateBORelationship(ctx, tenantID, datasourceID, boRel)
+		if err != nil {
+			return nil, fmt.Errorf("failed to persist inherited BO relationship (bo=%s -> bo=%s): %w", boNodeID, relatedBONodeID, err)
+		}
+		boRel.ID = edgeID
+
 		boRels = append(boRels, boRel)
 	}
 
 	return boRels, nil
+}
+
+// CreateBORelationship persists a BO_RELATES_TO_BO edge, upserting on the
+// (source, target) pair so re-running inference is idempotent. Invalidates
+// the relationship cache for the datasource on success.
+func (s *RelationshipInferenceService) CreateBORelationship(
+	ctx context.Context,
+	tenantID, datasourceID uuid.UUID,
+	edge BORelationshipEdge,
+) (uuid.UUID, error) {
+	properties := map[string]interface{}{
+		"relationship_type": edge.RelationshipType,
+		"join_path":         edge.JoinPath,
+		"via_tables":        edge.ViaTables,
+		"lookup":            edge.Lookup,
+		"ui_role":           edge.UIRole,
+		"description":       edge.Description,
+		"origin":            edge.Origin,
+		"confidence":        edge.Confidence,
+	}
+	if edge.SourceSubtypeID != uuid.Nil {
+		properties["source_subtype_id"] = edge.SourceSubtypeID.String()
+	}
+	if edge.TargetSubtypeID != uuid.Nil {
+		properties["target_subtype_id"] = edge.TargetSubtypeID.String()
+	}
+
+	propsJSON, err := json.Marshal(properties)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to marshal properties: %w", err)
+	}
+
+	var edgeTypeID uuid.UUID
+	err = s.db.GetContext(ctx, &edgeTypeID, `
+		SELECT id FROM catalog_edge_type
+		WHERE tenant_id = $1 AND edge_type_name = 'BO_RELATES_TO_BO'
+		LIMIT 1
+	`, tenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to find BO_RELATES_TO_BO edge type: %w", err)
+	}
+
+	var edgeID uuid.UUID
+	err = s.db.GetContext(ctx, &edgeID, `
+		INSERT INTO catalog_edge (
+			tenant_datasource_id, source_node_id, target_node_id,
+			relationship_type, edge_type_id, edge_type_name, properties, tenant_id,
+			created_at, updated_at
+		) VALUES ($1, $2, $3, 'BO_RELATES_TO_BO', $4, 'BO_RELATES_TO_BO', $5, $6, now(), now())
+		ON CONFLICT (tenant_datasource_id, source_node_id, edge_type_name, target_node_id)
+		DO UPDATE SET properties = EXCLUDED.properties, updated_at = now()
+		RETURNING id
+	`, datasourceID, edge.SourceBOID, edge.TargetBOID, edgeTypeID, propsJSON, tenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("failed to create BO relationship edge: %w", err)
+	}
+
+	s.cache.InvalidateDatasource(datasourceID)
+
+	return edgeID, nil
 }
 
 // GetBORelationships retrieves all BO_RELATES_TO_BO edges for a business object
@@ -593,6 +783,10 @@ func (s *RelationshipInferenceService) GetBORelationships(
 	ctx context.Context,
 	datasourceID, boNodeID uuid.UUID,
 ) ([]BORelationshipEdge, error) {
+	if cached, ok := s.cache.Get(datasourceID, boNodeID); ok {
+		return cached, nil
+	}
+
 	query := `
 		SELECT 
 			ce.id,
@@ -689,11 +883,23 @@ func (s *RelationshipInferenceService) GetBORelationships(
 						}
 					}
 				}
+				if v, ok := props["source_subtype_id"].(string); ok {
+					if parsed, err := uuid.Parse(v); err == nil {
+						edge.SourceSubtypeID = parsed
+					}
+				}
+				if v, ok := props["target_subtype_id"].(string); ok {
+					if parsed, err := uuid.Parse(v); err == nil {
+						edge.TargetSubtypeID = parsed
+					}
+				}
 			}
 		}
 
 		edges = append(edges, edge)
 	}
+
+	s.cache.Set(datasourceID, boNodeID, edges)
 
 	return edges, nil
 }

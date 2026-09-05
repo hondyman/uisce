@@ -17,6 +17,7 @@ import { PageStudioApi } from '../../api/pageStudio';
 import ComponentPalette from './ComponentPalette';
 import LayoutCanvas from './LayoutCanvas';
 import PropertiesPanel from './PropertiesPanel';
+import DataBindingsPanel from './DataBindingsPanel';
 import { PagePerformanceDashboard } from './PagePerformanceDashboard';
 import { AIDocumentationViewer } from './AIDocumentationViewer';
 import { AITestGenerator } from './AITestGenerator';
@@ -76,9 +77,11 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             <ComponentPalette />
                         )}
                         {tab === 1 && (
-                            <Box sx={{ p: 2 }}>
-                                <Typography variant="caption" color="textSecondary">Data Bindings coming soon...</Typography>
-                            </Box>
+                            <DataBindingsPanel
+                                draft={draft}
+                                setDraft={setDraft}
+                                tenantId={draft.tenantId || 'default'}
+                            />
                         )}
                         {tab === 2 && (
                             <PagePerformanceDashboard pageId={draft.id!} />
