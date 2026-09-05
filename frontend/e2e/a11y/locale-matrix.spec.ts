@@ -85,32 +85,19 @@ test.describe('Locale matrix', () => {
     expect(lang).toBe('ar');
   });
 
-  test.fixme(
-    'root redirect preserves query string across locale redirect',
-    async ({ page }) => {
-      await page.goto('/?foo=bar&baz=qux', { waitUntil: 'networkidle' });
-      const url = page.url();
-      expect(url).toContain('foo=bar');
-      expect(url).toContain('baz=qux');
-    },
-    'RootRedirect in localeShell.tsx navigates to /{locale} without search/hash. ' +
-    'Fix: useLocation() in RootRedirect, append search+hash to Navigate target. ' +
-    'This is the original Blocker 1 regression — resolveLocaleRoute was fixed but ' +
-    'RootRedirect was not in the enumerated site list.',
-  );
+  test('root redirect preserves query string across locale redirect', async ({ page }) => {
+    await page.goto('/?foo=bar&baz=qux', { waitUntil: 'networkidle' });
+    const url = page.url();
+    expect(url).toContain('foo=bar');
+    expect(url).toContain('baz=qux');
+  });
 
-  test.fixme(
-    'locale-to-locale navigation preserves query string',
-    async ({ page }) => {
-      await page.goto('/en/catalog?view=table', { waitUntil: 'networkidle' });
-      const enUrl = page.url();
-      await page.goto('/es/catalog?view=table', { waitUntil: 'networkidle' });
-      const esUrl = page.url();
-      expect(esUrl).toContain('view=table');
-      expect(esUrl).not.toBe(enUrl);
-    },
-    'RootRedirect fix (above) is the pre-req; then /en/catalog?view=table → ' +
-    '/es/catalog?view=table should preserve the query via resolveLocaleRoute ' +
-    'search/hash composition. Currently unit-tested only; no browser verification.',
-  );
+  test('locale-to-locale navigation preserves query string', async ({ page }) => {
+    await page.goto('/en/catalog?view=table', { waitUntil: 'networkidle' });
+    const enUrl = page.url();
+    await page.goto('/es/catalog?view=table', { waitUntil: 'networkidle' });
+    const esUrl = page.url();
+    expect(esUrl).toContain('view=table');
+    expect(esUrl).not.toBe(enUrl);
+  });
 });

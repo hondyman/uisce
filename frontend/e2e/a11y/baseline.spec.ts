@@ -219,8 +219,11 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
     } else if (KC_USER) {
       jwt = await getKeycloakToken();
     } else {
-      console.warn('[baseline] using fallback fake JWT — set E2E_JWT or E2E_KC_USER+E2E_KC_PASS');
-      jwt = FALLBACK_JWT;
+      throw new Error(
+        '[baseline] Neither E2E_JWT nor E2E_KC_USER is set. ' +
+        'A fake JWT produces vacuous-clean scans. ' +
+        'Set E2E_JWT (CI) or E2E_KC_USER+E2E_KC_PASS (local) to run a real crawl.',
+      );
     }
     await context.addInitScript(
       (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },

@@ -134,7 +134,12 @@ The cascade when a test fails after a change:
 3. Is it a regression in unrelated code? → revert the offending change.
 
 **Suite invariants:**
-- All 151 baseline tests must pass at `--workers=1` before Phase 2 opens a ratchet.
+- A green crawl without real auth **does not count**. `baseline.spec.ts` now throws
+  at `beforeEach` if neither `E2E_JWT` nor `E2E_KC_USER` is set — no silent fallback
+  to fake JWT. Run with real credentials; the number only matters if the app had real
+  auth when the crawl ran.
+- All 151 baseline tests must pass at `--workers=1` with real auth before Phase 2 opens
+  a ratchet.
 - Non-representative routes (param non-rep, crashed) are flagged per-route and excluded
   from the representative violation count — they must not affect Phase 2 sizing.
 - Auth token is TTL-refreshed mid-crawl (Keycloak tokens expire ~5 min; the crawl
@@ -142,6 +147,12 @@ The cascade when a test fails after a change:
   vacuous-clean pages indistinguishable from real renders.
 
 ## Known follow-ups (Phase 2+)
+
+- [x] **Bare `?` on every locale URL** — all locale redirects (`/en?`, `/es?`, `/ar?`)
+      RootRedirect in localeShell.tsx composed `/${target}` + an empty-but-present search
+      component, producing a trailing `?` on every locale URL. Fixed by appending
+      `${search}${hash}` to the Navigate target. Confirmed in browser: `/en?` → `/en?foo=bar`
+      post-fix.
 
 - [ ] **Plain CSS RTL** — activate postcss-rtlcss pipeline; only MUI v7
       handles its own RTL via `theme.direction`. ~172 hand-written CSS
