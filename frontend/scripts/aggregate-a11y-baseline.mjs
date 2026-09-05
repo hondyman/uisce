@@ -51,6 +51,21 @@ for (const v of violations) {
   }
 }
 
+// Tripwire: if any single rule appears on every route, the crawl likely hit the
+// same page (e.g. Vite error overlay) and the data is invalid.
+const byRule = {};
+for (const v of violations) {
+  byRule[v.id] = (byRule[v.id] || 0) + 1;
+}
+const routeCount = files.length;
+for (const [rule, count] of Object.entries(byRule)) {
+  if (count === routeCount) {
+    console.warn(`\n⚠️  TRIPWIRE: rule '${rule}' appears on ALL ${routeCount} routes — this indicates`);
+    console.warn(`   the crawl may have measured the same page everywhere (e.g. unmount/unauth redirect).`);
+    console.warn(`   Review test-results/a11y/ samples before trusting this baseline.\n`);
+  }
+}
+
 const summary = {
   date,
   generatedBy: 'frontend/scripts/aggregate-a11y-baseline.mjs',
