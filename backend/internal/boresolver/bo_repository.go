@@ -2,7 +2,6 @@ package boresolver
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -471,20 +470,18 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 	// bo_fields.binding_status column as the source of truth.
 	query := `
 		SELECT
-			COALESCE(bf.semantic_term_id::text, bf.id) AS term_node_id,
-			COALESCE(bf.key, bf.name, bf.technical_name) AS term_key,
-			COALESCE(bf.name, bf.key, bf.technical_name) AS term_name,
-			COALESCE(bf.display_label, bf.name, bf.key, bf.technical_name) AS display_name,
-			COALESCE(bf.description, '') AS description,
-			COALESCE(bf.field_type, 'string') AS data_type,
-			COALESCE(bf.field_role, 'DIMENSION') AS role,
-			COALESCE(bf.binding_status, 'RESOLVED') AS binding_status,
-			COALESCE(ct.properties->'drill_path', '[]'::jsonb) AS drill_path_json
-		FROM public.bo_fields bf
-		LEFT JOIN public.catalog_node ct ON ct.id = bf.semantic_term_id
-		WHERE bf.business_object_id = $1::uuid
-		  AND COALESCE(bf.binding_status, 'RESOLVED') = 'RESOLVED'
-		ORDER BY bf.display_order, bf.name
+			COALESCE(semantic_term_id::text, id) AS term_node_id,
+			COALESCE(key, name, technical_name) AS term_key,
+			COALESCE(name, key, technical_name) AS term_name,
+			COALESCE(display_label, name, key, technical_name) AS display_name,
+			COALESCE(description, '') AS description,
+			COALESCE(field_type, 'string') AS data_type,
+			COALESCE(field_role, 'DIMENSION') AS role,
+			COALESCE(binding_status, 'RESOLVED') AS binding_status
+		FROM public.bo_fields
+		WHERE business_object_id = $1::uuid
+		  AND COALESCE(binding_status, 'RESOLVED') = 'RESOLVED'
+		ORDER BY display_order, name
 	`
 	rows, err := r.DB.Queryx(query, boID)
 	if err != nil {
@@ -495,7 +492,6 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 	var terms []SemanticTermView
 	for rows.Next() {
 		var t SemanticTermView
-		var drillPathJSON []byte
 		if err := rows.Scan(
 			&t.TermNodeID,
 			&t.TermKey,
@@ -505,15 +501,11 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			&t.DataType,
 			&t.Role,
 			&t.BindingStatus,
-			&drillPathJSON,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan term: %w", err)
 		}
 		if t.Role == "MEASURE" {
 			t.DefaultAggregation = "SUM"
-		}
-		if len(drillPathJSON) > 0 {
-			_ = json.Unmarshal(drillPathJSON, &t.DrillPath)
 		}
 		terms = append(terms, t)
 	}

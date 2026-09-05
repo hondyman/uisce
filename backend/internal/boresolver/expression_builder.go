@@ -18,19 +18,6 @@ import (
 // parameters) that gets pushed into a query, never raw string interpolation
 // of a caller-supplied value.
 
-// allowedComparisonOps is the closed set of operator tokens
-// CompileFilterPredicate will ever interpolate into SQL text. filter.Operator
-// is caller-supplied (ultimately from an authenticated user's filter UI) and
-// cannot be bind-parameterized like filter.Value, so anything not in this
-// set is rejected rather than passed through.
-var allowedComparisonOps = map[string]bool{
-	"=": true, "!=": true, "<>": true, ">": true, "<": true, ">=": true, "<=": true,
-	"CONTAINS": true, "CONTAIN": true,
-	"STARTS WITH": true, "STARTS_WITH": true, "START_WITH": true,
-	"ENDS WITH": true, "ENDS_WITH": true, "END_WITH": true,
-	"IN": true, "NOT IN": true,
-}
-
 // CompiledPredicate is a SQL fragment paired with the parameter values it
 // references, in the order its placeholders appear.
 type CompiledPredicate struct {
@@ -107,13 +94,6 @@ func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr s
 			verb = "NOT BETWEEN"
 		}
 		return fmt.Sprintf("%s %s %s AND %s", sqlExpr, verb, lowTok, highTok), nil
-	}
-
-	// Every remaining branch below interpolates op directly into the SQL
-	// text (it can't be a bind parameter), so it must come from a known-safe
-	// set — never pass an unrecognized filter.Operator through as-is.
-	if !allowedComparisonOps[op] {
-		return "", fmt.Errorf("unsupported filter operator: %q", filter.Operator)
 	}
 
 	switch v := filter.Value.(type) {

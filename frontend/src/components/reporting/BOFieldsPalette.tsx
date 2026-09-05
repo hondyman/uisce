@@ -118,21 +118,8 @@ interface BOFieldsPaletteProps {
   onAddAllAsTable: (fields: BOField[]) => void;
 }
 
-// Best-effort classification of a relationship's cardinality string
-// ("1:M", "M:1", "1:1", "M:M") into whether fields from that related object
-// fan out relative to the selected BO's row. Authoritative fan-out
-// detection happens server-side when the query actually runs (via the
-// resolved join path's TraversalCardinality) — this is a UI hint shown
-// before that, so the report author knows up front that a related object's
-// fields belong in a child grid, not a flat column.
-const isManyCardinality = (cardinality?: string): boolean => {
-  const norm = (cardinality || '').toUpperCase().replace(/\s/g, '');
-  return norm === '1:M' || norm === '1:N' || norm === 'M:M' || norm === 'N:N';
-};
-
 export const BOFieldsPalette: React.FC<BOFieldsPaletteProps> = ({
   selectedBO,
-  relatedBOs,
   onAddFieldToCanvas,
   onAddAllAsTable,
 }) => {
@@ -203,36 +190,6 @@ export const BOFieldsPalette: React.FC<BOFieldsPaletteProps> = ({
           Add All as Table Grid ({allFields.length})
         </Button>
       </Box>
-
-      {/* Related Business Objects */}
-      {relatedBOs && relatedBOs.length > 0 && (
-        <Box sx={{ px: 1.5, pb: 1 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-            Related Business Objects
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-            {relatedBOs.map((rel: any, i: number) => {
-              const many = isManyCardinality(rel.cardinality || rel.relationshipType);
-              return (
-                <Tooltip
-                  key={rel.id || i}
-                  title={`${rel.relationshipType || 'related'} (${rel.cardinality || 'unknown'})${
-                    many ? ' — one-to-many: place its fields in a child grid, not this table' : ' — lookup: safe to add alongside this table'
-                  }`}
-                >
-                  <Chip
-                    size="small"
-                    label={rel.relatedObjectName || rel.relatedObjectId || 'Related object'}
-                    color={many ? 'warning' : 'default'}
-                    variant="outlined"
-                    sx={{ height: 20, fontSize: '0.65rem' }}
-                  />
-                </Tooltip>
-              );
-            })}
-          </Box>
-        </Box>
-      )}
 
       {/* Fields List */}
       <Box sx={{ flex: 1, overflowY: 'auto', px: 1.5 }}>

@@ -100,42 +100,24 @@ type TenantContext struct {
 	DatasourceID string
 }
 
-// clientTenantHeaderTrusted reports whether the verified caller may assert a
-// tenant identity via the client-supplied X-Tenant-ID header. This is safe
-// only for global admins/ops: AuthContextMiddleware has already validated
-// the bearer token's signature and role claims before this runs, so a
-// non-admin caller can never reach this branch and cannot spoof a tenant via
-// the header. Regular tenant-scoped users must carry a tenant claim in the
-// token itself (checked above).
-func clientTenantHeaderTrusted(r *http.Request) bool {
-	auth, ok := security.AuthInfoFromContext(r.Context())
-	return ok && auth.IsGlobalAdmin
-}
-
-// TenantIDFromRequest resolves the tenant ID for an incoming request.
-// Resolution order: (1) security.AuthInfo set by AuthContextMiddleware (production).
-// (2) jwtmiddleware.GetClaimsFromContext (standalone services with their own wiring).
-// (3) empty string, false — caller should respond 401.
-// This is the single canonical source of truth for tenant resolution; do not add
-// other helpers that read different context keys or header fallbacks without
-// consolidating them here.
-func TenantIDFromRequest(r *http.Request) (string, bool) {
-	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
-		return auth.TenantIDs[0], true
-	}
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		return claims.TenantID, true
-	}
-	return "", false
+// allowClientTenantHeaderFallback reports whether the X-Tenant-ID header may
+// be trusted when the JWT carries no tenant claim. This must never be enabled
+// in production: the header is fully client-controlled, so trusting it lets
+// any caller assert an arbitrary tenant identity.
+func allowClientTenantHeaderFallback() bool {
+	return getEnv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false") == "true"
 }
 
 // extractTenantContext extracts tenant context from request headers (JWT-validated)
 // WARNING: This function intentionally does NOT fall back to URL query params for security.
 // Tenant ID must come from validated JWT claims; the X-Tenant-ID header is only
-// trusted for verified global admins/ops (see clientTenantHeaderTrusted).
+// trusted when ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
 func extractTenantContext(r *http.Request) (*TenantContext, error) {
-	tenantID, ok := TenantIDFromRequest(r)
-	if !ok && clientTenantHeaderTrusted(r) {
+	var tenantID string
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
+	}
+	if tenantID == "" && allowClientTenantHeaderFallback() {
 		tenantID = r.Header.Get("X-Tenant-ID")
 	}
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
@@ -348,13 +330,13 @@ func nilIfNullFloat64(n sql.NullFloat64) *float64 {
 
 // getSecureTenantID extracts tenant ID from validated JWT claims.
 // SECURITY: This function intentionally does NOT fall back to URL query parameters,
-// and only trusts the client-supplied X-Tenant-ID header for verified global
-// admins/ops (see clientTenantHeaderTrusted).
+// and only trusts the client-supplied X-Tenant-ID header when
+// ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
 func getSecureTenantID(r *http.Request) string {
 	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
 		return claims.TenantID
 	}
-	if clientTenantHeaderTrusted(r) {
+	if allowClientTenantHeaderFallback() {
 		if tid := r.Header.Get("X-Tenant-ID"); tid != "" {
 			return tid
 		}
