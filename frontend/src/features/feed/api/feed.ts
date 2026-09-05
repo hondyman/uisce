@@ -14,7 +14,7 @@ export interface FeedItem {
 
 export const fetchFeed = async (): Promise<FeedItem[]> => {
     const response = await apiGet('wealth/feed');
-    return Array.isArray(response) ? response : (response?.data ?? []);
+    return response;
 };
 
 export const useFeed = () => {

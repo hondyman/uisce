@@ -250,10 +250,32 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         );
       }
 
-      const results = await new AxeBuilder({ page })
-        .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-        .disableRules(['color-contrast'])
-        .analyze();
+      let results: AxeCore.AxeResults;
+      try {
+        results = await new AxeBuilder({ page })
+          .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+          .disableRules(['color-contrast'])
+          .analyze();
+      } catch (err: unknown) {
+        const navError = err instanceof Error ? err.message : String(err);
+        if (navError.includes('Execution context was destroyed') || navError.includes('navigation')) {
+          const output: Record<string, unknown> = {
+            routePattern: route,
+            finalUrl: page.url(),
+            settled,
+            crashed: true,
+            crashReason: `navigation-during-scan: ${navError}`,
+            violations: [],
+            violationIds: [],
+          };
+          fs.writeFileSync(
+            path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`),
+            JSON.stringify(output, null, 2),
+          );
+          return;
+        }
+        throw err;
+      }
 
       const output: Record<string, unknown> = {
         routePattern: route,

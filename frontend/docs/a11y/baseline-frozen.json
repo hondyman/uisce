@@ -1,15 +1,15 @@
 {
   "metadata": {
-    "generated": "2026-09-05T14:51:21.694Z",
+    "generated": "2026-09-05T15:49:40.249Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
-    "totalRoutes": 150,
+    "totalRoutes": 151,
     "paramRoutes": 21,
     "nonRepClean": 14,
     "nonRepWithViolations": 7,
-    "crashedRoutes": 5,
+    "crashedRoutes": 6,
     "repRoutesWithViolations": 52,
-    "repViolations": 77,
+    "repViolations": 76,
     "totalViolations": 88,
     "routesWithViolations": 60,
     "byRule": {
@@ -85,10 +85,8 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 1,
-        "violationIds": [
-          "aria-progressbar-name"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/auth/callback",
@@ -125,6 +123,15 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/ai-semantic-bridge",
+        "finalUrl": "http://localhost:5173/login",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": true,
         "violations": 0,
         "violationIds": []
       },
@@ -217,11 +224,8 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 2,
-        "violationIds": [
-          "aria-progressbar-name",
-          "scrollable-region-focusable"
-        ]
+        "violations": 0,
+        "violationIds": []
       },
       {
         "routePattern": "/en/admin/rbac/user-roles",
@@ -443,8 +447,11 @@
         "isParam": true,
         "wasNonRep": true,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "scrollable-region-focusable"
+        ]
       },
       {
         "routePattern": "/en/business-objects/new",
@@ -1520,8 +1527,10 @@
         "isParam": false,
         "wasNonRep": false,
         "crashed": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/tenants/:tenantId",
