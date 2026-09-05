@@ -76,6 +76,18 @@ function getTenantHeadersInternal(): Record<string, string> {
  *   const response = await apiFetch('/api/validation-rules?...');
  *   const data = await apiFetch('/api/semantic-terms', { method: 'POST', body: JSON.stringify(...) });
  */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly statusText: string,
+    public readonly response: Response
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 export async function apiFetch(
   input: RequestInfo | URL,
   init: RequestInit = {}
@@ -94,7 +106,31 @@ export async function apiFetch(
     }
   });
 
-  return fetch(input, { ...init, headers });
+  const response = await fetch(input, { ...init, headers });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new ApiError(
+      `API request failed: ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`,
+      response.status,
+      response.statusText,
+      response
+    );
+  }
+
+  return response;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly statusText: string,
+    public readonly response: Response
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
 /**

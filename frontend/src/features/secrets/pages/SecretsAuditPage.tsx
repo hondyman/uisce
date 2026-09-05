@@ -57,14 +57,20 @@ export default function SecretsAuditPage({ tenantId }: SecretsAuditPageProps) {
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['audit-logs', tenantId],
-    queryFn: () => {
+    queryFn: async () => {
       const params = new URLSearchParams({ tenant_id: tenantId, limit: '100', offset: '0' });
-      return apiFetch(`/api/rest/secrets/audit-logs?${params}`).then(r => r.json());
+      const response = await apiFetch(`/api/admin/tenants/audit-logs?${params}`);
+      if (!response.ok) {
+        throw new Error(`Audit log fetch failed: ${response.status} ${response.statusText}`);
+      }
+      return response.json();
     },
     enabled: !!tenantId,
   });
 
-  const logs: AuditLog[] = data || [];
+  const logs: AuditLog[] = Array.isArray(data)
+    ? data
+    : (data?.data ?? []);
 
   const filteredLogs = logs.filter((log) => {
     if (actionFilter !== 'all' && log.action !== actionFilter) return false;
