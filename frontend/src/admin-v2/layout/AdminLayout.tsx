@@ -60,7 +60,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </div>
       </aside>
 
-      <main className="main-content">
+      <main id="main-content" tabIndex={-1} className="main-content">
         {children}
       </main>
     </div>

@@ -2,6 +2,14 @@ import { test } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import {
+  E2E_JWT,
+  KC_USER,
+  E2E_USER,
+  EXPIRES_AT,
+  getKeycloakToken,
+  FALLBACK_JWT,
+} from './auth';
 
 /**
  * Phase 0 axe baseline. Run against the default-locale URLs (locales all use
@@ -12,53 +20,11 @@ import path from 'node:path';
  *
  * Auth: each route seeds localStorage before navigation (see auth helpers below).
  * Negative control: E2E_JWT=garbage triggers the auth guard → test fails.
- * Non-empty-main: every route must render a non-empty <main> landmark.
+ * Non-empty-main: every route must render a <main> landmark.
  *
  * SCOPE NOTE: /api-studio is excluded — Vite dev server returns 404 for this
  * path (pre-existing bug; fix the Vite routing first, then re-add).
  */
-
-const E2E_JWT = process.env.E2E_JWT;
-const KC_USER = process.env.E2E_KC_USER;
-const KC_PASS = process.env.E2E_KC_PASS;
-const KC_ISSUER = process.env.E2E_KC_ISSUER ?? 'https://100.84.50.65:8443/realms/uisce';
-
-const EXPIRES_AT = Date.now() + 86400 * 1000;
-
-const E2E_USER = {
-  id: '00000000-0000-0000-0000-000000000001',
-  email: 'a11y@example.com',
-  name: 'A11y Fixture',
-  role: 'admin',
-  organization: 'E2E Test',
-  permissions: [],
-  is_active: true,
-  roles: ['admin', 'user'],
-  is_core_admin: true,
-  isCoreAdmin: true,
-  is_admin: true,
-  is_global_admin: true,
-};
-
-const FALLBACK_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
-
-async function fetchKeycloakToken(): Promise<string> {
-  if (!KC_USER || !KC_PASS) throw new Error('E2E_KC_USER / E2E_KC_PASS not set');
-  const res = await fetch(`${KC_ISSUER}/protocol/openid-connect/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'password',
-      username: KC_USER,
-      password: KC_PASS,
-      client_id: 'semlayer-frontend',
-      scope: 'openid profile email',
-    }),
-  });
-  if (!res.ok) throw new Error(`Keycloak token fetch failed: ${res.status} ${await res.text()}`);
-  const data = await res.json() as { access_token: string };
-  return data.access_token ?? (() => { throw new Error('No access_token in Keycloak response'); })();
-}
 
 const LOCALE = 'en';
 
@@ -251,7 +217,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
     if (E2E_JWT) {
       jwt = E2E_JWT;
     } else if (KC_USER) {
-      jwt = await fetchKeycloakToken();
+      jwt = await getKeycloakToken();
     } else {
       console.warn('[baseline] using fallback fake JWT — set E2E_JWT or E2E_KC_USER+E2E_KC_PASS');
       jwt = FALLBACK_JWT;
@@ -295,6 +261,11 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         type: 'axe-summary',
         description: `${results.violations.length} violations`,
       });
+
+      const mainCount = await page.locator('main, [role="main"]').count();
+      if (mainCount === 0) {
+        throw new Error(`no <main> landmark on ${route} — page may have failed to render`);
+      }
     });
   }
 });

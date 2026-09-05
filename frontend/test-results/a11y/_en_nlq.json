@@ -40,9 +40,9 @@
           "all": [],
           "none": [],
           "impact": "serious",
-          "html": "<div class=\"MuiBox-root css-oa138a\"><div class=\"nlq-page\"><div class=\"nlq-warning\"><h2>⚠️ Tenant Scope Required</h2><p>Please select a tenant and datasource to use the Natural Language Q&amp;A feature.</p></div></div></div>",
+          "html": "<main class=\"MuiBox-root css-2tkce1\" id=\"main-content\" tabindex=\"-1\"><div class=\"nlq-page\"><div class=\"nlq-warning\"><h2>⚠️ Tenant Scope Required</h2><p>Please select a tenant and datasource to use the Natural Language Q&amp;A feature.</p></div></div></main>",
           "target": [
-            ".css-oa138a"
+            "#main-content"
           ],
           "failureSummary": "Fix any of the following:\n  Element should have focusable content\n  Element should be focusable"
         }

@@ -28,7 +28,7 @@ function App() {
           <RouteBlockerProvider>
             <ScopeProvider>
               {!hideNav && <MainNavigation />}
-              <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
+              <Box component="main" id="main-content" tabIndex={-1} sx={{ flexGrow: 1, overflow: 'auto', outline: 'none' }}>
                 <LocaleShell />
               </Box>
             </ScopeProvider>

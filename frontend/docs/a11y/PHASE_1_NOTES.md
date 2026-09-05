@@ -509,9 +509,9 @@ The auth guard now fully operational. Remaining work: expand route list to full
 
 ### Update 2026-09-05 (authoritative serial run — workers=1, 6.4 min)
 
-**Baseline results (151 routes, 21 param routes):**
-- 63 routes with violations / 88 clean (representative denominator: 130)
-- 88 total violations across 11 rules
+**Baseline results (151 routes, 21 param routes, representative denominator: 130):**
+- Representative: **88 violations** across **57 routes** with violations
+- Total (incl. 6 non-rep error-state pages): 88 violations across 63 routes
 
 | Rule | Count | Impact |
 |------|-------|--------|
@@ -527,11 +527,15 @@ The auth guard now fully operational. Remaining work: expand route list to full
 | aria-command-name | 2 | serious |
 | listitem | 1 | serious |
 
-> Concurrency variance is real: five runs at --workers=4 produced 85/91/95/92/94.
-> Only the serial --workers=1 run is used for sizing. Numbers above are from that run.
+> Concurrency variance is real: five runs at --workers=4 produced 85/91/95/92.
+> Two serial runs at --workers=1 produced 94 (5.3 min) and 88 (6.4 min).
+> The 6-point delta is from timing (loading states vs. axe scan). Only the
+> serial run is used for sizing; counts are treated as ±N until stabilized.
+> Wait-stabilization (waitForLoadState('networkidle') or data-dependent selector)
+> is Phase 2 task zero — one re-baseline after landing it, then the ratchet holds.
 
 **Param route accounting:** 21 param routes. 15 non-rep clean (literal `:param` → catch-all);
-6 non-rep with violations (also caught redirect, so `finalUrl` confirms non-rep).
+6 non-rep with violations (redirected to error state; `finalUrl` confirms non-rep).
 Effective representative denominator: 130 routes.
 
 **Artifacts:**
@@ -540,20 +544,22 @@ Effective representative denominator: 130 routes.
   Committed to git — durable.
 - Aggregate: `frontend/docs/a11y/baseline-2026-09-05.json` (durable, never touched
   by Playwright). Updated by `scripts/aggregate-a11y-baseline.mjs`.
+  Fields: `repViolations`, `repRoutesWithViolations` separate non-rep error pages.
 - Aggregate script: `scripts/aggregate-a11y-baseline.mjs` — derives `isParam` from `':'`
   in routePattern; derives non-rep from `isParam && (clean || finalUrl redirect)`.
-  Passes excluded from per-route JSONs.
+  Backwards-compatible with prior JSON formats.
 
 **Key spec changes:**
 - Auth: throws at setup if E2E_KC_USER is set but token fetch fails. Fallback to
   fake JWT only when neither E2E_JWT nor E2E_KC_USER is set (with console.warn).
+  Token is now memoized once per crawl run (was: 151 POSTs; now: 1 POST).
 - JSON format: passes stripped; only routePattern, finalUrl, violations, violationIds.
-- Non-empty-main guard removed: too strict — many real pages use other landmarks.
+- `<main>` landmark: App.tsx now renders `<Box component="main" id="main-content" tabIndex={-1}>`
+  as the skip-link target. AdminLayout.tsx also updated. Guard restored with broadened
+  selector (`main, [role="main"]`) to catch pages that use `role="main"` directly.
+- Credential decision: Keycloak `uisce` realm is a disposable dev instance.
+  Rotation: N/A for disposable dev realm. No literal credential values in tracked files.
 
-**Credential decision:** Keycloak `uisce` realm is a disposable dev instance.
-The Keycloak admin credential (master realm) is present in this realm's setup defaults.
-Rotation: N/A for disposable dev realm. Production Keycloak must use a rotated credential.
-
-**Phase 1 status:** Phase 0 complete. Baseline of record: `a380c1836` (amended).
-Phase 2 (component-level triage) pending — button-name 24 critical, progressbar 18 serious,
-input-name 14 serious, label 7 critical, then the tail.
+**Phase 1 status:** Phase 0 complete. Baseline of record: `65e33ce41`.
+Phase 2 (component-level triage) pending — button-name 24 critical, progressbar 18–22
+(post-stabilization), input-name 14 serious, label 7 critical, then the tail.

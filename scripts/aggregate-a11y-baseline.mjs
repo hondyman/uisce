@@ -38,6 +38,8 @@ const result = {
     paramRoutes: 0,
     nonRepClean: 0,
     nonRepWithViolations: 0,
+    repRoutesWithViolations: 0,
+    repViolations: 0,
     totalViolations: 0,
     routesWithViolations: 0,
     byRule: {},
@@ -76,6 +78,8 @@ for (const file of files) {
   if (wasNonRep && violations.length > 0) result.metadata.nonRepWithViolations++;
   result.metadata.totalViolations += violations.length;
   if (violations.length > 0) result.metadata.routesWithViolations++;
+  if (!wasNonRep && violations.length > 0) result.metadata.repRoutesWithViolations++;
+  if (!wasNonRep) result.metadata.repViolations += violations.length;
 
   for (const v of violations) {
     result.metadata.byRule[v.id] = result.metadata.byRule[v.id] ||
@@ -102,5 +106,6 @@ console.log(`Written: ${outputPath}`);
 console.log(`  Routes: ${result.metadata.totalRoutes}`);
 console.log(`  Param routes: ${result.metadata.nonRepClean} clean non-rep + ${result.metadata.nonRepWithViolations} non-rep w/violations / ${result.metadata.paramRoutes} total`);
 console.log(`  Representative denominator: ${result.metadata.totalRoutes - result.metadata.nonRepClean - result.metadata.nonRepWithViolations}`);
-console.log(`  Violations: ${result.metadata.totalViolations} across ${result.metadata.routesWithViolations} routes`);
+console.log(`  Representative violations: ${result.metadata.repViolations} across ${result.metadata.repRoutesWithViolations} routes`);
+console.log(`  Total violations (incl. non-rep): ${result.metadata.totalViolations} across ${result.metadata.routesWithViolations} routes`);
 console.log(`  Rules: ${Object.keys(result.metadata.byRule).length}`);

@@ -1,27 +1,29 @@
 {
   "metadata": {
-    "generated": "2026-09-05T01:28:18.386Z",
+    "generated": "2026-09-05T01:55:39.358Z",
     "tool": "axe-core playwright",
     "browser": "chromium",
     "totalRoutes": 151,
     "paramRoutes": 21,
-    "nonRepClean": 15,
-    "nonRepWithViolations": 6,
-    "totalViolations": 88,
-    "routesWithViolations": 63,
+    "nonRepClean": 14,
+    "nonRepWithViolations": 7,
+    "repRoutesWithViolations": 59,
+    "repViolations": 81,
+    "totalViolations": 92,
+    "routesWithViolations": 66,
     "byRule": {
-      "button-name": {
-        "count": 24,
-        "impact": "critical",
-        "description": "Ensure buttons have discernible text"
-      },
       "aria-progressbar-name": {
-        "count": 18,
+        "count": 23,
         "impact": "serious",
         "description": "Ensure every ARIA progressbar node has an accessible name"
       },
+      "button-name": {
+        "count": 23,
+        "impact": "critical",
+        "description": "Ensure buttons have discernible text"
+      },
       "aria-input-field-name": {
-        "count": 14,
+        "count": 15,
         "impact": "serious",
         "description": "Ensure every ARIA input field has an accessible name"
       },
@@ -50,15 +52,15 @@
         "impact": "serious",
         "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies"
       },
-      "aria-prohibited-attr": {
-        "count": 3,
-        "impact": "serious",
-        "description": "Ensure ARIA attributes are not prohibited for an element's role"
-      },
       "aria-command-name": {
         "count": 2,
         "impact": "serious",
         "description": "Ensure every ARIA button, link and menuitem has an accessible name"
+      },
+      "aria-prohibited-attr": {
+        "count": 2,
+        "impact": "serious",
+        "description": "Ensure ARIA attributes are not prohibited for an element's role"
       },
       "listitem": {
         "count": 1,
@@ -318,8 +320,11 @@
         "finalUrl": "http://localhost:5173/en/optimization?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 2,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/audit",
@@ -447,8 +452,10 @@
         "finalUrl": "http://localhost:5173/en/catalog/ai-suggestions?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/catalog/api-inventory",
@@ -474,8 +481,10 @@
         "finalUrl": "http://localhost:5173/en/catalog/business-terms/:id?",
         "isParam": true,
         "wasNonRep": true,
-        "violations": 0,
-        "violationIds": []
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
       },
       {
         "routePattern": "/en/catalog/edge-types",
@@ -563,8 +572,9 @@
         "finalUrl": "http://localhost:5173/en/client-portal/workflow-studio?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 2,
+        "violations": 3,
         "violationIds": [
+          "aria-progressbar-name",
           "button-name",
           "scrollable-region-focusable"
         ]
@@ -574,10 +584,9 @@
         "finalUrl": "http://localhost:5173/en/core/abbreviations?",
         "isParam": false,
         "wasNonRep": false,
-        "violations": 2,
+        "violations": 1,
         "violationIds": [
-          "aria-prohibited-attr",
-          "button-name"
+          "aria-progressbar-name"
         ]
       },
       {
