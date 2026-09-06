@@ -53,25 +53,16 @@ jobs:
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Vet
+    - name: Build & Vet
       working-directory: backend
       run: |
-        # Vet is the durable gate: type-checks every package and catches signature
-        # drift (e.g. SecurityContextDeps migration), preventing tests from running
-        # blind through compilation failures.
-        #
-        # 'go build ./...' is NOT included as a step because segmentio/parquet-go
-        # v0.0.0-20230712 (used by cmd/audit-consumer and transitively by cmd/server
-        # and cmd/worker through internal/audit/iceberg) references the internal Go
-        # runtime symbol runtime.aeskeysched, which was relocated/removed in
-        # Go 1.21+. The symbol exists in Go 1.20.x and earlier. Until parquet-go is
-        # bumped or replaced with a fork, the full 'go build' gate cannot be run
-        # on CI's Go 1.25.14 toolchain. Local development on Go 1.26.3 works
-        # because the symbol was exposed under a different mechanism.
-        #
-        # Adding 'go build' here on first run exposed this pre-existing issue
-        # (proof-of-value for the gate). Filing the underlying dep bump as a
-        # separate workstream.
+        # Build every package and vet the result. This is the durable gate:
+        # - go build ./... catches type/syntax/link errors across the whole graph
+        # - go vet ./... catches correctness bugs the compiler can't see
+        #   (the WithOptimizer race condition this engagement found, the copylock
+        #   trap, etc.)
+        # Together they prevent 'tests running blind through compilation failures'.
+        go build ./...
         go vet ./...
 
     - name: Run Tests

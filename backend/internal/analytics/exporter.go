@@ -8,7 +8,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 type AuditExporter struct {

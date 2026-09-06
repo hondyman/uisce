@@ -13,7 +13,7 @@ import (
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	kafka "github.com/segmentio/kafka-go"
-	parquet "github.com/segmentio/parquet-go"
+	parquet "github.com/parquet-go/parquet-go"
 )
 
 type IcebergSinkConsumer struct {
