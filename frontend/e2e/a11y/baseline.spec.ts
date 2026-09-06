@@ -206,7 +206,7 @@ function authStorage(jwt: string) {
     auth_token: jwt,
     auth_user: JSON.stringify(E2E_USER),
     auth_expires_at: EXPIRES_AT.toString(),
-    selected_tenant: JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', display_name: 'Dev Tenant' }),
+    selected_tenant: JSON.stringify({ id: '99e99e99-99e9-49e9-89e9-99e99e99e999', display_name: 'Northwind Traders' }),
     appLocale: LOCALE,
   };
 }
@@ -236,7 +236,9 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
     // This is the signature of binary/DB mismatch; past crawls completed green on it.
     // 401 = bad auth token — hard fail immediately.
     // 403/404 = tenant or routing problem — try other endpoints.
-    const preflightPaths = ['/api/access/scopes', '/api/tenant/scope'];
+    // /api/auth/me: region-exempt auth endpoint, proves JWT valid + user exists.
+    // /api/v1/schedules/: tenant-scoped data endpoint, proves tenant context works.
+    const preflightPaths = ['/api/auth/me', '/api/v1/schedules/'];
     let lastError = '';
     for (const p of preflightPaths) {
       try {
