@@ -56,5 +56,5 @@ func main() {
 	for i, f := range res.CashFlows {
 		fmt.Printf("  [%d] %s | %-14s | $%12.2f\n", i+1, f.Date.Format("2006-01-02"), f.Type, f.Amount)
 	}
-	fmt.Println("=======================================================\n")
+	fmt.Println("=======================================================")
 }

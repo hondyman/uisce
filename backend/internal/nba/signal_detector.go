@@ -342,7 +342,6 @@ func (s *SignalDetector) detectPortalDisengagement(ctx context.Context, tenantID
 	// Implementation similar to portfolio signals...
 	// Returning empty for brevity
 	return []Signal{}, nil
-	return []Signal{}, nil
 }
 
 // detectLongTimeSinceLastMeeting finds clients with no recent meetings

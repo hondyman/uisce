@@ -122,8 +122,8 @@ func TestSweeper_LogErrorContinues(t *testing.T) {
 	// Easier: count the order via loggedIDs after the call.
 	s.sweepOnce(context.Background())
 
-	_ = firstCall
-	_ = secondCall
+	_ = firstCall.Load()
+	_ = secondCall.Load()
 	if got := fake.logCalls.Load(); got != 2 {
 		t.Errorf("expected both LogExpired calls despite first failing, got %d", got)
 	}
