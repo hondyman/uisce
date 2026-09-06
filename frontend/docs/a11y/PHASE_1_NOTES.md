@@ -69,6 +69,37 @@ button-name 0, aria-prohibited-attr 0, standing ≈ 40–53:
 3. `/api/access/scopes` not registered in SetupRouter
 4. `/api/tenant/scope` routing: path segment parsed as tenant ID → 403
 
+All four fixed in `fix/backend-unblock-a11y` (commits d058a3884, 33c108085, cefcb4e31, aec63412f).
+
+## Run Book
+
+### Starting the backend
+```bash
+cd backend
+source .env
+JWT_SECRET=development-secret-key-12345 ./uisce-server
+```
+
+### Running the e2e crawl
+```bash
+cd frontend
+# Preferred: scoped CA trust
+NODE_EXTRA_CA_CERTS=~/.uisce/certs/ca.crt \
+  KC_USER=john.b@example.com KC_PASS=ttXTbgMhqrW2aUOEfJCg \
+  npx playwright test e2e/a11y/baseline.spec.ts --project=chromium --workers=1
+
+# Fallback: disable TLS verification (Keycloak self-signed host cert)
+NODE_TLS_REJECT_UNAUTHORIZED=0 \
+  KC_USER=john.b@example.com KC_PASS=ttXTbgMhqrW2aUOEfJCg \
+  npx playwright test e2e/a11y/baseline.spec.ts --project=chromium --workers=1
+```
+
+### Why TLS handling
+Keycloak is at `https://100.84.50.65:8443/realms/uisce` with a self-signed
+host certificate. `NODE_EXTRA_CA_CERTS` scopes trust to the CA cert only.
+`NODE_TLS_REJECT_UNAUTHORIZED=0` disables TLS verification globally — use only
+if the CA approach fails (some self-signed setups need the host cert, not the CA).
+
 ## PR #11 — Merge
 
 | Date | Event | Notes |
