@@ -40,6 +40,15 @@ on:
       - 'frontend/**'
       - 'scripts/a11y-ratchet.mjs'
 
+# Cancel superseded runs of the same workflow on the same ref — without
+# this, every frontend-touching push piles up another queued/failed
+# "no matching runner" run, which makes the failure surface noisy and
+# pushes toward "just disable the workflow." The fail-loud is still
+# loud; we just don't shout it 200 times while waiting for the runner.
+concurrency:
+  group: a11y-ratchet-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   a11y-ratchet:
     name: A11y Ratchet Gate
