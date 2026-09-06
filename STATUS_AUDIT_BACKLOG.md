@@ -824,3 +824,53 @@ of magnitude is now visible (top 10 files × ~30 sites each is
 where the work concentrates), and the migration surface is
 substantial — calls for a phased rollout, not a flag flip.
 
+
+### BYPASSRLS — Phase 2 file inventory (concentrated)
+
+The 2,534 raw non-tx bare-query sites in `backend/internal` cluster
+heavily. Top 20 files:
+
+```
+ 102 backend/internal/ops/store_postgres.go
+  71 backend/internal/metadata/businessobject_service.go
+  49 backend/internal/altinv/advisor_activities.go
+  35 backend/internal/api/glossary_handler.go
+  33 backend/internal/analytics/semantic_mapping_service.go
+  31 backend/internal/api/bp_rbac_handlers.go
+  29 backend/internal/wealth/client_portal_db.go
+  28 backend/internal/api/marketplace_integration_handlers.go
+  27 backend/internal/rulefabric/handler.go
+  27 backend/internal/analytics/term_relationship_service.go
+  23 backend/internal/reporting/repository.go
+  22 backend/internal/handlers/model_catalog_handler.go
+  22 backend/internal/audit/explorer_repository.go
+  21 backend/internal/services/business_object_service.go
+  21 backend/internal/api/bp_notification_handlers.go
+  21 backend/internal/api/api_dispatcher.go
+  21 backend/internal/altinv/service.go
+  20 backend/internal/handlers/timeout_triggers_versioned_handler.go
+  19 backend/internal/analytics/semantic_mapping_wizard_helpers.go
+  18 backend/internal/discovery/api.go
+```
+
+**Phase 2 actionable starting points** (in priority order):
+
+1. **Repository patterns** (`reporting/repository.go`,
+   `audit/explorer_repository.go`) — these are typically the
+   cleanest targets: methods can accept a tx-scoped `*sqlx.Tx`
+   via parameter, leaving callers to opt in. Once a repo
+   signature is tx-aware, all its bare-query callers become
+   addressable through helper wrap. ~45 sites in 2 files.
+2. **Service-layer helpers** (`metadata/businessobject_service.go`,
+   `analytics/semantic_mapping_service.go`) — these often wrap
+   reads inside their own `BeginTx`, so adding `set_config` to
+   those existing txs is mostly mechanical. ~104 sites in 2 files.
+3. **HTTP handler paths** (`api/glossary_handler.go`,
+   `api/bp_rbac_handlers.go`, `api/api_dispatcher.go`) — handlers
+   are entry points and need a single tx-wrapping pattern per
+   request. The `SetRLSContext` middleware already exists; the
+   wrap is one shared request-scoped helper. ~96 sites in 3 files.
+
+This still leaves work but gives the design conversation a
+**concrete start point** rather than "2,534 sites."
+
