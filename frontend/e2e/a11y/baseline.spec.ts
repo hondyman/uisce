@@ -212,33 +212,59 @@ function authStorage(jwt: string) {
 }
 
 test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
-  // Protocol closure #2: health pre-flight — verify the app accepts the auth+tenant
+  // Protocol closure #2: health pre-flight — verify app accepts auth+tenant
   // before spending 6 minutes on a crawl that will measure error boundaries.
-  // Auth-OK (Keycloak 200) and app-accepts-tenant (API 200) are different checks.
+  // Keycloak-OK (token fetch 200) and app-OK (API 200) are different checks.
   test.beforeAll(async ({ request }) => {
     const backendURL = process.env.BASE_URL?.replace(':5173', ':8080') ?? 'http://localhost:8080';
+    // Fetch token here in beforeAll (beforeEach runs after beforeAll — can't stash from there).
+    // getKeycloakToken() is memoized, so this is free after the first call.
+    let jwt: string;
+    if (E2E_JWT) {
+      jwt = E2E_JWT;
+    } else if (KC_USER) {
+      jwt = await getKeycloakToken();
+    } else {
+      throw new Error(
+        '[baseline] Neither E2E_JWT nor E2E_KC_USER is set. ' +
+        'A fake JWT produces vacuous-clean scans. ' +
+        'Set E2E_JWT (CI) or E2E_KC_USER+E2E_KC_PASS (local) to run a real crawl.',
+      );
+    }
+
+    // 500 = schema drift / broken app state — hard fail, don't try other endpoints.
+    // This is the signature of binary/DB mismatch; past crawls completed green on it.
+    // 401 = bad auth token — hard fail immediately.
+    // 403/404 = tenant or routing problem — try other endpoints.
     const preflightPaths = ['/api/access/scopes', '/api/tenant/scope'];
-    let preflightPassed = false;
+    let lastError = '';
     for (const p of preflightPaths) {
       try {
         const res = await request.fetch(`${backendURL}${p}`, {
-          headers: { Authorization: `Bearer ${globalThis.__A11Y_JWT__}` },
+          headers: { Authorization: `Bearer ${jwt}` },
         });
-        if (res.status() === 200) { preflightPassed = true; break; }
+        if (res.status() === 200) {
+          console.log(`[pre-flight] Auth + tenant verified OK (${p})`);
+          return; // pre-flight passed
+        }
         if (res.status() === 401) {
           throw new Error(`[pre-flight] Auth rejected — check E2E_JWT or E2E_KC_USER/E2E_KC_PASS. Status: ${res.status()}`);
         }
-        // 403/500/404 = tenant or app state problem, not auth — keep trying other endpoints
-      } catch {}
+        if (res.status() === 500) {
+          throw new Error(`[pre-flight] App returned 500 on ${p} — schema drift or DB mismatch. Status: ${res.status()}. Fix the backend before re-running.`);
+        }
+        // 403/404 — try next endpoint
+        lastError = `[pre-flight] ${p} → ${res.status()}`;
+      } catch (e: any) {
+        if (e.message.includes('[pre-flight]')) throw e; // already a pre-flight error
+        lastError = e.message;
+      }
     }
-    if (!preflightPassed) {
-      throw new Error(
-        `[pre-flight] App rejected auth+tenant on all pre-flight endpoints. ` +
-        `This crawl would measure error boundaries, not the app. ` +
-        `Fix the tenant/auth setup before re-running.`,
-      );
-    }
-    console.log('[pre-flight] Auth + tenant verified OK');
+    throw new Error(
+      `[pre-flight] App rejected auth+tenant on all pre-flight endpoints.\n` +
+      `  Last error: ${lastError}\n` +
+      `  This crawl would measure error boundaries, not the app. Fix the tenant/auth setup before re-running.`,
+    );
   });
 
   test.beforeEach(async ({ page, context }) => {
@@ -254,8 +280,6 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         'Set E2E_JWT (CI) or E2E_KC_USER+E2E_KC_PASS (local) to run a real crawl.',
       );
     }
-    // Stash JWT globally so beforeAll can use it for the pre-flight
-    globalThis.__A11Y_JWT__ = jwt;
     await context.addInitScript(
       (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },
       authStorage(jwt),
@@ -285,7 +309,6 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         finalUrl: page.url(),
         violations: results.violations,
         violationIds: results.violations.map((v: { id: string }) => v.id),
-        passes: results.passes,
         passCount: results.passes.length,
       };
 
