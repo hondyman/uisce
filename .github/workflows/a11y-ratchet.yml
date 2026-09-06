@@ -38,7 +38,11 @@ jobs:
         # has a `webServer` block calling `npm start` which doesn't exist in
         # package.json (we have `dev`). The a11y config uses `npm run dev` and
         # its webServer block manages the dev server lifecycle.
-        run: npx playwright test --config=playwright.a11y.config.ts --reporter=line
+        #
+        # Pin to baseline.spec.ts only — locale-matrix.spec.ts has its own auth/
+        # backend requirements and is a separate test concern, not part of the
+        # ratchet.
+        run: npx playwright test --config=playwright.a11y.config.ts e2e/a11y/baseline.spec.ts --reporter=line
 
       - name: Aggregate baseline
         working-directory: frontend
