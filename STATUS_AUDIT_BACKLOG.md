@@ -1298,3 +1298,96 @@ ALTER ROLE usice_app PASSWORD '<as set by operator>';
 If not, fine — these remain password-NULL until Phase 1 sets
 its own.
 
+
+### BYPASSRLS — 52-table verdict triage (Step 4, completed)
+
+Method: for each of the 52 RLS_OFF tables in the gap catalog,
+greppped `FROM tbl|INTO tbl|UPDATE tbl|JOIN tbl` against
+`backend/**/*.go` (excluding tests) to count SQL references, and
+`grep -rl "tbl" backend/ --include="*.go"` for file-tokenized
+references. Cross-referenced with migration file declarations
+to flag DEAD_TABLE candidates (declared but unreferenced).
+
+Verdict distribution (52 tables):
+
+```
+verdict               count   meaning
+─────────────────────────────────────────────────────────────────
+POLICY_NEEDED         14      tenant-scoped data; SQL paths reach it
+INSPECT_TOKEN_REFS    9       tokenized in code, but no clean FROM/INTO/UPDATE/JOIN; could be logging, string-match filter, etc.
+DEAD_TABLE            6       declared in a migration file, no Go refs; can be dropped or kept as-is
+REVIEW                23      no Go refs and no migration file; empty table (reltuples=-1); possibly legacy or staging artifact
+```
+
+POLICY_NEEDED (14) — these MUST get policies before the DSN flip
+on Phase 1, otherwise tenant data leaks:
+
+```
+bo_fields (32 SQL refs, 23 files) ← heaviest
+business_objects (89 SQL refs, 51 files) ← second heaviest
+bo_instances (8 SQL refs)
+business_object_relationships (5 SQL refs)
+tenant_api_connections (5 SQL refs)
+bo_subtypes (4 SQL refs)
+bp_performance_scores (4 SQL refs)
+business_object_bindings (2 SQL refs)
+bp_peer_group_members (2 SQL refs)
+bp_gap_analysis (1 SQL ref)
+data_pipeline_runs (1 SQL ref)
+field_bindings (1 SQL ref)
+relationship_bindings (1 SQL ref)
+simulation_scenarios (1 SQL ref)
+```
+
+INSPECT_TOKEN_REFS (9) — uncertain, needs more analysis:
+```
+agent_approval_tickets        business_object_fields
+cryptographic_audit_ledger     schema_drift_proposals
+shadow_replay_diffs           shadow_replay_jobs
+survivorship_rules           tenant_custom_attributes
+upgrade_exceptions
+```
+These show 1-4 file-tokenized references but no SQL operations. Each
+needs a manual 5-minute check: "is this a real SQL reference or a
+string-log error message?"
+
+DEAD_TABLE (6) — candidates for drop or no-op:
+```
+analytics_assets               catalog_change_requests
+financial_compliance_rules     financial_household_tax_lots
+financial_instrument_master    financial_posting_behaviors
+```
+Each has a migration file declaring it but zero Go references. Drop
+the tables (separate migration) or leave them in place since they're
+no-ops.
+
+REVIEW (23) — likely not real tables in code:
+```
+backend_engine_capabilities   bo_governance_events
+bo_term_metadata              catalog_node_deletion_log
+cube_core_models              cube_custom_models
+cube_model_builder_sessions   cube_preaggregation_configs
+cube_security_cache           cube_security_policies
+data_domains                  iceberg_identity_map
+navigation_menu_nodes         northwind_mutations_shadow
+okf_attested_calculations     page_registry
+physical_backend              platform_page_blueprints
+report_filters                report_share_audit_log
+report_shares                 scan_jobs
+user_tenant_access
+```
+22 of 23 have reltuples=-1 (empty). Possibly left over from a prior
+schema experiment. Either drop or label explicitly as "intentionally
+empty."
+
+## Phase-2 wrap list (data-derived, derived from this triage)
+
+Per the engagement's plan, Phase 2's wrap cluster inventory is
+filtered through the "tables that need policies" list. Sites in
+`backend/internal/{api,handlers,middleware}` that touch POLICY_NEEDED
+tables must be wrapped. Priority order:
+
+1. `business_objects` and `bo_fields` (combined 121 SQL refs across 74 files)
+2. `bo_instances`, `bo_subtypes`, `business_object_relationships`
+3. `tenant_api_connections`, all the `bp_*` tables
+

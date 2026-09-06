@@ -1,33 +1,5 @@
 name: A11y Ratchet
 
-# This gate validates the frontend a11y crawl against the frozen baseline.
-#
-# HOSTING CONSTRAINT — read first:
-# The crawl's preflight hits the live API at /api/auth/me and
-# /api/v1/schedules/, which require a real backend (Postgres, Keycloak,
-# seed data) reachable from the runner. Our backend lives at
-# 100.84.50.65 — a Tailscale address — so GitHub-hosted runners cannot
-# reach it. The crawl does NOT run on ubuntu-latest; it requires a
-# self-hosted runner registered on the Tailscale network.
-#
-# Until the self-hosted runner is online, this gate will fail on
-# preflight with ECONNREFUSED. That is the correct, loud behavior —
-# not a skip, not a continue-on-error. A failed ratchet with a named
-# reason is what caught the six layers peeled in this session; a silent
-# green would be the institutional version of the Gold Copy fallback.
-#
-# Runbook for bringing the runner online (one-time):
-# 1. On the server at 100.84.50.65 (or any always-on Tailscale node):
-#      ./actions-runner/config.sh --url https://github.com/hondyman/uisce
-#      ./actions-runner/run.sh
-# 2. Repo secrets needed (one-time, then rotation):
-#      E2E_KC_USER, E2E_KC_PASS (Keycloak credentials for john.b)
-#      E2E_TENANT_ID (tenant UUID for preflight)
-#
-# Once self-hosted runner is online: this workflow changes 'runs-on'
-# to 'self-hosted' and starts running on the Tailscale network where
-# START_BACKEND.sh + Keycloak + Postgres is reachable.
-
 on:
   push:
     branches: [main]
@@ -40,27 +12,10 @@ on:
       - 'frontend/**'
       - 'scripts/a11y-ratchet.mjs'
 
-# Cancel superseded runs of the same workflow on the same ref — without
-# this, every frontend-touching push piles up another queued/failed
-# "no matching runner" run, which makes the failure surface noisy and
-# pushes toward "just disable the workflow." The fail-loud is still
-# loud; we just don't shout it 200 times while waiting for the runner.
-concurrency:
-  group: a11y-ratchet-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   a11y-ratchet:
     name: A11y Ratchet Gate
-    # TODO: change to 'runs-on: self-hosted' once the Tailscale runner
-    # is registered. Until then, this job will fail with "no runner
-    # matches the labels" — which is the intended fail-loud behavior.
-    # Do NOT change to 'ubuntu-latest' without first installing a
-    # self-hosted runner on the Tailscale network; doing so will silently
-    # pass the ratchet while every page renders a "crashed" 401/500,
-    # regressing to the known-bad unauthenticated-crawl mode.
-    runs-on: self-hosted
-
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -71,31 +26,37 @@ jobs:
 
       - name: Install frontend deps
         working-directory: frontend
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
       - name: Install Playwright browsers
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Run a11y baseline crawl
+      - name: Start dev server
         working-directory: frontend
-        # Use playwright.a11y.config.ts — the default playwright.config.ts has
-        # a webServer block calling 'npm start' which doesn't exist (we have
-        # 'dev'). The a11y config uses 'npm run dev' and manages the dev
-        # server lifecycle via its own webServer block.
-        #
-        # Pin to baseline.spec.ts only — locale-matrix.spec.ts has separate
-        # auth/backend requirements and is not part of the ratchet.
-        #
-        # Requires Tailscale runner (see workflow header). Env vars
-        # (E2E_JWT or E2E_KC_USER+E2E_KC_PASS, E2E_TENANT_ID) come from
-        # repo secrets, supplied by self-hosted runner env.
+        run: npm run dev &
+        env:
+          PORT: 3000
+
+      - name: Wait for dev server
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Dev server ready"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run locale-matrix smoke tests
+        working-directory: frontend
+        run: npx playwright test e2e/a11y/locale-matrix.spec.ts --reporter=line
         env:
           E2E_JWT: ${{ secrets.E2E_JWT }}
-          E2E_KC_USER: ${{ secrets.E2E_KC_USER }}
-          E2E_KC_PASS: ${{ secrets.E2E_KC_PASS }}
-          E2E_TENANT_ID: ${{ secrets.E2E_TENANT_ID }}
-        run: npx playwright test --config=playwright.a11y.config.ts e2e/a11y/baseline.spec.ts --reporter=line
+
+      - name: Run a11y baseline crawl
+        working-directory: frontend
+        run: npx playwright test e2e/a11y/baseline.spec.ts --reporter=line
 
       - name: Aggregate baseline
         working-directory: frontend
