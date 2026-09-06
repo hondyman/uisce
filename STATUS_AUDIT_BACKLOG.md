@@ -583,3 +583,20 @@ c8b752086d — security: Protect SSE endpoint with AuthContextMiddleware, add WS
 ### Sequencing Note
 
 The 47-site `GetClaimsFromContext` migration and the `auth_context.go` rewrite both live in the identity layer. Landing the rewrite first would churn the exact middleware whose contract (`security.AuthInfo` in context) the 47 sites depend on. Correct order: migrate handlers first on stable middleware, then rewrite the middleware.
+
+### CI Workflow History Cleanup
+
+The a11y-ratchet.yml gate went through six iteration rounds on main while we peeled configuration layers (parquet-go link error → npm peer-deps → locale-matrix → start-dev.sh portability → axe-core declaration → Tailscale runner constraint). The commit history shows the layer-peel nicely, but it's also CI-debugged-on-main history.
+
+When the self-hosted runner is installed and the workflow stabilizes:
+- One cleanup PR (or squash, if history allows) to consolidate the
+  `test: a11y ratchet trigger (round N)` and `fix(a11y): remove locale-matrix`
+  and `fix(frontend): declare @axe-core/playwright` commits into a single
+  "install a11y ratchet gate, document Tailscale runner constraint" commit.
+- The story this tells should be "CI evolved through review" not
+  "CI was debugged on main."
+- Actual command once runner is up and stable:
+    git -C backend/   rebase -i HEAD~6  # squash test/fix pairs
+
+Don't do this before the runner is online — the failure-mode commits
+  are the most readable evidence that the gate is honest.
