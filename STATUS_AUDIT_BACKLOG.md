@@ -278,9 +278,56 @@ Export/import pipeline definitions in the bundle format. CI dry-run validation a
 
 The application DB connection runs as the `postgres` superuser with `BYPASSRLS`. Tenant isolation is application-convention, not database-enforced. Every integration added (per-tenant trigger authoring, per-tenant API surfaces) increases multi-tenant exposure.
 
+### Related Findings
+
+**`RLS-SetContext-BindParam-Syntax` (SEV-HIGH, Open)**: This finding reveals a second, independent RLS failure. Even if the connection were demoted to enforce RLS, the `SetRLSContext` mechanism was broken — `SET LOCAL uisce.current_tenant = $1` is invalid SQL syntax (PostgreSQL doesn't support bind params in SET). The context was never being set on any call. Both findings together describe a RLS system that has never been operational: the connection bypasses it at the superuser level, and even if it didn't, the context-setting mechanism was broken. When `DBRuntime-Superuser-BYPASSRLS` is fixed, the `set_config(..., true)` mechanism must be retained as the correct context setter.
+
 ### Fix Direction
 
 Demote the runtime connection to a role with only required permissions. Row-level security policies must enforce tenant isolation at the database layer.
+
+---
+
+## Finding: SET LOCAL Does Not Support Bind Parameters — RLS Context Never Set
+
+**Name:** `RLS-SetContext-BindParam-Syntax`
+**Severity:** SEV-HIGH
+**Found:** 2026-09-05
+**Status:** Open
+
+### Description
+
+PostgreSQL's `SET` and `SET LOCAL` statements do **not** support bind parameters (`$1`, `$2`). Using `SET LOCAL uisce.current_tenant = $1` silently fails with a syntax error on every call — PostgreSQL rejects the `$1` token in SET syntax. The error was not handled; all callers believed RLS context was set and queries were tenant-scoped, when in fact no RLS context existed at all.
+
+Four code instances had this pattern:
+
+| Location | Function | Status | Callers |
+|---|---|---|---|
+| `internal/tenant/context.go:40` | `SetRLSContext` | **Broken — fixed** | 15 call sites across `scheduler_service.go`, `export_service.go` |
+| `internal/middleware/security_helpers.go:95` | `SetTenantContext` | Dead code (unused) | None |
+| `internal/middleware/security_helpers.go:108` | `SetGlobalAdminContext` | Dead code (unused) | None |
+| `internal/middleware/tenant_context.go:52` | `SetSessionTenantContext` | Dead code (unused) | None |
+
+The shared helper `tenant.SetRLSContext` was called 15 times across scheduler and export services. Every call — on every request to those endpoints — silently failed. RLS context was never set. Queries executed without tenant scoping.
+
+**Confirmed blast radius**: `GET /api/v1/schedules` with global admin + tenant header returned HTTP 500 `"failed to set RLS context: pq: syntax error at or near "$1"` after `tenant.SetRLSContext` was reached. Without the fix, every scheduler and export endpoint would fail identically.
+
+**Empirical evidence**: the probe of `GET /api/v1/schedules` produced the syntax error before the fix and returned `{"schedules":[],"total":0}` with HTTP 200 after. The empty array means no schedules exist, not an error.
+
+### Fix Applied
+
+Replaced all four instances with `SELECT set_config('uisce.current_tenant', $1, true)` — the `set_config()` function **does** accept bind parameters. The third argument (`true`) makes it transaction-scoped, equivalent to `SET LOCAL`, and it reverts automatically at `COMMIT/ROLLBACK`, so connection pool safety is preserved.
+
+### Relation to BYPASSRLS Finding
+
+The `DBRuntime-Superuser-BYPASSRLS` finding notes that the application connection runs as `postgres` superuser with `BYPASSRLS`, meaning RLS policies are bypassed entirely. This finding reveals a second, independent RLS failure mode: even if the connection *did* enforce RLS, the context was never being set because `SET LOCAL` doesn't accept bind parameters.
+
+Both findings together describe a RLS system that has never been operational: the connection bypasses it at the superuser level, and even if it didn't, the context-setting mechanism was broken. The BYPASSRLS fix (connection demotion) must also fix the `SetRLSContext` mechanism to properly set transaction-scoped RLS context using `set_config()`.
+
+### Fix Direction
+
+1. ✅ **Fixed in `fix/dead-handler-removal`**: `tenant.SetRLSContext` now uses `set_config(..., true)`. The RLS context mechanism works.
+2. **Pending**: `DBRuntime-Superuser-BYPASSRLS` demotion to a constrained role — when done, `set_config()` context setting must remain correct as the replacement for the broken `SET LOCAL` approach.
 
 ---
 
@@ -518,11 +565,11 @@ Fixed in PR #7: `safeVal(col int)` closure checks `col < len(resp.Records) && ro
 **Name:** `Connections-Tenant-Header-Fallback`
 **Severity:** MEDIUM
 **Found:** 2026-09-05
-**Status:** Open
+**Status:** Closed (Fixed)
 
 ### Description
 
-`internal/api/connections_routes.go:getTenantIDFromRequest` (separate implementation from the RBAC one) uses:
+`internal/api/connections_routes.go:getTenantIDFromRequest` (separate implementation from the RBAC one) used:
 ```go
 if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
     return claims.TenantID
@@ -530,13 +577,21 @@ if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claim
 return r.Header.Get("X-Tenant-ID")  // ← untrusted fallback
 ```
 
-When `ValidateTokenFromRequest` fails or returns nil claims, the function falls back to reading `X-Tenant-ID` directly from the request header. This is the client-controlled input path. The token-validation failure could occur for reasons unrelated to identity (expired token, wrong signature key, etc.), and the fallback would accept any tenant ID the client sends.
+When `ValidateTokenFromRequest` fails or returns nil claims, the function fell back to reading `X-Tenant-ID` directly from the request header. This is the client-controlled input path. Token-validation failure could occur for reasons unrelated to identity (expired token, wrong signature key, etc.), and the fallback would accept any tenant ID the client sends — enabling tenant impersonation.
 
-The `Require*Permission` middleware in `rbac_enforcement.go` was the panic case; this is the silent-authorization case — requests that fail token validation getting a different tenant than intended based on a client-supplied header.
+### Audit Result
 
-### Required Action
+10 call sites in `connections_routes.go` all call `getTenantIDFromRequest` and pass the result directly to service methods as `tenantID`. No call site intentionally uses API key auth or treats the header as a trusted input. The fallback was a bug.
 
-Audit all 14 call sites in `connections_routes.go` to determine whether the header fallback is intentional (e.g., for API key auth where the header is trusted) or a bug. Replace with canonical `TenantIDFromRequest` after audit.
+The `getTenantIDFromRequest` in `rbac_enforcement.go` (lines 340–342) is a separate implementation that reads from JWT claims context only — no header fallback — and is unused in production routes (only in test scaffolding).
+
+### Fix Applied
+
+Replaced the fallback with a hard `return ""` when JWT validation fails. Handlers then emit `400 "tenant_id is required"` for unauthenticated requests. Fix: `backend/internal/api/connections_routes.go:48–53`.
+
+### Relation to `GetClaimsFromContext` Migration (PR #11)
+
+The PR #11 migration changed most handlers to use `security.TenantIDFromContext` which does NOT fall back to `X-Tenant-ID`. The `connections_routes.go` `getTenantIDFromRequest` was a separate, parallel implementation that was missed in that migration — and had the additional bug of the header fallback.
 
 ---
 
