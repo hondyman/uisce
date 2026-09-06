@@ -216,7 +216,9 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
   // before spending 6 minutes on a crawl that will measure error boundaries.
   // Keycloak-OK (token fetch 200) and app-OK (API 200) are different checks.
   test.beforeAll(async ({ request }) => {
-    const backendURL = process.env.BASE_URL?.replace(':5173', ':8080') ?? 'http://localhost:8080';
+    const backendURL = (process.env.BASE_URL ?? 'http://localhost:5173')
+      .replace(':5173', ':8080')
+      .replace('localhost', '127.0.0.1');
     // Fetch token here in beforeAll (beforeEach runs after beforeAll — can't stash from there).
     // getKeycloakToken() is memoized, so this is free after the first call.
     let jwt: string;
