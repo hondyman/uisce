@@ -68,3 +68,9 @@ button-name 0, aria-prohibited-attr 0, standing ≈ 40–53:
 2. john.b (`113d0169-4819-42ff-968b-778f72af79e9`) has no `iam.user_roles` entries
 3. `/api/access/scopes` not registered in SetupRouter
 4. `/api/tenant/scope` routing: path segment parsed as tenant ID → 403
+
+## PR #11 — Merge
+
+| Date | Event | Notes |
+|------|-------|-------|
+| 2026-09-05 | PR #11 merged (5a79892d63) | Dead handler cleanup + a11y instrumentation on main |
