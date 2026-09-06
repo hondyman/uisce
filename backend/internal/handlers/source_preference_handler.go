@@ -203,7 +203,14 @@ func (h *SourcePreferenceHandler) ResolveException(w http.ResponseWriter, r *htt
 // ---- Shared helpers ----
 
 func mustTenantID(r *http.Request) uuid.UUID {
-	id, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		panic("mustTenantID: no tenant in context")
+	}
+	id, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		panic("mustTenantID: invalid tenant ID: " + tenantIDStr)
+	}
 	return id
 }
 

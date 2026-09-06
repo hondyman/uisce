@@ -34,7 +34,12 @@ func (h *ExportHandlers) CreateExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
+		return
+	}
+	tenantNorm := normalizeTenantID(tenantIDStr)
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	var req models.CreateExportRequest
@@ -78,7 +83,12 @@ func (h *ExportHandlers) GetExportStatus(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
+		return
+	}
+	tenantNorm := normalizeTenantID(tenantIDStr)
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	export, err := h.exportService.GetExportStatus(ctx, exportID)
@@ -119,7 +129,12 @@ func (h *ExportHandlers) ListExports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
+		return
+	}
+	tenantNorm := normalizeTenantID(tenantIDStr)
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	exports, err := h.exportService.ListExports(ctx, jobID)
@@ -158,7 +173,12 @@ func (h *ExportHandlers) DownloadExport(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
+		return
+	}
+	tenantNorm := normalizeTenantID(tenantIDStr)
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	file, contentType, err := h.exportService.DownloadExport(ctx, exportID)
@@ -189,7 +209,12 @@ func (h *ExportHandlers) GetDownloadURL(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tenantNorm := normalizeTenantID(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
+		return
+	}
+	tenantNorm := normalizeTenantID(tenantIDStr)
 	ctx := setupAuthContext(r.Context(), tenantNorm)
 
 	var req models.DownloadURLRequest
