@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# `set -euo pipefail` is bash-only — guard it so this script can be invoked
+# via `sh`/`dash` (which Playwright's webServer block does on Ubuntu runners).
+if [ -n "${BASH_VERSION:-}" ]; then
+    set -euo pipefail
+fi
 
 # Script to ensure port 5173 is free and start the Vite dev server.
 # Works on macOS/Linux/Alpine.
