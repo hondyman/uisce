@@ -874,3 +874,131 @@ heavily. Top 20 files:
 This still leaves work but gives the design conversation a
 **concrete start point** rather than "2,534 sites."
 
+
+### BYPASSRLS — Evidence Run #3: FORCE One-Liners + Gap Catalog
+
+Run 2026-09-06.
+
+**Step 1 — The 14 FORCE one-liners (full set, ready to migrate):**
+
+```sql
+ALTER TABLE public.ai_model_backtest_reports    FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_model_registry            FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.calc_fields                  FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.impersonation_action_audit   FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.notification_outbox          FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.okf_concept_manifest         FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.platform_admin_audit         FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.portfolio_holdings           FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.role_abac_policy             FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.role_claim_extended          FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.rule_approvals               FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.semantic_term_tags           FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.template_usage               FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.tenants                      FORCE ROW LEVEL SECURITY;
+```
+
+Migration file: `backend/db/migrations/20260906_001_force_rls_tenant_bearing.up.sql`
+(initial scope restricted to the 4 `tenant_id`-bearing tables; the
+other 10 are deliberately admin/global — see gap catalog below.)
+
+**Step 2 — The 56-row gap list (NOT 77 — earlier estimate was high).**
+
+Source query:
+```sql
+SELECT c.relname,
+       c.relrowsecurity AS rls_on,
+       c.relforcerowsecurity AS force
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN information_schema.columns col
+  ON col.table_schema = n.nspname
+ AND col.table_name = c.relname
+ AND col.column_name = 'tenant_id'
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+  AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity)
+ORDER BY c.relname;
+```
+
+Returns 56 rows. Split by class:
+
+| Class | Count | Notes |
+|---|---|---|
+| `tenant_id` × RLS_OFF | 52 | Need per-table verdict: policy-needed, intentionally-open, or dead |
+| `tenant_id` × RLS_ON_UNFORCED | 4 | One-line `FORCE` each — done in migration above |
+
+**Per-table verdicts owed:**
+
+The 52 RLS_OFF + `tenant_id` tables need classification. Working
+hypothesis based on naming conventions (not yet verified by direct
+lookup of app code): most of these are inventory/data tables where
+tenant scoping was deferred, not deliberately global. Real
+verdicts require examining the AccessPatterns in
+`backend/internal/**/*service*.go`. This is a follow-up task,
+not something to do by table-name inference.
+
+**Step 3 — Enforcement probe (the moment-of-truth).**
+
+Designed to be run as `app_user` (has GRANTs) against
+`catalog_node` (1,867 rows under 2 tenants). The probe was NOT
+executed in this session because:
+- I have client-cert auth only as `postgres`, and `app_user`
+  authenticate via password
+- The `app_user` password is not in this session's context
+
+Probe design (run on the runner host, where the password is in
+`START_BACKEND.sh`):
+
+```sql
+-- Connect as app_user, password from secrets
+BEGIN;
+SET LOCAL uisce.current_tenant = '99e99e99-99e9-49e9-89e9-99e99e99e999';
+-- Tenant A has 1,416 rows in catalog_node; expect 1,416
+SELECT count(*) FROM catalog_node;
+-- Switch tenant mid-tx (SET LOCAL only lives until COMMIT)
+SET LOCAL uisce.current_tenant = '840750a5-6ff4-5b63-8930-f2d28cd580f3';
+-- Tenant B has 451 rows; expect 451
+SELECT count(*) FROM catalog_node;
+COMMIT;
+```
+
+**Expected results if RLS evaluates `current_setting('uisce.current_tenant')`:**
+- Tenant A → 1,416 rows visible
+- Tenant B → 451 rows visible
+- If both return 1,867 or 0: policy doesn't reference `uisce.current_tenant` (or doesn't use `current_setting`), and the 470 enabled policies need a content audit.
+
+**Step 4 — `temporal` decision (carve-with-audit path).**
+
+`rolsuper=true` means `temporal` bypasses RLS unconditionally. Two
+options:
+
+a) **Demote to non-superuser.** Risk: Temporal server expects
+   elevated access for its own system schemas (visibility,
+   executions, task_queues). Simply removing `SUPERUSER` will break
+   Temporal's internal queries. Need to enumerate the schemas and
+   GRANT explicitly.
+
+b) **Carve with audit-logging.** Keep `temporal` as superuser,
+   but route all its DB calls through a wrapped client that:
+   - issues `SELECT set_config('audit.bypass_rls', 'true', true);`
+     before every statement
+   - emits a structured audit log per call (caller identity,
+     query, timestamp, tenant from JWT context)
+
+Option (b) is **defensible for temporal specifically** because
+its use of superuser is structural (it polls/executes system
+schemas), but requires the audit envelope to ship first.
+
+**Status as of this session:**
+- FORCE migration committed (4 of 14); 10 deliberately deferred
+- 56-row gap catalog filed (this section)
+- Enforcement probe design filed, blocked on password
+- temporal decision: leaning (b), needs scheduler schema audit
+
+**Immediate next-step for the next session:**
+
+The enforcement probe is the only piece left before Phase 1
+verifies. Run it on the runner host (where `app_user` password
+resides). The result gates whether 470 enabled policies actually
+filter, or whether the existing policy work needs a content audit.
+
