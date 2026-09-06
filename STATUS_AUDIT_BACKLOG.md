@@ -1021,3 +1021,127 @@ All 4 tenant-bearing tables now have FORCE RLS. The
 table-owner bypass path is closed on those tables. The 10
 admin/global tables remain unforced by design.
 
+
+### BYPASSRLS — Naming Correction (3)
+
+Re: "10 deliberately deferred" from the previous update.
+
+The 10 unforced admin/global tables (tenants, platform_admin_audit,
+impersonation_action_audit, role_abac_policy, role_claim_extended,
+rule_approvals, template_usage, portfolio_holdings, ai_model_registry,
+ai_model_backtest_reports) are **NOT** "FORCE deferred." They are
+a different decision class entirely: forcing them would block
+legitimate cross-tenant admin operations UNLESS admin-path
+policies exist that allow ops/usice_ops roles to bypass.
+
+The correct phrasing:
+
+  - "needs admin-path policy design" — what role accesses these
+    tables for ops purposes, and does that policy exist yet?
+  - Without that policy, forcing makes them invisible to everyone
+    except `postgres`+`temporal` (the two superusers), which is
+    precisely the superuser dependency we're trying to retire.
+
+**Status:**
+
+```
+ ai_model_backtest_reports  | needs admin-path policy (admin read policy exists; admin write missing?)
+ ai_model_registry          | needs admin-path policy (model_read/write_policy exist; tenant role needs gates)
+ impersonation_action_audit | needs admin-path policy (audit-only, but reader needs `usice_ops`)
+ platform_admin_audit       | needs admin-path policy (admin-only audit, ops-readable)
+ portfolio_holdings         | needs admin-path policy (per-client data, but who cross-checks portfolios?)
+ role_abac_policy            | needs admin-path policy (global by design — but readers?)
+ role_claim_extended        | needs admin-path policy (same)
+ rule_approvals              | needs admin-path policy (admin-action — usice_ops approval flow exists)
+ template_usage              | needs admin-path policy
+ tenants                     | central registry, requires careful ops-role design
+```
+
+Each line is a documented verdict owed, not a deferral.
+
+
+### BYPASSRLS — Critical post-apply corrections
+
+Three corrections to last session's close-out, all worth more than their weight:
+
+**Correction 1 — Live risk assessment.**
+
+The FORCE migration `20260906_001_force_rls_tenant_bearing.up.sql` was
+applied manually via psql (not via the migration runner). Connection
+audit at apply time:
+```
+SELECT usename, application_name, client_addr, state, count(*) FROM
+pg_stat_activity WHERE datname='alpha' AND pid != pg_backend_pid()
+GROUP BY … ORDER BY count(*) DESC;
+       usename  | application_name | client_addr  | state | count
+       ----------+------------------+--------------+-------+-------
+       postgres |                  | 100.90.97.15 | idle  |     1
+```
+Only this session's psql was connected — no app, no worker. **The
+silent-empty failure mode did not fire because no live process touches
+those tables right now.** When the app restarts, it will hit FORCED
+tables and may break if `SetRLSContext` is not on the request path.
+The migration's correctness on a running system is unverified.
+
+**Migration runner directory drift.** Confirmed:
+- Runner (`internal/migrations/runner.go:33`) reads `db/migrations/*.up.sql`
+- 10 different `migrations` directories exist under backend/:
+    backend/migrations, backend/internal/database/migrations,
+    backend/internal/reporting/migrations, backend/internal/migrations,
+    backend/internal/api/migrations, backend/rule-engine/migrations,
+    backend/postgres/migrations, **backend/db/migrations** ← runner reads this,
+    backend/sql/migrations
+
+The runner uses the file's name + SHA-256 in `oms.migration_log`.
+My file `20260906_001_force_rls_tenant_bearing.up.sql` was applied
+manually; the migration_log doesn't have a row for it. On next
+runner pass:
+- File found (matches `.up.sql` pattern, ends with right suffix)
+- Hash differs from anything in migration_log
+- Statements run; `ALTER TABLE ... FORCE` is idempotent in
+  PostgreSQL (no-op if already forced), so re-application is safe
+- INSERT into migration_log on success
+
+**Net effect:** On next fresh environment, the FORCE migration will
+be applied as part of normal startup. On the live alpha DB, no
+runner redundancy risk.
+
+**However** the runner's content hash means: if the migration file's
+content ever changes after the row is in migration_log, the runner
+will SKIP re-applying it with a warning. Since the FORCE statements
+are idempotent, this is fine. But if I want to *also* force the
+10 admin/global tables later, that's a **new** migration file,
+not an edit to this one.
+
+**Correction 2 — Probe was self-blocked.**
+
+The user's note about password reset was correct in principle,
+but pg_hba rules prevent password auth from this client's IP:
+
+```
+ host    | {all}         | {all} | 127.0.0.1  | scram-sha-256
+ host    | {all}         | {all} | ::1        | scram-sha-256
+ hostssl | {all}         | {app_user} | 0.0.0.0    | cert
+```
+
+Password auth works only from 127.0.0.1 (scram-sha-256) — and from
+anywhere via cert. `app_user` only has cert auth. Cert auth is
+bound to the postgres user (the existing client cert CN is
+"postgres"). To probe as `app_user`, one of:
+
+1. SSH to a Tailscale node and run from there (uses the existing
+   cert auth or hits 127.0.0.1 with the password we just set)
+2. Generate a new client cert with CN=`app_user`
+3. Add a temporary pg_hba rule permitting password auth from this
+   IP for `app_user`
+
+None of these are appropriate session-only changes. The probe is
+inherently a "run on the Tailscale runner host" task — and that's
+exactly the runner host we need for Phase 1 canary anyway. So the
+probe runs concurrent with the Tailscale-runner installation,
+not before. The corrections are filed as P0 next session, not now.
+
+(Note: I did reset the password for `app_user` and `usice_app`
+briefly during this investigation. Both have been reset to NULL
+after — no temporary credentials remain in the DB.)
+
