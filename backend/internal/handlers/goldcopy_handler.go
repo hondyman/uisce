@@ -41,7 +41,11 @@ func (h *GoldCopyHandler) RegisterRoutes(r chi.Router) {
 // ListPortfolioMasters returns current portfolio master gold copies.
 // Query params: portfolio_type (optional)
 func (h *GoldCopyHandler) ListPortfolioMasters(w http.ResponseWriter, r *http.Request) {
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	portfolioType := r.URL.Query().Get("portfolio_type")
 
 	records, err := h.repo.ListCurrentPortfolioMasters(r.Context(), tenantID, portfolioType)
@@ -64,7 +68,11 @@ func (h *GoldCopyHandler) ListPortfolioMasters(w http.ResponseWriter, r *http.Re
 // Includes the full lineage for that record.
 func (h *GoldCopyHandler) GetPortfolioMaster(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	rec, err := h.repo.GetCurrentPortfolioMaster(r.Context(), tenantID, portfolioID)
 	if err != nil {
@@ -90,7 +98,11 @@ func (h *GoldCopyHandler) GetPortfolioMaster(w http.ResponseWriter, r *http.Requ
 // GetPortfolioLineage returns the lineage for a portfolio master record.
 func (h *GoldCopyHandler) GetPortfolioLineage(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	rec, err := h.repo.GetCurrentPortfolioMaster(r.Context(), tenantID, portfolioID)
 	if err != nil {
@@ -125,7 +137,11 @@ func (h *GoldCopyHandler) GetPortfolioLineage(w http.ResponseWriter, r *http.Req
 //	  ]
 //	}
 func (h *GoldCopyHandler) BuildGoldCopy(w http.ResponseWriter, r *http.Request) {
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	var body struct {
 		PortfolioID string                         `json:"portfolio_id"`
@@ -159,6 +175,6 @@ func (h *GoldCopyHandler) BuildGoldCopy(w http.ResponseWriter, r *http.Request) 
 
 // mustTenantIDGC safely extracts a tenant ID from context; falls back to a
 // deterministic nil-safe UUID so the handler doesn't panic in dev/test.
-func mustTenantIDGC(r *http.Request) uuid.UUID {
+func mustTenantIDGC(r *http.Request) (uuid.UUID, bool) {
 	return mustTenantID(r) // delegate to existing helper in the handlers package
 }

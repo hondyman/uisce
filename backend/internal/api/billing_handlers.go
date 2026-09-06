@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/billing"
-	)
+)
 
 // BillingHandlers provides HTTP handlers for the platform billing API.
 type BillingHandlers struct {
@@ -58,8 +58,10 @@ func (h *BillingHandlers) GetTenantBilling(w http.ResponseWriter, r *http.Reques
 	tenantID := chi.URLParam(r, "tenantId")
 	if tenantID == "" {
 		// Fall back to JWT claims
-		tenantID, ok = TenantIDFromRequest(r)
-		if !ok {
+		if tid, ok := TenantIDFromRequest(r); ok {
+			tenantID = tid
+		}
+		if tenantID == "" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}

@@ -9,7 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // =============================================================================
@@ -1279,7 +1279,7 @@ func (h *Handler) GetRuleStats(w http.ResponseWriter, r *http.Request) {
 // =============================================================================
 
 func getTenantID(r *http.Request) (uuid.UUID, error) {
-	tenantIDStr := jwtmiddleware.GetClaimsFromContext(r).TenantID
+	tenantIDStr := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
 	if tenantIDStr == "" {
 		tenantIDStr = r.Header.Get("X-Tenant-ID")
 	}

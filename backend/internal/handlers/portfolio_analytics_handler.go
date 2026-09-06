@@ -30,7 +30,11 @@ func (h *PortfolioAnalyticsHandler) RegisterAnalyticsRoutes(r chi.Router) {
 // GetDeepAnalytics returns the integrated portfolio-security metrics.
 func (h *PortfolioAnalyticsHandler) GetDeepAnalytics(w http.ResponseWriter, r *http.Request) {
 	portfolioID := chi.URLParam(r, "portfolioId")
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	analytics, err := h.svc.CalculatePortfolioAnalytics(r.Context(), tenantID, portfolioID)
 	if err != nil {
@@ -45,7 +49,11 @@ func (h *PortfolioAnalyticsHandler) GetDeepAnalytics(w http.ResponseWriter, r *h
 // Returns per-source performance stats for the SourceComparisonMatrix component.
 // Query params: business_object, semantic_term, account_type, region, as_of_date (optional)
 func (h *PortfolioAnalyticsHandler) GetSourceComparison(w http.ResponseWriter, r *http.Request) {
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	q := r.URL.Query()
 
 	bo := q.Get("business_object")
@@ -162,7 +170,11 @@ func (h *PortfolioAnalyticsHandler) GetSourceComparison(w http.ResponseWriter, r
 // ─── GET /api/v1/portfolio/analytics/trends ───────────────────────────────────
 // Returns 30-day confidence trend data for the primary source per semantic term.
 func (h *PortfolioAnalyticsHandler) GetConfidenceTrends(w http.ResponseWriter, r *http.Request) {
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	q := r.URL.Query()
 	bo := q.Get("business_object")
 	term := q.Get("semantic_term")

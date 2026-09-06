@@ -121,18 +121,6 @@ export async function apiFetch(
   return response;
 }
 
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly statusText: string,
-    public readonly response: Response
-  ) {
-    super(message);
-    this.name = 'ApiError';
-  }
-}
-
 /**
  * Axios-compatible API client (if using axios instead of fetch)
  */

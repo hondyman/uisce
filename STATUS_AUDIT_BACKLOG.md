@@ -496,8 +496,10 @@ Replaced each call site with the canonical `TenantIDFromRequest(r)` helper from 
 
 Handlers use `security.AuthInfoFromContext` directly (different package from `helpers.go`); api files use `TenantIDFromRequest` from same package.
 
-**15 dead files not migrated** (not registered in `SetupRouter` — confirm dead before deletion):
-`aso_handler.go`, `internal_event_handler.go`, `temporal_admin.go` (9 sites), `apistudio/odata.go`, `apistudio/runtime.go`, `clientportal/handlers.go`, `cbo_handler.go` (4), `observability_handler.go`, `pre_aggregation_handler.go`, `pricing_handler.go`, `rules_handler_impl.go` (2), `slo_handler.go`, `term_metadata_handler.go`, `reporting/handler.go`, `rulefabric/handler.go`
+**14 dead files deleted** (PR #11 — confirmed not registered in `SetupRouter`):
+`aso_handler.go`, `internal_event_handler.go`, `temporal_admin.go` (9 sites), `apistudio/runtime.go`, `clientportal/handlers.go`, `cbo_handler.go` (4), `observability_handler.go`, `pre_aggregation_handler.go`, `pricing_handler.go`, `rules_handler_impl.go` (2), `slo_handler.go`, `term_metadata_handler.go`, `rulefabric/handler.go`, `rulefabric/bo_policy_handler.go` (depended on dead handler.go).
+
+Note: `apistudio/odata.go` and `reporting/handler.go` were already absent from this tree.
 
 ### Audit Logs Empty Reply — Confirmed Panic, Fixed
 
@@ -507,7 +509,6 @@ Fixed in PR #7: `safeVal(col int)` closure checks `col < len(resp.Records) && ro
 
 ### Remaining
 
-- Dead handler file deletion (15 files, confirmed not registered in `SetupRouter`) — file removal PR pending
 - `apps/analytics-api`, `apps/genui-api`, `apps/orchestration-api` — own `JWTMiddleware` wiring, clean (confirmed by prior audit)
 
 ---

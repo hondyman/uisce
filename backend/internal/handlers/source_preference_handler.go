@@ -49,7 +49,12 @@ func (h *SourcePreferenceHandler) CreatePreference(w http.ResponseWriter, r *htt
 		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	p.TenantID = mustTenantID(r)
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	p.TenantID = tid
 	p.CreatedBy = mustUserID(r)
 	result, err := h.svc.CreatePreference(r.Context(), &p)
 	if err != nil {
@@ -74,8 +79,13 @@ func (h *SourcePreferenceHandler) GetPreference(w http.ResponseWriter, r *http.R
 }
 
 func (h *SourcePreferenceHandler) ListPreferences(w http.ResponseWriter, r *http.Request) {
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	q := r.URL.Query()
-	prefs, err := h.svc.ListPreferences(r.Context(), mustTenantID(r),
+	prefs, err := h.svc.ListPreferences(r.Context(), tid,
 		q.Get("business_object"), q.Get("semantic_term"), q.Get("region"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -141,8 +151,13 @@ func (h *SourcePreferenceHandler) PromoteStage(w http.ResponseWriter, r *http.Re
 // ---- Analytics Handlers ----
 
 func (h *SourcePreferenceHandler) GetAnalytics(w http.ResponseWriter, r *http.Request) {
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	q := r.URL.Query()
-	report, err := h.svc.GetAnalytics(r.Context(), mustTenantID(r),
+	report, err := h.svc.GetAnalytics(r.Context(), tid,
 		q.Get("business_object"), q.Get("semantic_term"), q.Get("region"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -169,7 +184,12 @@ func (h *SourcePreferenceHandler) CreateException(w http.ResponseWriter, r *http
 		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	e.TenantID = mustTenantID(r)
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	e.TenantID = tid
 	result, err := h.svc.CreateException(r.Context(), &e)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -179,7 +199,12 @@ func (h *SourcePreferenceHandler) CreateException(w http.ResponseWriter, r *http
 }
 
 func (h *SourcePreferenceHandler) ListExceptions(w http.ResponseWriter, r *http.Request) {
-	exceptions, err := h.svc.ListExceptions(r.Context(), mustTenantID(r), r.URL.Query().Get("status"))
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	exceptions, err := h.svc.ListExceptions(r.Context(), tid, r.URL.Query().Get("status"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -202,9 +227,16 @@ func (h *SourcePreferenceHandler) ResolveException(w http.ResponseWriter, r *htt
 
 // ---- Shared helpers ----
 
-func mustTenantID(r *http.Request) uuid.UUID {
-	id, _ := uuid.Parse(func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }())
-	return id
+func mustTenantID(r *http.Request) (uuid.UUID, bool) {
+	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	if !ok {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
 }
 
 func mustUserID(r *http.Request) uuid.UUID {

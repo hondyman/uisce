@@ -616,11 +616,12 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 
 // Debug endpoint to echo request headers and basic info — useful to verify Vite proxy forwards headers
 func (s *Server) debugProxyHeaders(w http.ResponseWriter, r *http.Request) {
+	tenantID, _ := TenantIDFromRequest(r)
 	resp := map[string]interface{}{
 		"path":   r.URL.Path,
 		"method": r.Method,
 		"headers": map[string]string{
-			"X-Tenant-ID":            func() string { tid, _ := TenantIDFromRequest(r); return tid }(),
+			"X-Tenant-ID":            tenantID,
 			"X-Tenant-Datasource-ID": r.Header.Get("X-Tenant-Datasource-ID"),
 			"Host":                   r.Host,
 		},
@@ -2695,7 +2696,11 @@ func (s *Server) startProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set tenant and datasource from headers
-	req.TenantID, _ = TenantIDFromRequest(r)
+	var ok bool
+	if req.TenantID, ok = TenantIDFromRequest(r); !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	req.DatasourceID = r.Header.Get("X-Tenant-Datasource-ID")
 
 	// If node_ids are provided, resolve them to schema/tables

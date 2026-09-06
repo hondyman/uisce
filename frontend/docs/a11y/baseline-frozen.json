@@ -1,0 +1,1568 @@
+{
+  "metadata": {
+    "generated": "2026-09-05T19:02:44.090Z",
+    "tool": "axe-core playwright",
+    "browser": "chromium",
+    "totalRoutes": 151,
+    "paramRoutes": 21,
+    "nonRepClean": 15,
+    "nonRepWithViolations": 6,
+    "crashedRoutes": 3,
+    "repRoutesWithViolations": 50,
+    "repViolations": 69,
+    "totalViolations": 78,
+    "routesWithViolations": 56,
+    "byRule": {
+      "button-name": {
+        "count": 25,
+        "impact": "critical",
+        "description": "Ensure buttons have discernible text"
+      },
+      "aria-input-field-name": {
+        "count": 17,
+        "impact": "serious",
+        "description": "Ensure every ARIA input field has an accessible name"
+      },
+      "label": {
+        "count": 9,
+        "impact": "critical",
+        "description": "Ensure every form element has a label"
+      },
+      "aria-progressbar-name": {
+        "count": 5,
+        "impact": "serious",
+        "description": "Ensure every ARIA progressbar node has an accessible name"
+      },
+      "scrollable-region-focusable": {
+        "count": 5,
+        "impact": "serious",
+        "description": "Ensure elements that have scrollable content are accessible by keyboard"
+      },
+      "select-name": {
+        "count": 5,
+        "impact": "critical",
+        "description": "Ensure select element has an accessible name"
+      },
+      "list": {
+        "count": 4,
+        "impact": "serious",
+        "description": "Ensure that lists are structured correctly"
+      },
+      "nested-interactive": {
+        "count": 3,
+        "impact": "serious",
+        "description": "Ensure interactive controls are not nested as they are not always announced by screen readers or can cause focus problems for assistive technologies"
+      },
+      "aria-command-name": {
+        "count": 2,
+        "impact": "serious",
+        "description": "Ensure every ARIA button, link and menuitem has an accessible name"
+      },
+      "aria-prohibited-attr": {
+        "count": 2,
+        "impact": "serious",
+        "description": "Ensure ARIA attributes are not prohibited for an element's role"
+      },
+      "listitem": {
+        "count": 1,
+        "impact": "serious",
+        "description": "Ensure <li> elements are used semantically"
+      }
+    },
+    "routes": [
+      {
+        "routePattern": "/",
+        "finalUrl": "http://localhost:5173/en?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/app/data-product/:pageKey",
+        "finalUrl": "http://localhost:5173/en/app/data-product/:pageKey?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/auth/callback",
+        "finalUrl": "http://localhost:5173/auth/callback?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/change-review",
+        "finalUrl": "http://localhost:5173/change-review?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/abbreviations",
+        "finalUrl": "http://localhost:5173/en/core/abbreviations?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/access-explanation",
+        "finalUrl": "http://localhost:5173/en/access-explanation?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/ai-semantic-bridge",
+        "finalUrl": "http://localhost:5173/core/glossary",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": true,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/entitlements",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/entitlements/profiles/:profileKey",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/entitlements/profiles/:profileKey/components",
+        "finalUrl": "http://localhost:5173/en/admin/entitlements/profiles/:profileKey/components?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/llm",
+        "finalUrl": "http://localhost:5173/en/admin/llm?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/delegations",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/delegations?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/field-permissions",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/field-permissions?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/group-role-mappings",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/group-role-mappings?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/identity-providers",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/identity-providers?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/rbac/roles",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/teams",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/teams?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 3,
+        "violationIds": [
+          "aria-input-field-name",
+          "button-name",
+          "list"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/rbac/user-roles",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/user-roles?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/user-tenants",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/user-tenants?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/rbac/users",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/users?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/admin/seeding",
+        "finalUrl": "http://localhost:5173/en/admin/seeding?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/admin/temporal-ops",
+        "finalUrl": "http://localhost:5173/en/admin/temporal-ops?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/ai-assistant",
+        "finalUrl": "http://localhost:5173/en/ai-assistant?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/analytics/advisor-dashboard",
+        "finalUrl": "http://localhost:5173/en/analytics/advisor-dashboard?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/analytics/factors",
+        "finalUrl": "http://localhost:5173/en/analytics/factors?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/analytics/factors/:portfolioID?",
+        "finalUrl": "http://localhost:5173/en/analytics/factors/:portfolioID?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/analytics/rebalancer",
+        "finalUrl": "http://localhost:5173/en/analytics/rebalancer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/analytics/scenario-analysis",
+        "finalUrl": "http://localhost:5173/en/analytics/scenario-analysis?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/api-designer",
+        "finalUrl": "http://localhost:5173/en/api-studio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/aso",
+        "finalUrl": "http://localhost:5173/en/optimization?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/audit",
+        "finalUrl": "http://localhost:5173/en/audit?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console",
+        "finalUrl": "http://localhost:5173/en/bp-console?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/instances",
+        "finalUrl": "http://localhost:5173/en/bp-console/instances?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/queues",
+        "finalUrl": "http://localhost:5173/en/bp-console/queues?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bp-console/:tab",
+        "finalUrl": "http://localhost:5173/en/bp-console/:tab?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "aria-progressbar-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/bundle-explorer",
+        "finalUrl": "http://localhost:5173/en/bundle-explorer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/bundles",
+        "finalUrl": "http://localhost:5173/en/bundles?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/business-objects",
+        "finalUrl": "http://localhost:5173/en/business-objects?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/business-objects/:id",
+        "finalUrl": "http://localhost:5173/en/business-objects/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/business-objects/new",
+        "finalUrl": "http://localhost:5173/en/business-objects/new?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/calendar",
+        "finalUrl": "http://localhost:5173/en/calendar?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/calendar/conflicts",
+        "finalUrl": "http://localhost:5173/en/calendar/conflicts?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/ai-suggestions",
+        "finalUrl": "http://localhost:5173/en/catalog/ai-suggestions?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/api-inventory",
+        "finalUrl": "http://localhost:5173/en/catalog/api-inventory?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "aria-input-field-name",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/catalog/business-terms",
+        "finalUrl": "http://localhost:5173/en/catalog/business-terms?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/business-terms/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/business-terms/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/edge-types",
+        "finalUrl": "http://localhost:5173/en/catalog/edge-types?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/catalog/edge-types/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/edge-types/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/node-types",
+        "finalUrl": "http://localhost:5173/en/catalog/node-types?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/catalog/node-types/:id",
+        "finalUrl": "http://localhost:5173/en/catalog/node-types/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/semantic-terms",
+        "finalUrl": "http://localhost:5173/en/catalog/semantic-terms?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/catalog/view-definitions",
+        "finalUrl": "http://localhost:5173/en/catalog/view-definitions?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/change-reviews",
+        "finalUrl": "http://localhost:5173/en/governance/changesets?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/change-reviews/:id",
+        "finalUrl": "http://localhost:5173/en/change-reviews/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/client-portal/rules-editor",
+        "finalUrl": "http://localhost:5173/en/client-portal/rules-editor?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 4,
+        "violationIds": [
+          "button-name",
+          "label",
+          "list",
+          "nested-interactive"
+        ]
+      },
+      {
+        "routePattern": "/en/client-portal/workflow-studio",
+        "finalUrl": "http://localhost:5173/en/client-portal/workflow-studio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "button-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "routePattern": "/en/core/abbreviations",
+        "finalUrl": "http://localhost:5173/en/core/abbreviations?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/approval-inbox",
+        "finalUrl": "http://localhost:5173/en/core/approval-inbox?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": true,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/approval-workflows",
+        "finalUrl": "http://localhost:5173/en/core/approval-workflows?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/audit-explorer",
+        "finalUrl": "http://localhost:5173/en/core/audit-explorer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/business-terms",
+        "finalUrl": "http://localhost:5173/en/core/business-terms?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/calculated-fields",
+        "finalUrl": "http://localhost:5173/en/core/calculated-fields?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/data-pipelines",
+        "finalUrl": "http://localhost:5173/en/core/data-pipelines?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/domains",
+        "finalUrl": "http://localhost:5173/en/core/domains?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/flow-builder",
+        "finalUrl": "http://localhost:5173/en/core/flow-builder?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 2,
+        "violationIds": [
+          "button-name",
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "routePattern": "/en/core/genui-chat",
+        "finalUrl": "http://localhost:5173/en/core/genui-chat?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/genui-inbox",
+        "finalUrl": "http://localhost:5173/en/core/genui-inbox?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/genui-proposal",
+        "finalUrl": "http://localhost:5173/en/core/genui-proposal?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/glossary",
+        "finalUrl": "http://localhost:5173/en/core/glossary?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/notifications",
+        "finalUrl": "http://localhost:5173/en/core/notifications?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/notifications/preferences",
+        "finalUrl": "http://localhost:5173/en/core/notifications/preferences?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/notifications/templates",
+        "finalUrl": "http://localhost:5173/en/core/notifications/templates?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/process-catalog",
+        "finalUrl": "http://localhost:5173/en/core/process-catalog?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/core/semantic-mapper",
+        "finalUrl": "http://localhost:5173/en/core/semantic-mapper?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/core/semantic-terms",
+        "finalUrl": "http://localhost:5173/en/core/semantic-terms?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/sla-dashboard",
+        "finalUrl": "http://localhost:5173/en/core/sla-dashboard?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/uisce-builder",
+        "finalUrl": "http://localhost:5173/en/core/uisce-builder?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/validation",
+        "finalUrl": "http://localhost:5173/en/core/validation?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/validation-rules",
+        "finalUrl": "http://localhost:5173/en/core/validation-rules?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/core/workflow-designer",
+        "finalUrl": "http://localhost:5173/en/core/workflow-designer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/crypto/portfolio",
+        "finalUrl": "http://localhost:5173/en/crypto/portfolio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/dynamic-ui",
+        "finalUrl": "http://localhost:5173/en/dynamic-ui?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-command-name"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/audit-logs",
+        "finalUrl": "http://localhost:5173/en/fabric/audit-logs?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/bundles",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/fabric/bundles/:bundleId/edit",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles/:bundleId/edit?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/bundles/create",
+        "finalUrl": "http://localhost:5173/en/fabric/bundles/create?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/calculations",
+        "finalUrl": "http://localhost:5173/en/fabric/calculations?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 5,
+        "violationIds": [
+          "button-name",
+          "label",
+          "list",
+          "listitem",
+          "nested-interactive"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/custom-components",
+        "finalUrl": "http://localhost:5173/en/fabric/custom-components?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/fabric/dashboard",
+        "finalUrl": "http://localhost:5173/en/fabric/dashboard?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/fabric/ip-whitelist",
+        "finalUrl": "http://localhost:5173/en/fabric/ip-whitelist?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/preaggregations",
+        "finalUrl": "http://localhost:5173/en/fabric/preaggregations?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/fabric/settings",
+        "finalUrl": "http://localhost:5173/en/fabric/settings?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/fabric/tenants",
+        "finalUrl": "http://localhost:5173/en",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/fixed-income",
+        "finalUrl": "http://localhost:5173/en/fixed-income?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/flow-builder",
+        "finalUrl": "http://localhost:5173/en/core/flow-builder?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/global-intelligence",
+        "finalUrl": "http://localhost:5173/en/global-intelligence?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/glossary",
+        "finalUrl": "http://localhost:5173/en/core/glossary?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/governance/changesets",
+        "finalUrl": "http://localhost:5173/en/governance/changesets?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/incidents/:id",
+        "finalUrl": "http://localhost:5173/en/incidents/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/intelligence",
+        "finalUrl": "http://localhost:5173/en/intelligence?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/intelligence/data-quality",
+        "finalUrl": "http://localhost:5173/en/intelligence/data-quality?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/intelligence/index-advisor",
+        "finalUrl": "http://localhost:5173/en/intelligence/index-advisor?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/intelligence/storage",
+        "finalUrl": "http://localhost:5173/en/intelligence/storage?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/jit-request",
+        "finalUrl": "http://localhost:5173/en/jit-request?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/marketplace",
+        "finalUrl": "http://localhost:5173/en/marketplace?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/marketplace/components",
+        "finalUrl": "http://localhost:5173/en/marketplace/components?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/nlq",
+        "finalUrl": "http://localhost:5173/en/nlq?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "routePattern": "/en/observability",
+        "finalUrl": "http://localhost:5173/en/observability?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/observability/slos",
+        "finalUrl": "http://localhost:5173/en/observability/slos?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/optimization",
+        "finalUrl": "http://localhost:5173/en/optimization?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/optimization/:optimizationId",
+        "finalUrl": "http://localhost:5173/en/optimization/:optimizationId?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/page-designer",
+        "finalUrl": "http://localhost:5173/en/page-designer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-command-name"
+        ]
+      },
+      {
+        "routePattern": "/en/page-studio",
+        "finalUrl": "http://localhost:5173/en/page-studio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/pipelines/studio",
+        "finalUrl": "http://localhost:5173/en/pipelines/studio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/pipelines/studio/:id",
+        "finalUrl": "http://localhost:5173/en/pipelines/studio/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/pipelines/triggers/new",
+        "finalUrl": "http://localhost:5173/en/pipelines/triggers/new?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/private-markets",
+        "finalUrl": "http://localhost:5173/en/private-markets?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/query-builder",
+        "finalUrl": "http://localhost:5173/en/query-builder?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "routePattern": "/en/rbac",
+        "finalUrl": "http://localhost:5173/en/admin/rbac/roles?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/reports/builder",
+        "finalUrl": "http://localhost:5173/en/reports/builder?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 3,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/reports/expressions",
+        "finalUrl": "http://localhost:5173/en/reports/expressions?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/reports/library",
+        "finalUrl": "http://localhost:5173/en/reports/library?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 3,
+        "violationIds": [
+          "button-name",
+          "list",
+          "nested-interactive"
+        ]
+      },
+      {
+        "routePattern": "/en/reports/models",
+        "finalUrl": "http://localhost:5173/en/reports/models?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/reports/queries",
+        "finalUrl": "http://localhost:5173/en/reports/queries?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/reports/:reportId/edit",
+        "finalUrl": "http://localhost:5173/en/reports/:reportId/edit?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 3,
+        "violationIds": [
+          "aria-input-field-name",
+          "aria-prohibited-attr",
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler",
+        "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/calendars",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/calendars/:calendarId/edit",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars/:calendarId/edit?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/calendars/new",
+        "finalUrl": "http://localhost:5173/en/scheduler/calendars/new?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/executions",
+        "finalUrl": "http://localhost:5173/en/scheduler/executions?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/executions/:executionId",
+        "finalUrl": "http://localhost:5173/en/scheduler/executions/:executionId?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler-intelligence",
+        "finalUrl": "http://localhost:5173/en/scheduler-intelligence?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/jobs",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/scheduler/jobs/:jobId",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/jobs/:jobId/edit",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/:jobId/edit?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/scheduler/jobs/new",
+        "finalUrl": "http://localhost:5173/en/scheduler/jobs/new?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "label"
+        ]
+      },
+      {
+        "routePattern": "/en/schema-explorer",
+        "finalUrl": "http://localhost:5173/en/schema-explorer?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "scrollable-region-focusable"
+        ]
+      },
+      {
+        "routePattern": "/en/secrets/audit",
+        "finalUrl": "http://localhost:5173/en/secrets/audit?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-input-field-name"
+        ]
+      },
+      {
+        "routePattern": "/en/secrets/config",
+        "finalUrl": "http://localhost:5173/en/secrets/config?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/secrets/monitoring",
+        "finalUrl": "http://localhost:5173/en/secrets/monitoring?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "aria-progressbar-name"
+        ]
+      },
+      {
+        "routePattern": "/en/semantic-health",
+        "finalUrl": "http://localhost:5173/en/semantic-health?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "button-name"
+        ]
+      },
+      {
+        "routePattern": "/en/simulation",
+        "finalUrl": "http://localhost:5173/en/simulation?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/simulation/compare",
+        "finalUrl": "http://localhost:5173/en/simulation/compare?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/simulation/:id",
+        "finalUrl": "http://localhost:5173/en/simulation/:id?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/simulation/rebalance",
+        "finalUrl": "http://localhost:5173/en/simulation/rebalance?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 1,
+        "violationIds": [
+          "select-name"
+        ]
+      },
+      {
+        "routePattern": "/en/tenants",
+        "finalUrl": "http://localhost:5173/en/tenants?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/tenants/:tenantId",
+        "finalUrl": "http://localhost:5173/en/tenants/:tenantId?",
+        "isParam": true,
+        "wasNonRep": true,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/validation-rules",
+        "finalUrl": "http://localhost:5173/en/core/validation-rules?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/en/wealth/feed",
+        "finalUrl": "http://localhost:5173/en/wealth/feed?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/login",
+        "finalUrl": "http://localhost:5173/en",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": false,
+        "violations": 0,
+        "violationIds": []
+      },
+      {
+        "routePattern": "/page-studio",
+        "finalUrl": "http://localhost:5173/page-studio?",
+        "isParam": false,
+        "wasNonRep": false,
+        "crashed": true,
+        "violations": 0,
+        "violationIds": []
+      }
+    ]
+  }
+}

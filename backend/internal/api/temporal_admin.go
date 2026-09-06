@@ -15,8 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/temporal"
 	"go.temporal.io/sdk/client"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
-)
+	)
 
 // TemporalAdminHandler wraps the Temporal workflow admin service
 type TemporalAdminHandler struct {
@@ -50,6 +49,11 @@ func (h *TemporalAdminHandler) HandleSignalWorkflow(w http.ResponseWriter, r *ht
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
@@ -74,7 +78,7 @@ func (h *TemporalAdminHandler) HandleSignalWorkflow(w http.ResponseWriter, r *ht
 	}
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "signal",
 		WorkflowID: workflowID,
@@ -124,6 +128,11 @@ func (h *TemporalAdminHandler) HandleUpdateWorkflow(w http.ResponseWriter, r *ht
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
@@ -148,7 +157,7 @@ func (h *TemporalAdminHandler) HandleUpdateWorkflow(w http.ResponseWriter, r *ht
 	}
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "update",
 		WorkflowID: workflowID,
@@ -198,6 +207,11 @@ func (h *TemporalAdminHandler) HandleCancelWorkflow(w http.ResponseWriter, r *ht
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -215,7 +229,7 @@ func (h *TemporalAdminHandler) HandleCancelWorkflow(w http.ResponseWriter, r *ht
 	// Prepare audit entry
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "cancel",
 		WorkflowID: workflowID,
@@ -259,6 +273,11 @@ func (h *TemporalAdminHandler) HandleTerminateWorkflow(w http.ResponseWriter, r 
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -276,7 +295,7 @@ func (h *TemporalAdminHandler) HandleTerminateWorkflow(w http.ResponseWriter, r 
 	// Prepare audit entry
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "terminate",
 		WorkflowID: workflowID,
@@ -320,6 +339,11 @@ func (h *TemporalAdminHandler) HandleResetWorkflow(w http.ResponseWriter, r *htt
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -337,7 +361,7 @@ func (h *TemporalAdminHandler) HandleResetWorkflow(w http.ResponseWriter, r *htt
 	// Prepare audit entry
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "reset",
 		WorkflowID: workflowID,
@@ -408,6 +432,11 @@ func (h *TemporalAdminHandler) HandleExportHistory(w http.ResponseWriter, r *htt
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -425,7 +454,7 @@ func (h *TemporalAdminHandler) HandleExportHistory(w http.ResponseWriter, r *htt
 	// Audit read/export
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "export_history",
 		WorkflowID: workflowID,
@@ -469,6 +498,11 @@ func (h *TemporalAdminHandler) HandleExportAudit(w http.ResponseWriter, r *http.
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -480,7 +514,7 @@ func (h *TemporalAdminHandler) HandleExportAudit(w http.ResponseWriter, r *http.
 	// Audit read
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "export_audit",
 		WorkflowID: workflowID,
@@ -524,6 +558,11 @@ func (h *TemporalAdminHandler) HandleStackTrace(w http.ResponseWriter, r *http.R
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	workflowID := chi.URLParam(r, "id")
 	if workflowID == "" {
 		http.Error(w, "workflow_id is required", http.StatusBadRequest)
@@ -534,7 +573,7 @@ func (h *TemporalAdminHandler) HandleStackTrace(w http.ResponseWriter, r *http.R
 	// Audit read
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "stack_trace",
 		WorkflowID: workflowID,
@@ -626,12 +665,11 @@ func (h *TemporalAdminHandler) HandleSaveWorkflow(w http.ResponseWriter, r *http
 		return
 	}
 
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	tenantID := claims.TenantID
 
 	// Prepare an audit entry for this create action
 	audit := temporal.AdminActionAudit{
@@ -679,6 +717,11 @@ func (h *TemporalAdminHandler) HandleDescribeTaskQueue(w http.ResponseWriter, r 
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	queue := r.URL.Query().Get("queue")
 	if queue == "" {
@@ -689,7 +732,7 @@ func (h *TemporalAdminHandler) HandleDescribeTaskQueue(w http.ResponseWriter, r 
 	// Audit read
 	audit := temporal.AdminActionAudit{
 		ID:         uuid.New().String(),
-		TenantID:   jwtmiddleware.GetClaimsFromContext(r).TenantID,
+		TenantID:   tenantID,
 		ActorID:    userID,
 		Action:     "describe_taskqueue",
 		WorkflowID: "",

@@ -25,7 +25,11 @@ func (h *SecurityLineageHandler) RegisterRoutes(r chi.Router) {
 
 func (h *SecurityLineageHandler) GetLineage(w http.ResponseWriter, r *http.Request) {
 	securityID := chi.URLParam(r, "securityId")
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	lineage, err := h.svc.GetSecurityLineage(r.Context(), tenantID, securityID)
 	if err != nil {
@@ -38,7 +42,11 @@ func (h *SecurityLineageHandler) GetLineage(w http.ResponseWriter, r *http.Reque
 
 func (h *SecurityLineageHandler) SimulateImpact(w http.ResponseWriter, r *http.Request) {
 	securityID := chi.URLParam(r, "securityId")
-	tenantID := mustTenantID(r)
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 
 	var changes map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&changes); err != nil {

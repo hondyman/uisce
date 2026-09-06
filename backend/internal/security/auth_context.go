@@ -13,3 +13,11 @@ func AuthInfoFromContext(ctx context.Context) (AuthInfo, bool) {
 	auth, ok := value.(AuthInfo)
 	return auth, ok
 }
+
+func TenantIDFromContext(ctx context.Context) (string, bool) {
+	auth, ok := AuthInfoFromContext(ctx)
+	if !ok || len(auth.TenantIDs) == 0 {
+		return "", false
+	}
+	return auth.TenantIDs[0], true
+}

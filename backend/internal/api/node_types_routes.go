@@ -194,11 +194,11 @@ func (h *NodeTypesHandler) handleCreateNodeType(w http.ResponseWriter, r *http.R
 	}
 
 	if nt.TenantID == "" {
-		nt.TenantID, _ = TenantIDFromRequest(r)
-	}
-	if nt.TenantID == "" {
-		http.Error(w, "tenant_id is required", http.StatusBadRequest)
-		return
+		var ok bool
+		if nt.TenantID, ok = TenantIDFromRequest(r); !ok {
+			http.Error(w, "tenant_id is required", http.StatusBadRequest)
+			return
+		}
 	}
 
 	if nt.IsActive == nil {
