@@ -286,10 +286,10 @@ CREATE TABLE IF NOT EXISTS security_audit_log (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS x_security_audit_log_timestamp ON security_audit_log(timestamp DESC);
-CREATE INDEX IF NOT EXISTS x_security_audit_log_user ON security_audit_log(user_id);
-CREATE INDEX IF NOT EXISTS x_security_audit_log_tenant ON security_audit_log(tenant_id);
-CREATE INDEX IF NOT EXISTS x_security_audit_log_global_admin ON security_audit_log(is_global_admin) WHERE is_global_admin = true;
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_timestamp ON security_audit_log(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_user ON security_audit_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_tenant ON security_audit_log(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_security_audit_log_global_admin ON security_audit_log(is_global_admin) WHERE is_global_admin = true;
 
 -- Global admins can see all audit logs, tenant users can only see their tenant's logs
 ALTER TABLE security_audit_log ENABLE ROW LEVEL SECURITY;

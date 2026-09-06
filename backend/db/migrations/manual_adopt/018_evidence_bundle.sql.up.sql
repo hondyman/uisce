@@ -15,9 +15,9 @@ CREATE TABLE IF NOT EXISTS metadata.evidence_bundles (
         REFERENCES metadata.upgrade_requests(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_evidence_bundles_upgrade ON metadata.evidence_bundles(upgrade_request_id);
-CREATE INDEX IF NOT EXISTS x_evidence_bundles_status ON metadata.evidence_bundles(status);
-CREATE INDEX IF NOT EXISTS x_evidence_bundles_created ON metadata.evidence_bundles(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_evidence_bundles_upgrade ON metadata.evidence_bundles(upgrade_request_id);
+CREATE INDEX IF NOT EXISTS idx_evidence_bundles_status ON metadata.evidence_bundles(status);
+CREATE INDEX IF NOT EXISTS idx_evidence_bundles_created ON metadata.evidence_bundles(created_at DESC);
 
 COMMENT ON TABLE metadata.evidence_bundles IS 'Immutable evidence bundles for upgrade lifecycle auditing';
 COMMENT ON COLUMN metadata.evidence_bundles.upgrade_request_id IS 'Links to the upgrade request that triggered this evidence collection';
@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS metadata.stage_evidence (
         REFERENCES metadata.evidence_bundles(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_stage_evidence_bundle ON metadata.stage_evidence(bundle_id);
-CREATE INDEX IF NOT EXISTS x_stage_evidence_stage ON metadata.stage_evidence(stage_name);
-CREATE INDEX IF NOT EXISTS x_stage_evidence_status ON metadata.stage_evidence(status);
-CREATE INDEX IF NOT EXISTS x_stage_evidence_artifacts ON metadata.stage_evidence USING GIN (artifacts);
+CREATE INDEX IF NOT EXISTS idx_stage_evidence_bundle ON metadata.stage_evidence(bundle_id);
+CREATE INDEX IF NOT EXISTS idx_stage_evidence_stage ON metadata.stage_evidence(stage_name);
+CREATE INDEX IF NOT EXISTS idx_stage_evidence_status ON metadata.stage_evidence(status);
+CREATE INDEX IF NOT EXISTS idx_stage_evidence_artifacts ON metadata.stage_evidence USING GIN (artifacts);
 
 COMMENT ON TABLE metadata.stage_evidence IS 'Evidence artifacts collected at each upgrade stage';
 COMMENT ON COLUMN metadata.stage_evidence.stage_name IS 'Upgrade stage: diff, rebase, test, approval, deploy, rollback, audit';
@@ -64,10 +64,10 @@ CREATE TABLE IF NOT EXISTS metadata.approval_requests (
         REFERENCES metadata.evidence_bundles(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_approval_requests_bundle ON metadata.approval_requests(bundle_id);
-CREATE INDEX IF NOT EXISTS x_approval_requests_status ON metadata.approval_requests(status);
-CREATE INDEX IF NOT EXISTS x_approval_requests_role ON metadata.approval_requests(required_role);
-CREATE INDEX IF NOT EXISTS x_approval_requests_decided ON metadata.approval_requests(decided_at DESC);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_bundle ON metadata.approval_requests(bundle_id);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_status ON metadata.approval_requests(status);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_role ON metadata.approval_requests(required_role);
+CREATE INDEX IF NOT EXISTS idx_approval_requests_decided ON metadata.approval_requests(decided_at DESC);
 
 COMMENT ON TABLE metadata.approval_requests IS 'Maker-checker approval workflow for deployment governance';
 COMMENT ON COLUMN metadata.approval_requests.required_role IS 'Role required to approve (e.g., data_steward, compliance_officer)';
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS metadata.upgrade_requests (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS x_upgrade_requests_status ON metadata.upgrade_requests(status);
-CREATE INDEX IF NOT EXISTS x_upgrade_requests_created ON metadata.upgrade_requests(requested_at DESC);
+CREATE INDEX IF NOT EXISTS idx_upgrade_requests_status ON metadata.upgrade_requests(status);
+CREATE INDEX IF NOT EXISTS idx_upgrade_requests_created ON metadata.upgrade_requests(requested_at DESC);
 
 COMMENT ON TABLE metadata.upgrade_requests IS 'Upgrade pipeline requests initiated by users';

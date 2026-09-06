@@ -44,14 +44,14 @@ CREATE TABLE IF NOT EXISTS semantic_query_templates (
 );
 
 -- Indexes for template lookup
-CREATE INDEX IF NOT EXISTS x_semantic_templates_tenant_id ON semantic_query_templates(tenant_id);
-CREATE INDEX IF NOT EXISTS x_semantic_templates_datasource ON semantic_query_templates(datasource);
-CREATE INDEX IF NOT EXISTS x_semantic_templates_visibility ON semantic_query_templates(visibility);
-CREATE INDEX IF NOT EXISTS x_semantic_templates_created_by ON semantic_query_templates(created_by);
-CREATE INDEX IF NOT EXISTS x_semantic_templates_deprecated ON semantic_query_templates(deprecated);
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_tenant_id ON semantic_query_templates(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_datasource ON semantic_query_templates(datasource);
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_visibility ON semantic_query_templates(visibility);
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_created_by ON semantic_query_templates(created_by);
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_deprecated ON semantic_query_templates(deprecated);
 
 -- Full-text search on name and description
-CREATE INDEX IF NOT EXISTS x_semantic_templates_search 
+CREATE INDEX IF NOT EXISTS idx_semantic_templates_search 
 ON semantic_query_templates USING GIN (
     to_tsvector('english', name || ' ' || COALESCE(description, ''))
 );
@@ -89,9 +89,9 @@ CREATE TABLE IF NOT EXISTS semantic_query_template_versions (
 );
 
 -- Indexes for version history
-CREATE INDEX IF NOT EXISTS x_template_versions_template_id ON semantic_query_template_versions(template_id);
-CREATE INDEX IF NOT EXISTS x_template_versions_created_by ON semantic_query_template_versions(created_by);
-CREATE INDEX IF NOT EXISTS x_template_versions_promoted ON semantic_query_template_versions(is_promoted);
+CREATE INDEX IF NOT EXISTS idx_template_versions_template_id ON semantic_query_template_versions(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_versions_created_by ON semantic_query_template_versions(created_by);
+CREATE INDEX IF NOT EXISTS idx_template_versions_promoted ON semantic_query_template_versions(is_promoted);
 
 -- ============================================================================
 -- Table: semantic_query_template_permissions
@@ -117,7 +117,7 @@ CREATE TABLE IF NOT EXISTS semantic_query_template_permissions (
 );
 
 -- Index for permission lookup
-CREATE INDEX IF NOT EXISTS x_template_permissions_template_id ON semantic_query_template_permissions(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_permissions_template_id ON semantic_query_template_permissions(template_id);
 
 -- ============================================================================
 -- Table: semantic_query_template_parameter_constraints
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS semantic_query_template_parameter_constraints (
 );
 
 -- Index for parameter constraint lookup
-CREATE INDEX IF NOT EXISTS x_parameter_constraints_template_id ON semantic_query_template_parameter_constraints(template_id);
+CREATE INDEX IF NOT EXISTS idx_parameter_constraints_template_id ON semantic_query_template_parameter_constraints(template_id);
 
 -- ============================================================================
 -- Table: semantic_query_template_executions
@@ -179,15 +179,15 @@ CREATE TABLE IF NOT EXISTS semantic_query_template_executions (
 );
 
 -- Indexes for execution history
-CREATE INDEX IF NOT EXISTS x_template_executions_template_id ON semantic_query_template_executions(template_id);
-CREATE INDEX IF NOT EXISTS x_template_executions_executed_by ON semantic_query_template_executions(executed_by);
-CREATE INDEX IF NOT EXISTS x_template_executions_executed_at ON semantic_query_template_executions(executed_at DESC);
-CREATE INDEX IF NOT EXISTS x_template_executions_status ON semantic_query_template_executions(status);
+CREATE INDEX IF NOT EXISTS idx_template_executions_template_id ON semantic_query_template_executions(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_executions_executed_by ON semantic_query_template_executions(executed_by);
+CREATE INDEX IF NOT EXISTS idx_template_executions_executed_at ON semantic_query_template_executions(executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_executions_status ON semantic_query_template_executions(status);
 
 -- Partition by month for large execution tables
 -- This allows for better performance on time-range queries
 -- Uncomment when table gets large (millions of rows)
--- CREATE TABLE IF NOT EXISTS mantic_query_template_executions_202502 PARTITION OF semantic_query_template_executions
+-- CREATE TABLE IF NOT EXISTS semantic_query_template_executions_202502 PARTITION OF semantic_query_template_executions
 --   FOR VALUES FROM ('2025-02-01') TO ('2025-03-01');
 
 -- ============================================================================

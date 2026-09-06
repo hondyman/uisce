@@ -55,11 +55,11 @@ CREATE TABLE IF NOT EXISTS bo_projections (
 );
 
 -- Indexes for fast queries
-CREATE INDEX IF NOT EXISTS x_bo_proj_tenant ON bo_projections(tenant_id);
-CREATE INDEX IF NOT EXISTS x_bo_proj_tenant_key ON bo_projections(tenant_id, key);
-CREATE INDEX IF NOT EXISTS x_bo_proj_tenant_active ON bo_projections(tenant_id, is_active);
-CREATE INDEX IF NOT EXISTS x_bo_proj_updated ON bo_projections(updated_at DESC);
-CREATE INDEX IF NOT EXISTS x_bo_proj_category ON bo_projections(tenant_id, category);
+CREATE INDEX IF NOT EXISTS idx_bo_proj_tenant ON bo_projections(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bo_proj_tenant_key ON bo_projections(tenant_id, key);
+CREATE INDEX IF NOT EXISTS idx_bo_proj_tenant_active ON bo_projections(tenant_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_bo_proj_updated ON bo_projections(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_bo_proj_category ON bo_projections(tenant_id, category);
 
 -- ============================================================================
 -- Instance Projection (Read Model)
@@ -112,12 +112,12 @@ CREATE TABLE IF NOT EXISTS instance_projections (
 );
 
 -- Indexes for fast queries
-CREATE INDEX IF NOT EXISTS x_inst_proj_tenant ON instance_projections(tenant_id);
-CREATE INDEX IF NOT EXISTS x_inst_proj_bo_key ON instance_projections(tenant_id, business_object_key);
-CREATE INDEX IF NOT EXISTS x_inst_proj_instance_id ON instance_projections(tenant_id, instance_id);
-CREATE INDEX IF NOT EXISTS x_inst_proj_active ON instance_projections(tenant_id, is_deleted);
-CREATE INDEX IF NOT EXISTS x_inst_proj_updated ON instance_projections(updated_at DESC);
-CREATE INDEX IF NOT EXISTS x_inst_proj_search ON instance_projections USING GIN(searchable_text);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_tenant ON instance_projections(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_bo_key ON instance_projections(tenant_id, business_object_key);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_instance_id ON instance_projections(tenant_id, instance_id);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_active ON instance_projections(tenant_id, is_deleted);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_updated ON instance_projections(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_inst_proj_search ON instance_projections USING GIN(searchable_text);
 
 -- ============================================================================
 -- Projection Metadata (Track what's been projected)
@@ -175,9 +175,9 @@ CREATE TABLE IF NOT EXISTS projection_errors (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS x_proj_err_name ON projection_errors(projection_name);
-CREATE INDEX IF NOT EXISTS x_proj_err_event ON projection_errors(event_id);
-CREATE INDEX IF NOT EXISTS x_proj_err_unresolved ON projection_errors(is_resolved);
+CREATE INDEX IF NOT EXISTS idx_proj_err_name ON projection_errors(projection_name);
+CREATE INDEX IF NOT EXISTS idx_proj_err_event ON projection_errors(event_id);
+CREATE INDEX IF NOT EXISTS idx_proj_err_unresolved ON projection_errors(is_resolved);
 
 -- ============================================================================
 -- Event Correlation View (For CQRS Phase 4a Integration)

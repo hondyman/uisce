@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS ledger_entries (
 );
 
 -- Index for "As Of" queries (Time Travel)
-CREATE INDEX IF NOT EXISTS x_ledger_valid_time ON ledger_entries (account_id, valid_from, valid_to);
-CREATE INDEX IF NOT EXISTS x_ledger_system_time ON ledger_entries (account_id, system_from, system_to);
+CREATE INDEX IF NOT EXISTS idx_ledger_valid_time ON ledger_entries (account_id, valid_from, valid_to);
+CREATE INDEX IF NOT EXISTS idx_ledger_system_time ON ledger_entries (account_id, system_from, system_to);
 
 -- CQRS Command Table
 CREATE TABLE IF NOT EXISTS insert_trade_requests (

@@ -12,7 +12,7 @@ ALTER TABLE business_process_step_participant
     ADD COLUMN exclude_initiator BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Detailed Execution Logging (Process Level)
-CREATE TABLE IF NOT EXISTS siness_process_execution (
+CREATE TABLE IF NOT EXISTS business_process_execution (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id    UUID NOT NULL,
     bp_def_id    UUID NOT NULL REFERENCES business_process_definition(id),
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS siness_process_execution (
 );
 
 -- Detailed Execution Logging (Step Level)
-CREATE TABLE IF NOT EXISTS siness_process_step_execution (
+CREATE TABLE IF NOT EXISTS business_process_step_execution (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bp_exec_id         UUID NOT NULL REFERENCES business_process_execution(id) ON DELETE CASCADE,
     step_id            UUID NOT NULL REFERENCES business_process_step(id),

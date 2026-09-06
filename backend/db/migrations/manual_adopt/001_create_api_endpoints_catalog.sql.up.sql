@@ -36,12 +36,12 @@ CREATE TABLE IF NOT EXISTS api_endpoints_catalog (
 );
 
 -- Create indexes for common queries
-CREATE INDEX IF NOT EXISTS x_api_endpoints_tenant_id ON api_endpoints_catalog(tenant_id);
-CREATE INDEX IF NOT EXISTS x_api_endpoints_datasource_id ON api_endpoints_catalog(datasource_id);
-CREATE INDEX IF NOT EXISTS x_api_endpoints_category ON api_endpoints_catalog(category);
-CREATE INDEX IF NOT EXISTS x_api_endpoints_http_method ON api_endpoints_catalog(http_method);
-CREATE INDEX IF NOT EXISTS x_api_endpoints_is_active ON api_endpoints_catalog(is_active);
-CREATE INDEX IF NOT EXISTS x_api_endpoints_created_at ON api_endpoints_catalog(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_tenant_id ON api_endpoints_catalog(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_datasource_id ON api_endpoints_catalog(datasource_id);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_category ON api_endpoints_catalog(category);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_http_method ON api_endpoints_catalog(http_method);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_is_active ON api_endpoints_catalog(is_active);
+CREATE INDEX IF NOT EXISTS idx_api_endpoints_created_at ON api_endpoints_catalog(created_at DESC);
 
 -- Create trigger for updated_at
 CREATE OR REPLACE FUNCTION update_api_endpoints_catalog_updated_at()
@@ -75,9 +75,9 @@ CREATE TABLE IF NOT EXISTS api_endpoint_entity_mappings (
   CONSTRAINT fk_tenant_mapping FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_endpoint_entity_mappings_endpoint ON api_endpoint_entity_mappings(api_endpoint_id);
-CREATE INDEX IF NOT EXISTS x_endpoint_entity_mappings_entity ON api_endpoint_entity_mappings(entity_id);
-CREATE INDEX IF NOT EXISTS x_endpoint_entity_mappings_tenant ON api_endpoint_entity_mappings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_entity_mappings_endpoint ON api_endpoint_entity_mappings(api_endpoint_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_entity_mappings_entity ON api_endpoint_entity_mappings(entity_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_entity_mappings_tenant ON api_endpoint_entity_mappings(tenant_id);
 
 -- Create trigger for endpoint entity mappings updated_at
 CREATE TRIGGER api_endpoint_entity_mappings_update_trigger
@@ -103,9 +103,9 @@ CREATE TABLE IF NOT EXISTS api_endpoint_datasource_mappings (
   CONSTRAINT fk_tenant_datasource_mapping FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_endpoint_datasource_mappings_endpoint ON api_endpoint_datasource_mappings(api_endpoint_id);
-CREATE INDEX IF NOT EXISTS x_endpoint_datasource_mappings_datasource ON api_endpoint_datasource_mappings(datasource_id);
-CREATE INDEX IF NOT EXISTS x_endpoint_datasource_mappings_tenant ON api_endpoint_datasource_mappings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_datasource_mappings_endpoint ON api_endpoint_datasource_mappings(api_endpoint_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_datasource_mappings_datasource ON api_endpoint_datasource_mappings(datasource_id);
+CREATE INDEX IF NOT EXISTS idx_endpoint_datasource_mappings_tenant ON api_endpoint_datasource_mappings(tenant_id);
 
 -- Create trigger for endpoint datasource mappings updated_at
 CREATE TRIGGER api_endpoint_datasource_mappings_update_trigger

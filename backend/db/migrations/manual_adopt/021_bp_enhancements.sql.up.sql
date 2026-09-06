@@ -3,7 +3,7 @@ ALTER TABLE business_process_step_participant ADD COLUMN rule_id TEXT; -- Option
 ALTER TABLE business_process_step_participant ALTER COLUMN role_key DROP NOT NULL; -- Can be null if rule_id is set
 
 -- Inbox Tasks (User items to complete)
-CREATE TABLE IF NOT EXISTS siness_process_task (
+CREATE TABLE IF NOT EXISTS business_process_task (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id     UUID NOT NULL,
     bp_run_id     TEXT NOT NULL,          -- Temporal Workflow ID
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS siness_process_task (
 );
 
 -- Audit / History
-CREATE TABLE IF NOT EXISTS siness_process_event (
+CREATE TABLE IF NOT EXISTS business_process_event (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID NOT NULL,
     bp_run_id   TEXT NOT NULL,

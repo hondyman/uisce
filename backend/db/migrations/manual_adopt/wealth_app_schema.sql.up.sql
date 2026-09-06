@@ -16,7 +16,7 @@ CREATE TYPE compliance_status AS ENUM ('COMPLIANT', 'NON_COMPLIANT', 'PENDING_RE
 CREATE TYPE risk_tolerance AS ENUM ('CONSERVATIVE', 'MODERATE', 'AGGRESSIVE', 'VERY_AGGRESSIVE');
 
 -- Users table - stores wealth managers and system users
-CREATE TABLE IF NOT EXISTS ers (
+CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     username VARCHAR(50) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS ers (
 );
 
 -- Roles table - defines user roles in the system
-CREATE TABLE IF NOT EXISTS les (
+CREATE TABLE IF NOT EXISTS roles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(50) UNIQUE NOT NULL,
     description TEXT,
@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS les (
 );
 
 -- Permissions table - granular permissions
-CREATE TABLE IF NOT EXISTS rmissions (
+CREATE TABLE IF NOT EXISTS permissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(100) UNIQUE NOT NULL,
     description TEXT,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS rmissions (
 );
 
 -- User roles junction table
-CREATE TABLE IF NOT EXISTS er_roles (
+CREATE TABLE IF NOT EXISTS user_roles (
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
     assigned_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS er_roles (
 );
 
 -- Role permissions junction table
-CREATE TABLE IF NOT EXISTS le_permissions (
+CREATE TABLE IF NOT EXISTS role_permissions (
     role_id UUID REFERENCES roles(id) ON DELETE CASCADE,
     permission_id UUID REFERENCES permissions(id) ON DELETE CASCADE,
     granted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS le_permissions (
 );
 
 -- Clients table - high net worth individuals
-CREATE TABLE IF NOT EXISTS ients (
+CREATE TABLE IF NOT EXISTS clients (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE SET NULL, -- Wealth manager who manages this client
     client_code VARCHAR(20) UNIQUE NOT NULL, -- Unique client identifier
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS ients (
 );
 
 -- Portfolios table - investment portfolios for clients
-CREATE TABLE IF NOT EXISTS rtfolios (
+CREATE TABLE IF NOT EXISTS portfolios (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
     name VARCHAR(100) NOT NULL,
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS rtfolios (
 );
 
 -- Assets master table - reference data for all tradeable assets
-CREATE TABLE IF NOT EXISTS sets_master (
+CREATE TABLE IF NOT EXISTS assets_master (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     symbol VARCHAR(20) UNIQUE NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS sets_master (
 );
 
 -- Portfolio holdings - current positions in portfolios
-CREATE TABLE IF NOT EXISTS rtfolio_holdings (
+CREATE TABLE IF NOT EXISTS portfolio_holdings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
     asset_id UUID REFERENCES assets_master(id) ON DELETE RESTRICT,
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS rtfolio_holdings (
 );
 
 -- Transactions table - all financial transactions
-CREATE TABLE IF NOT EXISTS ansactions (
+CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
     asset_id UUID REFERENCES assets_master(id) ON DELETE RESTRICT,
@@ -168,7 +168,7 @@ CREATE TABLE IF NOT EXISTS ansactions (
 );
 
 -- Orders table - trading orders
-CREATE TABLE IF NOT EXISTS ders (
+CREATE TABLE IF NOT EXISTS orders (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
     asset_id UUID REFERENCES assets_master(id) ON DELETE RESTRICT,
@@ -192,7 +192,7 @@ CREATE TABLE IF NOT EXISTS ders (
 );
 
 -- Market data table - caches market prices and data
-CREATE TABLE IF NOT EXISTS rket_data (
+CREATE TABLE IF NOT EXISTS market_data (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     asset_id UUID REFERENCES assets_master(id) ON DELETE CASCADE,
     symbol VARCHAR(20) NOT NULL,
@@ -215,7 +215,7 @@ CREATE TABLE IF NOT EXISTS rket_data (
 );
 
 -- Compliance records table
-CREATE TABLE IF NOT EXISTS mpliance_records (
+CREATE TABLE IF NOT EXISTS compliance_records (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE SET NULL,
@@ -238,7 +238,7 @@ CREATE TABLE IF NOT EXISTS mpliance_records (
 );
 
 -- Audit trail table - tracks all system changes
-CREATE TABLE IF NOT EXISTS dit_trail (
+CREATE TABLE IF NOT EXISTS audit_trail (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id),
     table_name VARCHAR(50) NOT NULL,
@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS dit_trail (
 );
 
 -- Performance tracking table
-CREATE TABLE IF NOT EXISTS rtfolio_performance (
+CREATE TABLE IF NOT EXISTS portfolio_performance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     portfolio_id UUID REFERENCES portfolios(id) ON DELETE CASCADE,
     date DATE NOT NULL,
@@ -270,7 +270,7 @@ CREATE TABLE IF NOT EXISTS rtfolio_performance (
 );
 
 -- Notifications table
-CREATE TABLE IF NOT EXISTS tifications (
+CREATE TABLE IF NOT EXISTS notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID REFERENCES users(id) ON DELETE CASCADE,
     client_id UUID REFERENCES clients(id) ON DELETE CASCADE,
@@ -285,28 +285,28 @@ CREATE TABLE IF NOT EXISTS tifications (
 );
 
 -- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS x_users_email ON users(email);
-CREATE INDEX IF NOT EXISTS x_users_username ON users(username);
-CREATE INDEX IF NOT EXISTS x_clients_user_id ON clients(user_id);
-CREATE INDEX IF NOT EXISTS x_clients_client_code ON clients(client_code);
-CREATE INDEX IF NOT EXISTS x_portfolios_client_id ON portfolios(client_id);
-CREATE INDEX IF NOT EXISTS x_portfolio_holdings_portfolio_id ON portfolio_holdings(portfolio_id);
-CREATE INDEX IF NOT EXISTS x_portfolio_holdings_asset_id ON portfolio_holdings(asset_id);
-CREATE INDEX IF NOT EXISTS x_transactions_portfolio_id ON transactions(portfolio_id);
-CREATE INDEX IF NOT EXISTS x_transactions_asset_id ON transactions(asset_id);
-CREATE INDEX IF NOT EXISTS x_transactions_date ON transactions(transaction_date);
-CREATE INDEX IF NOT EXISTS x_orders_portfolio_id ON orders(portfolio_id);
-CREATE INDEX IF NOT EXISTS x_orders_asset_id ON orders(asset_id);
-CREATE INDEX IF NOT EXISTS x_orders_status ON orders(status);
-CREATE INDEX IF NOT EXISTS x_market_data_symbol ON market_data(symbol);
-CREATE INDEX IF NOT EXISTS x_market_data_asset_id ON market_data(asset_id);
-CREATE INDEX IF NOT EXISTS x_compliance_records_client_id ON compliance_records(client_id);
-CREATE INDEX IF NOT EXISTS x_compliance_records_status ON compliance_records(status);
-CREATE INDEX IF NOT EXISTS x_audit_trail_user_id ON audit_trail(user_id);
-CREATE INDEX IF NOT EXISTS x_audit_trail_table_record ON audit_trail(table_name, record_id);
-CREATE INDEX IF NOT EXISTS x_portfolio_performance_portfolio_date ON portfolio_performance(portfolio_id, date);
-CREATE INDEX IF NOT EXISTS x_notifications_user_id ON notifications(user_id);
-CREATE INDEX IF NOT EXISTS x_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_clients_user_id ON clients(user_id);
+CREATE INDEX IF NOT EXISTS idx_clients_client_code ON clients(client_code);
+CREATE INDEX IF NOT EXISTS idx_portfolios_client_id ON portfolios(client_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_portfolio_id ON portfolio_holdings(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_holdings_asset_id ON portfolio_holdings(asset_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_portfolio_id ON transactions(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_asset_id ON transactions(asset_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(transaction_date);
+CREATE INDEX IF NOT EXISTS idx_orders_portfolio_id ON orders(portfolio_id);
+CREATE INDEX IF NOT EXISTS idx_orders_asset_id ON orders(asset_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+CREATE INDEX IF NOT EXISTS idx_market_data_symbol ON market_data(symbol);
+CREATE INDEX IF NOT EXISTS idx_market_data_asset_id ON market_data(asset_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_records_client_id ON compliance_records(client_id);
+CREATE INDEX IF NOT EXISTS idx_compliance_records_status ON compliance_records(status);
+CREATE INDEX IF NOT EXISTS idx_audit_trail_user_id ON audit_trail(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_trail_table_record ON audit_trail(table_name, record_id);
+CREATE INDEX IF NOT EXISTS idx_portfolio_performance_portfolio_date ON portfolio_performance(portfolio_id, date);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(user_id, is_read) WHERE is_read = FALSE;
 
 -- Create triggers for updated_at timestamps
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -325,7 +325,7 @@ CREATE TRIGGER update_assets_master_updated_at BEFORE UPDATE ON assets_master FO
 CREATE TRIGGER update_transactions_updated_at BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 -- Generic Business Object Instances Table (Metadata-Driven Storage)
-CREATE TABLE IF NOT EXISTS _instances (
+CREATE TABLE IF NOT EXISTS bo_instances (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     tenant_id UUID NOT NULL, -- Redundant but good for safety
     business_object_id TEXT NOT NULL,
@@ -343,5 +343,5 @@ CREATE TABLE IF NOT EXISTS _instances (
     last_modified_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX IF NOT EXISTS x_bo_instances_bo_key ON bo_instances(business_object_key);
-CREATE INDEX IF NOT EXISTS x_bo_instances_tenant_bo ON bo_instances(tenant_id, business_object_key);
+CREATE INDEX IF NOT EXISTS idx_bo_instances_bo_key ON bo_instances(business_object_key);
+CREATE INDEX IF NOT EXISTS idx_bo_instances_tenant_bo ON bo_instances(tenant_id, business_object_key);

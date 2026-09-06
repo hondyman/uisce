@@ -238,9 +238,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 SELECT create_distributed_table('audit_logs', 'tenant_id', colocate_with => 'datasources');
 
 -- Create monthly partitions for audit logs
-CREATE TABLE IF NOT EXISTS dit_logs_2024_01 PARTITION OF audit_logs
+CREATE TABLE IF NOT EXISTS audit_logs_2024_01 PARTITION OF audit_logs
     FOR VALUES FROM ('2024-01-01') TO ('2024-02-01');
-CREATE TABLE IF NOT EXISTS dit_logs_2024_02 PARTITION OF audit_logs
+CREATE TABLE IF NOT EXISTS audit_logs_2024_02 PARTITION OF audit_logs
     FOR VALUES FROM ('2024-02-01') TO ('2024-03-01');
 -- ... continue for each month
 

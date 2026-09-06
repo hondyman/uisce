@@ -1,5 +1,5 @@
 -- Business process definition (per tenant, per entity/type)
-CREATE TABLE IF NOT EXISTS siness_process_definition (
+CREATE TABLE IF NOT EXISTS business_process_definition (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id   UUID NOT NULL, -- references tenant(id) implicit
     key         TEXT NOT NULL, -- e.g. "account_opening"
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS siness_process_definition (
 );
 
 -- Steps in the business process
-CREATE TABLE IF NOT EXISTS siness_process_step (
+CREATE TABLE IF NOT EXISTS business_process_step (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bp_def_id     UUID NOT NULL REFERENCES business_process_definition(id) ON DELETE CASCADE,
     seq           INT  NOT NULL,             -- order within process
@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS siness_process_step (
 );
 
 -- Step Participants (e.g. "Manager", "Compliance_Officer")
-CREATE TABLE IF NOT EXISTS siness_process_step_participant (
+CREATE TABLE IF NOT EXISTS business_process_step_participant (
     id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     step_id   UUID NOT NULL REFERENCES business_process_step(id) ON DELETE CASCADE,
     role_key  TEXT NOT NULL,                 -- e.g. "Manager", "Compliance", "Ops"

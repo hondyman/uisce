@@ -26,4 +26,4 @@ CREATE TABLE IF NOT EXISTS recon_exceptions (
 );
 
 -- Index for finding open breaks
-CREATE INDEX IF NOT EXISTS x_recon_exceptions_status ON recon_exceptions (status) WHERE status != 'Resolved';
+CREATE INDEX IF NOT EXISTS idx_recon_exceptions_status ON recon_exceptions (status) WHERE status != 'Resolved';

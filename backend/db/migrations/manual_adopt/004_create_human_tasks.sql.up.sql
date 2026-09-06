@@ -17,5 +17,5 @@ CREATE TABLE IF NOT EXISTS human_tasks (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS x_human_tasks_assignee_group ON human_tasks (assignee_group, status);
-CREATE INDEX IF NOT EXISTS x_human_tasks_workflow_id ON human_tasks (workflow_id);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_assignee_group ON human_tasks (assignee_group, status);
+CREATE INDEX IF NOT EXISTS idx_human_tasks_workflow_id ON human_tasks (workflow_id);

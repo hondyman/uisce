@@ -51,5 +51,5 @@ CREATE TABLE IF NOT EXISTS position_versions (
 );
 
 -- Indexes for Time Travel Queries
-CREATE INDEX IF NOT EXISTS x_positions_entity_valid ON position_versions USING GIST (entity_id, valid_time);
-CREATE INDEX IF NOT EXISTS x_positions_system_time ON position_versions USING GIST (system_time);
+CREATE INDEX IF NOT EXISTS idx_positions_entity_valid ON position_versions USING GIST (entity_id, valid_time);
+CREATE INDEX IF NOT EXISTS idx_positions_system_time ON position_versions USING GIST (system_time);

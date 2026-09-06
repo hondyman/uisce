@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS market_prices (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 -- Index for finding latest price
-CREATE INDEX IF NOT EXISTS x_market_prices_asset_valid ON market_prices (asset_id, valid_from DESC);
+CREATE INDEX IF NOT EXISTS idx_market_prices_asset_valid ON market_prices (asset_id, valid_from DESC);
 
 -- 3. Computed Field: calculate_nav
 -- This function will be exposed as a computed field 'nav' on the 'portfolios' table in Hasura.

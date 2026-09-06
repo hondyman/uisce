@@ -164,32 +164,32 @@ CREATE TABLE IF NOT EXISTS household_report_logs (
 -- ============================================================================
 
 -- Household lookups
-CREATE INDEX IF NOT EXISTS x_households_tenant ON households(tenant_id);
-CREATE INDEX IF NOT EXISTS x_households_status ON households(status);
-CREATE INDEX IF NOT EXISTS x_households_tenant_status ON households(tenant_id, status);
+CREATE INDEX IF NOT EXISTS idx_households_tenant ON households(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_households_status ON households(status);
+CREATE INDEX IF NOT EXISTS idx_households_tenant_status ON households(tenant_id, status);
 
 -- Member lookups
-CREATE INDEX IF NOT EXISTS x_household_members_household ON household_members(household_id);
-CREATE INDEX IF NOT EXISTS x_household_members_tenant ON household_members(tenant_id);
-CREATE INDEX IF NOT EXISTS x_household_members_type ON household_members(member_type);
+CREATE INDEX IF NOT EXISTS idx_household_members_household ON household_members(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_members_tenant ON household_members(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_household_members_type ON household_members(member_type);
 
 -- Semantic mapping lookups
-CREATE INDEX IF NOT EXISTS x_household_semantic_mappings_household ON household_semantic_mappings(household_id);
-CREATE INDEX IF NOT EXISTS x_household_semantic_mappings_view ON household_semantic_mappings(semantic_view_id);
-CREATE INDEX IF NOT EXISTS x_household_semantic_mappings_active ON household_semantic_mappings(is_active);
+CREATE INDEX IF NOT EXISTS idx_household_semantic_mappings_household ON household_semantic_mappings(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_semantic_mappings_view ON household_semantic_mappings(semantic_view_id);
+CREATE INDEX IF NOT EXISTS idx_household_semantic_mappings_active ON household_semantic_mappings(is_active);
 
 -- Report lookups
-CREATE INDEX IF NOT EXISTS x_household_reports_household ON household_reports(household_id);
-CREATE INDEX IF NOT EXISTS x_household_reports_tenant ON household_reports(tenant_id);
-CREATE INDEX IF NOT EXISTS x_household_reports_status ON household_reports(status);
-CREATE INDEX IF NOT EXISTS x_household_reports_created ON household_reports(created_at DESC);
-CREATE INDEX IF NOT EXISTS x_household_reports_tenant_household ON household_reports(tenant_id, household_id);
+CREATE INDEX IF NOT EXISTS idx_household_reports_household ON household_reports(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_reports_tenant ON household_reports(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_household_reports_status ON household_reports(status);
+CREATE INDEX IF NOT EXISTS idx_household_reports_created ON household_reports(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_household_reports_tenant_household ON household_reports(tenant_id, household_id);
 
 -- Report log lookups
-CREATE INDEX IF NOT EXISTS x_household_report_logs_report ON household_report_logs(report_id);
-CREATE INDEX IF NOT EXISTS x_household_report_logs_household ON household_report_logs(household_id);
-CREATE INDEX IF NOT EXISTS x_household_report_logs_tenant ON household_report_logs(tenant_id);
-CREATE INDEX IF NOT EXISTS x_household_report_logs_action ON household_report_logs(action);
+CREATE INDEX IF NOT EXISTS idx_household_report_logs_report ON household_report_logs(report_id);
+CREATE INDEX IF NOT EXISTS idx_household_report_logs_household ON household_report_logs(household_id);
+CREATE INDEX IF NOT EXISTS idx_household_report_logs_tenant ON household_report_logs(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_household_report_logs_action ON household_report_logs(action);
 
 -- ============================================================================
 -- VIEWS

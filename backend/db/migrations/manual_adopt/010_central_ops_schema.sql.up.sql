@@ -4,7 +4,7 @@
 BEGIN;
 
 -- 1. Tenants Catalog
-CREATE TABLE IF NOT EXISTS nants (
+CREATE TABLE IF NOT EXISTS tenants (
     tenant_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
     status TEXT CHECK (status IN ('active', 'inactive', 'suspended')) DEFAULT 'active',
@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS nants (
 );
 
 -- 2. Exceptions Table (Partitioned by Tenant/Time in production, simplified here)
-CREATE TABLE IF NOT EXISTS ceptions (
+CREATE TABLE IF NOT EXISTS exceptions (
     exception_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(tenant_id),
     source_system TEXT NOT NULL,
@@ -25,10 +25,10 @@ CREATE TABLE IF NOT EXISTS ceptions (
 );
 
 -- Index for SLA Dashboards
-CREATE INDEX IF NOT EXISTS x_exceptions_tenant_status_created ON exceptions (tenant_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_exceptions_tenant_status_created ON exceptions (tenant_id, status, created_at);
 
 -- 3. Workflows Table (SLA Tracking)
-CREATE TABLE IF NOT EXISTS rkflows (
+CREATE TABLE IF NOT EXISTS workflows (
     workflow_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL REFERENCES tenants(tenant_id),
     process_name TEXT NOT NULL,
@@ -37,10 +37,10 @@ CREATE TABLE IF NOT EXISTS rkflows (
     completed_at TIMESTAMPTZ
 );
 
-CREATE INDEX IF NOT EXISTS x_workflows_tenant_process ON workflows (tenant_id, process_name);
+CREATE INDEX IF NOT EXISTS idx_workflows_tenant_process ON workflows (tenant_id, process_name);
 
 -- 4. Unified Audit Records (UAR) - Central Log
-CREATE TABLE IF NOT EXISTS dit_records (
+CREATE TABLE IF NOT EXISTS audit_records (
     audit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID REFERENCES tenants(tenant_id), -- Nullable for system-level events
     entity_type TEXT NOT NULL,

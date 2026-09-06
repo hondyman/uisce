@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS position_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() -- System Time
 );
 
-CREATE INDEX IF NOT EXISTS x_position_events_account_asset ON position_events (account_id, asset_id, event_date);
+CREATE INDEX IF NOT EXISTS idx_position_events_account_asset ON position_events (account_id, asset_id, event_date);
 
 -- 2. Position Snapshots (Daily Materialized View)
 -- Stores the state at the end of each day.

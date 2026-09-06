@@ -20,9 +20,9 @@ CREATE TABLE IF NOT EXISTS uma_accounts (
     CONSTRAINT fk_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id)
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_accounts_tenant_id ON uma_accounts(tenant_id);
-CREATE INDEX IF NOT EXISTS x_uma_accounts_status ON uma_accounts(status);
-CREATE INDEX IF NOT EXISTS x_uma_accounts_created_at ON uma_accounts(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uma_accounts_tenant_id ON uma_accounts(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_uma_accounts_status ON uma_accounts(status);
+CREATE INDEX IF NOT EXISTS idx_uma_accounts_created_at ON uma_accounts(created_at DESC);
 
 -- ============================================================================
 -- UMA Sleeves Table
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS uma_sleeves (
     CONSTRAINT fk_uma_account FOREIGN KEY (uma_account_id) REFERENCES uma_accounts(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_sleeves_uma_account_id ON uma_sleeves(uma_account_id);
-CREATE INDEX IF NOT EXISTS x_uma_sleeves_status ON uma_sleeves(status);
-CREATE INDEX IF NOT EXISTS x_uma_sleeves_drift ON uma_sleeves(drift);
+CREATE INDEX IF NOT EXISTS idx_uma_sleeves_uma_account_id ON uma_sleeves(uma_account_id);
+CREATE INDEX IF NOT EXISTS idx_uma_sleeves_status ON uma_sleeves(status);
+CREATE INDEX IF NOT EXISTS idx_uma_sleeves_drift ON uma_sleeves(drift);
 
 -- ============================================================================
 -- UMA Holdings Table
@@ -68,10 +68,10 @@ CREATE TABLE IF NOT EXISTS uma_holdings (
     CONSTRAINT fk_sleeve FOREIGN KEY (sleeve_id) REFERENCES uma_sleeves(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_holdings_sleeve_id ON uma_holdings(sleeve_id);
-CREATE INDEX IF NOT EXISTS x_uma_holdings_cusip ON uma_holdings(cusip);
-CREATE INDEX IF NOT EXISTS x_uma_holdings_security_id ON uma_holdings(security_id);
-CREATE INDEX IF NOT EXISTS x_uma_holdings_updated_at ON uma_holdings(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uma_holdings_sleeve_id ON uma_holdings(sleeve_id);
+CREATE INDEX IF NOT EXISTS idx_uma_holdings_cusip ON uma_holdings(cusip);
+CREATE INDEX IF NOT EXISTS idx_uma_holdings_security_id ON uma_holdings(security_id);
+CREATE INDEX IF NOT EXISTS idx_uma_holdings_updated_at ON uma_holdings(updated_at DESC);
 
 -- ============================================================================
 -- UMA Rebalance Requests Table
@@ -90,10 +90,10 @@ CREATE TABLE IF NOT EXISTS uma_rebalance_requests (
     CONSTRAINT fk_uma_account_req FOREIGN KEY (uma_account_id) REFERENCES uma_accounts(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_requests_tenant_id ON uma_rebalance_requests(tenant_id);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_requests_uma_account_id ON uma_rebalance_requests(uma_account_id);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_requests_status ON uma_rebalance_requests(status);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_requests_created_at ON uma_rebalance_requests(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_requests_tenant_id ON uma_rebalance_requests(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_requests_uma_account_id ON uma_rebalance_requests(uma_account_id);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_requests_status ON uma_rebalance_requests(status);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_requests_created_at ON uma_rebalance_requests(created_at DESC);
 
 -- ============================================================================
 -- UMA Rebalance Plans Table
@@ -116,9 +116,9 @@ CREATE TABLE IF NOT EXISTS uma_rebalance_plans (
     CONSTRAINT fk_rebalance_request FOREIGN KEY (request_id) REFERENCES uma_rebalance_requests(id) ON DELETE SET NULL
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_plans_uma_account_id ON uma_rebalance_plans(uma_account_id);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_plans_status ON uma_rebalance_plans(status);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_plans_created_at ON uma_rebalance_plans(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_plans_uma_account_id ON uma_rebalance_plans(uma_account_id);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_plans_status ON uma_rebalance_plans(status);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_plans_created_at ON uma_rebalance_plans(created_at DESC);
 
 -- ============================================================================
 -- UMA Rebalance History Table
@@ -141,8 +141,8 @@ CREATE TABLE IF NOT EXISTS uma_rebalance_history (
     CONSTRAINT fk_uma_account_history FOREIGN KEY (uma_account_id) REFERENCES uma_accounts(id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_history_uma_account_id ON uma_rebalance_history(uma_account_id);
-CREATE INDEX IF NOT EXISTS x_uma_rebalance_history_completed_at ON uma_rebalance_history(completed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_history_uma_account_id ON uma_rebalance_history(uma_account_id);
+CREATE INDEX IF NOT EXISTS idx_uma_rebalance_history_completed_at ON uma_rebalance_history(completed_at DESC);
 
 -- ============================================================================
 -- Add audit columns to UMA tables for ABAC temporal policies

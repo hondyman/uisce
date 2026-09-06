@@ -21,7 +21,7 @@ ALTER TABLE sync_conflicts DROP COLUMN IF EXISTS provider;
 -- Restore indexes
 DROP INDEX IF EXISTS idx_synced_events_external_id;
 DROP INDEX IF EXISTS idx_synced_events_provider;
-CREATE INDEX IF NOT EXISTS x_synced_events_google_id ON synced_google_events(google_event_id);
+CREATE INDEX IF NOT EXISTS idx_synced_events_google_id ON synced_google_events(google_event_id);
 
 -- Restore FK constraints
 ALTER TABLE synced_google_events DROP CONSTRAINT IF EXISTS synced_calendar_events_connection_id_fkey;

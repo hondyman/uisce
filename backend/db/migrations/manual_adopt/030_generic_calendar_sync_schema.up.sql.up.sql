@@ -23,8 +23,8 @@ ALTER TABLE sync_conflicts ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAU
 
 -- Update indexes
 DROP INDEX IF EXISTS idx_synced_events_google_id;
-CREATE INDEX IF NOT EXISTS x_synced_events_external_id ON synced_calendar_events(external_event_id);
-CREATE INDEX IF NOT EXISTS x_synced_events_provider ON synced_calendar_events(provider);
+CREATE INDEX IF NOT EXISTS idx_synced_events_external_id ON synced_calendar_events(external_event_id);
+CREATE INDEX IF NOT EXISTS idx_synced_events_provider ON synced_calendar_events(provider);
 
 -- Rename connection_id FK reference in synced_calendar_events
 -- (connection_id column name stays the same, but now references calendar_connections)

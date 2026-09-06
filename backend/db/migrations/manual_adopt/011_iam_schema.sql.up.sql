@@ -24,8 +24,8 @@ CREATE TABLE IF NOT EXISTS iam.roles (
     UNIQUE(tenant_id, role_name)
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_roles_tenant ON iam.roles(tenant_id);
-CREATE INDEX IF NOT EXISTS x_iam_roles_global_admin ON iam.roles(is_global_admin) WHERE is_global_admin = true;
+CREATE INDEX IF NOT EXISTS idx_iam_roles_tenant ON iam.roles(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_iam_roles_global_admin ON iam.roles(is_global_admin) WHERE is_global_admin = true;
 
 -- Permissions table (actions on resources)
 CREATE TABLE IF NOT EXISTS iam.permissions (
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS iam.permissions (
     UNIQUE(action, resource)
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_permissions_resource ON iam.permissions(resource);
+CREATE INDEX IF NOT EXISTS idx_iam_permissions_resource ON iam.permissions(resource);
 
 -- Role-Permission mappings
 CREATE TABLE IF NOT EXISTS iam.role_permissions (
@@ -48,8 +48,8 @@ CREATE TABLE IF NOT EXISTS iam.role_permissions (
     PRIMARY KEY(role_id, permission_id)
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_role_permissions_role ON iam.role_permissions(role_id);
-CREATE INDEX IF NOT EXISTS x_iam_role_permissions_permission ON iam.role_permissions(permission_id);
+CREATE INDEX IF NOT EXISTS idx_iam_role_permissions_role ON iam.role_permissions(role_id);
+CREATE INDEX IF NOT EXISTS idx_iam_role_permissions_permission ON iam.role_permissions(permission_id);
 
 -- User-Role assignments
 CREATE TABLE IF NOT EXISTS iam.user_roles (
@@ -61,9 +61,9 @@ CREATE TABLE IF NOT EXISTS iam.user_roles (
     PRIMARY KEY(user_id, role_id)
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_user_roles_user ON iam.user_roles(user_id);
-CREATE INDEX IF NOT EXISTS x_iam_user_roles_role ON iam.user_roles(role_id);
-CREATE INDEX IF NOT EXISTS x_iam_user_roles_expires ON iam.user_roles(expires_at) WHERE expires_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_iam_user_roles_user ON iam.user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_iam_user_roles_role ON iam.user_roles(role_id);
+CREATE INDEX IF NOT EXISTS idx_iam_user_roles_expires ON iam.user_roles(expires_at) WHERE expires_at IS NOT NULL;
 
 -- ============================================================================
 -- STEP 3: Audit Tables for Security Events
@@ -82,9 +82,9 @@ CREATE TABLE IF NOT EXISTS iam.security_events (
     processed BOOLEAN DEFAULT false
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_security_events_type ON iam.security_events(event_type);
-CREATE INDEX IF NOT EXISTS x_iam_security_events_created ON iam.security_events(created_at);
-CREATE INDEX IF NOT EXISTS x_iam_security_events_processed ON iam.security_events(processed) WHERE processed = false;
+CREATE INDEX IF NOT EXISTS idx_iam_security_events_type ON iam.security_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_iam_security_events_created ON iam.security_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_iam_security_events_processed ON iam.security_events(processed) WHERE processed = false;
 
 -- Sync status tracking (which systems have processed each event)
 CREATE TABLE IF NOT EXISTS iam.sync_status (
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS iam.sync_status (
     PRIMARY KEY(event_id, system)
 );
 
-CREATE INDEX IF NOT EXISTS x_iam_sync_status_status ON iam.sync_status(status, system);
+CREATE INDEX IF NOT EXISTS idx_iam_sync_status_status ON iam.sync_status(status, system);
 
 -- ============================================================================
 -- STEP 4: Helper Functions
