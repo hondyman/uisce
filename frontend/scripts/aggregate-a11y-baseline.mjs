@@ -24,7 +24,14 @@ let crashed = 0;
 for (const file of files) {
   const raw = JSON.parse(readFileSync(path.join(SRC, file), 'utf8'));
   const route = file.replace(/^_+|_+\.json$/g, '');
-  if (raw.crashed) crashed++;
+  // Only count as crashed if the Vite error overlay is present.
+  // raw.crashed = no <main> landmark — too broad; pages that render without
+  // <main> (loading spinners, redirect pages) are false positives.
+  const hasViteOverlay = (raw.violations ?? []).some(v =>
+    v.html?.includes('vite-error-overlay') ||
+    v.nodes?.some(n => Array.isArray(n.target) && n.target.some(t => t[0] === 'vite-error-overlay'))
+  );
+  if (raw.crashed && hasViteOverlay) crashed++;
   for (const v of raw.violations ?? []) {
     violations.push({
       route,

@@ -227,10 +227,10 @@ func (sc *ShardedCache) cleanup() {
 }
 
 // GetMetrics returns cache performance metrics
-func (sc *ShardedCache) GetMetrics() CacheMetrics {
+func (sc *ShardedCache) GetMetrics() *CacheMetrics {
 	sc.metrics.lock.RLock()
 	defer sc.metrics.lock.RUnlock()
-	return *sc.metrics
+	return sc.metrics
 }
 
 // matchPattern simple glob pattern matching

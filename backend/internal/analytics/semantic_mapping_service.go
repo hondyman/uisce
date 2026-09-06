@@ -1730,7 +1730,6 @@ func (s *SemanticMappingService) getOrCreateBusinessTerm(ctx context.Context, tx
 	}
 
 	return newTermID, nil
-	return newTermID, nil
 }
 
 // createEdge creates a generic edge between two nodes within a transaction.

@@ -206,10 +206,13 @@ function authStorage(jwt: string) {
     auth_token: jwt,
     auth_user: JSON.stringify(E2E_USER),
     auth_expires_at: EXPIRES_AT.toString(),
-    selected_tenant: JSON.stringify({ id: '00000000-0000-0000-0000-000000000000', display_name: 'Dev Tenant' }),
+    selected_tenant: JSON.stringify({ id: '99e99e99-99e9-49e9-89e9-99e99e99e999', display_name: 'Northwind Traders' }),
     appLocale: LOCALE,
   };
 }
+
+// john.b is a global admin with no tenant claim; must supply X-Tenant-ID header.
+const E2E_TENANT_ID = process.env.E2E_TENANT_ID ?? '99e99e99-99e9-49e9-89e9-99e99e99e999';
 
 test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
   // Protocol closure #2: health pre-flight — verify app accepts auth+tenant
@@ -234,21 +237,35 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
 
     // 500 = schema drift / broken app state — hard fail, don't try other endpoints.
     // This is the signature of binary/DB mismatch; past crawls completed green on it.
-    // 401 = bad auth token — hard fail immediately.
-    // 403/404 = tenant or routing problem — try other endpoints.
-    const preflightPaths = ['/api/access/scopes', '/api/tenant/scope'];
+    // 401 = on /api/auth/me: endpoint uses session tokens, not JWTs — try next.
+    // 401 = on /api/v1/schedules/: bad auth token — hard fail.
+    // 403/404 = tenant or routing problem — try next endpoint.
+    // /api/auth/me: region-exempt, uses session tokens (not JWT-aware).
+    // /api/v1/schedules/: tenant-scoped, JWT-protected via middleware.
+    const preflightPaths = ['/api/auth/me', '/api/v1/schedules/'];
     let lastError = '';
     for (const p of preflightPaths) {
       try {
+        console.log(`[pre-flight] trying ${p}...`);
         const res = await request.fetch(`${backendURL}${p}`, {
-          headers: { Authorization: `Bearer ${jwt}` },
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+            'X-Tenant-ID': E2E_TENANT_ID,
+          },
         });
+        console.log(`[pre-flight] ${p} → ${res.status()}`);
         if (res.status() === 200) {
           console.log(`[pre-flight] Auth + tenant verified OK (${p})`);
           return; // pre-flight passed
         }
         if (res.status() === 401) {
-          throw new Error(`[pre-flight] Auth rejected — check E2E_JWT or E2E_KC_USER/E2E_KC_PASS. Status: ${res.status()}`);
+          // /api/auth/me returns 401 for JWT auth (session-token only) — try next endpoint.
+          // /api/v1/schedules/ returning 401 means bad token — hard fail.
+          if (p === '/api/v1/schedules/') {
+            throw new Error(`[pre-flight] Auth rejected — check E2E_JWT or E2E_KC_USER/E2E_KC_PASS. Status: ${res.status()}`);
+          }
+          lastError = `[pre-flight] ${p} → ${res.status()} (session-token only, trying next)`;
+          continue;
         }
         if (res.status() === 500) {
           throw new Error(`[pre-flight] App returned 500 on ${p} — schema drift or DB mismatch. Status: ${res.status()}. Fix the backend before re-running.`);
@@ -280,6 +297,7 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         'Set E2E_JWT (CI) or E2E_KC_USER+E2E_KC_PASS (local) to run a real crawl.',
       );
     }
+    await context.setExtraHTTPHeaders({ 'X-Tenant-ID': E2E_TENANT_ID });
     await context.addInitScript(
       (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },
       authStorage(jwt),

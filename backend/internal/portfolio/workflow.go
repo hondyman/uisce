@@ -107,6 +107,4 @@ func PortfolioWorkflow(ctx workflow.Context, portfolioID string) error {
 		})
 		selector.Select(ctx)
 	}
-
-	return nil
 }

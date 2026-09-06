@@ -53,6 +53,12 @@ jobs:
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+    - name: Build & Vet
+      working-directory: backend
+      run: |
+        go build ./...
+        go vet ./...
+
     - name: Run Tests
       working-directory: backend
       run: |

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 // sendJSON sends a JSON response
@@ -47,6 +48,9 @@ func normalizeTenantID(tenantID string) string {
 func setupAuthContext(ctx context.Context, tenantID string) context.Context {
 	ctx = context.WithValue(ctx, "tenant_id", tenantID)
 	ctx = context.WithValue(ctx, "app.current_tenant_id", tenantID)
+	ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+		TenantIDs: []string{tenantID},
+	})
 	return ctx
 }
 
