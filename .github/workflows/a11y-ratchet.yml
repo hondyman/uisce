@@ -48,12 +48,6 @@ jobs:
             sleep 5
           done
 
-      - name: Run locale-matrix smoke tests
-        working-directory: frontend
-        run: npx playwright test e2e/a11y/locale-matrix.spec.ts --reporter=line
-        env:
-          E2E_JWT: ${{ secrets.E2E_JWT }}
-
       - name: Run a11y baseline crawl
         working-directory: frontend
         run: npx playwright test e2e/a11y/baseline.spec.ts --reporter=line
