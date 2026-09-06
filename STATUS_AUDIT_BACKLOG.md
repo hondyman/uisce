@@ -1002,3 +1002,22 @@ verifies. Run it on the runner host (where `app_user` password
 resides). The result gates whether 470 enabled policies actually
 filter, or whether the existing policy work needs a content audit.
 
+
+### BYPASSRLS — Phase 0 step 1 verification
+
+Migration `20260906_001_force_rls_tenant_bearing.up.sql` was APPLIED
+to alpha on 2026-09-06. Verification:
+
+```
+       relname        | relrowsecurity | relforcerowsecurity
+----------------------+----------------+---------------------
+ calc_fields          | t              | t
+ notification_outbox  | t              | t
+ okf_concept_manifest | t              | t
+ semantic_term_tags   | t              | t
+```
+
+All 4 tenant-bearing tables now have FORCE RLS. The
+table-owner bypass path is closed on those tables. The 10
+admin/global tables remain unforced by design.
+
