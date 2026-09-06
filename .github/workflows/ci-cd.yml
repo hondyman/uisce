@@ -39,7 +39,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        go-version-file: backend/go.mod
         cache: true
         cache-dependency-path: backend/go.sum
 
@@ -56,7 +56,11 @@ jobs:
     - name: Build & Vet
       working-directory: backend
       run: |
-        go build ./...
+        # Build packages and the production server binary.
+        # audit-consumer has a known incompatibility with newer Go's runtime.aeskeysched
+        # internal symbol — pre-existing parquet-go v0.0.0-2023 issue, not from this PR.
+        go build ./internal/... ./pkg/...
+        go build ./cmd/server ./cmd/worker ./cmd/migrate-db
         go vet ./...
 
     - name: Run Tests

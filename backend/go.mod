@@ -2,6 +2,8 @@ module github.com/hondyman/uisce/backend
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/apache/arrow-go/v18 v18.7.1-0.20260728150822-666f8dc2ea47
