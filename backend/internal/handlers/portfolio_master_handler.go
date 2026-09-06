@@ -39,6 +39,11 @@ func (h *PortfolioMasterHandler) RegisterRoutes(r chi.Router) {
 // ListGoldenRecords returns current portfolio golden records.
 // Query params: account_type (optional), as_of (optional RFC3339 date)
 func (h *PortfolioMasterHandler) ListGoldenRecords(w http.ResponseWriter, r *http.Request) {
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	q := r.URL.Query()
 	accountType := q.Get("account_type")
 	asOf := time.Now()
@@ -47,7 +52,7 @@ func (h *PortfolioMasterHandler) ListGoldenRecords(w http.ResponseWriter, r *htt
 			asOf = t
 		}
 	}
-	records, err := h.svc.GetPortfolioGolden(r.Context(), mustTenantID(r), accountType, asOf)
+	records, err := h.svc.GetPortfolioGolden(r.Context(), tid, accountType, asOf)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -62,7 +67,12 @@ func (h *PortfolioMasterHandler) ListGoldenRecords(w http.ResponseWriter, r *htt
 
 // ListSourceRegistry returns all active source registry entries.
 func (h *PortfolioMasterHandler) ListSourceRegistry(w http.ResponseWriter, r *http.Request) {
-	sources, err := h.svc.GetSourceRegistry(r.Context(), mustTenantID(r))
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	sources, err := h.svc.GetSourceRegistry(r.Context(), tid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -81,6 +91,11 @@ func (h *PortfolioMasterHandler) SimulateSourceChange(w http.ResponseWriter, r *
 	prefID, err := uuid.Parse(chi.URLParam(r, "prefId"))
 	if err != nil {
 		http.Error(w, "invalid prefId", http.StatusBadRequest)
+		return
+	}
+	tid, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
 		return
 	}
 
@@ -103,7 +118,7 @@ func (h *PortfolioMasterHandler) SimulateSourceChange(w http.ResponseWriter, r *
 
 	result, err := h.svc.SimulateSourceChange(
 		r.Context(),
-		mustTenantID(r),
+		tid,
 		prefID,
 		body.Field,
 		body.AccountType,
