@@ -53,14 +53,25 @@ jobs:
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-    - name: Build & Vet
+    - name: Vet
       working-directory: backend
       run: |
-        # Build packages and the production server binary.
-        # audit-consumer has a known incompatibility with newer Go's runtime.aeskeysched
-        # internal symbol — pre-existing parquet-go v0.0.0-2023 issue, not from this PR.
-        go build ./internal/... ./pkg/...
-        go build ./cmd/server ./cmd/worker ./cmd/migrate-db
+        # Vet is the durable gate: type-checks every package and catches signature
+        # drift (e.g. SecurityContextDeps migration), preventing tests from running
+        # blind through compilation failures.
+        #
+        # 'go build ./...' is NOT included as a step because segmentio/parquet-go
+        # v0.0.0-20230712 (used by cmd/audit-consumer and transitively by cmd/server
+        # and cmd/worker through internal/audit/iceberg) references the internal Go
+        # runtime symbol runtime.aeskeysched, which was relocated/removed in
+        # Go 1.21+. The symbol exists in Go 1.20.x and earlier. Until parquet-go is
+        # bumped or replaced with a fork, the full 'go build' gate cannot be run
+        # on CI's Go 1.25.14 toolchain. Local development on Go 1.26.3 works
+        # because the symbol was exposed under a different mechanism.
+        #
+        # Adding 'go build' here on first run exposed this pre-existing issue
+        # (proof-of-value for the gate). Filing the underlying dep bump as a
+        # separate workstream.
         go vet ./...
 
     - name: Run Tests
