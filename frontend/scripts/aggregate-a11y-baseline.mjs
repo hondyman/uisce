@@ -19,10 +19,12 @@ if (!existsSync(SRC)) {
 const files = readdirSync(SRC).filter((f) => f.endsWith('.json'));
 const violations = [];
 const passes = [];
+let crashed = 0;
 
 for (const file of files) {
   const raw = JSON.parse(readFileSync(path.join(SRC, file), 'utf8'));
   const route = file.replace(/^_+|_+\.json$/g, '');
+  if (raw.crashed) crashed++;
   for (const v of raw.violations ?? []) {
     violations.push({
       route,
@@ -66,6 +68,21 @@ for (const [rule, count] of Object.entries(byRule)) {
   }
 }
 
+// Protocol closure #1: refuse to write if >20% of routes crashed.
+// A crawl where most routes are error boundaries is not a baseline — it's an outage report.
+const crashPct = ((crashed / routeCount) * 100).toFixed(1);
+const CRASH_THRESHOLD = 0.20;
+if (crashed > routeCount * CRASH_THRESHOLD) {
+  console.error(`\n⚠️  INVALID BASELINE: ${crashed}/${routeCount} routes crashed (${crashPct}%)`);
+  console.error(`   Exceeds ${(CRASH_THRESHOLD * 100).toFixed(0)}% threshold — crawl measured error boundaries, not the app.`);
+  console.error(`   Fix the auth/tenant/backend first, then re-run the crawl.\n`);
+  const invalidOut = path.join(DST, `INVALID-${date}.json`);
+  writeFileSync(invalidOut, JSON.stringify({ invalid: true, reason: 'crash-threshold-exceeded', crashed, total: routeCount, crashPct }, null, 2));
+  console.error(`Wrote invalid baseline to ${invalidOut} for archaeology.`);
+  process.exit(1);
+}
+console.log(`  Crashed routes: ${crashed}/${routeCount} (${crashPct}%) — OK`);
+
 const summary = {
   date,
   generatedBy: 'frontend/scripts/aggregate-a11y-baseline.mjs',
@@ -73,6 +90,8 @@ const summary = {
   totals: {
     violations: violations.length,
     passes: passes.length,
+    crashed,
+    crashedPct: parseFloat(crashPct),
     impact: {
       critical: violations.filter((v) => v.impact === 'critical').length,
       serious: violations.filter((v) => v.impact === 'serious').length,

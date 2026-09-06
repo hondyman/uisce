@@ -212,6 +212,35 @@ function authStorage(jwt: string) {
 }
 
 test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
+  // Protocol closure #2: health pre-flight — verify the app accepts the auth+tenant
+  // before spending 6 minutes on a crawl that will measure error boundaries.
+  // Auth-OK (Keycloak 200) and app-accepts-tenant (API 200) are different checks.
+  test.beforeAll(async ({ request }) => {
+    const backendURL = process.env.BASE_URL?.replace(':5173', ':8080') ?? 'http://localhost:8080';
+    const preflightPaths = ['/api/access/scopes', '/api/tenant/scope'];
+    let preflightPassed = false;
+    for (const p of preflightPaths) {
+      try {
+        const res = await request.fetch(`${backendURL}${p}`, {
+          headers: { Authorization: `Bearer ${globalThis.__A11Y_JWT__}` },
+        });
+        if (res.status() === 200) { preflightPassed = true; break; }
+        if (res.status() === 401) {
+          throw new Error(`[pre-flight] Auth rejected — check E2E_JWT or E2E_KC_USER/E2E_KC_PASS. Status: ${res.status()}`);
+        }
+        // 403/500/404 = tenant or app state problem, not auth — keep trying other endpoints
+      } catch {}
+    }
+    if (!preflightPassed) {
+      throw new Error(
+        `[pre-flight] App rejected auth+tenant on all pre-flight endpoints. ` +
+        `This crawl would measure error boundaries, not the app. ` +
+        `Fix the tenant/auth setup before re-running.`,
+      );
+    }
+    console.log('[pre-flight] Auth + tenant verified OK');
+  });
+
   test.beforeEach(async ({ page, context }) => {
     let jwt: string;
     if (E2E_JWT) {
@@ -225,6 +254,8 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         'Set E2E_JWT (CI) or E2E_KC_USER+E2E_KC_PASS (local) to run a real crawl.',
       );
     }
+    // Stash JWT globally so beforeAll can use it for the pre-flight
+    globalThis.__A11Y_JWT__ = jwt;
     await context.addInitScript(
       (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },
       authStorage(jwt),
@@ -254,7 +285,18 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
         finalUrl: page.url(),
         violations: results.violations,
         violationIds: results.violations.map((v: { id: string }) => v.id),
+        passes: results.passes,
+        passCount: results.passes.length,
       };
+
+      // Check for crash before writing — error boundaries render valid DOM that axe can scan,
+      // producing "clean" results on broken pages. <main> presence is the crash indicator.
+      const mainCount = await page.locator('main, [role="main"]').count();
+      if (mainCount === 0) {
+        output.crashed = true;
+        output.crashReason = 'no <main> landmark — app crashed or error boundary rendered';
+      }
+
       fs.writeFileSync(
         path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`),
         JSON.stringify(output, null, 2),
@@ -262,17 +304,10 @@ test.describe('Phase 0 axe baseline (WCAG 2.1 AA)', () => {
 
       test.info().annotations.push({
         type: 'axe-summary',
-        description: `${results.violations.length} violations`,
+        description: `${results.violations.length} violations${output.crashed ? ' [CRASHED]' : ''}`,
       });
 
-      const mainCount = await page.locator('main, [role="main"]').count();
-      if (mainCount === 0) {
-        output.crashed = true;
-        output.crashReason = 'no <main> landmark — app crashed or error boundary rendered';
-        const filePath = path.join(OUT_DIR, `${route.replace(/\W+/g, '_')}.json`);
-        fs.writeFileSync(filePath, JSON.stringify(output, null, 2));
-        return;
-      }
+      if (output.crashed) return;
     });
   }
 });
