@@ -32,25 +32,13 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Start dev server
-        working-directory: frontend
-        run: npm run dev &
-        env:
-          PORT: 3000
-
-      - name: Wait for dev server
-        run: |
-          for i in {1..30}; do
-            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
-              echo "Dev server ready"
-              break
-            fi
-            sleep 5
-          done
-
       - name: Run a11y baseline crawl
         working-directory: frontend
-        run: npx playwright test e2e/a11y/baseline.spec.ts --reporter=line
+        # Use playwright.a11y.config.ts explicitly — the default playwright.config.ts
+        # has a `webServer` block calling `npm start` which doesn't exist in
+        # package.json (we have `dev`). The a11y config uses `npm run dev` and
+        # its webServer block manages the dev server lifecycle.
+        run: npx playwright test --config=playwright.a11y.config.ts --reporter=line
 
       - name: Aggregate baseline
         working-directory: frontend
