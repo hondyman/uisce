@@ -600,3 +600,110 @@ When the self-hosted runner is installed and the workflow stabilizes:
 
 Don't do this before the runner is online — the failure-mode commits
   are the most readable evidence that the gate is honest.
+
+### BYPASSRLS Design — Evidence Pack
+
+Gathered 2026-09-06 (PostgreSQL 18.6, db `alpha` on `100.84.50.65`).
+
+**Q1 — Do RLS policies exist?**
+
+YES. **603 policies across 529 distinct tables** in `public` schema
+(and one in `calendar`). Sample (`pg_policies` first 50 rows by
+tablename): every tenant-scoped table has a `tenant_isolation_policy`
+on `{public}` role, plus a handful of specialized policies
+(`{authenticated}`-bound for Keycloak-federated reads; per-table
+admin policies; `_tenant_isolation` suffixed variants).
+
+Conclusion: the policy authoring work is **largely done**. The
+remaining work is roles, wiring, and the app-DSN switch (see Q3).
+NOT a per-table authoring project.
+
+**Q2 — Tenant-scoped table count**
+
+`SELECT count(*) FROM information_schema.columns
+WHERE table_schema='public' AND column_name='tenant_id'` → **533**.
+
+Of those, ~529 have RLS policies (numbers align with Q1). The 4-5
+delta is likely: tenant_id-bearing tables that are intentionally
+unsecured (e.g. cross-tenant lookup tables like `trigger_types`),
+plus any in-flight migrations.
+
+**Q3 — Roles inventory**
+
+```
+ rolname                    | rolsuper | rolbypassrls | rolcanlogin
+----------------------------+----------+--------------+------------
+ app_user                   | f        | f            | t
+ infisical                  | f        | f            | t
+ keycloak                   | f        | f            | t
+ nessie                     | f        | f            | t
+ postgres                   | t        | t            | t   <-- only BYPASSRLS
+ semlayer_lookups_replica   | f        | f            | t
+ temporal                   | t        | f            | t   <-- superuser but NO BYPASSRLS
+ usice_app                  | f        | f            | t
+ usice_ops                  | f        | f            | t
+```
+
+Only `postgres` has BYPASSRLS. `temporal` is superuser but does
+NOT have BYPASSRLS — meaning the migration runner respects RLS
+(unless `temporal` reconnects as `postgres` to bypass).
+
+**App connection (today):** `DATABASE_URL=postgres://postgres@100.84.50.65:...`
+— the app connects as `postgres`, which has BYPASSRLS enabled.
+**This means every `set_config('uisce.current_tenant', ...)` call
+is currently inert** — the policy never fires because the role
+bypasses it. The `set_config` mechanism is correct in isolation;
+the gap is the connection role.
+
+Implication: the BYPASSRLS fix is almost entirely an app-side
+DSN switch (`postgres` → `usice_app` or `app_user`), plus wiring
+the existing `SetRLSContext` helper into the request path. No
+new policy authoring. No DSN-level connection pool rewrite (no
+pgxpool in the codebase — see Q4).
+
+**Q4 — Connection pool architecture (`rg sqlx.Connect|pgxpool|sql.Open`)**
+
+Every cmd/entry point uses `sql.Open` / `sqlx.Connect` directly
+from `DATABASE_URL`. No central connection pool. No `pgxpool`
+anywhere — everything is `database/sql` / `sqlx`. Each cmd binary
+opens its own connection(s) per process. `internal/multitenancy/manager.go`
+keeps a connection ref but creates per-call (it's commented out in
+the source — see that file).
+
+`internal/middleware/security_helpers.go` already has the comment:
+"a transaction (via db.BeginTx) — otherwise SET LOCAL reverts
+immediately" — confirming the project understands the tx-scoped
+constraint.
+
+**Transaction boundaries:** `rg "BeginTx|Begin\(" backend/internal --type go` → **132 matches** across the internal packages. `set_config(..., true)` is tx-scoped: the call must be on the same tx as the query, or `SET LOCAL` reverts.
+
+**Q5 — Pool architecture = one direct connection per binary, per process**
+
+  - Per-cmd `sql.Open` / `sqlx.Connect` against `DATABASE_URL`
+  - No pooled backend, no pgxpool
+  - Connection role = postgres (BYPASSRLS) — `set_config` is currently inert
+  - 132 explicit tx boundaries in internal/
+
+**Implications for BYPASSRLS design:**
+
+1. Roles are good. Policies are written. The gap is the app's
+   connection role.
+2. App-side DSN switch (`postgres` → `usice_app`) is the main lever.
+   `usice_app` has `BYPASSRLS=false`, will honor every existing policy.
+   Validate this with `psql` as `usice_app` once it's enabled with
+   `LOGIN`.
+3. `set_config('uisce.current_tenant', $1, true)` then becomes the
+   active mechanism — driven by JWT claims from `security.AuthInfo`.
+   The middleware at `internal/tenant/context.go:24` and
+   `internal/middleware/security_helpers.go` already does this.
+4. 132 tx boundaries mean SET LOCAL discipline must apply across all
+   of them. Easiest: a tx-wrapping helper that always sets
+   `uisce.current_tenant` first, then runs the user's queries.
+   Mirrors the `BeginTx` pattern at
+   `internal/middleware/security_helpers.go`.
+5. Migration order: (a) create a non-BYPASSRLS role for app;
+   (b) verify policies enforced against it with `SET ROLE` in
+   dev; (c) flip DATABASE_URL; (d) monitor `pg_stat_activity` for
+   the new role.
+
+This is the design conversation to start next session.
