@@ -34,6 +34,10 @@ const (
 	AccessLevelWrite AccessLevel = "WRITE"
 )
 
+// catalogNodeTypeID is the node_type_id for BO semantic linkage nodes (classification, business_key, semantic_id, grain)
+// Corresponds to catalog_node_types.catalog_type_name = 'business_object'
+var catalogNodeTypeID = uuid.MustParse("06bb774c-8666-4ab1-84eb-4f4d439ac84c")
+
 // ErrForbidden is returned when a caller lacks the required permission.
 var ErrForbidden = errors.New("forbidden")
 
@@ -351,37 +355,51 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		}
 	}
 
-	// Insert BO
-	query := `
+	var err error
+
+	// gen-3: create catalog linkage nodes before the BO INSERT (FK required: NOT NULL + FK to catalog_node)
+	classificationNodeID := uuid.New()
+	businessKeyNodeID := uuid.New()
+	semanticIDNodeID := uuid.New()
+	grainNodeID := uuid.New()
+
+	now = time.Now()
+
+	catalogInsertQuery := `
+		INSERT INTO catalog_node (id, node_type_id, node_name, qualified_path, tenant_id, is_active, created_at, updated_at)
+		VALUES
+			($1, $2, $3, $4, $5, true, $6, $6),
+			($7, $2, $8, $9, $5, true, $6, $6),
+			($10, $2, $11, $12, $5, true, $6, $6),
+			($13, $2, $14, $15, $5, true, $6, $6)
+	`
+	_, err = s.db.ExecContext(ctx, catalogInsertQuery,
+		classificationNodeID, catalogNodeTypeID, bo.Key+" (classification)", "business_object/"+bo.Key+"/classification",
+		bo.TenantID, now,
+		businessKeyNodeID, bo.Key+" (business key)", "business_object/"+bo.Key+"/business_key",
+		semanticIDNodeID, bo.Key+" (semantic id)", "business_object/"+bo.Key+"/semantic_id",
+		grainNodeID, bo.Key+" (grain)", "business_object/"+bo.Key+"/grain",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create catalog linkage nodes: %w", err)
+	}
+
+	// Insert BO (gen-3 schema)
+	insertQuery := `
 		INSERT INTO business_objects (
-			id, tenant_id, key, name, display_name, technical_name,
-			description, icon, is_core, clones_from, clone_parent_key,
-			clone_parent_display_name, category, parent_id, datasource_id,
+			id, tenant_id, model_id, bo_key, bo_name, description,
+			bo_type, classification_node_id, business_key_node_id,
+			semantic_id_node_id, grain_node_id,
 			driver_table_id, driver_table_name,
-			config,
-			created_at, created_by, last_modified_at, last_modified_by, 
-			is_active
+			is_core, is_active, created_at, updated_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, $14, $15,
-			$16, $17,
-			$18,
-			$19, $20, $21, $22, 
-			$23
+			$7, $8, $9,
+			$10, $11,
+			$12, $13,
+			$14, $15, $16, $17
 		)
 	`
-
-	// Handle nullable parent_id UUID
-	var parentID interface{} = nil
-	if bo.ParentID.Valid && bo.ParentID.String != "" {
-		parentID = bo.ParentID.String
-	}
-
-	var datasourceID interface{} = nil
-	if bo.DatasourceID.Valid && bo.DatasourceID.String != "" {
-		datasourceID = bo.DatasourceID.String
-	}
 
 	// Handle nullable driver_table_id UUID
 	var driverTableID interface{} = nil
@@ -389,40 +407,51 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		driverTableID = bo.DriverTableID.String
 	}
 
-	// Handle nullable created_by
-	var createdBy interface{} = nil
-	if bo.CreatedBy != "" {
-		createdBy = bo.CreatedBy
+	// model_id: use req.ModelID if provided, otherwise use a default empty UUID
+	modelID := req.ModelID
+	if modelID == "" {
+		modelID = uuid.Nil.String()
 	}
 
-	// Handle nullable last_modified_by
-	var lastModifiedBy interface{} = nil
-	if bo.LastModifiedBy != "" {
-		lastModifiedBy = bo.LastModifiedBy
+	// bo_type: default to ENTITY
+	boType := req.BOType
+	if boType == "" {
+		boType = "ENTITY"
 	}
 
-	// Prepare config JSON
-	configJSON := map[string]interface{}{
-		"is_core": bo.IsCore,
-	}
-	if req.Config != nil {
-		for k, v := range req.Config {
-			configJSON[k] = v
+	// classification_node_id: allow req override (for pre-existing linkage), else use auto-generated
+	if req.ClassificationNodeID != "" {
+		if parsed, parseErr := uuid.Parse(req.ClassificationNodeID); parseErr == nil {
+			classificationNodeID = parsed
 		}
 	}
-	configBytes, _ := json.Marshal(configJSON)
 
-	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s datasource=%v parent_id=%v name=%s", bo.TenantID, datasourceID, parentID, bo.Name)
-	fmt.Printf("[META DEBUG] tenant=%s datasource=%v parent_id=%v name=%s valid=%v\n", bo.TenantID, datasourceID, parentID, bo.Name, bo.DatasourceID.Valid)
+	// business_key_node_id, semantic_id_node_id, grain_node_id: allow req override or auto-generated
+	if req.BusinessKeyNodeID != "" {
+		if parsed, parseErr := uuid.Parse(req.BusinessKeyNodeID); parseErr == nil {
+			businessKeyNodeID = parsed
+		}
+	}
+	if req.SemanticIDNodeID != "" {
+		if parsed, parseErr := uuid.Parse(req.SemanticIDNodeID); parseErr == nil {
+			semanticIDNodeID = parsed
+		}
+	}
+	if req.GrainNodeID != "" {
+		if parsed, parseErr := uuid.Parse(req.GrainNodeID); parseErr == nil {
+			grainNodeID = parsed
+		}
+	}
 
-	_, err := s.db.ExecContext(ctx, query,
-		bo.ID, bo.TenantID, bo.Key, bo.Name, bo.DisplayName, bo.TechnicalName,
-		bo.Description, bo.Icon, bo.IsCore, bo.ClonesFrom, bo.CloneParentKey,
-		bo.CloneParentDisplayName, bo.Category, parentID, datasourceID,
+	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s name=%s bo_key=%s", bo.TenantID, bo.Name, bo.Key)
+	fmt.Printf("[META DEBUG] tenant=%s name=%s bo_key=%s\n", bo.TenantID, bo.Name, bo.Key)
+
+	_, err = s.db.ExecContext(ctx, insertQuery,
+		bo.ID, bo.TenantID, modelID, bo.Key, bo.Name,
+		bo.Description, boType, classificationNodeID, businessKeyNodeID,
+		semanticIDNodeID, grainNodeID,
 		driverTableID, bo.DriverTableName,
-		string(configBytes),
-		bo.CreatedAt, createdBy, bo.LastModifiedAt, lastModifiedBy,
-		bo.IsActive,
+		bo.IsCore, bo.IsActive, bo.CreatedAt, now,
 	)
 
 	if err != nil {
@@ -457,56 +486,30 @@ func (s *BusinessObjectService) GetBusinessObject(
 
 	bo := &models.BusinessObjectDefinition{}
 
-	// Try old schema first (business_objects table)
-	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name,
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id
+	// gen-3 schema query
+	query := `
+		SELECT id, tenant_id, model_id, bo_key, bo_name,
+		       COALESCE(description, '') AS description,
+		       bo_type, classification_node_id, business_key_node_id,
+		       semantic_id_node_id, grain_node_id,
+		       COALESCE(driver_table_id::text, '') AS driver_table_id,
+		       COALESCE(driver_table_name, '') AS driver_table_name,
+		       is_core, is_active, created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND (key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
+		WHERE tenant_id = $1::uuid AND (bo_key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
 	`
 
-	err := s.db.GetContext(ctx, bo, oldQuery, tenantID, boKey, isUUID)
+	err := s.db.GetContext(ctx, bo, query, tenantID, boKey, isUUID)
 	if err == nil {
-		// Found in old schema (User Tenant)
-		logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject found in old schema (User Tenant) - id=%s", bo.ID)
+		logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject found - id=%s bo_key=%s", bo.ID, bo.Key)
 		s.populateDriverTableInfo(ctx, bo)
 
-		// Load subtypes and fields
 		if err := s.loadBOSubtypesAndFields(ctx, bo, tenantID); err != nil {
 			logging.GetLogger().Sugar().Warnf("Warning: failed to load subtypes and fields: %v", err)
 		}
 		return bo, nil
 	}
 
-	// Fallback: Check Gold Copy Tenant if not found in User Tenant
-	var goldCopyTenantID string
-	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
-
-	if gcErr == nil && goldCopyTenantID != "" && goldCopyTenantID != tenantID {
-		err = s.db.GetContext(ctx, bo, oldQuery, goldCopyTenantID, boKey, isUUID)
-		if err == nil {
-			// Found in Gold Copy
-			logging.GetLogger().Sugar().Infof("DEBUG: GetBusinessObject found in Gold Copy - id=%s", bo.ID)
-			s.populateDriverTableInfo(ctx, bo)
-
-			// Load subtypes and fields - PASSING USER TENANT ID to find custom extensions
-			if err := s.loadBOSubtypesAndFields(ctx, bo, tenantID); err != nil {
-				logging.GetLogger().Sugar().Warnf("Warning: failed to load subtypes and fields for Gold Copy BO: %v", err)
-			}
-			return bo, nil
-		}
-	}
-
-	// If not found in old schema, return error immediately
-	logging.GetLogger().Sugar().Errorf("ERROR: GetBusinessObject not found in old schema (User or Gold Copy): %v", err)
 	return nil, fmt.Errorf("business object not found")
 }
 
@@ -538,43 +541,31 @@ func (s *BusinessObjectService) populateDriverTableInfo(ctx context.Context, bo 
 	}
 }
 
-// ListBusinessObjects retrieves all BOs for a tenant from both old and new schema
+// ListBusinessObjects retrieves all BOs for a tenant (gen-3 schema)
 func (s *BusinessObjectService) ListBusinessObjects(
 	ctx context.Context,
 	secCtx *security.Context,
 ) ([]*models.BusinessObjectDefinition, error) {
 	tenantID := secCtx.TenantID
-	datasourceID := secCtx.DatasourceID
-	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
-		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
-		       is_active,
-		       config, datasource_id
+	query := `
+		SELECT id, tenant_id, model_id, bo_key, bo_name,
+		       COALESCE(description, '') AS description,
+		       bo_type, classification_node_id, business_key_node_id,
+		       semantic_id_node_id, grain_node_id,
+		       COALESCE(driver_table_id::text, '') AS driver_table_id,
+		       COALESCE(driver_table_name, '') AS driver_table_name,
+		       is_core, is_active, created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1::uuid AND parent_id IS NULL
+		WHERE tenant_id = $1::uuid
+		ORDER BY bo_name
 	`
 
-	oldArgs := []interface{}{tenantID}
-	if datasourceID != "" {
-		oldQuery += " AND (datasource_id = $2::uuid OR datasource_id IS NULL)"
-		oldArgs = append(oldArgs, datasourceID)
-	}
-	oldQuery += " ORDER BY name"
-
 	var bos []*models.BusinessObjectDefinition
-	oldSchemaErr := s.db.SelectContext(ctx, &bos, oldQuery, oldArgs...)
-	if oldSchemaErr != nil {
-		logging.GetLogger().Sugar().Warnf("Warning: failed to list from old schema: %v", oldSchemaErr)
-		// Continue to new schema
+	if err := s.db.SelectContext(ctx, &bos, query, tenantID); err != nil {
+		logging.GetLogger().Sugar().Warnf("Warning: failed to list business objects: %v", err)
+		return nil, err
 	}
 
-	// Only use old schema for now as business_object_def does not exist
 	return bos, nil
 }
 
@@ -1045,37 +1036,13 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	if req.IsActive != nil {
 		current.IsActive = *req.IsActive
 	}
-	if req.DisplayName != "" {
-		current.DisplayName = req.DisplayName
-	}
 	if req.Description != "" {
 		current.Description = req.Description
 	}
-	if req.Icon != "" {
-		current.Icon = req.Icon
-	}
-	if req.Category != "" {
-		current.Category = req.Category
-	}
 
 	now := time.Now()
-	var lastModifiedBy interface{} = nil
-	if userID != "" {
-		lastModifiedBy = userID
-	}
 
 	if req.Config != nil {
-		// Update Config
-		configBytes, err := json.Marshal(req.Config)
-		if err == nil {
-			query := `
-				UPDATE business_objects
-				SET config = $1, last_modified_at = $2, last_modified_by = $3
-				WHERE tenant_id = $4::uuid AND key = $5
-			`
-			_, _ = s.db.ExecContext(ctx, query, configBytes, now, lastModifiedBy, tenantID, current.Key)
-		}
-
 		// Update Fields column if present in config
 		if fields, ok := req.Config["fields"]; ok {
 			fieldsBytes, err := json.Marshal(fields)
@@ -1087,13 +1054,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 				if err := json.Unmarshal(fieldsBytes, &newFields); err == nil {
 					logging.GetLogger().Sugar().Infof("metadata: UPDATE FIELDS - received %d fields for bo_id=%s, tenant=%s", len(newFields), current.ID, tenantID)
 
-					// Update the fields column in business_objects table
-					query := `
-						UPDATE business_objects
-						SET fields = $1, last_modified_at = $2, last_modified_by = $3
-						WHERE tenant_id = $4::uuid AND key = $5
-					`
-					_, _ = s.db.ExecContext(ctx, query, fieldsBytes, now, lastModifiedBy, tenantID, current.Key)
+					// gen-3: no fields column on business_objects; fields go to bo_fields table only
 					// Use a transaction to replace custom (non-core) fields
 					tx, txErr := s.db.BeginTxx(ctx, nil)
 					if txErr == nil {
@@ -1358,24 +1319,24 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	if isUUID {
 		query = `
 			UPDATE business_objects
-			SET display_name = $1, description = $2, icon = $3, category = $4,
-				is_active = $5, last_modified_at = $6, last_modified_by = $7,
-				driver_table_id = $8, driver_table_name = $9
-			WHERE tenant_id = $10::uuid AND id = CAST($11 AS uuid)
+			SET bo_name = $1, description = $2,
+				is_active = $3, updated_at = $4,
+				driver_table_id = $5, driver_table_name = $6
+			WHERE tenant_id = $7::uuid AND id = CAST($8 AS uuid)
 		`
 	} else {
 		query = `
 			UPDATE business_objects
-			SET display_name = $1, description = $2, icon = $3, category = $4,
-				is_active = $5, last_modified_at = $6, last_modified_by = $7,
-				driver_table_id = $8, driver_table_name = $9
-			WHERE tenant_id = $10::uuid AND key = $11
+			SET bo_name = $1, description = $2,
+				is_active = $3, updated_at = $4,
+				driver_table_id = $5, driver_table_name = $6
+			WHERE tenant_id = $7::uuid AND bo_key = $8
 		`
 	}
 
 	_, err = s.db.ExecContext(ctx, query,
-		current.DisplayName, current.Description, current.Icon, current.Category,
-		current.IsActive, now, lastModifiedBy,
+		current.Name, current.Description,
+		current.IsActive, now,
 		current.DriverTableID, current.DriverTableName,
 		tenantID, boKey,
 	)
@@ -1386,10 +1347,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 
 	// Log audit
 	changes := map[string]interface{}{
-		"displayName":     req.DisplayName,
 		"description":     req.Description,
-		"icon":            req.Icon,
-		"category":        req.Category,
 		"driverTableId":   req.DriverTableID,
 		"driverTableName": req.DriverTableName,
 		"isActive":        req.IsActive,
@@ -1425,7 +1383,7 @@ func (s *BusinessObjectService) DeleteBusinessObject(
 
 	query := `
 		DELETE FROM business_objects
-		WHERE tenant_id = $1::uuid AND key = $2
+		WHERE tenant_id = $1::uuid AND bo_key = $2
 	`
 
 	_, err = s.db.ExecContext(ctx, query, tenantID, bo.Key)
@@ -1478,43 +1436,21 @@ func (s *BusinessObjectService) RenameSubtype(
 	subtype.DisplayName = newName
 	bo.Subtypes[foundKey] = subtype
 
-	// Update the business object with new subtypes in the config
-	subtypesJSON, err := json.Marshal(bo.Subtypes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal subtypes: %w", err)
-	}
-
-	query := `
-		UPDATE business_objects
-		SET config = jsonb_set(config, '{subtypes}', $1::jsonb),
-		    last_modified_at = $2,
-		    last_modified_by = $3
-		WHERE id = $4::uuid AND tenant_id = $5::uuid
-	`
-
+	// gen-3: no config column, update bo_subtypes directly
 	now := time.Now()
 	var lastModifiedBy interface{} = nil
 	if userID != "" {
 		lastModifiedBy = userID
 	}
-	_, err = s.db.ExecContext(ctx, query, string(subtypesJSON), now, lastModifiedBy, bo.ID, tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to rename subtype in config: %w", err)
-	}
 
-	// Also update in bo_subtypes if it exists there
+	// Update in bo_subtypes if it exists there
 	_, _ = s.db.ExecContext(ctx, `
-		UPDATE bo_subtypes 
+		UPDATE bo_subtypes
 		SET name = $1, display_name = $1, last_modified_at = $2, last_modified_by = $3
 		WHERE (id = $4::uuid OR key = $4) AND business_object_id = $5::uuid
 	`, newName, now, lastModifiedBy, subtypeKey, bo.ID)
 
-	// Also update in business_objects if it's a child BO
-	_, _ = s.db.ExecContext(ctx, `
-		UPDATE business_objects
-		SET name = $1, display_name = $1, last_modified_at = $2, last_modified_by = $3
-		WHERE (id = $4::uuid OR key = $4) AND parent_id = $5::uuid
-	`, newName, now, lastModifiedBy, subtypeKey, bo.ID)
+	// gen-3: business_objects has no name/parent_id columns; child BOs are handled via bo_subtypes
 
 	// Log audit
 	s.logAudit(ctx, tenantID, "subtype", bo.ID, "rename", map[string]interface{}{
@@ -1565,41 +1501,14 @@ func (s *BusinessObjectService) DeleteSubtype(
 	// Remove from the map
 	delete(bo.Subtypes, foundKey)
 
-	// Update the business object with new subtypes in the config
-	subtypesJSON, err := json.Marshal(bo.Subtypes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal subtypes: %w", err)
-	}
-
-	query := `
-		UPDATE business_objects
-		SET config = jsonb_set(config, '{subtypes}', $1::jsonb),
-		    last_modified_at = $2,
-		    last_modified_by = $3
-		WHERE id = $4::uuid AND tenant_id = $5::uuid
-	`
-
-	now := time.Now()
-	var lastModifiedBy interface{} = nil
-	if userID != "" {
-		lastModifiedBy = userID
-	}
-	_, err = s.db.ExecContext(ctx, query, string(subtypesJSON), now, lastModifiedBy, bo.ID, tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to delete subtype from config: %w", err)
-	}
-
-	// Also delete from bo_subtypes table if it exists there
+	// gen-3: no config column, delete from bo_subtypes directly
+	// Delete from bo_subtypes table if it exists there
 	_, _ = s.db.ExecContext(ctx, `
-		DELETE FROM bo_subtypes 
+		DELETE FROM bo_subtypes
 		WHERE key = $1 AND business_object_id = $2::uuid
 	`, subtypeKey, bo.ID)
 
-	// Also delete from business_objects table if it's a child BO
-	_, _ = s.db.ExecContext(ctx, `
-		DELETE FROM business_objects
-		WHERE (key = $1 OR id = CAST($2 AS uuid)) AND parent_id = $3::uuid
-	`, subtypeKey, subtypeKey, bo.ID)
+	// gen-3: business_objects has no child-BO concept; child BOs are handled via bo_subtypes
 
 	// Log audit
 	s.logAudit(ctx, tenantID, "subtype", bo.ID, "delete", map[string]interface{}{

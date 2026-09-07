@@ -65,8 +65,8 @@ type SubtypeDefinition struct {
 // BusinessObjectDefinition represents a complete Business Object
 type BusinessObjectDefinition struct {
 	ID                     string                       `db:"id" json:"id"`
-	Key                    string                       `db:"key" json:"key"`
-	Name                   string                       `db:"name" json:"name"`
+	Key                    string                       `db:"bo_key" json:"key"`
+	Name                   string                       `db:"bo_name" json:"name"`
 	DisplayName            string                       `db:"display_name" json:"displayName"`
 	TechnicalName          string                       `db:"technical_name" json:"technicalName"`
 	Description            string                       `db:"description" json:"description"`
@@ -317,14 +317,17 @@ type CreateBusinessObjectRequest struct {
 	EnableHistory   bool                   `json:"enableHistory"`
 	HistoryMode     string                 `json:"historyMode"`
 	Config          map[string]interface{} `json:"config"`
+	ModelID         string                 `json:"modelId"`
+	BOType          string                 `json:"boType"`
+	ClassificationNodeID string             `json:"classificationNodeId"`
+	BusinessKeyNodeID   string             `json:"businessKeyNodeId"`
+	SemanticIDNodeID     string             `json:"semanticIdNodeId"`
+	GrainNodeID           string             `json:"grainNodeId"`
 }
 
 // UpdateBusinessObjectRequest represents a request to update a BO
 type UpdateBusinessObjectRequest struct {
-	DisplayName     string                 `json:"displayName"`
 	Description     string                 `json:"description"`
-	Icon            string                 `json:"icon"`
-	Category        string                 `json:"category"`
 	IsActive        *bool                  `json:"isActive"`
 	EnableHistory   *bool                  `json:"enableHistory"`
 	HistoryMode     string                 `json:"historyMode"`

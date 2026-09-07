@@ -119,10 +119,7 @@ func (bch *BOCommandHandler) HandleUpdateBO(ctx context.Context, command *Comman
 
 	dataMap := getMapField(cmdMap, "data")
 	req := models.UpdateBusinessObjectRequest{
-		DisplayName: getStringField(dataMap, "displayName"),
 		Description: getStringField(dataMap, "description"),
-		Icon:        getStringField(dataMap, "icon"),
-		Category:    getStringField(dataMap, "category"),
 	}
 
 	// Execute business logic

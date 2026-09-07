@@ -436,48 +436,31 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 		return nil, fmt.Errorf("database connection not initialized")
 	}
 
-	// Marshal config if present
-	var configJSON []byte
 	var err error
-	if req.Config != nil {
-		configJSON, err = json.Marshal(req.Config)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal config: %w", err)
-		}
-	}
-
 	query := `
 		UPDATE business_objects
-		SET display_name = $1, description = $2, icon = $3, category = $4, is_active = COALESCE($5, is_active), 
-		    enable_history = COALESCE($6, enable_history), history_mode = COALESCE($7, history_mode), 
-		    config = CASE WHEN $10::jsonb IS NOT NULL THEN $10::jsonb ELSE config END,
-		    last_modified_at = NOW()
-		WHERE tenant_id = $8 AND (id::text = $9 OR technical_name = $9)
-		RETURNING id, tenant_id, name, display_name, description, config, icon, category, is_active, enable_history, history_mode, created_by, created_at, last_modified_at
+		SET description = $1, is_active = COALESCE($2, is_active),
+		    driver_table_id = $3, driver_table_name = $4, updated_at = NOW()
+		WHERE tenant_id = $5 AND (id::text = $6 OR bo_key = $6)
+		RETURNING id, tenant_id, model_id, bo_key, bo_name, description, bo_type,
+		          classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+		          driver_table_id, driver_table_name, is_core, is_active, created_at, updated_at
 	`
 
 	bo := &models.BusinessObjectDefinition{}
-	var config []byte
-
-	// Use sql.Null types or just pass nil for configJSON if empty?
-	// Postgres driver handles []byte as bytea usually, but we cast to jsonb.
-	// We need to be careful with nil vs empty slice.
-	// If configJSON is nil, it passes nil.
+	var boType string
 
 	err = s.db.QueryRowContext(ctx, query,
-		req.DisplayName,
 		req.Description,
-		req.Icon,
-		req.Category,
 		req.IsActive,
-		req.EnableHistory,
-		req.HistoryMode,
+		req.DriverTableID,
+		req.DriverTableName,
 		tenantID,
-		key,
-		configJSON).
-		Scan(&bo.ID, &bo.TenantID, &bo.Name, &bo.DisplayName, &bo.Description, &config,
-			&bo.Icon, &bo.Category, &bo.IsActive, &bo.EnableHistory, &bo.HistoryMode,
-			&bo.CreatedBy, &bo.CreatedAt, &bo.LastModifiedAt)
+		key).
+		Scan(&bo.ID, &bo.TenantID, &bo.ModelID, &bo.Key, &bo.Name, &bo.Description, &boType,
+			&bo.ClassificationNodeID, &bo.BusinessKeyNodeID, &bo.SemanticIDNodeID, &bo.GrainNodeID,
+			&bo.DriverTableID, &bo.DriverTableName, &bo.IsCore, &bo.IsActive,
+			&bo.CreatedAt, &bo.LastModifiedAt)
 
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("business object not found")
@@ -486,11 +469,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 		return nil, fmt.Errorf("failed to update business object: %w", err)
 	}
 
-	if len(config) > 0 {
-		bo.Config = config
-	}
-
-	// Logic for child fields update (bo_fields)
+	// boType is the STI type string; BOTypeID is a FK UUID not present in gen-3 table
 	// This logic extracted from Config['fields']
 	if req.Config != nil {
 		if fieldsRaw, ok := req.Config["fields"]; ok {
