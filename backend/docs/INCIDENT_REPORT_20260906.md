@@ -142,11 +142,122 @@ The query behind it selects `oauth_client_secret_encrypted`, `oauth_refresh_toke
 
 ## Lesson: A Branch Labeled As The Fix Can Be The Vulnerability, Relative To Current Main
 
-Re-baselining `claude/wonderful-lewin-7c0c43` (the branch containing the commit titled "fix: close cross-tenant IDOR...") against *current* `main` — after the hotfix above had already landed — found that on all three files where the branch differs from main, merging it would **revert the fix back to vulnerable code**. The branch was cut before PR #19/#20/#21 landed; by the time it would have been reviewed, main had independently and more correctly fixed the same functions.
+Re-baselining `claude/festive-jemison-6593fd` (the branch containing the commit titled "fix: close cross-tenant IDOR...") against *current* `main` — corrected 2026-09-07, later same day: this section originally misattributed the branch as `claude/wonderful-lewin-7c0c43`, itself an instance of the exact lesson this section describes (see `backend/docs/BRANCH_DISPOSITION.md`'s correction note for the full account) — — after the hotfix above had already landed — found that on all three files where the branch differs from main, merging it would **revert the fix back to vulnerable code**. The branch was cut before PR #19/#20/#21 landed; by the time it would have been reviewed, main had independently and more correctly fixed the same functions.
 
 This is the repo's signature failure mode (same name, different thing — five `CreateBusinessObject`s, two field tables, three schema generations) inverted to its most dangerous form: here the **label and the content point in opposite directions**. A branch named for the fix is, relative to the state it would actually merge into, the carrier. Under deadline pressure — "just merge the security branch, we need this now" — that label alone would have been enough to justify skipping review, and the result would have been shipping the exact vulnerability back into a codebase that had just paid to remove it.
 
 **What caught it:** not the branch's own tests, not its commit message, not its author's intent — a deliberate re-baseline (diff against current main, not the main that existed when the branch was cut) performed *before* considering the branch for merge, done specifically because a minimal hotfix had been extracted instead of merging the branch wholesale under urgency. Extract-then-verify is what created the opportunity to catch this; merge-then-hope would not have. Write this down as a standing rule, not a one-off: **a branch's name and commit message describe intent at the time it was written, not truth about the state it would merge into. Re-baseline against current main before trusting either.**
+
+## New Entry (2026-09-07): Platform Has No Route-Layer Authentication Gate — Tenant-Resolution Sweep
+
+Triggered by reviewing the IDOR branch's remaining ~21 unreviewed files (see
+`BRANCH_DISPOSITION.md`). Rather than review branch content, audited `main`
+directly for the vulnerable pattern — the branch is reference material, not
+the source of truth; main's own code is. **The branch was never needed to
+find or fix any of this.**
+
+**The architectural finding:** `AuthContextMiddleware` calls
+`next.ServeHTTP` unconditionally. It is opt-in context enrichment, not a
+gate — a request with no `Authorization` header, an invalid token, or an
+expired token proceeds to the handler exactly as if it had a valid one,
+just without `security.AuthInfo` populated. Whether anything downstream
+notices and rejects is a per-handler decision. This one fact is the root
+cause of every Tier 0/2 finding below — they are symptoms, not independent
+bugs.
+
+**Pattern-sweep results** (`grep` for raw `r.Header.Get("X-Tenant-ID")` /
+`Query().Get("tenant_id")` across `backend/internal`, then liveness- and
+replay-verified — not trusted at grep level, per the `mcp_handlers.go`
+near-false-positive below):
+
+| Tier | Finding | Files |
+|---|---|---|
+| 0 — replay-confirmed live, write path | Zero auth + spoofed tenant header reaches `HandleUpdateBORecord`'s OLTP mutation path; if no header at all, silently defaults to a hardcoded tenant UUID (confirmed absent from this DB — no real-tenant corruption today, but the idiom itself is the worst found: silent misattribution instead of loud rejection) | `bo_crud_handler.go` |
+| 1 — highest blast radius | `SecurityContextFromRequest`, used at **67 call sites**, accepted a client-supplied tenant unconditionally — any authenticated user for any tenant could pivot to any other tenant. **Fixed this entry** (see below) | `handlers/security_context.go` |
+| 2 — confirmed live, unauthenticated raw trust | 7 files, ~13 endpoints | `report_schedule_handlers.go` (6), `glossary_handler.go`, `external_compliance_handler.go` (2), `shadow_handler.go`, `lookups_routes.go` (2), `catalog_admin_handlers.go`, `semantic_tags_rest.go` (2), `common/handlers.go` |
+| 3 — live, weak fallback (tries a safe path first, trusts raw header only as last resort) | Lower priority, not clean | `trigger_handlers_chi.go`, `tenant_studio_handler.go`, `region/middleware.go`, `handlers/tenant_helper.go` |
+| dead code, flagged for removal not hardening | Confirmed zero references outside own file | `drift_handlers.go`, `mdm_steward_handler.go`, `semantic_relationships_handler.go`, `rebase_handlers.go`, `data_quality_handlers.go` |
+| reference pattern (safe by design) | JWT required; client header honored only if it matches the claimed tenant, else rejected as mismatch | `data_contract_handlers.go`'s `extractValidatedTenantID` |
+
+**A near-false-positive, worth its own line because it's the proof-chain
+lesson:** `internal/api/mcp_handlers.go` matched the pattern and its own
+`NewMCPHandler` constructor exists in the file — but `srv.MCPHandler` in
+`api.go` is actually `*handlers.MCPHandler` (a different type, different
+package, same name), and `internal/api.NewMCPHandler` is never called
+anywhere. A fix was written and nearly reported as a critical live finding
+before checking instantiation — reverted once confirmed dead. **Pattern
+match plus route-file presence is not proof of live exploitability; proof
+requires confirming the specific type is actually instantiated, and
+ultimately, replaying the request.** This is the same lesson the
+`GetTenantConnection` hotfix taught from the other direction (a real
+finding, confirmed by replay) — here it taught the false-positive side.
+
+**Fix 1, landed in this entry:** `security.ResolveTenantID(auth, requested)`
+— the canonical tenant-resolution rule, added to the `security` package
+(`auth_context.go`) with six unit tests. Rule: JWT claims authoritative; a
+client-supplied tenant is honored only if it matches the caller's own
+`TenantIDs` or the caller is a verified global admin/ops; anything else is
+rejected; **no default, ever**. `SecurityContextFromRequest` (67 call
+sites) now calls it instead of unconditionally accepting the header.
+
+Verification used two replay scenarios, not one, because the first
+appeared to fail and very nearly produced a second false conclusion: a
+single-tenant JWT's `X-Tenant-ID` header is overwritten by
+`AuthContextMiddleware` to the JWT's own authoritative tenant *before* the
+handler ever runs, so a pivot attempt with such a token never reaches the
+vulnerable code path — a same-tenant "200" in that scenario is not evidence
+the fix failed, it's evidence that scenario doesn't exercise the bug.
+The actual live-exploitable shape needs a **multi-tenant JWT**
+(`tenant_ids` with 2+ entries, no singular `tenant_id` claim) — the one
+case `AuthContextMiddleware` does not overwrite, letting the client's raw
+header reach `SecurityContextFromRequest` unmodified. Replayed against a
+rebuilt binary with such a token: pivot to a tenant outside the caller's
+own list → rejected (`forbidden: requested tenant does not match caller's
+tenant`); request for a tenant genuinely in the caller's own list → still
+succeeds. **The lesson: when a replay result looks wrong, suspect the
+replay's fidelity to the real exploit shape before suspecting the fix.**
+
+**Frontend regression-risk check (before landing Fix 1):** enumerated every
+`X-Tenant-ID` header setter in the frontend. The overwhelming majority set
+it to the active session's own `tenant.id` — unaffected by the new rule,
+since that's always a match. One outlier needs a human decision, not a code
+guess: `frontend/src/components/semantic-mapper/useSemanticMapper.ts:246`
+sets the header to `mapping.database_column.tenant_id` — a *different
+record's* tenant, not the caller's own session tenant. Under the new rule
+this will be rejected unless the caller is a global admin. Flagged as an
+open item: legitimate cross-tenant mapping view (needs a global-admin
+check added to that call site or a UI restriction), or a pre-existing
+frontend bug this rule now surfaces instead of silently allowing.
+
+**Remaining work, not yet done (see `BRANCH_DISPOSITION.md` for the live
+tracking):**
+- Fix 2 (the gate): require-valid-JWT middleware on `/api/*` with an
+  explicit public-route allowlist. Closes Tier 0 and all of Tier 2
+  wholesale, regardless of individual handler discipline. Expect it to
+  break e2e tests and any silently-public endpoint — that failure list
+  *is* the inventory of what was reachable without auth, and becomes the
+  gate PR's review artifact.
+- Fix 3 (call-site migration): Tier 0, Tier 2, and Tier 3 endpoints
+  migrated onto `ResolveTenantID`, grouped by tier into separate PRs.
+  Verification for the batch is a re-run of the pattern sweep showing zero
+  remaining raw-trust call sites on live-wired files (the sweep is
+  mechanical and scales; three-replaying all ~20 individually does not),
+  plus spot replays on the highest-risk few.
+- Dead-code files (5) go to the re-derive queue alongside
+  `claude/nifty-greider-015b86` and `cleanup-node-edge-deadcode` — flagged
+  for removal, not hardened. Hardening dead code is noise.
+
+**The number this earns for the standing BYPASSRLS gate:** one platform, no
+route-layer authentication gate, six-plus independent tenant-resolution
+implementations found, a 67-call-site authenticated-pivot flaw, one
+replay-confirmed unauthenticated write path, ~13 further unauthenticated
+read endpoints, three separate "masked by luck, not by design" findings in
+one day (`vend` evacuation, `GetTenantConnection`, `bo_crud_handler.go`'s
+schema-drift-masked write path). The consolidated function fixes today's
+instances. **RLS fixes the class** — the database refusing cross-tenant
+rows regardless of what any Go handler believes, which is the only fix
+that survives the next handler someone writes without reading this
+document.
 
 ## Standing Gates
 
