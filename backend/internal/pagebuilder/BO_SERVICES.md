@@ -1,3 +1,87 @@
+# RESUMED (2026-09-07): owner answered gen-3, four-semantics guard shipped and verified live
+
+The pause below ended when the owner named gen-3 (`internal/metadata`) as the
+destination generation. Gate B (re-verification against current `alpha`
+before editing) was run and held — all six originally-broken statements
+were still broken, confirming the triage was still accurate two days later.
+`internal/metadata`'s `CreateBusinessObject`/`GetBusinessObject`/
+`UpdateBusinessObject`/`ListBusinessObjects` are now repaired against the
+live gen-3 schema (branch `metadata-gen3-crud`), and the diff-based
+four-semantics field guard is implemented and **verified against live
+`alpha` data**, not just compiled — see that branch's commits for the full
+record, including several inherited column-name bugs (`field_id` vs `id`,
+nonexistent `binding_status`/`eligibility_path`/`is_active` on
+`business_object_fields`) caught only by actually running the guard's tests
+against real data. None of this had ever been executed against a live
+database before this session — the standing lesson restated: **SQL that has
+never run against the live schema is presumptively wrong, regardless of how
+long it's been committed.**
+
+## Registry rule: identity vs. enforcement — read this before touching either facet table
+
+The guard's first implementation got this wrong, which is exactly why it's
+recorded here rather than left implicit:
+
+- **`bo_field_key_registry` is identity, not enforcement.** A row there
+  exists *because* the field exists — it is the field's own surrogate-ID
+  record, upserted/deleted in the same transaction as the field write. It
+  must **never** be consulted as a blocking reference when deciding whether
+  a field can be removed. The guard's first draft checked it exactly that
+  way, and the consequence was concrete: once *any* field was registered,
+  removing it became permanently impossible, since removal itself doesn't
+  happen until the very code path being blocked. Caught by
+  `TestFieldUpdateRemovesUnreferencedField` actually failing.
+- **`bo_crud_capabilities` and `bp_field_permissions` are enforcement.**
+  They are downstream consumers *of* a field's identity, not the identity
+  itself. A reference there means something else depends on this field
+  continuing to exist under this name/type — that's what should block
+  removal or a type change.
+
+**Rule for every future write path built on this registry:** upsert
+registry rows in-transaction with the write, unconditionally. Consult only
+the facet (enforcement) tables when deciding whether a change is safe to
+make. If a new facet table is added later, the question to ask before
+wiring it into any guard is "does this table's row exist because the field
+exists (identity — never blocks), or because something else depends on the
+field (enforcement — can block)?" Get this backwards and the failure mode
+is silent: everything still compiles, and the bug only surfaces as "removal
+mysteriously doesn't work," which looks like a permissions problem, not a
+one-line logic inversion.
+
+## Known loose thread: a migration reported success without full effect
+
+`20260907_001_allow_null_term_node_id.up.sql`'s `DROP CONSTRAINT IF EXISTS
+uq_tenant_bo_term` named a constraint that doesn't exist on
+`business_object_fields` — the real, still-active constraint is
+`uq_bo_field_tenant UNIQUE (tenant_id, bo_id, field_name)`, a broader
+constraint than the two partial indexes the migration intended to replace
+it with. The migration ran, reported `COMMIT`, and silently did not achieve
+one of its two stated effects (the NOT NULL drop and the two new partial
+indexes both landed correctly; the intended constraint replacement did not)
+— discovered only because someone happened to check the resulting index
+list rather than trust the migration's own success output. This is the
+same failure shape as the fabricated/empty migration ledger found earlier
+in this investigation, in miniature: applied-as-recorded, effect
+incomplete. **Follow-up migration needed, filed here so it has an owner and
+a location**: look up the real constraint name from
+`information_schema.table_constraints` at write time (matching on the
+columns `(tenant_id, bo_id, field_name)`), not by guessing a name from
+memory — guessing the name is exactly what produced this gap. Low priority
+(the broader constraint doesn't currently break anything observed), but
+real, and it belongs in the same category of "don't let it become the next
+person's afternoon of confusion" as everything else in this document.
+
+Also filed here rather than left in a session summary: `provisionTestTenant`
+(the test helper introduced alongside the guard) seeds `catalog_node_types`
+with `ON CONFLICT DO NOTHING` and no explicit conflict target — safe today
+because `gen_random_uuid()` collisions are practically impossible, but if
+this table ever gets a real `(tenant_id, catalog_type_name)` unique
+constraint, duplicate rows could already exist from repeated test runs
+before that constraint is added. Check for duplicates before adding the
+constraint, or backfill-dedupe first.
+
+---
+
 # TRIAGE REPORT (2026-09-05) — read this section first
 
 **Status: page-builder implementation paused.** What began as a census of

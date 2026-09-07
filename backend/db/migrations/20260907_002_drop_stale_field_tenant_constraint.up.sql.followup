@@ -1,0 +1,54 @@
+-- FOLLOW-UP, not yet reviewed/applied — see the "Known loose thread" section
+-- in backend/internal/pagebuilder/BO_SERVICES.md for the finding this fixes.
+--
+-- 20260907_001_allow_null_term_node_id.up.sql tried to drop the old
+-- unconditional field-name-uniqueness constraint on business_object_fields
+-- (superseded by the two new partial unique indexes it created) via
+-- `DROP CONSTRAINT IF EXISTS uq_tenant_bo_term` — a name that doesn't exist
+-- on this table. The real constraint is uq_bo_field_tenant. Rather than
+-- hardcode that name here (the exact mistake this migration fixes), look it
+-- up dynamically by the columns it actually enforces, so this migration
+-- stays correct even if the name differs across environments.
+--
+-- Filename deliberately carries a .followup suffix so it is not picked up
+-- by the migration runner until reviewed and renamed to .up.sql — this
+-- needs a human decision on whether the broader constraint is safe to drop
+-- (nothing currently depends on it being broader than the two partial
+-- indexes, per the BO_SERVICES.md note, but "currently" is not "verified").
+
+BEGIN;
+
+DO $$
+DECLARE
+    stale_constraint_name text;
+BEGIN
+    SELECT tc.constraint_name INTO stale_constraint_name
+    FROM information_schema.table_constraints tc
+    WHERE tc.table_schema = 'public'
+      AND tc.table_name = 'business_object_fields'
+      AND tc.constraint_type = 'UNIQUE'
+      AND tc.constraint_name IN (
+          -- Only a constraint whose column set is exactly
+          -- (tenant_id, bo_id, field_name), unconditionally (no partial
+          -- WHERE clause), is the one this migration intends to replace.
+          SELECT kcu_agg.constraint_name
+          FROM (
+              SELECT kcu.constraint_name,
+                     array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS cols
+              FROM information_schema.key_column_usage kcu
+              WHERE kcu.table_schema = 'public'
+                AND kcu.table_name = 'business_object_fields'
+              GROUP BY kcu.constraint_name
+          ) kcu_agg
+          WHERE kcu_agg.cols = ARRAY['tenant_id', 'bo_id', 'field_name']
+      );
+
+    IF stale_constraint_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE public.business_object_fields DROP CONSTRAINT %I', stale_constraint_name);
+        RAISE NOTICE 'Dropped stale constraint: %', stale_constraint_name;
+    ELSE
+        RAISE NOTICE 'No matching unconditional (tenant_id, bo_id, field_name) constraint found — nothing to drop.';
+    END IF;
+END $$;
+
+COMMIT;
