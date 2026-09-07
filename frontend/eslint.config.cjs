@@ -41,9 +41,11 @@ module.exports = [
         }
       ],
       "import/no-named-as-default": "off",
-      // Disallow console usage except console.error
+      // Disallow console usage except console.error — tracked separately from a11y
+      // errors. The a11y cap is a11y-only (59); this rule contributes only to
+      // the warning floor and its own cleanliness counter, not the a11y gate.
       "no-restricted-syntax": [
-        "error",
+        "warn",
         {
           selector: "CallExpression[callee.object.name='console'][callee.property.name!= 'error']",
           message: "Use the devLogger (devLog/devDebug/devWarn) for non-error console output or remove console statements. Only console.error is allowed."

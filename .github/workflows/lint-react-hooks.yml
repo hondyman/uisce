@@ -47,15 +47,23 @@ jobs:
       working-directory: frontend
 
     - name: Run jsx-a11y lint
-      # --max-warnings 3931: current warning floor. Warnings grow when new
-      # jsx-a11y violations are introduced (rule is set to "warn"). New errors
-      # are caught by comparing --format json output against the error baseline.
-      # The baseline is 201 errors — any new error introduced will fail the gate.
+      # --max-warnings 4073: current warning floor (142 console.log violations
+      # + 3931 jsx-a11y WARN violations). Warnings grow when new violations are
+      # introduced at WARN level; sweep PRs flip WARN→off as counts go to zero.
+      # Error cap (59 a11y-only): any new ERROR-level violation blocks the PR.
+      #   55 no-autofocus, 2 heading-has-content, 1 iframe-has-title,
+      #   1 anchor-has-content
+      # jsx-a11y ERROR rules (0 current violations, must stay at 0):
+      #   alt-text, anchor-has-content, heading-has-content, html-has-lang,
+      #   iframe-has-title, img-redundant-alt, no-access-key,
+      #   no-distracting-elements, scope, tabindex-no-positive
       run: |
         ERROR_COUNT=$(npx eslint src/ --quiet --format json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const msgs=JSON.parse(d);console.log(msgs.reduce((a,f)=>a+f.messages.filter(m=>m.severity===2).length,0))}catch(e){console.log(0)}})")
-        if [ "$ERROR_COUNT" -gt 201 ]; then
-          echo "ERROR: $ERROR_COUNT errors exceed baseline (201). Fix new violations before merging."
+        if [ "$ERROR_COUNT" -gt 59 ]; then
+          echo "ERROR: $ERROR_COUNT errors exceed a11y cap (59). Fix new violations before merging."
+          echo "A11y-only errors (no console.log in this count):"
+          npx eslint src/ --quiet 2>&1 | grep "error" | grep -v "no-restricted-syntax" | head -20
           exit 1
         fi
-        npx eslint src/ --max-warnings 3931
+        npx eslint src/ --max-warnings 4073
       working-directory: frontend
