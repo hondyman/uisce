@@ -8,6 +8,25 @@ wasn't. Update this file in the same PR that changes a branch's status.
 **Status values:** `merged` / `discarded-subsumed` / `discarded-regressive` /
 `re-derive` / `pending-review` / `needs-triage`
 
+**Last verified:** 2026-09-07, against `origin/main` @ `721ad6ba2b`. Every
+"subsumed" / "byte-identical" / commit-count claim below is a snapshot as of
+that commit, not a standing fact — re-run before trusting if `main` or the
+branch in question has moved since. Re-verification procedure, exact
+commands:
+
+```bash
+git fetch origin --prune
+# per-branch unique-commit count (matches the sweep table):
+git log origin/main..origin/<branch> --oneline | wc -l
+# full subsumption check for a branch under detailed review (matches the
+# claude/wonderful-lewin-7c0c43 pass below):
+MB=$(git merge-base origin/main origin/<branch>)
+git log $MB..origin/<branch> --name-only --pretty=format: | sort -u > /tmp/branch_touched_files.txt
+git diff --name-only origin/main origin/<branch> | sort -u > /tmp/twodot_diff_files.txt
+comm -12 /tmp/branch_touched_files.txt /tmp/twodot_diff_files.txt   # still differing
+comm -23 /tmp/branch_touched_files.txt /tmp/twodot_diff_files.txt   # now subsumed
+```
+
 | Branch | Commits ahead of main (at sweep) | Status | Evidence |
 |---|---|---|---|
 | `fix/runner-search-path-and-tx-control` | 3 | `merged` | PR #16 |
