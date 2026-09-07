@@ -24,7 +24,6 @@ import (
 	"github.com/lib/pq"
 )
 
-
 // AccessLevel represents the effective permission over a Business Object.
 type AccessLevel string
 
@@ -34,9 +33,43 @@ const (
 	AccessLevelWrite AccessLevel = "WRITE"
 )
 
-// catalogNodeTypeID is the node_type_id for BO semantic linkage nodes (classification, business_key, semantic_id, grain)
-// Corresponds to catalog_node_types.catalog_type_name = 'business_object'
-var catalogNodeTypeID = uuid.MustParse("06bb774c-8666-4ab1-84eb-4f4d439ac84c")
+// catalogNodeTypeIDCache caches the resolved node_type_id per tenant. This
+// value is a *row in catalog_node_types*, not a fixed constant — confirmed
+// live on alpha to differ per tenant (two rows found for catalog_type_name
+// = 'business_object', one per tenant). A hardcoded UUID here worked only
+// by coincidence on the one database it was read from; on any fresh
+// environment or different tenant the row exists under a different ID and
+// every BO create fails on an FK miss. Resolve by name and cache per
+// tenant, and fail loudly (no fallback to a guessed constant) when the type
+// row is missing — a loud startup/first-call error says "seed
+// catalog_node_types," a silent fallback reintroduces exactly this bug.
+var catalogNodeTypeIDCache sync.Map // map[tenantID string]uuid.UUID
+
+// resolveCatalogNodeTypeID looks up catalog_node_types.id where
+// catalog_type_name = 'business_object' for tenantID, caching the result.
+// Returns an error (never a fallback value) if the type row does not exist
+// for this tenant.
+func (s *BusinessObjectService) resolveCatalogNodeTypeID(ctx context.Context, tenantID string) (uuid.UUID, error) {
+	if v, ok := catalogNodeTypeIDCache.Load(tenantID); ok {
+		return v.(uuid.UUID), nil
+	}
+
+	var id uuid.UUID
+	err := s.db.GetContext(ctx, &id, `
+		SELECT id FROM catalog_node_types
+		WHERE catalog_type_name = 'business_object' AND tenant_id = $1::uuid
+	`, tenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf(
+			"no catalog_node_types row for catalog_type_name='business_object' and tenant_id=%s "+
+				"(seed catalog_node_types for this tenant before creating business objects): %w",
+			tenantID, err,
+		)
+	}
+
+	catalogNodeTypeIDCache.Store(tenantID, id)
+	return id, nil
+}
 
 // ErrForbidden is returned when a caller lacks the required permission.
 var ErrForbidden = errors.New("forbidden")
@@ -362,6 +395,11 @@ func (s *BusinessObjectService) CreateBusinessObject(
 	businessKeyNodeID := uuid.New()
 	semanticIDNodeID := uuid.New()
 	grainNodeID := uuid.New()
+
+	catalogNodeTypeID, err := s.resolveCatalogNodeTypeID(ctx, bo.TenantID)
+	if err != nil {
+		return nil, err
+	}
 
 	now = time.Now()
 
@@ -741,7 +779,6 @@ func (s *BusinessObjectService) mergeCustomOntoCore(coreBO, customBO *models.Bus
 	// PR duplicate-fix: customFields holds only the custom (tenant-extension) fields.
 	// Do NOT prepend coreBO.CoreFields here — they already live in composed.CoreFields.
 	composed.CustomFields = customBO.CustomFields
-
 
 	// If custom BO has a config, use it (allows tenant overrides)
 	if len(customBO.Config) > 0 {
@@ -1960,18 +1997,18 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		`
 		_ = s.db.SelectContext(ctx, &bRows, fallbackBindingQuery, bo.ID)
 	}
-		for _, b := range bRows {
-			bo.Bindings = append(bo.Bindings, map[string]interface{}{
-				"boBindingId":     b.BoBindingId,
-				"bindingName":     b.BindingName,
-				"backendId":       b.BackendId,
-				"drivingNodeName": b.QualifiedPath,
-				"nodeName":        b.NodeName,
-				"isCore":          b.IsCore,
-				"isActive":        b.IsActive,
-				"temporalMode":    b.TemporalMode,
-			})
-		}
+	for _, b := range bRows {
+		bo.Bindings = append(bo.Bindings, map[string]interface{}{
+			"boBindingId":     b.BoBindingId,
+			"bindingName":     b.BindingName,
+			"backendId":       b.BackendId,
+			"drivingNodeName": b.QualifiedPath,
+			"nodeName":        b.NodeName,
+			"isCore":          b.IsCore,
+			"isActive":        b.IsActive,
+			"temporalMode":    b.TemporalMode,
+		})
+	}
 
 	return nil
 }
@@ -3102,7 +3139,6 @@ func (s *BusinessObjectService) IntrospectTable(
 	if _, err := uuid.Parse(tableIDOrName); err == nil {
 		isUUID = true
 	}
-
 
 	if isUUID {
 		var node struct {
@@ -4454,7 +4490,7 @@ func (s *BusinessObjectService) GetBOWorkflowStatus(ctx context.Context, secCtx 
 			TriggeredBy: "System",
 			Status:      "COMPLETED",
 			StartTime:   time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-			EndTime:     time.Now().Add(-2 * time.Hour + 3*time.Second).Format(time.RFC3339),
+			EndTime:     time.Now().Add(-2*time.Hour + 3*time.Second).Format(time.RFC3339),
 		},
 	}
 
@@ -4499,8 +4535,6 @@ func (s *BusinessObjectService) ExecuteWorkflowAction(ctx context.Context, secCt
 		"targetStatus": targetStatus,
 		"reviewerNote": req.ReviewerNote,
 	}, userID)
-
-
 
 	return s.GetBOWorkflowStatus(ctx, secCtx, bo.ID)
 }
@@ -4611,11 +4645,11 @@ func (s *BusinessObjectService) ValidatePublishGate(ctx context.Context, secCtx 
 	}
 
 	return &models.BOPublishGateValidationResponse{
-		BOID:               bo.ID,
-		CanPublish:         canPublish,
-		UnresolvedFields:   unresolved,
+		BOID:                bo.ID,
+		CanPublish:          canPublish,
+		UnresolvedFields:    unresolved,
 		MissingDependencies: []string{},
-		GateSummary:        summary,
+		GateSummary:         summary,
 	}, nil
 }
 
@@ -5047,8 +5081,3 @@ func (s *BusinessObjectService) RunLakehouseCompaction(ctx context.Context, secC
 
 	return report, nil
 }
-
-
-
-
-
