@@ -152,6 +152,29 @@ re-check, and a genuinely small novel set (CEL validation feature,
 `pageStudio.ts` conflict, dependency bump, runner.go question, ~15
 miscellaneous files) that actually warrants human review time.
 
+## Tenant-resolution sweep — remediation status (2026-09-07)
+
+Full findings in `backend/docs/INCIDENT_REPORT_20260906.md`, "Platform Has
+No Route-Layer Authentication Gate" entry. Remediation is a four-fix
+architecture; status of each:
+
+| Fix | Status | PR |
+|---|---|---|
+| 1 — canonical `ResolveTenantID` rule, `SecurityContextFromRequest` (67 sites) | **Done, merged, replay-verified** | #27 |
+| 2 — route-layer auth gate (`/api/*` require-valid-JWT + public allowlist) | Not started | — |
+| 3 — per-tier call-site migration (Tier 0/2/3, ~13+ endpoints) | Not started | — |
+| 4 — BYPASSRLS (the class-level fix) | Not started, sequenced last per standing decision | — |
+
+**Tier 0 (replay-confirmed live write path) still open:** `bo_crud_handler.go`'s `extractTenantUUIDFromRequest` — not yet migrated onto the canonical rule. This is the single most severe unfixed item: a confirmed-live, unauthenticated write path.
+
+**Tier 2 (confirmed live, unauthenticated reads, ~13 endpoints) still open:** `report_schedule_handlers.go` (6), `glossary_handler.go`, `external_compliance_handler.go` (2), `shadow_handler.go`, `lookups_routes.go` (2), `catalog_admin_handlers.go`, `semantic_tags_rest.go` (2), `common/handlers.go`. Note `glossary_handler.go` also has 9 call sites into the now-fixed `SecurityContextFromRequest` — those are covered by Fix 1; only its independent raw-trust line needs separate migration.
+
+**Tier 3 (weak fallback, lower priority) still open:** `trigger_handlers_chi.go`, `tenant_studio_handler.go`, `region/middleware.go`, `handlers/tenant_helper.go`.
+
+**Open decision, not a code fix:** `frontend/src/components/semantic-mapper/useSemanticMapper.ts:246` sets `X-Tenant-ID` to `mapping.database_column.tenant_id` (a different record's tenant, not the caller's own). Once Fix 3 reaches any endpoint this header hits, this call site will start getting rejected unless the caller is a global admin — needs a decision on whether that's the intended UI restriction or a legitimate flow needing a global-admin path.
+
+**Dead code, flagged for removal not hardening:** `mcp_handlers.go` (confirmed dead — a near-false-positive, see incident report), `drift_handlers.go`, `mdm_steward_handler.go`, `semantic_relationships_handler.go`, `rebase_handlers.go`, `data_quality_handlers.go`.
+
 ## `pageStudio.ts` divergence — adjudicated, mechanical resolve, no design decision needed
 
 All three `claude/*` branches carry an identical 124-line divergence from
