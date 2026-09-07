@@ -178,34 +178,49 @@ func (h *TriggerHandler) CreateValidationTriggerHTTP(w http.ResponseWriter, r *h
 	userID := userIDFromRequest(r)
 
 	var req struct {
-		TriggerTypeID   string          `json:"trigger_type_id"`
-		TargetEntity    string          `json:"target_entity"`
-		EventID         *string         `json:"event_id"`
-		EventConfig     json.RawMessage `json:"event_config"`
-		ConditionConfig json.RawMessage `json:"condition_config"`
-		ActionConfig    json.RawMessage `json:"action_config"`
-		ABACPolicyID    *string         `json:"abac_policy_id"`
-		Enabled         bool            `json:"enabled"`
-		Priority        int             `json:"priority"`
+		TriggerType string `json:"trigger_type"`
+		TargetEntity string `json:"target_entity"`
+		RuleIDs     []string        `json:"rule_ids"`
+		StepName    string          `json:"step_name"`
+		Meta        json.RawMessage `json:"meta"`
+		IsActive    *bool           `json:"is_active"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	if req.TriggerType == "" || req.TargetEntity == "" {
+		http.Error(w, "trigger_type and target_entity are required", http.StatusBadRequest)
+		return
+	}
+
+	if req.RuleIDs == nil {
+		req.RuleIDs = []string{}
+	}
+	meta := req.Meta
+	if meta == nil {
+		meta = []byte("{}")
+	}
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+	stepName := req.StepName
+	if stepName == "" {
+		stepName = req.TargetEntity + "_validation"
+	}
+
 	query := `
-        INSERT INTO validation_triggers 
-        (tenant_id, trigger_type_id, target_entity, event_id, event_config, 
-         condition_config, action_config, abac_policy_id, enabled, priority, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO validation_triggers
+        (tenant_id, trigger_type, target_entity, step_name, rule_ids, meta, is_active, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, created_at`
 
 	var id string
 	var createdAt time.Time
 	err := h.db.QueryRowxContext(r.Context(), query,
-		tenantID, req.TriggerTypeID, req.TargetEntity, req.EventID,
-		req.EventConfig, req.ConditionConfig, req.ActionConfig,
-		req.ABACPolicyID, req.Enabled, req.Priority, userID,
+		tenantID, req.TriggerType, req.TargetEntity, stepName, req.RuleIDs, meta, isActive, userID,
 	).Scan(&id, &createdAt)
 
 	if err != nil {
@@ -264,15 +279,14 @@ func (h *TriggerHandler) GetValidationTriggersHTTP(w http.ResponseWriter, r *htt
 
 func (h *TriggerHandler) UpdateValidationTriggerHTTP(w http.ResponseWriter, r *http.Request) {
 	tenantID := tenantIDFromRequest(r)
-	userID := userIDFromRequest(r)
 	triggerID := chi.URLParam(r, "id")
 
 	var req struct {
-		EventConfig  *json.RawMessage `json:"event_config"`
-		IsActive     *bool            `json:"is_active"`
-		Priority     *int             `json:"priority"`
-		PipelineID   *string          `json:"pipeline_id"`
-		DispatchMode *string          `json:"dispatch_mode"`
+		StepName    *string `json:"step_name"`
+		Meta        *json.RawMessage `json:"meta"`
+		IsActive    *bool   `json:"is_active"`
+		PipelineID  *string `json:"pipeline_id"`
+		DispatchMode *string `json:"dispatch_mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -281,20 +295,19 @@ func (h *TriggerHandler) UpdateValidationTriggerHTTP(w http.ResponseWriter, r *h
 
 	query := `
 		UPDATE validation_triggers
-		SET event_config = COALESCE($1, event_config),
-		    is_active = COALESCE($2, is_active),
-		    priority = COALESCE($3, priority),
+		SET step_name = COALESCE($1, step_name),
+		    meta = COALESCE($2, meta),
+		    is_active = COALESCE($3, is_active),
 		    pipeline_id = COALESCE($4, pipeline_id),
 		    dispatch_mode = COALESCE($5, dispatch_mode),
-		    updated_by = $6,
 		    updated_at = NOW()
-		WHERE id = $7 AND tenant_id = $8
+		WHERE id = $6 AND tenant_id = $7
 		RETURNING id, updated_at`
 
 	var updatedID string
 	var updatedAt time.Time
 	err := h.db.QueryRowxContext(r.Context(), query,
-		req.EventConfig, req.IsActive, req.Priority, req.PipelineID, req.DispatchMode, userID, triggerID, tenantID,
+		req.StepName, req.Meta, req.IsActive, req.PipelineID, req.DispatchMode, triggerID, tenantID,
 	).Scan(&updatedID, &updatedAt)
 
 	if err == sql.ErrNoRows {
@@ -428,7 +441,12 @@ func (h *TriggerHandler) EscalateTimeoutHTTP(w http.ResponseWriter, r *http.Requ
 func (h *TriggerHandler) GetTriggerExecutionsHTTP(w http.ResponseWriter, r *http.Request) {
 	tenantID := tenantIDFromRequest(r)
 
-	query := `SELECT id, trigger_id, status, started_at, finished_at, payload FROM trigger_executions WHERE tenant_id = $1 ORDER BY started_at DESC LIMIT 100`
+	query := `
+		SELECT r.id, r.trigger_id, r.status, r.start_time, r.end_time, r.total_records_in, r.total_records_out, r.error_details
+		FROM data_pipeline_runs r
+		WHERE r.tenant_id = $1 AND r.trigger_id IS NOT NULL
+		ORDER BY r.start_time DESC
+		LIMIT 100`
 	var executions []map[string]interface{}
 	rows, err := h.db.QueryxContext(r.Context(), query, tenantID)
 	if err != nil {
