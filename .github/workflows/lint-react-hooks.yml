@@ -29,3 +29,33 @@ jobs:
     # Note: this job intentionally runs only the focused react-hooks lint
     # so that hook-order violations fail the CI job while unrelated warnings
     # in the wider codebase do not block PRs.
+
+  lint-jsx-a11y:
+    name: Lint (jsx-a11y)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install frontend dependencies
+      run: npm ci
+      working-directory: frontend
+
+    - name: Run jsx-a11y lint
+      # --max-warnings 3931: current warning floor. Warnings grow when new
+      # jsx-a11y violations are introduced (rule is set to "warn"). New errors
+      # are caught by comparing --format json output against the error baseline.
+      # The baseline is 201 errors — any new error introduced will fail the gate.
+      run: |
+        ERROR_COUNT=$(npx eslint src/ --quiet --format json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const msgs=JSON.parse(d);console.log(msgs.reduce((a,f)=>a+f.messages.filter(m=>m.severity===2).length,0))}catch(e){console.log(0)}})")
+        if [ "$ERROR_COUNT" -gt 201 ]; then
+          echo "ERROR: $ERROR_COUNT errors exceed baseline (201). Fix new violations before merging."
+          exit 1
+        fi
+        npx eslint src/ --max-warnings 3931
+      working-directory: frontend

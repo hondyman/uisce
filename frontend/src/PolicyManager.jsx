@@ -87,7 +87,6 @@ const PolicyManager = () => {
         setError(e.message);
         devError(e);
       }
-    }
   };
 
   if (isLoading) return <div>Loading policies...</div>;
