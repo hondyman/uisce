@@ -104,7 +104,11 @@ func splitSchemaTable(qualified string) (schema, table string) {
 func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -190,7 +194,11 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -283,7 +291,11 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -378,7 +390,11 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")

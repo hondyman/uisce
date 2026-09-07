@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -183,39 +183,55 @@ func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingT
 	return "", false
 }
 
+// tenantResolutionError carries the HTTP status a tenant-resolution failure
+// should surface as, so call sites don't have to re-derive whether a given
+// rejection means "not authenticated" (401) or "authenticated, but not for
+// that tenant" (403) — a distinction PR #21 and PR #27's replay protocol
+// both depend on.
+type tenantResolutionError struct {
+	status int
+	msg    string
+}
+
+func (e *tenantResolutionError) Error() string { return e.msg }
+
 // extractTenantUUIDFromRequest resolves the tenant for OLTP row mutations.
 // HOTFIX 2026-09-07: this previously fell back to an unauthenticated
 // caller's raw X-Tenant-ID header, or to a hardcoded phantom tenant UUID
 // when even that was absent — the single worst idiom found in this repo's
 // tenant-resolution sweep (backend/docs/INCIDENT_REPORT_20260906.md),
 // since it let unauthenticated writes land under a guessed tenant instead
-// of being rejected. Claims are now required, and the X-Tenant-ID header
-// (when present) must match claims.TenantID / claims.TenantIDs or is
-// rejected outright rather than trusted or silently ignored.
+// of being rejected.
+//
+// An earlier revision of this fix read jwtmiddleware.GetClaimsFromContext,
+// which is never populated on this router — the actual auth middleware
+// wired in here (appmid.AuthContextMiddleware) sets security.AuthInfo via
+// a different context key entirely, so that revision rejected every
+// request, authenticated or not. Caught by HTTP replay (case 3: a
+// legitimately authenticated request was also 401ing) before merge — see
+// backend/docs/INCIDENT_REPORT_20260906.md. This reads security.AuthInfo
+// directly and delegates to security.ResolveTenantID, the same canonical
+// rule and the same populated context PR #27 already wired into
+// SecurityContextFromRequest's 67 call sites, rather than a second
+// implementation over a claims type nothing sets here.
 func extractTenantUUIDFromRequest(r *http.Request) (uuid.UUID, error) {
-	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		return uuid.Nil, fmt.Errorf("authentication required: missing or invalid JWT token")
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return uuid.Nil, &tenantResolutionError{status: http.StatusUnauthorized, msg: "authentication required: missing or invalid JWT token"}
 	}
 
 	requested := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-	if requested != "" {
-		if err := jwtmiddleware.ValidateTenantAccess(claims, requested); err != nil {
-			return uuid.Nil, fmt.Errorf("forbidden: requested tenant does not match caller's tenant")
+	resolved, ok := security.ResolveTenantID(auth, requested)
+	if !ok {
+		if requested != "" {
+			return uuid.Nil, &tenantResolutionError{status: http.StatusForbidden, msg: "forbidden: requested tenant does not match caller's tenant"}
 		}
-		id, err := uuid.Parse(requested)
-		if err != nil {
-			return uuid.Nil, fmt.Errorf("invalid tenant identifier")
-		}
-		return id, nil
+		return uuid.Nil, &tenantResolutionError{status: http.StatusUnauthorized, msg: "no tenants assigned to user: JWT token must include tenant_id or tenant_ids claim"}
 	}
 
-	if claims.TenantID == "" {
-		return uuid.Nil, fmt.Errorf("no tenants assigned to user: JWT token must include tenant_id or tenant_ids claim")
-	}
-	id, err := uuid.Parse(claims.TenantID)
+	id, err := uuid.Parse(resolved)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("invalid tenant identifier")
+		return uuid.Nil, &tenantResolutionError{status: http.StatusBadRequest, msg: "invalid tenant identifier"}
 	}
 	return id, nil
 }
@@ -224,7 +240,11 @@ func extractTenantUUIDFromRequest(r *http.Request) (uuid.UUID, error) {
 func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -325,7 +345,11 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -411,7 +435,11 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -466,7 +494,11 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -547,7 +579,11 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -598,7 +634,11 @@ type TopologyRelationship struct {
 func (h *BOCRUDHandler) HandleGetBOTopologySummary(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnauthorized)
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
