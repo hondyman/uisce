@@ -183,25 +183,50 @@ func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingT
 	return "", false
 }
 
-func extractTenantUUIDFromRequest(r *http.Request) uuid.UUID {
+// extractTenantUUIDFromRequest resolves the tenant for OLTP row mutations.
+// HOTFIX 2026-09-07: this previously fell back to an unauthenticated
+// caller's raw X-Tenant-ID header, or to a hardcoded phantom tenant UUID
+// when even that was absent — the single worst idiom found in this repo's
+// tenant-resolution sweep (backend/docs/INCIDENT_REPORT_20260906.md),
+// since it let unauthenticated writes land under a guessed tenant instead
+// of being rejected. Claims are now required, and the X-Tenant-ID header
+// (when present) must match claims.TenantID / claims.TenantIDs or is
+// rejected outright rather than trusted or silently ignored.
+func extractTenantUUIDFromRequest(r *http.Request) (uuid.UUID, error) {
 	claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims != nil && claims.TenantID != "" {
-		if id, err := uuid.Parse(claims.TenantID); err == nil {
-			return id
-		}
+	if claims == nil {
+		return uuid.Nil, fmt.Errorf("authentication required: missing or invalid JWT token")
 	}
-	tenantHeader := r.Header.Get("X-Tenant-ID")
-	if tenantHeader != "" {
-		if id, err := uuid.Parse(tenantHeader); err == nil {
-			return id
+
+	requested := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
+	if requested != "" {
+		if err := jwtmiddleware.ValidateTenantAccess(claims, requested); err != nil {
+			return uuid.Nil, fmt.Errorf("forbidden: requested tenant does not match caller's tenant")
 		}
+		id, err := uuid.Parse(requested)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("invalid tenant identifier")
+		}
+		return id, nil
 	}
-	return uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	if claims.TenantID == "" {
+		return uuid.Nil, fmt.Errorf("no tenants assigned to user: JWT token must include tenant_id or tenant_ids claim")
+	}
+	id, err := uuid.Parse(claims.TenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid tenant identifier")
+	}
+	return id, nil
 }
 
 // HandleUpdateBORecord commits validated OLTP mutations with Cardinal Rule 7 tenant scoping
 func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -298,7 +323,11 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 
 // HandleCreateBORecord creates a new record in the driving table
 func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	var payload map[string]interface{}
@@ -380,7 +409,11 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 
 // HandleGetBORecord hydrates a single record by ID
 func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -431,7 +464,11 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 
 // HandleListBORecords provides paginated / infinite-scroll chunk loading
 func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
@@ -508,7 +545,11 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 
 // HandleDeleteBORecord deletes or soft-deletes a record
 func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
@@ -555,7 +596,11 @@ type TopologyRelationship struct {
 
 // HandleGetBOTopologySummary inspects the catalog graph and subtype registry
 func (h *BOCRUDHandler) HandleGetBOTopologySummary(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 
 	// 1. Discover Subtypes from oms.subtype_registry
