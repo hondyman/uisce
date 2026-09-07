@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/require"
@@ -159,4 +160,82 @@ func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
 	require.NotNil(t, bo)
 	require.Equal(t, boID, bo.ID)
 	require.Equal(t, gcTenantID, bo.TenantID) // It returns the actual BO, so tenant ID is GC
+}
+
+// TestFieldUpdateRoundTrip writes fields via UpdateBusinessObject and reads them via GetBusinessObject,
+// asserting that the fields are visible after the write. This is the assertion that catches the
+// write→read table-mismatch bug: writes to business_object_fields must be readable by loadBOSubtypesAndFields.
+func TestFieldUpdateRoundTrip(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode: requires Postgres")
+	}
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+	}
+
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		t.Skipf("Skipping: failed to open DB: %v", err)
+		return
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		t.Skipf("Skipping: database not reachable: %v", err)
+		return
+	}
+
+	ctx := context.Background()
+	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
+
+	// Provision tenant + BO
+	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "round-trip tenant")
+	boID := uuid.NewString()
+	boKey := "rt_test_bo_" + boID[:8]
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
+		boID, tenantID, boKey, "Round-Trip BO")
+	require.NoError(t, err)
+
+	defer func() {
+		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
+	}()
+
+	svc := NewBusinessObjectService(db, nil, nil, nil)
+	secCtx := &security.Context{TenantID: tenantID}
+
+	// Update with two named fields
+	updateReq := models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "ProductName", "type": "text", "role": "DIMENSION"},
+				{"name": "UnitPrice", "type": "number", "role": "MEASURE"},
+			},
+		},
+	}
+	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, updateReq, "test-user")
+	require.NoError(t, err)
+
+	// Get and assert fields are visible
+	bo, err := svc.GetBusinessObject(ctx, secCtx, boKey)
+	require.NoError(t, err)
+	require.NotNil(t, bo)
+
+	totalFields := len(bo.CoreFields) + len(bo.CustomFields)
+	require.GreaterOrEqual(t, totalFields, 2, "Update wrote fields but Get returned %d — write→read table-mismatch bug present", totalFields)
+
+	// Verify by name
+	wantNames := map[string]bool{"ProductName": true, "UnitPrice": true}
+	for _, f := range append(bo.CoreFields, bo.CustomFields...) {
+		delete(wantNames, f.Name)
+	}
+	require.Empty(t, wantNames, "missing fields after round-trip: %v", wantNames)
+
+	// Direct DB assertion: business_object_fields has the rows (not bo_fields)
+	var bfRows, bofRows int
+	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM bo_fields WHERE business_object_id = $1`, boID).Scan(&bfRows)
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND subtype_scope = 'ALL'`, boID).Scan(&bofRows))
+	require.Equal(t, 2, bofRows, "expected 2 rows in business_object_fields")
+	require.Equal(t, 0, bfRows, "no rows should land in bo_fields anymore")
 }
