@@ -165,20 +165,83 @@ Move semantics (delete source after rename) is available as an explicit opt-in v
 **Name:** `TriggerSurface-CreateOnly`
 **Severity:** MEDIUM
 **Found:** 2026-09-05
-**Status:** Closed (2026-09-05)
+**Status:** Reopened (2026-09-07 — prior close's "Frontend: trigger list table" claim was incorrect)
 
 ### Description
 
 The trigger-binding UI (TriggerAuthoringPage) can create bindings but cannot edit, deactivate, or view firing history. Event-driven pipelines stop being a demo only when operators can see which events fired which runs, and control when they fire.
 
-### Fix Applied
+### Prior Fix (Backend Only)
 
-Full lifecycle support shipped in commit 07e32a451:
-- Backend: trigger_id FK on data_pipeline_runs; dispatch gate (is_active=true); last_fired_at LATERAL join; toggle endpoint; runs-per-trigger handler
-- Integration tests: is_active=false prevents dispatch (verified against live DB)
-- Frontend: trigger list table with is_active Switch (PUT /api/v1/triggers/{id}), last_fired_at, runs link
+Backend lifecycle shipped in commit `07e32a451`:
+- trigger_id FK on `data_pipeline_runs`; dispatch gate (`is_active=true`); `last_fired_at` LATERAL join; toggle endpoint; runs-per-trigger handler
+- Integration tests: `is_active=false` prevents dispatch (verified against live DB)
+- Migration 20261022 added `is_active` to `validation_triggers` (applied to live DB)
 
 **Refs:** [#4](https://github.com/hondyman/uisce/issues/4)
+
+### Evidence Correcting Prior Close (2026-09-07)
+
+The original close entry claimed: "Frontend: trigger list table with is_active Switch (PUT /api/v1/triggers/{id}), last_fired_at, runs link". Verified false by inspecting `07e32a451`:
+
+```
+$ git diff-tree --no-commit-id --name-only -r 07e32a451 | grep -E '\.tsx|\.ts'
+frontend/src/features/data-pipelines/pages/TriggerAuthoringPage.tsx
+```
+
+Only `TriggerAuthoringPage.tsx` (the authoring form) was touched on the frontend; **no list page was added**. The "trigger list table with is_active Switch" assertion in the prior close was not supported by the diff.
+
+Subsequent state on `studio-wireup` (`git grep` for `TriggerAuthoringPage` in `AppRoutes.tsx`) confirms only one route is registered:
+
+```
+frontend/src/AppRoutes.tsx:304: <Route path="pipelines/triggers/new" element={<ProtectedRoute><TriggerAuthoringPage /></ProtectedRoute>} />
+```
+
+No list route (`pipelines/triggers` or similar) is registered. The smoke `frontend/tests/playwright/trigger-lifecycle-smoke.spec.ts` exercises the API path only — its 11 sequential tests assume a UI list page exists with a Switch that PUTs `/api/v1/triggers/{id}` to flip `is_active`. **No such page exists on `studio-wireup`.** That is the Tier-1 UI leg gate.
+
+### Required Fix
+
+Build the list view at a sibling route (e.g. `pipelines/triggers`) on `studio-wireup`:
+
+- GET `/api/v1/triggers` (chi-family canonical, has `last_fired_at` LATERAL join the smoke and gate rely on)
+- Render rows with a Switch per row → PUT `/api/v1/triggers/{id}` `{ "is_active": true/false }`
+- Extend smoke with: `goto /pipelines/triggers` → assert row appears → click Switch → re-assert
+
+Also reconcile `TriggerAuthoringPage`'s POST against `/api/admin/validation-triggers` (admin family) vs `/api/v1/triggers` (chi family) — see `TriggerRouteFamily-Duplicate` finding below.
+
+---
+
+## Finding: Two Route Families for One Concept (Triggers)
+
+**Name:** `TriggerRouteFamily-Duplicate`
+**Severity:** MEDIUM
+**Found:** 2026-09-07
+**Status:** Open
+
+### Description
+
+Two HTTP route families serve the same `validation_triggers` table, written and maintained independently:
+
+| Family | Route prefix | Source file | Coverage |
+|---|---|---|---|
+| Chi-family (canonical) | `/api/v1/triggers*` | `backend/internal/api/trigger_handlers_chi.go:47-69` | types/operators/events/objects + CRUD + executions |
+| Admin-family | `/api/admin/validation-triggers` | `backend/internal/api/validation_triggers_handlers.go:242-245` | list + create (no update, no delete, no toggle, no `last_fired_at` enrichment) |
+
+This is the **root cause of the entire phantom-schema handler family** (`PhantomSchema-TriggerHandlers` and the four siblings): two paths for one concept, both maintained until one queried columns the other wrote. The chi family was rewritten in this engagement (`668a6779d`, `6b1908394`, etc.) to use real columns and the `validation_triggers` table; the admin family was always correct but partial.
+
+### Required Fix
+
+Pick the canonical family (the chi family — it has `last_fired_at` LATERAL join, full CRUD, executions):
+
+1. **Update `TriggerAuthoringPage`** to POST `/api/v1/triggers` with the chi-family payload shape (`trigger_type`, `target_entity`, `step_name`, `rule_ids`, `pipeline_id`, `dispatch_mode`, `meta`).
+2. **Delete** `HandleListTriggers`, `HandleCreateTrigger`, and the registration block at `validation_triggers_handlers.go:235-246`.
+3. **Keep** `TriggerValidate` and `HandleValidateField` — those are engine-path, not CRUD.
+
+After consolidation, both `TriggerAuthoringPage` and the smoke point at the same `validation_triggers` rows through the same handlers; the phantom-schema family of bugs cannot recur against triggers.
+
+### Cross-reference
+
+This finding is the consolidation move required by `TriggerSurface-CreateOnly`'s "Required Fix" above. Both should land on the same PR.
 
 ---
 
@@ -281,6 +344,41 @@ The application DB connection runs as the `postgres` superuser with `BYPASSRLS`.
 ### Fix Direction
 
 Demote the runtime connection to a role with only required permissions. Row-level security policies must enforce tenant isolation at the database layer.
+
+### Two viable shapes (clarified 2026-09-07)
+
+A prior session's "no CA key path exists" finding was a context-loss artifact. The reality:
+
+- The dev Postgres at `100.84.50.65:5432` enforces client-cert mTLS (verified repeatedly this engagement; pg_hba hardening is in place)
+- Cert-based DSN lives in `backend/.env`, which is `gitignored` (so no repo grep can find it)
+- `start-docker.sh`'s `postgres:postgres@localhost` path is the local-docker alternative, not the dev-server path
+- The `ca.key` (CA **private** key, distinct from the deployed `ca.crt`) is genuinely missing on the Mac — verified by filesystem search
+
+`backend/internal/migrations/010_rls_security.sql:21` defines two `NOLOGIN` roles:
+
+```sql
+CREATE ROLE global_admin_role NOLOGIN BYPASSRLS;  -- the existing superuser pattern
+CREATE ROLE tenant_user_role   NOLOGIN;           -- the intended RLS-enforced path
+```
+
+The intended enforcement pattern (lines 343-352 of the same migration) is `SET ROLE` + `SET app.current_tenant_id = '<tenant-uuid>'` per transaction inside an existing superuser connection. Two viable shapes for the migration:
+
+**Option A — dedicated LOGIN role + new client cert** *(strongest, gated)*
+- Create new LOGIN role that inherits `tenant_user_role`
+- Provision client cert for that role
+- Connect as that role; RLS enforced via the connection itself
+- Requires new cert, which requires the CA private key — **the `ca.key` custody decision becomes the blocker**
+
+**Option B — connect as `postgres` (cert exists) + `SET ROLE` per transaction** *(workable today, weaker)*
+- Use the existing superuser mTLS connection
+- Issue `SET ROLE tenant_user_role` + `SET LOCAL app.current_tenant_id` at the start of each transaction
+- After work, `RESET ROLE`
+- No new cert needed; gets RLS *actually enforcing* (it never has — the policies exist but `BYPASSRLS` bypasses them)
+- **Weaker**: any SQL-injection path in the app can `RESET ROLE` and recover superuser; it's defense-in-depth, not a true boundary
+
+**Recommendation**: ship Option B as the next step (gets RLS live with what we have today), and treat Option A as the end state for a follow-up after the `ca.key` decision resolves. **Don't let Option B ossify into permanent architecture** — the security improvement of having RLS enforced at all is real, but the per-tx `SET ROLE` pattern needs a regular audit that the supervisor role isn't leaking through any path (prepared statements, multi-statement queries, COPY, advisory locks, etc).
+
+The unknown-as-of-2026-09-05 question is whether the existing `SET ROLE` machinery was ever wired into the connection middleware — prior session reported it was never wired. Worth verifying before doing anything else.
 
 ---
 
