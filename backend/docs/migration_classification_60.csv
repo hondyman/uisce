@@ -1,0 +1,61 @@
+FILE|REPLAY_RESULT|ERROR_DETAIL
+001_create_api_endpoints_catalog.sql.up.sql|ERROR|column "id" referenced in foreign key constraint does not exist
+001_pgvector_enable.sql.up.sql|CLEAN|No error
+001_phase_3_21_initial_schema.sql.up.sql|CLEAN|No error
+001_semantic_query_templates.sql.up.sql|CLEAN|No error
+001_uma_tables.sql.up.sql|CLEAN|No error
+002_add_template_json.sql.up.sql|CLEAN|No error
+002_analytics_collaboration.sql.up.sql|ERROR|unique constraint on partitioned table must include all partitioning columns
+003_create_ledger_tables.sql.up.sql|CLEAN|No error — effects absent (created in vend, CASCADE-dropped; tables ledger_entries/insert_trade_requests absent from both public and vend)
+004_create_human_tasks.sql.up.sql|CLEAN|No error
+004_phase_4b_event_projections.sql.up.sql|ERROR|column "is_deleted" does not exist
+005_business_process_designer_seed.sql.up.sql|ERROR|duplicate key value violates unique constraint "process_step_types_key_key"
+005_business_process_designer.sql.up.sql|CLEAN|No error
+005_create_titan_schema.sql.up.sql|CLEAN|No error
+006_relationship_discovery_schema.sql.up.sql|ERROR|check constraint "entity_relationship_confidence_check" already exists
+006_semantic_layer.sql.up.sql|CLEAN|No error
+007_ibor_snapshots.sql.up.sql|CLEAN|No error
+007_semantic_model_regeneration_dba.sql.up.sql|ERROR|relation "public.entity_relationship" does not exist
+008_add_auth_columns_to_users.sql.up.sql|ERROR|ALTER action ADD COLUMN cannot be performed on relation "users"
+008_multi_book_ledger.sql.up.sql|ERROR|relation "ledger_entries" does not exist
+009_fix_session_fk.sql.up.sql|ERROR|constraint "private_markets_sessions_user_id_fkey" of relation "private_markets_sessions" does not exist
+009_recon_engine.sql.up.sql|CLEAN|No error
+010_central_ops_schema.sql.up.sql|CLEAN|No error — COMMIT escape: replay created vend.tenants/exceptions/workflows/audit_records; cleaned; original application state undeterminable
+010_rls_security.sql.up.sql|ERROR|relation "household_members" does not exist
+011_google_sync_schema.sql.up.sql|CLEAN|No error
+011_iam_schema.sql.up.sql|ERROR|column "id" of relation "tenants" does not exist
+012_metadata_registry.sql.up.sql|CLEAN|No error
+013_seed_wealth_domain.sql.up.sql|ERROR|relation "meta_objects" does not exist
+014_seed_wealth_workflows.sql.up.sql|ERROR|relation "meta_processes" does not exist
+015_refactor_schemas.sql.up.sql|ERROR|schema "analytics" already exists
+016_add_tenant_db_config.sql.up.sql|ERROR|schema "platform" does not exist
+017_seed_wealth_trends_metadata.sql.up.sql|ERROR|relation "meta_objects" does not exist
+018_evidence_bundle.sql.up.sql|ERROR|schema "metadata" does not exist
+018_seed_wealthstream_metadata.sql.up.sql|ERROR|relation "meta_objects" does not exist
+019_create_rule_scenarios.sql.up.sql|ERROR|relation "rule_test_run" does not exist
+020_create_bp_framework.sql.up.sql|CLEAN|No error
+021_bp_enhancements.sql.up.sql|ERROR|relation "business_process_step_participant" does not exist
+022_bp_workday_plus.sql.up.sql|ERROR|relation "business_process_step" does not exist
+023_consolidate_auth.sql.up.sql|ERROR|ALTER action ADD COLUMN cannot be performed on relation "users"
+024_add_scan_status.sql.up.sql|CLEAN|No error
+025_create_catalog_node_type.sql.up.sql|CLEAN|No error
+026_add_core_id_columns.sql.up.sql|CLEAN|No error
+027_add_catalog_edge_cascades.sql.up.sql|ERROR|insert or update on table "catalog_edge_future" violates foreign key constraint "fk_catalog_edge_source_node"
+028_replace_edge_type_column.sql.up.sql|ERROR|unique constraint on partitioned table must include all partitioning columns
+029_remove_starlark_columns.sql.up.sql|CLEAN|No error
+030_generic_calendar_sync_schema.down.sql.up.sql|ERROR|relation "calendar_connections" does not exist
+030_generic_calendar_sync_schema.up.sql.up.sql|ERROR|relation "google_calendar_connections" does not exist
+031_rbac_users_fix.sql.up.sql|ERROR|column "last_login" does not exist
+20241201_cosmos_db_citus_schema.sql.up.sql|ERROR|function create_reference_table(unknown) does not exist
+20241201_search_and_scheduling.sql.up.sql|ERROR|syntax error at or near "NOT"
+create_notifications_alpha.sql.up.sql|CLEAN|No error
+household_ledger.sql.up.sql|ERROR|syntax error at or near "NOT"
+nlq_support.sql.up.sql|ERROR|column n.lineage does not exist
+semantic_layer_tables.sql.up.sql|ERROR|column "id" referenced in foreign key constraint does not exist
+verify_hybrid_analytics.sql.up.sql|ERROR|syntax error at or near "EXISTS"
+verify_hybrid_integration.sql.up.sql|ERROR|syntax error at or near "EXISTS"
+verify_multi_book.sql.up.sql|ERROR|relation "ref_ledger_basis" does not exist
+verify_multi_tenant_ops.sql.up.sql|ERROR|RLS Failed: Expected 0 rows for Tenant B, got 1
+verify_semantic_core.sql.up.sql|ERROR|column "id" of relation "tenants" does not exist
+verify_titan_level_2.sql.up.sql|ERROR|relation "recon_exceptions" does not exist
+wealth_app_schema.sql.up.sql|CLEAN|No error
