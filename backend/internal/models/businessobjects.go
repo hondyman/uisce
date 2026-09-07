@@ -87,6 +87,7 @@ type BusinessObjectDefinition struct {
 	HistoryMode            HistoryMode                  `db:"history_mode" json:"historyMode"`
 	CreatedAt              time.Time                    `db:"created_at" json:"createdAt"`
 	CreatedBy              string                       `db:"created_by" json:"createdBy"`
+	UpdatedAt              time.Time                    `db:"updated_at" json:"updatedAt"`
 	LastModifiedAt         time.Time                    `db:"last_modified_at" json:"lastModifiedAt"`
 	LastModifiedBy         string                       `db:"last_modified_by" json:"lastModifiedBy"`
 	DriverTableID          sql.NullString               `db:"driver_table_id" json:"driverTableId,omitempty"`
@@ -98,6 +99,7 @@ type BusinessObjectDefinition struct {
 
 	// Core Identity Triple & Semantic Governance (Feature 1)
 	BOTypeID             sql.NullString `db:"bo_type_id" json:"boTypeId,omitempty"`
+	BOType               string         `db:"bo_type" json:"boType,omitempty"`
 	ModelID              string         `db:"model_id" json:"modelId,omitempty"`
 	ClassificationNodeID sql.NullString `db:"classification_node_id" json:"classificationNodeId,omitempty"` // Level 3 taxonomy node
 	BusinessKeyNodeID    sql.NullString `db:"business_key_node_id" json:"businessKeyNodeId,omitempty"`       // Natural identifier (e.g. customer_bk)

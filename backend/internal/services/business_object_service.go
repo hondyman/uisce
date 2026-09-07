@@ -234,30 +234,38 @@ func (s *BusinessObjectService) ListBusinessObjects(ctx context.Context, tenantI
 	return objects, nil
 }
 
-// GetBusinessObject retrieves a single business object by key
+// GetBusinessObject retrieves a single business object by key (gen-3)
 func (s *BusinessObjectService) GetBusinessObject(ctx context.Context, tenantID, key string) (*models.BusinessObjectDefinition, error) {
 	if s.db == nil {
 		return nil, fmt.Errorf("database connection not initialized")
 	}
 
+	isUUID := false
+	if _, err := uuid.Parse(key); err == nil {
+		isUUID = true
+	}
+
 	query := `
-		SELECT id, tenant_id, datasource_id, key, name, display_name, parent_id, technical_name, 
-               description, config, icon, is_core, is_active, category, enable_history, history_mode,
-		       created_at, last_modified_at, entity_key, catalog_node_id
+		SELECT id, tenant_id, model_id, bo_key, bo_name,
+		       COALESCE(description, '') AS description,
+		       bo_type, classification_node_id, business_key_node_id,
+		       semantic_id_node_id, grain_node_id,
+		       COALESCE(driver_table_id::text, '') AS driver_table_id,
+		       COALESCE(driver_table_name, '') AS driver_table_name,
+		       is_core, is_active, created_at, updated_at
 		FROM business_objects
-		WHERE tenant_id = $1 AND (id::text = $2 OR key = $2 OR technical_name = $2 OR name = $2 OR entity_key = $2)
+		WHERE tenant_id = $1::uuid AND (bo_key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
 	`
 
 	bo := &models.BusinessObjectDefinition{}
-	var parentID, technicalName, datasourceID, businessName, entityKey, catalogNodeID, boKey sql.NullString
-	var description, icon, category sql.NullString
-	var isCore, isActive sql.NullBool
-	var config []byte
+	var driverTableID, driverTableName sql.NullString
 
-	err := s.db.QueryRowContext(ctx, query, tenantID, key).
-		Scan(&bo.ID, &bo.TenantID, &datasourceID, &boKey, &bo.Name, &businessName,
-			&parentID, &technicalName, &description, &config, &icon, &isCore, &isActive, &category, &bo.EnableHistory, &bo.HistoryMode,
-			&bo.CreatedAt, &bo.LastModifiedAt, &entityKey, &catalogNodeID)
+	err := s.db.QueryRowContext(ctx, query, tenantID, key, isUUID).
+		Scan(&bo.ID, &bo.TenantID, &bo.ModelID, &bo.Key, &bo.Name,
+			&bo.Description, &bo.BOType,
+			&bo.ClassificationNodeID, &bo.BusinessKeyNodeID, &bo.SemanticIDNodeID, &bo.GrainNodeID,
+			&driverTableID, &driverTableName,
+			&bo.IsCore, &bo.IsActive, &bo.CreatedAt, &bo.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("business object not found")
 	}
@@ -265,104 +273,44 @@ func (s *BusinessObjectService) GetBusinessObject(ctx context.Context, tenantID,
 		return nil, fmt.Errorf("failed to get business object: %w", err)
 	}
 
-	if businessName.Valid {
-		bo.DisplayName = businessName.String
+	if driverTableID.Valid {
+		bo.DriverTableID = driverTableID
 	}
-	if boKey.Valid {
-		bo.Key = boKey.String
-	}
-	if description.Valid {
-		bo.Description = description.String
-	}
-	if icon.Valid {
-		bo.Icon = icon.String
-	}
-	if category.Valid {
-		bo.Category = category.String
-	}
-	if entityKey.Valid {
-		bo.Key = entityKey.String
-	}
-	if isCore.Valid {
-		bo.IsCore = isCore.Bool
-	}
-	if isActive.Valid {
-		bo.IsActive = isActive.Bool
-	}
-	if parentID.Valid {
-		bo.ParentID = sql.NullString{String: parentID.String, Valid: true}
-	}
-	if len(config) > 0 {
-		bo.Config = config
-		logging.GetLogger().Sugar().Infof("[BO-SERVICE] config len=%d", len(config))
-
-		// Extract driver_table_id from config if present
-		var cfg map[string]interface{}
-		if err := json.Unmarshal(config, &cfg); err == nil {
-			logging.GetLogger().Sugar().Infof("[BO-SERVICE] config unmarshaled: %v", cfg)
-			if v, ok := cfg["driver_table_id"].(string); ok && v != "" {
-				bo.DriverTableID = sql.NullString{String: v, Valid: true}
-				logging.GetLogger().Sugar().Infof("[BO-SERVICE] Extracted driver_table_id: %s", v)
-			} else {
-				logging.GetLogger().Sugar().Infof("[BO-SERVICE] driver_table_id not found: ok=%v v=%v", ok, cfg["driver_table_id"])
-			}
-		} else {
-			logging.GetLogger().Sugar().Infof("[BO-SERVICE] Failed to unmarshal config: %v", err)
-		}
-	} else {
-		logging.GetLogger().Sugar().Infof("[BO-SERVICE] config is empty")
+	if driverTableName.Valid {
+		bo.DriverTableName = driverTableName.String
 	}
 
-	// Fallback: if driver_table_id did not get extracted (e.g., type mismatch), try again defensively
-	if !bo.DriverTableID.Valid && len(config) > 0 {
-		var cfg map[string]interface{}
-		if err := json.Unmarshal(config, &cfg); err == nil {
-			if v, ok := cfg["driver_table_id"]; ok {
-				switch t := v.(type) {
-				case string:
-					if t != "" {
-						bo.DriverTableID = sql.NullString{String: t, Valid: true}
-						logging.GetLogger().Sugar().Infof("[BO-SERVICE] Fallback extracted driver_table_id (string): %s", t)
-					}
-				case []byte:
-					if len(t) > 0 {
-						bo.DriverTableID = sql.NullString{String: string(t), Valid: true}
-						logging.GetLogger().Sugar().Infof("[BO-SERVICE] Fallback extracted driver_table_id (bytes): %s", string(t))
-					}
-				default:
-					logging.GetLogger().Sugar().Infof("[BO-SERVICE] Fallback driver_table_id not string/bytes: %v", v)
-				}
-			}
-		}
-	}
-
-	if datasourceID.Valid {
-		bo.DatasourceID = datasourceID
-	}
-
-	// 3. Fetch bo_fields (semantic terms linked to this BO) from bo_fields
+	// Fetch fields from business_object_fields (the table with the real FK to business_objects.id)
 	fieldQuery := `
-		SELECT id, key, name, display_label AS display_name, field_type AS type, is_core, display_order AS sequence, created_at, created_by, semantic_term_id, role
-		FROM bo_fields
-
-		WHERE business_object_id = $1
+		SELECT id, field_name AS key, field_name, COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, '') AS technical_name, data_type AS type,
+		       field_role IN ('KEY', 'DIMENSION', 'TIME_DIMENSION', 'MEASURE') AS is_core,
+		       COALESCE(is_required, false) AS is_required,
+		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
+		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
+		       created_at, COALESCE(updated_at, created_at) AS last_modified_at,
+		       field_role
+		FROM business_object_fields
+		WHERE bo_id = $1::uuid AND tenant_id = $2::uuid AND subtype_scope = 'ALL'
 		ORDER BY display_order, created_at
 	`
 
-	logging.GetLogger().Sugar().Debugf("Fetching bo_fields for BO: boID=%s", bo.ID)
-	rows, err := s.db.QueryContext(ctx, fieldQuery, bo.ID)
+	logging.GetLogger().Sugar().Debugf("Fetching business_object_fields for BO: boID=%s tenant=%s", bo.ID, tenantID)
+	rows, err := s.db.QueryContext(ctx, fieldQuery, bo.ID, tenantID)
 	if err != nil {
-		// Log but don't fail - fields are optional
-		logging.GetLogger().Sugar().Warnf("Failed to fetch bo_fields for BO %s (tenant %s): %v", bo.ID, tenantID, err)
+		logging.GetLogger().Sugar().Warnf("Failed to fetch business_object_fields for BO %s (tenant %s): %v", bo.ID, tenantID, err)
 	} else {
 		defer rows.Close()
-		var fields []models.FieldDefinition
+		var coreFields, customFields []models.FieldDefinition
 		for rows.Next() {
 			field := models.FieldDefinition{}
-			var displayName, createdBy, semanticTermID, role sql.NullString
-			err := rows.Scan(&field.ID, &field.Key, &field.Name, &displayName, &field.Type, &field.IsCore, &field.Sequence, &field.CreatedAt, &createdBy, &semanticTermID, &role)
+			var displayName, technicalName, fieldRole sql.NullString
+			var isCore bool
+			err := rows.Scan(&field.ID, &field.Key, &field.Name, &displayName, &technicalName,
+				&field.Type, &isCore, &field.IsRequired, &field.IsSystem, &field.Description,
+				&field.ReferenceEntity, &field.Sequence, &field.CreatedAt, &field.LastModifiedAt, &fieldRole)
 			if err != nil {
-				logging.GetLogger().Sugar().Warnf("Failed to scan bo_field row: %v", err)
+				logging.GetLogger().Sugar().Warnf("Failed to scan business_object_fields row: %v", err)
 				continue
 			}
 			if displayName.Valid {
@@ -370,65 +318,31 @@ func (s *BusinessObjectService) GetBusinessObject(ctx context.Context, tenantID,
 			} else {
 				field.DisplayName = field.Name
 			}
-			if createdBy.Valid {
-				field.CreatedBy = createdBy.String
+			if technicalName.Valid {
+				field.TechnicalName = technicalName.String
 			}
-			if semanticTermID.Valid {
-				field.SemanticTermID = semanticTermID.String
+			field.IsCore = isCore
+			if fieldRole.Valid {
+				field.Role = models.FieldRole(fieldRole.String)
 			}
-			if role.Valid {
-				field.Role = models.FieldRole(role.String)
+			if isCore {
+				coreFields = append(coreFields, field)
+			} else {
+				customFields = append(customFields, field)
 			}
-			fields = append(fields, field)
 		}
-		logging.GetLogger().Sugar().Debugf("Fetched %d bo_fields for BO %s", len(fields), bo.ID)
-		if len(fields) > 0 {
-			// All wizard-created fields are custom (not core)
-			bo.CustomFields = fields
+		logging.GetLogger().Sugar().Debugf("Fetched %d core + %d custom fields for BO %s", len(coreFields), len(customFields), bo.ID)
+		if len(coreFields) > 0 {
+			bo.CoreFields = coreFields
 		}
-	}
-
-	// Fallback: if no fields returned, try without tenant filter to confirm data exists (helps diagnose tenant mismatch)
-	if len(bo.CustomFields) == 0 {
-		altQuery := `
-			SELECT id, key, name, display_label AS display_name, field_type AS type, is_core, display_order AS sequence, created_at, created_by
-			FROM bo_fields
-			WHERE business_object_id = $1
-			ORDER BY display_order, created_at
-		`
-		rows, err := s.db.QueryContext(ctx, altQuery, bo.ID)
-		if err != nil {
-			logging.GetLogger().Sugar().Warnf("Fallback fetch bo_fields failed for BO %s: %v", bo.ID, err)
-		} else {
-			defer rows.Close()
-			var fields []models.FieldDefinition
-			for rows.Next() {
-				field := models.FieldDefinition{}
-				var displayName, createdBy sql.NullString
-				err := rows.Scan(&field.ID, &field.Key, &field.Name, &displayName, &field.Type, &field.IsCore, &field.Sequence, &field.CreatedAt, &createdBy)
-				if err != nil {
-					logging.GetLogger().Sugar().Warnf("Fallback failed to scan bo_field row: %v", err)
-					continue
-				}
-				if displayName.Valid {
-					field.DisplayName = displayName.String
-				} else {
-					field.DisplayName = field.Name
-				}
-				if createdBy.Valid {
-					field.CreatedBy = createdBy.String
-				}
-				fields = append(fields, field)
-			}
-			if len(fields) > 0 {
-				logging.GetLogger().Sugar().Infof("Fallback fetched %d bo_fields without tenant filter for BO %s", len(fields), bo.ID)
-				bo.CustomFields = fields
-			}
+		if len(customFields) > 0 {
+			bo.CustomFields = customFields
 		}
 	}
 
 	return bo, nil
 }
+
 
 // UpdateBusinessObject updates an existing business object
 func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenantID, key string, req models.UpdateBusinessObjectRequest, userID string) (*models.BusinessObjectDefinition, error) {

@@ -1630,94 +1630,16 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		}
 	}
 
-	// STRATEGY 1: Load child business objects via parent_id (inheritance pattern)
-	// We look for subtypes in EITHER the BO's tenant (e.g. gold copy) OR the viewer's tenant (custom extensions)
-	childBOQuery := `
-		SELECT id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, is_core, tenant_id, config
-		FROM business_objects
-		WHERE parent_id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id = $3::uuid)
-		ORDER BY name
-	`
-
-	type ChildBO struct {
-		ID            string          `db:"id"`
-		Key           string          `db:"key"`
-		Name          string          `db:"name"`
-		DisplayName   string          `db:"display_name"`
-		TechnicalName string          `db:"technical_name"`
-		Description   string          `db:"description"`
-		IsCore        bool            `db:"is_core"`
-		TenantID      string          `db:"tenant_id"`
-		Config        json.RawMessage `db:"config"`
-	}
-
-	var childBOs []ChildBO
-	if err := s.db.SelectContext(ctx, &childBOs, childBOQuery, bo.ID, bo.TenantID, viewTenantID); err != nil {
-		logging.GetLogger().Sugar().Warnf("Warning: failed to load child business objects (with tenant filter): %v", err)
-	}
-
-	logging.GetLogger().Sugar().Infof("DEBUG: loading %d child BO(s) for parent %s (tenant %s)", len(childBOs), bo.ID, bo.TenantID)
-
-	// For each child BO, load its fields and add as subtype
-	for _, child := range childBOs {
-		// Load fields for this child BO
-		fieldQuery := `
-			SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
-			       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
-			       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
-			       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
-			       created_at, '' AS created_by,
-			       created_at AS last_modified_at, '' AS last_modified_by
-			FROM bo_fields
-			WHERE business_object_id::text = $1 AND (tenant_id::text = $2 OR tenant_id::text = $3) AND subtype_id IS NULL
-			ORDER BY sequence
-		`
-
-		var fields []models.FieldDefinition
-		if err := s.db.SelectContext(ctx, &fields, fieldQuery, child.ID, child.TenantID, viewTenantID); err != nil || len(fields) == 0 {
-			// Fallback: check config JSON
-			if len(child.Config) > 0 {
-				var configMap map[string]interface{}
-				if err := json.Unmarshal(child.Config, &configMap); err == nil {
-					if fieldsRaw, ok := configMap["fields"]; ok {
-						if fieldsJSON, err := json.Marshal(fieldsRaw); err == nil {
-							_ = json.Unmarshal(fieldsJSON, &fields)
-						}
-					}
-				}
-			}
-		}
-
-		if fields == nil {
-			fields = []models.FieldDefinition{}
-		}
-
-		// Create subtype definition from child BO
-		// Only use child BO data if config doesn't already have an entry for this key
-		// (Config takes precedence because it has the latest renamed values)
-		if _, exists := bo.Subtypes[child.Key]; !exists {
-			subtype := models.SubtypeDefinition{
-				ID:            child.ID,
-				Key:           child.Key,
-				Name:          child.Name,
-				DisplayName:   child.DisplayName,
-				TechnicalName: child.TechnicalName,
-				Description:   child.Description,
-				IsCore:        child.IsCore,
-				BasedOnEntity: bo.Key, // Parent BO key
-				SubtypeFields: fields,
-			}
-			bo.Subtypes[child.Key] = subtype
-		}
-	}
+	// STRATEGY 1: gen-3 has no parent_id column in business_objects.
+	// Child-BO inheritance via parent_id is gen-1 only; subtypes are loaded via bo_subtypes (STRATEGY 2).
+	logging.GetLogger().Sugar().Debugf("loadBOSubtypesAndFields: child BO inheritance skipped (gen-3 has no parent_id)")
 
 	// STRATEGY 2: Also load from bo_subtypes table for backward compatibility
 	subtypeQuery := `
 		SELECT id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
 		       COALESCE(description, '') AS description, is_core, based_on_entity, 
 		       COALESCE(clone_parent_key, '') AS clone_parent_key, sequence, created_at, 
-		       COALESCE(created_by, '') AS created_by, last_modified_at, COALESCE(last_modified_by, '') AS last_modified_by
+		       COALESCE(created_by::text, '') AS created_by, last_modified_at, COALESCE(last_modified_by::text, '') AS last_modified_by
 		FROM bo_subtypes
 		WHERE business_object_id::text = $1
 		ORDER BY sequence
@@ -1799,29 +1721,70 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		}
 	}
 
-	// Load entity-level fields (non-subtype fields)
+	// Load entity-level fields from business_object_fields (the table with the real FK and data)
 	var entityFields []models.FieldDefinition
+	type entityFieldRow struct {
+		ID              string    `db:"id"`
+		Key             string    `db:"key"`
+		Name            string    `db:"name"`
+		DisplayName     string    `db:"display_name"`
+		TechnicalName   string    `db:"technical_name"`
+		Type            string    `db:"type"`
+		IsCore          bool      `db:"is_core"`
+		IsRequired      bool      `db:"is_required"`
+		IsSystem        bool      `db:"is_system"`
+		Description     string    `db:"description"`
+		ReferenceEntity string    `db:"reference_entity"`
+		Sequence        int       `db:"sequence"`
+		CreatedAt       time.Time `db:"created_at"`
+		LastModifiedAt  time.Time `db:"last_modified_at"`
+		FieldRole       string    `db:"field_role"`
+	}
 
 	fieldQuery := `
-		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
-		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
+		SELECT id, field_name AS key, COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, '') AS technical_name, data_type AS type,
+		       field_role IN ('KEY', 'DIMENSION', 'TIME_DIMENSION', 'MEASURE') AS is_core,
+		       COALESCE(is_required, false) AS is_required,
 		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
-		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
-		       created_at, '' AS created_by, created_at AS last_modified_at, 
-		       '' AS last_modified_by
-		FROM bo_fields
-		WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
-		ORDER BY sequence
+		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
+		       created_at, COALESCE(updated_at, created_at) AS last_modified_at,
+		       COALESCE(field_role, '') AS field_role
+		FROM business_object_fields
+		WHERE bo_id = $1::uuid AND tenant_id = $2::uuid AND subtype_scope = 'ALL'
+		ORDER BY display_order, created_at
 	`
 
-	// Query bo_fields table for viewTenantID (user tenant context) or bo.TenantID (master BO tenant context)
-	if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, viewTenantID); err != nil || len(entityFields) == 0 {
-		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
-			logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
+	var rows []entityFieldRow
+	if err := s.db.SelectContext(ctx, &rows, fieldQuery, bo.ID, viewTenantID); err != nil || len(rows) == 0 {
+		if err := s.db.SelectContext(ctx, &rows, fieldQuery, bo.ID, bo.TenantID); err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields from business_object_fields: %v", err)
 		}
 	}
 
-	// MIGRATION STRATEGY: Load fields from Config JSONB if bo_fields returned nothing
+	entityFields = make([]models.FieldDefinition, 0, len(rows))
+	for _, row := range rows {
+		f := models.FieldDefinition{
+			ID:              row.ID,
+			Key:             row.Key,
+			Name:            row.Name,
+			DisplayName:     row.DisplayName,
+			TechnicalName:   row.TechnicalName,
+			Type:            row.Type,
+			IsCore:          row.IsCore,
+			IsRequired:      row.IsRequired,
+			IsSystem:        row.IsSystem,
+			Description:     row.Description,
+			ReferenceEntity: row.ReferenceEntity,
+			Sequence:        row.Sequence,
+			CreatedAt:       row.CreatedAt,
+			LastModifiedAt:  row.LastModifiedAt,
+			Role:            models.FieldRole(row.FieldRole),
+		}
+		entityFields = append(entityFields, f)
+	}
+
+	// MIGRATION STRATEGY: Load fields from Config JSONB if business_object_fields returned nothing
 	if len(entityFields) == 0 && len(bo.Config) > 0 {
 		var configMap map[string]interface{}
 		if err := json.Unmarshal(bo.Config, &configMap); err == nil {
@@ -1830,49 +1793,6 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 					_ = json.Unmarshal(fieldsJSON, &entityFields)
 				}
 			}
-		}
-	}
-
-	// Try old schema fallback where bo_fields stores field info differently
-	if len(entityFields) == 0 {
-		oldFieldQuery := `
-			SELECT id, business_object_id, field_name, display_label, field_type, is_required, is_readonly, is_searchable, is_sortable, display_order
-			FROM bo_fields
-			WHERE business_object_id = $1
-			ORDER BY display_order
-		`
-		type OldField struct {
-			ID           string `db:"id"`
-			BoID         string `db:"business_object_id"`
-			FieldName    string `db:"field_name"`
-			DisplayLabel string `db:"display_label"`
-			FieldType    string `db:"field_type"`
-			IsRequired   bool   `db:"is_required"`
-			IsReadOnly   bool   `db:"is_readonly"`
-			IsSearchable bool   `db:"is_searchable"`
-			IsSortable   bool   `db:"is_sortable"`
-			Sequence     int    `db:"display_order"`
-		}
-
-		var oldFields []OldField
-		if err2 := s.db.SelectContext(ctx, &oldFields, oldFieldQuery, bo.ID); err2 != nil {
-			return fmt.Errorf("failed to load entity fields (old schema): %w", err2)
-		}
-
-		entityFields = make([]models.FieldDefinition, 0, len(oldFields))
-		for _, of := range oldFields {
-			f := models.FieldDefinition{
-				ID:          of.ID,
-				Key:         of.FieldName,
-				Name:        of.FieldName,
-				DisplayName: of.DisplayLabel,
-				Type:        of.FieldType,
-				IsCore:      false,
-				IsRequired:  of.IsRequired,
-				IsSystem:    of.IsReadOnly,
-				Sequence:    of.Sequence,
-			}
-			entityFields = append(entityFields, f)
 		}
 	}
 

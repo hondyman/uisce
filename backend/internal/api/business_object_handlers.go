@@ -183,13 +183,8 @@ func (h *BusinessObjectHandler) ListBusinessObjects(w http.ResponseWriter, r *ht
 		}
 	}
 
-	// Exclude subtypes from list view (only top-level business objects)
-	filtered := make([]*models.BusinessObjectDefinition, 0, len(bos))
-	for _, bo := range bos {
-		if !bo.ParentID.Valid || bo.ParentID.String == "" {
-			filtered = append(filtered, bo)
-		}
-	}
+	// gen-3: all BOs returned are top-level; subtypes live in bo_subtypes table
+	filtered := bos
 
 	format := r.URL.Query().Get("format")
 	if format == "array" {
