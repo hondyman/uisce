@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/models"
@@ -12,30 +13,59 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
+// integrationTestDSN is the load-bearing fallback used by every test in this
+// file. connect_timeout is not decoration: the fallback host is only
+// reachable over a private network (Tailscale range), and an
+// unreachable-but-routed address hangs the OS-level TCP connect for far
+// longer than any context passed to PingContext/QueryRowContext actually
+// bounds — lib/pq's connection retry re-dials outside that context's
+// effective window (observed directly: a 3s context.WithTimeout around
+// PingContext still hung ~30s against this host). connect_timeout is a real
+// libpq DSN parameter enforced at the socket layer, and is what actually
+// makes these tests skip promptly on a host without that network instead of
+// hanging the whole package's test run past `go test -timeout`.
+const integrationTestFallbackDSN = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable&connect_timeout=3"
+
+// openIntegrationTestDB centralizes DSN selection, connect, and a bounded
+// reachability check for every integration test in this file — previously
+// four separate copies of this logic, each with its own (occasionally
+// missing, occasionally unbounded) reachability check, which is exactly how
+// this file ended up with a hang in one copy while a sibling copy nearby
+// used a bounded PingContext. One implementation now, one place to fix.
+func openIntegrationTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("skipping integration test in short mode: requires Postgres")
 	}
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {
-		// fallback to local dev DB used by integration
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+		dsn = integrationTestFallbackDSN
 	}
 
 	db, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		t.Skipf("Skipping integration test: failed to open DB: %v", err)
+		return nil
+	}
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := db.PingContext(pingCtx); err != nil {
+		db.Close()
+		t.Skipf("Skipping integration test: database not reachable: %v", err)
+		return nil
+	}
+	return db
+}
+
+func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
+	db := openIntegrationTestDB(t)
+	if db == nil {
 		return
 	}
 	defer db.Close()
 
 	ctx := context.Background()
-
-	// Ping to ensure DB is accessible (skip if not)
-	if err := db.Ping(); err != nil {
-		t.Skipf("Skipping integration test: database not reachable: %v", err)
-		return
-	}
 
 	// Sanity checks: ensure the DB has the tables our integration path requires
 	// (this keeps this test safe to run against clean dev DBs that may not have
@@ -57,7 +87,7 @@ func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
 	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (tenant_id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (tenant_id) DO NOTHING`, tenantID, "test tenant")
 
 	// Insert parent
-	_, err = db.ExecContext(ctx, `INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, NOW())`, parentID, tenantID, "test_parent_key_"+parentID, "Test Parent", "Test Parent", "test_parent")
+	_, err := db.ExecContext(ctx, `INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, NOW())`, parentID, tenantID, "test_parent_key_"+parentID, "Test Parent", "Test Parent", "test_parent")
 	require.NoError(t, err)
 
 	childID := uuid.NewString()
@@ -94,17 +124,8 @@ func TestGetBusinessObjectIncludesChildIntegration(t *testing.T) {
 }
 
 func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode: requires Postgres")
-	}
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
-	}
-
-	db, err := sqlx.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Skipping integration test: failed to open DB: %v", err)
+	db := openIntegrationTestDB(t)
+	if db == nil {
 		return
 	}
 	defer db.Close()
@@ -112,7 +133,7 @@ func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
 
 	// Check if gold_copy column exists
 	var hasGoldCopy bool
-	err = db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'gold_copy')").Scan(&hasGoldCopy)
+	err := db.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'tenants' AND column_name = 'gold_copy')").Scan(&hasGoldCopy)
 	if err != nil || !hasGoldCopy {
 		t.Skip("Skipping test: gold_copy column missing")
 		return
@@ -166,24 +187,11 @@ func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
 // asserting that the fields are visible after the write. This is the assertion that catches the
 // write→read table-mismatch bug: writes to business_object_fields must be readable by loadBOSubtypesAndFields.
 func TestFieldUpdateRoundTrip(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode: requires Postgres")
-	}
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
-	}
-
-	db, err := sqlx.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Skipping: failed to open DB: %v", err)
+	db := openIntegrationTestDB(t)
+	if db == nil {
 		return
 	}
 	defer db.Close()
-	if err := db.Ping(); err != nil {
-		t.Skipf("Skipping: database not reachable: %v", err)
-		return
-	}
 
 	ctx := context.Background()
 	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
@@ -192,7 +200,7 @@ func TestFieldUpdateRoundTrip(t *testing.T) {
 	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "round-trip tenant")
 	boID := uuid.NewString()
 	boKey := "rt_test_bo_" + boID[:8]
-	_, err = db.ExecContext(ctx,
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
 		boID, tenantID, boKey, "Round-Trip BO")
 	require.NoError(t, err)
@@ -264,24 +272,11 @@ func TestFieldUpdateRoundTrip(t *testing.T) {
 // exists to prevent at scale; this test pins the loud-failure form of the
 // guard in place.
 func TestFieldUpdateRejectsWithDownstreamRefs(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode: requires Postgres")
-	}
-	dsn := os.Getenv("TEST_DATABASE_URL")
-	if dsn == "" {
-		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
-	}
-
-	db, err := sqlx.Open("postgres", dsn)
-	if err != nil {
-		t.Skipf("Skipping: failed to open DB: %v", err)
+	db := openIntegrationTestDB(t)
+	if db == nil {
 		return
 	}
 	defer db.Close()
-	if err := db.Ping(); err != nil {
-		t.Skipf("Skipping: database not reachable: %v", err)
-		return
-	}
 
 	ctx := context.Background()
 	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
@@ -289,7 +284,7 @@ func TestFieldUpdateRejectsWithDownstreamRefs(t *testing.T) {
 	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "ref-reject tenant")
 	boID := uuid.NewString()
 	boKey := "rt_ref_bo_" + boID[:8]
-	_, err = db.ExecContext(ctx,
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
 		boID, tenantID, boKey, "Ref-Reject BO")
 	require.NoError(t, err)
