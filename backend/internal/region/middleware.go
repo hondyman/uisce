@@ -161,12 +161,13 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				tenantID = strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 			}
 			if tenantID == "" {
-				// Parse from URL path if matching /tenants/{tenantID} or /v1/admin/tenants/{tenantID}/...
 				parts := strings.Split(r.URL.Path, "/")
 				for i, p := range parts {
-					if (p == "tenants" || p == "tenant") && i+1 < len(parts) && parts[i+1] != "" {
-						tenantID = parts[i+1]
-						break
+					if (p == "tenants" || p == "tenant") && i+1 < len(parts) {
+						if _, err := uuid.Parse(parts[i+1]); err == nil {
+							tenantID = parts[i+1]
+							break
+						}
 					}
 				}
 			}

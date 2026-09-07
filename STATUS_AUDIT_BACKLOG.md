@@ -286,6 +286,111 @@ The application DB connection runs as the `postgres` superuser with `BYPASSRLS`.
 
 Demote the runtime connection to a role with only required permissions. Row-level security policies must enforce tenant isolation at the database layer.
 
+### Technical Analysis
+
+**The two migration conventions — incompatible context, same goal:**
+
+| Migration | GUC name | Policy style | Enforcement |
+|---|---|---|---|
+| `010_rls_security.sql` (2025) | `app.current_tenant_id` | `TO tenant_user_role` + `USING (tenant_id = current_setting(...))` | Only when active role is `tenant_user_role` |
+| `20260727000030_strict_tenant_rls.sql` | `uisce.current_tenant` | `FORCE ROW LEVEL SECURITY` + `uisce_get_current_tenant()` | All roles including superuser |
+
+**Why the connection bypasses both:**
+
+The app connects as `postgres` superuser. For `010_rls_security.sql` tables, the policies are `TO tenant_user_role` — they only fire when `ROLE = tenant_user_role`. `postgres` superuser is not `tenant_user_role`, so policies never apply. For `FORCE ROW LEVEL SECURITY` tables, the superuser is subject to RLS, but the context GUC was never set (the `SET LOCAL = $1` bug). Both layers were defeated by the same two bugs this engagement fixed.
+
+**The two `set_config` calls that must both be set:**
+
+```sql
+-- Old migration reads this:
+SELECT set_config('app.current_tenant_id', $1, true)
+
+-- New migration (via uisce_get_current_tenant()) reads this:
+SELECT set_config('uisce.current_tenant', $1, true)
+```
+
+`SetRLSContext` was recently fixed to set `uisce.current_tenant`. The old migration's policies still read `app.current_tenant_id`. The fix: `SetRLSContext` must set **both** GUCs atomically, or a migration must be written to update the old policies to use `uisce_get_current_tenant()`.
+
+**Design: two-role connection pool**
+
+```
+app_user (NOLOGIN, non-superuser)  ← app connects as this
+  └── SET ROLE tenant_user_role     ← normal queries, RLS enforced
+  └── SET ROLE global_admin_role   ← cross-tenant reads (e.g., audit explorer)
+```
+
+`app_user` is granted `CONNECT` on the database and `USAGE` on schemas it needs, but **not** `BYPASSRLS`. `SET ROLE` switches the effective role within the connection; the connection itself stays as `app_user`.
+
+**Why SET ROLE rather than connecting as the role directly:**
+
+PostgreSQL doesn't allow a connection to `SET ROLE` to a role it wasn't granted — the initial connection auth determines what roles are available. By connecting as `app_user` (which is granted to the app's auth token) and then `SET ROLE tenant_user_role`, the connection inherits `tenant_user_role`'s RLS policy membership while the pool keeps its connection identity.
+
+**Operations that need special handling:**
+
+| Operation | Current | Needed | Plan |
+|---|---|---|---|
+| Regular tenant queries | `postgres` superuser | `app_user` + `SET ROLE tenant_user_role` | Main pool, `SetRLSContext` |
+| `REFRESH MATERIALIZED VIEW` | `postgres` superuser | Separate connection as `global_admin_role` | Admin pool or `SET ROLE global_admin_role` (BYPASSRLS but `FORCE RLS` tables still enforce `WITH CHECK`) |
+| `pg_class` stats | `postgres` superuser | `app_user` (has catalog read access) | Works without change |
+| DDL / `CREATE SCHEMA` | `postgres` superuser | Separate provisioner connection | Only in `tenant provision` binary, not main app |
+| `ALTER TABLE FORCE ROW LEVEL SECURITY` | Superuser | Migration-only (never in runtime) | N/A |
+
+**Migration plan:**
+
+1. **Create `app_user` role** (non-superuser, `NOLOGIN`) with `GRANT CONNECT ON DATABASE`, `GRANT USAGE ON SCHEMA public`, `GRANT SELECT/INSERT/UPDATE/DELETE` on all tenant tables (matching `tenant_user_role`'s grants).
+2. **Update `SetRLSContext`** to set both `app.current_tenant_id` and `uisce.current_tenant` — or write a migration to update old policies to use `uisce_get_current_tenant()`. (The `uisce.current_tenant` is the canonical name going forward; `app.current_tenant_id` is the legacy name that should be phased out.)
+3. **Update connection pool** to connect as `app_user` (change DSN user or add `user=` to connection string). The pool authenticates as the OS user or as `app_user` via `pg_hba.conf`.
+4. **After acquiring connection, before each transaction**: `SET ROLE tenant_user_role` (or `global_admin_role` for admin contexts). This is a zero-cost session setting.
+5. **Admin pool**: for `REFRESH MATERIALIZED VIEW` and other operations that need `global_admin_role` BYPASSRLS, use a separate connection pool authenticated as `app_user` but calling `SET ROLE global_admin_role`. Note: `FORCE ROW LEVEL SECURITY` tables still enforce their `WITH CHECK` even for `global_admin_role`; the admin bypass only works for the older `010_rls_security.sql` tables.
+6. **Test**: verify that `SELECT * FROM tenant_instance` (FORCE RLS table) returns 0 rows for a tenant context, and all rows for a global admin context.
+
+**`app.current_tenant_id` vs `uisce.current_tenant` — canonical name decision needed:**
+
+The codebase now sets `uisce.current_tenant`. The old migration (`010_rls_security.sql`) still reads `app.current_tenant_id`. Until those policies are migrated to use `uisce_get_current_tenant()`, both must be set. Decision: either (a) migrate old policies to `uisce_get_current_tenant()` and remove `app.current_tenant_id` entirely, or (b) keep both and standardize on `app.current_tenant_id` going forward. Option (a) is preferred — one canonical GUC name reduces future confusion.
+
+---
+
+## Finding: SET LOCAL Does Not Support Bind Parameters — RLS Context Never Set
+
+**Name:** `RLS-SetContext-BindParam-Syntax`
+**Severity:** SEV-HIGH
+**Found:** 2026-09-05
+**Status:** Closed — Fix Applied (merged to main via PR #11). Pending BYPASSRLS connection demotion to fully operationalize the RLS layer.
+
+### Description
+
+PostgreSQL's `SET` and `SET LOCAL` statements do **not** support bind parameters (`$1`, `$2`). Using `SET LOCAL uisce.current_tenant = $1` silently fails with a syntax error on every call — PostgreSQL rejects the `$1` token in SET syntax. The error was not handled; all callers believed RLS context was set and queries were tenant-scoped, when in fact no RLS context existed at all.
+
+Four code instances had this pattern:
+
+| Location | Function | Status | Callers |
+|---|---|---|---|
+| `internal/tenant/context.go:40` | `SetRLSContext` | **Broken — fixed** | 15 call sites across `scheduler_service.go`, `export_service.go` |
+| `internal/middleware/security_helpers.go:95` | `SetTenantContext` | Dead code (unused) | None |
+| `internal/middleware/security_helpers.go:108` | `SetGlobalAdminContext` | Dead code (unused) | None |
+| `internal/middleware/tenant_context.go:52` | `SetSessionTenantContext` | Dead code (unused) | None |
+
+The shared helper `tenant.SetRLSContext` was called 15 times across scheduler and export services. Every call — on every request to those endpoints — silently failed. RLS context was never set. Queries executed without tenant scoping.
+
+**Confirmed blast radius**: `GET /api/v1/schedules` with global admin + tenant header returned HTTP 500 `"failed to set RLS context: pq: syntax error at or near "$1"` after `tenant.SetRLSContext` was reached. Without the fix, every scheduler and export endpoint would fail identically.
+
+**Empirical evidence**: the probe of `GET /api/v1/schedules` produced the syntax error before the fix and returned `{"schedules":[],"total":0}` with HTTP 200 after. The empty array means no schedules exist, not an error.
+
+### Fix Applied
+
+Replaced all four instances with `SELECT set_config('uisce.current_tenant', $1, true)` — the `set_config()` function **does** accept bind parameters. The third argument (`true`) makes it transaction-scoped, equivalent to `SET LOCAL`, and it reverts automatically at `COMMIT/ROLLBACK`, so connection pool safety is preserved.
+
+### Relation to BYPASSRLS Finding
+
+The `DBRuntime-Superuser-BYPASSRLS` finding notes that the application connection runs as `postgres` superuser with `BYPASSRLS`, meaning RLS policies are bypassed entirely. This finding reveals a second, independent RLS failure mode: even if the connection *did* enforce RLS, the context was never being set because `SET LOCAL` doesn't accept bind parameters.
+
+Both findings together describe a RLS system that has never been operational: the connection bypasses it at the superuser level, and even if it didn't, the context-setting mechanism was broken. The BYPASSRLS fix (connection demotion) must also fix the `SetRLSContext` mechanism to properly set transaction-scoped RLS context using `set_config()`.
+
+### Fix Direction
+
+1. ✅ **Fixed in `fix/dead-handler-removal`**: `tenant.SetRLSContext` now uses `set_config(..., true)`. The RLS context mechanism works.
+2. **Pending**: `DBRuntime-Superuser-BYPASSRLS` demotion to a constrained role — when done, `set_config()` context setting must remain correct as the replacement for the broken `SET LOCAL` approach.
+
 ---
 
 ## Finding: SET LOCAL Does Not Support Bind Parameters — RLS Context Never Set
