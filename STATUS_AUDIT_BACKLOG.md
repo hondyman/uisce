@@ -224,18 +224,30 @@ Two HTTP route families serve the same `validation_triggers` table, written and 
 
 | Family | Route prefix | Source file | Coverage |
 |---|---|---|---|
-| Chi-family (canonical) | `/api/v1/triggers*` | `backend/internal/api/trigger_handlers_chi.go:47-69` | types/operators/events/objects + CRUD + executions |
-| Admin-family | `/api/admin/validation-triggers` | `backend/internal/api/validation_triggers_handlers.go:242-245` | list + create (no update, no delete, no toggle, no `last_fired_at` enrichment) |
+| Chi-family | `/api/v1/triggers*` | `backend/internal/api/trigger_handlers_chi.go:47-69` | types/operators/events/objects + CRUD + executions; `last_fired_at` LATERAL join |
+| Admin-family | `/api/admin/validation-triggers` | `backend/internal/api/validation_triggers_handlers.go:242-245` | list + create only; no PUT/DELETE/toggle; no enrichment |
 
-This is the **root cause of the entire phantom-schema handler family** (`PhantomSchema-TriggerHandlers` and the four siblings): two paths for one concept, both maintained until one queried columns the other wrote. The chi family was rewritten in this engagement (`668a6779d`, `6b1908394`, etc.) to use real columns and the `validation_triggers` table; the admin family was always correct but partial.
+This is the **root cause of the entire phantom-schema handler family** (`PhantomSchema-TriggerHandlers` and the four siblings): two paths for one concept, both maintained until one queried columns the other wrote. The chi family spent most of its life querying an imagined schema (`trigger_event_id`, `event_config`, `condition_config`, `action_config`, `abac_policy_id`, etc.) until the five-handler rewrite in this engagement; the admin family was always correct.
 
-### Required Fix
+### Canonical-Family Choice (decision deferred to executor)
 
-Pick the canonical family (the chi family — it has `last_fired_at` LATERAL join, full CRUD, executions):
+A prior summary proposed "chi family canonical, admin family deleted" based on which one carried the LATERAL join and the smoke. A more honest comparison inverts the default:
 
-1. **Update `TriggerAuthoringPage`** to POST `/api/v1/triggers` with the chi-family payload shape (`trigger_type`, `target_entity`, `step_name`, `rule_ids`, `pipeline_id`, `dispatch_mode`, `meta`).
-2. **Delete** `HandleListTriggers`, `HandleCreateTrigger`, and the registration block at `validation_triggers_handlers.go:235-246`.
-3. **Keep** `TriggerValidate` and `HandleValidateField` — those are engine-path, not CRUD.
+| Criterion | Chi-family | Admin-family |
+|---|---|---|
+| Correctness history | Recently broken (5 phantom-schema handlers); smoke covers the fix | Always correct; never queried imagined columns |
+| UI wiring | None | Already consumed by `TriggerAuthoringPage` (real page, real route at `AppRoutes.tsx:304`) |
+| `last_fired_at` enrichment | Has it (`trigger_handlers_chi.go:240-258`) | Doesn't |
+| Full CRUD + toggle | Yes | No (no PUT/DELETE) |
+| Spec lineage for #4's gate | Smoke covers it, but gate/integration-test contracts were specified against the admin family | Source-of-truth for gate contract |
+
+The cleaner argument is: **keep the family with the better correctness history (admin), port the small survivors (LATERAL join, executions, smoke migration) to it**. The other direction (keep chi, port the page) is also fine and the executor may disagree on ergonomics — but the choice should be argued, not defaulted. This finding records the comparison so the choice isn't relitigated from scratch.
+
+### Required Fix (whichever canonical family is chosen)
+
+1. **Decide canonical family** using the comparison above; record the chosen direction in this finding.
+2. **Update `TriggerAuthoringPage`** to point at the canonical family in both the form POST and the list/page wiring.
+3. **Delete** the duplicate CRUD handlers from the other family (the list/create pairs at minimum; PUT/DELETE/toggle if they exist only on one side). **Keep** engine-path handlers (`TriggerValidate`, `HandleValidateField`) on whichever family owns them.
 
 After consolidation, both `TriggerAuthoringPage` and the smoke point at the same `validation_triggers` rows through the same handlers; the phantom-schema family of bugs cannot recur against triggers.
 
