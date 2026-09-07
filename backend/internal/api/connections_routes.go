@@ -46,10 +46,11 @@ func RegisterConnectionsRoutes(r chi.Router, db *sqlx.DB) {
 }
 
 func getTenantIDFromRequest(r *http.Request) string {
-	if claims, err := jwtmiddleware.ValidateTokenFromRequest(r); err == nil && claims != nil && claims.TenantID != "" {
-		return claims.TenantID
+	claims, err := jwtmiddleware.ValidateTokenFromRequest(r)
+	if err != nil || claims == nil || claims.TenantID == "" {
+		return ""
 	}
-	return r.Header.Get("X-Tenant-ID")
+	return claims.TenantID
 }
 
 // handleListConnections lists all connections for a tenant

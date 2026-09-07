@@ -92,7 +92,7 @@ func SetTenantContext(ctx context.Context, tx *sql.Tx, tenantID string) error {
 	if tx == nil {
 		return fmt.Errorf("database transaction is nil")
 	}
-	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID)
+	_, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to set tenant context: %w", err)
 	}
@@ -105,7 +105,7 @@ func SetGlobalAdminContext(ctx context.Context, tx *sql.Tx) error {
 	if tx == nil {
 		return fmt.Errorf("database transaction is nil")
 	}
-	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.is_global_admin = 'true'")
+	_, err := tx.ExecContext(ctx, "SELECT set_config('uisce.is_global_admin', 'true', true)")
 	if err != nil {
 		return fmt.Errorf("failed to set global admin context: %w", err)
 	}

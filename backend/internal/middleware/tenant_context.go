@@ -49,7 +49,7 @@ func SetSessionTenantContext(ctx context.Context, tx *sql.Tx, tenantID string) e
 	if _, err := uuid.Parse(tenantID); err != nil {
 		return fmt.Errorf("invalid tenant ID format for RLS session setting: %w", err)
 	}
-	_, err := tx.ExecContext(ctx, "SET LOCAL uisce.current_tenant = $1", tenantID)
+	_, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID)
 	if err != nil {
 		return fmt.Errorf("failed to set session RLS parameter uisce.current_tenant: %w", err)
 	}
