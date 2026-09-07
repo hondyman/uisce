@@ -391,32 +391,56 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 			fieldsBytes, _ := json.Marshal(fieldsRaw)
 			var newFields []map[string]interface{}
 			if err := json.Unmarshal(fieldsBytes, &newFields); err == nil {
-				// Use transaction to replace bo_fields for this BO
+				// Use transaction to replace fields for this BO.
+				// Writes go to business_object_fields (the canonical table read by loadBOSubtypesAndFields);
+				// term_node_id is generated deterministically from boID+fieldName when no semantic term is
+				// supplied, so re-saves are idempotent on the (tenant_id, bo_id, term_node_id) unique key.
 				tx, err := s.db.Beginx()
 				if err == nil {
 					defer func() { _ = tx.Rollback() }()
-					// delete existing fields for BO
-					if _, err := tx.ExecContext(ctx, `DELETE FROM bo_fields WHERE business_object_id = $1::uuid`, bo.ID); err != nil {
-						fmt.Printf("warning: failed to delete bo_fields for bo_id=%s: %v\n", bo.ID, err)
+					// delete existing entity-level fields for this BO
+					if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'`, bo.ID); err != nil {
+						fmt.Printf("warning: failed to delete business_object_fields for bo_id=%s: %v\n", bo.ID, err)
 					}
-					// insert new fields
-					insertQ := `INSERT INTO bo_fields (id, business_object_id, field_name, field_type, display_label, display_order, help_text, is_required, semantic_term_id, role) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8, $9::uuid, $10)`
+					// upsert new fields
+					upsertQ := `
+						INSERT INTO business_object_fields (
+							field_id, tenant_id, bo_id, term_node_id, field_name,
+							field_role, binding_requirement, binding_status,
+							eligibility_source, eligibility_path, is_exposed,
+							override_reason, is_active, subtype_scope
+						) VALUES (
+							$1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
+							$6, $7, $8, $9, $10, $11, $12, $13, 'ALL'
+						)
+						ON CONFLICT (tenant_id, bo_id, term_node_id) DO UPDATE SET
+							field_name = EXCLUDED.field_name,
+							field_role = EXCLUDED.field_role,
+							binding_requirement = EXCLUDED.binding_requirement,
+							binding_status = EXCLUDED.binding_status,
+							eligibility_source = EXCLUDED.eligibility_source,
+							eligibility_path = EXCLUDED.eligibility_path,
+							is_exposed = EXCLUDED.is_exposed,
+							override_reason = EXCLUDED.override_reason,
+							is_active = EXCLUDED.is_active
+					`
 
 					var selectedTermIDs []string
 
 					for _, f := range newFields {
-						id := uuid.New()
 						fieldName := ""
-						if s, ok := f["key"].(string); ok {
+						if s, ok := f["key"].(string); ok && s != "" {
 							fieldName = s
-						} else if s, ok := f["technicalName"].(string); ok {
+						} else if s, ok := f["technicalName"].(string); ok && s != "" {
+							fieldName = s
+						} else if s, ok := f["name"].(string); ok && s != "" {
 							fieldName = s
 						}
-						displayLabel := ""
-						if s, ok := f["name"].(string); ok {
-							displayLabel = s
+						if fieldName == "" {
+							continue
 						}
-						fieldType := "string"
+						_ = f["name"] // displayLabel reserved for future metadata column
+						fieldType := "text"
 						if s, ok := f["type"].(string); ok {
 							fieldType = s
 						}
@@ -434,6 +458,9 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 						if s, ok := f["role"].(string); ok {
 							role = s
 						}
+						if role == "" {
+							role = "DIMENSION"
+						}
 
 						// If implementation details: fieldName (key) is the semantic term ID for wizard-created fields
 						// BUT if we have explicit semanticTermID, use that for tracking.
@@ -446,16 +473,18 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 							}
 						}
 
-						seq := 0
-						if n, ok := f["sequence"].(float64); ok {
-							seq = int(n)
+						// Determine term_node_id: explicit semanticTermId, else deterministic SHA-1.
+						termNodeID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(bo.ID+fieldName)).String()
+						if semanticTermID != nil {
+							termNodeID = *semanticTermID
 						}
-						help := ""
-						if s, ok := f["description"].(string); ok {
-							help = s
-						}
-						if _, err := tx.ExecContext(ctx, insertQ, id, bo.ID, fieldName, fieldType, displayLabel, seq, help, false, semanticTermID, role); err != nil {
-							fmt.Printf("warning: failed to insert bo_field for bo_id=%s key=%s: %v\n", bo.ID, fieldName, err)
+
+						if _, err := tx.ExecContext(ctx, upsertQ,
+							uuid.New().String(), tenantID, bo.ID, termNodeID, fieldName,
+							role, "REQUIRED", "RESOLVED",
+							"DIRECT", "{}", true, "", true,
+						); err != nil {
+							fmt.Printf("warning: failed to upsert business_object_field for bo_id=%s name=%s: %v\n", bo.ID, fieldName, err)
 						}
 					}
 
