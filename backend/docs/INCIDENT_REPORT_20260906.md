@@ -105,6 +105,31 @@ The cleanup script that evacuated `vend` would have destroyed live data if live 
 3. **Quarantine `verify_*` scripts** — rename out of runner's discovery path (category error, not migrations)
 4. **Fix non-idempotent migrations** — lower priority, sequence after steps 1–3
 
+## New Entry (2026-09-07): Unauthenticated Cross-Tenant Credential Disclosure — Found, Hotfixed
+
+**Found by:** not a security audit, not CI (which was red across the board and would not have caught this) — the git-consolidation effort's unmerged-work sweep, which surfaced a 52-commit security branch (`claude/wonderful-lewin-7c0c43`, "fix: close cross-tenant IDOR in remaining X-Tenant-ID/tenant_id readers") with no open PR, followed by one behavioral replay against a freshly-built `main` binary to confirm the vulnerability the branch claimed to fix was real.
+
+**The vulnerability:** `GetTenantConnection` (`GET /api/api-dispatcher/connections`) trusted the client-supplied `tenant_id` query param / `X-Tenant-ID` header directly, with no JWT or session validation of any kind:
+
+```go
+tenantID := r.URL.Query().Get("tenant_id")
+if tenantID == "" {
+    tenantID = r.Header.Get("X-Tenant-ID")
+}
+```
+
+The query behind it selects `oauth_client_secret_encrypted`, `oauth_refresh_token_encrypted`, and `auth_config_encrypted` for the requested `tenant_id` — any tenant's connection credentials, readable by an unauthenticated caller who supplies that tenant's UUID.
+
+**Confirmed exploitable, live, on `main`:** replayed with zero Authorization header and a spoofed `tenant_id` against a binary built from current `main`. The request reached the vulnerable query using the attacker-supplied tenant ID and only returned `500` instead of the secrets themselves, because of an *unrelated* schema-drift bug — the `auth_config_encrypted` column referenced in the `SELECT` does not exist on the live table. **The vulnerability was masked by luck, not by design — the same conduct framing as the `vend` evacuation above, now describing a live security posture rather than a near-miss.** Any future migration that adds that column (e.g., as part of routine schema-drift cleanup) would silently un-mask a credential-disclosure endpoint with zero code review touching the auth logic. **This is a hard sequencing dependency: the `auth_config_encrypted` column drift must not be fixed independently of this hotfix — whoever picks up that column-drift item must confirm this fix has landed first, or fix them together.**
+
+**Exposure assessment:**
+- Server binds `0.0.0.0:8080` (`http.ListenAndServe(":8080", ...)`), not loopback-only.
+- Host is on a personal Tailscale tailnet (5 devices, single account) — not internet-facing, not a shared/multi-tenant network. Real-world exposure at time of discovery: low, but non-zero (any device on that tailnet could reach it).
+- **Exploitation evidence check: none found**, but this is a weak negative — no per-request access log records client IP for this endpoint, and `pg_stat_statements` is not installed on `alpha` (confirmed earlier in this effort), so DB-side query history for `tenant_api_connections` cannot be checked either. Absence of evidence in logs that don't exist is not confirmation of no exploitation.
+- **Credential rotation: not yet done.** Given the ambiguous logging coverage above, rotating the OAuth client secrets/refresh tokens in `tenant_api_connections` is cheap insurance worth doing regardless of the "low real-world exposure" assessment — flagged here as an open action, not completed.
+
+**Fix (hotfix, minimal, not the source branch):** rather than merge the 52-commit branch under time pressure — the same shortcut that produced the `vend` evacuation — extracted only the one-function fix, using `TenantIDFromRequest` (already on `main` via the SEV-HIGH RBAC fix, PR #19/#20) plus a `security.AuthInfo.IsGlobalAdmin` check for legitimate cross-tenant admin lookups. Verified with three replays against a rebuilt binary of the patched code (not claimed sight-unseen — actually executed): (a) unauthenticated, spoofed `tenant_id` → `401 unauthorized`; (b) authenticated as tenant A requesting tenant B's connection, not global admin → `403 forbidden: cannot access another tenant's connection`; (c) authenticated, own tenant → passes the auth check and reaches the query (same pre-existing `auth_config_encrypted` column-drift `500` as before, not a new failure — proof the fix doesn't over-block legitimate same-tenant access, the classic bad-security-fix failure mode). The branch's remaining 51 commits get full review on their own timeline, unblocked by this hotfix.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:

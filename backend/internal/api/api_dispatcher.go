@@ -840,10 +840,28 @@ func (h *ApiDispatcherHandler) GetApiLineage(w http.ResponseWriter, r *http.Requ
 }
 
 // GetTenantConnection returns the tenant's instance URL and credentials
+// (including OAuth client secret / refresh token, encrypted at rest but
+// decrypted here). HOTFIX 2026-09-07: this previously trusted the raw
+// tenant_id query param / X-Tenant-ID header directly with zero validation
+// — an unauthenticated caller could read any tenant's connection secrets by
+// supplying an arbitrary tenant_id. TenantIDFromRequest resolves the
+// caller's own tenant from verified JWT claims and fails closed (empty,
+// false) if there are none; a client-supplied tenant_id is honored only
+// when it matches the caller's own tenant or the caller is a verified
+// global admin. See backend/docs/INCIDENT_REPORT_20260906.md.
 func (h *ApiDispatcherHandler) GetTenantConnection(w http.ResponseWriter, r *http.Request) {
-	tenantID := r.URL.Query().Get("tenant_id")
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
+	tenantID, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if requested := r.URL.Query().Get("tenant_id"); requested != "" && requested != tenantID {
+		auth, authOk := security.AuthInfoFromContext(r.Context())
+		if !authOk || !auth.IsGlobalAdmin {
+			http.Error(w, "forbidden: cannot access another tenant's connection", http.StatusForbidden)
+			return
+		}
+		tenantID = requested
 	}
 	dsID := r.URL.Query().Get("api_datasource_id")
 	if tenantID == "" || dsID == "" {
