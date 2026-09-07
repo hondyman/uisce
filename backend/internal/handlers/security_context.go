@@ -59,21 +59,41 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 			break
 		}
 	}
+	auth.IsGlobalAdmin = auth.IsGlobalAdmin || isGlobalAdmin
 
+	// HOTFIX 2026-09-07: this previously accepted a client-supplied
+	// X-Tenant-ID header or tenant_id query param unconditionally, prepending
+	// it as the primary scoped tenant with no check that it belonged to the
+	// caller. Because this function is called from 67 sites across the
+	// backend, that meant any authenticated user for any tenant could pivot
+	// to any other tenant by setting the header — the single highest-blast-
+	// radius finding in backend/docs/INCIDENT_REPORT_20260906.md's
+	// tenant-resolution sweep. security.ResolveTenantID is the canonical
+	// rule: the requested tenant is honored only if it matches the caller's
+	// own tenant list or the caller is a verified global admin/ops.
 	targetTenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 	if targetTenantID == "" {
 		targetTenantID = strings.TrimSpace(r.URL.Query().Get("tenant_id"))
 	}
-	if targetTenantID != "" {
-		if len(auth.TenantIDs) == 0 {
-			auth.TenantIDs = []string{targetTenantID}
-		} else {
-			// Prepend targetTenantID so BuildContext treats it as the primary scoped tenant
-			auth.TenantIDs = append([]string{targetTenantID}, auth.TenantIDs...)
+	resolvedTenantID, resolveOK := security.ResolveTenantID(auth, targetTenantID)
+	switch {
+	case resolveOK:
+		if len(auth.TenantIDs) == 0 || auth.TenantIDs[0] != resolvedTenantID {
+			auth.TenantIDs = append([]string{resolvedTenantID}, auth.TenantIDs...)
 		}
-	}
-
-	if len(auth.TenantIDs) == 0 && !isGlobalAdmin {
+	case targetTenantID != "":
+		// A tenant was explicitly requested (header or query param) and did
+		// not match the caller's own tenants or admin status — reject
+		// outright rather than silently falling back to the caller's own
+		// tenant, which would mask the mismatch instead of surfacing it.
+		err := fmt.Errorf("forbidden: requested tenant does not match caller's tenant")
+		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user=%s requested=%s ownTenantIDs=%v isGlobalAdmin=%v: %v", auth.UserID, targetTenantID, auth.TenantIDs, isGlobalAdmin, err)
+		return nil, r.Context(), err
+	case isGlobalAdmin:
+		// No tenant requested, caller has no tenant claims of their own, but
+		// is a verified global admin — preserves the original behavior of
+		// allowing a global-scope request through with empty TenantIDs.
+	default:
 		err := fmt.Errorf("no tenants assigned to user: JWT token must include tenant_id or tenant_ids claim")
 		logging.GetLogger().Sugar().Warnf("[SecurityContextFromRequest] user=%s roles=%v tenantIDs=%v isGlobalAdmin=%v: %v", auth.UserID, auth.Roles, auth.TenantIDs, isGlobalAdmin, err)
 		return nil, r.Context(), err
