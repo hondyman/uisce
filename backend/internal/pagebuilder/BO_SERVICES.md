@@ -33,14 +33,7 @@ Confirmed via direct SQL replay (not code reading) against `alpha`:
 | `boresolver.SaveBusinessObjectAtomic` | gen-3 shape + one extra column, `status` | gen-3, no `status` column | **Nearly current** — one-column drift, most likely the least-stale of the four |
 | `security.FieldPermissionRepository.GetTermPermissionsForRoles` | `term_node_id`, `datasource_id` on `bp_field_permissions` (gen-N+1, forward-looking) | Neither column exists | **Schema never caught up to code** — inverse of the others |
 
-**The migration ledger (`schema_migrations`) is empty — zero rows, both
-`public` and `vend` schemas.** This database's history was never tracked by
-this repo's migration runner. Falling back to column-presence facts: the
-gen-3 `business_objects` migrations (e.g.
-`20260812000002_sync_existing_bos_to_catalog.up.sql`) did apply — alpha has
-that shape. `add_term_node_id_to_field_permissions.sql` exists in the repo,
-defines exactly the column `FieldPermissionRepository` expects, and was
-**never applied** — confirmed absent via `\d bp_field_permissions`.
+**The migration ledger is not empty — it contains 188 entries in `oms.migration_log`.** The earlier claim of an "empty ledger" checked `schema_migrations` (wrong table); the correct table is `oms.migration_log`, which tracks applied migrations by filename + SHA-256 hash. The ledger includes 60 `manual_adopt/*` entries registered on 2026-09-07 01:32 — all within 0.77 seconds, which is incompatible with serial runner processing and indicates bulk manual registration rather than runner observation. Of these 60 entries: 22 are clean no-ops (already had their effects), 6 are applied-but-non-idempotent, 25 are fiction (wrong schema generation, missing prerequisites, or broken files), 6 are category errors (verify scripts in the migration path), and 1 has missing effects (`ledger_entries`/`insert_trade_requests` absent). See `backend/docs/migration_classification_60.csv` for the full machine-generated classification.
 
 **Conclusion: not one drift event, two different ones layered together.**
 The BO-service code is stale relative to a schema that moved past it. The
