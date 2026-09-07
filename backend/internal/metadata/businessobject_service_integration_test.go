@@ -232,10 +232,104 @@ func TestFieldUpdateRoundTrip(t *testing.T) {
 	}
 	require.Empty(t, wantNames, "missing fields after round-trip: %v", wantNames)
 
-	// Direct DB assertion: business_object_fields has the rows (not bo_fields)
-	var bfRows, bofRows int
+	// Direct DB assertion: business_object_fields has the rows (not bo_fields).
+	// Per the NULL-able term_node_id migration, fields without a semanticTermId
+	// must store term_node_id = NULL — never a synthetic hash. This is the
+	// assertion that catches the SHA-1 fallback reappearing.
+	var bfRows, bofRows, nullTermRows, hashRows int
 	_ = db.QueryRowContext(ctx, `SELECT COUNT(*) FROM bo_fields WHERE business_object_id = $1`, boID).Scan(&bfRows)
 	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND subtype_scope = 'ALL'`, boID).Scan(&bofRows))
 	require.Equal(t, 2, bofRows, "expected 2 rows in business_object_fields")
 	require.Equal(t, 0, bfRows, "no rows should land in bo_fields anymore")
+
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND subtype_scope = 'ALL' AND term_node_id IS NULL`,
+		boID).Scan(&nullTermRows))
+	require.Equal(t, 2, nullTermRows,
+		"both fields lack semanticTermId and must store term_node_id IS NULL — "+
+			"got %d, want 2. Synthetic IDs are forbidden.",
+		nullTermRows)
+
+	// Belt-and-braces: term_node_id values must NOT look like SHA-1 OID-namespace UUIDs
+	// (which would be 6ba7b810-9dad-11d1-80b4-00c04fd430c8-derived UUIDs).
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND term_node_id::text LIKE '6ba7b810-9dad-11d1-80b4-%'`,
+		boID).Scan(&hashRows))
+	require.Equal(t, 0, hashRows, "found SHA-1 OID-namespace term_node_ids — hash fallback reappeared")
+}
+
+// TestFieldUpdateRejectsWithDownstreamRefs verifies the pre-flight reference
+// check refuses wholesale field replacement when downstream references exist.
+// Bypassing this guard is exactly the silent-drop bug the diff-based rewrite
+// exists to prevent at scale; this test pins the loud-failure form of the
+// guard in place.
+func TestFieldUpdateRejectsWithDownstreamRefs(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode: requires Postgres")
+	}
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
+	}
+
+	db, err := sqlx.Open("postgres", dsn)
+	if err != nil {
+		t.Skipf("Skipping: failed to open DB: %v", err)
+		return
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		t.Skipf("Skipping: database not reachable: %v", err)
+		return
+	}
+
+	ctx := context.Background()
+	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
+
+	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "ref-reject tenant")
+	boID := uuid.NewString()
+	boKey := "rt_ref_bo_" + boID[:8]
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
+		boID, tenantID, boKey, "Ref-Reject BO")
+	require.NoError(t, err)
+
+	// Seed a field binding that points to a hypothetical future field_id
+	// (no business_object_fields row — we're testing the count > 0 query path).
+	// The pre-flight counts field_bindings joined to business_object_fields,
+	// so we need both rows. Insert one field, then one binding.
+	fieldID := uuid.NewString()
+	termID := uuid.NewString()
+	_, err = db.ExecContext(ctx, `INSERT INTO business_object_fields (field_id, tenant_id, bo_id, term_node_id, field_name, subtype_scope) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, 'ALL')`,
+		fieldID, tenantID, boID, termID, "SeedField")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `INSERT INTO field_bindings (id, tenant_id, bo_id, binding_id, field_id, source_type, is_active) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, gen_random_uuid(), $3::uuid, 'COLUMN', true)`,
+		tenantID, boID, fieldID)
+	require.NoError(t, err)
+
+	defer func() {
+		db.ExecContext(ctx, `DELETE FROM field_bindings WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
+	}()
+
+	svc := NewBusinessObjectService(db, nil, nil, nil)
+	secCtx := &security.Context{TenantID: tenantID}
+
+	updateReq := models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "ReplacementField", "type": "text", "role": "DIMENSION"},
+			},
+		},
+	}
+	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, updateReq, "test-user")
+	require.Error(t, err, "Update must reject with downstream references")
+	require.Contains(t, err.Error(), "refusing to replace field set", "rejection must name the issue")
+
+	// The original field must still be there — rejection is transactional.
+	var stillThere int
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND field_name = 'SeedField'`, boID).Scan(&stillThere))
+	require.Equal(t, 1, stillThere, "rejected update must not have modified the field set")
 }

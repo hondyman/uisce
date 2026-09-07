@@ -402,8 +402,12 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 					if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'`, bo.ID); err != nil {
 						fmt.Printf("warning: failed to delete business_object_fields for bo_id=%s: %v\n", bo.ID, err)
 					}
-					// upsert new fields
-					upsertQ := `
+					// Upsert into business_object_fields — bound vs unbound by term_node_id.
+					// Bound: keyed on uq_business_object_fields_term (term_node_id-bound).
+					// Unbound: keyed on uq_business_object_fields_unbound_name (field_name, NULL term_node_id).
+					// The previous SHA-1(boID+fieldName) fallback for term_node_id produced IDs that
+					// corresponded to no catalog_node — silently incompatible with bp_field_permissions.term_node_id.
+					upsertBoundQ := `
 						INSERT INTO business_object_fields (
 							field_id, tenant_id, bo_id, term_node_id, field_name,
 							field_role, binding_requirement, binding_status,
@@ -415,6 +419,27 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 						)
 						ON CONFLICT (tenant_id, bo_id, term_node_id) DO UPDATE SET
 							field_name = EXCLUDED.field_name,
+							field_role = EXCLUDED.field_role,
+							binding_requirement = EXCLUDED.binding_requirement,
+							binding_status = EXCLUDED.binding_status,
+							eligibility_source = EXCLUDED.eligibility_source,
+							eligibility_path = EXCLUDED.eligibility_path,
+							is_exposed = EXCLUDED.is_exposed,
+							override_reason = EXCLUDED.override_reason,
+							is_active = EXCLUDED.is_active
+					`
+					upsertUnboundQ := `
+						INSERT INTO business_object_fields (
+							field_id, tenant_id, bo_id, term_node_id, field_name,
+							field_role, binding_requirement, binding_status,
+							eligibility_source, eligibility_path, is_exposed,
+							override_reason, is_active, subtype_scope
+						) VALUES (
+							$1::uuid, $2::uuid, $3::uuid, NULL, $4,
+							$5, $6, $7, $8, $9, $10, $11, $12, 'ALL'
+						)
+						ON CONFLICT (tenant_id, bo_id, field_name) WHERE term_node_id IS NULL
+						DO UPDATE SET
 							field_role = EXCLUDED.field_role,
 							binding_requirement = EXCLUDED.binding_requirement,
 							binding_status = EXCLUDED.binding_status,
@@ -445,7 +470,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 							fieldType = s
 						}
 
-						// Extract semanticTermID
+						// Extract semanticTermID. NULL = field has no catalog binding.
 						var semanticTermID *string
 						if s, ok := f["semanticTermId"].(string); ok && s != "" {
 							semanticTermID = &s
@@ -453,7 +478,6 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 							semanticTermID = &s
 						}
 
-						// Extract Role
 						role := ""
 						if s, ok := f["role"].(string); ok {
 							role = s
@@ -462,28 +486,31 @@ func (s *BusinessObjectService) UpdateBusinessObject(ctx context.Context, tenant
 							role = "DIMENSION"
 						}
 
-						// If implementation details: fieldName (key) is the semantic term ID for wizard-created fields
-						// BUT if we have explicit semanticTermID, use that for tracking.
+						// Track selected semantic terms for catalog sync event (only bound fields).
 						if fieldType == "semantic_term" {
 							if semanticTermID != nil {
 								selectedTermIDs = append(selectedTermIDs, *semanticTermID)
 							} else {
-								// Fallback to key if semanticTermID not explicitly in payload (legacy)
 								selectedTermIDs = append(selectedTermIDs, fieldName)
 							}
 						}
 
-						// Determine term_node_id: explicit semanticTermId, else deterministic SHA-1.
-						termNodeID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(bo.ID+fieldName)).String()
+						fieldID := uuid.New().String()
+						var err error
 						if semanticTermID != nil {
-							termNodeID = *semanticTermID
+							_, err = tx.ExecContext(ctx, upsertBoundQ,
+								fieldID, tenantID, bo.ID, *semanticTermID, fieldName,
+								role, "REQUIRED", "RESOLVED",
+								"DIRECT", "{}", true, "", true,
+							)
+						} else {
+							_, err = tx.ExecContext(ctx, upsertUnboundQ,
+								fieldID, tenantID, bo.ID, fieldName,
+								role, "REQUIRED", "RESOLVED",
+								"DIRECT", "{}", true, "", true,
+							)
 						}
-
-						if _, err := tx.ExecContext(ctx, upsertQ,
-							uuid.New().String(), tenantID, bo.ID, termNodeID, fieldName,
-							role, "REQUIRED", "RESOLVED",
-							"DIRECT", "{}", true, "", true,
-						); err != nil {
+						if err != nil {
 							fmt.Printf("warning: failed to upsert business_object_field for bo_id=%s name=%s: %v\n", bo.ID, fieldName, err)
 						}
 					}
