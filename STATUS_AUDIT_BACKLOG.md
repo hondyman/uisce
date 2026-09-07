@@ -1501,3 +1501,50 @@ tables must be wrapped. Priority order:
 2. `bo_instances`, `bo_subtypes`, `business_object_relationships`
 3. `tenant_api_connections`, all the `bp_*` tables
 
+---
+
+## Merge Plan: metadata-gen3-crud → studio-wireup
+
+**Name:** `MergePlan-metadata-gen3-crud-into-studio-wireup`
+**Found:** 2026-09-07
+**Status:** Ready to execute (gated on the conditions below)
+
+### Background
+
+`metadata-gen3-crud` (pushed to `origin` at `20e90509a`, 17 commits ahead of `main`) carries:
+
+- `business_object_fields` write-path fixes (`6b1908394`, `ea35df7d1`, `65038e513`) in both `metadata.UpdateBusinessObject` and `services.UpdateBusinessObject`
+- The `TestFieldUpdateRoundTrip` integration test pinning the write→read contract
+- Three backlog entries: `TriggerSurface-CreateOnly` (reopened), `TriggerRouteFamily-Duplicate` (new), `DBRuntime-Superuser-BYPASSRLS` (clarified with Option A/B)
+
+`studio-wireup` (at `668a6779d`) carries the Tier-1 backend fixes — `98e08247b` RBAC nil-deref, `10f0b163f` T1/T2/T3 PASS, `668a6779d` smoke cherry-pick, the trigger backend — and the Tier-1 frontend `TriggerAuthoringPage` at `frontend/src/features/data-pipelines/pages/TriggerAuthoringPage.tsx:65`.
+
+### Writer-Side Conflict (resolved at contract level)
+
+Both branches write to `business_object_fields`. No file-level collision; the methods are different. Contract-level question to document in the merge commit body:
+
+| Branch | Method | Path | Flow |
+|---|---|---|---|
+| `metadata-gen3-crud` | `metadata.UpdateBusinessObject` | `backend/internal/metadata/businessobject_service.go:1060-1180` | Wizard-driven field-set replacement (DELETE-then-upsert guarded by pre-flight reference check) |
+| `metadata-gen3-crud` | `services.UpdateBusinessObject` | `backend/internal/services/business_object_service.go:388-525` | Same flow, secondary path |
+| `studio-wireup` | `persistCoreFieldsToBOF` | `backend/internal/api/business_object_handlers.go:879, 1822-1830` | Handler-driven auto-discovery (semantic term discovery → BOF) |
+
+**Boundary:** metadata-gen3-crud's pair owns semantic-term-bound field updates from the wizard / explicit API; studio-wireup's `persistCoreFieldsToBOF` owns handler-driven discovery. The two write paths target the same table but at different lifecycle points (explicit edit vs. derived from catalog scan). This boundary must be in the merge commit body.
+
+### Required Pre-Merge Conditions
+
+1. **Writer-side contract reconciliation** — the merge commit body must state the boundary above explicitly. Add one test that exercises both paths against the same BO in the same session and asserts no corruption. Template: `TestFieldUpdateRoundTrip` (`metadata/businessobject_service_integration_test.go:170`). Without this test, "no direct collision" is an assertion, not a fact.
+
+2. **Route-family consolidation lands atomically with or before the merge** — the consolidation finding `TriggerRouteFamily-Duplicate` should land on `studio-wireup` either before the merge or in the same merge commit. Otherwise `TriggerAuthoringPage`'s POST target (currently `/api/admin/validation-triggers`) becomes stale again the moment the merge lands. Executor makes the canonical call using the comparison table in the finding; the comparison argues "keep admin, port survivors" but the executor may disagree.
+
+3. **The merge itself**: `metadata-gen3-crud` → `studio-wireup`, `--no-ff`, single reviewable commit. Commit body contains: the writer-contract boundary, the consolidation decision, the test that gates it. One merge, one reviewable artifact, the reconciliation visible in the diff.
+
+### Follow-ons (post-merge, already in backlog)
+
+- `TriggerSurface-CreateOnly` — the list page on `studio-wireup`
+- `DBRuntime-Superuser-BYPASSRLS` Option B wiring → Option A gated on `ca.key` custody
+
+### Why this is a finding and not a commit message
+
+The merge is the moment two branches become one system. The plan is the argument for what the system becomes — not just the merge log, but the evidence the executor's choices were argued rather than defaulted. If the merge is done without this artifact, the next session reads `git log` and sees a commit titled "merge metadata-gen3-crud" with no boundary declaration; the writer-side contract re-diverges the moment either path is touched. The finding makes the boundary durable by reference, not by hope.
+
