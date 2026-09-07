@@ -14,6 +14,15 @@ import (
 )
 
 func ApplyMigrations(db *sql.DB) error {
+	// Pin search_path to public. Without this, the connection's
+	// session-level search_path (set by ALTER ROLE/DATABASE elsewhere
+	// in this codebase) determines where unqualified CREATE TABLE goes.
+	// That migration-drift risk surfaces as tables landing in `vend`
+	// instead of `public`. Idempotent and harmless.
+	if _, err := db.Exec(`SET search_path TO public, oms`); err != nil {
+		return fmt.Errorf("failed to pin search_path: %w", err)
+	}
+
 	_, err := db.Exec(`CREATE SCHEMA IF NOT EXISTS oms`)
 	if err != nil {
 		return fmt.Errorf("failed to create oms schema: %w", err)
