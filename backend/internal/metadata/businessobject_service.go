@@ -1100,117 +1100,54 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 							_ = tx.Rollback()
 						}()
 
-						// PRE-FLIGHT reference check: refuse the wholesale field-set replacement if
-						// any of this BO's existing fields carry downstream references. The whole
-						// block below is DELETE-then-upsert; without this check, name-keyed references
-						// (entitlements via term_node_id, bindings via field_id, registry entries by
-						// (bo_name, field_name)) silently drift or get orphaned with a 200 OK.
-						//
-						// This is the loud-failure form of the four-semantics guard. Full diff-based
-						// semantics (add / remove each in own transaction, rename with explicit type
-						// change detection) is the next iteration; the pre-flight at minimum makes
-						// the dangerous half of the wholesale path refuse to run.
-						var (
-							bindingsN, permsN, keyRegN int
-							refDetails                 []string
-						)
-						if err := tx.QueryRowContext(ctx, `
-							SELECT COUNT(*) FROM field_bindings fb
-							JOIN business_object_fields bf ON bf.field_id = fb.field_id
-							WHERE bf.bo_id = $1::uuid AND bf.subtype_scope = 'ALL' AND fb.is_active = true
-						`, current.ID).Scan(&bindingsN); err != nil {
-							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count field_bindings: %v", err)
+						// FOUR-SEMANTICS GUARD (diff-based, replacing the version-1 blanket
+						// pre-flight): read the existing field set, diff it against the
+						// incoming request by field_name, and act per-field rather than
+						// rejecting the whole update whenever *any* field on the BO has a
+						// reference anywhere. Rules:
+						//   added (in request, not existing)        -> always allowed
+						//   removed (existing, not in request)      -> allowed only if unreferenced
+						//   type-changed (same name, different type)-> allowed only if unreferenced
+						//   unchanged                                -> left entirely alone
+						// A rename has no special case: it arrives as remove-old + add-new,
+						// so it is caught by the removed-field reference check automatically.
+						// That is the intended behavior — renames stay forbidden until
+						// ID-keying and cascading reference updates exist.
+						type existingField struct {
+							FieldID    string         `db:"field_id"`
+							TermNodeID sql.NullString `db:"term_node_id"`
+							DataType   sql.NullString `db:"data_type"`
 						}
-						if bindingsN > 0 {
-							refDetails = append(refDetails, fmt.Sprintf("%d field_binding(s)", bindingsN))
-						}
-						if err := tx.QueryRowContext(ctx, `
-							SELECT COUNT(*) FROM bp_field_permissions fp
-							WHERE fp.term_node_id IN (
-								SELECT term_node_id FROM business_object_fields
+						existingByName := map[string]existingField{}
+						{
+							rows, err := tx.QueryxContext(ctx, `
+								SELECT id, field_name, term_node_id, data_type
+								FROM business_object_fields
 								WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'
-								  AND term_node_id IS NOT NULL
-							)
-						`, current.ID).Scan(&permsN); err != nil {
-							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count bp_field_permissions: %v", err)
-						}
-						if permsN > 0 {
-							refDetails = append(refDetails, fmt.Sprintf("%d bp_field_permission(s)", permsN))
-						}
-						if err := tx.QueryRowContext(ctx, `
-							SELECT COUNT(*) FROM bo_field_key_registry r
-							WHERE r.bo_name = $1
-						`, current.Key).Scan(&keyRegN); err != nil {
-							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count bo_field_key_registry: %v", err)
-						}
-						if keyRegN > 0 {
-							refDetails = append(refDetails, fmt.Sprintf("%d bo_field_key_registry row(s) for bo %q", keyRegN, current.Key))
-						}
-						if len(refDetails) > 0 {
-							return nil, fmt.Errorf("refusing to replace field set on BO %q (%s): downstream references would be orphaned. Add/update fields one at a time or remove the references first", current.Key, strings.Join(refDetails, ", "))
+							`, current.ID)
+							if err != nil {
+								return nil, fmt.Errorf("failed to read existing fields for bo %q: %w", current.Key, err)
+							}
+							for rows.Next() {
+								var name string
+								var ef existingField
+								if err := rows.Scan(&ef.FieldID, &name, &ef.TermNodeID, &ef.DataType); err != nil {
+									rows.Close()
+									return nil, fmt.Errorf("failed to scan existing field for bo %q: %w", current.Key, err)
+								}
+								existingByName[name] = ef
+							}
+							rows.Close()
 						}
 
-						// Safe to wholesale replace: no downstream references. Proceed with the
-						// DELETE-then-upsert path. Diff-based per-field operations remain the
-						// target of the next iteration; this is the version-1 hotfix.
-						if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'`, current.ID); err != nil {
-							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] Failed to delete business_object_fields for bo_id=%s: %v", current.ID, err)
+						type incomingField struct {
+							Name       string
+							DataType   string
+							FieldRole  string
+							TermNodeID string
+							HasTerm    bool
 						}
-
-						// Two upsert paths — term-bound and unbound (term_node_id IS NULL).
-						// Bound upserts on the partial unique index uq_business_object_fields_term
-						// (tenant_id, bo_id, term_node_id) WHERE term_node_id IS NOT NULL.
-						// Unbound upserts on uq_business_object_fields_unbound_name
-						// (tenant_id, bo_id, field_name) WHERE term_node_id IS NULL.
-						//
-						// term_node_id is intentionally NOT synthesized when no semanticTermId is
-						// supplied. The previous SHA-1(boID+fieldName) convention produced IDs that
-						// corresponded to no catalog_node entry — silently incompatible with the
-						// bp_field_permissions.term_node_id join. A field without a semantic binding
-						// has no term node; NULL is the correct value.
-						upsertBoundQuery := `
-							INSERT INTO business_object_fields (
-								field_id, tenant_id, bo_id, term_node_id, field_name,
-								field_role, binding_requirement, binding_status,
-								eligibility_source, eligibility_path, is_exposed,
-								override_reason, is_active, subtype_scope
-							) VALUES (
-								$1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
-								$6, $7, $8, $9, $10, $11, $12, $13, 'ALL'
-							)
-							ON CONFLICT (tenant_id, bo_id, term_node_id) DO UPDATE SET
-								field_name = EXCLUDED.field_name,
-								field_role = EXCLUDED.field_role,
-								binding_requirement = EXCLUDED.binding_requirement,
-								binding_status = EXCLUDED.binding_status,
-								eligibility_source = EXCLUDED.eligibility_source,
-								eligibility_path = EXCLUDED.eligibility_path,
-								is_exposed = EXCLUDED.is_exposed,
-								override_reason = EXCLUDED.override_reason,
-								is_active = EXCLUDED.is_active
-						`
-						upsertUnboundQuery := `
-							INSERT INTO business_object_fields (
-								field_id, tenant_id, bo_id, term_node_id, field_name,
-								field_role, binding_requirement, binding_status,
-								eligibility_source, eligibility_path, is_exposed,
-								override_reason, is_active, subtype_scope
-							) VALUES (
-								$1::uuid, $2::uuid, $3::uuid, NULL, $4,
-								$5, $6, $7, $8, $9, $10, $11, $12, 'ALL'
-							)
-							ON CONFLICT (tenant_id, bo_id, field_name) WHERE term_node_id IS NULL
-							DO UPDATE SET
-								field_role = EXCLUDED.field_role,
-								binding_requirement = EXCLUDED.binding_requirement,
-								binding_status = EXCLUDED.binding_status,
-								eligibility_source = EXCLUDED.eligibility_source,
-								eligibility_path = EXCLUDED.eligibility_path,
-								is_exposed = EXCLUDED.is_exposed,
-								override_reason = EXCLUDED.override_reason,
-								is_active = EXCLUDED.is_active
-						`
-
+						newByName := map[string]incomingField{}
 						for _, f := range newFields {
 							name := toString(f["name"])
 							if name == "" {
@@ -1219,8 +1156,6 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 							if name == "" {
 								continue
 							}
-							_ = toString(f["displayName"]) // displayName reserved for future use
-							_ = toString(f["technicalName"])
 							dataType := toString(f["type"])
 							if dataType == "" {
 								dataType = "text"
@@ -1229,37 +1164,221 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 							if fieldRole == "" {
 								fieldRole = "DIMENSION"
 							}
-
-							var termNodeID string
-							hasTermNode := false
+							inf := incomingField{Name: name, DataType: dataType, FieldRole: fieldRole}
 							if stid := toString(f["semanticTermId"]); stid != "" {
-								termNodeID = stid
-								hasTermNode = true
+								inf.TermNodeID, inf.HasTerm = stid, true
 							} else if stid2 := toString(f["semantic_term_id"]); stid2 != "" {
-								termNodeID = stid2
-								hasTermNode = true
+								inf.TermNodeID, inf.HasTerm = stid2, true
 							}
-							// else: NULL — no synthetic ID. Field is unbound.
+							newByName[name] = inf
+						}
 
+						// referencesFor runs the five reference checks for one field and
+						// returns a human-readable detail per table with any rows, or nil
+						// if the field is unreferenced. fieldID/termNodeID may be "" if the
+						// field has no binding/term (those checks are skipped, not counted
+						// as zero — a check that can't apply isn't evidence of safety).
+						referencesFor := func(fieldName, fieldID string, termNodeID sql.NullString) ([]string, error) {
+							var details []string
+
+							if fieldID != "" {
+								// field_bindings has no is_active column (verified against
+								// live schema) — any row at all is a real downstream
+								// reference regardless of binding_status.
+								var n int
+								if err := tx.QueryRowContext(ctx, `
+									SELECT COUNT(*) FROM field_bindings WHERE field_id = $1::uuid
+								`, fieldID).Scan(&n); err != nil {
+									return nil, fmt.Errorf("checking field_bindings for %q: %w", fieldName, err)
+								}
+								if n > 0 {
+									details = append(details, fmt.Sprintf("%d field_binding(s)", n))
+								}
+							}
+
+							if termNodeID.Valid && termNodeID.String != "" {
+								var n int
+								if err := tx.QueryRowContext(ctx, `
+									SELECT COUNT(*) FROM bp_field_permissions WHERE term_node_id = $1::uuid
+								`, termNodeID.String).Scan(&n); err != nil {
+									return nil, fmt.Errorf("checking bp_field_permissions for %q: %w", fieldName, err)
+								}
+								if n > 0 {
+									details = append(details, fmt.Sprintf("%d field permission(s) (bp_field_permissions)", n))
+								}
+							}
+
+							{
+								var n int
+								if err := tx.QueryRowContext(ctx, `
+									SELECT COUNT(*) FROM bo_crud_capabilities cc
+									JOIN bo_field_key_registry r ON r.id = cc.field_key_id
+									WHERE r.bo_name = $1 AND r.field_name = $2
+								`, current.Key, fieldName).Scan(&n); err != nil {
+									return nil, fmt.Errorf("checking bo_crud_capabilities for %q: %w", fieldName, err)
+								}
+								if n > 0 {
+									details = append(details, fmt.Sprintf("%d capability override(s) (bo_crud_capabilities)", n))
+								}
+							}
+
+							// Deliberately NOT checking bo_field_key_registry here: its row for
+							// this field is the field's own identity record (created because
+							// the field exists), not evidence of downstream consumption by
+							// something else. Treating it as a blocking reference made removal
+							// of a field impossible the moment it had ever been registered —
+							// confirmed wrong by TestFieldUpdateRemovesUnreferencedField, which
+							// registers a field deliberately and expects removal to still
+							// succeed. The registry row is cleaned up on removal below, never
+							// checked as a blocker.
+
+							{
+								// catalog_validation_rules keys on the legacy target_entity name
+								// string, not a stable ID — per the BO-service triage, only 4 of
+								// 233 stored rules matched a real BO name at all, so this check is
+								// best-effort and likely to under-count today. Included so the
+								// guard is complete once that facet is repointed to a real key;
+								// do not treat a zero result here as strong evidence of safety.
+								var n int
+								if err := tx.QueryRowContext(ctx, `
+									SELECT COUNT(*) FROM catalog_validation_rules
+									WHERE target_entity = $1 OR target_entity = $2
+								`, fieldName, current.Key+"."+fieldName).Scan(&n); err != nil {
+									logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] reference check: failed to count catalog_validation_rules for %q: %v", fieldName, err)
+								} else if n > 0 {
+									details = append(details, fmt.Sprintf("%d validation rule(s) (catalog_validation_rules, name-keyed — best-effort match)", n))
+								}
+							}
+
+							return details, nil
+						}
+
+						// Diff: removed and type-changed fields need a reference check before
+						// anything is written. Collect every violation before returning, so a
+						// single rejected update names every problem field at once rather than
+						// making the author fix one and retry to discover the next.
+						var violations []string
+						var toDelete []string     // field_name
+						var toUpdateType []string // field_name — type/role changed, safe to update in place
+						var toAdd []incomingField // present in request, absent in existing
+
+						for name, ef := range existingByName {
+							inf, stillPresent := newByName[name]
+							typeChanged := stillPresent && inf.DataType != ef.DataType.String
+
+							if !stillPresent || typeChanged {
+								refs, err := referencesFor(name, ef.FieldID, ef.TermNodeID)
+								if err != nil {
+									return nil, err
+								}
+								if len(refs) > 0 {
+									action := "removed"
+									if typeChanged {
+										action = "type-changed"
+									}
+									violations = append(violations, fmt.Sprintf("%q (%s): %s", name, action, strings.Join(refs, ", ")))
+									continue
+								}
+							}
+
+							if !stillPresent {
+								toDelete = append(toDelete, name)
+							} else if typeChanged {
+								toUpdateType = append(toUpdateType, name)
+							}
+							// else: unchanged, left entirely alone — no delete, no update, no touch.
+						}
+						for name, inf := range newByName {
+							if _, exists := existingByName[name]; !exists {
+								toAdd = append(toAdd, inf)
+							}
+						}
+
+						if len(violations) > 0 {
+							return nil, fmt.Errorf(
+								"refusing to update field set on BO %q: %s. Remove the references first, or leave these fields unchanged",
+								current.Key, strings.Join(violations, "; "),
+							)
+						}
+
+						// Safe to proceed: every removed or type-changed field is unreferenced.
+						for _, name := range toDelete {
+							ef := existingByName[name]
+							if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE id = $1::uuid`, ef.FieldID); err != nil {
+								return nil, fmt.Errorf("failed to delete field %q: %w", name, err)
+							}
+							if _, err := tx.ExecContext(ctx, `DELETE FROM bo_field_key_registry WHERE bo_name = $1 AND field_name = $2`, current.Key, name); err != nil {
+								return nil, fmt.Errorf("failed to delete registry row for field %q: %w", name, err)
+							}
+						}
+						for _, name := range toUpdateType {
+							inf := newByName[name]
+							if _, err := tx.ExecContext(ctx, `
+								UPDATE business_object_fields SET data_type = $1, field_role = $2
+								WHERE id = $3::uuid
+							`, inf.DataType, inf.FieldRole, existingByName[name].FieldID); err != nil {
+								return nil, fmt.Errorf("failed to update type for field %q: %w", name, err)
+							}
+						}
+
+						// Two insert paths — term-bound and unbound (term_node_id IS NULL).
+						// Bound inserts on the partial unique index uq_business_object_fields_term
+						// (tenant_id, bo_id, term_node_id) WHERE term_node_id IS NOT NULL.
+						// Unbound inserts on uq_business_object_fields_unbound_name
+						// (tenant_id, bo_id, field_name) WHERE term_node_id IS NULL. Only ever
+						// used for genuinely new fields now (toAdd) — existing fields are never
+						// re-inserted, so created_at/created_by survive untouched across updates
+						// that don't touch them, which the wholesale delete-then-upsert this
+						// replaces could not guarantee.
+						//
+						// term_node_id is intentionally NOT synthesized when no semanticTermId is
+						// supplied. The previous SHA-1(boID+fieldName) convention produced IDs that
+						// corresponded to no catalog_node entry — silently incompatible with the
+						// bp_field_permissions.term_node_id join. A field without a semantic binding
+						// has no term node; NULL is the correct value.
+						// Column list verified against live schema (information_schema,
+						// not carried forward from the version-1 code this replaces,
+						// which referenced binding_status, eligibility_path, and
+						// is_active — none of which exist on business_object_fields;
+						// those belong to the differently-shaped field_bindings table).
+						insertBoundQuery := `
+							INSERT INTO business_object_fields (
+								id, tenant_id, bo_id, term_node_id, field_name,
+								field_role, data_type, binding_requirement,
+								eligibility_source, is_exposed, override_reason, subtype_scope
+							) VALUES (
+								$1::uuid, $2::uuid, $3::uuid, $4::uuid, $5,
+								$6, $7, $8, $9, $10, $11, 'ALL'
+							)
+						`
+						insertUnboundQuery := `
+							INSERT INTO business_object_fields (
+								id, tenant_id, bo_id, term_node_id, field_name,
+								field_role, data_type, binding_requirement,
+								eligibility_source, is_exposed, override_reason, subtype_scope
+							) VALUES (
+								$1::uuid, $2::uuid, $3::uuid, NULL, $4,
+								$5, $6, $7, $8, $9, $10, 'ALL'
+							)
+						`
+
+						for _, inf := range toAdd {
 							var err error
-							if hasTermNode {
-								_, err = tx.ExecContext(ctx, upsertBoundQuery,
-									uuid.New().String(), tenantID, current.ID, termNodeID, name,
-									fieldRole, "REQUIRED", "RESOLVED",
-									"DIRECT", "{}", true, "", true,
+							if inf.HasTerm {
+								_, err = tx.ExecContext(ctx, insertBoundQuery,
+									uuid.New().String(), tenantID, current.ID, inf.TermNodeID, inf.Name,
+									inf.FieldRole, inf.DataType, "REQUIRED", "DIRECT", true, "",
 								)
 							} else {
-								_, err = tx.ExecContext(ctx, upsertUnboundQuery,
-									uuid.New().String(), tenantID, current.ID, name,
-									fieldRole, "REQUIRED", "RESOLVED",
-									"DIRECT", "{}", true, "", true,
+								_, err = tx.ExecContext(ctx, insertUnboundQuery,
+									uuid.New().String(), tenantID, current.ID, inf.Name,
+									inf.FieldRole, inf.DataType, "REQUIRED", "DIRECT", true, "",
 								)
 							}
 							if err != nil {
-								logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to upsert business_object_field for bo_id=%s name=%s: %v", current.ID, name, err)
-							} else {
-								logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Upserted business_object_field for bo_id=%s name=%s (term_bound=%v)", current.ID, name, hasTermNode)
+								return nil, fmt.Errorf("failed to insert new field %q: %w", inf.Name, err)
 							}
+							logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Added business_object_field for bo_id=%s name=%s (term_bound=%v)", current.ID, inf.Name, inf.HasTerm)
 						}
 
 						// Collect semantic term IDs for catalog sync event
@@ -1894,8 +2013,8 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 
 	fieldQuery := `
-		SELECT id, field_name AS key, COALESCE(display_name, field_name) AS display_name,
-		       COALESCE(technical_name, '') AS technical_name, data_type AS type,
+		SELECT id, field_name AS key, field_name AS name, COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, '') AS technical_name, COALESCE(data_type, '') AS type,
 		       field_role IN ('KEY', 'DIMENSION', 'TIME_DIMENSION', 'MEASURE') AS is_core,
 		       COALESCE(is_required, false) AS is_required,
 		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,

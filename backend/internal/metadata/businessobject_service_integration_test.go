@@ -183,6 +183,47 @@ func TestGetBusinessObjectFallbackToGoldCopy(t *testing.T) {
 	require.Equal(t, gcTenantID, bo.TenantID) // It returns the actual BO, so tenant ID is GC
 }
 
+// provisionTestTenant creates a tenant row in public.tenants, schema-qualified
+// deliberately: this role's search_path is `vend, public`, and vend.tenants
+// (a different table, PK tenant_id not id) resolves first for an unqualified
+// `tenants` reference — the exact bug already documented in
+// 20260905_page_builder_facets.sql's migration comments, rediscovered here
+// because these fixtures predate that lesson.
+func provisionTestTenant(ctx context.Context, db *sqlx.DB, tenantID, name string) error {
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO public.tenants (id, name, display_name, created_at) VALUES ($1::uuid, $2, $2, NOW()) ON CONFLICT (id) DO NOTHING`,
+		tenantID, name); err != nil {
+		return err
+	}
+	// CreateBusinessObject resolves catalog_node_types by (catalog_type_name,
+	// tenant_id) and fails loudly — by design, see resolveCatalogNodeTypeID —
+	// when no row exists for this tenant. Test tenants need one seeded the
+	// same way a real tenant onboarding flow would.
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO catalog_node_types (id, tenant_id, catalog_type_name, description, is_active)
+		 VALUES (gen_random_uuid(), $1::uuid, 'business_object', 'Business Object Definition', true)
+		 ON CONFLICT DO NOTHING`,
+		tenantID)
+	return err
+}
+
+// provisionTestBO creates a tenant and a BO via the real CreateBusinessObject
+// path rather than a hand-rolled INSERT — deliberately: this file's previous
+// per-test INSERTs referenced gen-1 columns (business_objects.key,
+// tenants.id resolving to the wrong schema) and had apparently never been
+// run against a real database, since none of it matches the live gen-3
+// schema. Going through the service means these fixtures can't drift from
+// the schema the same way twice — they exercise, and depend on, the exact
+// creation path being tested elsewhere in this file.
+func provisionTestBO(t *testing.T, svc *BusinessObjectService, ctx context.Context, secCtx *security.Context, name string) *models.BusinessObjectDefinition {
+	t.Helper()
+	bo, err := svc.CreateBusinessObject(ctx, secCtx, models.CreateBusinessObjectRequest{
+		Name: name,
+	}, "test-user")
+	require.NoError(t, err, "fixture setup: CreateBusinessObject must succeed")
+	return bo
+}
+
 // TestFieldUpdateRoundTrip writes fields via UpdateBusinessObject and reads them via GetBusinessObject,
 // asserting that the fields are visible after the write. This is the assertion that catches the
 // write→read table-mismatch bug: writes to business_object_fields must be readable by loadBOSubtypesAndFields.
@@ -193,25 +234,20 @@ func TestFieldUpdateRoundTrip(t *testing.T) {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	ctx := security.WithAuthInfo(context.Background(), security.AuthInfo{UserID: "test-user", Roles: []string{"global_admin"}})
 	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
-
-	// Provision tenant + BO
-	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "round-trip tenant")
-	boID := uuid.NewString()
-	boKey := "rt_test_bo_" + boID[:8]
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
-		boID, tenantID, boKey, "Round-Trip BO")
-	require.NoError(t, err)
-
-	defer func() {
-		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
-		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
-	}()
+	require.NoError(t, provisionTestTenant(ctx, db, tenantID, "round-trip tenant"))
 
 	svc := NewBusinessObjectService(db, nil, nil, nil)
 	secCtx := &security.Context{TenantID: tenantID}
+	created := provisionTestBO(t, svc, ctx, secCtx, "Round-Trip BO "+uuid.NewString()[:8])
+	boID, boKey := created.ID, created.Key
+
+	defer func() {
+		db.ExecContext(ctx, `DELETE FROM bo_field_key_registry WHERE bo_name = $1`, boKey)
+		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
+	}()
 
 	// Update with two named fields
 	updateReq := models.UpdateBusinessObjectRequest{
@@ -222,7 +258,7 @@ func TestFieldUpdateRoundTrip(t *testing.T) {
 			},
 		},
 	}
-	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, updateReq, "test-user")
+	_, err := svc.UpdateBusinessObject(ctx, secCtx, boKey, updateReq, "test-user")
 	require.NoError(t, err)
 
 	// Get and assert fields are visible
@@ -278,38 +314,48 @@ func TestFieldUpdateRejectsWithDownstreamRefs(t *testing.T) {
 	}
 	defer db.Close()
 
-	ctx := context.Background()
+	ctx := security.WithAuthInfo(context.Background(), security.AuthInfo{UserID: "test-user", Roles: []string{"global_admin"}})
 	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
+	require.NoError(t, provisionTestTenant(ctx, db, tenantID, "ref-reject tenant"))
 
-	_, _ = db.ExecContext(ctx, `INSERT INTO tenants (id, name, created_at) VALUES ($1::uuid, $2, NOW()) ON CONFLICT (id) DO NOTHING`, tenantID, "ref-reject tenant")
-	boID := uuid.NewString()
-	boKey := "rt_ref_bo_" + boID[:8]
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO business_objects (id, tenant_id, key, name, display_name, technical_name, created_at) VALUES ($1::uuid, $2::uuid, $3, $4, $4, $3, NOW())`,
-		boID, tenantID, boKey, "Ref-Reject BO")
+	svc := NewBusinessObjectService(db, nil, nil, nil)
+	secCtx := &security.Context{TenantID: tenantID}
+	created := provisionTestBO(t, svc, ctx, secCtx, "Ref-Reject BO "+uuid.NewString()[:8])
+	boID, boKey := created.ID, created.Key
+
+	// Seed a field binding that points to a real business_object_fields row
+	// (id, not the nonexistent "field_id" column business_object_fields was
+	// briefly assumed to have) — no term_node_id needed, it's nullable and
+	// unrelated to what field_bindings references.
+	//
+	// field_bindings.binding_id FKs to business_object_bindings, which in
+	// turn FKs driving_node_id to catalog_node — reuse one of the four
+	// catalog_node rows CreateBusinessObject already provisioned for this BO
+	// rather than provision a fifth just to satisfy this chain.
+	var drivingNodeID string
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT id FROM catalog_node WHERE qualified_path = $1`, "business_object/"+boKey+"/classification",
+	).Scan(&drivingNodeID))
+
+	seedFieldID := uuid.NewString()
+	_, err := db.ExecContext(ctx, `INSERT INTO business_object_fields (id, tenant_id, bo_id, term_node_id, field_name, subtype_scope) VALUES ($1::uuid, $2::uuid, $3::uuid, NULL, $4, 'ALL')`,
+		seedFieldID, tenantID, boID, "SeedField")
 	require.NoError(t, err)
 
-	// Seed a field binding that points to a hypothetical future field_id
-	// (no business_object_fields row — we're testing the count > 0 query path).
-	// The pre-flight counts field_bindings joined to business_object_fields,
-	// so we need both rows. Insert one field, then one binding.
-	fieldID := uuid.NewString()
-	termID := uuid.NewString()
-	_, err = db.ExecContext(ctx, `INSERT INTO business_object_fields (field_id, tenant_id, bo_id, term_node_id, field_name, subtype_scope) VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, 'ALL')`,
-		fieldID, tenantID, boID, termID, "SeedField")
+	bindingID := uuid.NewString()
+	_, err = db.ExecContext(ctx, `INSERT INTO business_object_bindings (id, tenant_id, bo_id, backend_id, driving_node_id) VALUES ($1::uuid, $2::uuid, $3::uuid, gen_random_uuid(), $4::uuid)`,
+		bindingID, tenantID, boID, drivingNodeID)
 	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, `INSERT INTO field_bindings (id, tenant_id, bo_id, binding_id, field_id, source_type, is_active) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, gen_random_uuid(), $3::uuid, 'COLUMN', true)`,
-		tenantID, boID, fieldID)
+	_, err = db.ExecContext(ctx, `INSERT INTO field_bindings (id, tenant_id, bo_id, binding_id, field_id, source_type) VALUES (gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::uuid, 'COLUMN')`,
+		tenantID, boID, bindingID, seedFieldID)
 	require.NoError(t, err)
 
 	defer func() {
 		db.ExecContext(ctx, `DELETE FROM field_bindings WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_object_bindings WHERE bo_id = $1`, boID)
 		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
 		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
 	}()
-
-	svc := NewBusinessObjectService(db, nil, nil, nil)
-	secCtx := &security.Context{TenantID: tenantID}
 
 	updateReq := models.UpdateBusinessObjectRequest{
 		Config: map[string]interface{}{
@@ -320,11 +366,154 @@ func TestFieldUpdateRejectsWithDownstreamRefs(t *testing.T) {
 	}
 	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, updateReq, "test-user")
 	require.Error(t, err, "Update must reject with downstream references")
-	require.Contains(t, err.Error(), "refusing to replace field set", "rejection must name the issue")
+	require.Contains(t, err.Error(), "refusing to update field set", "rejection must name the issue")
+	require.Contains(t, err.Error(), "SeedField", "rejection must name the specific field, not just the BO")
+	require.Contains(t, err.Error(), "field_binding", "rejection must name which table references it")
 
 	// The original field must still be there — rejection is transactional.
 	var stillThere int
 	require.NoError(t, db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND field_name = 'SeedField'`, boID).Scan(&stillThere))
 	require.Equal(t, 1, stillThere, "rejected update must not have modified the field set")
+}
+
+// TestFieldUpdateRemovesUnreferencedField verifies the opposite side of the
+// guard: a field with no downstream references can be removed, the registry
+// row goes with it in the same transaction, and it disappears from a
+// subsequent Get. Without this test, "remove is allowed when safe" is only
+// asserted by absence of a rejection in the referenced-field test, which
+// doesn't distinguish "removal succeeded" from "removal silently no-op'd."
+func TestFieldUpdateRemovesUnreferencedField(t *testing.T) {
+	db := openIntegrationTestDB(t)
+	if db == nil {
+		return
+	}
+	defer db.Close()
+
+	ctx := security.WithAuthInfo(context.Background(), security.AuthInfo{UserID: "test-user", Roles: []string{"global_admin"}})
+	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
+	require.NoError(t, provisionTestTenant(ctx, db, tenantID, "remove-unref tenant"))
+
+	svc := NewBusinessObjectService(db, nil, nil, nil)
+	secCtx := &security.Context{TenantID: tenantID}
+	created := provisionTestBO(t, svc, ctx, secCtx, "Remove-Unref BO "+uuid.NewString()[:8])
+	boID, boKey := created.ID, created.Key
+
+	defer func() {
+		db.ExecContext(ctx, `DELETE FROM bo_field_key_registry WHERE bo_name = $1`, boKey)
+		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
+	}()
+
+	// Seed two fields, neither referenced by anything.
+	_, err := svc.UpdateBusinessObject(ctx, secCtx, boKey, models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "KeepMe", "type": "text", "role": "DIMENSION"},
+				{"name": "DropMe", "type": "text", "role": "DIMENSION"},
+			},
+		},
+	}, "test-user")
+	require.NoError(t, err)
+
+	// Register DropMe in the field-key registry directly, as the write path
+	// eventually will on its own — this test's job is to prove removal
+	// cleans the registry row up, not to prove who writes it originally.
+	_, err = db.ExecContext(ctx, `INSERT INTO bo_field_key_registry (bo_name, field_name) VALUES ($1, $2) ON CONFLICT DO NOTHING`, boKey, "DropMe")
+	require.NoError(t, err)
+
+	// Update again, omitting DropMe — it's unreferenced, so this must succeed.
+	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "KeepMe", "type": "text", "role": "DIMENSION"},
+			},
+		},
+	}, "test-user")
+	require.NoError(t, err, "removing an unreferenced field must be allowed")
+
+	bo, err := svc.GetBusinessObject(ctx, secCtx, boKey)
+	require.NoError(t, err)
+	gotNames := map[string]bool{}
+	for _, f := range append(bo.CoreFields, bo.CustomFields...) {
+		gotNames[f.Name] = true
+	}
+	require.True(t, gotNames["KeepMe"], "KeepMe must still be present")
+	require.False(t, gotNames["DropMe"], "DropMe must be gone after removal")
+
+	var fieldRows, registryRows int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND field_name = 'DropMe'`, boID).Scan(&fieldRows))
+	require.Equal(t, 0, fieldRows, "DropMe's business_object_fields row must be deleted")
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM bo_field_key_registry WHERE bo_name = $1 AND field_name = 'DropMe'`, boKey).Scan(&registryRows))
+	require.Equal(t, 0, registryRows, "DropMe's registry row must be deleted in the same transaction as the field")
+}
+
+// TestFieldUpdateProvenance_UntouchedFieldUnchanged is the assertion that
+// would fail silently forever without a test: an update that adds a new
+// field must not disturb the created_at/field_id of an existing, untouched
+// field. The wholesale delete-then-upsert this guard replaced could not
+// make this guarantee — every save reset every field's provenance, whether
+// that field was mentioned in the request or not.
+func TestFieldUpdateProvenance_UntouchedFieldUnchanged(t *testing.T) {
+	db := openIntegrationTestDB(t)
+	if db == nil {
+		return
+	}
+	defer db.Close()
+
+	ctx := security.WithAuthInfo(context.Background(), security.AuthInfo{UserID: "test-user", Roles: []string{"global_admin"}})
+	tenantID := "910638ba-a459-4a3f-bb2d-78391b0595f6"
+	require.NoError(t, provisionTestTenant(ctx, db, tenantID, "provenance tenant"))
+
+	svc := NewBusinessObjectService(db, nil, nil, nil)
+	secCtx := &security.Context{TenantID: tenantID}
+	created := provisionTestBO(t, svc, ctx, secCtx, "Provenance BO "+uuid.NewString()[:8])
+	boID, boKey := created.ID, created.Key
+
+	defer func() {
+		db.ExecContext(ctx, `DELETE FROM bo_field_key_registry WHERE bo_name = $1`, boKey)
+		db.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1`, boID)
+		db.ExecContext(ctx, `DELETE FROM business_objects WHERE id = $1`, boID)
+	}()
+
+	_, err := svc.UpdateBusinessObject(ctx, secCtx, boKey, models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "Original", "type": "text", "role": "DIMENSION"},
+			},
+		},
+	}, "test-user")
+	require.NoError(t, err)
+
+	var originalFieldID string
+	var originalCreatedAt time.Time
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT id, created_at FROM business_object_fields WHERE bo_id = $1 AND field_name = 'Original'`,
+		boID).Scan(&originalFieldID, &originalCreatedAt))
+
+	// A second update adds a new field but does not mention "Original" —
+	// under diff-based semantics, "Original" is unchanged and must not be
+	// touched at all.
+	_, err = svc.UpdateBusinessObject(ctx, secCtx, boKey, models.UpdateBusinessObjectRequest{
+		Config: map[string]interface{}{
+			"fields": []map[string]interface{}{
+				{"name": "Original", "type": "text", "role": "DIMENSION"},
+				{"name": "AddedLater", "type": "text", "role": "DIMENSION"},
+			},
+		},
+	}, "test-user")
+	require.NoError(t, err)
+
+	var afterFieldID string
+	var afterCreatedAt time.Time
+	require.NoError(t, db.QueryRowContext(ctx,
+		`SELECT id, created_at FROM business_object_fields WHERE bo_id = $1 AND field_name = 'Original'`,
+		boID).Scan(&afterFieldID, &afterCreatedAt))
+
+	require.Equal(t, originalFieldID, afterFieldID, "untouched field's field_id must survive an update that only adds a different field")
+	require.True(t, originalCreatedAt.Equal(afterCreatedAt), "untouched field's created_at must not be reset (got %v, want %v)", afterCreatedAt, originalCreatedAt)
+
+	var addedCount int
+	require.NoError(t, db.QueryRowContext(ctx, `SELECT COUNT(*) FROM business_object_fields WHERE bo_id = $1 AND field_name = 'AddedLater'`, boID).Scan(&addedCount))
+	require.Equal(t, 1, addedCount, "AddedLater must be present after the second update")
 }
