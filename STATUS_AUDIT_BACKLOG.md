@@ -1391,3 +1391,54 @@ tables must be wrapped. Priority order:
 2. `bo_instances`, `bo_subtypes`, `business_object_relationships`
 3. `tenant_api_connections`, all the `bp_*` tables
 
+
+### Migration adoption — applied (Step 3 + 4 + runner patch)
+
+This session moved 60 .sql files from 6 orphaned migration
+directories into the runner's discovery path:
+
+  backend/db/migrations/manual_adopt/
+
+After this commit:
+  - The runner, on next ApplyMigrations(), will discover these
+    files, hash them, see they're recorded in oms.migration_log,
+    and skip (no-op).
+  - Test path: the runner previously was caught in the same drift
+    class; the adopt/ files now formally exist for it.
+  - The runner itself got a fix at
+    `internal/migrations/runner.go:ApplyMigrations` to `SET
+    search_path TO public, oms` before running migrations.
+    Without that fix, unqualified CREATE TABLE statements in any
+    of these files would land in `vend` (the connection's default
+    schema path), not `public`. This single discovery —
+    search_path was inherited from a prior `ALTER ROLE/DATABASE`
+    setting — was the actual cause of the "tables invisible to
+    schema diff" mystery earlier in the audit.
+
+Side-effect cleanup committed:
+  - 10 tables created in `vend` by a prior manual run were
+    moved to `public` (with one DROP TABLE conflict resolved by
+    dropping the source).
+  - 60 manual_adopt/ files registered in `oms.migration_log`
+    with their actual file sha256, so the runner won't try to
+    re-apply.
+
+Verification commands run:
+  - `\`i 001_pgvector_enable.sql.up.sql` against live alpha → no
+    errors
+  - `\`i 001_semantic_query_templates.sql.up.sql` against live
+    alpha → no errors
+  - `psql -f ...` against live alpha (twice) → IF NOT EXISTS
+    notices on each, idempotent as expected
+  - `SELECT relname, nspname FROM pg_class WHERE relname LIKE
+    'semantic_query_template%' ORDER BY relname LIMIT 10;` →
+    all 10 rows now in `public` namespace
+  - `SELECT count(*) FROM oms.migration_log WHERE filename LIKE
+    'manual_adopt/%';` → 60
+
+Cleanup NOT yet done (deferred):
+  - The 8 original orphaned directories are still present on
+    disk. Delete them once the runner has been observed in
+    production for at least one cycle. Per Step 3's Path A:
+    "After Path A completes, delete the 8 orphaned dirs."
+
