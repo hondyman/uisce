@@ -9,7 +9,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 // StorageBackend interface allows mocking S3/Local filesystem interactions

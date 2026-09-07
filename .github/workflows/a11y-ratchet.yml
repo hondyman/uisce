@@ -1,0 +1,66 @@
+name: A11y Ratchet
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'scripts/a11y-ratchet.mjs'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'scripts/a11y-ratchet.mjs'
+
+jobs:
+  a11y-ratchet:
+    name: A11y Ratchet Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Start dev server
+        working-directory: frontend
+        run: npm run dev &
+        env:
+          PORT: 3000
+
+      - name: Wait for dev server
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+              echo "Dev server ready"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: Run locale-matrix smoke tests
+        working-directory: frontend
+        run: npx playwright test e2e/a11y/locale-matrix.spec.ts --reporter=line
+        env:
+          E2E_JWT: ${{ secrets.E2E_JWT }}
+
+      - name: Run a11y baseline crawl
+        working-directory: frontend
+        run: npx playwright test e2e/a11y/baseline.spec.ts --reporter=line
+
+      - name: Aggregate baseline
+        working-directory: frontend
+        run: node scripts/aggregate-a11y-baseline.mjs
+
+      - name: Run ratchet
+        run: node scripts/a11y-ratchet.mjs

@@ -62,6 +62,22 @@ button-name 0, aria-prohibited-attr 0, standing ≈ 40–53:
 - scrollable-region-focusable ~5
 - tail ~7–13
 
+## Static vs. Runtime Divergence — jsx-a11y vs. axe
+
+jsx-a11y (static lint) and axe-core (runtime audit) catch **different subsets** of violations. They will never agree on individual rule counts, only trend together over time.
+
+**Why they diverge:**
+- jsx-a11y reads JSX source — it sees structural patterns (missing `label`, redundant `role`, `onClick` without keyboard handler)
+- axe injects into the running page — it sees the actual DOM, event handler behavior, focus management, dynamic ARIA state
+- Some violations are only detectable at runtime (e.g., `scrollable-region-focusable` requires the element to actually be scrolled; `button-name` on an IconButton with `aria-label` set by JS logic is visible to axe but not to static analysis)
+- Some violations are only detectable statically (e.g., `no-onchange` catches `select.onChange` patterns axe never sees; implicit role on `<ul>` is structural)
+
+**Implication for the sweep:**
+- jsx-a11y ERROR rules (`html-has-lang`, `alt-text`, `no-autofocus`, etc.) should be driven to **zero** as the primary goal — these are structural, fixable, and not runtime-dependent
+- jsx-a11y WARN rules that map to axe rules (`label-has-for`, `click-events-have-key-events`, etc.) are advisory — they trend with axe but the axe count is the authoritative signal for done-ness
+- When axe reports a count of zero for a rule, flip the corresponding jsx-a11y WARN → `off` in the same PR; this is the sweep's definition of done per rule
+- The eslint gate's error cap (59 a11y-only) and warning floor (4,073 total) are independent of axe — they exist to catch new violations at development time, not to replace the crawl
+
 ## Known Backend Issues (Blocking Valid Crawl)
 
 1. `public.users` view maps to `app_user` — missing `role`, `organization`, `permissions`, `is_core_admin` columns

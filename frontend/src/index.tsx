@@ -88,4 +88,10 @@ export default function AccessControlDashboard() {
       </main>
     </div>
   );
-}
+}// test a11y ratchet trigger
+// a11y ratchet re-test
+// a11y trigger (no-op comment)
+// a11y trigger 3
+// a11y trigger 4
+// a11y trigger 5
+// final a11y test - fail loud

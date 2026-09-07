@@ -1,7 +1,7 @@
 import React from "react";
 import { Routes, Route, Navigate, useParams } from "react-router-dom";
 import useBlockableNavigate from './components/RouteBlocker/useBlockableNavigate';
-import { RouteBlockerProvider } from './components/RouteBlocker/RouteBlocker';
+import { useLocale } from "./i18n/useLocale";
 import { MicroBundleCatalogExample } from "./MicroBundleCatalogExample";
 import { JITRequestPanelExample } from "./JITRequestPanelExample";
 import { AccessExplanationExample } from "./AccessExplanationExample";
@@ -10,8 +10,6 @@ import ManagementPage from "./features/fabric/pages/preaggregations/ManagementPa
 import FixedIncomeDashboard from "./components/FixedIncomeDashboard";
 import BundleExplorer from "./components/BundleExplorer";
 import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
-import LoginPage from "./pages/AuthPage";
-import AuthCallbackPage from "./pages/AuthCallbackPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import CalendarPage from "./pages/CalendarPage";
 import ConflictsPage from "./pages/ConflictsPage";
@@ -195,37 +193,30 @@ import RebalancingWizard from "./pages/simulation/RebalancingWizard";
 
 export function AppRoutes() {
   return (
-    <RouteBlockerProvider>
-      <Routes>
-        <Route path="/api-studio" element={<APIStudioPage />} />
-        <Route path="/page-studio" element={<PageStudioPage />} />
-        <Route path="/app/:slug" element={<RuntimePage />} />
-        <Route path="/change-review" element={<ChangeReviewPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
-        <Route path="/*" element={<ProtectedApp />} />
-      </Routes>
-    </RouteBlockerProvider>
+    <Routes>
+      <Route path="*" element={<ProtectedApp />} />
+    </Routes>
   );
 }
 
 function ProtectedApp() {
   const navigate = useBlockableNavigate();
+  const locale = useLocale();
 
   const handleBundleSave = () => {
-    void navigate('/fabric/bundles');
+    void navigate(`/${locale}/fabric/bundles`);
   };
 
   const handleBundleCancel = () => {
-    void navigate('/fabric/bundles');
+    void navigate(`/${locale}/fabric/bundles`);
   };
 
   const handleRoleSave = () => {
-    void navigate('/fabric/roles');
+    void navigate(`/${locale}/fabric/roles`);
   };
 
   const handleRoleCancel = () => {
-    void navigate('/fabric/roles');
+    void navigate(`/${locale}/fabric/roles`);
   };
 
   return (
@@ -235,195 +226,195 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             PLATFORM - Organization, security, and setup
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/tenants" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
-        <Route path="/tenants/:tenantId" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
-        <Route path="/admin/rbac/roles" element={<ProtectedRoute><RoleManagerPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/teams" element={<ProtectedRoute><TeamManagerPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/delegations" element={<ProtectedRoute><DelegationManagerPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/field-permissions" element={<ProtectedRoute><FieldPermissionEditorPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/user-roles" element={<ProtectedRoute><UserRoleAssignmentPage /></ProtectedRoute>} />
-        <Route path="/admin/rbac/user-tenants" element={<ProtectedRoute><TenantUserAssignmentPage /></ProtectedRoute>} />
-        <Route path="/fabric/ip-whitelist" element={<ProtectedRoute><IPWhitelistManagementPage /></ProtectedRoute>} />
-        <Route path="/secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />
-        <Route path="/secrets/audit" element={<ProtectedRoute><SecretsAuditPage tenantId="default" /></ProtectedRoute>} />
-        <Route path="/secrets/monitoring" element={<ProtectedRoute><SecretsMonitoringPage tenantId="default" /></ProtectedRoute>} />
+        <Route path="tenants" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
+        <Route path="tenants/:tenantId" element={<ProtectedRoute><TenantDetailPageV2 /></ProtectedRoute>} />
+        <Route path="admin/rbac/roles" element={<ProtectedRoute><RoleManagerPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/users" element={<ProtectedRoute><UserManagementPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/teams" element={<ProtectedRoute><TeamManagerPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/delegations" element={<ProtectedRoute><DelegationManagerPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/field-permissions" element={<ProtectedRoute><FieldPermissionEditorPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/user-roles" element={<ProtectedRoute><UserRoleAssignmentPage /></ProtectedRoute>} />
+        <Route path="admin/rbac/user-tenants" element={<ProtectedRoute><TenantUserAssignmentPage /></ProtectedRoute>} />
+        <Route path="fabric/ip-whitelist" element={<ProtectedRoute><IPWhitelistManagementPage /></ProtectedRoute>} />
+        <Route path="secrets/config" element={<ProtectedRoute><SecretsConfigPage tenantId="default" /></ProtectedRoute>} />
+        <Route path="secrets/audit" element={<ProtectedRoute><SecretsAuditPage tenantId="default" /></ProtectedRoute>} />
+        <Route path="secrets/monitoring" element={<ProtectedRoute><SecretsMonitoringPage tenantId="default" /></ProtectedRoute>} />
 
-        <Route path="/audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
-        <Route path="/admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
-        <Route path="/admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
-        <Route path="/admin/temporal-ops" element={<ProtectedRoute><TemporalOpsPage /></ProtectedRoute>} />
-        <Route path="/fabric/tenants" element={<ProtectedRoute><TenantsManagementPage /></ProtectedRoute>} />
-        <Route path="/security/*" element={<ProtectedRoute><SecurityRoutes /></ProtectedRoute>} />
+        <Route path="audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
+        <Route path="admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
+        <Route path="admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
+        <Route path="admin/temporal-ops" element={<ProtectedRoute><TemporalOpsPage /></ProtectedRoute>} />
+        <Route path="fabric/tenants" element={<ProtectedRoute><TenantsManagementPage /></ProtectedRoute>} />
+        <Route path="security/*" element={<ProtectedRoute><SecurityRoutes /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             CATALOG - Discovery and lineage
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/core/glossary" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
-        <Route path="/core/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
-        <Route path="/catalog/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
-        <Route path="/core/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
-        <Route path="/catalog/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
-        <Route path="/core/abbreviations" element={<ProtectedRoute><AbbreviationsPage /></ProtectedRoute>} />
-        <Route path="/core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
-        <Route path="/schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
-        <Route path="/catalog/api-inventory" element={<ProtectedRoute><ApiInventoryPage /></ProtectedRoute>} />
+        <Route path="core/glossary" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="core/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="catalog/semantic-terms" element={<ProtectedRoute><GlossaryExplorer /></ProtectedRoute>} />
+        <Route path="core/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
+        <Route path="catalog/business-terms" element={<ProtectedRoute><BusinessTermsExplorer /></ProtectedRoute>} />
+        <Route path="core/abbreviations" element={<ProtectedRoute><AbbreviationsPage /></ProtectedRoute>} />
+        <Route path="core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
+        <Route path="schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
+        <Route path="catalog/api-inventory" element={<ProtectedRoute><ApiInventoryPage /></ProtectedRoute>} />
 
-        <Route path="/catalog/node-types" element={<ProtectedRoute><CatalogNodeTypesPage /></ProtectedRoute>} />
-        <Route path="/catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />
-        <Route path="/catalog/edge-types" element={<ProtectedRoute><CatalogEdgeTypesPage /></ProtectedRoute>} />
-        <Route path="/catalog/edge-types/:id" element={<ProtectedRoute><EdgeTypeDetailPage /></ProtectedRoute>} />
+        <Route path="catalog/node-types" element={<ProtectedRoute><CatalogNodeTypesPage /></ProtectedRoute>} />
+        <Route path="catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />
+        <Route path="catalog/edge-types" element={<ProtectedRoute><CatalogEdgeTypesPage /></ProtectedRoute>} />
+        <Route path="catalog/edge-types/:id" element={<ProtectedRoute><EdgeTypeDetailPage /></ProtectedRoute>} />
 
-        <Route path="/core/semantic-mapper" element={<ProtectedRoute><SemanticMapperPage /></ProtectedRoute>} />
+        <Route path="core/semantic-mapper" element={<ProtectedRoute><SemanticMapperPage /></ProtectedRoute>} />
 
-        <Route path="/catalog/ai-suggestions" element={<ProtectedRoute><AIBusinessTermSuggestionsPage /></ProtectedRoute>} />
-        <Route path="/catalog/business-terms/:id" element={<ProtectedRoute><BusinessTermDetailPage /></ProtectedRoute>} />
+        <Route path="catalog/ai-suggestions" element={<ProtectedRoute><AIBusinessTermSuggestionsPage /></ProtectedRoute>} />
+        <Route path="catalog/business-terms/:id" element={<ProtectedRoute><BusinessTermDetailPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
-        <Route path="/business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
-        <Route path="/business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
-        <Route path="/semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
-        <Route path="/views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
-        <Route path="/views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
-        <Route path="/fabric/bundles" element={<ProtectedRoute><BundleListPage /></ProtectedRoute>} />
-        <Route path="/fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
-        <Route path="/fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
-        <Route path="/core/validation-rules" element={<ProtectedRoute><ValidationRulesBuilderPage /></ProtectedRoute>} />
-        <Route path="/core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
-        <Route path="/reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
-        <Route path="/core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
-        <Route path="/core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
-        <Route path="/core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
-        <Route path="/query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
-        <Route path="/marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
-        <Route path="/marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
+        <Route path="business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
+        <Route path="business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
+        <Route path="business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
+        <Route path="semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
+        <Route path="views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
+        <Route path="views/:id" element={<ProtectedRoute><ViewDetailsPage /></ProtectedRoute>} />
+        <Route path="fabric/bundles" element={<ProtectedRoute><BundleListPage /></ProtectedRoute>} />
+        <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
+        <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
+        <Route path="core/validation-rules" element={<ProtectedRoute><ValidationRulesBuilderPage /></ProtectedRoute>} />
+        <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
+        <Route path="reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
+        <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
+        <Route path="core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
+        <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
+        <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
+        <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
+        <Route path="marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             STUDIO - Low-code tools
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/api-studio" element={<ProtectedRoute><APIStudioPage /></ProtectedRoute>} />
-        <Route path="/page-studio" element={<ProtectedRoute><PageStudioPage /></ProtectedRoute>} />
-        <Route path="/dynamic-ui" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
-        <Route path="/page-designer" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
-        <Route path="/app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
-        <Route path="/client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
-        <Route path="/client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />
-        <Route path="/fabric/custom-components" element={<ProtectedRoute><CustomComponentPage /></ProtectedRoute>} />
-        <Route path="/core/workflow-designer" element={<ProtectedRoute><WorkflowDesignerPage /></ProtectedRoute>} />
+        <Route path="api-studio" element={<ProtectedRoute><APIStudioPage /></ProtectedRoute>} />
+        <Route path="page-studio" element={<ProtectedRoute><PageStudioPage /></ProtectedRoute>} />
+        <Route path="dynamic-ui" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
+        <Route path="page-designer" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
+        <Route path="app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
+        <Route path="client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
+        <Route path="client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />
+        <Route path="fabric/custom-components" element={<ProtectedRoute><CustomComponentPage /></ProtectedRoute>} />
+        <Route path="core/workflow-designer" element={<ProtectedRoute><WorkflowDesignerPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             OPERATIONS - Scheduling and workflows
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/scheduler-intelligence" element={<ProtectedRoute><SchedulerConsolePage /></ProtectedRoute>} />
-        <Route path="/scheduler/jobs" element={<ProtectedRoute><JobsListPage /></ProtectedRoute>} />
-        <Route path="/scheduler/jobs/new" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="/scheduler/jobs/:jobId" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="/scheduler/jobs/:jobId/edit" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="/scheduler/executions" element={<ProtectedRoute><ExecutionsListPage /></ProtectedRoute>} />
-        <Route path="/scheduler/executions/:executionId" element={<ProtectedRoute><ExecutionDetailPage /></ProtectedRoute>} />
-        <Route path="/scheduler/calendars" element={<ProtectedRoute><BusinessCalendarsPage /></ProtectedRoute>} />
-        <Route path="/scheduler/calendars/new" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
-        <Route path="/scheduler/calendars/:calendarId/edit" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
+        <Route path="scheduler-intelligence" element={<ProtectedRoute><SchedulerConsolePage /></ProtectedRoute>} />
+        <Route path="scheduler/jobs" element={<ProtectedRoute><JobsListPage /></ProtectedRoute>} />
+        <Route path="scheduler/jobs/new" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
+        <Route path="scheduler/jobs/:jobId" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
+        <Route path="scheduler/jobs/:jobId/edit" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
+        <Route path="scheduler/executions" element={<ProtectedRoute><ExecutionsListPage /></ProtectedRoute>} />
+        <Route path="scheduler/executions/:executionId" element={<ProtectedRoute><ExecutionDetailPage /></ProtectedRoute>} />
+        <Route path="scheduler/calendars" element={<ProtectedRoute><BusinessCalendarsPage /></ProtectedRoute>} />
+        <Route path="scheduler/calendars/new" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
+        <Route path="scheduler/calendars/:calendarId/edit" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
         
-        <Route path="/bp-console" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
-        <Route path="/bp-console/:tab" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
-        <Route path="/core/process-catalog" element={<ProtectedRoute><ProcessCatalogPage /></ProtectedRoute>} />
-        <Route path="/bp-console/instances" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
-        <Route path="/bp-console/queues" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
+        <Route path="bp-console" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
+        <Route path="bp-console/:tab" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
+        <Route path="core/process-catalog" element={<ProtectedRoute><ProcessCatalogPage /></ProtectedRoute>} />
+        <Route path="bp-console/instances" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
+        <Route path="bp-console/queues" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
         
-        <Route path="/governance/changesets" element={<ProtectedRoute><GovernanceConsolePage /></ProtectedRoute>} />
-        <Route path="/core/approval-workflows" element={<ProtectedRoute><ApprovalWorkflowDashboard /></ProtectedRoute>} />
-        <Route path="/core/notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
-        <Route path="/core/notifications/templates" element={<ProtectedRoute><NotificationTemplateEditorPage /></ProtectedRoute>} />
-        <Route path="/core/notifications/preferences" element={<ProtectedRoute><NotificationPreferencesPage /></ProtectedRoute>} />
+        <Route path="governance/changesets" element={<ProtectedRoute><GovernanceConsolePage /></ProtectedRoute>} />
+        <Route path="core/approval-workflows" element={<ProtectedRoute><ApprovalWorkflowDashboard /></ProtectedRoute>} />
+        <Route path="core/notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
+        <Route path="core/notifications/templates" element={<ProtectedRoute><NotificationTemplateEditorPage /></ProtectedRoute>} />
+        <Route path="core/notifications/preferences" element={<ProtectedRoute><NotificationPreferencesPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             CALENDAR SYNC - Multi-provider calendar integration
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-        <Route path="/calendar/conflicts" element={<ProtectedRoute><ConflictsPage /></ProtectedRoute>} />
+        <Route path="calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
+        <Route path="calendar/conflicts" element={<ProtectedRoute><ConflictsPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             INTELLIGENCE - Optimization and observability
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/intelligence" element={<ProtectedRoute><IntelligenceDashboard /></ProtectedRoute>} />
-        <Route path="/intelligence/index-advisor" element={<ProtectedRoute><IndexAdvisorPage /></ProtectedRoute>} />
-        <Route path="/intelligence/storage" element={<ProtectedRoute><StorageTieringPage /></ProtectedRoute>} />
-        <Route path="/intelligence/data-quality" element={<ProtectedRoute><DataQualityMonitorPage /></ProtectedRoute>} />
-        <Route path="/optimization" element={<ProtectedRoute><OptimizationCenter scope="global" /></ProtectedRoute>} />
-        <Route path="/optimization/:optimizationId" element={<ProtectedRoute><ASOOptimizationDetail /></ProtectedRoute>} />
-        <Route path="/observability" element={<ProtectedRoute><ObservabilityDashboard /></ProtectedRoute>} />
-        <Route path="/observability/slos" element={<ProtectedRoute><SLODashboard /></ProtectedRoute>} />
-        <Route path="/nlq" element={<ProtectedRoute><NLQPage /></ProtectedRoute>} />
-        <Route path="/global-intelligence" element={<ProtectedRoute><GlobalNLQueryPage /></ProtectedRoute>} />
+        <Route path="intelligence" element={<ProtectedRoute><IntelligenceDashboard /></ProtectedRoute>} />
+        <Route path="intelligence/index-advisor" element={<ProtectedRoute><IndexAdvisorPage /></ProtectedRoute>} />
+        <Route path="intelligence/storage" element={<ProtectedRoute><StorageTieringPage /></ProtectedRoute>} />
+        <Route path="intelligence/data-quality" element={<ProtectedRoute><DataQualityMonitorPage /></ProtectedRoute>} />
+        <Route path="optimization" element={<ProtectedRoute><OptimizationCenter scope="global" /></ProtectedRoute>} />
+        <Route path="optimization/:optimizationId" element={<ProtectedRoute><ASOOptimizationDetail /></ProtectedRoute>} />
+        <Route path="observability" element={<ProtectedRoute><ObservabilityDashboard /></ProtectedRoute>} />
+        <Route path="observability/slos" element={<ProtectedRoute><SLODashboard /></ProtectedRoute>} />
+        <Route path="nlq" element={<ProtectedRoute><NLQPage /></ProtectedRoute>} />
+        <Route path="global-intelligence" element={<ProtectedRoute><GlobalNLQueryPage /></ProtectedRoute>} />
         
-        <Route path="/simulation" element={<ProtectedRoute><SimulationWorkspace /></ProtectedRoute>} />
-        <Route path="/simulation/rebalance" element={<ProtectedRoute><RebalancingWizard /></ProtectedRoute>} />
-        <Route path="/simulation/:id" element={<ProtectedRoute><ScenarioDetail /></ProtectedRoute>} />
-        <Route path="/simulation/compare" element={<ProtectedRoute><ScenarioComparison /></ProtectedRoute>} />
+        <Route path="simulation" element={<ProtectedRoute><SimulationWorkspace /></ProtectedRoute>} />
+        <Route path="simulation/rebalance" element={<ProtectedRoute><RebalancingWizard /></ProtectedRoute>} />
+        <Route path="simulation/:id" element={<ProtectedRoute><ScenarioDetail /></ProtectedRoute>} />
+        <Route path="simulation/compare" element={<ProtectedRoute><ScenarioComparison /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             CONSUME - Reports and analytics
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="/reports/library" element={<ProtectedRoute><ReportLibrary /></ProtectedRoute>} />
-        <Route path="/reports/builder" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
-        <Route path="/reports/queries" element={<ProtectedRoute><QueryLibraryDashboard /></ProtectedRoute>} />
-        <Route path="/reports/:reportId/edit" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
-        <Route path="/reports/models" element={<ProtectedRoute><SemanticModelManager /></ProtectedRoute>} />
+        <Route path="reports/library" element={<ProtectedRoute><ReportLibrary /></ProtectedRoute>} />
+        <Route path="reports/builder" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
+        <Route path="reports/queries" element={<ProtectedRoute><QueryLibraryDashboard /></ProtectedRoute>} />
+        <Route path="reports/:reportId/edit" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
+        <Route path="reports/models" element={<ProtectedRoute><SemanticModelManager /></ProtectedRoute>} />
         
-        <Route path="/analytics/factors" element={<ProtectedRoute><FactorAnalysisPage /></ProtectedRoute>} />
-        <Route path="/analytics/factors/:portfolioID?" element={<ProtectedRoute><FactorAnalysisPage /></ProtectedRoute>} />
-        <Route path="/fixed-income" element={<ProtectedRoute><FixedIncomeDashboard /></ProtectedRoute>} />
-        <Route path="/private-markets" element={<ProtectedRoute><AIPortfolioRebalancer /></ProtectedRoute>} />
-        <Route path="/analytics/scenario-analysis" element={<ProtectedRoute><ScenarioAnalysisPro /></ProtectedRoute>} />
-        <Route path="/analytics/rebalancer" element={<ProtectedRoute><AIPortfolioRebalancer /></ProtectedRoute>} />
-        <Route path="/analytics/advisor-dashboard" element={<ProtectedRoute><AdvisorDashboard /></ProtectedRoute>} />
-        <Route path="/crypto/portfolio" element={<ProtectedRoute><CryptoPortfolioCenter clientId={""} /></ProtectedRoute>} />
-        <Route path="/wealth/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
+        <Route path="analytics/factors" element={<ProtectedRoute><FactorAnalysisPage /></ProtectedRoute>} />
+        <Route path="analytics/factors/:portfolioID?" element={<ProtectedRoute><FactorAnalysisPage /></ProtectedRoute>} />
+        <Route path="fixed-income" element={<ProtectedRoute><FixedIncomeDashboard /></ProtectedRoute>} />
+        <Route path="private-markets" element={<ProtectedRoute><AIPortfolioRebalancer /></ProtectedRoute>} />
+        <Route path="analytics/scenario-analysis" element={<ProtectedRoute><ScenarioAnalysisPro /></ProtectedRoute>} />
+        <Route path="analytics/rebalancer" element={<ProtectedRoute><AIPortfolioRebalancer /></ProtectedRoute>} />
+        <Route path="analytics/advisor-dashboard" element={<ProtectedRoute><AdvisorDashboard /></ProtectedRoute>} />
+        <Route path="crypto/portfolio" element={<ProtectedRoute><CryptoPortfolioCenter clientId={""} /></ProtectedRoute>} />
+        <Route path="wealth/feed" element={<ProtectedRoute><Feed /></ProtectedRoute>} />
 
         {/* Legacy / Utilities / Misc */}
-        <Route path="/bundles" element={<ProtectedRoute><MicroBundleCatalogExample /></ProtectedRoute>} />
-        <Route path="/bundle-explorer" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />
-        <Route path="/jit-request" element={<ProtectedRoute><JITRequestPanelExample /></ProtectedRoute>} />
-        <Route path="/access-explanation" element={<ProtectedRoute><AccessExplanationExample /></ProtectedRoute>} />
-        <Route path="/fabric/preaggregations" element={<ProtectedRoute><ManagementPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
-        <Route path="/fabric/calculations" element={<ProtectedRoute><CalculationsLibraryPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
-        <Route path="/fabric/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-        <Route path="/fabric/audit-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
-        <Route path="/fabric/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-        <Route path="/core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
-        <Route path="/core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
-        <Route path="/core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
+        <Route path="bundles" element={<ProtectedRoute><MicroBundleCatalogExample /></ProtectedRoute>} />
+        <Route path="bundle-explorer" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />
+        <Route path="jit-request" element={<ProtectedRoute><JITRequestPanelExample /></ProtectedRoute>} />
+        <Route path="access-explanation" element={<ProtectedRoute><AccessExplanationExample /></ProtectedRoute>} />
+        <Route path="fabric/preaggregations" element={<ProtectedRoute><ManagementPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
+        <Route path="fabric/calculations" element={<ProtectedRoute><CalculationsLibraryPage tenantId="default" datasourceId="default" /></ProtectedRoute>} />
+        <Route path="fabric/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="fabric/audit-logs" element={<ProtectedRoute><AuditLogsPage /></ProtectedRoute>} />
+        <Route path="fabric/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+        <Route path="core/audit-explorer" element={<ProtectedRoute><AuditExplorerPage /></ProtectedRoute>} />
+        <Route path="core/approval-inbox" element={<ProtectedRoute><ApprovalInboxPage /></ProtectedRoute>} />
+        <Route path="core/sla-dashboard" element={<ProtectedRoute><SLADashboardPage /></ProtectedRoute>} />
 
         {/* GenUI Routes */}
-        <Route path="/core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />
-        <Route path="/core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />
-        <Route path="/core/genui-inbox" element={<ProtectedRoute><GenUIApprovalInboxPage /></ProtectedRoute>} />
+        <Route path="core/genui-chat" element={<ProtectedRoute><GenUIChatPage /></ProtectedRoute>} />
+        <Route path="core/genui-proposal" element={<ProtectedRoute><GenUIProposalDemoPage /></ProtectedRoute>} />
+        <Route path="core/genui-inbox" element={<ProtectedRoute><GenUIApprovalInboxPage /></ProtectedRoute>} />
         {/* Compatibility Redirects */}
 
-        <Route path="/rbac" element={<Navigate to="/admin/rbac/roles" replace />} />
-        <Route path="/glossary" element={<Navigate to="/core/glossary" replace />} />
-        <Route path="/abbreviations" element={<Navigate to="/core/abbreviations" replace />} />
-        <Route path="/validation-rules" element={<Navigate to="/core/validation-rules" replace />} />
-        <Route path="/flow-builder" element={<Navigate to="/core/flow-builder" replace />} />
-        <Route path="/api-designer" element={<Navigate to="/api-studio" replace />} />
-        <Route path="/page-designer" element={<Navigate to="/page-studio" replace />} />
-        <Route path="/change-review" element={<Navigate to="/governance/changesets" replace />} />
-        <Route path="/change-reviews" element={<Navigate to="/governance/changesets" replace />} />
-        <Route path="/change-reviews/:id" element={<ProtectedRoute><ChangeReviewPage /></ProtectedRoute>} />
-        <Route path="/incidents/:id" element={<ProtectedRoute><IncidentPage /></ProtectedRoute>} />
-        <Route path="/scheduler" element={<Navigate to="/scheduler-intelligence" replace />} />
-        <Route path="/aso" element={<Navigate to="/optimization" replace />} />
+        <Route path="rbac" element={<Navigate to={`/${locale}/admin/rbac/roles`} replace />} />
+        <Route path="glossary" element={<Navigate to={`/${locale}/core/glossary`} replace />} />
+        <Route path="abbreviations" element={<Navigate to={`/${locale}/core/abbreviations`} replace />} />
+        <Route path="validation-rules" element={<Navigate to={`/${locale}/core/validation-rules`} replace />} />
+        <Route path="flow-builder" element={<Navigate to={`/${locale}/core/flow-builder`} replace />} />
+        <Route path="api-designer" element={<Navigate to={`/${locale}/api-studio`} replace />} />
+        <Route path="page-designer" element={<Navigate to={`/${locale}/page-studio`} replace />} />
+        <Route path="change-review" element={<Navigate to={`/${locale}/governance/changesets`} replace />} />
+        <Route path="change-reviews" element={<Navigate to={`/${locale}/governance/changesets`} replace />} />
+        <Route path="change-reviews/:id" element={<ProtectedRoute><ChangeReviewPage /></ProtectedRoute>} />
+        <Route path="incidents/:id" element={<ProtectedRoute><IncidentPage /></ProtectedRoute>} />
+        <Route path="scheduler" element={<Navigate to={`/${locale}/scheduler-intelligence`} replace />} />
+        <Route path="aso" element={<Navigate to={`/${locale}/optimization`} replace />} />
         
-        <Route path="/" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />
+        <Route path="" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />
 
         {/* Self-Service Studio — Phase D (Spec PART 5) */}
-        <Route path="/admin/entitlements" element={<ProtectedRoute><ProfilesDashboard /></ProtectedRoute>} />
-        <Route path="/admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
-        <Route path="/admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
+        <Route path="admin/entitlements" element={<ProtectedRoute><ProfilesDashboard /></ProtectedRoute>} />
+        <Route path="admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
+        <Route path="admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
       </Routes>
     </>
   );

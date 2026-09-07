@@ -5,17 +5,18 @@ package resilience
 // does not report them as unused when they are intentionally retained.
 func init() {
 	var ro ResilienceOrchestrator
-	_ = ro.mu
+	var gd GracefulDegradation
+
+	// Retain symbols by pointer or method-value reference — avoids copying mutex fields.
+	_ = &ro.mu
+	_ = &gd.mu
 	_ = ro.metricsCollected
 	_ = ro.gracefulDegradation
-
-	var gd GracefulDegradation
-	_ = gd.mu
 	_ = gd.fallbacks
 	_ = gd.degradationLevel
 	_ = gd.degradationReason
 
-	// Reference key constructors and methods by value so staticcheck considers them used
+	// Retain constructors and methods by value
 	_ = NewResilienceOrchestrator
 	_ = ro.Execute
 	_ = ro.ExecuteAsync

@@ -21,10 +21,14 @@ func main() {
 
 	claims := jwt.MapClaims{
 		"sub":        userID,
+		"user_id":    userID,
 		"roles":      roles,
 		"tenant_ids": tenantIDs,
 		"exp":        time.Now().Add(24 * time.Hour).Unix(),
 		"iat":        time.Now().Unix(),
+	}
+	if len(tenantIDs) > 0 {
+		claims["tenant_id"] = tenantIDs[0]
 	}
 
 	secret := os.Getenv("JWT_SECRET")

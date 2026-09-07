@@ -24,7 +24,7 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db)
+	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -86,7 +86,7 @@ func TestUpdateModel_ChecksumOnResolvedConfig(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db)
+	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 

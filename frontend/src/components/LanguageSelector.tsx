@@ -2,20 +2,24 @@ import React, { useState } from 'react';
 import { IconButton, Menu, MenuItem, ListItemText, ListItemIcon } from '@mui/material';
 import TranslateIcon from '@mui/icons-material/Translate';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocale } from '../i18n/useLocale';
+import { stripLocale } from '../i18n/locales';
 import useUserAPI from '../hooks/useUserAPI';
 import { useAuth } from '../contexts/AuthContext';
 
-// Supported languages - add more as needed
 const LANGUAGES = [
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Español' },
   { code: 'fr', label: 'Français' },
-  // synthetic placeholder for test-language used in tests
   { code: 'xx', label: 'Test' },
 ];
 
 const LanguageSelector: React.FC = () => {
   const { i18n } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const locale = useLocale();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const handleOpen = (ev: React.MouseEvent<HTMLElement>) => setAnchorEl(ev.currentTarget);
@@ -26,19 +30,16 @@ const LanguageSelector: React.FC = () => {
 
   const handleChangeLanguage = async (code: string) => {
     await i18n.changeLanguage(code);
-    // persist choice locally
-    try { localStorage.setItem('selected_language', code); } catch (e) { /* ignore */ }
-
-    // If user is logged in, try to persist to server
+    const currentPath = stripLocale(location.pathname);
+    navigate(`/${code}${currentPath}`);
+    try { localStorage.setItem('appLocale', code); } catch (e) { /* ignore */ }
     try {
       if (auth?.user?.id) {
         await updateUserPreferences(auth.user.id, { language: code });
       }
     } catch (err) {
-      // ignore network/save failures to avoid blocking the UI
       console.error('Failed to persist language preference', err);
     }
-
     handleClose();
   };
 

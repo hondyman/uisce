@@ -122,3 +122,6 @@ uisce_frontend/
 # Block zero-byte shell-glob artifacts created by unquoted cp/mv (e.g. `[ai-builder]`)
 /[*
 datafusion-engine/target/
+
+# Go devjwt binary
+backend/devjwt

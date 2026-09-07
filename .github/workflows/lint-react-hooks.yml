@@ -29,3 +29,46 @@ jobs:
     # Note: this job intentionally runs only the focused react-hooks lint
     # so that hook-order violations fail the CI job while unrelated warnings
     # in the wider codebase do not block PRs.
+
+  lint-jsx-a11y:
+    name: Lint (jsx-a11y)
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install frontend dependencies
+      run: npm ci
+      working-directory: frontend
+
+    - name: Run jsx-a11y lint
+      # --max-warnings 4073: current warning floor (142 console.log violations
+      # + 3931 jsx-a11y WARN violations). Warnings grow when new violations are
+      # introduced at WARN level; sweep PRs flip WARN→off as counts go to zero.
+      # Error cap (59 a11y-only): any new ERROR-level violation blocks the PR.
+      #   55 no-autofocus, 2 heading-has-content, 1 iframe-has-title,
+      #   1 anchor-has-content
+      # jsx-a11y ERROR rules (0 current violations, must stay at 0):
+      #   alt-text, anchor-has-content, heading-has-content, html-has-lang,
+      #   iframe-has-title, img-redundant-alt, no-access-key,
+      #   no-distracting-elements, scope, tabindex-no-positive
+      run: |
+        npx eslint src/ --quiet --format json > /tmp/eslint-out.json 2>/dev/null
+        ERROR_COUNT=$(node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));console.log(msgs.reduce((a,f)=>a+f.messages.filter(m=>m.severity===2).length,0))")
+        if [ "$ERROR_COUNT" -gt 59 ]; then
+          echo "ERROR: $ERROR_COUNT errors exceed a11y cap (59). Fix new violations before merging."
+          echo "Per-rule a11y-only errors:"
+          node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));const byRule={};msgs.forEach(f=>f.messages.filter(m=>m.severity===2&&!m.message.includes('no-restricted-syntax')).forEach(m=>{const r=m.ruleId||'unknown';byRule[r]=(byRule[r]||0)+1}));Object.entries(byRule).sort((a,b)=>b[1]-a[1]).forEach(([r,c])=>console.log(c+'\t'+r))"
+          exit 1
+        fi
+        npx eslint src/ --max-warnings 4073 || {
+          echo "ERROR: warning count exceeds floor (4073). New violations introduced (top 20 by count):"
+          node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));const byRule={};msgs.forEach(f=>f.messages.filter(m=>m.severity===1).forEach(m=>{const r=m.ruleId||'unknown';byRule[r]=(byRule[r]||0)+1}));Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,20).forEach(([r,c])=>console.log(c+'\t'+r))"
+          exit 1
+        }
+      working-directory: frontend

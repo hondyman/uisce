@@ -21,7 +21,7 @@ func TestDeleteModelCoreCascade(t *testing.T) {
 	defer dbSQL.Close()
 
 	db := dbSQL
-	h := NewModelCatalogHandler(db)
+	h := NewModelCatalogHandler(db, SecurityContextDeps{})
 
 	// Prepare input IDs
 	tenantID := uuid.New()

@@ -11,7 +11,7 @@ import (
 )
 
 func TestHandleGenerateMappings_RequiresNewHeader(t *testing.T) {
-	h := NewSemanticMappingHandler(nil)
+	h := NewSemanticMappingHandler(nil, SecurityContextDeps{})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -25,7 +25,7 @@ func TestHandleGenerateMappings_RequiresNewHeader(t *testing.T) {
 }
 
 func TestHandleApplyMappings_RequiresNewHeader(t *testing.T) {
-	h := NewSemanticMappingHandler(nil)
+	h := NewSemanticMappingHandler(nil, SecurityContextDeps{})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 

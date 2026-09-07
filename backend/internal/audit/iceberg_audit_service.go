@@ -11,7 +11,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
-	"github.com/segmentio/parquet-go"
+	"github.com/parquet-go/parquet-go"
 )
 
 // IcebergAuditService handles writing audit logs to object storage in Parquet format

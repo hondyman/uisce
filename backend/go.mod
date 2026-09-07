@@ -2,6 +2,8 @@ module github.com/hondyman/uisce/backend
 
 go 1.25.0
 
+toolchain go1.25.14
+
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/apache/arrow-go/v18 v18.7.1-0.20260728150822-666f8dc2ea47
@@ -55,7 +57,6 @@ require (
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/pusher/pusher-http-go/v5 v5.1.1
 	github.com/riferrei/srclient v0.7.4
-	github.com/segmentio/parquet-go v0.0.0-20230712180008-5d42db8f0d47
 	github.com/sendgrid/sendgrid-go v3.16.1+incompatible
 	github.com/shopspring/decimal v1.4.0
 	github.com/slack-go/slack v0.17.3
@@ -173,6 +174,9 @@ require (
 	github.com/moby/sys/userns v0.1.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
+	github.com/parquet-go/bitpack v1.0.0 // indirect
+	github.com/parquet-go/jsonlite v1.0.0 // indirect
+	github.com/parquet-go/parquet-go v0.32.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
@@ -192,6 +196,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/twmb/franz-go v1.21.6 // indirect
+	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/yashtewari/glob-intersection v0.2.0 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect

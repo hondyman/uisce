@@ -39,7 +39,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.25'
+        go-version-file: backend/go.mod
         cache: true
         cache-dependency-path: backend/go.sum
 
@@ -52,6 +52,18 @@ jobs:
           VERSION=$(git describe --tags --always --dirty)-${{ github.run_number }}
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Build & Vet
+      working-directory: backend
+      run: |
+        # Build every package and vet the result. This is the durable gate:
+        # - go build ./... catches type/syntax/link errors across the whole graph
+        # - go vet ./... catches correctness bugs the compiler can't see
+        #   (the WithOptimizer race condition this engagement found, the copylock
+        #   trap, etc.)
+        # Together they prevent 'tests running blind through compilation failures'.
+        go build ./...
+        go vet ./...
 
     - name: Run Tests
       working-directory: backend

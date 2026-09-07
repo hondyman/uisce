@@ -3,13 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
-	)
+)
 
 // SchedulerHandlers provides scheduler API endpoints
 type SchedulerHandlers struct {
@@ -98,6 +99,8 @@ func (h *SchedulerHandlers) GetSchedule(w http.ResponseWriter, r *http.Request) 
 // ListSchedules lists all schedules for a tenant (GET /api/v1/schedules)
 func (h *SchedulerHandlers) ListSchedules(w http.ResponseWriter, r *http.Request) {
 	tenantIDStr, ok := security.TenantIDFromContext(r.Context())
+	authInfo, authOk := security.AuthInfoFromContext(r.Context())
+	log.Printf("[DEBUG] ListSchedules: TenantIDFromContext ok=%v tenantIDStr=%q, AuthInfoFromContext ok=%v authInfo=%+v", ok, tenantIDStr, authOk, authInfo)
 	if !ok {
 		sendError(w, http.StatusUnauthorized, "Missing or invalid tenant")
 		return
@@ -224,3 +227,4 @@ func (h *SchedulerHandlers) DeleteSchedule(w http.ResponseWriter, r *http.Reques
 
 	w.WriteHeader(http.StatusNoContent)
 }
+// DEBUG: add log import if not present

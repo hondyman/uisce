@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -27,7 +28,7 @@ func TestWebSocketEventStreaming(t *testing.T) {
 	defer broker.Stop()
 
 	// Create WebSocket handler
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 
 	// Create test server
 	server := httptest.NewServer(wsHandler)
@@ -79,7 +80,7 @@ func TestWebSocketRegionFiltering(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -137,7 +138,7 @@ func TestWebSocketMultipleTenants(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 
@@ -215,7 +216,8 @@ func TestWebSocketEventBatching(t *testing.T) {
 	go func() {
 		ch, err := aggregator.Subscribe(context.Background(), "test-tenant", []string{})
 		if err != nil {
-			t.Fatalf("subscribe failed: %v", err)
+			t.Errorf("subscribe failed: %v", err)
+			runtime.Goexit()
 		}
 		for batch := range ch {
 			batches <- batch
@@ -238,7 +240,7 @@ func TestWebSocketDisconnectHandling(t *testing.T) {
 	broker := events.NewEventStreamBroker(100)
 	defer broker.Stop()
 
-	wsHandler := handlers.NewWebSocketEventHandler(broker)
+	wsHandler := handlers.NewWebSocketEventHandler(broker, handlers.SecurityContextDeps{})
 	server := httptest.NewServer(wsHandler)
 	defer server.Close()
 

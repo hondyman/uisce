@@ -45,7 +45,7 @@ func TestTenantManager_Integration(t *testing.T) {
 		t.Skipf("Skipping integration test: database not available: %v", err)
 	}
 
-	tm := NewTenantManager(db, nil)
+	tm := NewTenantManager(db)
 	ctx := context.Background()
 
 	// Skip if the environment doesn't have the 'vector' extension available.

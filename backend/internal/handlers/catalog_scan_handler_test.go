@@ -46,7 +46,7 @@ func TestHandleCatalogScan_AllSuccess(t *testing.T) {
 		err:     nil,
 	}
 
-	h := NewCatalogScanHandler(fake)
+	h := NewCatalogScanHandler(fake, SecurityContextDeps{})
 
 	// call handler
 	w := httptest.NewRecorder()
@@ -72,7 +72,7 @@ func TestHandleCatalogScan_PartialFailure(t *testing.T) {
 		err: nil,
 	}
 
-	h := NewCatalogScanHandler(fake)
+	h := NewCatalogScanHandler(fake, SecurityContextDeps{})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
@@ -97,7 +97,7 @@ func TestHandleCatalogScan_AllFailure(t *testing.T) {
 	// handler should respond 200 (not 500) because service indicates all failed via returned error
 	// But it returns 200 even if all failed.
 	fake2 := &fakeScanService{results: fake.results, err: assert.AnError}
-	h2 := NewCatalogScanHandler(fake2)
+	h2 := NewCatalogScanHandler(fake2, SecurityContextDeps{})
 
 	w2 := httptest.NewRecorder()
 	req2, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
@@ -177,7 +177,7 @@ func TestHandleCatalogScan_InvokesUpsert_EndToEnd(t *testing.T) {
 		return svc.ScanSingleDatasourceForTest(ctx, ds, goldCopyNodes)
 	})
 
-	h := NewCatalogScanHandler(svc)
+	h := NewCatalogScanHandler(svc, SecurityContextDeps{})
 
 	w := httptest.NewRecorder()
 	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)

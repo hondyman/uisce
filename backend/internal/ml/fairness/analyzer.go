@@ -298,7 +298,7 @@ func (fa *FairnessAnalyzer) computeDisparateImpact(groups map[string][]*Predicti
 			minRate = rate
 		}
 		if rate > maxRate {
-			maxRate = maxRate
+			maxRate = rate
 		}
 	}
 

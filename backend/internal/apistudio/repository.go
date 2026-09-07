@@ -117,15 +117,15 @@ func (r *Repository) ListCatalogEntries(ctx context.Context, catalogID uuid.UUID
 
 // APITelemetry represents a usage record
 type APITelemetry struct {
-	ID           uuid.UUID  `id`
-	APIID        uuid.UUID  `api_id`
-	Env          string     `env`
-	TenantID     *uuid.UUID `tenant_id`
-	ClientType   string     `client_type`
-	StatusCode   int        `status_code`
-	LatencyMs    int        `latency_ms`
-	ErrorMessage *string    `error_message`
-	RequestedAt  time.Time  `requested_at`
+	ID           uuid.UUID  `db:"id"`
+	APIID        uuid.UUID  `db:"api_id"`
+	Env          string     `db:"env"`
+	TenantID     *uuid.UUID `db:"tenant_id"`
+	ClientType   string     `db:"client_type"`
+	StatusCode   int        `db:"status_code"`
+	LatencyMs    int        `db:"latency_ms"`
+	ErrorMessage *string    `db:"error_message"`
+	RequestedAt  time.Time  `db:"requested_at"`
 }
 
 // LogTelemetry persists a usage record

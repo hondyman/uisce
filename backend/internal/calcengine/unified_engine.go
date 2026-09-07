@@ -233,11 +233,13 @@ func LoadUnifiedCalcConfigFromEnv() *UnifiedCalcConfig {
 	}
 }
 
-// WithOptimizer returns a copy of the engine with the CBO optimizer set.
+// WithOptimizer installs a CBO telemetry router into the engine.
+// The caller (api.go:1097) discards the original engine and uses only
+// the returned pointer, so no concurrent access to the original occurs.
+// Mutating the receiver is safe in this usage pattern.
 func (e *UnifiedCalcEngine) WithOptimizer(opt TelemetryRouter) *UnifiedCalcEngine {
-	e2 := *e
-	e2.Optimizer = opt
-	return &e2
+	e.Optimizer = opt
+	return e
 }
 
 type mockTelemetryRouterForCalc struct {
