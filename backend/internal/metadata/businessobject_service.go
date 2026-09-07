@@ -1062,8 +1062,60 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 						defer func() {
 							_ = tx.Rollback()
 						}()
-						// Delete existing entity-level fields for this BO from business_object_fields
-						// (the canonical table read by loadBOSubtypesAndFields)
+
+						// PRE-FLIGHT reference check: refuse the wholesale field-set replacement if
+						// any of this BO's existing fields carry downstream references. The whole
+						// block below is DELETE-then-upsert; without this check, name-keyed references
+						// (entitlements via term_node_id, bindings via field_id, registry entries by
+						// (bo_name, field_name)) silently drift or get orphaned with a 200 OK.
+						//
+						// This is the loud-failure form of the four-semantics guard. Full diff-based
+						// semantics (add / remove each in own transaction, rename with explicit type
+						// change detection) is the next iteration; the pre-flight at minimum makes
+						// the dangerous half of the wholesale path refuse to run.
+						var (
+							bindingsN, permsN, keyRegN int
+							refDetails                 []string
+						)
+						if err := tx.QueryRowContext(ctx, `
+							SELECT COUNT(*) FROM field_bindings fb
+							JOIN business_object_fields bf ON bf.field_id = fb.field_id
+							WHERE bf.bo_id = $1::uuid AND bf.subtype_scope = 'ALL' AND fb.is_active = true
+						`, current.ID).Scan(&bindingsN); err != nil {
+							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count field_bindings: %v", err)
+						}
+						if bindingsN > 0 {
+							refDetails = append(refDetails, fmt.Sprintf("%d field_binding(s)", bindingsN))
+						}
+						if err := tx.QueryRowContext(ctx, `
+							SELECT COUNT(*) FROM bp_field_permissions fp
+							WHERE fp.term_node_id IN (
+								SELECT term_node_id FROM business_object_fields
+								WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'
+								  AND term_node_id IS NOT NULL
+							)
+						`, current.ID).Scan(&permsN); err != nil {
+							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count bp_field_permissions: %v", err)
+						}
+						if permsN > 0 {
+							refDetails = append(refDetails, fmt.Sprintf("%d bp_field_permission(s)", permsN))
+						}
+						if err := tx.QueryRowContext(ctx, `
+							SELECT COUNT(*) FROM bo_field_key_registry r
+							WHERE r.bo_name = $1
+						`, current.Key).Scan(&keyRegN); err != nil {
+							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] pre-flight: failed to count bo_field_key_registry: %v", err)
+						}
+						if keyRegN > 0 {
+							refDetails = append(refDetails, fmt.Sprintf("%d bo_field_key_registry row(s) for bo %q", keyRegN, current.Key))
+						}
+						if len(refDetails) > 0 {
+							return nil, fmt.Errorf("refusing to replace field set on BO %q (%s): downstream references would be orphaned. Add/update fields one at a time or remove the references first", current.Key, strings.Join(refDetails, ", "))
+						}
+
+						// Safe to wholesale replace: no downstream references. Proceed with the
+						// DELETE-then-upsert path. Diff-based per-field operations remain the
+						// target of the next iteration; this is the version-1 hotfix.
 						if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1::uuid AND subtype_scope = 'ALL'`, current.ID); err != nil {
 							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] Failed to delete business_object_fields for bo_id=%s: %v", current.ID, err)
 						}
