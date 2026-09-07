@@ -58,12 +58,17 @@ jobs:
       #   iframe-has-title, img-redundant-alt, no-access-key,
       #   no-distracting-elements, scope, tabindex-no-positive
       run: |
-        ERROR_COUNT=$(npx eslint src/ --quiet --format json 2>/dev/null | node -e "let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{try{const msgs=JSON.parse(d);console.log(msgs.reduce((a,f)=>a+f.messages.filter(m=>m.severity===2).length,0))}catch(e){console.log(0)}})")
+        npx eslint src/ --quiet --format json > /tmp/eslint-out.json 2>/dev/null
+        ERROR_COUNT=$(node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));console.log(msgs.reduce((a,f)=>a+f.messages.filter(m=>m.severity===2).length,0))")
         if [ "$ERROR_COUNT" -gt 59 ]; then
           echo "ERROR: $ERROR_COUNT errors exceed a11y cap (59). Fix new violations before merging."
-          echo "A11y-only errors (no console.log in this count):"
-          npx eslint src/ --quiet 2>&1 | grep "error" | grep -v "no-restricted-syntax" | head -20
+          echo "Per-rule a11y-only errors:"
+          node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));const byRule={};msgs.forEach(f=>f.messages.filter(m=>m.severity===2&&!m.message.includes('no-restricted-syntax')).forEach(m=>{const r=m.ruleId||'unknown';byRule[r]=(byRule[r]||0)+1}));Object.entries(byRule).sort((a,b)=>b[1]-a[1]).forEach(([r,c])=>console.log(c+'\t'+r))"
           exit 1
         fi
-        npx eslint src/ --max-warnings 4073
+        npx eslint src/ --max-warnings 4073 || {
+          echo "ERROR: warning count exceeds floor (4073). New violations introduced (top 20 by count):"
+          node -e "const msgs=JSON.parse(require('fs').readFileSync('/tmp/eslint-out.json','utf8'));const byRule={};msgs.forEach(f=>f.messages.filter(m=>m.severity===1).forEach(m=>{const r=m.ruleId||'unknown';byRule[r]=(byRule[r]||0)+1}));Object.entries(byRule).sort((a,b)=>b[1]-a[1]).slice(0,20).forEach(([r,c])=>console.log(c+'\t'+r))"
+          exit 1
+        }
       working-directory: frontend
