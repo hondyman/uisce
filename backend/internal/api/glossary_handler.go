@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/jmoiron/sqlx"
 
@@ -27,10 +29,11 @@ type GlossaryHandler struct {
 	governance   *governance.GovernanceEngine
 	lineageRepo  lineage.LineageRepository
 	securityDeps handlers.SecurityContextDeps
+	abbrevSvc    *services.AbbreviationService
 }
 
 // NewGlossaryHandler creates a new glossary handler
-func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps) *GlossaryHandler {
+func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps, abbrevSvc *services.AbbreviationService) *GlossaryHandler {
 	dbx := sqlx.NewDb(db, "postgres")
 	return &GlossaryHandler{
 		db:           db,
@@ -38,6 +41,7 @@ func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, secur
 		governance:   governance.NewGovernanceEngine(dbx),
 		lineageRepo:  lineageRepo,
 		securityDeps: securityDeps,
+		abbrevSvc:    abbrevSvc,
 	}
 }
 
@@ -2056,11 +2060,128 @@ func (h *GlossaryHandler) ProfileSample(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(resp)
 }
 
+// tokenizeColumnName splits a raw column/technical name into candidate
+// words: breaks on underscores/spaces/dots and on camelCase boundaries,
+// e.g. "AcctCd" -> ["Acct", "Cd"], "customer_acct_no" -> ["customer", "acct", "no"].
+var camelBoundary = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+
+func tokenizeColumnName(name string) []string {
+	spaced := camelBoundary.ReplaceAllString(name, "$1 $2")
+	spaced = strings.NewReplacer("_", " ", ".", " ", "-", " ", "/", " ").Replace(spaced)
+	var tokens []string
+	for _, t := range strings.Fields(spaced) {
+		if t != "" {
+			tokens = append(tokens, t)
+		}
+	}
+	return tokens
+}
+
+// commonWords are short tokens that look abbreviation-like but are already
+// real English words - skip these when deciding whether a token needs
+// abbreviation lookup/LLM disambiguation.
+var commonShortWords = map[string]bool{
+	"ID": true, "NO": true, "OF": true, "IN": true, "ON": true, "AT": true,
+	"IS": true, "OR": true, "TO": true, "BY": true, "AN": true, "UP": true,
+	"DUE": true, "NEW": true, "OLD": true, "KEY": true, "PIN": true,
+}
+
+func looksLikeAbbreviation(token string) bool {
+	upper := strings.ToUpper(token)
+	if commonShortWords[upper] {
+		return false
+	}
+	// All-caps short token (<=6 chars) with no vowels, or a short token where
+	// the original casing was already all-uppercase, is a likely abbreviation
+	// (ACCT, CD, MGR, XREF). Longer already-capitalized words (Country,
+	// Customer) are left alone.
+	if token == strings.ToUpper(token) && len(token) <= 6 {
+		return true
+	}
+	return false
+}
+
+func titleCase(tokens []string) string {
+	out := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		if t == "" {
+			continue
+		}
+		if len(t) == 1 {
+			out = append(out, strings.ToUpper(t))
+			continue
+		}
+		out = append(out, strings.ToUpper(t[:1])+strings.ToLower(t[1:]))
+	}
+	return strings.Join(out, " ")
+}
+
+// deriveTermName expands abbreviations (dictionary lookup, then Gemini
+// disambiguation for anything unresolved) and returns a clean, human
+// business-term name for a raw column/technical name. Newly-disambiguated
+// abbreviations are persisted back to the abbreviation dictionary so the
+// next generation for the same column name doesn't need the LLM again.
+func (h *GlossaryHandler) deriveTermName(ctx context.Context, tenantID, rawName string) string {
+	tokens := tokenizeColumnName(rawName)
+	if len(tokens) == 0 || h.abbrevSvc == nil {
+		return titleCase(tokens)
+	}
+
+	svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
+
+	abbrevs, err := h.abbrevSvc.GetAllAbbreviations(svcCtx)
+	if err != nil {
+		log.Printf("[deriveTermName] abbreviation lookup failed, falling back to raw tokens: %v", err)
+		return titleCase(tokens)
+	}
+	abbrMap := make(map[string]string, len(abbrevs))
+	for _, a := range abbrevs {
+		abbrMap[strings.ToUpper(a.Abbreviation)] = a.FullWord
+	}
+
+	resolved := make([]string, len(tokens))
+	var unresolvedIdx []int
+	var unresolvedTokens []string
+	for i, tok := range tokens {
+		upper := strings.ToUpper(tok)
+		if full, ok := abbrMap[upper]; ok {
+			resolved[i] = full
+		} else if looksLikeAbbreviation(tok) {
+			resolved[i] = tok // placeholder, may be overwritten below
+			unresolvedIdx = append(unresolvedIdx, i)
+			unresolvedTokens = append(unresolvedTokens, upper)
+		} else {
+			resolved[i] = tok
+		}
+	}
+
+	if len(unresolvedTokens) > 0 {
+		suggestions, err := h.abbrevSvc.SuggestExpansions(svcCtx, unresolvedTokens)
+		if err != nil {
+			log.Printf("[deriveTermName] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
+		} else {
+			for _, idx := range unresolvedIdx {
+				upper := strings.ToUpper(tokens[idx])
+				if full, ok := suggestions[upper]; ok && full != "" {
+					resolved[idx] = full
+					// Persist so future generations reuse the dictionary instead of the LLM.
+					if addErr := h.abbrevSvc.AddAbbreviation(svcCtx, upper, full, "auto-learned via semantic term generation"); addErr != nil {
+						log.Printf("[deriveTermName] failed to persist learned abbreviation %s=%s: %v", upper, full, addErr)
+					}
+				}
+			}
+		}
+	}
+
+	return titleCase(resolved)
+}
+
 // GenerateSemanticTerms creates one semantic_term catalog node per requested
-// group, linked via MAPS_TO edges to the given physical column nodes.
-// This is the backend counterpart to the frontend's "Generate from Columns"
-// action, which previously called a route that never existed
-// (POST /api/glossary/generate-semantic-terms was a 404).
+// physical column, deriving a real business-term name (dictionary
+// abbreviation expansion + Gemini disambiguation for anything unresolved,
+// with existing-term reuse to avoid duplicates) rather than using the raw
+// qualified path as the term name. Links each term to its source column via
+// a MAPS_TO edge.
 func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -2069,15 +2190,14 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 	}
 
 	var req struct {
+		// Name is accepted for backward compatibility / manual override, but
+		// is only used verbatim when it does NOT look like a raw catalog path
+		// (contains "/"). Otherwise the name is derived from the column itself.
 		Name      string   `json:"name"`
 		ColumnIDs []string `json:"column_ids"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	if req.Name == "" {
-		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 	if len(req.ColumnIDs) == 0 {
@@ -2091,6 +2211,23 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 			`SELECT tenant_datasource_id FROM catalog_node WHERE id = $1 AND tenant_datasource_id IS NOT NULL AND tenant_datasource_id != ''`,
 			req.ColumnIDs[0],
 		).Scan(&datasourceID)
+	}
+
+	// Resolve the term name: manual override wins only if it isn't a raw path;
+	// otherwise derive from the first column's own node_name.
+	name := req.Name
+	if name == "" || strings.Contains(name, "/") {
+		var columnNodeName string
+		_ = h.db.QueryRow(`SELECT node_name FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&columnNodeName)
+		if columnNodeName == "" {
+			http.Error(w, "could not resolve a name for this term: column not found and no name override given", http.StatusBadRequest)
+			return
+		}
+		name = h.deriveTermName(r.Context(), secCtx.TenantID, columnNodeName)
+	}
+	if name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
 	}
 
 	// Resolve (or create) the semantic_term catalog_node_type, same as CreateTerm.
@@ -2108,20 +2245,24 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	qualifiedPath := fmt.Sprintf("semantic_term/%s", req.Name)
+	// Reuse an existing term with the same name for this tenant before creating
+	// a duplicate - a repeated concept (e.g. "Account Code" appearing on many
+	// tables) should map to one term, not one per table.
+	qualifiedPath := fmt.Sprintf("semantic_term/%s", name)
 	var termID string
 	err = h.db.QueryRow(
-		`SELECT id FROM catalog_node WHERE node_type_id = $1 AND (qualified_path = $2 OR node_name = $3) AND ((tenant_datasource_id = $4) OR (tenant_datasource_id IS NULL AND $4 = '')) LIMIT 1`,
-		nodeTypeID, qualifiedPath, req.Name, datasourceID,
+		`SELECT id FROM catalog_node WHERE node_type_id = $1 AND tenant_id = $2 AND (qualified_path = $3 OR lower(node_name) = lower($4)) LIMIT 1`,
+		nodeTypeID, secCtx.TenantID, qualifiedPath, name,
 	).Scan(&termID)
-	if err != nil {
+	reused := err == nil && termID != ""
+	if !reused {
 		err = h.db.QueryRow(
 			`INSERT INTO catalog_node (node_name, node_type_id, tenant_id, tenant_datasource_id, properties, qualified_path, created_at, updated_at)
 			 VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, NOW(), NOW()) RETURNING id`,
-			req.Name, nodeTypeID, secCtx.TenantID, datasourceID, qualifiedPath,
+			name, nodeTypeID, secCtx.TenantID, datasourceID, qualifiedPath,
 		).Scan(&termID)
 		if err != nil {
-			log.Printf("[GenerateSemanticTerms] failed to create term %q: %v", req.Name, err)
+			log.Printf("[GenerateSemanticTerms] failed to create term %q: %v", name, err)
 			http.Error(w, "Failed to create semantic term: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -2171,7 +2312,8 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":             termID,
-		"name":           req.Name,
+		"name":           name,
+		"reused_existing": reused,
 		"columns_linked": linked,
 		"columns_total":  len(req.ColumnIDs),
 	})

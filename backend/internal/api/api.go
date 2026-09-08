@@ -1642,7 +1642,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		if srv.SemanticMappingHandler != nil {
 			srv.SemanticMappingHandler.RegisterRoutes(r)
 		}
-		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
+		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc)
 		glossaryHandler.RegisterRoutes(r)
 		apiDispatcherEncryptor, encryptorErr := buildApiDispatcherEncryptor()
 		if encryptorErr != nil {
