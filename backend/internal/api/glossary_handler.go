@@ -2281,6 +2281,9 @@ func (h *GlossaryHandler) resolveOrCreateEdgeType(tenantID, typeName string) (st
 // given definition (used only when creating; an existing node's definition
 // is left untouched).
 func (h *GlossaryHandler) findOrCreateTermNode(ctx context.Context, tenantID, datasourceID, nodeTypeID, qualifiedPrefix, name, definition string) (id string, reused bool, err error) {
+	if datasourceID == "none" {
+		datasourceID = ""
+	}
 	qualifiedPath := fmt.Sprintf("%s/%s", qualifiedPrefix, name)
 	err = h.db.QueryRowContext(ctx,
 		`SELECT id FROM catalog_node WHERE node_type_id = $1 AND tenant_id = $2 AND (qualified_path = $3 OR lower(node_name) = lower($4)) LIMIT 1`,
@@ -2311,6 +2314,9 @@ func (h *GlossaryHandler) findOrCreateTermNode(ctx context.Context, tenantID, da
 // ensureEdge creates a catalog_edge between subject and object if one of
 // this edge type doesn't already exist between them.
 func (h *GlossaryHandler) ensureEdge(tenantID, datasourceID, subjectID, objectID, edgeTypeID string) error {
+	if datasourceID == "none" {
+		datasourceID = ""
+	}
 	var existingID string
 	err := h.db.QueryRow(
 		`SELECT id FROM catalog_edge WHERE source_node_id = $1 AND target_node_id = $2 AND edge_type_id = $3 LIMIT 1`,
