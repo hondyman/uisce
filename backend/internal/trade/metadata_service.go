@@ -205,7 +205,7 @@ func (s *MetadataService) createWorkflowStageRecord(ctx context.Context, stage *
 func (s *MetadataService) getBusinessObjectsRecords(ctx context.Context, tenantID string) ([]map[string]interface{}, error) {
 	// Use SQL for map[string]interface{} result type
 	query := `
-		SELECT id, name, display_name, description
+		SELECT id, bo_key AS name, bo_name AS display_name, COALESCE(description, '') AS description
 		FROM business_objects
 		WHERE tenant_id = $1
 	`

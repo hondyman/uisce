@@ -108,25 +108,25 @@ func (gw *LLMGateway) loadSemanticBundle(
 	version string,
 ) (*SemanticBundle, error) {
 	// Query to get the business object
-	var boID, boName, dsID, drivingTable string
-	var boVersion int
+	var boID, boName, drivingTable string
+	boVersion := 1
+	_ = region
 
 	query := `
-		SELECT 
-			bo.id, 
-			bo.name, 
-			bo.datasource_id, 
-			bo.driving_table,
-			COALESCE(bo.version, 1)
-		FROM business_objects bo
-		WHERE bo.name = $1 AND bo.tenant_id = $2 AND (bo.region IS NULL OR bo.region = $3)
+		SELECT
+			bo.id,
+			bo.bo_name,
+			COALESCE(bo.driver_table_name, '')
+		FROM public.business_objects bo
+		WHERE bo.bo_key = $1 AND bo.tenant_id = $2
 		LIMIT 1
 	`
 
-	row := gw.server.DB.QueryRowContext(ctx, query, datasourceName, tenantID, region)
-	if err := row.Scan(&boID, &boName, &dsID, &drivingTable, &boVersion); err != nil {
+	row := gw.server.DB.QueryRowContext(ctx, query, datasourceName, tenantID)
+	if err := row.Scan(&boID, &boName, &drivingTable); err != nil {
 		return nil, fmt.Errorf("business object not found: %s", datasourceName)
 	}
+	dsID := ""
 
 	// Build bundle struct
 	bundle := &SemanticBundle{

@@ -932,7 +932,7 @@ export default function BusinessObjectDetailsPage() {
       
       // Validate that the business object belongs to the current tenant or is a gold_copy / core object
       const isCoreObject = data.isCore || data.is_core || data.goldCopy || data.gold_copy;
-      if (data.tenantId && data.tenantId !== tenant.id && !isCoreObject) {
+      if (data.tenantId && data.tenantId !== tenant?.id && !isCoreObject) {
         throw new Error('Business object does not belong to the current tenant');
       }
       
@@ -1066,7 +1066,7 @@ export default function BusinessObjectDetailsPage() {
           displayName: mappedObject.displayName || 'Root',
           icon: mappedObject.icon || 'business',
           children: hierarchy.length > 0 ? hierarchy : undefined,
-          fields: hierarchy.length === 0 ? uniqueFields : undefined
+          fields: hierarchy.length === 0 ? allFields : undefined
         },
       ];
       setHierarchyNodes(rootHierarchy);

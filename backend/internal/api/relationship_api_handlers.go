@@ -367,17 +367,17 @@ func (s *Server) discoverSimpleBusinessObjectRelationships(
 	tenantID, datasourceID, sourceEntityID string,
 ) ([]EnhancedRelatedEntity, error) {
 	query := `
-		SELECT 
+		SELECT
 			bo.id as entity_id,
-			bo.name as entity_name,
-			bo.display_name as display_name,
+			bo.bo_name as entity_name,
+			bo.bo_name as display_name,
 			'ASSOCIATION' as link_type,
 			'N:M' as cardinality,
 			0.7 as confidence,
 			'Business object available' as confidence_reason
-		FROM business_objects bo
+		FROM public.business_objects bo
 		WHERE bo.id != $1
-		ORDER BY bo.name
+		ORDER BY bo.bo_name
 		LIMIT 50
 	`
 

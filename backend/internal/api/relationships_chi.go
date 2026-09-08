@@ -130,9 +130,9 @@ type DismissSuggestionRequest struct {
 // getEntityFields fetches fields for a given business object
 func (s *Server) getEntityFields(ctx context.Context, db *sql.DB, tenantID, entityID string) ([]map[string]interface{}, error) {
 	query := `
-		SELECT bf.field_name, bf.display_label, bf.field_type, bf.is_required, bf.is_readonly
-		FROM bo_fields bf
-		JOIN business_objects bo ON bo.id = bf.bo_id
+		SELECT bf.field_name, COALESCE(bf.display_name, bf.field_name), COALESCE(bf.data_type, ''), bf.is_required, false
+		FROM public.business_object_fields bf
+		JOIN public.business_objects bo ON bo.id = bf.bo_id
 		WHERE bf.bo_id = $1 AND bo.tenant_id = $2
 		ORDER BY bf.display_order
 	`
@@ -208,12 +208,12 @@ func (s *Server) handleGetRelationshipSuggestions(w http.ResponseWriter, r *http
 		SELECT rs.id, rs.tenant_id, rs.datasource_id, rs.source_entity_id, rs.target_entity_id,
 		       rs.confidence, rs.rationale, rs.scoring_breakdown, rs.accepted, rs.accepted_at,
 		       rs.created_at, rs.updated_at,
-		       bo_source.display_name as source_name,
-		       bo_target.display_name as target_name
+		       bo_source.bo_name as source_name,
+		       bo_target.bo_name as target_name
 		FROM relationship_suggestions rs
-		LEFT JOIN business_objects bo_source ON bo_source.id = rs.source_entity_id 
+		LEFT JOIN public.business_objects bo_source ON bo_source.id = rs.source_entity_id
 		  AND bo_source.tenant_id = rs.tenant_id
-		LEFT JOIN business_objects bo_target ON bo_target.id = rs.target_entity_id 
+		LEFT JOIN public.business_objects bo_target ON bo_target.id = rs.target_entity_id
 		  AND bo_target.tenant_id = rs.tenant_id
 		WHERE rs.tenant_id = $1 AND rs.datasource_id = $2 AND rs.source_entity_id = $3
 		      AND rs.confidence >= $4 AND rs.accepted = false
@@ -584,39 +584,37 @@ func (s *Server) postGenerateSuggestionsFromLineage(w http.ResponseWriter, r *ht
 	// 3. Creates suggestions between business entities that use related tables
 	query := `
 		WITH entity_tables AS (
-			-- Map each business object to its source catalog table (from config)
-			SELECT 
+			-- Map each business object to its driving catalog table
+			SELECT
 				bo.id as entity_id,
-				bo.name as entity_name,
+				bo.bo_name as entity_name,
 				cn.id as table_id,
 				cn.node_name as table_name
-			FROM business_objects bo
+			FROM public.business_objects bo
 			LEFT JOIN catalog_node cn ON (
-				cn.node_name = bo.config->>'sourceTable'
+				cn.node_name = bo.driver_table_name
 				AND cn.tenant_datasource_id = $2
 				AND cn.node_type_id = (
 					SELECT id FROM catalog_node_type WHERE catalog_type_name = 'table'
 				)
 			)
 			WHERE bo.tenant_id = $1
-				AND bo.parent_id IS NULL
-				AND bo.config->>'sourceTable' IS NOT NULL
+				AND bo.driver_table_name IS NOT NULL
 				AND cn.id IS NOT NULL
 		),
 		fk_lineage AS (
 			-- Find FK relationships between entity source tables
-			SELECT 
+			SELECT
 				pt1.entity_id as source_entity_id,
 				pt1.entity_name as source_entity_name,
 				pt2.entity_id as target_entity_id,
 				pt2.entity_name as target_entity_name,
 				pt1.table_name || ' (FK)-> ' || pt2.table_name as lineage_path,
 				0.92 as confidence,
-				'Data lineage: ' || pt1.entity_name || ' (from ' || pt1.table_name || ' table) has foreign key relationship to ' || 
+				'Data lineage: ' || pt1.entity_name || ' (from ' || pt1.table_name || ' table) has foreign key relationship to ' ||
 				pt2.entity_name || ' (from ' || pt2.table_name || ' table)' as rationale
 			FROM entity_tables pt1
-			FROM entity_tables pt1
-			JOIN catalog_edge ce ON ce.source_node_id = pt1.table_id 
+			JOIN catalog_edge ce ON ce.source_node_id = pt1.table_id
 				AND ce.tenant_datasource_id = $2
 				AND ce.edge_type = 'foreign_key'
 			JOIN entity_tables pt2 ON ce.target_node_id = pt2.table_id
@@ -690,13 +688,13 @@ func (s *Server) postRecommendTableMappings(w http.ResponseWriter, r *http.Reque
 	query := `
 		WITH bo_analysis AS (
 			-- Extract all fields from each business entity
-			SELECT 
+			SELECT
 				bo.id::text as entity_id,
-				bo.name as entity_name,
-				jsonb_array_elements(bo.config->'entity_fields')->>'technicalName' as field_name
-			FROM business_objects bo
+				bo.bo_name as entity_name,
+				bf.technical_name as field_name
+			FROM public.business_objects bo
+			LEFT JOIN public.business_object_fields bf ON bf.bo_id = bo.id
 			WHERE bo.tenant_id = $1
-				AND bo.parent_id IS NULL
 		),
 		table_scores AS (
 			-- Score each table based on match criteria

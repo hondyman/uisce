@@ -290,17 +290,14 @@ func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.R
 	}
 
 	query := `
-		SELECT id, name, display_name, description, icon, config, created_at, updated_at
+		SELECT id, bo_key, bo_name, COALESCE(description, ''), created_at, updated_at
 		FROM business_objects
 		WHERE tenant_id = $1
 	`
 	args := []interface{}{tenantID}
+	_ = datasourceID
 
-	if datasourceID != "" {
-		query += " AND (datasource_id = $2 OR datasource_id IS NULL)"
-		args = append(args, datasourceID)
-	}
-	query += " ORDER BY display_name"
+	query += " ORDER BY bo_name"
 
 	rows, err := h.DB.QueryContext(r.Context(), query, args...)
 	if err != nil {
@@ -314,17 +311,17 @@ func (h *BPDesignerHandlers) GetBusinessObjects(w http.ResponseWriter, r *http.R
 	var objects []BusinessObject
 	for rows.Next() {
 		var bo BusinessObject
-		if err := rows.Scan(&bo.ID, &bo.Name, &bo.DisplayName, &bo.Description, &bo.Icon, &bo.Config, &bo.CreatedAt, &bo.UpdatedAt); err != nil {
+		if err := rows.Scan(&bo.ID, &bo.Name, &bo.DisplayName, &bo.Description, &bo.CreatedAt, &bo.UpdatedAt); err != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
 
-		// Load fields from bo_fields table
+		// Load fields from business_object_fields (the table actually FK'd to business_objects.id)
 		fieldRows, err := h.DB.QueryContext(r.Context(), `
-			SELECT field_name, display_label, field_type
-			FROM bo_fields
+			SELECT field_name, COALESCE(display_name, field_name), COALESCE(data_type, '')
+			FROM public.business_object_fields
 			WHERE bo_id = $1
 			ORDER BY display_order
 		`, bo.ID)

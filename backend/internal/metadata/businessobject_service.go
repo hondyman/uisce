@@ -459,18 +459,18 @@ func (s *BusinessObjectService) GetBusinessObject(
 
 	// Try old schema first (business_objects table)
 	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name,
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
+		SELECT id, tenant_id, bo_key AS key, bo_name AS name, bo_name AS display_name, '' AS technical_name,
+		       COALESCE(description, '') AS description, '' AS icon, is_core,
+		       '' AS clones_from, '' AS clone_parent_key,
+		       '' AS clone_parent_display_name, '' AS category,
+		       NULL::uuid AS parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
+		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
+		       updated_at AS last_modified_at, '' AS last_modified_by,
 		       is_active,
-		       config, datasource_id
-		FROM business_objects
-		WHERE tenant_id = $1::uuid AND (key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
+		       'null'::jsonb AS config, NULL::uuid AS datasource_id
+		FROM public.business_objects
+		WHERE tenant_id = $1::uuid AND (bo_key = $2 OR ($3 = true AND id = CAST($2 AS uuid)))
 	`
 
 	err := s.db.GetContext(ctx, bo, oldQuery, tenantID, boKey, isUUID)
@@ -546,26 +546,23 @@ func (s *BusinessObjectService) ListBusinessObjects(
 	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
 	oldQuery := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
+		SELECT id, tenant_id, bo_key AS key, bo_name AS name, bo_name AS display_name, '' AS technical_name,
+		       COALESCE(description, '') AS description, '' AS icon, is_core,
+		       '' AS clones_from, '' AS clone_parent_key,
+		       '' AS clone_parent_display_name, '' AS category,
+		       NULL::uuid AS parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
+		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
+		       updated_at AS last_modified_at, '' AS last_modified_by,
 		       is_active,
-		       config, datasource_id
-		FROM business_objects
-		WHERE tenant_id = $1::uuid AND parent_id IS NULL
+		       'null'::jsonb AS config, NULL::uuid AS datasource_id
+		FROM public.business_objects
+		WHERE tenant_id = $1::uuid
 	`
 
 	oldArgs := []interface{}{tenantID}
-	if datasourceID != "" {
-		oldQuery += " AND (datasource_id = $2::uuid OR datasource_id IS NULL)"
-		oldArgs = append(oldArgs, datasourceID)
-	}
-	oldQuery += " ORDER BY name"
+	_ = datasourceID
+	oldQuery += " ORDER BY bo_name"
 
 	var bos []*models.BusinessObjectDefinition
 	oldSchemaErr := s.db.SelectContext(ctx, &bos, oldQuery, oldArgs...)
@@ -620,19 +617,20 @@ func (s *BusinessObjectService) ListBusinessObjectsComposed(
 // listCoreBusinessObjects lists BOs from the gold copy tenant marked as core
 func (s *BusinessObjectService) listCoreBusinessObjects(ctx context.Context, goldCopyTenantID string) ([]*models.BusinessObjectDefinition, error) {
 	query := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
+		SELECT id, tenant_id, bo_key AS key, bo_name AS name, bo_name AS display_name, '' AS technical_name,
+		       COALESCE(description, '') AS description, '' AS icon, is_core,
+		       '' AS clones_from, '' AS clone_parent_key,
+		       '' AS clone_parent_display_name, '' AS category,
+		       NULL::uuid AS parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
+		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
+		       updated_at AS last_modified_at, '' AS last_modified_by,
 		       is_active,
-		       config, datasource_id, core_id
-		FROM business_objects
-		WHERE tenant_id = $1::uuid AND is_core = true AND parent_id IS NULL
-		ORDER BY name
+		       'null'::jsonb AS config, NULL::uuid AS datasource_id, NULL::uuid AS core_id,
+		       model_id
+		FROM public.business_objects
+		WHERE tenant_id = $1::uuid AND is_core = true
+		ORDER BY bo_name
 	`
 	var bos []*models.BusinessObjectDefinition
 	err := s.db.SelectContext(ctx, &bos, query, goldCopyTenantID)
@@ -645,27 +643,24 @@ func (s *BusinessObjectService) listCoreBusinessObjects(ctx context.Context, gol
 // listTenantCustomBusinessObjects lists only tenant-specific (non-core) BOs
 func (s *BusinessObjectService) listTenantCustomBusinessObjects(ctx context.Context, tenantID, datasourceID string) ([]*models.BusinessObjectDefinition, error) {
 	query := `
-		SELECT id, tenant_id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, COALESCE(icon, '') AS icon, is_core, 
-		       COALESCE(clones_from, '') AS clones_from, COALESCE(clone_parent_key, '') AS clone_parent_key,
-		       COALESCE(clone_parent_display_name, '') AS clone_parent_display_name, COALESCE(category, '') AS category, 
-		       parent_id,
+		SELECT id, tenant_id, bo_key AS key, bo_name AS name, bo_name AS display_name, '' AS technical_name,
+		       COALESCE(description, '') AS description, '' AS icon, is_core,
+		       '' AS clones_from, '' AS clone_parent_key,
+		       '' AS clone_parent_display_name, '' AS category,
+		       NULL::uuid AS parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
-		       CAST(0 AS int) AS instance_count, created_at, COALESCE(CAST(created_by AS text), '') AS created_by, 
-		       last_modified_at, COALESCE(CAST(last_modified_by AS text), '') AS last_modified_by, 
+		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
+		       updated_at AS last_modified_at, '' AS last_modified_by,
 		       is_active,
-		       config, datasource_id, core_id
-		FROM business_objects
-		WHERE tenant_id = $1::uuid AND (is_core = false OR is_core IS NULL) AND parent_id IS NULL
+		       'null'::jsonb AS config, NULL::uuid AS datasource_id, NULL::uuid AS core_id,
+		       model_id
+		FROM public.business_objects
+		WHERE tenant_id = $1::uuid AND (is_core = false OR is_core IS NULL)
 	`
 	args := []interface{}{tenantID}
+	_ = datasourceID
 
-	if datasourceID != "" {
-		query += " AND (datasource_id = $2::uuid OR datasource_id IS NULL)"
-		args = append(args, datasourceID)
-	}
-
-	query += " ORDER BY name"
+	query += " ORDER BY bo_name"
 
 	var bos []*models.BusinessObjectDefinition
 	err := s.db.SelectContext(ctx, &bos, query, args...)
@@ -1890,15 +1885,34 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		}
 	}
 
-	// Load entity-level fields (non-subtype fields)
+	// Load entity-level fields (non-subtype fields). business_object_fields is
+	// the table actually FK'd to business_objects.id and populated with real
+	// data on this schema - bo_fields (queried below as a fallback) is an
+	// orphaned legacy table whose business_object_id matches no real BO here
+	// (see the same finding documented in boresolver/bo_repository.go).
 	var entityFields []models.FieldDefinition
+
+	semanticFieldQuery := `
+		SELECT id, field_name AS key, field_name AS name, COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, '') AS technical_name, COALESCE(data_type, 'text') AS type,
+		       false AS is_core, is_required, COALESCE(is_system, false) AS is_system,
+		       COALESCE(description, '') AS description, COALESCE(reference_entity, '') AS reference_entity,
+		       COALESCE(display_order, 0) AS sequence,
+		       created_at, '' AS created_by, updated_at AS last_modified_at, '' AS last_modified_by
+		FROM public.business_object_fields
+		WHERE bo_id = $1::uuid
+		ORDER BY display_order
+	`
+	if err := s.db.SelectContext(ctx, &entityFields, semanticFieldQuery, bo.ID); err != nil {
+		logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields from business_object_fields: %v", err)
+	}
 
 	fieldQuery := `
 		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
 		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
 		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
 		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
-		       created_at, '' AS created_by, created_at AS last_modified_at, 
+		       created_at, '' AS created_by, created_at AS last_modified_at,
 		       '' AS last_modified_by
 		FROM bo_fields
 		WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
@@ -1906,9 +1920,11 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	`
 
 	// Query bo_fields table for viewTenantID (user tenant context) or bo.TenantID (master BO tenant context)
-	if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, viewTenantID); err != nil || len(entityFields) == 0 {
-		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
-			logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
+	if len(entityFields) == 0 {
+		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, viewTenantID); err != nil || len(entityFields) == 0 {
+			if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
+				logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
+			}
 		}
 	}
 
@@ -3331,6 +3347,36 @@ func (s *BusinessObjectService) IntrospectTable(
 	}, nil
 }
 
+// resolveQualifiedTable splits a driver-table reference into (schema, table).
+// business_objects.driver_table_name on this schema stores catalog_node-style
+// qualified paths ("/public/customers"), not "schema.table" - so both forms are
+// accepted here. Defaults schema to "public" when none is present.
+func resolveQualifiedTable(drivingTable string) (schema, table string) {
+	schema = "public"
+	table = drivingTable
+	if strings.HasPrefix(table, "/") {
+		parts := strings.Split(strings.Trim(table, "/"), "/")
+		if len(parts) >= 2 {
+			schema = parts[0]
+			table = parts[1]
+		} else if len(parts) == 1 && parts[0] != "" {
+			table = parts[0]
+		}
+		return schema, table
+	}
+	if idx := strings.LastIndex(table, "."); idx >= 0 {
+		schema = table[:idx]
+		table = table[idx+1:]
+	}
+	return schema, table
+}
+
+// quotedQualifiedTable returns a safely-quoted "schema"."table" reference for drivingTable.
+func quotedQualifiedTable(drivingTable string) string {
+	schema, table := resolveQualifiedTable(drivingTable)
+	return pq.QuoteIdentifier(schema) + "." + pq.QuoteIdentifier(table)
+}
+
 // QueryBORecords queries physical records through the Business Object ORM layer with
 // parameter filtering, column projections, bi-temporal time-travel, and pagination.
 func (s *BusinessObjectService) QueryBORecords(
@@ -3360,10 +3406,8 @@ func (s *BusinessObjectService) QueryBORecords(
 	}
 
 	// Clean table name
-	rawTable := drivingTable
-	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
-		rawTable = rawTable[idx+1:]
-	}
+	_, rawTable := resolveQualifiedTable(drivingTable)
+	quotedTable := quotedQualifiedTable(drivingTable)
 
 	// 3. Determine available fields/columns
 	columnNames := make([]string, 0)
@@ -3383,6 +3427,37 @@ func (s *BusinessObjectService) QueryBORecords(
 		}
 		if col != "" {
 			columnNames = append(columnNames, col)
+		}
+	}
+
+	// Guard against BO field metadata that doesn't match the driving table's
+	// actual physical columns (e.g. seeded from a pre-migration schema) - drop
+	// any declared field that isn't a real column instead of erroring the whole
+	// query, so a partial metadata mismatch degrades gracefully.
+	if len(columnNames) > 0 {
+		schemaName, tableName := resolveQualifiedTable(drivingTable)
+		var realCols []string
+		if err := s.db.SelectContext(ctx, &realCols, `
+			SELECT column_name FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2
+		`, schemaName, tableName); err == nil && len(realCols) > 0 {
+			realColSet := make(map[string]bool, len(realCols))
+			for _, c := range realCols {
+				realColSet[c] = true
+			}
+			filtered := make([]string, 0, len(columnNames))
+			var dropped []string
+			for _, c := range columnNames {
+				if realColSet[c] {
+					filtered = append(filtered, c)
+				} else {
+					dropped = append(dropped, c)
+				}
+			}
+			if len(dropped) > 0 {
+				logging.GetLogger().Sugar().Warnf("BO %s field metadata references columns not present on %s.%s (likely stale seed data): %v", bo.ID, schemaName, tableName, dropped)
+			}
+			columnNames = filtered
 		}
 	}
 
@@ -3469,7 +3544,7 @@ func (s *BusinessObjectService) QueryBORecords(
 	whereSQL := strings.Join(whereClauses, " AND ")
 
 	// 5. Total count query
-	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", pq.QuoteIdentifier(rawTable), whereSQL)
+	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", quotedTable, whereSQL)
 	var total int
 	if err := s.db.GetContext(ctx, &total, countSQL, args...); err != nil {
 		logging.GetLogger().Sugar().Warnf("Count query failed: %v", err)
@@ -3498,7 +3573,7 @@ func (s *BusinessObjectService) QueryBORecords(
 
 	querySQL := fmt.Sprintf(
 		"SELECT %s FROM %s WHERE %s %s LIMIT %d OFFSET %d",
-		selectCols, pq.QuoteIdentifier(rawTable), whereSQL, orderSQL, limit, offset,
+		selectCols, quotedTable, whereSQL, orderSQL, limit, offset,
 	)
 
 	rows, err := s.db.QueryxContext(ctx, querySQL, args...)
@@ -3559,10 +3634,7 @@ func (s *BusinessObjectService) CreateBORecord(
 	if table == "" {
 		table = bo.Key
 	}
-	rawTable := table
-	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
-		rawTable = rawTable[idx+1:]
-	}
+	quotedTable := quotedQualifiedTable(table)
 
 	rec := req.Record
 	if rec == nil {
@@ -3588,14 +3660,14 @@ func (s *BusinessObjectService) CreateBORecord(
 
 	insertSQL := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s) RETURNING *",
-		pq.QuoteIdentifier(rawTable),
+		quotedTable,
 		strings.Join(cols, ", "),
 		strings.Join(placeholders, ", "),
 	)
 
 	rows, err := s.db.QueryxContext(ctx, insertSQL, vals...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to insert record into %s: %w", rawTable, err)
+		return nil, fmt.Errorf("failed to insert record into %s: %w", table, err)
 	}
 	defer rows.Close()
 
@@ -3634,10 +3706,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 	if table == "" {
 		table = bo.Key
 	}
-	rawTable := table
-	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
-		rawTable = rawTable[idx+1:]
-	}
+	quotedTable := quotedQualifiedTable(table)
 
 	rec := req.Record
 	if rec == nil || len(rec) == 0 {
@@ -3670,7 +3739,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 
 	updateSQL := fmt.Sprintf(
 		"UPDATE %s SET %s WHERE id = $%d RETURNING *",
-		pq.QuoteIdentifier(rawTable),
+		quotedTable,
 		strings.Join(setClauses, ", "),
 		idx,
 	)
@@ -3679,7 +3748,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 
 	rows, err := s.db.QueryxContext(ctx, updateSQL, vals...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update record in %s: %w", rawTable, err)
+		return nil, fmt.Errorf("failed to update record in %s: %w", table, err)
 	}
 	defer rows.Close()
 
@@ -3717,15 +3786,12 @@ func (s *BusinessObjectService) DeleteBORecord(
 	if table == "" {
 		table = bo.Key
 	}
-	rawTable := table
-	if idx := strings.LastIndex(rawTable, "."); idx >= 0 {
-		rawTable = rawTable[idx+1:]
-	}
+	quotedTable := quotedQualifiedTable(table)
 
-	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", pq.QuoteIdentifier(rawTable))
+	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", quotedTable)
 	_, err = s.db.ExecContext(ctx, deleteSQL, recordID)
 	if err != nil {
-		return fmt.Errorf("failed to delete record from %s: %w", rawTable, err)
+		return fmt.Errorf("failed to delete record from %s: %w", table, err)
 	}
 
 	s.logAudit(ctx, secCtx.TenantID, "instance", recordID, "delete", nil, userID)
