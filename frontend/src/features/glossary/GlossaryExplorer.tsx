@@ -9,11 +9,13 @@ import apiClient from '../../utils/apiClient';
 import GenericCatalogNodePicker from '../../components/common/GenericCatalogNodePicker';
 import EditSemanticTermDialog from '../../components/EditSemanticTermDialog';
 import { IconButton, Tooltip } from '@mui/material';
-import { 
-  Edit as EditIcon, 
-  Delete as DeleteIcon, 
-  Add as AddIcon, 
-  AutoFixHigh as AutoFixIcon 
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Add as AddIcon,
+  AutoFixHigh as AutoFixIcon,
+  ContentCopy as ContentCopyIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { useDeleteTerm } from '../../api/glossary';
 import { RelationshipExplorer } from './components/RelationshipExplorer';
@@ -113,6 +115,27 @@ const Spinner: React.FC<{ size?: number }> = ({ size }) => (
   </div>
 );
 
+const CopyButton: React.FC<{ value: string }> = ({ value }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Tooltip title={copied ? 'Copied!' : 'Copy to clipboard'}>
+      <IconButton
+        size="small"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          } catch { /* clipboard unavailable, ignore */ }
+        }}
+        sx={{ color: copied ? C.success : C.textMuted, padding: '2px', '&:hover': { color: C.accent, background: 'rgba(255,255,255,0.05)' } }}
+      >
+        {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+      </IconButton>
+    </Tooltip>
+  );
+};
+
 const Empty: React.FC<{ icon: string; title: string; subtitle?: string }> = ({ icon, title, subtitle }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 64, gap: 12, textAlign: 'center' }}>
     <div style={{ fontSize: 48, opacity: 0.3 }}>{icon}</div>
@@ -129,9 +152,13 @@ const parsePath = (path: string) => {
     return { datasource: 'API Endpoints', schema: 'REST API', table: 'Endpoints', column: parts.length > 1 ? parts[1] : 'Endpoint' };
   }
   const slashParts = clean.split('/').filter(Boolean);
+  // The real qualified_path convention used throughout the catalog is
+  // /schema/table/column (e.g. "/orm/account/manager_id" -> schema "orm",
+  // table "account", column "manager_id") - there is no datasource segment
+  // embedded in the path; the datasource comes from a separate field.
   if (slashParts.length >= 4) return { datasource: slashParts[0], schema: slashParts[1], table: slashParts[2], column: slashParts[3] };
-  else if (slashParts.length === 3) return { datasource: slashParts[0], schema: slashParts[1], table: slashParts[1], column: slashParts[2] };
-  else if (slashParts.length === 2) return { datasource: slashParts[0], schema: 'public', table: slashParts[0], column: slashParts[1] };
+  else if (slashParts.length === 3) return { datasource: 'N/A', schema: slashParts[0], table: slashParts[1], column: slashParts[2] };
+  else if (slashParts.length === 2) return { datasource: 'N/A', schema: 'public', table: slashParts[0], column: slashParts[1] };
   const dotParts = clean.split('.').filter(Boolean);
   if (dotParts.length === 4) return { datasource: dotParts[0], schema: dotParts[1], table: dotParts[2], column: dotParts[3] };
   else if (dotParts.length === 3) return { datasource: dotParts[0], schema: 'public', table: dotParts[1], column: dotParts[2] };
@@ -291,6 +318,23 @@ export default function GlossaryExplorer() {
     ),
     enabled: !!tenantId && (isGenModalOpen || isAddMappingOpen),
   });
+
+  // Columns that already have a MAPS_TO edge to a semantic term - these are
+  // excluded from the "Generate from Columns" wizard below, since they're
+  // already mapped and re-offering them just invites accidental duplicates.
+  const { data: allEdges } = useQuery<any[]>({
+    queryKey: ['glossary-all-edges', tenantId, isGenModalOpen],
+    queryFn: () => apiClient<any[]>(`/api/glossary/edges?tenant_id=${tenantId}`),
+    enabled: !!tenantId && isGenModalOpen,
+  });
+  const mappedColumnIds = useMemo(() => {
+    const list = Array.isArray(allEdges) ? allEdges : (allEdges as any)?.data ?? [];
+    const ids = new Set<string>();
+    list.forEach((e: any) => {
+      if (e.edge_type_name === 'MAPS_TO') ids.add(e.target_node_id);
+    });
+    return ids;
+  }, [allEdges]);
 
   const semTerms = useMemo(() => {
     const list = Array.isArray(semTermsRaw) ? semTermsRaw : (semTermsRaw as any)?.data ?? [];
@@ -483,8 +527,13 @@ export default function GlossaryExplorer() {
 
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
-    const colList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
-    if (colList.length === 0) return;
+    const rawColList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
+    const colList = rawColList.filter((c: any) => !mappedColumnIds.has(c.id));
+    if (colList.length === 0) {
+      setGenGroups([]);
+      setSelectedGenGroups(new Set());
+      return;
+    }
     const groups: Record<string, any[]> = {};
     colList.forEach((c: any) => {
       if (!c.qualified_path) return;
@@ -497,7 +546,7 @@ export default function GlossaryExplorer() {
 
     setGenGroups(Object.entries(groups).map(([name, cols]) => ({ suggestedName: name, columns: cols })));
     setSelectedGenGroups(new Set());
-  }, [allColumns, isGenModalOpen]);
+  }, [allColumns, isGenModalOpen, mappedColumnIds]);
 
   const inputStyle = {
     background: '#1E2130', border: `1px solid ${C.border}`, color: C.text,
@@ -505,7 +554,7 @@ export default function GlossaryExplorer() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', width: '100%', background: C.bg, color: C.text, fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100%', background: C.bg, color: C.text, fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
       
       {/* Modals */}
       {isCreateSemModalOpen && (
@@ -613,7 +662,7 @@ export default function GlossaryExplorer() {
       )}
 
       {/* Sidebar */}
-      <div style={{ width: 280, minWidth: 280, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: 280, minWidth: 280, minHeight: 0, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${C.border}` }}>
           <input 
             placeholder="Search terms..." 
@@ -650,7 +699,7 @@ export default function GlossaryExplorer() {
       </div>
 
       {/* Main Panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: C.bg }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
         
         {/* Topbar */}
         <div style={{ height: 60, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', padding: '0 24px', justifyContent: 'space-between', background: C.panel }}>
@@ -699,7 +748,7 @@ export default function GlossaryExplorer() {
         {!selectedTerm ? (
           <Empty icon="📖" title="Select a term" subtitle="Choose a semantic term from the sidebar to view details." />
         ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: 24, borderBottom: `1px solid ${C.border}`, background: C.panel }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <span style={{ fontSize: 24 }}>{selectedTerm._kind === 'semantic' ? '🧠' : '💼'}</span>
@@ -761,7 +810,10 @@ export default function GlossaryExplorer() {
                       </tr>
                       <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                         <td style={{ padding: '12px 0', color: C.textMuted }}>Node ID</td>
-                        <td style={{ padding: '12px 0', fontFamily: 'monospace', color: C.textMuted }}>{selectedTerm.id}</td>
+                        <td style={{ padding: '12px 0', fontFamily: 'monospace', color: C.textMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {selectedTerm.id}
+                          <CopyButton value={selectedTerm.id} />
+                        </td>
                       </tr>
                       {(() => {
                         const props = typeof selectedTerm.properties === 'string' 
@@ -898,7 +950,7 @@ export default function GlossaryExplorer() {
                         <thead>
                           <tr style={{ borderBottom: `2px solid ${C.border}`, background: 'rgba(255,255,255,0.03)' }}>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Datasource</th>
-                            <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Table · Schema</th>
+                            <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Schema · Table</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Physical Column</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Data Type</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Source</th>

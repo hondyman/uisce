@@ -299,7 +299,6 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                 <span style={{ fontWeight: 700, fontSize: 14, color: C.text, wordBreak: 'break-word' }}>
                   {cleanName}
                 </span>
-                <Badge label={typeLabel} color={typeColor} />
               </div>
               {relatedPath && (
                 <div style={{
@@ -311,6 +310,11 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                   {relatedPath}
                 </div>
               )}
+            </div>
+
+            {/* Node Type: its own fixed-width column so it lines up across rows */}
+            <div style={{ flex: '0 0 150px', display: 'flex', justifyContent: 'flex-start' }}>
+              <Badge label={typeLabel} color={typeColor} />
             </div>
 
             {/* Right: Actions */}
