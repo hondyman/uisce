@@ -169,8 +169,21 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 	json.NewEncoder(w).Encode(tenants)
 }
 
-// listAllTenants returns all tenants with full hierarchy
+// listAllTenants returns all tenants with full hierarchy.
+// HOTFIX 2026-09-08: this had no auth check at all - any unauthenticated
+// caller could enumerate every tenant's ID and display name, converting
+// every header-spoof / tenant-pivot vulnerability found this week from
+// "guess a UUID" into "pick from a menu" (backend/docs/DISCOVERY_UNAUTH_ROUTES.md,
+// backend/docs/INCIDENT_REPORT_20260906.md). Cross-tenant enumeration is a
+// global-admin operation; regular users list their own tenants via
+// listAccessibleTenants above.
 func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Request) {
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || !auth.IsGlobalAdmin {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
 	tenants, err := h.getAllTenantsInternal(r.Context(), nil, nil) // nil means fetch all
 	if err != nil {
 		http.Error(w, "Failed to query tenants: "+err.Error(), http.StatusInternalServerError)
@@ -188,7 +201,17 @@ type GoldCopyResponse struct {
 }
 
 // getGoldCopyTenant returns the gold copy tenant ID (public, no auth required)
+// HOTFIX 2026-09-08: had no auth check - identifying the gold-copy tenant
+// unauthenticated hands an attacker the one tenant every gold-copy bypass
+// path (bo_crud_handler.go's old fallback among others) treats as
+// always-allowed. Any authenticated caller may resolve it (the frontend's
+// goldCopy.ts calls this for ordinary tenant-scoped flows), but anonymous
+// callers are rejected.
 func (h *TenantAccessHandlers) getGoldCopyTenant(w http.ResponseWriter, r *http.Request) {
+	if _, ok := security.AuthInfoFromContext(r.Context()); !ok {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
 	var id string
 	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
 	if err != nil {

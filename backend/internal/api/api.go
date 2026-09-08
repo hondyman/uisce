@@ -885,7 +885,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// request body to stderr and returns 204.
 
 	// Diagnostic route: list registered routes at request time to help debug missing handlers.
+	// HOTFIX 2026-09-08: an unauthenticated dump of the entire route map is a
+	// reconnaissance gift - it enumerates every admin endpoint for an
+	// attacker (backend/docs/DISCOVERY_UNAUTH_ROUTES.md). Gated to global
+	// admins; the debugging value doesn't require it be public.
 	r.Get("/_routes", func(w http.ResponseWriter, req *http.Request) {
+		auth, ok := security.AuthInfoFromContext(req.Context())
+		if !ok || !auth.IsGlobalAdmin {
+			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+			return
+		}
 		routes := []string{}
 		_ = chi.Walk(r, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
 			routes = append(routes, fmt.Sprintf("%s %s", method, route))
