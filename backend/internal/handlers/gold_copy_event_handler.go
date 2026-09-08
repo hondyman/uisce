@@ -121,7 +121,7 @@ func (h *GoldCopyEventHandler) HandleEvent(w http.ResponseWriter, r *http.Reques
 	// 3. Check Gold Copy Status
 	// Optimization: Cache result? For now, DB query.
 	var isGoldCopy bool
-	err = h.db.Get(&isGoldCopy, "SELECT gold_copy FROM tenants WHERE id = $1", tenantID)
+	err = h.db.Get(&isGoldCopy, "SELECT gold_copy FROM public.tenants WHERE id = $1", tenantID)
 	if err != nil {
 		h.logger.Error("Failed to query tenant status", zap.Error(err), zap.String("tenant_id", tenantID))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)

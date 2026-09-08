@@ -58,7 +58,7 @@ func main() {
 
 	// Find first tenant
 	var tenantID string
-	err = db.GetContext(ctx, &tenantID, `SELECT id FROM tenants LIMIT 1`)
+	err = db.GetContext(ctx, &tenantID, `SELECT id FROM public.tenants LIMIT 1`)
 	if err != nil {
 		log.Fatalf("no tenants found to seed: %v", err)
 	}

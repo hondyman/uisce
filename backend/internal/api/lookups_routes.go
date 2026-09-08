@@ -115,7 +115,7 @@ func handleCreateLookup(db *sql.DB) http.HandlerFunc {
 
 		// Check if this tenant is gold copy to set IsCore
 		var goldCopyTenantID string
-		err = db.QueryRow(`SELECT id FROM tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err = db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
 		if err == nil && goldCopyTenantID == tenantID {
 			l.IsCore = true
 		}
@@ -265,7 +265,7 @@ func handleCreateLookupValue(db *sql.DB) http.HandlerFunc {
 
 		// Check if this tenant is gold copy to set IsCore
 		var goldCopyTenantID string
-		err = db.QueryRow(`SELECT id FROM tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err = db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
 		if err == nil && goldCopyTenantID == tenantID {
 			v.IsCore = true
 		}
@@ -362,7 +362,7 @@ func handleListLookups(db *sql.DB) http.HandlerFunc {
 
 		// First, get the gold copy tenant ID (tenant with gold_copy = true)
 		var goldCopyTenantID sql.NullString
-		err := db.QueryRow(`SELECT id FROM tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err := db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
 		if err != nil && err != sql.ErrNoRows {
 			http.Error(w, "Failed to find gold copy tenant: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -484,7 +484,7 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 
 		// Get gold copy tenant
 		var goldCopyTenantID sql.NullString
-		err := db.QueryRow(`SELECT id FROM tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err := db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
 		if err != nil && err != sql.ErrNoRows {
 			http.Error(w, "Failed to find gold copy tenant: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -698,7 +698,7 @@ func handlePropagateLookup(db *sql.DB) http.HandlerFunc {
 		}
 
 		// 3. Get All Tenants (excluding source)
-		tRows, err := db.Query(`SELECT id FROM tenants WHERE id != $1 AND is_active = true`, srcTenantID)
+		tRows, err := db.Query(`SELECT id FROM public.tenants WHERE id != $1 AND is_active = true`, srcTenantID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "failed to fetch tenants", "fetch_error", err.Error())
 			return

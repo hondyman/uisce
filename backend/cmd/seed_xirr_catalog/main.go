@@ -31,7 +31,7 @@ func main() {
 
 	// 1. Fetch Master / Gold Copy Tenant
 	var masterTenantID string
-	err = db.QueryRow("SELECT id FROM tenants WHERE gold_copy = true LIMIT 1").Scan(&masterTenantID)
+	err = db.QueryRow("SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1").Scan(&masterTenantID)
 	if err != nil {
 		log.Fatalf("Fatal: Master tenant (gold_copy = true) not found: %v", err)
 	}
@@ -44,7 +44,7 @@ func main() {
 		GoldCopy bool
 	}
 	var tenants []TenantRow
-	tRows, err := db.Query("SELECT id, name, gold_copy FROM tenants")
+	tRows, err := db.Query("SELECT id, name, gold_copy FROM public.tenants")
 	if err != nil {
 		log.Fatalf("Failed to query tenants: %v", err)
 	}

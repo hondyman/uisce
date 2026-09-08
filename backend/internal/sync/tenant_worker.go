@@ -25,7 +25,7 @@ func (w *TenantWorker) DeleteTenantResources(ctx context.Context, tenantID strin
 
 	// 1. Check if Gold Copy
 	var isGoldCopy bool
-	err := w.db.QueryRowContext(ctx, "SELECT gold_copy FROM tenants WHERE id = $1", tenantID).Scan(&isGoldCopy)
+	err := w.db.QueryRowContext(ctx, "SELECT gold_copy FROM public.tenants WHERE id = $1", tenantID).Scan(&isGoldCopy)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Tenant already deleted, proceed to cleanup orphans if any, or just return

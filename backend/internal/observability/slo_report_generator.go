@@ -298,7 +298,7 @@ func (g *SLOReportGenerator) collectTenantMetrics(ctx context.Context, start, en
 			COUNT(*) FILTER (WHERE cqa.cache_hit = true)::float / NULLIF(COUNT(*), 0) * 100 as hit_rate,
 			COUNT(*) as total_requests
 		FROM cube_query_analytics cqa
-		LEFT JOIN tenants t ON t.id::text = cqa.tenant_id
+		LEFT JOIN public.tenants t ON t.id::text = cqa.tenant_id
 		WHERE cqa.created_at >= $1 AND cqa.created_at < $2
 		GROUP BY cqa.tenant_id, t.display_name, t.is_gold_copy
 		ORDER BY total_requests DESC

@@ -86,7 +86,7 @@ func (a *GoldCopyActivities) PropagateConnectionActivity(ctx context.Context, ev
 	// Fetch all downstream tenants (that are not gold copy)
 	// We can filter by "subscribed" tenants if that concept exists, or just all active tenants.
 	var tenants []string
-	err := a.DB.SelectContext(ctx, &tenants, `SELECT id FROM tenants WHERE is_active = true AND gold_copy = false`)
+	err := a.DB.SelectContext(ctx, &tenants, `SELECT id FROM public.tenants WHERE is_active = true AND gold_copy = false`)
 	if err != nil {
 		return fmt.Errorf("failed to fetch tenants: %w", err)
 	}

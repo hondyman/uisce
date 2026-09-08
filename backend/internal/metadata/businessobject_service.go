@@ -351,78 +351,77 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		}
 	}
 
-	// Insert BO
-	query := `
-		INSERT INTO business_objects (
-			id, tenant_id, key, name, display_name, technical_name,
-			description, icon, is_core, clones_from, clone_parent_key,
-			clone_parent_display_name, category, parent_id, datasource_id,
-			driver_table_id, driver_table_name,
-			config,
-			created_at, created_by, last_modified_at, last_modified_by, 
-			is_active
-		) VALUES (
-			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10, $11,
-			$12, $13, $14, $15,
-			$16, $17,
-			$18,
-			$19, $20, $21, $22, 
-			$23
-		)
-	`
-
-	// Handle nullable parent_id UUID
-	var parentID interface{} = nil
-	if bo.ParentID.Valid && bo.ParentID.String != "" {
-		parentID = bo.ParentID.String
-	}
-
-	var datasourceID interface{} = nil
-	if bo.DatasourceID.Valid && bo.DatasourceID.String != "" {
-		datasourceID = bo.DatasourceID.String
-	}
-
 	// Handle nullable driver_table_id UUID
 	var driverTableID interface{} = nil
 	if bo.DriverTableID.Valid {
 		driverTableID = bo.DriverTableID.String
 	}
 
-	// Handle nullable created_by
-	var createdBy interface{} = nil
-	if bo.CreatedBy != "" {
-		createdBy = bo.CreatedBy
-	}
-
-	// Handle nullable last_modified_by
-	var lastModifiedBy interface{} = nil
-	if bo.LastModifiedBy != "" {
-		lastModifiedBy = bo.LastModifiedBy
-	}
-
-	// Prepare config JSON
-	configJSON := map[string]interface{}{
-		"is_core": bo.IsCore,
-	}
-	if req.Config != nil {
-		for k, v := range req.Config {
-			configJSON[k] = v
+	// Resolve the four NOT NULL semantic-node references the real business_objects
+	// schema requires (classification_node_id, business_key_node_id,
+	// semantic_id_node_id, grain_node_id - all FK to catalog_node ON DELETE RESTRICT).
+	// No prior BO rows survive to copy the convention from (this tenant's were
+	// deleted for a clean re-scan), so this uses the most defensible bootstrap
+	// default for a straightforward entity table: the table's own driving-table
+	// node for classification, and its primary-key ("id") column node for the
+	// business key / semantic id / grain - one row per id is the correct grain
+	// for these tables. A richer semantic model (distinct classification taxonomy,
+	// composite business keys, etc.) should replace this once one exists.
+	var classificationNodeID, keyColumnNodeID string
+	if driverTableID != nil {
+		classificationNodeID = driverTableID.(string)
+		// Verify the driver table node itself actually exists (catalog scans have
+		// been observed to leave dangling parent_id references from an earlier,
+		// inconsistent node-ID generation pass) before trusting anything derived
+		// from it.
+		var exists string
+		_ = s.db.GetContext(ctx, &exists, `SELECT id FROM public.catalog_node WHERE id = $1::uuid`, classificationNodeID)
+		if exists == "" {
+			classificationNodeID = ""
+		} else {
+			_ = s.db.GetContext(ctx, &keyColumnNodeID, `
+				SELECT id FROM public.catalog_node
+				WHERE parent_id = $1::uuid AND node_name = 'id'
+				LIMIT 1
+			`, classificationNodeID)
+			// Fall back to the table node itself when its id-column node is
+			// missing/orphaned (same dangling-reference issue) - one BO per
+			// table is still a coherent grain even without a distinct PK-column
+			// node to point at.
+			if keyColumnNodeID == "" {
+				keyColumnNodeID = classificationNodeID
+			}
 		}
 	}
-	configBytes, _ := json.Marshal(configJSON)
+	if classificationNodeID == "" || keyColumnNodeID == "" {
+		return nil, fmt.Errorf("cannot create business object %q: driver table catalog node not found (has the datasource been scanned, and is driverTableId valid?)", req.Name)
+	}
 
-	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s datasource=%v parent_id=%v name=%s", bo.TenantID, datasourceID, parentID, bo.Name)
-	fmt.Printf("[META DEBUG] tenant=%s datasource=%v parent_id=%v name=%s valid=%v\n", bo.TenantID, datasourceID, parentID, bo.Name, bo.DatasourceID.Valid)
+	// Insert BO
+	query := `
+		INSERT INTO public.business_objects (
+			id, tenant_id, model_id, bo_key, bo_name, description,
+			classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
+			driver_table_id, driver_table_name,
+			created_at, updated_at,
+			is_active, is_core
+		) VALUES (
+			$1, $2, $1, $3, $4, $5,
+			$6, $7, $7, $7,
+			$8, $9,
+			$10, $10,
+			$11, $12
+		)
+	`
+
+	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s driverTable=%v name=%s", bo.TenantID, driverTableID, bo.Name)
 
 	_, err := s.db.ExecContext(ctx, query,
-		bo.ID, bo.TenantID, bo.Key, bo.Name, bo.DisplayName, bo.TechnicalName,
-		bo.Description, bo.Icon, bo.IsCore, bo.ClonesFrom, bo.CloneParentKey,
-		bo.CloneParentDisplayName, bo.Category, parentID, datasourceID,
+		bo.ID, bo.TenantID, bo.Key, bo.DisplayName, bo.Description,
+		classificationNodeID, keyColumnNodeID,
 		driverTableID, bo.DriverTableName,
-		string(configBytes),
-		bo.CreatedAt, createdBy, bo.LastModifiedAt, lastModifiedBy,
-		bo.IsActive,
+		bo.CreatedAt,
+		bo.IsActive, bo.IsCore,
 	)
 
 	if err != nil {

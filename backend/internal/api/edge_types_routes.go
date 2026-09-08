@@ -79,7 +79,7 @@ func (h *edgeTypesHandler) handleListEdgeTypes() http.HandlerFunc {
 				FROM catalog_edge_type cet
 				LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 				LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
-				JOIN tenants t ON cet.tenant_id::uuid = t.id
+				JOIN public.tenants t ON cet.tenant_id::uuid = t.id
 				WHERE cet.tenant_id::text = $1
 				ORDER BY cet.edge_type_name
 			`
@@ -95,7 +95,7 @@ func (h *edgeTypesHandler) handleListEdgeTypes() http.HandlerFunc {
 				FROM catalog_edge_type cet
 				LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 				LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
-				JOIN tenants t ON cet.tenant_id::uuid = t.id
+				JOIN public.tenants t ON cet.tenant_id::uuid = t.id
 				WHERE cet.tenant_id::text = $1
 				  AND (cet.edge_type_name ILIKE $2 OR cet.description ILIKE $2)
 				ORDER BY cet.edge_type_name
@@ -202,7 +202,7 @@ func (h *edgeTypesHandler) handleCreateEdgeType() http.HandlerFunc {
 		}
 
 		var goldCopy bool
-		err = h.db.QueryRow("SELECT COALESCE(gold_copy, false) FROM tenants WHERE id::text = $1", et.TenantID).Scan(&goldCopy)
+		err = h.db.QueryRow("SELECT COALESCE(gold_copy, false) FROM public.tenants WHERE id::text = $1", et.TenantID).Scan(&goldCopy)
 		if err == nil {
 			if goldCopy {
 				core := "core"
@@ -259,7 +259,7 @@ func (h *edgeTypesHandler) handleGetEdgeType() http.HandlerFunc {
 			FROM catalog_edge_type cet
 			LEFT JOIN catalog_node_type cnt_subj ON cnt_subj.id = cet.source_node_type_id
 			LEFT JOIN catalog_node_type cnt_obj ON cnt_obj.id = cet.target_node_type_id
-			JOIN tenants t ON cet.tenant_id::uuid = t.id
+			JOIN public.tenants t ON cet.tenant_id::uuid = t.id
 			WHERE cet.id = $1 AND cet.tenant_id::text = $2
 		`
 

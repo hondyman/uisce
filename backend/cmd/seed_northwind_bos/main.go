@@ -28,7 +28,7 @@ func main() {
 	ctx := context.Background()
 
 	// Get uisce tenant specifically
-	tenantQuery := `SELECT id FROM tenants WHERE name = 'uisce' LIMIT 1`
+	tenantQuery := `SELECT id FROM public.tenants WHERE name = 'uisce' LIMIT 1`
 	var tenantID string
 	err = db.GetContext(ctx, &tenantID, tenantQuery)
 	if err != nil {

@@ -39,7 +39,7 @@ func (a *TenantActivities) RollbackPostgresTenant(ctx context.Context, p TenantP
 	if a.DB == nil {
 		return nil
 	}
-	query := `DELETE FROM tenants WHERE id = $1`
+	query := `DELETE FROM public.tenants WHERE id = $1`
 	_, err := a.DB.ExecContext(ctx, query, p.TenantID)
 	return err
 }

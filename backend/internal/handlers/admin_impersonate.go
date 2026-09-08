@@ -406,7 +406,7 @@ func (h *AdminImpersonateHandler) ListRecentSessions(w http.ResponseWriter, r *h
 		       s.mode,
 		       MAX(s.created_at) AS last_used_at
 		FROM platform_admin_audit s
-		LEFT JOIN tenants t ON t.id = s.target_tenant_id
+		LEFT JOIN public.tenants t ON t.id = s.target_tenant_id
 		WHERE s.event_type = $1
 		  AND s.admin_user_id = $2
 		GROUP BY s.target_tenant_id, t.name, s.admin_user_id, s.admin_role, s.mode
