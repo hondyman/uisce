@@ -259,6 +259,101 @@ rows regardless of what any Go handler believes, which is the only fix
 that survives the next handler someone writes without reading this
 document.
 
+## New Entry (2026-09-07): Tier 0 Write-Path Fix — A Replay Caught The Fix's Own Bug
+
+`bo_crud_handler.go`'s `extractTenantUUIDFromRequest` was the sweep's only
+replay-confirmed **live** write path: it fell back to an unauthenticated
+caller's raw `X-Tenant-ID` header, or to a hardcoded phantom tenant UUID
+(`00000000-...0001`) when even that was absent. Fixed in PR #29, landed on
+`main` at `62243f63f`.
+
+**The fix's first revision was itself broken, and unit tests did not catch
+it.** That revision read `jwtmiddleware.GetClaimsFromContext(r)` — a
+context key nothing on this router ever populates. The router's actual
+auth middleware, `appmid.AuthContextMiddleware`, sets `security.AuthInfo`
+under a different context key entirely. Six unit tests against the
+function passed cleanly, because they construct the request and populate
+exactly the context key the function under test reads — by construction,
+a unit test cannot see a wrong-context-key defect between the function and
+the router that's supposed to feed it. Only the three-replay protocol
+against a running server caught it: **replay case 3 (a legitimately
+authenticated caller, requesting their own tenant) came back 401.** That
+is the discriminating case — not a courtesy step in the protocol, the one
+that actually detects a broken fix, precisely because a fix that rejects
+everyone looks identical to a correct fix on the "attacker rejected" cases
+alone.
+
+Fixed to read `security.AuthInfo` directly, converging onto the same
+context and the same `security.ResolveTenantID` rule PR #27 already wired
+into `SecurityContextFromRequest`'s 67 call sites — deleting the second
+implementation (`jwtmiddleware.ValidateTenantAccess`) as a caller here
+rather than adding a third. 401 (no authentication) and 403 (authenticated,
+wrong tenant) were also split via a typed `tenantResolutionError`, where
+the first revision had flattened both to 401.
+
+Re-verified with the full three-replay protocol against a running instance:
+
+1. No auth, spoofed `X-Tenant-ID` → **401 at the auth boundary** (was:
+   deep inside the write path, masked by an unrelated schema-lookup
+   miss — the third occurrence today of "masked by luck, not by design")
+2. Multi-tenant JWT (tenants A, C; no singular `tenant_id` claim — the
+   construction needed so `AuthContextMiddleware` doesn't overwrite the
+   header first, see below) with header spoofing tenant B → **403
+   forbidden**, tenant B's data never touched
+3. Same JWT, header requesting its own tenant A → **proceeds past auth**,
+   landing on the same unrelated "business object definition not found"
+   404 as before — the point being *where* it fails, not merely *that*
+   it fails
+
+### Standing rule: the three-replay protocol is mandatory for auth/tenant-path changes
+
+This is the third time in two days router-level replay caught what
+compile-plus-unit-tests blessed: the dead `mcp_handlers.go` near-fix (a
+type never wired to the live server), the Fix 1 single-tenant false
+negative (the middleware silently neutralized the exploit shape), and now
+this wrong-context-key defect. Three independent failure modes, one
+detection method. Going forward: **any change to a tenant-resolution or
+authentication code path requires the three-replay protocol (unauthenticated,
+authenticated-wrong-tenant, authenticated-legitimate) against a running
+instance before merge — unit tests alone are not sufficient evidence for
+this class of change**, because they cannot observe a mismatch between
+what a function reads and what the real request pipeline actually writes.
+
+### Systemic finding: the header-overwrite asymmetry, confirmed at two call sites
+
+`AuthContextMiddleware` silently rewrites the client-supplied `X-Tenant-ID`
+header to the JWT's own tenant whenever the JWT carries a singular
+`tenant_id` claim — but leaves the header untouched when the JWT has
+`tenant_ids` with zero or 2+ entries and no singular claim. This is now
+confirmed behavior at two independent call sites (`SecurityContextFromRequest`
+during Fix 1's replay, and `bo_crud_handler.go` during this fix's replay),
+and it is the reason both vulnerabilities existed unnoticed: single-tenant
+users — the overwhelming common case — were silently protected by this
+side effect, while multi-tenant users were not, because for them the raw
+header survived to the vulnerable code unchanged. The asymmetry is why
+every replay of a tenant-pivot exploit in this codebase requires
+constructing a multi-tenant JWT without a singular claim — a
+single-tenant JWT cannot exercise the vulnerable path at all.
+
+**Follow-up design flag (not urgent — current state is safe, just
+asymmetric):** the header's meaning is currently decided in two places —
+`AuthContextMiddleware` rewrites it in one case, `security.ResolveTenantID`
+interprets it in the other. This is the same "same responsibility, two
+owners" shape that produced every finding in this sweep. The
+consolidation's own principle says there should be one interpretation
+point: middleware should pass the header through untouched in all cases,
+and `ResolveTenantID` should be the only code that ever assigns it
+meaning. Queued for a future PR, not blocking — flagging here so the next
+author doesn't rediscover the asymmetry the hard way.
+
+**The sweep's consolidation result, at the point Fix 1 and this fix are
+both merged:** `security.ResolveTenantID` is now the single canonical
+implementation. The second adapter this fix's first revision would have
+introduced (`jwtmiddleware.ValidateTenantAccess` as a second call site) was
+deleted rather than kept parallel. Six-plus independent implementations
+found by the sweep; two of the highest-severity call sites now converge on
+one.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:
