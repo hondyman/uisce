@@ -179,7 +179,11 @@ func (h *TenantAccessHandlers) listAccessibleTenants(w http.ResponseWriter, r *h
 // listAccessibleTenants above.
 func (h *TenantAccessHandlers) listAllTenants(w http.ResponseWriter, r *http.Request) {
 	auth, ok := security.AuthInfoFromContext(r.Context())
-	if !ok || !auth.IsGlobalAdmin {
+	if !ok {
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+		return
+	}
+	if !auth.IsGlobalAdmin {
 		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 		return
 	}
