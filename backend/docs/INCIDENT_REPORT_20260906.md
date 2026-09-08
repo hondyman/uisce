@@ -354,6 +354,58 @@ deleted rather than kept parallel. Six-plus independent implementations
 found by the sweep; two of the highest-severity call sites now converge on
 one.
 
+## New Entry (2026-09-08): Tenant-Enumeration Hotfix, and a Killed Hypothesis
+
+Triage of `DISCOVERY_UNAUTH_ROUTES.md` proposed a structural hypothesis:
+that the 93 unauthenticated `200`s clustered by route group because
+specific `r.Route(...)` groups were registered without the auth
+middleware newer groups received. Checked directly against `api.go`: only
+**one** auth-related middleware call exists on the entire router
+(`r.Use(appmid.AuthContextMiddleware(secMgr))`, applied globally, plus one
+commented-out `SessionAuthMiddleware` that was never activated). There is
+no per-group auth gate to have been omitted from anywhere. The hypothesis
+is killed — the real explanation is the same one this entire sweep keeps
+finding: `AuthContextMiddleware` is enrichment-only, and each of ~258
+handlers (93 open + 165 hand-rolled-401) independently decided for itself
+whether to check `security.AuthInfoFromContext` and reject. The apparent
+clustering in `TenantAccessHandlers.RegisterRoutes` (`/tenants/all`,
+`/tenants/gold-copy`, both `/admin/tenants/.../configuration` routes,
+`/rest/datasources`, `/rest/products`) isn't a middleware gap — it's one
+handler file where nobody happened to add the check, same as everywhere
+else. This *confirms* Fix 2's shape (a global gate is the only
+ordering-independent fix) rather than suggesting a narrower, group-level
+patch would do.
+
+Three routes were hotfixed ahead of the gate, per triage (PR #31, merged
+`80c95e1b9`), since they were identified as accelerants for the
+IDOR class rather than ordinary exposures:
+
+- `GET /api/tenants/all` — returned every tenant's ID and display name to
+  any unauthenticated caller. Every tenant-pivot exploit this week needed
+  a real tenant UUID; this converted "guess one" into "pick from a menu."
+  Now requires global-admin.
+- `GET /api/tenants/gold-copy` — identified the gold-copy tenant (the one
+  tenant multiple bypass paths, including the old `bo_crud_handler.go`
+  fallback, treat as always-allowed) with no auth. Now requires any
+  authenticated caller.
+- `GET /_routes` — an unauthenticated dump of the entire route map, handing
+  an attacker a menu of every admin endpoint, including the ones just
+  hotfixed above. Now requires global-admin.
+
+All three replay-verified per the mandatory three-replay protocol
+(unauthenticated rejected / wrong-privilege rejected where applicable /
+legitimate caller proceeds) before merge.
+
+**Standing observation carried into Fix 2's design:** 165 of 410 probed
+`GET` routes already return 401 — meaning roughly 40% of this platform's
+authentication is hand-rolled, per-handler, in a codebase that has
+demonstrated repeatedly that per-handler anything drifts. Fix 2 doesn't
+just close the 93 unauthenticated routes; it makes those 165 hand-rolled
+checks redundant. The end state this points toward is deleting them once
+the global gate is proven — one gate, one tenant rule, zero per-handler
+dialects — the same consolidation shape that just finished for tenant
+resolution, one layer up.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:
