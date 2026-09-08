@@ -538,44 +538,46 @@ export default function GlossaryExplorer() {
 
       {isGenModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: C.panel, padding: 24, borderRadius: 12, width: 800, maxHeight: '80vh', overflow: 'auto', border: `1px solid ${C.border}` }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Generate Semantic Terms from Columns</h2>
-            {columnsLoading ? <Spinner /> : (
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <th style={{ padding: '8px' }}><input type="checkbox" onChange={e => {
-                      if (e.target.checked) setSelectedGenGroups(new Set(genGroups.map(g => g.suggestedName)));
-                      else setSelectedGenGroups(new Set());
-                    }} /></th>
-                    <th style={{ padding: '8px' }}>Suggested Name</th>
-                    <th style={{ padding: '8px' }}>Columns Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {genGroups.map((g, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: '8px' }}>
-                        <input type="checkbox" checked={selectedGenGroups.has(g.suggestedName)} onChange={e => {
-                          const next = new Set(selectedGenGroups);
-                          if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
-                          setSelectedGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input style={{ ...inputStyle, marginBottom: 0, width: 'auto' }} value={g.suggestedName} onChange={e => {
-                          const next = [...genGroups];
-                          next[i].suggestedName = e.target.value;
-                          setGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>{g.columns.length}</td>
+          <div style={{ background: C.panel, borderRadius: 12, width: 800, maxHeight: '80vh', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ margin: 0, padding: '24px 24px 16px 24px' }}>Generate Semantic Terms from Columns</h2>
+            <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '0 24px', minHeight: 0 }}>
+              {columnsLoading ? <Spinner /> : (
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <th style={{ padding: '8px' }}><input type="checkbox" onChange={e => {
+                        if (e.target.checked) setSelectedGenGroups(new Set(genGroups.map(g => g.suggestedName)));
+                        else setSelectedGenGroups(new Set());
+                      }} /></th>
+                      <th style={{ padding: '8px' }}>Suggested Name</th>
+                      <th style={{ padding: '8px' }}>Columns Count</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
+                  </thead>
+                  <tbody>
+                    {genGroups.map((g, i) => (
+                      <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
+                        <td style={{ padding: '8px' }}>
+                          <input type="checkbox" checked={selectedGenGroups.has(g.suggestedName)} onChange={e => {
+                            const next = new Set(selectedGenGroups);
+                            if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
+                            setSelectedGenGroups(next);
+                          }} />
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          <input style={{ ...inputStyle, marginBottom: 0, width: 'auto' }} value={g.suggestedName} onChange={e => {
+                            const next = [...genGroups];
+                            next[i].suggestedName = e.target.value;
+                            setGenGroups(next);
+                          }} />
+                        </td>
+                        <td style={{ padding: '8px' }}>{g.columns.length}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ flex: '0 0 auto', display: 'flex', gap: 12, justifyContent: 'flex-end', padding: '16px 24px 24px 24px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={() => setIsGenModalOpen(false)} style={{ background: 'transparent', color: C.text, border: 'none', cursor: 'pointer' }}>Cancel</button>
               <button onClick={() => generateColumns(genGroups.filter(g => selectedGenGroups.has(g.suggestedName)))} style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: 'pointer' }}>Create Selected</button>
             </div>

@@ -50,6 +50,7 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/terms", h.CreateTerm)
 		r.Delete("/terms/{id}", h.DeleteTerm)
 		r.Post("/edges", h.CreateEdge)
+		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
 		r.Put("/edges/{id}", h.UpdateEdge)
 		r.Delete("/edges/{id}", h.DeleteEdge)
 		// Technical assets & graph endpoints for selected term detail view
@@ -2053,4 +2054,125 @@ func (h *GlossaryHandler) ProfileSample(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// GenerateSemanticTerms creates one semantic_term catalog node per requested
+// group, linked via MAPS_TO edges to the given physical column nodes.
+// This is the backend counterpart to the frontend's "Generate from Columns"
+// action, which previously called a route that never existed
+// (POST /api/glossary/generate-semantic-terms was a 404).
+func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		Name      string   `json:"name"`
+		ColumnIDs []string `json:"column_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.ColumnIDs) == 0 {
+		http.Error(w, "column_ids is required", http.StatusBadRequest)
+		return
+	}
+
+	datasourceID := secCtx.DatasourceID
+	if datasourceID == "" {
+		_ = h.db.QueryRow(
+			`SELECT tenant_datasource_id FROM catalog_node WHERE id = $1 AND tenant_datasource_id IS NOT NULL AND tenant_datasource_id != ''`,
+			req.ColumnIDs[0],
+		).Scan(&datasourceID)
+	}
+
+	// Resolve (or create) the semantic_term catalog_node_type, same as CreateTerm.
+	var nodeTypeID string
+	err = h.db.QueryRow(`SELECT id FROM catalog_node_type WHERE catalog_type_name = 'semantic_term' LIMIT 1`).Scan(&nodeTypeID)
+	if err == sql.ErrNoRows {
+		err = h.db.QueryRow(
+			`INSERT INTO catalog_node_type (tenant_id, catalog_type_name, created_at, updated_at) VALUES ($1, 'semantic_term', NOW(), NOW()) RETURNING id`,
+			secCtx.TenantID,
+		).Scan(&nodeTypeID)
+	}
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve semantic_term node type: %v", err)
+		http.Error(w, "Failed to resolve semantic term type", http.StatusInternalServerError)
+		return
+	}
+
+	qualifiedPath := fmt.Sprintf("semantic_term/%s", req.Name)
+	var termID string
+	err = h.db.QueryRow(
+		`SELECT id FROM catalog_node WHERE node_type_id = $1 AND (qualified_path = $2 OR node_name = $3) AND ((tenant_datasource_id = $4) OR (tenant_datasource_id IS NULL AND $4 = '')) LIMIT 1`,
+		nodeTypeID, qualifiedPath, req.Name, datasourceID,
+	).Scan(&termID)
+	if err != nil {
+		err = h.db.QueryRow(
+			`INSERT INTO catalog_node (node_name, node_type_id, tenant_id, tenant_datasource_id, properties, qualified_path, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, NOW(), NOW()) RETURNING id`,
+			req.Name, nodeTypeID, secCtx.TenantID, datasourceID, qualifiedPath,
+		).Scan(&termID)
+		if err != nil {
+			log.Printf("[GenerateSemanticTerms] failed to create term %q: %v", req.Name, err)
+			http.Error(w, "Failed to create semantic term: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Resolve (or create) the MAPS_TO edge type, same lookup pattern as CreateEdge.
+	var mapsToEdgeTypeID string
+	err = h.db.QueryRow(`SELECT id FROM catalog_edge_type WHERE edge_type_name = 'MAPS_TO' LIMIT 1`).Scan(&mapsToEdgeTypeID)
+	if err == sql.ErrNoRows {
+		err = h.db.QueryRow(
+			`INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at) VALUES ($1, 'MAPS_TO', NOW(), NOW()) RETURNING id`,
+			secCtx.TenantID,
+		).Scan(&mapsToEdgeTypeID)
+	}
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve MAPS_TO edge type: %v", err)
+		http.Error(w, "Failed to resolve MAPS_TO edge type", http.StatusInternalServerError)
+		return
+	}
+
+	linked := 0
+	for _, colID := range req.ColumnIDs {
+		if colID == "" {
+			continue
+		}
+		var existingEdgeID string
+		err := h.db.QueryRow(
+			`SELECT id FROM catalog_edge WHERE source_node_id = $1 AND target_node_id = $2 AND edge_type_id = $3 LIMIT 1`,
+			termID, colID, mapsToEdgeTypeID,
+		).Scan(&existingEdgeID)
+		if err == nil && existingEdgeID != "" {
+			linked++
+			continue
+		}
+		_, err = h.db.Exec(
+			`INSERT INTO catalog_edge (id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, properties, edge_type_id, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6, NOW(), NOW())`,
+			uuid.New().String(), secCtx.TenantID, datasourceID, termID, colID, mapsToEdgeTypeID,
+		)
+		if err != nil {
+			log.Printf("[GenerateSemanticTerms] failed to link column %s to term %s: %v", colID, termID, err)
+			continue
+		}
+		linked++
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":             termID,
+		"name":           req.Name,
+		"columns_linked": linked,
+		"columns_total":  len(req.ColumnIDs),
+	})
 }
