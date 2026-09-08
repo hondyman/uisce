@@ -845,6 +845,19 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 	// Apply Auth Context Middleware globally (does not block, but populates context)
 	r.Use(appmid.AuthContextMiddleware(secMgr))
+	// Route-layer authentication gate (Fix 2, backend/docs/INCIDENT_REPORT_20260906.md).
+	// Mode is env-controlled (AUTH_GATE_MODE=off|shadow|enforce, default off) so this
+	// is inert until deliberately turned on. Shadow mode logs what would be blocked
+	// without changing any response - see backend/docs/DISCOVERY_UNAUTH_ROUTES.md for
+	// the discovery pass this allowlist is seeded from. Runs immediately after
+	// AuthContextMiddleware so security.AuthInfo is already in context, and re-uses
+	// that result rather than re-validating the JWT itself.
+	r.Use(appmid.AuthGateMiddleware(appmid.AuthGateConfig{
+		Mode: appmid.AuthGateModeFromEnv(),
+		Allowlist: []string{
+			"/health",
+		},
+	}))
 	// Resolve each request's IdP groups to a functional role / clearance level
 	// via security.identity_profile_mappings. Was defined but never wired up —
 	// EnrichSubjectAttributes returns "unassigned_operator"/"L1" when a user's
