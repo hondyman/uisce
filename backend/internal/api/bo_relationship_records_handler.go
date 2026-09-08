@@ -102,7 +102,15 @@ func splitSchemaTable(qualified string) (schema, table string) {
 
 // HandleListRelatedRecords lists the "many" side of a relationship for one parent record.
 func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 	relKey := chi.URLParam(r, "relKey")
@@ -184,7 +192,15 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 
 // HandleCreateRelatedRecord creates a child record, forcing the FK to the parent server-side.
 func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 	relKey := chi.URLParam(r, "relKey")
@@ -273,7 +289,15 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 
 // HandleUpdateRelatedRecord updates a child record, scoped to both its own key and the parent FK.
 func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 	relKey := chi.URLParam(r, "relKey")
@@ -364,7 +388,15 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 
 // HandleDeleteRelatedRecord deletes a child record, scoped to both its own key and the parent FK.
 func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http.Request) {
-	tenantID := extractTenantUUIDFromRequest(r)
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 	relKey := chi.URLParam(r, "relKey")
