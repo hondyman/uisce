@@ -153,6 +153,8 @@ generate_env_file() {
 
 generate_composite_secrets() {
     local output_path="$1"
+    local prev_database_url="$2"
+    local prev_postgres_dsn="$3"
     local db_pass="${POSTGRES_PASSWORD:-postgres}"
     local db_user="${POSTGRES_USER:-postgres}"
     local db_host="${DB_HOST:-100.84.50.65}"
@@ -164,11 +166,34 @@ generate_composite_secrets() {
         return
     fi
 
+    # generate_env_file truncates $output_path on every run and only
+    # repopulates DATABASE_URL/POSTGRES_DSN from Infisical when the pull
+    # succeeds. Before this guard existed, an unreachable Infisical server
+    # silently clobbered a working TLS-configured DSN (sslmode=verify-full
+    # plus client certs) with a plaintext sslmode=disable default on every
+    # single run - see backend/docs/INCIDENT_REPORT_20260906.md. Prefer
+    # whatever DSN was already in this file before this run truncated it;
+    # only fall back to the plaintext default, loudly, if there was
+    # nothing to preserve (e.g. a genuinely first-time bootstrap).
     if ! grep -q "^DATABASE_URL=" "$output_path"; then
-        echo "DATABASE_URL=postgres://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        if [ -n "$prev_database_url" ]; then
+            # Quoted: the DSN contains "&", which an unquoted assignment
+            # in a sourced .env file hands to the shell as a job-control
+            # operator, silently truncating the value to empty the moment
+            # anything sources this file with plain `source`/`. `.
+            echo "DATABASE_URL=\"${prev_database_url}\"" >> "$output_path"
+        else
+            warn "No DATABASE_URL from Infisical or a prior $output_path - writing an insecure sslmode=disable default. This should only happen on a genuine first-time bootstrap."
+            echo "DATABASE_URL=postgres://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        fi
     fi
     if ! grep -q "^POSTGRES_DSN=" "$output_path"; then
-        echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        if [ -n "$prev_postgres_dsn" ]; then
+            echo "POSTGRES_DSN=\"${prev_postgres_dsn}\"" >> "$output_path"
+        else
+            warn "No POSTGRES_DSN from Infisical or a prior $output_path - writing an insecure sslmode=disable default. This should only happen on a genuine first-time bootstrap."
+            echo "POSTGRES_DSN=postgresql://${db_user}:${db_pass}@${db_host}:${db_port}/${db_name}?sslmode=disable" >> "$output_path"
+        fi
     fi
     if ! grep -q "^REDIS_URL=" "$output_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
@@ -209,6 +234,24 @@ generate_composite_secrets() {
     fi
 }
 
+# capture_env_value prints the current value of KEY from a .env file
+# before generate_env_file truncates it, so generate_composite_secrets can
+# preserve it instead of clobbering it with an insecure default. Strips a
+# surrounding pair of double quotes if present (generate_env_file writes
+# values quoted; hand-edited files may not be).
+capture_env_value() {
+    local path="$1"
+    local key="$2"
+    [ -f "$path" ] || return 0
+    local line
+    line=$(grep "^${key}=" "$path" | tail -n1)
+    [ -n "$line" ] || return 0
+    line="${line#${key}=}"
+    line="${line%\"}"
+    line="${line#\"}"
+    echo "$line"
+}
+
 main() {
     parse_args "$@"
     check_infisical
@@ -231,12 +274,17 @@ main() {
         eval "$(echo "$env_vars" | while read -r line; do [ -n "$line" ] && echo "export $line"; done)"
     fi
 
+    local prev_db_url prev_dsn
+    prev_db_url=$(capture_env_value "$root_env" "DATABASE_URL")
+    prev_dsn=$(capture_env_value "$root_env" "POSTGRES_DSN")
     generate_env_file "$all_secrets" "$root_env" "root"
-    generate_composite_secrets "$root_env"
+    generate_composite_secrets "$root_env" "$prev_db_url" "$prev_dsn"
 
     if [ -d "$ROOT_DIR/backend" ]; then
+        prev_db_url=$(capture_env_value "$backend_env" "DATABASE_URL")
+        prev_dsn=$(capture_env_value "$backend_env" "POSTGRES_DSN")
         generate_env_file "$all_secrets" "$backend_env" "backend"
-        generate_composite_secrets "$backend_env"
+        generate_composite_secrets "$backend_env" "$prev_db_url" "$prev_dsn"
     fi
 
     if [ -d "$ROOT_DIR/frontend" ]; then
@@ -244,13 +292,17 @@ main() {
     fi
 
     if [ -d "$ROOT_DIR/calendar-service" ]; then
+        prev_db_url=$(capture_env_value "$calendar_env" "DATABASE_URL")
+        prev_dsn=$(capture_env_value "$calendar_env" "POSTGRES_DSN")
         generate_env_file "$all_secrets" "$calendar_env" "calendar-service"
-        generate_composite_secrets "$calendar_env"
+        generate_composite_secrets "$calendar_env" "$prev_db_url" "$prev_dsn"
     fi
 
     if [ -d "$ROOT_DIR/rebalancing" ]; then
+        prev_db_url=$(capture_env_value "$rebalancing_env" "DATABASE_URL")
+        prev_dsn=$(capture_env_value "$rebalancing_env" "POSTGRES_DSN")
         generate_env_file "$all_secrets" "$rebalancing_env" "rebalancing"
-        generate_composite_secrets "$rebalancing_env"
+        generate_composite_secrets "$rebalancing_env" "$prev_db_url" "$prev_dsn"
     fi
 
     log "Done. Generated .env files:"
