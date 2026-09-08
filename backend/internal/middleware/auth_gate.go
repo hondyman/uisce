@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -38,20 +39,48 @@ type AuthGateConfig struct {
 	// only: an entry is added when shadow mode observes a real
 	// pre-authentication caller and a reason is written down, never by
 	// default or by inertia.
+	//
+	// This is exact-path-or-prefix matching only. The moment this list
+	// grows past a handful of literal paths, it will need chi-route-
+	// pattern awareness (e.g. matching "/api/bo/{boKey}/records" as a
+	// pattern rather than one prefix per concrete boKey) - decide that
+	// matching contract before the list grows, not after the first
+	// pattern-shaped entry is needed under time pressure.
 	Allowlist []string
 }
 
-// AuthGateModeFromEnv reads AUTH_GATE_MODE ("off" | "shadow" | "enforce"),
-// defaulting to "off" for any unset or unrecognized value so this gate is
-// inert until deliberately turned on.
+// AuthGateModeFromEnv reads AUTH_GATE_MODE ("off" | "shadow" | "enforce").
+// Unset (empty) is treated as "off" - the gate must be inert until someone
+// deliberately turns it on. An unrecognized non-empty value is NOT treated
+// the same way: it panics at startup rather than silently falling back to
+// "off".
+//
+// This asymmetry is deliberate. A silent fail-open on typos (e.g.
+// AUTH_GATE_MODE=enforc) is the same "control that exists on paper" failure
+// this sweep has already caught three times - branch protection's
+// enforce_admins defaulting to false, AuthContextMiddleware's header
+// rewrite being mistaken for a real gate, and CI's red baseline making a
+// broken check look present. Once "enforce" is the intended production
+// mode, a typo that silently degrades to "off" means the operator believes
+// the platform is protected and it isn't - so a loud startup crash is the
+// correct failure mode here, not a quiet default.
 func AuthGateModeFromEnv() AuthGateMode {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv("AUTH_GATE_MODE"))) {
+	raw := strings.TrimSpace(os.Getenv("AUTH_GATE_MODE"))
+	if raw == "" {
+		return AuthGateOff
+	}
+	switch strings.ToLower(raw) {
+	case string(AuthGateOff):
+		return AuthGateOff
 	case string(AuthGateShadow):
 		return AuthGateShadow
 	case string(AuthGateEnforce):
 		return AuthGateEnforce
 	default:
-		return AuthGateOff
+		panic("AUTH_GATE_MODE has an unrecognized value " + strconv.Quote(raw) +
+			" - must be unset, \"off\", \"shadow\", or \"enforce\". Refusing to silently " +
+			"fall back to \"off\": once this gate is meant to be enforcing, a typo that " +
+			"silently disables it is worse than a startup crash.")
 	}
 }
 
@@ -68,6 +97,29 @@ func isAllowlisted(path string, allowlist []string) bool {
 		}
 	}
 	return false
+}
+
+// statusCapturingWriter records the status code a handler wrote without
+// altering anything about the write itself - WriteHeader and Write are
+// both forwarded unchanged. Used only to enrich the shadow-mode violation
+// log line; must never change response bytes, headers, or timing in any
+// observable way. See TestAuthGate_Shadow_NeverAltersResponse, which pins
+// this property directly rather than trusting this comment.
+type statusCapturingWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (s *statusCapturingWriter) WriteHeader(code int) {
+	s.status = code
+	s.ResponseWriter.WriteHeader(code)
+}
+
+func (s *statusCapturingWriter) Write(b []byte) (int, error) {
+	if s.status == 0 {
+		s.status = http.StatusOK
+	}
+	return s.ResponseWriter.Write(b)
 }
 
 // AuthGateMiddleware is the route-layer authentication gate (Fix 2 in
@@ -102,22 +154,33 @@ func AuthGateMiddleware(cfg AuthGateConfig) func(http.Handler) http.Handler {
 				return
 			}
 
-			// Violation: no AuthInfo, route not allowlisted. In shadow mode
-			// this is pure observation - it must never change response
-			// behavior, so the classified reading (expected-violation vs.
-			// legitimate-pre-auth-traffic vs. a caller expecting the route
-			// to already be gated) stays uncontaminated by the gate itself.
-			logging.GetLogger().Sugar().Warnf(
-				"[AuthGateMiddleware] mode=%s violation: %s %s has no AuthInfo and is not allowlisted",
-				cfg.Mode, r.Method, r.URL.Path,
-			)
-
-			if cfg.Mode == AuthGateShadow {
-				next.ServeHTTP(w, r)
+			if cfg.Mode == AuthGateEnforce {
+				logging.GetLogger().Sugar().Warnf(
+					"[AuthGateMiddleware] mode=enforce violation: %s %s has no AuthInfo and is not allowlisted - rejected",
+					r.Method, r.URL.Path,
+				)
+				http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 				return
 			}
 
-			http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+			// Shadow mode: pure observation. Wrap the writer only to learn
+			// the status the handler itself produced - every byte, header,
+			// and status code the wrapper sees is forwarded unchanged, so
+			// this adds a log line and nothing else. The captured status is
+			// what turns the log into a mechanical classification: "200 +
+			// no-auth + not-allowlisted" is the real exposure list, "401 +
+			// no-auth" is a handler that already gates itself (redundant
+			// once this gate enforces, not currently unsafe).
+			capture := &statusCapturingWriter{ResponseWriter: w}
+			next.ServeHTTP(capture, r)
+			status := capture.status
+			if status == 0 {
+				status = http.StatusOK
+			}
+			logging.GetLogger().Sugar().Warnf(
+				"[AuthGateMiddleware] mode=shadow violation: %s %s has no AuthInfo and is not allowlisted (handler responded %d)",
+				r.Method, r.URL.Path, status,
+			)
 		})
 	}
 }
