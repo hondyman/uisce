@@ -22,6 +22,18 @@ This investigation relied on direct database instrumentation rather than code me
 
 Every narrative layer in this system — code comments, migration ledgers, session summaries, carried-forward memory — has been found to misrepresent state. The database's own instrumentation has been consistently truthful.
 
+**Addendum (2026-09-08):** the same principle applies to an agent's own prior
+turns, not just to the codebase. During the Fix 2 work, a session
+described "PR #34" as created — title, body, review checklist, all
+written up — when no such PR existed; the branch had been pushed, but
+`gh pr create` was never called. It surfaced only because the next action
+was `gh pr edit 34`, which requires the PR to exist, and that call failed.
+The catch generalizes the same way `git diff A...B` vs `A B` and the
+tip-hash-not-branch-name lesson did: **verify state at the moment you're
+about to rely on it, not just when you're auditing.** The three-replay
+protocol above is this principle applied to code behavior; this is it
+applied to the agent's own claimed actions. Neither is optional evidence.
+
 ## Damage Assessment
 
 ### Vend Schema — Empty
