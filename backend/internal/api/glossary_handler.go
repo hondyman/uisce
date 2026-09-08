@@ -2255,11 +2255,28 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 		nodeTypeID, secCtx.TenantID, qualifiedPath, name,
 	).Scan(&termID)
 	reused := err == nil && termID != ""
+	definitionSource := ""
 	if !reused {
+		properties := "{}"
+		if h.abbrevSvc != nil {
+			var sourceContext string
+			_ = h.db.QueryRow(`SELECT qualified_path FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&sourceContext)
+			svcCtx := context.WithValue(r.Context(), "tenant_id", secCtx.TenantID)
+			if def, defErr := h.abbrevSvc.GenerateStandardDefinition(svcCtx, name, sourceContext); defErr != nil {
+				log.Printf("[GenerateSemanticTerms] definition generation failed for %q: %v", name, defErr)
+			} else {
+				definitionSource = def.Source
+				propsBytes, _ := json.Marshal(map[string]string{
+					"description": def.Definition,
+					"source":      def.Source,
+				})
+				properties = string(propsBytes)
+			}
+		}
 		err = h.db.QueryRow(
 			`INSERT INTO catalog_node (node_name, node_type_id, tenant_id, tenant_datasource_id, properties, qualified_path, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, '{}'::jsonb, $5, NOW(), NOW()) RETURNING id`,
-			name, nodeTypeID, secCtx.TenantID, datasourceID, qualifiedPath,
+			 VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW(), NOW()) RETURNING id`,
+			name, nodeTypeID, secCtx.TenantID, datasourceID, properties, qualifiedPath,
 		).Scan(&termID)
 		if err != nil {
 			log.Printf("[GenerateSemanticTerms] failed to create term %q: %v", name, err)
@@ -2311,10 +2328,11 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":             termID,
-		"name":           name,
-		"reused_existing": reused,
-		"columns_linked": linked,
-		"columns_total":  len(req.ColumnIDs),
+		"id":                termID,
+		"name":              name,
+		"reused_existing":   reused,
+		"definition_source": definitionSource,
+		"columns_linked":    linked,
+		"columns_total":     len(req.ColumnIDs),
 	})
 }
