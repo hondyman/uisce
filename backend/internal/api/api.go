@@ -891,7 +891,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// admins; the debugging value doesn't require it be public.
 	r.Get("/_routes", func(w http.ResponseWriter, req *http.Request) {
 		auth, ok := security.AuthInfoFromContext(req.Context())
-		if !ok || !auth.IsGlobalAdmin {
+		if !ok {
+			http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
+			return
+		}
+		if !auth.IsGlobalAdmin {
 			http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 			return
 		}
