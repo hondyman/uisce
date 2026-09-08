@@ -454,6 +454,51 @@ func (s *AbbreviationService) ScanForAbbreviations(ctx context.Context) ([]strin
 	return candidates, nil
 }
 
+// SuggestExpansionsInContext behaves like SuggestExpansions but tells the LLM
+// the full source name (e.g. the raw column name "ex_date") the candidates
+// were tokenized from, so an ambiguous token like "EX" gets expanded the way
+// it's actually used in that name ("ex-dividend date") rather than the most
+// generic reading ("exchange").
+func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string) (map[string]string, error) {
+	if s.llmProvider == nil {
+		return nil, fmt.Errorf("LLM provider not configured")
+	}
+	if len(candidates) == 0 {
+		return map[string]string{}, nil
+	}
+
+	prompt := fmt.Sprintf(`You are a data architect expert in Wealth Management and Financial domains, grounded in
+industry-standard terminology from FINRA (Financial Industry Regulatory Authority), the
+EDM Council's Financial Industry Business Ontology (FIBO), and ISO 20022.
+
+These potential abbreviations were extracted from the database column name %q. Use that
+full context to resolve any abbreviation that has more than one common meaning (e.g. "EX" in
+"ex_date" means "ex-dividend", not "exchange"; "EX" in "exch_cd" means "exchange").
+Abbreviations to expand: %s
+
+Return ONLY a valid JSON object where keys are the abbreviations and values are the suggested full words (in UPPERCASE).
+If you are unsure or it looks like a full word already, exclude it from the JSON.
+Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
+`, contextHint, strings.Join(candidates, ", "))
+
+	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
+	if err != nil {
+		return nil, fmt.Errorf("LLM generation failed: %w", err)
+	}
+
+	cleanResponse := strings.TrimSpace(response)
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
+	cleanResponse = strings.TrimPrefix(cleanResponse, "```")
+	cleanResponse = strings.TrimSuffix(cleanResponse, "```")
+	cleanResponse = strings.TrimSpace(cleanResponse)
+
+	var suggestions map[string]string
+	if err := json.Unmarshal([]byte(cleanResponse), &suggestions); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	}
+	return suggestions, nil
+}
+
 // SuggestExpansions uses LLM to suggest expansions for abbreviations
 func (s *AbbreviationService) SuggestExpansions(ctx context.Context, candidates []string) (map[string]string, error) {
 	if s.llmProvider == nil {

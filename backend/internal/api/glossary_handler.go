@@ -2156,7 +2156,7 @@ func (h *GlossaryHandler) deriveTermName(ctx context.Context, tenantID, rawName 
 	}
 
 	if len(unresolvedTokens) > 0 {
-		suggestions, err := h.abbrevSvc.SuggestExpansions(svcCtx, unresolvedTokens)
+		suggestions, err := h.abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName)
 		if err != nil {
 			log.Printf("[deriveTermName] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
 		} else {
