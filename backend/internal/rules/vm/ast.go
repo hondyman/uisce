@@ -56,9 +56,22 @@ type Literal struct {
 	Value float64
 }
 
+// FuncCall represents a named function applied to a list of argument
+// expressions, e.g. SUM(field) or NPV(rate, cash_flows). Added to let the
+// same rule/calc AST express aggregate and financial functions used by
+// calculated semantic terms, not just the scalar arithmetic BinaryExpr
+// already supported. Backends (VM compiler, SQL compiler, ...) that don't
+// yet support a given function name should fail explicitly rather than
+// silently mis-evaluate.
+type FuncCall struct {
+	Name string
+	Args []ExprNode
+}
+
 func (*BinaryExpr) exprNode() {}
 func (*FieldRef) exprNode()   {}
 func (*Literal) exprNode()    {}
+func (*FuncCall) exprNode()   {}
 
 type Expression struct {
 	Root ExprNode
@@ -132,6 +145,22 @@ func unmarshalExprNode(data []byte) (ExprNode, error) {
 			return nil, err
 		}
 		return &be, nil
+	}
+	if name, ok := m["func"].(string); ok {
+		rawArgs, _ := m["args"].([]any)
+		args := make([]ExprNode, 0, len(rawArgs))
+		for _, ra := range rawArgs {
+			argData, err := json.Marshal(ra)
+			if err != nil {
+				return nil, err
+			}
+			argNode, err := unmarshalExprNode(argData)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, argNode)
+		}
+		return &FuncCall{Name: name, Args: args}, nil
 	}
 	if path, ok := m["path"].(string); ok {
 		return &FieldRef{Path: path}, nil
