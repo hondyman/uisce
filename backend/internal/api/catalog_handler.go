@@ -130,7 +130,11 @@ func (h *CatalogHandler) handleRemoveMapping(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleGetSemanticTermsByTable returns semantic terms linked to columns from a specific driver table
+// handleGetSemanticTermsByTable returns semantic terms linked to columns from a
+// specific driver table, plus every calculated term for the tenant (calculated
+// terms - term_type "calculated" - aren't linked to any physical column, so
+// they'd never show up via the column-edge join alone; they're eligible for
+// any business object regardless of driver table).
 func (h *CatalogHandler) handleGetSemanticTermsByTable(w http.ResponseWriter, r *http.Request) {
 	tableID := chi.URLParam(r, "tableId")
 	datasourceID := r.Header.Get("X-Tenant-Datasource-ID")
@@ -146,7 +150,15 @@ func (h *CatalogHandler) handleGetSemanticTermsByTable(w http.ResponseWriter, r 
 		return
 	}
 
-	terms, err := h.boService.GetSemanticTermsByTable(r.Context(), tableID, datasourceID)
+	tenantID := ""
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
+		tenantID = claims.TenantID
+	}
+	if tenantID == "" {
+		tenantID = r.Header.Get("X-Tenant-ID")
+	}
+
+	terms, err := h.boService.GetSemanticTermsByTable(r.Context(), tableID, datasourceID, tenantID)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Warning in handleGetSemanticTermsByTable for table %s: %v", tableID, err)
 		terms = []models.CatalogNode{}

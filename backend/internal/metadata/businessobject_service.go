@@ -3046,6 +3046,7 @@ func (s *BusinessObjectService) GetSemanticTermsByTable(
 	ctx context.Context,
 	tableID string,
 	datasourceID string,
+	tenantID string,
 ) ([]models.CatalogNode, error) {
 	if tableID == "" {
 		return []models.CatalogNode{}, nil
@@ -3146,7 +3147,52 @@ func (s *BusinessObjectService) GetSemanticTermsByTable(
 	err := s.db.SelectContext(ctx, &terms, query, args...)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Warning in GetSemanticTermsByTable: %v", err)
-		return []models.CatalogNode{}, nil
+		terms = []models.CatalogNode{}
+	}
+
+	// Calculated terms (term_type "calculated") aren't linked to any physical
+	// column - there's nothing for the edge-join above to find - so they're
+	// fetched separately and appended. They're tenant-wide, not scoped to this
+	// driver table, since a calculation can apply to any business object.
+	if tenantID != "" {
+		calcQuery := `
+			SELECT DISTINCT
+				st.id,
+				st.node_name,
+				st.qualified_path,
+				st.node_type_id,
+				st.tenant_datasource_id,
+				COALESCE(st.node_type, 'semantic_term') AS catalog_type,
+				st.description,
+				st.properties,
+				COALESCE(st.created_at, NOW()) AS created_at,
+				COALESCE(st.updated_at, NOW()) AS updated_at,
+				st.tenant_id
+			FROM catalog_node st
+			WHERE st.tenant_id = $1::uuid
+			  AND (
+			      st.node_type_id = '820b942a-9c9e-4abc-acdc-84616db33098'
+			      OR st.node_type = 'semantic_term'
+			      OR st.qualified_path LIKE 'semantic_term/%'
+			      OR st.qualified_path LIKE 'semantic/%'
+			  )
+			  AND st.properties->>'term_type' = 'calculated'
+			ORDER BY st.node_name
+		`
+		var calcTerms []models.CatalogNode
+		if err := s.db.SelectContext(ctx, &calcTerms, calcQuery, tenantID); err != nil {
+			logging.GetLogger().Sugar().Warnf("Warning loading calculated terms in GetSemanticTermsByTable: %v", err)
+		} else {
+			seen := make(map[string]bool, len(terms))
+			for _, t := range terms {
+				seen[t.ID] = true
+			}
+			for _, t := range calcTerms {
+				if !seen[t.ID] {
+					terms = append(terms, t)
+				}
+			}
+		}
 	}
 
 	return terms, nil
@@ -3271,7 +3317,7 @@ func (s *BusinessObjectService) IntrospectTable(
 	// 4. Query mapped semantic terms if table has a catalog node ID
 	termMap := make(map[string]models.CatalogNode)
 	if tableID != "" && datasourceID != "" {
-		if terms, err := s.GetSemanticTermsByTable(ctx, tableID, datasourceID); err == nil {
+		if terms, err := s.GetSemanticTermsByTable(ctx, tableID, datasourceID, secCtx.TenantID); err == nil {
 			for _, t := range terms {
 				termMap[strings.ToLower(t.NodeName)] = t
 			}
