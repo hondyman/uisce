@@ -119,46 +119,82 @@ func (s *PreAggregationService) GenerateDDL(ctx context.Context, preAggID uuid.U
 		return "", err
 	}
 
-	// 2. Get BO ID by name
-	var boID string
-	err = s.db.GetContext(ctx, &boID, `
-		SELECT n.id FROM catalog_node n
-		JOIN catalog_node_type nt ON n.node_type_id = nt.id
-		WHERE nt.catalog_type_name = 'business_object' AND n.node_name = $1 AND n.tenant_id = $2
+	// 2. Get the real BO (business_objects, not the unrelated legacy
+	// catalog_node "business_object" prototype) and its driving table's
+	// qualified_path (e.g. "/orm/execution"). business_objects.driver_table_name
+	// on this schema is stored in qualified_path form, not "schema.table" -
+	// used directly below to scope MAPS_TO edge lookups to this BO's table.
+	var bo struct {
+		ID              string `db:"id"`
+		DriverTableName string `db:"driver_table_name"`
+	}
+	err = s.db.GetContext(ctx, &bo, `
+		SELECT id, COALESCE(driver_table_name, '') AS driver_table_name
+		FROM business_objects
+		WHERE (bo_key = $1 OR bo_name = $1) AND tenant_id = $2::uuid
 		LIMIT 1
 	`, props.BOName, props.TenantID)
 	if err != nil {
 		return "", fmt.Errorf("BO '%s' not found: %w", props.BOName, err)
 	}
-
-	// 3. Generate base BO SQL using BOContextResolver
-	boIDParsed, err := uuid.Parse(boID)
-	if err != nil {
-		return "", fmt.Errorf("invalid BO ID: %w", err)
+	if bo.DriverTableName == "" {
+		return "", fmt.Errorf("BO '%s' has no driver_table_name set", props.BOName)
 	}
-	tenantIDParsed, _ := uuid.Parse(props.TenantID)
-	boCtx, err := s.boResolver.GetBOContext(props.BOName, tenantIDParsed, uuid.Nil, dialect)
-	if err != nil {
-		return "", fmt.Errorf("failed to get BO context: %w", err)
+	// StarRocks hot-tier mirror tables are named oms.orm_<table>, matching
+	// the last qualified_path segment (see starrocks_init.sql).
+	tableSuffix := bo.DriverTableName
+	if idx := strings.LastIndex(tableSuffix, "/"); idx >= 0 {
+		tableSuffix = tableSuffix[idx+1:]
 	}
-	_ = boIDParsed // For future use
+	starrocksTable := fmt.Sprintf("oms.orm_%s", tableSuffix)
 
-	boSQL, err := s.boResolver.GenerateBOSQL(*boCtx, cfg.Terms, cfg.Calculations)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate BO SQL: %w", err)
+	// 3. Resolve each requested field to its real physical column via the
+	// business_object_fields -> MAPS_TO -> catalog_node(column) chain,
+	// scoped to this BO's table by qualified_path prefix (the same fields
+	// can be shared across many tables' columns, e.g. "CreatedAt", so an
+	// unscoped lookup would be ambiguous).
+	resolveColumn := func(fieldName string) (string, error) {
+		var col string
+		err := s.db.GetContext(ctx, &col, `
+			SELECT col.node_name
+			FROM business_object_fields bf
+			JOIN catalog_edge ce ON ce.source_node_id = bf.term_node_id
+			JOIN catalog_edge_type et ON et.id = ce.edge_type_id
+			JOIN catalog_node col ON col.id = ce.target_node_id
+			WHERE bf.bo_id = $1::uuid AND bf.field_name = $2
+			  AND et.edge_type_name = 'MAPS_TO'
+			  AND col.qualified_path LIKE $3 || '/%'
+			LIMIT 1
+		`, bo.ID, fieldName, bo.DriverTableName)
+		if err != nil {
+			return "", err
+		}
+		return col, nil
 	}
 
-	// 4. Build SELECT list from terms + calculations
+	// 4. Build SELECT list from terms + calculations. Dimensions (GroupBy)
+	// resolve to real columns on the StarRocks mirror table. Calculated
+	// terms (e.g. "Excel NPV") store their logic as a formula template in
+	// catalog_node.properties (see semantic term "term_type": "calculated")
+	// rather than any SQL-compilable DSL - there is no formula-to-SQL
+	// compiler wired anywhere in this codebase yet, so compiling them here
+	// would mean fabricating SQL. Emit an explicit placeholder instead of
+	// pretending they're computed.
 	selectCols := make([]string, 0, len(cfg.GroupBy)+len(cfg.Calculations))
-	for _, col := range cfg.GroupBy {
-		selectCols = append(selectCols, col)
+	for _, dim := range cfg.GroupBy {
+		col, err := resolveColumn(dim)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve dimension %q: %w", dim, err)
+		}
+		selectCols = append(selectCols, fmt.Sprintf("%s AS %q", col, dim))
 	}
 	for _, calc := range cfg.Calculations {
-		// Resolve calculation expression
-		// For now, assume calc name = column name in BO SQL
-		// TODO: Resolve actual calc DSL -> SQL
-		selectCols = append(selectCols, calc)
+		selectCols = append(selectCols, fmt.Sprintf(
+			"NULL /* TODO: %q is a formula-based calculated term (no SQL compiler wired) */ AS %q",
+			calc, calc,
+		))
 	}
+	boSQL := fmt.Sprintf("SELECT * FROM %s", starrocksTable)
 
 	// 5. Build WHERE clause from filters
 	var whereClause string
