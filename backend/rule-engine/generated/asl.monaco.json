@@ -35,6 +35,11 @@
   ],
   "snippets": [
     {
+      "label": "AVG",
+      "insert": "AVG()",
+      "detail": "(values number[]) -\u003e number - Average of a numeric field across grouped rows."
+    },
+    {
       "label": "Change",
       "insert": "Change {\n  \n}",
       "detail": "Insert Change node"
@@ -80,6 +85,11 @@
       "detail": "Insert DatabaseColumn node"
     },
     {
+      "label": "EXP",
+      "insert": "EXP()",
+      "detail": "(x number) -\u003e number - e^x - the inverse of LN, used alongside it in geometric linking and annualization."
+    },
+    {
       "label": "Event",
       "insert": "Event {\n  \n}",
       "detail": "Insert Event node"
@@ -90,9 +100,84 @@
       "detail": "Insert HierarchicalNode node"
     },
     {
+      "label": "IRR",
+      "insert": "IRR()",
+      "detail": "(cash_flows number[]) -\u003e number - Internal rate of return - the rate that makes NPV zero, over regularly-spaced (e.g. annual) cash flows. Solved numerically (Newton-Raphson, bisection fallback) - no algebraic solution exists, so this has no SQL pushdown."
+    },
+    {
+      "label": "IS_BOOLEAN",
+      "insert": "IS_BOOLEAN()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is a boolean."
+    },
+    {
+      "label": "IS_DATE",
+      "insert": "IS_DATE()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is a date (YYYY-MM-DD)."
+    },
+    {
+      "label": "IS_DATETIME",
+      "insert": "IS_DATETIME()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is an RFC3339 datetime."
+    },
+    {
+      "label": "IS_INTEGER",
+      "insert": "IS_INTEGER()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is an integer."
+    },
+    {
+      "label": "IS_JSON",
+      "insert": "IS_JSON()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is valid JSON."
+    },
+    {
+      "label": "IS_NUMBER",
+      "insert": "IS_NUMBER()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is numeric."
+    },
+    {
+      "label": "IS_UUID",
+      "insert": "IS_UUID()",
+      "detail": "(value any) -\u003e boolean - True if the field's value is a UUID."
+    },
+    {
       "label": "Job",
       "insert": "Job {\n  \n}",
       "detail": "Insert Job node"
+    },
+    {
+      "label": "LN",
+      "insert": "LN()",
+      "detail": "(x number) -\u003e number - Natural logarithm - used by annualization ((1+r)^(365/days)-1), geometric linking, and lnPME."
+    },
+    {
+      "label": "MAX",
+      "insert": "MAX()",
+      "detail": "(values number[]) -\u003e number - Maximum of a numeric field across grouped rows."
+    },
+    {
+      "label": "MAX_LENGTH",
+      "insert": "MAX_LENGTH()",
+      "detail": "(value any, max number) -\u003e boolean - True if the field's string length is within a maximum."
+    },
+    {
+      "label": "MIN",
+      "insert": "MIN()",
+      "detail": "(values number[]) -\u003e number - Minimum of a numeric field across grouped rows."
+    },
+    {
+      "label": "MIRR",
+      "insert": "MIRR()",
+      "detail": "(cash_flows number[], finance_rate number, reinvest_rate number) -\u003e number - Modified IRR: (FV(positive cash flows, reinvest_rate) / -PV(negative cash flows, finance_rate))^(1/n) - 1. Unlike IRR/XIRR this IS closed-form (no iterative solver) - Pushdownable is still false here, but only because the SQL emitter (a conditional FV/PV expansion over grouped rows, more involved than NPV's) hasn't been written and verified against a live table yet, not because it's impossible. See docs/unified-rule-engine-handoff.md."
+    },
+    {
+      "label": "NOT_EMPTY",
+      "insert": "NOT_EMPTY()",
+      "detail": "(value any) -\u003e boolean - True if the field is present and non-empty."
+    },
+    {
+      "label": "NPV",
+      "insert": "NPV()",
+      "detail": "(rate number, cash_flows number[]) -\u003e number - Net present value: SUM(cf_i / (1+rate)^i). No native StarRocks function - pushed down as a hand-expanded SQL expression using ROW_NUMBER()."
     },
     {
       "label": "Notification",
@@ -120,6 +205,21 @@
       "detail": "Insert RuleNode node"
     },
     {
+      "label": "SQRT",
+      "insert": "SQRT()",
+      "detail": "(x number) -\u003e number - Square root - used by standard-deviation-style calculations."
+    },
+    {
+      "label": "SUM",
+      "insert": "SUM()",
+      "detail": "(values number[]) -\u003e number - Sum of a numeric field across grouped rows."
+    },
+    {
+      "label": "SUMPRODUCT",
+      "insert": "SUMPRODUCT()",
+      "detail": "(a number[], b number[]) -\u003e number - Sum of pairwise products: SUM(a_i * b_i). Used for weighted aggregates over grouped rows, e.g. avg_price = SUMPRODUCT(qty, price) / SUM(qty)."
+    },
+    {
       "label": "SemanticDimension",
       "insert": "SemanticDimension {\n  \n}",
       "detail": "Insert SemanticDimension node"
@@ -143,6 +243,21 @@
       "label": "WebSocketMessage",
       "insert": "WebSocketMessage {\n  \n}",
       "detail": "Insert WebSocketMessage node"
+    },
+    {
+      "label": "XIRR",
+      "insert": "XIRR()",
+      "detail": "(cash_flows number[], dates number[]) -\u003e number - IRR for irregularly-dated cash flows (actual/365 day-count, matching Excel's XIRR). Same numerical solver as IRR, different period calculation. No SQL pushdown, for the same reason as IRR."
+    },
+    {
+      "label": "XNPV",
+      "insert": "XNPV()",
+      "detail": "(rate number, cash_flows number[], dates date[]) -\u003e number - Net present value for irregularly-dated cash flows: SUM(cf_i / (1+rate)^((date_i - date_0)/365)) - XIRR's companion the way NPV is IRR's, using the same ACT/365 day-count as XIRR. No SQL pushdown, for the same reason XIRR has none: this is here for the day-count logic, not because it needs a solver, but its date-string parsing isn't (yet) expressible as a single StarRocks expression."
+    },
+    {
+      "label": "YEARFRAC",
+      "insert": "YEARFRAC()",
+      "detail": "(start date, end date, basis string) -\u003e number - Year fraction between two dates under a day-count convention: \"ACT/365\" (default, actual days / 365 - matches XIRR's convention), \"ACT/360\" (actual days / 360, common for money-market instruments), or \"30/360\" (US bond basis: each month counted as 30 days). The day-count primitive XIRR/XNPV and hurdle-rate annualization all reduce to."
     },
     {
       "label": "patchChange",
@@ -199,6 +314,9 @@
     "DataSource": [
       "\"ignite\"",
       "\"postgres\"",
+      "\"starrocks\""
+    ],
+    "Dialect": [
       "\"starrocks\""
     ],
     "EmailTemplate": [
@@ -353,5 +471,237 @@
       "\"deprecate\"",
       "\"modify\""
     ]
-  }
+  },
+  "functions": [
+    {
+      "name": "AVG",
+      "signature": "(values number[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Average of a numeric field across grouped rows.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "EXP",
+      "signature": "(x number) -\u003e number",
+      "category": "math",
+      "description": "e^x - the inverse of LN, used alongside it in geometric linking and annualization.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "IRR",
+      "signature": "(cash_flows number[]) -\u003e number",
+      "category": "financial",
+      "description": "Internal rate of return - the rate that makes NPV zero, over regularly-spaced (e.g. annual) cash flows. Solved numerically (Newton-Raphson, bisection fallback) - no algebraic solution exists, so this has no SQL pushdown.",
+      "noClosedForm": true,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_BOOLEAN",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is a boolean.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_DATE",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is a date (YYYY-MM-DD).",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_DATETIME",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is an RFC3339 datetime.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_INTEGER",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is an integer.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_JSON",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is valid JSON.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_NUMBER",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is numeric.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "IS_UUID",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's value is a UUID.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "LN",
+      "signature": "(x number) -\u003e number",
+      "category": "math",
+      "description": "Natural logarithm - used by annualization ((1+r)^(365/days)-1), geometric linking, and lnPME.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "MAX",
+      "signature": "(values number[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Maximum of a numeric field across grouped rows.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "MAX_LENGTH",
+      "signature": "(value any, max number) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field's string length is within a maximum.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "MIN",
+      "signature": "(values number[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Minimum of a numeric field across grouped rows.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "MIRR",
+      "signature": "(cash_flows number[], finance_rate number, reinvest_rate number) -\u003e number",
+      "category": "financial",
+      "description": "Modified IRR: (FV(positive cash flows, reinvest_rate) / -PV(negative cash flows, finance_rate))^(1/n) - 1. Unlike IRR/XIRR this IS closed-form (no iterative solver) - Pushdownable is still false here, but only because the SQL emitter (a conditional FV/PV expansion over grouped rows, more involved than NPV's) hasn't been written and verified against a live table yet, not because it's impossible. See docs/unified-rule-engine-handoff.md.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "NOT_EMPTY",
+      "signature": "(value any) -\u003e boolean",
+      "category": "format",
+      "description": "True if the field is present and non-empty.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "NPV",
+      "signature": "(rate number, cash_flows number[]) -\u003e number",
+      "category": "financial",
+      "description": "Net present value: SUM(cf_i / (1+rate)^i). No native StarRocks function - pushed down as a hand-expanded SQL expression using ROW_NUMBER().",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "SQRT",
+      "signature": "(x number) -\u003e number",
+      "category": "math",
+      "description": "Square root - used by standard-deviation-style calculations.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "SUM",
+      "signature": "(values number[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Sum of a numeric field across grouped rows.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "SUMPRODUCT",
+      "signature": "(a number[], b number[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Sum of pairwise products: SUM(a_i * b_i). Used for weighted aggregates over grouped rows, e.g. avg_price = SUMPRODUCT(qty, price) / SUM(qty).",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "XIRR",
+      "signature": "(cash_flows number[], dates number[]) -\u003e number",
+      "category": "financial",
+      "description": "IRR for irregularly-dated cash flows (actual/365 day-count, matching Excel's XIRR). Same numerical solver as IRR, different period calculation. No SQL pushdown, for the same reason as IRR.",
+      "noClosedForm": true,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "XNPV",
+      "signature": "(rate number, cash_flows number[], dates date[]) -\u003e number",
+      "category": "financial",
+      "description": "Net present value for irregularly-dated cash flows: SUM(cf_i / (1+rate)^((date_i - date_0)/365)) - XIRR's companion the way NPV is IRR's, using the same ACT/365 day-count as XIRR. No SQL pushdown, for the same reason XIRR has none: this is here for the day-count logic, not because it needs a solver, but its date-string parsing isn't (yet) expressible as a single StarRocks expression.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    },
+    {
+      "name": "YEARFRAC",
+      "signature": "(start date, end date, basis string) -\u003e number",
+      "category": "date",
+      "description": "Year fraction between two dates under a day-count convention: \"ACT/365\" (default, actual days / 365 - matches XIRR's convention), \"ACT/360\" (actual days / 360, common for money-market instruments), or \"30/360\" (US bond basis: each month counted as 30 days). The day-count primitive XIRR/XNPV and hurdle-rate annualization all reduce to.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": false
+      }
+    }
+  ]
 }

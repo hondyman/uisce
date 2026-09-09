@@ -1,13 +1,8 @@
 package vm
 
 import (
-	"encoding/json"
 	"fmt"
-	"math"
-	"regexp"
-	"strconv"
 	"strings"
-	"time"
 )
 
 type AdvancedEvaluator struct {
@@ -219,254 +214,10 @@ func (ae *AdvancedEvaluator) evalFieldRef(fr *FieldRef, data map[string]interfac
 	return val, nil
 }
 
-// nativeFuncs is the native (tree-walking) function registry, evaluated
-// directly against a single record's data - the counterpart to
-// starrocksFuncs in sql_compiler.go. Aggregate functions (SUM/AVG/MIN/MAX)
-// expect their argument to resolve to a []float64 (e.g. a FieldRef pointing
-// at an array-valued field), since there is no row set to aggregate over
-// here. NPV mirrors the SQL expansion: SUM(cf_i / (1+rate)^i).
-var nativeFuncs = map[string]func(args []any) (any, error){
-	"SUM": func(args []any) (any, error) {
-		return aggFold(args, 0, func(acc, v float64) float64 { return acc + v })
-	},
-	"AVG": func(args []any) (any, error) {
-		vals, err := requireFloatSlice(args)
-		if err != nil {
-			return nil, err
-		}
-		if len(vals) == 0 {
-			return 0.0, nil
-		}
-		sum := 0.0
-		for _, v := range vals {
-			sum += v
-		}
-		return sum / float64(len(vals)), nil
-	},
-	"MIN": func(args []any) (any, error) {
-		vals, err := requireFloatSlice(args)
-		if err != nil || len(vals) == 0 {
-			return nil, err
-		}
-		m := vals[0]
-		for _, v := range vals[1:] {
-			if v < m {
-				m = v
-			}
-		}
-		return m, nil
-	},
-	"MAX": func(args []any) (any, error) {
-		vals, err := requireFloatSlice(args)
-		if err != nil || len(vals) == 0 {
-			return nil, err
-		}
-		m := vals[0]
-		for _, v := range vals[1:] {
-			if v > m {
-				m = v
-			}
-		}
-		return m, nil
-	},
-	"NPV": func(args []any) (any, error) {
-		if len(args) != 2 {
-			return nil, fmt.Errorf("NPV expects 2 args (rate, cash_flows), got %d", len(args))
-		}
-		rate, ok := args[0].(float64)
-		if !ok {
-			return nil, fmt.Errorf("NPV rate must be numeric, got %T", args[0])
-		}
-		cashFlows, err := requireFloatSlice(args[1:])
-		if err != nil {
-			return nil, err
-		}
-		npv := 0.0
-		for i, cf := range cashFlows {
-			npv += cf / math.Pow(1+rate, float64(i))
-		}
-		return npv, nil
-	},
-
-	// IRR/XIRR: the rate that makes NPV zero, solved numerically (see
-	// irr.go) - no closed-form solution exists, which is also why
-	// neither has a StarRocks-native function or a sql_compiler.go
-	// expansion. Native/WASM-only, honestly: a rule or calc term using
-	// either runs at tree-walking speed. IRR assumes regular (e.g.
-	// annual) period spacing; XIRR takes actual dates (as day-offsets -
-	// Excel serial dates or days-since-epoch, any consistent unit) for
-	// irregular cash flow timing, matching Excel's own IRR/XIRR split.
-	"IRR": func(args []any) (any, error) {
-		cashFlows, err := requireFloatSlice(args)
-		if err != nil {
-			return nil, err
-		}
-		return solveIRR(cashFlows, integerPeriods(len(cashFlows)))
-	},
-	"XIRR": func(args []any) (any, error) {
-		if len(args) != 2 {
-			return nil, fmt.Errorf("XIRR expects 2 args (cash_flows, dates), got %d", len(args))
-		}
-		cashFlows, err := requireFloatSlice(args[0:1])
-		if err != nil {
-			return nil, fmt.Errorf("XIRR cash_flows: %w", err)
-		}
-		days, err := requireFloatSlice(args[1:2])
-		if err != nil {
-			return nil, fmt.Errorf("XIRR dates: %w", err)
-		}
-		if len(days) != len(cashFlows) {
-			return nil, fmt.Errorf("XIRR cash_flows and dates must be the same length (%d vs %d)", len(cashFlows), len(days))
-		}
-		return solveIRR(cashFlows, dayPeriods(days))
-	},
-
-	// Field-format predicates, added for the catalog_validation_rules ->
-	// rule_ast migration (backend/cmd/migrate_validation_rules). These are
-	// the FuncCall side of the 12-operator vocabulary found in that
-	// table's condition_json: pure comparisons (greater_than, ...) map to
-	// Condition nodes via ConditionEvaluator; format/type validators
-	// (is_uuid, is_date, max_length, ...) had no home in either Condition
-	// or the arithmetic ExprNode set, so they're predicates here instead -
-	// the function registry growing exactly the kind of function it was
-	// designed for, now authorable in the editor like SUM/NPV. All treat a
-	// present-but-JSON-null field value as failing the predicate (false,
-	// no error) rather than a type error - a genuinely absent field is a
-	// separate case, already an error from evalFieldRef before these ever
-	// run.
-	"NOT_EMPTY": func(args []any) (any, error) {
-		v, err := require1(args, "NOT_EMPTY")
-		if err != nil {
-			return nil, err
-		}
-		if v == nil {
-			return false, nil
-		}
-		s, ok := v.(string)
-		return !ok || s != "", nil
-	},
-	"IS_INTEGER": func(args []any) (any, error) {
-		v, err := require1(args, "IS_INTEGER")
-		if err != nil {
-			return nil, err
-		}
-		switch n := v.(type) {
-		case int, int32, int64:
-			return true, nil
-		case float64:
-			return n == math.Trunc(n), nil
-		case string:
-			_, err := strconv.ParseInt(n, 10, 64)
-			return err == nil, nil
-		default:
-			return false, nil
-		}
-	},
-	"IS_NUMBER": func(args []any) (any, error) {
-		v, err := require1(args, "IS_NUMBER")
-		if err != nil {
-			return nil, err
-		}
-		switch n := v.(type) {
-		case int, int32, int64, float32, float64:
-			return true, nil
-		case string:
-			_, err := strconv.ParseFloat(n, 64)
-			return err == nil, nil
-		default:
-			return false, nil
-		}
-	},
-	"IS_BOOLEAN": func(args []any) (any, error) {
-		v, err := require1(args, "IS_BOOLEAN")
-		if err != nil {
-			return nil, err
-		}
-		switch b := v.(type) {
-		case bool:
-			return true, nil
-		case string:
-			return b == "true" || b == "false", nil
-		default:
-			return false, nil
-		}
-	},
-	"IS_UUID": func(args []any) (any, error) {
-		v, err := require1(args, "IS_UUID")
-		if err != nil {
-			return nil, err
-		}
-		s, ok := v.(string)
-		if !ok {
-			return false, nil
-		}
-		return uuidPattern.MatchString(s), nil
-	},
-	"IS_DATE": func(args []any) (any, error) {
-		v, err := require1(args, "IS_DATE")
-		if err != nil {
-			return nil, err
-		}
-		s, ok := v.(string)
-		if !ok {
-			return false, nil
-		}
-		_, parseErr := time.Parse("2006-01-02", s)
-		return parseErr == nil, nil
-	},
-	"IS_DATETIME": func(args []any) (any, error) {
-		v, err := require1(args, "IS_DATETIME")
-		if err != nil {
-			return nil, err
-		}
-		s, ok := v.(string)
-		if !ok {
-			return false, nil
-		}
-		_, parseErr := time.Parse(time.RFC3339, s)
-		return parseErr == nil, nil
-	},
-	"IS_JSON": func(args []any) (any, error) {
-		v, err := require1(args, "IS_JSON")
-		if err != nil {
-			return nil, err
-		}
-		s, ok := v.(string)
-		if !ok {
-			return false, nil
-		}
-		return json.Valid([]byte(s)), nil
-	},
-	"MAX_LENGTH": func(args []any) (any, error) {
-		if len(args) != 2 {
-			return nil, fmt.Errorf("MAX_LENGTH expects 2 args (field, max), got %d", len(args))
-		}
-		max, ok := args[1].(float64)
-		if !ok {
-			return nil, fmt.Errorf("MAX_LENGTH's second arg must be numeric, got %T", args[1])
-		}
-		if args[0] == nil {
-			return true, nil
-		}
-		s, ok := args[0].(string)
-		if !ok {
-			return false, nil
-		}
-		return float64(len(s)) <= max, nil
-	},
-}
-
-// require1 validates a predicate received exactly one argument and returns
-// it, nil-safe (a resolved FieldRef for an absent/null field comes through
-// as a nil any, which is a valid input to these predicates, not an error).
-func require1(args []any, fnName string) (any, error) {
-	if len(args) != 1 {
-		return nil, fmt.Errorf("%s expects 1 arg, got %d", fnName, len(args))
-	}
-	return args[0], nil
-}
-
-var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+// Function implementations (SUM/AVG/.../MIRR/format predicates) live in
+// library.go's FunctionSpec registry (Library) - the single source of
+// truth for native evaluation, SQL pushdown, and editor metadata alike.
+// evalFuncCall below just dispatches into it.
 
 func aggFold(args []any, init float64, fold func(acc, v float64) float64) (any, error) {
 	vals, err := requireFloatSlice(args)
@@ -507,7 +258,7 @@ func requireFloatSlice(args []any) ([]float64, error) {
 }
 
 func (ae *AdvancedEvaluator) evalFuncCall(fc *FuncCall, data map[string]interface{}) (any, error) {
-	fn, ok := nativeFuncs[strings.ToUpper(fc.Name)]
+	spec, ok := LookupFunction(fc.Name)
 	if !ok {
 		return nil, fmt.Errorf("no native evaluator registered for function %q", fc.Name)
 	}
@@ -519,7 +270,7 @@ func (ae *AdvancedEvaluator) evalFuncCall(fc *FuncCall, data map[string]interfac
 		}
 		args = append(args, v)
 	}
-	return fn(args)
+	return spec.Native(args)
 }
 
 func toFloat64(a, b any) (float64, float64, bool) {

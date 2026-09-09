@@ -6189,6 +6189,12 @@
       ],
       "type": "object"
     },
+    "Dialect": {
+      "enum": [
+        "starrocks"
+      ],
+      "type": "string"
+    },
     "DiffReport": {
       "description": "DiffReport - matches the schema structure for upgrade artifacts",
       "properties": {
@@ -8149,6 +8155,44 @@
       "required": [
         "Name",
         "Args"
+      ],
+      "type": "object"
+    },
+    "FunctionSpec": {
+      "description": "FunctionSpec is the one declaration a function needs. Category and\nDescription exist for editor autocomplete/capability badges (see\nLibraryEntries and cmd/generate-monaco) - they're read, not decorative.",
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Native": {
+          "$ref": "#/definitions/NativeImpl"
+        },
+        "NoClosedForm": {
+          "description": "NoClosedForm marks a function with no algebraic solution (solved\nnumerically) - explains why Pushdownable is false for it even\nthough it's a real, fully-supported function, as opposed to a\nfunction whose SQL emitter simply hasn't been written yet.",
+          "type": "boolean"
+        },
+        "SQLEmit": {
+          "$ref": "#/definitions/Record\u003cDialect, SQLEmitter\u003e"
+        },
+        "Signature": {
+          "description": "Signature is a human-readable argument/return description, e.g.\n\"(rate number, cash_flows number[]) -\u003e number\" - not parsed by\nanything, purely for editor autocomplete detail text and docs.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Signature",
+        "Category",
+        "Description",
+        "NoClosedForm",
+        "Native",
+        "SQLEmit"
       ],
       "type": "object"
     },

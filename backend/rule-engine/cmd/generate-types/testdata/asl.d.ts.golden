@@ -8,6 +8,8 @@ export type CommandStatus = failed | pending | success;
 
 export type DataSource = ignite | postgres | starrocks;
 
+export type Dialect = starrocks;
+
 export type ExportFormat = csv | json | parquet;
 
 export type FieldRole = DIMENSION | EVENT_DATE | MEASURE | PARTITION_KEY | VALIDITY_END | VALIDITY_START;
@@ -2793,6 +2795,26 @@ silently mis-evaluate. */
 export interface FuncCall {
   Args: ExprNode[];
   Name: string;
+}
+
+/** FunctionSpec is the one declaration a function needs. Category and
+Description exist for editor autocomplete/capability badges (see
+LibraryEntries and cmd/generate-monaco) - they're read, not decorative. */
+export interface FunctionSpec {
+  Category: string;
+  Description: string;
+  Name: string;
+  Native: NativeImpl;
+  /** NoClosedForm marks a function with no algebraic solution (solved
+numerically) - explains why Pushdownable is false for it even
+though it's a real, fully-supported function, as opposed to a
+function whose SQL emitter simply hasn't been written yet. */
+  NoClosedForm: boolean;
+  SQLEmit: Record<Dialect, SQLEmitter>;
+  /** Signature is a human-readable argument/return description, e.g.
+"(rate number, cash_flows number[]) -> number" - not parsed by
+anything, purely for editor autocomplete detail text and docs. */
+  Signature: string;
 }
 
 /** Fund represents a private markets fund */
@@ -6295,6 +6317,19 @@ export interface UpsertPreAggRequest {
   Terms: string[];
 }
 
+/** UpsertValidationRuleRequest is the API request shape for creating or
+updating a validation rule. */
+export interface UpsertValidationRuleRequest {
+  BOName: string;
+  Category: string;
+  Description: string;
+  Name: string;
+  RuleAST: any;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
+}
+
 /** User represents a user in the system */
 export interface User {
   Attributes: Record<string, string>;
@@ -6390,6 +6425,15 @@ export interface ValidationResponse {
   Pass: boolean;
 }
 
+/** ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
+vm.RuleNode-shaped json.RawMessage (internal/rules/vm) - kept as
+json.RawMessage here rather than a typed vm.RuleNode so this package
+doesn't need to import internal/rules/vm (models is a low-level,
+widely-imported package; the AST is parsed by whoever evaluates it). */
+export interface ValidationRuleConfig {
+  RuleAST: any;
+}
+
 /** ValidationRuleDefinition represents a complete validation rule */
 export interface ValidationRuleDefinition {
   ActionOnFailure: string;
@@ -6406,6 +6450,22 @@ export interface ValidationRuleDefinition {
   UpdatedAt: any;
 }
 
+/** ValidationRuleDescriptor is the API response shape. */
+export interface ValidationRuleDescriptor {
+  BOName: string;
+  Category: string;
+  CreatedAt: any;
+  Description: string;
+  GovernanceStatus: string;
+  ID: any;
+  Name: string;
+  RuleAST: any;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
+  UpdatedAt: any;
+}
+
 /** ValidationRuleEngineImpl implements ValidationRuleEngine */
 export interface ValidationRuleEngineImpl {
   db: any;
@@ -6416,6 +6476,19 @@ RuleFabric's tree-based rules share one implementation of what "=",
 bug-prone copies. */
   operators: any;
   resolver: any;
+}
+
+/** ValidationRuleProperties is stored in catalog_node.properties, mirroring
+PreAggProperties' role for pre-aggregation nodes and term_type/
+return_type's role for calculated semantic terms - node metadata that
+isn't the AST itself. */
+export interface ValidationRuleProperties {
+  BOName: string;
+  Category: string;
+  GovernanceStatus: string;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
 }
 
 /** ValidationTask represents a single validation job */

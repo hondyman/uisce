@@ -6189,6 +6189,12 @@
       ],
       "type": "object"
     },
+    "Dialect": {
+      "enum": [
+        "starrocks"
+      ],
+      "type": "string"
+    },
     "DiffReport": {
       "description": "DiffReport - matches the schema structure for upgrade artifacts",
       "properties": {
@@ -8149,6 +8155,44 @@
       "required": [
         "Name",
         "Args"
+      ],
+      "type": "object"
+    },
+    "FunctionSpec": {
+      "description": "FunctionSpec is the one declaration a function needs. Category and\nDescription exist for editor autocomplete/capability badges (see\nLibraryEntries and cmd/generate-monaco) - they're read, not decorative.",
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Native": {
+          "$ref": "#/definitions/NativeImpl"
+        },
+        "NoClosedForm": {
+          "description": "NoClosedForm marks a function with no algebraic solution (solved\nnumerically) - explains why Pushdownable is false for it even\nthough it's a real, fully-supported function, as opposed to a\nfunction whose SQL emitter simply hasn't been written yet.",
+          "type": "boolean"
+        },
+        "SQLEmit": {
+          "$ref": "#/definitions/Record\u003cDialect, SQLEmitter\u003e"
+        },
+        "Signature": {
+          "description": "Signature is a human-readable argument/return description, e.g.\n\"(rate number, cash_flows number[]) -\u003e number\" - not parsed by\nanything, purely for editor autocomplete detail text and docs.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Signature",
+        "Category",
+        "Description",
+        "NoClosedForm",
+        "Native",
+        "SQLEmit"
       ],
       "type": "object"
     },
@@ -18629,6 +18673,44 @@
       ],
       "type": "object"
     },
+    "UpsertValidationRuleRequest": {
+      "description": "UpsertValidationRuleRequest is the API request shape for creating or\nupdating a validation rule.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {},
+        "Severity": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Timing": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "BOName",
+        "Name",
+        "Description",
+        "Severity",
+        "Timing",
+        "Category",
+        "RuleAST"
+      ],
+      "type": "object"
+    },
     "User": {
       "description": "User represents a user in the system",
       "properties": {
@@ -18915,6 +18997,16 @@
       ],
       "type": "object"
     },
+    "ValidationRuleConfig": {
+      "description": "ValidationRuleConfig is stored in catalog_node.config. RuleAST is a\nvm.RuleNode-shaped json.RawMessage (internal/rules/vm) - kept as\njson.RawMessage here rather than a typed vm.RuleNode so this package\ndoesn't need to import internal/rules/vm (models is a low-level,\nwidely-imported package; the AST is parsed by whoever evaluates it).",
+      "properties": {
+        "RuleAST": {}
+      },
+      "required": [
+        "RuleAST"
+      ],
+      "type": "object"
+    },
     "ValidationRuleDefinition": {
       "description": "ValidationRuleDefinition represents a complete validation rule",
       "properties": {
@@ -18965,6 +19057,54 @@
       ],
       "type": "object"
     },
+    "ValidationRuleDescriptor": {
+      "description": "ValidationRuleDescriptor is the API response shape.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "Description": {
+          "type": "string"
+        },
+        "GovernanceStatus": {
+          "type": "string"
+        },
+        "ID": {},
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {},
+        "Severity": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Timing": {
+          "type": "string"
+        },
+        "UpdatedAt": {}
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "BOName",
+        "Name",
+        "Description",
+        "Severity",
+        "Timing",
+        "Category",
+        "RuleAST",
+        "GovernanceStatus",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "type": "object"
+    },
     "ValidationRuleEngineImpl": {
       "description": "ValidationRuleEngineImpl implements ValidationRuleEngine",
       "properties": {
@@ -18978,6 +19118,38 @@
         "db",
         "resolver",
         "operators"
+      ],
+      "type": "object"
+    },
+    "ValidationRuleProperties": {
+      "description": "ValidationRuleProperties is stored in catalog_node.properties, mirroring\nPreAggProperties' role for pre-aggregation nodes and term_type/\nreturn_type's role for calculated semantic terms - node metadata that\nisn't the AST itself.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "GovernanceStatus": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Timing": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOName",
+        "TenantID",
+        "Severity",
+        "Timing",
+        "Category",
+        "GovernanceStatus"
       ],
       "type": "object"
     },

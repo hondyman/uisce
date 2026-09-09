@@ -8,6 +8,8 @@ export type CommandStatus = failed | pending | success;
 
 export type DataSource = ignite | postgres | starrocks;
 
+export type Dialect = starrocks;
+
 export type ExportFormat = csv | json | parquet;
 
 export type FieldRole = DIMENSION | EVENT_DATE | MEASURE | PARTITION_KEY | VALIDITY_END | VALIDITY_START;
@@ -2793,6 +2795,26 @@ silently mis-evaluate. */
 export interface FuncCall {
   Args: ExprNode[];
   Name: string;
+}
+
+/** FunctionSpec is the one declaration a function needs. Category and
+Description exist for editor autocomplete/capability badges (see
+LibraryEntries and cmd/generate-monaco) - they're read, not decorative. */
+export interface FunctionSpec {
+  Category: string;
+  Description: string;
+  Name: string;
+  Native: NativeImpl;
+  /** NoClosedForm marks a function with no algebraic solution (solved
+numerically) - explains why Pushdownable is false for it even
+though it's a real, fully-supported function, as opposed to a
+function whose SQL emitter simply hasn't been written yet. */
+  NoClosedForm: boolean;
+  SQLEmit: Record<Dialect, SQLEmitter>;
+  /** Signature is a human-readable argument/return description, e.g.
+"(rate number, cash_flows number[]) -> number" - not parsed by
+anything, purely for editor autocomplete detail text and docs. */
+  Signature: string;
 }
 
 /** Fund represents a private markets fund */

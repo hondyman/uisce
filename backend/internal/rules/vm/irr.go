@@ -7,8 +7,8 @@ package vm
 // target implementations. Deliberately native/WASM-only: unlike
 // SUM/AVG/MIN/MAX/NPV, IRR/XIRR have no StarRocks-native function and no
 // closed-form SQL expansion (they're the root of a polynomial with no
-// general algebraic solution), so they aren't in starrocksFuncs
-// (sql_compiler.go) and aren't pushdownable - a rule or calc term using
+// general algebraic solution), so their FunctionSpec in library.go has no
+// SQLEmit entry and they aren't pushdownable - a rule or calc term using
 // them runs at tree-walking speed, same as any FuncCall the bytecode
 // compiler doesn't support yet (see vm_compiler_funccall_test.go).
 //
@@ -134,6 +134,43 @@ func bisect(lo, hi float64, cashFlows []float64, periods []float64) (float64, er
 		}
 	}
 	return (lo + hi) / 2, nil
+}
+
+// solveMIRR computes the modified IRR: unlike IRR/XIRR this has a closed
+// form (no root-finding) because the reinvestment/finance split removes
+// the ambiguity a plain IRR has with multiple sign changes -
+// (FV(positive cash flows, reinvest_rate) / -PV(negative cash flows,
+// finance_rate))^(1/n) - 1, with n = periods - 1 (regular, e.g. annual,
+// spacing, same assumption as IRR/integerPeriods). Lives here rather
+// than in library.go because it shares npvAt-shaped period-discounting
+// arithmetic with IRR/XIRR, not because it shares their solver.
+func solveMIRR(cashFlows []float64, financeRate, reinvestRate float64) (float64, error) {
+	if len(cashFlows) < 2 {
+		return 0, fmt.Errorf("MIRR requires at least 2 cash flows, got %d", len(cashFlows))
+	}
+	n := len(cashFlows) - 1
+	pvNeg, fvPos := 0.0, 0.0
+	hasPositive, hasNegative := false, false
+	for i, cf := range cashFlows {
+		if cf < 0 {
+			hasNegative = true
+			pvNeg += cf / math.Pow(1+financeRate, float64(i))
+		} else if cf > 0 {
+			hasPositive = true
+			fvPos += cf * math.Pow(1+reinvestRate, float64(n-i))
+		}
+	}
+	if !hasPositive || !hasNegative {
+		return 0, fmt.Errorf("MIRR requires at least one positive and one negative cash flow")
+	}
+	if pvNeg == 0 {
+		return 0, fmt.Errorf("MIRR: present value of negative cash flows is zero")
+	}
+	ratio := fvPos / -pvNeg
+	if ratio < 0 {
+		return 0, fmt.Errorf("MIRR: FV(positive)/PV(negative) ratio is negative, cannot take real root")
+	}
+	return math.Pow(ratio, 1.0/float64(n)) - 1, nil
 }
 
 // integerPeriods returns [0, 1, 2, ...] for IRR's assumption of regular

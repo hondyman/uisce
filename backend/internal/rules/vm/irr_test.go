@@ -119,27 +119,27 @@ func TestIRR_RequiresBothSigns(t *testing.T) {
 }
 
 func TestIRR_NativeFuncRegistration(t *testing.T) {
-	fn, ok := nativeFuncs["IRR"]
+	spec, ok := LookupFunction("IRR")
 	if !ok {
-		t.Fatal("IRR not registered in nativeFuncs")
+		t.Fatal("IRR not registered in Library")
 	}
-	result, err := fn([]any{[]float64{-100, 110}})
+	result, err := spec.Native([]any{[]float64{-100, 110}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertNear(t, result.(float64), 0.10, irrTol, "nativeFuncs[\"IRR\"]")
+	assertNear(t, result.(float64), 0.10, irrTol, "Library[\"IRR\"]")
 }
 
 func TestXIRR_NativeFuncRegistration(t *testing.T) {
-	fn, ok := nativeFuncs["XIRR"]
+	spec, ok := LookupFunction("XIRR")
 	if !ok {
-		t.Fatal("XIRR not registered in nativeFuncs")
+		t.Fatal("XIRR not registered in Library")
 	}
-	result, err := fn([]any{[]float64{-1000, 300, 420, 380, 500}, []float64{0, 365, 730, 1095, 1460}})
+	result, err := spec.Native([]any{[]float64{-1000, 300, 420, 380, 500}, []float64{0, 365, 730, 1095, 1460}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertNear(t, result.(float64), 0.20132155150637107, 1e-6, "nativeFuncs[\"XIRR\"]")
+	assertNear(t, result.(float64), 0.20132155150637107, 1e-6, "Library[\"XIRR\"]")
 }
 
 // Evaluated through the full RuleNode/Expression AST - the same path an
