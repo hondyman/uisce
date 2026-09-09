@@ -1645,3 +1645,23 @@ not just built:
   JSON marshal/unmarshal, the VM bytecode compiler, and the SQL
   compiler, in addition to the parser) is the real fix - not attempted
   this pass, scoped out deliberately rather than rushed.
+
+### 41. The Monaco surface got real IntelliSense, same session, on explicit push-back
+Item 38 shipped a completion provider that only ever suggested function
+names, `triggerCharacters: []` (no auto-popup beyond Ctrl+Space) - "an
+editor," not the "world class IDE" asked for immediately afterward.
+Closed the same session: field completion (real data types, sourced
+from a live `setAslFields` list `AdvancedRuleBuilderPage` keeps synced
+to the selected BO, since the completion provider registers once per
+page load but the BO changes after that); dot notation (`entity.` scopes
+to that entity's tagged fields, falling back to the full list rather
+than an honestly-empty one - which otherwise let Monaco's own unrelated
+"Text" ghost suggestion surface as the only entry, caught by aria-label
+inspection, not a screenshot); and signature help (parameter hints
+parsed from the same `FunctionSpec.Signature` string the hover/
+completion detail already shows, not a second hand-maintained parameter
+list). `triggerCharacters` now `['.', '(', ',']`, `wordBasedSuggestions:
+false` so Monaco's generic buffer-scraping stops competing with the
+real semantic suggestions. All verified live via `editor.trigger(...)`
++ DOM inspection, the same discipline as item 38's browser proof - not
+just "it builds."
