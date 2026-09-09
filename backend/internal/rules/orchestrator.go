@@ -65,7 +65,7 @@ func (e *RuleEngine) evaluateChain(
 		if res.Unsupported != nil || len(res.Program.Insts) == 0 {
 			e.metrics.fallbacks.Add(1)
 			e.metrics.compileErrors.Add(1)
-			evaluator := NewConditionEvaluator()
+			evaluator := vm.NewConditionEvaluator()
 			passed, _, _ = EvaluateRecursiveWithDiagnostics(evaluator, rule.Node, input)
 		} else {
 			e.metrics.vmPathCount.Add(1)
@@ -86,7 +86,7 @@ func (e *RuleEngine) evaluateChain(
 				result.Details = append(result.Details, res.Unsupported.Error())
 			}
 			if res.Unsupported != nil || len(res.Program.Insts) == 0 {
-				evaluator := NewConditionEvaluator()
+				evaluator := vm.NewConditionEvaluator()
 				_, violations, _ := EvaluateRecursiveWithDiagnostics(evaluator, rule.Node, input)
 				result.Violations = violations
 			}

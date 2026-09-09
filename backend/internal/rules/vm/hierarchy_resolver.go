@@ -1,6 +1,6 @@
 // backend/internal/rules/hierarchy_resolver.go
 
-package rules
+package vm
 
 import (
 	"encoding/json"

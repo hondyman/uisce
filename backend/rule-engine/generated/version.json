@@ -1,11 +1,6 @@
 {
-  "commit": "unknown",
-  "generator": "asl-type-generator",
-  "packages": [
-    "../../../internal/services",
-    "../../../internal/rules",
-    "../../../internal/models"
-  ],
-  "timestamp": "2026-02-02T00:00:00Z",
-  "version": "1.0.0"
+  "schemaVersion": "1.0.0",
+  "generatedAt": "2026-09-09T13:02:21Z",
+  "commit": "3b45524a097617a17596afa83afc05ed5a8164f1",
+  "compatibleSince": "1.0.0"
 }

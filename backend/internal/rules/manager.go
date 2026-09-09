@@ -3,9 +3,11 @@ package rules
 import (
 	"fmt"
 	"strings"
+
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
-func EvaluateRecursiveWithDiagnostics(evaluator *ConditionEvaluator, node *RuleNode, data map[string]any) (bool, []RuleViolation, error) {
+func EvaluateRecursiveWithDiagnostics(evaluator *vm.ConditionEvaluator, node *RuleNode, data map[string]any) (bool, []RuleViolation, error) {
 	if node == nil {
 		return true, nil, nil
 	}

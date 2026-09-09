@@ -1,6 +1,6 @@
 // backend/internal/rules/condition_evaluator.go (UPDATED)
 
-package rules
+package vm
 
 import (
 	"fmt"

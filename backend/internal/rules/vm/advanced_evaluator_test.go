@@ -1,4 +1,4 @@
-package rules
+package vm
 
 import (
 	"encoding/json"

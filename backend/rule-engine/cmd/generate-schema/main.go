@@ -343,6 +343,7 @@ func main() {
 	packages := []string{
 		"../../../internal/services",
 		"../../../internal/rules",
+		"../../../internal/rules/vm",
 		"../../../internal/models",
 	}
 
