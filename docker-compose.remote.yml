@@ -560,6 +560,90 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  uisce-stream-loader-order:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-order
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.order
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_order
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-placement:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-placement
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.placement
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_placement
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-order-allocation:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-order-allocation
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.order_allocation
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_order_allocation
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-execution-allocation:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-execution-allocation
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.execution_allocation
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_execution_allocation
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   remote-net:
     driver: bridge
