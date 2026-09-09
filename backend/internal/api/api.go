@@ -1302,6 +1302,17 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		_ = mdmGraph.Initialize()
 	}
 
+	// Pre-aggregation service: StarRocks hot-tier rollup definitions for
+	// calculated semantic terms, materialized off the CDC pipeline
+	// (cmd/cdc_service -> Kafka -> cmd/stream_loader -> StarRocks) instead
+	// of Postgres triggers.
+	boContextResolver := analytics.NewBOContextResolver(sqlxDB, mdmGraph)
+	preAggLifecycleSvc := analytics.NewPreAggLifecycleService(sqlxDB)
+	preAggInvalidationSvc := analytics.NewPreAggInvalidationService(sqlxDB, preAggLifecycleSvc)
+	preAggSvc := analytics.NewPreAggregationService(sqlxDB, boContextResolver, mdmGraph)
+	mdmGraph.RegisterChangeListener(analytics.PreAggInvalidationListener(sqlxDB, preAggInvalidationSvc))
+	preAggHandler := handlers.NewPreAggregationHandler(preAggSvc)
+
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
 	srv.ExecutionEngine = execEngine
@@ -1464,6 +1475,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
 		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
+
+		// Pre-aggregation (StarRocks hot-tier rollup) routes
+		preAggHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)

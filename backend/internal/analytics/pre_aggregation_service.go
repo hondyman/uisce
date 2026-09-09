@@ -66,7 +66,7 @@ func (s *PreAggregationService) UpsertPreAggregation(ctx context.Context, req mo
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO catalog_node (id, node_name, description, node_type_id, tenant_id, qualified_path, properties, config, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-		ON CONFLICT (tenant_id, node_type_id, node_name) DO UPDATE SET
+		ON CONFLICT (tenant_id, qualified_path) DO UPDATE SET
 			description = EXCLUDED.description,
 			properties = EXCLUDED.properties,
 			config = EXCLUDED.config,
