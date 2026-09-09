@@ -1268,3 +1268,201 @@ exercising), and its own session boundary. Not started.
   `field_bindings` rows under it - not test noise, this is the real
   fixture the two-binding proof depends on; don't delete it without
   re-running `cmd/verify_second_binding` first.
+
+## Session 9 addendum (2026-09-09, continued a seventh time) — the function library is unified; the frontend half of the proof bar is not built yet
+
+### 28. `nativeFuncs`/`starrocksFuncs`/the registry that described them → one `FunctionSpec` per function
+Three sources of truth for the same set of facts, collapsed into one.
+Before this session: `nativeFuncs` (a `map[string]func` in
+`advanced_evaluator.go`) held native implementations, `starrocksFuncs`
+(same shape, `sql_compiler.go`) held SQL pushdown, and item 26's
+`registry.go` held a third, hand-maintained `FunctionCapability` list
+*describing* the other two - three places that could (and, per
+`registry_test.go`'s whole reason for existing, did need active
+cross-checking) drift apart. Now: `internal/rules/vm/library.go` defines
+one `FunctionSpec{Name, Signature, Category, Description, NoClosedForm,
+Native, SQLEmit map[Dialect]SQLEmitter}` per function, in a single
+`Library` map; `evalFuncCall` and `compileNodeToSQL` both dispatch
+through `vm.LookupFunction` instead of the two old maps, which are
+deleted outright (not deprecated, not kept in sync - gone). `Dialect` is
+a real type (`DialectStarRocks` the only value today) rather than an
+implicit StarRocks-only assumption, so a second dialect is new
+`SQLEmit` entries, not a new codepath.
+
+The registry self-consistency test changed shape along with the source
+it tests: `registry_test.go` cross-checked a *description* against two
+*implementations* - with only one place left, there's nothing left to
+cross-check, so `library_test.go` instead asserts properties that must
+hold of the one true source (every entry has a callable `Native`, every
+`NoClosedForm` function is non-pushdownable, `SUM`/`AVG`/`NPV` etc. are
+pushdownable, lookup is case-insensitive). TVPI/DPI/MOIC needed no
+registry entry before and need none now - they're `BinaryExpr`
+compositions over `SUM`, proven directly against `CompileToSQL` in
+`sql_compiler_test.go`, exactly as item 26 established.
+
+### 29. MIRR, and the three-tier golden-test discipline held on a function with no Excel URL memorized
+Closed-form (unlike IRR/XIRR): `(FV(positive CFs, reinvest_rate) /
+-PV(negative CFs, finance_rate))^(1/n) - 1`, no solver. All three
+golden-test tiers this session's discipline requires: exact-by-
+construction (a single negative CF at t=0 against a single positive CF
+at t=n, engineered so MIRR collapses to exactly `reinvest_rate`
+regardless of `finance_rate`); an independent cross-check (a from-
+scratch Python re-implementation, run against a second cash-flow shape);
+and a real Microsoft-published fixture. The fixture took two tries - the
+first guessed URL (`...b020f038-7492-4fb4-93c1-35c345b53482`) 404'd, and
+the follow-up search that session gave up on found nothing; re-searching
+this session (rather than trusting the 404 as "no fixture exists") found
+the real URL (`...53524`, one hex digit different) on the first try, and
+its worked example (`$120,000` cost, 5 years of income, 10%/12%
+finance/reinvest rates → 13%, -5% for years 0-3, 13% again at 14%
+reinvest) matched the Go implementation to within the fixture's own
+rounding. Recorded as a working note below: a 404 on a guessed doc URL
+is not evidence the doc doesn't exist.
+
+One caught-by-the-test moment worth naming again (this arc's second, per
+item 11's XIRR one): the first `TestMIRR_IndependentCrossCheck` value was
+hand-typed wrong (`0.0790286`, a number that was never actually computed)
+- caught immediately because it didn't match what the Go implementation
+returned, then fixed by actually running the Python cross-check instead
+of asserting a remembered-sounding number. The lesson from item 11
+(`146.41` vs `121`) generalizes: an "independent cross-check" fixture is
+only independent if the second computation actually ran.
+
+### 30. Tier 1 of the PE-metrics request: primitives that complete the day-count/pushdown machinery
+The user's next message (mid-session) supplied a tiered function
+backlog grounded in standard PE reporting vocabulary (`TVPI = DPI +
+RVPI`, `MOIC = (Realized + Unrealized) / Invested`), organized primitive
+vs. composition vs. algorithm. This session built Tier 1's primitives
+(`internal/rules/vm/library_tier1.go`, registered via `init()` into the
+same `Library` map `library.go`'s `buildLibrary()` populates - package
+var initializers run before `init()` functions, so ordering is safe):
+- **`YEARFRAC(start, end, basis)`** - the day-count primitive
+  ACT/365/ACT/360/30/360 (Excel's basis 3/2/0; basis 1 actual/actual and
+  basis 4 European 30/360 not implemented - no fixture value was
+  available to prove them against, so they were left out rather than
+  guessed). Excel-fixture-verified against Microsoft's own published
+  YEARFRAC example (1/1/2012→7/30/2012, three bases).
+- **`XNPV(rate, cash_flows, dates)`** - NPV's companion for irregular
+  dates, same ACT/365 convention as XIRR. Exact-by-construction only
+  (engineered to reduce to plain NPV at exactly 365-day spacing) - no
+  Excel fixture fetched this pass.
+- **`SUMPRODUCT(a, b)`** - pushdownable (`SUM(a * b)`), the general form
+  behind `avg_price = SUMPRODUCT(qty, price) / SUM(qty)`.
+- **`LN`, `EXP`, `SQRT`** - pushdownable (StarRocks has native functions
+  of the same names), cross-checked against each other (`LN(EXP(x)) ==
+  x`) in addition to exact-by-construction cases.
+
+**Deliberately not done**: `RVPI` got no registry entry, matching
+`TVPI`/`DPI`/`MOIC` (item 26) - it's `SUM(remaining_value) /
+SUM(paid_in_capital)`, a composition, not a function. Tiers 2-4 of the
+request (TWRR, Sharpe/Sortino/drawdown, the carried-interest waterfall,
+PME family, net-vs-gross, the bond/annuity family) are **not started** -
+recorded as backlog below, not silently absorbed into this pass. Dates
+are accepted as strings (`YYYY-MM-DD` or RFC3339, matching the existing
+`IS_DATE`/`IS_DATETIME` predicates) rather than XIRR's day-offset-number
+convention - real BO fields are date-typed columns, not pre-computed
+offsets, and XIRR's convention was a deliberately simplified proof-
+script shortcut, not a pattern worth propagating.
+
+### 31. `cmd/generate-monaco` now derives function metadata from the real registry - item 6 (and half of item 5) closed
+The parked gap named explicitly in item 6 ("`keywords` is still a
+hardcoded literal list") and half of item 5 (capability badges need "the
+data layer" - item 26's `registry.go`, now `library.go`). Unlike
+`NodeKinds`/`Enums` (derived via `go/types` static analysis over AST,
+because those are Go *type declarations*), function metadata is
+*registry data* - `internal/rules/vm` is in the same Go module as
+`backend/rule-engine`, so `cmd/generate-monaco/main.go` now directly
+imports it and calls `vm.LibraryEntries()` at generation time, no static
+analysis needed. Output: a new `functions` array in `asl.monaco.json`
+(name, signature, category, description, `noClosedForm`, and a
+per-dialect `pushdown` map), plus one snippet per function folded into
+the existing `snippets` list. Verified by running the generator and
+checking the output: 23 functions present after Tier 1, `IRR`/`XIRR`/
+`MIRR` correctly `pushdown.starrocks: false`, `SUM`/`AVG`/`NPV`/
+`SUMPRODUCT`/`LN`/`EXP`/`SQRT` correctly `true`.
+
+Regenerating touched more than `asl.monaco.json`: `FunctionSpec` and
+`Dialect` are new exported types in `internal/rules/vm`, so
+`asl.d.ts`/`asl.schema.json` picked them up too (via the same
+`go/types`-based generator item 25 already runs), which meant their
+golden-file tests (`cmd/generate-schema/testdata/asl.schema.json`,
+`cmd/generate-types/testdata/asl.d.ts.golden`) needed updating alongside
+the `generated/` copies - easy to miss since `check-drift` only compares
+`generated/` against git, not the `testdata/` golden files against the
+generator (those are a separate, `go test`-level guard). Both are
+committed together this session. `rule_engine.wasm` rebuilt and
+re-synced to `frontend/public/` per the established sequence (item 25).
+Full `internal/rules/vm` suite: 59 tests, all passing.
+`go build ./...` clean repo-wide.
+
+### 32. The honest gap: nothing in the frontend reads `asl.monaco.json` yet
+Checked before claiming otherwise (`grep -rl "asl.monaco" frontend/`):
+zero hits, in either `src` or `public`. This session's proof bar per the
+user's own framing - "open editor, autocomplete shows XIRR with a
+wasm-only badge, author+evaluate in browser; author a measure with a
+pushdownable function, watch it compile to StarRocks SQL" - is **not
+met** by what shipped this session. What exists in the browser today:
+`AdvancedRuleBuilderPage.tsx` (item 5 of Session 5) is a structured
+condition/group builder (dropdown field/operator/value), not a free-text
+expression language - there's nowhere in it to type `XIRR(...)` at all.
+`ValidationRuleScriptEditor.tsx` is a real `@monaco-editor/react`
+component with a `handleEditorDidMount` stub literally commented
+`// Future: Configure language server capabilities using schemaContext`
+- but it belongs to a different, older Python/CUE-script rule-authoring
+path (`ValidationRuleCreator.tsx`), not the `rule_ast`/`vm` engine this
+whole arc has built. `CalculatedFieldBuilderPage` ("Workday Style") has
+an expression textbox, but its helper text advertises a different,
+apparently pre-existing function set (`SUM, AVG, IF`) with no evident
+connection to `vm.Library` either. **Item D** ("Calc engine authoring
+surface - the one piece of the mirror not yet built") named this gap
+before this session started; this session closed the data-layer
+prerequisite (items 5/6) but did not build the surface itself. Next
+concrete step, not done: wire a real Monaco instance to
+`asl.monaco.json`'s new `functions` array (autocomplete + hover +
+pushdown/wasm-only badges) somewhere a calc term or rule expression is
+actually authored as text - which may mean building that authoring
+surface for the first time (item D), since none of the three editors
+above are actually it.
+
+### 33. New tickets from this pass
+- **Tier 2-4 of the PE-metrics backlog, not started**: period/cumulative/
+  annualized return compositions, TWRR (native + SQL window functions),
+  STDEV/VAR/CORREL/COVARIANCE/SLOPE/MEDIAN/PERCENTILE (pushdownable
+  primitives - StarRocks has native equivalents for all of these, same
+  shape as this session's LN/EXP/SQRT), Sharpe/Sortino/information
+  ratio/max drawdown (compositions, drawdown needs a running-peak window
+  function); the carried-interest waterfall (European + American,
+  multi-tier hurdle/catch-up/carry/clawback - native-only, the one
+  genuinely new *algorithm* in the whole backlog, not a primitive or
+  composition); the PME family (lnPME/KS-PME as compositions given an
+  index series input binding, Direct Alpha as a native regression); net-
+  vs-gross IRR/TVPI (same solvers, different flow sets); the bond/annuity
+  family (YIELD/PRICE/ACCRINT/DURATION/MDURATION/RATE/NPER/PMT/PV/FV) -
+  explicitly Tier 4, "only if the book needs fixed income/credit," per
+  the user's own framing. Per-function convention documentation (gross
+  vs. net, fee treatment, since-inception date convention) needs to be
+  part of each spec's `Description`, not left implicit, per the user's
+  explicit warning that undocumented-convention metrics are "this
+  codebase's signature failure mode, in financial form."
+- **The frontend authoring/autocomplete surface (item 32) is now the
+  single largest remaining gap** in this whole arc - larger than any
+  individual function, since it blocks the stated proof bar for every
+  function already built, not just the newest ones.
+- **`YEARFRAC`'s basis 1 (actual/actual) and basis 4 (European 30/360)
+  are unimplemented**, not merely undocumented - `YEARFRAC` returns an
+  error for either. Worth closing if a real convention in the wild needs
+  actual/actual (it's the more calendar-sensitive of the two, average-
+  year-length dependent, and deserved its own fixture before being
+  trusted).
+- Both `Upsert*` stale-id bugs (items 23, 27) - still open, still
+  unfixed, still worth a shared fix rather than two separate patches.
+
+## Working note added this session
+- **A 404 on a guessed documentation URL is evidence the guess was
+  wrong, not that the document doesn't exist.** The MIRR fixture search
+  gave up after one wrong guess and one unhelpful follow-up search in an
+  earlier pass; re-searching (rather than re-guessing, and rather than
+  concluding "no fixture available") found the real URL - one hex digit
+  different from the guess - on the first try. Apply before writing "no
+  official fixture was found" into a test file: that sentence should
+  follow a real search, not a single 404.
