@@ -218,6 +218,189 @@ timing/category in `properties`.
   session was handed and the live database have drifted apart — worth
   keeping in mind for the OMS work generally, not just this rule.
 
+## Session 3 addendum (2026-09-09, continued)
+
+### 8. Related-row context provider — proven in shadow mode, scoped to one BO
+Before building this, discovered the generic BO write path
+(`CreateBORecord`/`UpdateBORecord` in `businessobject_service.go`) didn't
+actually work for any of the 5 OMS BOs: `business_objects.driver_table_name`
+was `/orm/<name>` for all of them, resolving to schema `orm` — which
+**does not exist** in the `alpha` Postgres database this backend connects
+to. The real `orm` schema lives in a *different* database (`crims`, same
+host) and is the Debezium CDC source feeding StarRocks (see
+`docs/oms-calc-engine-handoff.md`) — a one-way pipeline the Go backend
+never writes through. Separately, `alpha` has a populated `oms` schema
+(`oms.orders`, `oms.order_slice`, `oms.execution`, `oms.allocation` — real
+tables, real rows) that nothing in the generic BO CRUD path pointed at.
+Fixed for the two BOs this slice needed: `business_objects.driver_table_name`
+updated from `/orm/placement` → `/oms/order_slice` and `/orm/execution` →
+`/oms/execution` (tenant `99e99e99-...`). **`order`, `order_allocation`,
+`execution_allocation` are still broken** — `order` likely just needs
+`/oms/orders`, but `order_allocation` has no obvious 1:1 physical table
+(`oms.allocation` is keyed by `execution_id`, not `order_id` — it's really
+"execution allocation"; what backs "order allocation" as a distinct
+concept wasn't investigated). Fixing the remaining 3 is its own scoped
+task, not done here.
+
+With that fixed, built the context provider:
+`backend/internal/metadata/shadow_evaluation.go` —
+`evaluateShadowRules` (called from `CreateBORecord`/`UpdateBORecord` after
+the write already succeeded, panic-recovering and error-swallowing by
+design) lists active validation rules for the BO via the same
+`ValidationRuleService` the editor uses; if any exist, `loadRelatedRowContext`
+loads the parent row's fields (a `relatedRowContext` lookup table, keyed
+by `bo_key`, currently has one entry: `execution` → parent `oms.order_slice`
+via `slice_id`, plus a `SUM(qty)` over sibling `oms.execution` rows sharing
+that `slice_id`) and merges both into the evaluation context alongside the
+written record's own fields. Every active rule is evaluated via
+`vm.AdvancedEvaluator` (same engine, same code path as the editor and the
+oracle rule) and a failure is logged as `[SHADOW VIOLATION]` — **never
+blocks**, this is shadow mode from its first line, not a phase.
+
+**A real bug found only by running it**: `lib/pq` returns Postgres
+`numeric` columns as `[]byte`, not a Go numeric type — the parent row's
+`quantity`/`filled_qty` came back as `[]uint8`, and `AdvancedEvaluator`'s
+`<=` operator correctly refused to compare it against the `float64` sibling
+sum (`"expression operands not numeric: float64, []uint8"` — caught by
+running the proof script, not by reading the code). Fixed with a
+`coerceNumeric` helper (`ParseFloat` on the byte slice) applied to
+everything `loadRelatedRowContext` loads. Note this same `[]byte` behavior
+means the *written record's own* numeric fields (as returned by
+`CreateBORecord`, which stringifies `[]byte` for JSON serialization) would
+reach a future rule as strings, not numbers, if a rule referenced them
+directly — not hit by the current proof rule (which only reads
+`sibling_qty_sum`/`quantity`, both freshly coerced), but worth fixing the
+same way before a rule needs `record["qty"]` directly.
+
+**Proof artifact, permanent**: `backend/cmd/verify_shadow_context` —
+authors a synthetic Tier-1-shaped "overfill guard" rule
+(`sibling_qty_sum <= quantity`) against the Execution BO through the real
+`ValidationRuleService`, creates a real placement (`quantity = 100`)
+through the real `CreateBORecord`, then two real executions through the
+same path: `qty=60` (running total 60 ≤ 100 — no violation logged) then
+`qty=60` again (running total 120 > 100 — `[SHADOW VIOLATION]` logged,
+**and the second write still succeeds** — the exact two-directions proof
+this item needed: detection works, and shadow mode really doesn't block).
+Run with `DATABASE_URL=... go run ./cmd/verify_shadow_context/` from
+`backend/`.
+
+**What's still open for this item**: only `execution` has a
+`relatedRowContext` entry — the other 4 OMS BOs need both their
+`driver_table_name` fixed (see above) and an entry added before they can
+carry Tier-1 rules. The `relatedRowContext` table itself is intentionally
+not a generic relationship-graph walk (per design note in the file) —
+extending it to a new BO today means hand-adding a map entry, which is
+fine for 5 known BOs but would need a real design pass before this pattern
+scales further.
+
+### 9. Confirmed regression from the `driver_table_name` repoint — do not repeat this pattern for the other 3 BOs
+
+Repointing `placement`/`execution`'s `driver_table_name` to `/oms/...` was
+reviewed **after the fact** and found to have silently answered an
+architectural question that should have gone to a person first — see the
+"canonical OMS stratum" open item below. Before committing, ran the
+regression check that review called for and it confirmed real breakage:
+
+```
+$ DATABASE_URL=... go run ./cmd/check_ddl_regression/
+GenerateDDL failed: failed to resolve dimension "PlacementID": sql: no rows in result set
+```
+
+Root cause: `driver_table_name` is one field serving two different
+consumers with two different expectations of what it means.
+`CreateBORecord`/`UpdateBORecord` (`resolveQualifiedTable`) treat it as
+"the physical schema.table to read/write" — the repoint fixed this
+consumer. `GenerateDDL`'s dimension resolution
+(`pre_aggregation_service.go`) treats it as "the catalog qualified_path
+subtree the BO's column nodes live under" and scopes its `MAPS_TO`
+catalog-edge lookup with `qualified_path LIKE driver_table_name || '/%'`
+— the catalog's column nodes for Execution still live under
+`/orm/execution/...` (unchanged), so this consumer now matches nothing.
+**`execution_npv_rollup`'s DDL generation (verified working in item 4 of
+the session-2 addendum) is broken as of this commit.**
+`cmd/check_ddl_regression` is kept as a permanent reproduction script —
+run it again after any fix attempt.
+
+This is not a two-line fix to just apply elsewhere: the right fix is
+probably splitting `driver_table_name` into two fields (physical
+read/write location vs. catalog subtree), and which values each should
+hold depends entirely on the stratum decision below. Left broken,
+deliberately, rather than patched around blind.
+
+**Rollback data** (DB mutation, not in git — recorded here because
+nothing else will remember it): for tenant `99e99e99-99e9-49e9-89e9-99e99e99e999`,
+`business_objects.driver_table_name` was changed
+`placement`: `/orm/placement` → `/oms/order_slice`,
+`execution`: `/orm/execution` → `/oms/execution`. To revert:
+```sql
+UPDATE business_objects SET driver_table_name = '/orm/placement'
+WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999' AND bo_key = 'placement';
+UPDATE business_objects SET driver_table_name = '/orm/execution'
+WHERE tenant_id = '99e99e99-99e9-49e9-89e9-99e99e99e999' AND bo_key = 'execution';
+```
+Reverting restores `GenerateDDL` and re-breaks `CreateBORecord`/
+`evaluateShadowRules`/`cmd/verify_shadow_context` for these two BOs — the
+same tradeoff, just the other direction, until the field is actually
+split or the stratum question is answered.
+
+### 10. The canonical-OMS-stratum question — unresolved, now with a third candidate
+
+Session 3 repointed `placement`/`execution` at `alpha.oms.*` without
+deciding whether the platform is meant to be the OMS write surface at
+all. That decision was never anyone's to make silently, and the
+consequences compound (see item 9, and the diverging-schema/unaudited-
+traffic points below). While researching the regression, found a third
+candidate that widens the question rather than narrowing it:
+
+- **Candidate 1 — `crims` database, `orm` schema** (`docs/oms-calc-engine-handoff.md`):
+  the live Debezium CDC source, `orm_cdc_publication FOR TABLES IN SCHEMA orm`,
+  feeding Kafka → StarRocks `oms.orm_*` hot tier. Host `100.84.50.65`.
+- **Candidate 2 — `orm` **database** (not schema), `oms`/`mds`/`ref` schemas**
+  (`backend/db/orm/README.md` + `0001`-`0008` DDL files, newly read while
+  diagnosing item 9): a from-scratch, single-tenant ("soul_trader") OMS
+  schema design, also targeting host `100.84.50.65:5432`. Its DDL is the
+  probable *origin* of `business_objects.driver_table_name`'s `/orm/...`
+  convention — `/orm/execution` reads as "database `orm`, table
+  `execution`", which is a coherent encoding for *this* candidate and
+  simply not what `resolveQualifiedTable` implements (it treats the first
+  path segment as a Postgres schema, and Postgres can't address a second
+  database in one query anyway). Never verified live — whether this
+  database/schema set actually exists and is populated on `100.84.50.65`
+  was not checked this session.
+- **Candidate 3 — `alpha` database, `oms` schema**: what session 3 actually
+  repointed `placement`/`execution` to. Real, populated (3 orders/slices/
+  executions, tenant `a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11` — a
+  *different* tenant than the `99e99e99-...` one the validation-rule work
+  and `business_objects` catalog rows use), seeded by
+  `20260812000007_seed_trade_graph_gold_copy.up.sql`. Looks like gold-copy/
+  demo data, not confirmed to be anyone's system of record.
+
+**The decision, stated plainly (unchanged from the review that flagged
+this, now with a third option)**: which of these three is the OMS system
+of record for this platform, or is none of them and the real answer is
+"the platform doesn't write OMS data at all, `crims`/`orm`-database is
+external, and evaluation belongs on the StarRocks hot tier via a
+reconciliation sweep instead of the BO write path"? Each answer rewrites
+`driver_table_name`'s meaning, which of the 3+ remaining OMS BOs get
+repointed vs. get an honest "external datasource — read/CDC only" error,
+and whether `evaluateShadowRules` (item 8) is watching real traffic or
+only the platform's own test writes. **Consequences already visible from
+guessing wrong once**: `execution_npv_rollup`'s DDL generation is broken
+(item 9); the shadow-mode overfill guard in `cmd/verify_shadow_context`
+currently only sees `alpha.oms` writes, not whatever candidate turns out
+to carry real order flow; and the BO catalog's column-node subtree
+(`/orm/execution/...`) now disagrees with two of its own BOs'
+`driver_table_name`. This needs a person's decision before any more OMS
+BOs get touched, in either direction.
+
+**Not wasted under any answer**: the `CreateBORecord`/`evaluateShadowRules`
+hook (item 8) and a future hot-tier reconciliation sweep are complementary,
+not competing — one covers platform-authored writes if the platform ever
+has any, the other covers externally-sourced flow. Whichever candidate
+wins, the sweep is unbuilt and is probably the half that matters more,
+since it's the one likely to see real order data. It belongs back on the
+short list regardless of how the stratum question resolves.
+
 ## What's NOT done — the actual next task
 
 ### A. Editor save-wiring + real BO catalog data
@@ -239,15 +422,12 @@ all. Two integration points, both real but small:
 - The severity/timing/category fields need a form (currently nothing in
   the editor UI collects them — `ValidationRuleProperties` requires them).
 
-### B. Related-row context provider on the BO write path
-Not started. The Tier-1 OMS validations (overfill, over-placement, the
-Σ-completeness invariants) need aggregate context — "Σ executions for
-this placement" — that a single-row write doesn't carry. This is
-real engine wiring: something that, given a BO write, resolves and
-attaches related-row aggregates to the `data map[string]interface{}`
-passed to `AdvancedEvaluator.Evaluate`. No design work done yet on where
-this hooks into the write path or what the aggregate-resolution query
-shape looks like.
+### B. Related-row context provider on the BO write path — done for `execution`, needs the other 4 BOs
+See "Session 3 addendum" item 8 above for the full account. Working and
+proven in shadow mode for the Execution BO's overfill guard. Remaining:
+fix `driver_table_name` for `order`/`order_allocation`/`execution_allocation`
+(same class of bug as `placement`/`execution` had), then add a
+`relatedRowContext` entry per BO as each Tier-1 rule needs one.
 
 ### C. Everything downstream of A and B (design already settled, not started)
 1. OMS Tier-1 BLOCK set, authored natively in the routed editor (spec

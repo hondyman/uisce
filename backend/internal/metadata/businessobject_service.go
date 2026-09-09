@@ -3727,6 +3727,7 @@ func (s *BusinessObjectService) CreateBORecord(
 	}
 
 	s.logAudit(ctx, secCtx.TenantID, "instance", toString(rec["id"]), "create", rec, userID)
+	s.evaluateShadowRules(ctx, secCtx.TenantID, bo.Key, result)
 	return result, nil
 }
 
@@ -3808,6 +3809,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 	}
 
 	s.logAudit(ctx, secCtx.TenantID, "instance", recordID, "update", rec, userID)
+	s.evaluateShadowRules(ctx, secCtx.TenantID, bo.Key, result)
 	return result, nil
 }
 
