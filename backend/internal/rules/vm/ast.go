@@ -77,6 +77,72 @@ type Expression struct {
 	Root ExprNode
 }
 
+// MarshalJSON produces {"root": ...}, matching Expression.UnmarshalJSON.
+// Standalone Expression marshaling (e.g. calc-term rule_ast, which stores
+// just {"root": {...}} directly rather than wrapping it in a RuleNode) -
+// RuleNode.MarshalJSON's NodeTypeExpression case sets "root" itself rather
+// than delegating here, since it needs "root" flat alongside "type", but
+// this keeps a plain Expression value equally round-trippable on its own.
+func (e Expression) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"root": e.Root})
+}
+
+func (be *BinaryExpr) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"op": be.Op, "left": be.Left, "right": be.Right})
+}
+
+func (fr *FieldRef) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"path": fr.Path})
+}
+
+func (l *Literal) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"value": l.Value})
+}
+
+func (fc *FuncCall) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]any{"func": fc.Name, "args": fc.Args})
+}
+
+// MarshalJSON flattens n into the same wire shape UnmarshalJSON reads back:
+// {"type": ..., <fields of whichever of Group/Condition/Expression is set,
+// as direct siblings of "type" - never nested under a "Group"/"Condition"/
+// "Expression" key>}. Value receiver (not pointer) so this is picked up
+// when RuleNode appears by value, e.g. RuleGroup.Conditions []RuleNode.
+//
+// Without this, encoding/json's default struct marshaling produces
+// {"Type":"expression","Expression":{"Root":{...}}} - capitalized Go
+// field names, and Expression nested under its own key - which
+// UnmarshalJSON cannot read back (it looks for a flat, lowercase "root"
+// sibling of "type"). That silent asymmetry was found by round-trip
+// testing, not by inspection - Marshal always "succeeded" and produced
+// well-formed JSON, it just wasn't JSON this package could read.
+func (n RuleNode) MarshalJSON() ([]byte, error) {
+	out := map[string]any{"type": n.Type}
+	switch n.Type {
+	case NodeTypeGroup:
+		if n.Group != nil {
+			out["id"] = n.Group.ID
+			out["operator"] = n.Group.Operator
+			out["conditions"] = n.Group.Conditions
+		}
+	case NodeTypeCondition:
+		if n.Condition != nil {
+			out["id"] = n.Condition.ID
+			out["field"] = n.Condition.Field
+			out["fieldPath"] = n.Condition.FieldPath
+			out["operator"] = n.Condition.Operator
+			out["value"] = n.Condition.Value
+			out["valueType"] = n.Condition.ValueType
+			out["secondValue"] = n.Condition.SecondValue
+		}
+	case NodeTypeExpression:
+		if n.Expression != nil {
+			out["root"] = n.Expression.Root
+		}
+	}
+	return json.Marshal(out)
+}
+
 func (n *RuleNode) UnmarshalJSON(data []byte) error {
 	var temp struct {
 		Type RuleNodeType `json:"type"`

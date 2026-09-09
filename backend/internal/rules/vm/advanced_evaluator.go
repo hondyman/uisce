@@ -1,9 +1,13 @@
 package vm
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type AdvancedEvaluator struct {
@@ -265,7 +269,153 @@ var nativeFuncs = map[string]func(args []any) (any, error){
 		}
 		return npv, nil
 	},
+
+	// Field-format predicates, added for the catalog_validation_rules ->
+	// rule_ast migration (backend/cmd/migrate_validation_rules). These are
+	// the FuncCall side of the 12-operator vocabulary found in that
+	// table's condition_json: pure comparisons (greater_than, ...) map to
+	// Condition nodes via ConditionEvaluator; format/type validators
+	// (is_uuid, is_date, max_length, ...) had no home in either Condition
+	// or the arithmetic ExprNode set, so they're predicates here instead -
+	// the function registry growing exactly the kind of function it was
+	// designed for, now authorable in the editor like SUM/NPV. All treat a
+	// present-but-JSON-null field value as failing the predicate (false,
+	// no error) rather than a type error - a genuinely absent field is a
+	// separate case, already an error from evalFieldRef before these ever
+	// run.
+	"NOT_EMPTY": func(args []any) (any, error) {
+		v, err := require1(args, "NOT_EMPTY")
+		if err != nil {
+			return nil, err
+		}
+		if v == nil {
+			return false, nil
+		}
+		s, ok := v.(string)
+		return !ok || s != "", nil
+	},
+	"IS_INTEGER": func(args []any) (any, error) {
+		v, err := require1(args, "IS_INTEGER")
+		if err != nil {
+			return nil, err
+		}
+		switch n := v.(type) {
+		case int, int32, int64:
+			return true, nil
+		case float64:
+			return n == math.Trunc(n), nil
+		case string:
+			_, err := strconv.ParseInt(n, 10, 64)
+			return err == nil, nil
+		default:
+			return false, nil
+		}
+	},
+	"IS_NUMBER": func(args []any) (any, error) {
+		v, err := require1(args, "IS_NUMBER")
+		if err != nil {
+			return nil, err
+		}
+		switch n := v.(type) {
+		case int, int32, int64, float32, float64:
+			return true, nil
+		case string:
+			_, err := strconv.ParseFloat(n, 64)
+			return err == nil, nil
+		default:
+			return false, nil
+		}
+	},
+	"IS_BOOLEAN": func(args []any) (any, error) {
+		v, err := require1(args, "IS_BOOLEAN")
+		if err != nil {
+			return nil, err
+		}
+		switch b := v.(type) {
+		case bool:
+			return true, nil
+		case string:
+			return b == "true" || b == "false", nil
+		default:
+			return false, nil
+		}
+	},
+	"IS_UUID": func(args []any) (any, error) {
+		v, err := require1(args, "IS_UUID")
+		if err != nil {
+			return nil, err
+		}
+		s, ok := v.(string)
+		if !ok {
+			return false, nil
+		}
+		return uuidPattern.MatchString(s), nil
+	},
+	"IS_DATE": func(args []any) (any, error) {
+		v, err := require1(args, "IS_DATE")
+		if err != nil {
+			return nil, err
+		}
+		s, ok := v.(string)
+		if !ok {
+			return false, nil
+		}
+		_, parseErr := time.Parse("2006-01-02", s)
+		return parseErr == nil, nil
+	},
+	"IS_DATETIME": func(args []any) (any, error) {
+		v, err := require1(args, "IS_DATETIME")
+		if err != nil {
+			return nil, err
+		}
+		s, ok := v.(string)
+		if !ok {
+			return false, nil
+		}
+		_, parseErr := time.Parse(time.RFC3339, s)
+		return parseErr == nil, nil
+	},
+	"IS_JSON": func(args []any) (any, error) {
+		v, err := require1(args, "IS_JSON")
+		if err != nil {
+			return nil, err
+		}
+		s, ok := v.(string)
+		if !ok {
+			return false, nil
+		}
+		return json.Valid([]byte(s)), nil
+	},
+	"MAX_LENGTH": func(args []any) (any, error) {
+		if len(args) != 2 {
+			return nil, fmt.Errorf("MAX_LENGTH expects 2 args (field, max), got %d", len(args))
+		}
+		max, ok := args[1].(float64)
+		if !ok {
+			return nil, fmt.Errorf("MAX_LENGTH's second arg must be numeric, got %T", args[1])
+		}
+		if args[0] == nil {
+			return true, nil
+		}
+		s, ok := args[0].(string)
+		if !ok {
+			return false, nil
+		}
+		return float64(len(s)) <= max, nil
+	},
 }
+
+// require1 validates a predicate received exactly one argument and returns
+// it, nil-safe (a resolved FieldRef for an absent/null field comes through
+// as a nil any, which is a valid input to these predicates, not an error).
+func require1(args []any, fnName string) (any, error) {
+	if len(args) != 1 {
+		return nil, fmt.Errorf("%s expects 1 arg, got %d", fnName, len(args))
+	}
+	return args[0], nil
+}
+
+var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
 func aggFold(args []any, init float64, fold func(acc, v float64) float64) (any, error) {
 	vals, err := requireFloatSlice(args)
