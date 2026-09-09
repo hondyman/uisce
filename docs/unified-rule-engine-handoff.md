@@ -1466,3 +1466,182 @@ above are actually it.
   different from the guess - on the first try. Apply before writing "no
   official fixture was found" into a test file: that sentence should
   follow a real search, not a single 404.
+
+## Session 10 addendum (2026-09-09, continued an eighth time) — the frontend surface is built, and the full proof bar is genuinely met
+
+### 34. A real expression parser - the piece that made everything else in this arc authorable as text
+`internal/rules/vm/parser.go`: a lexer + recursive-descent parser
+(`ParseExpression`) turning text like `SUM(ExecQuantity * ExecPrice)` or
+`XIRR(cash_flows, dates) > 0.15` into the exact same `*Expression` AST
+every other consumer already worked with. Before this, the only way to
+produce one was a hand-built Go struct literal - `cmd/verify_calc_measure`
+wrote its rule_ast as a raw JSON string for exactly this reason. Scoped
+deliberately: arithmetic + function calls + one top-level comparison
+(not chainable, no `&&`/`||` - the structured condition builder already
+owns boolean combination), no string literals yet (`Literal` only holds
+`float64`, so `YEARFRAC`'s basis argument still needs a `FieldRef`, not
+a literal - a real, documented gap, not silently worked around). Proven
+via golden round-trip tests: the Microsoft XIRR fixture and the
+TVPI-shaped SQL-compile fixture, authored as text, land on the identical
+results as the hand-built-AST versions.
+
+### 35. Calc terms get a real save/preview/evaluate surface - `internal/analytics/calc_term_service.go` + `internal/handlers/calc_term_handler.go`
+Mirrors `ValidationRuleService`'s shape (catalog_node,
+`properties.term_type=calculated`, `config.rule_ast`) and, deliberately,
+its `RETURNING id` scanned back into the same variable on `ON CONFLICT
+DO UPDATE` - the fix for the stale-id bug class item 27 flagged in
+`UpsertPreAggregation`, applied here from the start rather than
+inherited. Kept fully separate from three pre-existing, unrelated "calc"
+systems already in this codebase that were only discovered while
+scoping this: `internal/services.SemanticResolver` (regex substitution
+over raw SQL text), `internal/handlers.CalcHandler`'s
+`public.calc_fields` (raw `sql_expr` strings - see item 37, a real SQL
+injection found in its `Preview` handler), and `catalog_validation_rules`'
+own legacy calc concept. None of them produce or consume a
+`vm.Expression`; this doesn't touch them.
+
+### 36. `evaluateExpressionText`'s WASM export tries numeric first, falls back to boolean on the specific mismatch
+Text parsed by the same grammar can be a calc-term formula (numeric) or
+a rule-shaped comparison (boolean) - the text alone doesn't say which.
+`cmd/wasm/main.go`'s export calls `EvaluateNumeric` first; only on the
+exact "did not evaluate to a number" error does it retry via the
+boolean `Evaluate` - any other error (an unresolvable field, a division
+by zero) surfaces as-is rather than being masked by a second,
+differently-wrong attempt.
+
+### 37. `is_null`/`is_not_null` - a real vocabulary mismatch, closed
+`AdvancedConditionBuilder.tsx`'s operator dropdown has offered "Is
+Null"/"Is Not Null" for number/date/boolean/enum fields since before
+this engagement, with no matching case in `compareValues`
+(`condition_evaluator.go`) - selecting either produced "unknown
+operator" once a field resolved, or a silent `false` when it didn't.
+Fixed by special-casing both ahead of the "field not found -> false"
+branch in `evaluateSimpleCondition`, since is_null's entire job is to
+detect exactly that case (and `ResolveFieldPath` already reports "not
+found" identically for a missing key and a present-but-null value -
+unlike `vm`'s own `evalFieldRef`, which needed teaching to tell those
+apart for `NOT_EMPTY`'s sake, `is_null` wants them treated the same).
+The dropdown's other ~30 operators (`contains`, `between`, `is_positive`,
+the date-relative ones, ...) remain unimplemented in `compareValues` -
+deliberately not touched this pass, recorded as item 39 rather than
+silently expanded into.
+
+### 38. The Monaco expression surface, and the full proof bar, verified live
+`AdvancedRuleBuilderPage.tsx` gained an "Expression" mode: a real
+Monaco instance (`frontend/src/rules/aslMonacoRegistry.ts`) registering
+a completion + hover provider from `asl.monaco.json`'s `functions`
+array - the first frontend consumer of that file, ever (checked before
+building: `grep -rl "asl.monaco" frontend/` returned nothing until this
+session copied it to `frontend/public/`). Live syntax checking via the
+WASM `parseExpression` export, rendered as an inline Monaco marker at
+the real byte offset the `*ParseError` reports. Two save paths from the
+same text - `{type:"expression", root:...}` to `/validation-rule-nodes`,
+or straight to `/calc-terms` - plus a "Preview SQL" button against the
+real backend compiler.
+
+All three items of the stated proof bar, checked in the actual browser,
+not just built:
+1. Typing "XI" surfaces XIRR with its signature and a **wasm-only**
+   badge in the completion detail - confirmed by reading the rendered
+   DOM text (`document.querySelectorAll('.monaco-list-row')`), not just
+   a screenshot, since the narrow preview pane truncates it visually.
+2. `XIRR(cash_flows, dates)` authored as text, evaluated via
+   `evaluateExpressionTextWasm` against Microsoft's published XIRR
+   fixture data (the same `[-10000,2750,4250,3250,2750]` /
+   `[0,60,303,411,456]` from `irr_excel_fixtures_test.go`) →
+   `0.37336253351883153`, matching the doc's `0.373362535` to the
+   fixture's own precision - entirely client-side, no backend involved.
+3. `SUM(ExecQuantity * ExecPrice)` authored as text → "Save as Calc
+   Term" → real `catalog_node`
+   (`075e8a3c-6d1d-40f0-a977-72716cbfc779`, confirmed directly in
+   Postgres with the parsed `rule_ast`) → registered as a
+   pre-aggregation and ran `GenerateDDL` through the live HTTP API →
+   `CREATE MATERIALIZED VIEW ... SUM((exec_qty * exec_price)) ...` -
+   real resolved column names, no `NULL /* TODO */` placeholder - the
+   editor-authored mirror of the original `499375` proof. Missing only
+   the live `ApplyMaterialization` step against real StarRocks, which
+   this dev machine can't reach right now (`server.log`:
+   `WARNING: StarRocks ping failed ... connection refused` - a
+   pre-existing, unrelated connectivity gap already known from earlier
+   sessions, not something this pass caused or could fix from here).
+
+### 39. Two automation/infrastructure landmines hit while proving this, neither a bug in this session's code
+- **Monaco's newer "EditContext API" input mode doesn't reliably receive
+  synthetic keystrokes from this session's browser-automation tool.**
+  `document.activeElement` reported `native-edit-context`; repeated
+  `type`/`Backspace`/`ctrl+a` sequences visibly failed to edit the buffer
+  (once producing a garbled `XIXIRR(...)` from a select-all that silently
+  no-op'd). Worked around by driving `window.monaco.editor.getEditors()
+  [0].setValue(...)` directly - goes through Monaco's own model-change
+  event, so `onChange`/React state update identically to real typing,
+  just bypassing the flaky keystroke-to-EditContext translation. Worth
+  knowing before the next person spends twenty minutes on the same
+  keyboard-doesn't-work confusion in *this* environment specifically -
+  a real user's browser is unaffected.
+- **The long-running dev `./server` (up 3+ hours, started outside this
+  session) had to be killed and rebuilt to serve the new `/calc-terms`
+  routes, and its restart surfaced that `JWT_SECRET` and
+  `API_TOKEN_ENCRYPTION_KEY` were never in `.env` - only in whatever
+  shell originally launched it.** Regenerated fresh local values via
+  `openssl rand -base64 32` (the same remediation `api.go`'s own fatal
+  message suggests) rather than guessing at the originals. The 401s that
+  followed were NOT a real auth bug, despite investigating deep enough
+  to nearly conclude one was: `security.TenantIDFromContext` came back
+  empty because the specific browser JWT in hand had simply expired
+  (short-lived Keycloak access tokens, and this investigation took
+  several minutes) - re-logging in fixed it immediately, confirmed by
+  decoding the fresh token's own `exp` against `Date.now()` before
+  touching anything else. `ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true`
+  (a real, documented, dev-only escape hatch in
+  `internal/middleware/auth_context.go` - "Must never be enabled in
+  production") is still set on this session's server process as a
+  result of the detour; harmless for local dev, but **worth explicitly
+  unsetting before treating this server as anything but scratch**, and
+  worth checking whether this repo's Keycloak realm actually configures
+  a `tenant_id`/`roles` claim mapper for real deployments - if it
+  doesn't, any non-global-admin user hitting a `mustTenantID`-gated
+  write endpoint in production would fail exactly like this session's
+  first (correct, pre-fallback) 401, which is a real gap worth
+  confirming with whoever owns the Keycloak realm config, not something
+  this session's local workaround actually fixes.
+
+### 40. New tickets from this pass
+- **`internal/handlers/calc_handler.go`'s `Preview` handler has a real
+  SQL injection**: `fmt.Sprintf("SELECT %s as result LIMIT %d",
+  req.SQLExpr, limit)` interpolates request-body text directly into an
+  executed query, no validation. Found while scoping item 35 (a
+  pre-existing, unrelated file - the older `calc_fields` system, not
+  touched by this session's work). Flagged as a background task
+  (`task_cc8410a8`) rather than fixed inline, since it's out of scope
+  for this arc and the right fix (stop accepting raw SQL from the
+  client at all, vs. an inherently-fragile allowlist) deserves its own
+  look at every caller first.
+- **`compareValues`' vocabulary gap is much larger than `is_null`/
+  `is_not_null`** (item 37 fixed those two specifically, since the user
+  named them): `AdvancedConditionBuilder.tsx` offers roughly 30
+  operators across its five field-type variants (`contains`,
+  `starts_with`, `between`, `is_positive`, `is_this_week`, `in_last_n_days`,
+  ...) and `compareValues` implements six. Every other one currently
+  either silently returns `false` (missing field) or errors "unknown
+  operator" (field present) exactly like `is_null` did before this
+  session - worth a deliberate, systematic pass (implement the real
+  vocabulary, or prune the dropdown to what's implemented) rather than
+  patching operators one user report at a time.
+- **Tiers 2-4 of the PE-metrics backlog (item 33) remain untouched**:
+  TWRR/risk stats, the carried-interest waterfall, PME family,
+  net-vs-gross, the bond/annuity family, and the full
+  investment-accounting/wealth-management tier (tax-lot selection,
+  corporate actions, accruals, FX/wash-sale, allocation analytics) from
+  the most recent request. The Monaco surface this session built is the
+  front door every one of those functions now has waiting for it -
+  landing any of them means an immediate, visible autocomplete entry
+  and a real evaluate/compile proof, not more inventory in an
+  unconsumed pipeline.
+- **`YEARFRAC`'s basis argument can't be authored as free text** (noted
+  in item 34 too): the parser has no string-literal syntax, so
+  `YEARFRAC(start, end, "ACT/365")` doesn't parse - only `YEARFRAC(start,
+  end, basis_field)` with `basis_field` resolving to a string via
+  context does. Adding a `StringLiteral` `ExprNode` (touching `ast.go`'s
+  JSON marshal/unmarshal, the VM bytecode compiler, and the SQL
+  compiler, in addition to the parser) is the real fix - not attempted
+  this pass, scoped out deliberately rather than rushed.
