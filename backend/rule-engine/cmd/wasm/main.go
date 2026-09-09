@@ -10,6 +10,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"syscall/js"
 
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
@@ -100,13 +101,17 @@ func parseExpressionJS(this js.Value, args []js.Value) interface{} {
 	return map[string]interface{}{"ast": astAny}
 }
 
-// evaluateExpressionText parses expression text and evaluates it
-// against a data context in one call - the primitive a "Test with
-// sample data" editor panel needs, combining vm.ParseExpression with
-// AdvancedEvaluator.EvaluateNumeric (the numeric entry point calc terms
-// use - see irr_test.go's own EvaluateNumeric usage - as opposed to
-// evaluateRule's boolean Evaluate, which is for RuleCondition/RuleGroup
-// trees, not arithmetic expressions).
+// evaluateExpressionText parses expression text and evaluates it against
+// a data context in one call - the primitive a "Test with sample data"
+// editor panel needs. Text authored via ParseExpression's grammar can be
+// either a pure calc-term formula ("SUM(qty * price)", numeric) or a
+// validation-rule-shaped comparison ("XIRR(cash_flows, dates) > 0.15",
+// boolean) - the editor doesn't know which until it tries, so this tries
+// AdvancedEvaluator.EvaluateNumeric first (the entry point calc terms
+// use) and falls back to the boolean Evaluate only on the specific
+// "didn't evaluate to a number" mismatch, not on every error (a real
+// evaluation error - an unresolvable field, a division by zero - should
+// surface as-is, not be masked by a second, differently-wrong attempt).
 func evaluateExpressionText(this js.Value, args []js.Value) interface{} {
 	if len(args) != 2 {
 		return map[string]interface{}{"error": "expected 2 arguments: expression text, context"}
@@ -120,11 +125,20 @@ func evaluateExpressionText(this js.Value, args []js.Value) interface{} {
 		return map[string]interface{}{"error": "invalid context JSON: " + err.Error()}
 	}
 	ae := vm.NewAdvancedEvaluator()
-	result, err := ae.EvaluateNumeric(vm.RuleNode{Type: vm.NodeTypeExpression, Expression: expr}, ctx)
-	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
+	node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: expr}
+
+	numResult, numErr := ae.EvaluateNumeric(node, ctx)
+	if numErr == nil {
+		return map[string]interface{}{"result": numResult, "resultType": "number"}
 	}
-	return map[string]interface{}{"result": result}
+	if !strings.Contains(numErr.Error(), "did not evaluate to a number") {
+		return map[string]interface{}{"error": numErr.Error()}
+	}
+	boolResult, boolErr := ae.Evaluate(node, ctx)
+	if boolErr != nil {
+		return map[string]interface{}{"error": boolErr.Error()}
+	}
+	return map[string]interface{}{"result": boolResult, "resultType": "boolean"}
 }
 
 // compileExpressionText parses expression text and compiles it to SQL

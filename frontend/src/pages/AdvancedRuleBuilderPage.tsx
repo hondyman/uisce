@@ -1,11 +1,18 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, Container, Typography, Paper, Button, Tabs, Tab, TextField,
   MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip,
   List, ListItem, ListItemText, Divider, CircularProgress,
+  ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
+import Editor, { OnMount } from '@monaco-editor/react';
+import type * as Monaco from 'monaco-editor';
 import AdvancedConditionBuilder, { ConditionGroup, ConditionNode, EntityDefinition, FieldDefinition } from '../components/ExpressionBuilder/AdvancedConditionBuilder';
-import { evaluateRuleWasm } from '../rules/wasmRuntime';
+import {
+  evaluateRuleWasm, parseExpressionWasm, evaluateExpressionTextWasm,
+  ExpressionParseError,
+} from '../rules/wasmRuntime';
+import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE } from '../rules/aslMonacoRegistry';
 import apiClient from '../utils/apiClient';
 
 // Converts the editor's ConditionNode shape into the wire format
@@ -78,12 +85,33 @@ interface ViolationRow {
   created_at: string;
 }
 
+const SAMPLE_EXPRESSION = 'SUM(ExecQuantity * ExecPrice)';
+
 const AdvancedRuleBuilderPage: React.FC = () => {
   const [rule, setRule] = useState<ConditionGroup>(INITIAL_RULE);
   const [tabIndex, setTabIndex] = useState(0);
   const [contextJson, setContextJson] = useState(JSON.stringify(SAMPLE_CONTEXT, null, 2));
-  const [evalResult, setEvalResult] = useState<{ result?: boolean; error?: string } | null>(null);
+  const [evalResult, setEvalResult] = useState<{ result?: boolean | number; resultType?: string; error?: string } | null>(null);
   const [evaluating, setEvaluating] = useState(false);
+
+  // Authoring mode: the structured condition/group builder (dropdowns,
+  // no FuncCall/Expression authoring surface) vs. free-text expression
+  // mode (Monaco, bound to the real function registry via
+  // asl.monaco.json) - the surface item D in the handoff named as the
+  // calc side's missing mirror. Expression mode produces the same
+  // vm.Expression AST either way it's saved: as a validation rule's
+  // rule_ast (wrapped in {type:"expression", root:...}) or as a calc
+  // term's rule_ast (via /calc-terms, unwrapped).
+  const [mode, setMode] = useState<'structured' | 'expression'>('structured');
+  const [expressionText, setExpressionText] = useState(SAMPLE_EXPRESSION);
+  const [exprParseError, setExprParseError] = useState<{ message: string; pos: number } | null>(null);
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
+
+  const [calcTermSaving, setCalcTermSaving] = useState(false);
+  const [calcTermSaveResult, setCalcTermSaveResult] = useState<{ id?: string; error?: string } | null>(null);
+  const [sqlPreview, setSqlPreview] = useState<{ sql?: string; error?: string } | null>(null);
+  const [sqlPreviewLoading, setSqlPreviewLoading] = useState(false);
 
   // Real BO catalog data, replacing MOCK_ENTITIES.
   const [businessObjects, setBusinessObjects] = useState<BOOption[]>([]);
@@ -153,18 +181,139 @@ const AdvancedRuleBuilderPage: React.FC = () => {
     loadFieldsAndRules();
   }, [loadFieldsAndRules]);
 
+  // Live syntax checking: reparse on every edit (debounced) and render
+  // the result as an inline Monaco marker at the real character offset
+  // vm.ParseExpression's *ParseError reports - not a toast the user has
+  // to correlate with a position themselves.
+  useEffect(() => {
+    if (mode !== 'expression') return;
+    const handle = setTimeout(() => {
+      parseExpressionWasm(expressionText)
+        .then(() => {
+          setExprParseError(null);
+          if (monacoRef.current && editorRef.current) {
+            monacoRef.current.editor.setModelMarkers(editorRef.current.getModel()!, 'uisce-expr', []);
+          }
+        })
+        .catch((err) => {
+          if (err instanceof ExpressionParseError) {
+            setExprParseError({ message: err.message, pos: err.pos });
+            if (monacoRef.current && editorRef.current) {
+              const model = editorRef.current.getModel()!;
+              const posAt = model.getPositionAt(err.pos);
+              monacoRef.current.editor.setModelMarkers(model, 'uisce-expr', [{
+                startLineNumber: posAt.lineNumber, startColumn: posAt.column,
+                endLineNumber: posAt.lineNumber, endColumn: posAt.column + 1,
+                message: err.message,
+                severity: monacoRef.current.MarkerSeverity.Error,
+              }]);
+            }
+          } else {
+            setExprParseError({ message: err instanceof Error ? err.message : String(err), pos: 0 });
+          }
+        });
+    }, 300);
+    return () => clearTimeout(handle);
+  }, [expressionText, mode]);
+
+  const handleExpressionEditorMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+  };
+
   const runBackendPreview = async () => {
     setEvaluating(true);
     setEvalResult(null);
     try {
       const ctx = JSON.parse(contextJson);
-      const ruleNode = toRuleNode(rule);
-      const result = await evaluateRuleWasm(ruleNode, ctx);
-      setEvalResult({ result });
+      if (mode === 'expression') {
+        const { result, resultType } = await evaluateExpressionTextWasm(expressionText, ctx);
+        setEvalResult({ result, resultType });
+      } else {
+        const ruleNode = toRuleNode(rule);
+        const result = await evaluateRuleWasm(ruleNode, ctx);
+        setEvalResult({ result, resultType: 'boolean' });
+      }
     } catch (err) {
       setEvalResult({ error: err instanceof Error ? err.message : String(err) });
     } finally {
       setEvaluating(false);
+    }
+  };
+
+  // Save path 1: expression mode -> validation rule. The parsed
+  // Expression's root becomes a RuleNode of type "expression" (see
+  // internal/rules/vm/ast.go's RuleNode/Expression shapes) - the same
+  // /validation-rule-nodes endpoint the structured builder already
+  // posts to, just a different rule_ast shape.
+  const handleSaveExpressionRule = async () => {
+    setSaving(true);
+    setSaveResult(null);
+    try {
+      const ast = await parseExpressionWasm(expressionText) as { root: unknown };
+      const desc = await apiClient<{ id: string }>('/validation-rule-nodes', {
+        method: 'POST',
+        body: JSON.stringify({
+          bo_name: selectedBOKey,
+          name: ruleName,
+          severity,
+          timing,
+          category,
+          rule_ast: { type: 'expression', root: ast.root },
+        }),
+      });
+      setSaveResult({ id: desc.id });
+      await loadFieldsAndRules();
+    } catch (err) {
+      setSaveResult({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save path 2: expression mode -> calc term. Server-side parsing
+  // (POST /calc-terms, internal/handlers/calc_term_handler.go) rather
+  // than posting the client-parsed AST - the server is the single place
+  // that validates and stores rule_ast, so a client/server parser
+  // disagreement can't silently save something that evaluates
+  // differently than it was authored.
+  const handleSaveCalcTerm = async () => {
+    setCalcTermSaving(true);
+    setCalcTermSaveResult(null);
+    try {
+      const desc = await apiClient<{ id: string }>('/calc-terms', {
+        method: 'POST',
+        body: JSON.stringify({
+          bo_name: selectedBOKey,
+          name: ruleName,
+          expression: expressionText,
+        }),
+      });
+      setCalcTermSaveResult({ id: desc.id });
+    } catch (err) {
+      setCalcTermSaveResult({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setCalcTermSaving(false);
+    }
+  };
+
+  // "Does this pushdown, and to what?" - compiles via the real backend
+  // resolver (BO field bindings -> physical columns), the same chain
+  // GenerateDDL uses for a saved pre-aggregation - not a client-side
+  // guess at column names.
+  const handlePreviewSQL = async () => {
+    setSqlPreviewLoading(true);
+    setSqlPreview(null);
+    try {
+      const res = await apiClient<{ sql: string }>('/calc-terms/preview-sql', {
+        method: 'POST',
+        body: JSON.stringify({ bo_name: selectedBOKey, expression: expressionText }),
+      });
+      setSqlPreview({ sql: res.sql });
+    } catch (err) {
+      setSqlPreview({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSqlPreviewLoading(false);
     }
   };
 
@@ -221,9 +370,49 @@ const AdvancedRuleBuilderPage: React.FC = () => {
           {!loadingFields && fields.length === 0 && selectedBOKey && (
             <Alert severity="warning" sx={{ py: 0 }}>No physical fields found for this BO's driver_table_name.</Alert>
           )}
+          <ToggleButtonGroup
+            size="small"
+            value={mode}
+            exclusive
+            onChange={(_, v) => v && setMode(v)}
+            sx={{ ml: 'auto' }}
+          >
+            <ToggleButton value="structured">Structured Conditions</ToggleButton>
+            <ToggleButton value="expression">Expression</ToggleButton>
+          </ToggleButtonGroup>
         </Stack>
 
-        {entities.length > 0 && (
+        {mode === 'expression' && (
+          <Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Author a FuncCall/Expression tree directly - the structured
+              builder can't produce these. Start typing a function name
+              (e.g. "XI") for autocomplete with its signature and
+              wasm-only/pushdown badge.
+            </Typography>
+            <Paper variant="outlined" sx={{ mb: 1 }}>
+              <Editor
+                height="140px"
+                language={UISCE_EXPRESSION_LANGUAGE}
+                value={expressionText}
+                onChange={(v) => setExpressionText(v ?? '')}
+                theme="vs-light"
+                beforeMount={(monaco) => { void registerUisceExpressionLanguage(monaco); }}
+                onMount={handleExpressionEditorMount}
+                options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'off', folding: false, scrollBeyondLastLine: false }}
+              />
+            </Paper>
+            {exprParseError ? (
+              <Alert severity="error" sx={{ mb: 1 }}>
+                Syntax error at position {exprParseError.pos}: {exprParseError.message}
+              </Alert>
+            ) : (
+              <Alert severity="success" sx={{ mb: 1 }}>Parses cleanly.</Alert>
+            )}
+          </Box>
+        )}
+
+        {mode === 'structured' && entities.length > 0 && (
           <AdvancedConditionBuilder
             // AdvancedConditionBuilder seeds its own currentEntity state
             // from the primaryEntity prop via useState(primaryEntity) once,
@@ -266,21 +455,71 @@ const AdvancedRuleBuilderPage: React.FC = () => {
               <MenuItem value="reconcile">reconcile</MenuItem>
             </Select>
           </FormControl>
-          <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} />
+          <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} disabled={mode === 'expression'} />
         </Stack>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saving || !ruleName || !selectedBOKey}
-        >
-          {saving ? 'Saving...' : 'Save Rule'}
-        </Button>
+
+        {mode === 'structured' && (
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving || !ruleName || !selectedBOKey}
+          >
+            {saving ? 'Saving...' : 'Save Rule'}
+          </Button>
+        )}
+
+        {mode === 'expression' && (
+          <Stack direction="row" spacing={2}>
+            <Button
+              variant="contained"
+              onClick={handleSaveExpressionRule}
+              disabled={saving || !ruleName || !selectedBOKey || !!exprParseError}
+            >
+              {saving ? 'Saving...' : 'Save as Validation Rule'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handleSaveCalcTerm}
+              disabled={calcTermSaving || !ruleName || !selectedBOKey || !!exprParseError}
+            >
+              {calcTermSaving ? 'Saving...' : 'Save as Calc Term'}
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={handlePreviewSQL}
+              disabled={sqlPreviewLoading || !selectedBOKey || !!exprParseError}
+            >
+              {sqlPreviewLoading ? 'Compiling...' : 'Preview SQL'}
+            </Button>
+          </Stack>
+        )}
+
         {saveResult && (
           <Box sx={{ mt: 2 }}>
             {saveResult.error ? (
               <Alert severity="error">{saveResult.error}</Alert>
             ) : (
-              <Alert severity="success">Saved as {saveResult.id}</Alert>
+              <Alert severity="success">Saved as validation rule {saveResult.id}</Alert>
+            )}
+          </Box>
+        )}
+        {calcTermSaveResult && (
+          <Box sx={{ mt: 2 }}>
+            {calcTermSaveResult.error ? (
+              <Alert severity="error">{calcTermSaveResult.error}</Alert>
+            ) : (
+              <Alert severity="success">Saved as calc term {calcTermSaveResult.id}</Alert>
+            )}
+          </Box>
+        )}
+        {sqlPreview && (
+          <Box sx={{ mt: 2 }}>
+            {sqlPreview.error ? (
+              <Alert severity="error">{sqlPreview.error}</Alert>
+            ) : (
+              <Box sx={{ bgcolor: '#f5f5f5', p: 2, borderRadius: 1, overflow: 'auto', fontFamily: 'monospace', fontSize: 13 }}>
+                {sqlPreview.sql}
+              </Box>
             )}
           </Box>
         )}
@@ -330,15 +569,18 @@ const AdvancedRuleBuilderPage: React.FC = () => {
 
         {tabIndex === 0 && (
           <Box sx={{ bgcolor: '#f5f5f5', p: 2, borderRadius: 1, overflow: 'auto' }}>
-            <pre style={{ margin: 0 }}>{JSON.stringify(rule, null, 2)}</pre>
+            <pre style={{ margin: 0 }}>
+              {mode === 'expression' ? expressionText : JSON.stringify(rule, null, 2)}
+            </pre>
           </Box>
         )}
 
         {tabIndex === 1 && (
           <Box sx={{ p: 2 }}>
             <Typography variant="body2" color="textSecondary" paragraph>
-              Runs this rule against internal/rules/vm.AdvancedEvaluator via the same
-              rule_engine.wasm build the browser live-preview panel uses (see
+              Runs this {mode === 'expression' ? 'expression' : 'rule'} against
+              internal/rules/vm.AdvancedEvaluator via the same rule_engine.wasm
+              build the browser live-preview panel uses (see
               frontend/src/rules/wasmRuntime.ts) - the real evaluator, not a claim about it.
             </Typography>
             <TextField
@@ -357,6 +599,10 @@ const AdvancedRuleBuilderPage: React.FC = () => {
               <Box sx={{ mt: 2 }}>
                 {evalResult.error ? (
                   <Typography color="error">Error: {evalResult.error}</Typography>
+                ) : evalResult.resultType === 'number' ? (
+                  <Typography sx={{ fontWeight: 'bold' }} color="success.main">
+                    Result: {evalResult.result}
+                  </Typography>
                 ) : (
                   <Typography sx={{ fontWeight: 'bold' }} color={evalResult.result ? 'success.main' : 'text.secondary'}>
                     Result: {evalResult.result ? 'PASS' : 'FAIL'}
