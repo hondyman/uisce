@@ -1053,10 +1053,6 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	}
 
 	now := time.Now()
-	var lastModifiedBy interface{} = nil
-	if userID != "" {
-		lastModifiedBy = userID
-	}
 
 	if req.Config != nil {
 		// Update Config
@@ -1064,48 +1060,46 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 		if err == nil {
 			query := `
 				UPDATE business_objects
-				SET config = $1, last_modified_at = $2, last_modified_by = $3
-				WHERE tenant_id = $4::uuid AND key = $5
+				SET config = $1, updated_at = $2
+				WHERE tenant_id = $3::uuid AND bo_key = $4
 			`
-			_, _ = s.db.ExecContext(ctx, query, configBytes, now, lastModifiedBy, tenantID, current.Key)
+			if _, execErr := s.db.ExecContext(ctx, query, configBytes, now, tenantID, current.Key); execErr != nil {
+				logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to persist config for bo_id=%s: %v", current.ID, execErr)
+			}
 		}
 
-		// Update Fields column if present in config
+		// Persist fields into the real business_object_fields table (bo_fields is
+		// a legacy table that was dropped - see migrations/20260902_bo_studio_and_field_overrides.sql
+		// for the table this service should have been using all along). Full
+		// replace: the frontend always sends the complete desired field list.
 		if fields, ok := req.Config["fields"]; ok {
 			fieldsBytes, err := json.Marshal(fields)
 			if err == nil {
-				// Also persist fields into normalized bo_fields table (replace existing custom fields)
-				// We unmarshal the fields JSON and insert each as a bo_fields row. This keeps
-				// the authoritative field list normalized for queries and UI.
 				var newFields []map[string]interface{}
 				if err := json.Unmarshal(fieldsBytes, &newFields); err == nil {
 					logging.GetLogger().Sugar().Infof("metadata: UPDATE FIELDS - received %d fields for bo_id=%s, tenant=%s", len(newFields), current.ID, tenantID)
 
-					// Update the fields column in business_objects table
-					query := `
-						UPDATE business_objects
-						SET fields = $1, last_modified_at = $2, last_modified_by = $3
-						WHERE tenant_id = $4::uuid AND key = $5
-					`
-					_, _ = s.db.ExecContext(ctx, query, fieldsBytes, now, lastModifiedBy, tenantID, current.Key)
-					// Use a transaction to replace custom (non-core) fields
 					tx, txErr := s.db.BeginTxx(ctx, nil)
 					if txErr == nil {
-						logging.GetLogger().Sugar().Errorf("Started bo_fields transaction for bo_id=%s", current.ID)
 						defer func() {
 							_ = tx.Rollback()
 						}()
-						// Delete existing custom fields for this BO from the catalog
-						if _, err := tx.ExecContext(ctx, `DELETE FROM bo_fields WHERE business_object_id = $1::uuid`, current.ID); err != nil {
-							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] Failed to delete bo_fields for bo_id=%s: %v", current.ID, err)
+						if _, err := tx.ExecContext(ctx, `DELETE FROM business_object_fields WHERE bo_id = $1::uuid AND tenant_id = $2::uuid`, current.ID, tenantID); err != nil {
+							logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] Failed to delete business_object_fields for bo_id=%s: %v", current.ID, err)
 						}
 
 						insertQuery := `
-							INSERT INTO bo_fields (
-								id, tenant_id, business_object_id, key, name, display_name, technical_name, type, is_core, sequence, description
+							INSERT INTO business_object_fields (
+								id, tenant_id, bo_id, term_node_id, field_name, field_role,
+								display_name, technical_name, data_type, description, display_order
 							) VALUES (
-								$1::uuid, $2::uuid, $3::uuid, $4, $5, $6, $7, $8, $9, $10, $11
+								$1::uuid, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10, $11
 							)
+							ON CONFLICT (tenant_id, bo_id, term_node_id) WHERE term_node_id IS NOT NULL DO UPDATE
+							SET field_name = EXCLUDED.field_name, field_role = EXCLUDED.field_role,
+								display_name = EXCLUDED.display_name, technical_name = EXCLUDED.technical_name,
+								data_type = EXCLUDED.data_type, description = EXCLUDED.description,
+								display_order = EXCLUDED.display_order, updated_at = NOW()
 							`
 						for _, f := range newFields {
 							id := uuid.New().String()
@@ -1113,33 +1107,35 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 							if name == "" {
 								name = toString(f["displayName"])
 							}
-							displayName := toString(f["displayName"])
-							if displayName == "" {
-								displayName = name
+							termNodeID := toString(f["semanticTermId"])
+							if termNodeID == "" {
+								termNodeID = toString(f["key"])
 							}
-							key := toString(f["key"])
-							if key == "" {
-								key = toString(f["technicalName"])
+							if _, err := uuid.Parse(termNodeID); err != nil {
+								logging.GetLogger().Sugar().Warnf("[FIELD_UPDATE] Skipping field %q for bo_id=%s: no valid semantic term id", name, current.ID)
+								continue
 							}
-							if key == "" {
-								key = name
+							role := toString(f["role"])
+							if role == "" {
+								role = "DIMENSION"
 							}
 							technicalName := toString(f["technicalName"])
 							if technicalName == "" {
-								technicalName = key
+								technicalName = toString(f["key"])
 							}
-							typeName := toString(f["type"])
-							if typeName == "" {
-								typeName = "text"
+							dataType := toString(f["type"])
+							if dataType == "" {
+								dataType = "text"
 							}
-							seq := toInt(f["sequence"])
 							desc := toString(f["description"])
+							seq := toInt(f["sequence"])
 							if _, err := tx.ExecContext(ctx, insertQuery,
-								id, tenantID, current.ID, key, name, displayName, technicalName, typeName, false, seq, desc,
+								id, tenantID, current.ID, termNodeID, name, role,
+								name, technicalName, dataType, desc, seq,
 							); err != nil {
-								logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to insert bo_field for bo_id=%s key=%s: %v", current.ID, key, err)
+								logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to insert business_object_field for bo_id=%s name=%s: %v", current.ID, name, err)
 							} else {
-								logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Successfully inserted bo_field for bo_id=%s key=%s, name=%s", current.ID, key, name)
+								logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Successfully inserted business_object_field for bo_id=%s name=%s", current.ID, name)
 							}
 						}
 
@@ -1352,24 +1348,24 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	if isUUID {
 		query = `
 			UPDATE business_objects
-			SET display_name = $1, description = $2, icon = $3, category = $4,
-				is_active = $5, last_modified_at = $6, last_modified_by = $7,
-				driver_table_id = $8, driver_table_name = $9
-			WHERE tenant_id = $10::uuid AND id = CAST($11 AS uuid)
+			SET bo_name = $1, description = $2,
+				is_active = $3, updated_at = $4,
+				driver_table_id = $5, driver_table_name = $6
+			WHERE tenant_id = $7::uuid AND id = CAST($8 AS uuid)
 		`
 	} else {
 		query = `
 			UPDATE business_objects
-			SET display_name = $1, description = $2, icon = $3, category = $4,
-				is_active = $5, last_modified_at = $6, last_modified_by = $7,
-				driver_table_id = $8, driver_table_name = $9
-			WHERE tenant_id = $10::uuid AND key = $11
+			SET bo_name = $1, description = $2,
+				is_active = $3, updated_at = $4,
+				driver_table_id = $5, driver_table_name = $6
+			WHERE tenant_id = $7::uuid AND bo_key = $8
 		`
 	}
 
 	_, err = s.db.ExecContext(ctx, query,
-		current.DisplayName, current.Description, current.Icon, current.Category,
-		current.IsActive, now, lastModifiedBy,
+		current.DisplayName, current.Description,
+		current.IsActive, now,
 		current.DriverTableID, current.DriverTableName,
 		tenantID, boKey,
 	)
@@ -1892,15 +1888,19 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	var entityFields []models.FieldDefinition
 
 	semanticFieldQuery := `
-		SELECT id, field_name AS key, field_name AS name, COALESCE(display_name, field_name) AS display_name,
-		       COALESCE(technical_name, '') AS technical_name, COALESCE(data_type, 'text') AS type,
-		       false AS is_core, is_required, COALESCE(is_system, false) AS is_system,
-		       COALESCE(description, '') AS description, COALESCE(reference_entity, '') AS reference_entity,
-		       COALESCE(display_order, 0) AS sequence,
-		       created_at, '' AS created_by, updated_at AS last_modified_at, '' AS last_modified_by
+		SELECT id, field_name AS key, field_name AS name,
+		       COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, field_name) AS technical_name,
+		       COALESCE(data_type, 'text') AS type,
+		       false AS is_core, is_required, is_system,
+		       COALESCE(description, '') AS description,
+		       COALESCE(reference_entity, '') AS reference_entity,
+		       display_order AS sequence,
+		       created_at, '' AS created_by, updated_at AS last_modified_at, '' AS last_modified_by,
+		       COALESCE(term_node_id::text, '') AS semantic_term_id
 		FROM public.business_object_fields
 		WHERE bo_id = $1::uuid
-		ORDER BY display_order
+		ORDER BY display_order, created_at
 	`
 	if err := s.db.SelectContext(ctx, &entityFields, semanticFieldQuery, bo.ID); err != nil {
 		logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields from business_object_fields: %v", err)
