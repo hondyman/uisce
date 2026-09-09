@@ -6295,6 +6295,19 @@ export interface UpsertPreAggRequest {
   Terms: string[];
 }
 
+/** UpsertValidationRuleRequest is the API request shape for creating or
+updating a validation rule. */
+export interface UpsertValidationRuleRequest {
+  BOName: string;
+  Category: string;
+  Description: string;
+  Name: string;
+  RuleAST: any;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
+}
+
 /** User represents a user in the system */
 export interface User {
   Attributes: Record<string, string>;
@@ -6390,6 +6403,15 @@ export interface ValidationResponse {
   Pass: boolean;
 }
 
+/** ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
+vm.RuleNode-shaped json.RawMessage (internal/rules/vm) - kept as
+json.RawMessage here rather than a typed vm.RuleNode so this package
+doesn't need to import internal/rules/vm (models is a low-level,
+widely-imported package; the AST is parsed by whoever evaluates it). */
+export interface ValidationRuleConfig {
+  RuleAST: any;
+}
+
 /** ValidationRuleDefinition represents a complete validation rule */
 export interface ValidationRuleDefinition {
   ActionOnFailure: string;
@@ -6406,6 +6428,22 @@ export interface ValidationRuleDefinition {
   UpdatedAt: any;
 }
 
+/** ValidationRuleDescriptor is the API response shape. */
+export interface ValidationRuleDescriptor {
+  BOName: string;
+  Category: string;
+  CreatedAt: any;
+  Description: string;
+  GovernanceStatus: string;
+  ID: any;
+  Name: string;
+  RuleAST: any;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
+  UpdatedAt: any;
+}
+
 /** ValidationRuleEngineImpl implements ValidationRuleEngine */
 export interface ValidationRuleEngineImpl {
   db: any;
@@ -6416,6 +6454,19 @@ RuleFabric's tree-based rules share one implementation of what "=",
 bug-prone copies. */
   operators: any;
   resolver: any;
+}
+
+/** ValidationRuleProperties is stored in catalog_node.properties, mirroring
+PreAggProperties' role for pre-aggregation nodes and term_type/
+return_type's role for calculated semantic terms - node metadata that
+isn't the AST itself. */
+export interface ValidationRuleProperties {
+  BOName: string;
+  Category: string;
+  GovernanceStatus: string;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
 }
 
 /** ValidationTask represents a single validation job */
