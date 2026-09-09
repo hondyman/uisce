@@ -40,6 +40,16 @@
       "detail": "(values number[]) -\u003e number - Average of a numeric field across grouped rows."
     },
     {
+      "label": "CORREL",
+      "insert": "CORREL()",
+      "detail": "(x number[], y number[]) -\u003e number - Pearson correlation coefficient between two series, in [-1, 1]. Scale-invariant - sample vs. population normalization cancels, so this needs no such convention note."
+    },
+    {
+      "label": "COVARIANCE_S",
+      "insert": "COVARIANCE_S()",
+      "detail": "(x number[], y number[]) -\u003e number - Sample covariance between two series (n-1 denominator). Convention: sample, not population."
+    },
+    {
       "label": "Change",
       "insert": "Change {\n  \n}",
       "detail": "Insert Change node"
@@ -160,6 +170,11 @@
       "detail": "(value any, max number) -\u003e boolean - True if the field's string length is within a maximum."
     },
     {
+      "label": "MEDIAN",
+      "insert": "MEDIAN()",
+      "detail": "(values number[]) -\u003e number - Median (50th percentile) of a set of values - the average of the two middle values when the count is even."
+    },
+    {
       "label": "MIN",
       "insert": "MIN()",
       "detail": "(values number[]) -\u003e number - Minimum of a numeric field across grouped rows."
@@ -185,6 +200,11 @@
       "detail": "Insert Notification node"
     },
     {
+      "label": "PERCENTILE",
+      "insert": "PERCENTILE()",
+      "detail": "(values number[], k number) -\u003e number - The k-th percentile of a set of values (0 \u003c= k \u003c= 1), linearly interpolated between the two nearest values - matches StarRocks PERCENTILE_CONT and Excel's PERCENTILE.INC (inclusive), NOT PERCENTILE.EXC."
+    },
+    {
       "label": "ReactFlowNode",
       "insert": "ReactFlowNode {\n  \n}",
       "detail": "Insert ReactFlowNode node"
@@ -205,9 +225,24 @@
       "detail": "Insert RuleNode node"
     },
     {
+      "label": "SLOPE",
+      "insert": "SLOPE()",
+      "detail": "(known_ys number[], known_xs number[]) -\u003e number - Slope of the linear least-squares regression line through the given points - Cov(y,x)/Var(x). Argument order matches Excel's SLOPE(known_y's, known_x's): y first, x second."
+    },
+    {
       "label": "SQRT",
       "insert": "SQRT()",
       "detail": "(x number) -\u003e number - Square root - used by standard-deviation-style calculations."
+    },
+    {
+      "label": "STDEV_P",
+      "insert": "STDEV_P()",
+      "detail": "(values number[]) -\u003e number - Population standard deviation (n denominator) - use when the values ARE the entire population being measured, not a sample of a larger one."
+    },
+    {
+      "label": "STDEV_S",
+      "insert": "STDEV_S()",
+      "detail": "(values number[]) -\u003e number - Sample standard deviation (n-1 denominator, Bessel's correction). Convention: sample, not population - see STDEV_P for the population form."
     },
     {
       "label": "SUM",
@@ -238,6 +273,16 @@
       "label": "TraceStep",
       "insert": "TraceStep {\n  \n}",
       "detail": "Insert TraceStep node"
+    },
+    {
+      "label": "VAR_P",
+      "insert": "VAR_P()",
+      "detail": "(values number[]) -\u003e number - Population variance (n denominator) - use when the values ARE the entire population being measured, not a sample of a larger one."
+    },
+    {
+      "label": "VAR_S",
+      "insert": "VAR_S()",
+      "detail": "(values number[]) -\u003e number - Sample variance (n-1 denominator, Bessel's correction). Convention: sample, not population - see VAR_P."
     },
     {
       "label": "WebSocketMessage",
@@ -470,6 +515,24 @@
       "\"add\"",
       "\"deprecate\"",
       "\"modify\""
+    ],
+    "tokenKind": [
+      "0",
+      "1",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "2",
+      "3",
+      "4",
+      "5",
+      "6",
+      "7",
+      "8",
+      "9"
     ]
   },
   "functions": [
@@ -478,6 +541,26 @@
       "signature": "(values number[]) -\u003e number",
       "category": "aggregation",
       "description": "Average of a numeric field across grouped rows.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "CORREL",
+      "signature": "(x number[], y number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Pearson correlation coefficient between two series, in [-1, 1]. Scale-invariant - sample vs. population normalization cancels, so this needs no such convention note.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "COVARIANCE_S",
+      "signature": "(x number[], y number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Sample covariance between two series (n-1 denominator). Convention: sample, not population.",
       "noClosedForm": false,
       "pushdown": {
         "starrocks": true
@@ -604,6 +687,16 @@
       }
     },
     {
+      "name": "MEDIAN",
+      "signature": "(values number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Median (50th percentile) of a set of values - the average of the two middle values when the count is even.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
       "name": "MIN",
       "signature": "(values number[]) -\u003e number",
       "category": "aggregation",
@@ -644,10 +737,50 @@
       }
     },
     {
+      "name": "PERCENTILE",
+      "signature": "(values number[], k number) -\u003e number",
+      "category": "statistics",
+      "description": "The k-th percentile of a set of values (0 \u003c= k \u003c= 1), linearly interpolated between the two nearest values - matches StarRocks PERCENTILE_CONT and Excel's PERCENTILE.INC (inclusive), NOT PERCENTILE.EXC.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "SLOPE",
+      "signature": "(known_ys number[], known_xs number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Slope of the linear least-squares regression line through the given points - Cov(y,x)/Var(x). Argument order matches Excel's SLOPE(known_y's, known_x's): y first, x second.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
       "name": "SQRT",
       "signature": "(x number) -\u003e number",
       "category": "math",
       "description": "Square root - used by standard-deviation-style calculations.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "STDEV_P",
+      "signature": "(values number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Population standard deviation (n denominator) - use when the values ARE the entire population being measured, not a sample of a larger one.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "STDEV_S",
+      "signature": "(values number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Sample standard deviation (n-1 denominator, Bessel's correction). Convention: sample, not population - see STDEV_P for the population form.",
       "noClosedForm": false,
       "pushdown": {
         "starrocks": true
@@ -668,6 +801,26 @@
       "signature": "(a number[], b number[]) -\u003e number",
       "category": "aggregation",
       "description": "Sum of pairwise products: SUM(a_i * b_i). Used for weighted aggregates over grouped rows, e.g. avg_price = SUMPRODUCT(qty, price) / SUM(qty).",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "VAR_P",
+      "signature": "(values number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Population variance (n denominator) - use when the values ARE the entire population being measured, not a sample of a larger one.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "VAR_S",
+      "signature": "(values number[]) -\u003e number",
+      "category": "statistics",
+      "description": "Sample variance (n-1 denominator, Bessel's correction). Convention: sample, not population - see VAR_P.",
       "noClosedForm": false,
       "pushdown": {
         "starrocks": true

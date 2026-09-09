@@ -1665,3 +1665,347 @@ false` so Monaco's generic buffer-scraping stops competing with the
 real semantic suggestions. All verified live via `editor.trigger(...)`
 + DOM inspection, the same discipline as item 38's browser proof - not
 just "it builds."
+
+## Session 11 addendum (2026-09-09, continued a ninth time) - Tier 2a: plain statistical aggregates
+
+### 42. Nine new functions, same registration discipline, zero changes to `evalFuncCall`/`compileNodeToSQL`
+`internal/rules/vm/library_tier2a.go`: `STDEV_S`/`STDEV_P` (sample/
+population standard deviation), `VAR_S`/`VAR_P` (sample/population
+variance), `COVARIANCE_S` (sample covariance), `CORREL` (Pearson
+correlation), `SLOPE` (OLS regression slope, Excel's `SLOPE(known_ys,
+known_xs)` argument order), `MEDIAN`, and `PERCENTILE` (linear
+interpolation - matches StarRocks `PERCENTILE_CONT`/Excel's inclusive
+`PERCENTILE.INC`, explicitly **not** `PERCENTILE.EXC`, stated in the
+function's own `Description`). All nine are pushdownable
+(`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP`/`COVAR_SAMP`/`CORR`/
+`PERCENTILE_CONT` pass-through; `SLOPE` the one expansion emitter,
+`COVAR_SAMP(y,x)/VAR_SAMP(x)`, argument order matching the native form).
+Confirms the item 28 registry refactor's whole point: registering nine
+functions touched exactly one new file plus its test file - `evalFuncCall`
+and `compileNodeToSQL` needed no edits, dispatching through
+`LookupFunction` exactly as they did before any of these existed.
+
+Naming departs from Excel's dotted spelling (`STDEV_S` not `STDEV.S`)
+deliberately: the parser's `isIdentPart` already treats `.` as part of a
+dotted field path (see item 34), so `STDEV.S(` would be ambiguous with
+field-path syntax. Follows the existing underscore convention
+(`MAX_LENGTH`, `NOT_EMPTY`) instead.
+
+### 43. Fixture honesty: three real Microsoft values, three honest "no fixture available"
+`STDEV_S`/`VAR_S`/`COVARIANCE_S` are checked against real values fetched
+live this session from Microsoft's own published docs (breaking-strength
+sample data, result 27.46391572 for STDEV.S / 754.27 for VAR.S; `{2,4,8}`/
+`{5,11,12}` -> 9.666666667 for COVARIANCE.S). `CORREL`, `MEDIAN`, and
+`PERCENTILE.EXC`'s own Microsoft doc pages were fetched too, but - unlike
+YEARFRAC's basis-1/4 gap, which was a real, checked "not implemented" -
+these three publish their example data only as an image
+(`![Examples of the ... function](../media/...jpg)`), with no numeric
+values anywhere in the page's text content. Confirmed this directly
+(fetched the pages, read what came back) rather than assuming from a
+search miss - the same "a 404 is evidence the guess was wrong, not that
+the document doesn't exist" discipline from the MIRR working note,
+applied to the adjacent case of a page that exists but whose numbers
+aren't machine-readable. `STDEV_P`/`VAR_P` (no Microsoft fixture for the
+population form either) and `CORREL`/`SLOPE`/`PERCENTILE` all fall back
+to exact-by-construction (a perfect line for `CORREL`/`SLOPE`, round
+numbers for `PERCENTILE`) plus an independent cross-check against
+Python's `statistics` module or a from-scratch centered-sum computation -
+labeled as exactly that in `library_tier2a_test.go`'s own header comment,
+not mislabeled as Excel fixtures. 17 new tests, all passing; full
+`internal/rules/vm` suite now 94 tests (up from 59 after Tier 1), still
+zero failures.
+
+### 44. The live proof surfaced a real stratum-boundary fact, not just a passing test
+`cmd/verify_stats_measure` (permanent, mirrors `verify_calc_measure`'s
+shape) authors "Exec Price StdDev" (`STDEV_S(ExecPrice)`) against the
+Execution BO, registers a pre-aggregation, and confirms `GenerateDDL`
+compiles it to real SQL (`STDDEV_SAMP(exec_price)`, no `NULL /* TODO */`)
+through the same `ResolveSemanticFieldMap` chain item 26 proved for `SUM`.
+
+Getting to a *live* proof took a real detour worth recording: the script
+originally seeded four executions (varying `exec_price`, one placement)
+into the platform-local `alpha.orm.execution` table (see item 11) and
+waited for Debezium CDC to mirror them into StarRocks's
+`oms.orm_execution` before generating DDL - the same assumption
+`verify_calc_measure` implicitly made. It never arrived. Reading
+`docs/orm-oms-connector.md` (present in the repo, not written this
+session) confirmed why: the real `orm-oms-connector`'s publication is
+`CREATE PUBLICATION orm_cdc_publication FOR TABLES IN SCHEMA orm` **on
+the `crims` database**, not `alpha.orm` - exactly the still-open
+"canonical OMS stratum" question item 10 named, now with a concrete,
+checked consequence: data written to this session's (and item 11's, and
+every `verify_order_validations`-style proof's) `alpha.orm` tables was
+*never* going to reach StarRocks through that pipeline, no matter how
+long the script waited. `verify_calc_measure`'s original `499375` proof
+was never actually testing that path either - it read a single row that
+was already resident in StarRocks from some earlier, undocumented
+mechanism, with no live Postgres source at all that session.
+
+Fixed for this proof the same way: seeded the identical four rows
+directly into StarRocks's `oms.orm_execution` (real INSERT statements
+against the live hot tier, not a mock) alongside the Postgres insert
+(kept as the source-of-truth record, and in case a future session's
+resolution of item 10 makes it CDC-reachable). One new wrinkle found
+running it: StarRocks's prepared-statement protocol rejects a
+placeholder-parameterized `INSERT`/`SELECT ... WHERE` through
+`go-sql-driver/mysql` (`Error 1295: This command is not supported in the
+prepared statement protocol yet`) - worked around by building the
+literal SQL string directly (safe here: every interpolated value is a
+freshly-generated UUID or a float this program computed, never external
+input).
+
+Result: `StarRocks STDDEV_SAMP` on the four live rows =
+`1.2308533625091174`, an independent from-scratch Go reimplementation
+(not a call into `internal/rules/vm`) of sample standard deviation over
+the same four prices = `1.2308533625091154` - agreement to within
+`2e-12`, comfortably inside the script's own `1e-3` assertion. Tier 2a's
+pushdown claim is proven against the real, live StarRocks instance, not
+only unit-tested.
+
+**Not resolved, and not this pass's job to resolve**: which physical
+source is actually canonical (item 10) still needs a person's decision.
+This item only adds a second, independently-discovered data point to
+that open question - a real script hit a real dead end for a reason
+that traces directly back to it.
+
+### 45. Artifacts regenerated per the standing checklist
+`go generate ./...` from `backend/rule-engine` (`asl.monaco.json`'s
+`functions` array grew from 23 to 32 entries, all nine new ones correctly
+flagged `pushdown.starrocks: true`; `asl.d.ts`/`asl.schema.json`
+unchanged, since Tier 2a added no new Go *types*, only `Library` map
+entries - consistent with item 31's explanation of why type-level
+codegen and registry-data codegen are different generators); wasm
+rebuilt (`GOOS=js GOARCH=wasm go build ./cmd/wasm`), synced to
+`frontend/public/rule_engine.wasm` and `frontend/public/asl.monaco.json`,
+and functionally verified via `scripts/verify_wasm.js` before trusting
+it. `check-drift` confirmed it fails pre-commit (comparing against git
+HEAD, as designed) and will pass once this session's changes are
+committed - not run again post-commit in this session.
+
+### 46. What Tier 2a deliberately left out, per the order-of-work plan
+- **Tier 2b** (Sharpe/Sortino/information ratio, annualized returns) -
+  not started; per the build plan these are authored expressions/calc-
+  term recipes, not registry entries, the same way `RVPI`/`TVPI`/`DPI`/
+  `MOIC` already are (item 26).
+- **Tier 2c** (TWRR, max drawdown) and the context-provider array-loading
+  extension it needs - not started. Both require window functions
+  (`OVER (PARTITION BY ... ORDER BY ...)`), which `compileNodeToSQL`
+  doesn't emit today - the honest move, per the build plan, is
+  native-only with `Pushdown: false` until a real measure needs the SQL
+  form, not a half-built emitter.
+- **Waterfall, PME** - not started, both explicitly scoped as their own
+  sessions in the build plan (spec-first for the waterfall; PME needs the
+  series-binding design settled first).
+- No frontend work this pass - the Monaco surface (items 38/41) already
+  reads `asl.monaco.json`'s `functions` array generically, so the nine
+  new entries are autocomplete-visible with correct pushdown/wasm badges
+  with no code changes; not independently re-verified live in the browser
+  this session (the generated-JSON diff plus the unit/live-SQL proofs
+  were treated as sufficient for a mechanical, playbook-following batch -
+  see item 20 for the "when is a live proof enough" precedent for
+  compositions needing none).
+
+### New tickets from this pass
+- **The `alpha.orm` vs. `crims.orm` CDC-reachability gap (item 44) blocks
+  every future live proof that wants fresh data, not just this one.**
+  Every `verify_*` script that inserts into `alpha.orm` and expects
+  StarRocks to see it will hit the same 90-second dead end this session
+  did, until item 10's stratum question is answered. Worth flagging
+  explicitly to whoever picks that decision up: it's not only a
+  modeling/ownership question anymore, it's actively blocking this
+  engagement's own proof discipline.
+- Tiers 2b-4 of the PE-metrics backlog (unchanged from item 33/40) remain
+  untouched.
+
+## Working note added this session
+- **A doc page returning 200 with real prose is not the same as a page
+  with machine-readable example data.** `CORREL`/`MEDIAN`/`PERCENTILE.EXC`'s
+  Microsoft pages fetched successfully and described their examples in
+  words, but the actual numbers exist only inside a linked image the
+  fetch tool can't read. Confirm this by reading what actually came back
+  (an image reference with no numbers) before writing "no fixture
+  available" - the same discipline as the MIRR 404 note, for the
+  adjacent failure mode of a page that loads but doesn't contain what you
+  need.
+
+## Session 12 addendum (2026-09-10) - OMS validation Phase 1: 20 new rules, 5 BOs, proven both directions
+
+Implemented the OMS validation spec's Phase 1: the 2 new Order rules plus
+all 5 Placement, 6 Execution, 4 ExecutionAllocation, and 3 OrderAllocation
+rules the spec called for, each with real context-provider support and a
+passing + violating case through the real write path. UI (the BO
+Validations tab and system validations page) is next, per the spec's own
+sequencing note - not started this session.
+
+### 47. Every OMS BO now has a dedicated context loader - the generic shape retired
+`internal/metadata/shadow_evaluation.go`'s `relatedRowContext`/
+`loadRelatedRowContext` (the one-size-fits-all parent+sibling-sum shape
+from Session 3/item 8) is gone - once Execution needed a two-hop parent
+(Execution -> Placement -> Order, for price-vs-limit and causality) and a
+duplicate-row count the old shape couldn't express, there was no BO left
+using it. Five dedicated loaders replace it: `loadOrderContext` (extended
+with `placement_routed_sum` and `duplicate_order_count`),
+`loadPlacementContext`, `loadExecutionContext`, `loadOrderAllocationContext`,
+`loadExecutionAllocationContext` - each documented with exactly which
+context keys it produces and why. All added to
+`knownTransientContextFields` so the fail-loud unresolved-field check
+(item 19) doesn't false-positive on them.
+
+### 48. Two new engine-boundary facts, found only by running the proof - neither fixed inside the shared evaluator
+Both closed the same way item 16/19's null-vs-absent fix was: a
+precomputed boolean in the context provider, not a change to
+`AdvancedEvaluator`/`ConditionEvaluator`, per the standing "never mutate
+the shared ConditionEvaluator" rule.
+- **`AdvancedEvaluator.evalBinaryExpr` calls `toFloat64` unconditionally,
+  even for `==`/`!=`** - every `Expression`-type comparison, including
+  equality, is numeric-only. A same-order-linkage rule authored as
+  `{"op":"==","left":{"path":"parent_order_id"},"right":{"path":"alloc_order_id"}}`
+  (two UUID strings) errors "operands not numeric" regardless of whether
+  the IDs actually match - not a bug in the linkage logic, a real gap in
+  what `==` can express for `Expression` nodes. `Condition`'s `equals`
+  operator has no such restriction (`reflect.DeepEqual`, any type) - so
+  the fix was computing `same_order_ok` (a plain bool) once in
+  `loadExecutionAllocationContext` and authoring the rule as a
+  `Condition` checking `same_order_ok == true`, the same move
+  `causality_ok` (below) already made for timestamps.
+- **Neither comparator has any timestamp/date support at all** -
+  `ConditionEvaluator`'s `greater_than`/`less_than`/`greater_equal`/
+  `less_equal` and `AdvancedEvaluator`'s `BinaryExpr` both delegate to
+  `toNumber`/`toFloat64`, which reject an RFC3339 string outright. The
+  causality rule (`ExecTime >= placement's created_at`) needed the same
+  precomputed-boolean treatment: `causality_ok`, computed in
+  `loadExecutionContext` via a small `parseTimestamp` helper (handles
+  both `time.Time` - the common case, lib/pq recognizes timestamptz - and
+  a string fallback), exposed as a plain bool.
+- **Neither of these was found by reading the code** - both surfaced only
+  by running `cmd/verify_oms_validations` and watching a rule that should
+  have passed instead reject every write, every time, regardless of the
+  actual data. Worth remembering next time a cross-field or non-numeric
+  comparison seems like the obvious way to author a rule: numeric-only is
+  the load-bearing assumption underneath both comparators today, and
+  neither documents it anywhere else.
+
+### 49. A third, more insidious engine-boundary bug: `MapScan` silently returns `[]byte` for some column types, `coerceNumeric` doesn't fix it
+Found debugging item 48's linkage rule even after switching to a
+`Condition`: `same_order_ok` was landing as `false` unconditionally, for
+values that were verified (via direct SQL) to actually match. Root cause,
+confirmed with temporary debug logging before touching any code: lib/pq's
+generic `interface{}` scan target - used by every `rows.MapScan(row)`
+call in this file's context loaders - returns some Postgres text-like
+column types (confirmed for `uuid`; not confirmed but plausible for other
+non-varchar text types) as raw `[]byte`, not `string`, while a *typed*
+scan (`GetContext(&aTypedStringVar, ...)`, used by `broker_status`
+elsewhere in the same file) gets a clean `string` for the identical kind
+of column. `coerceNumeric` (the existing helper applied to every
+MapScan'd value) doesn't fix this - it converts a `[]byte` to `float64`
+*only if it parses as a number*, and silently returns non-numeric
+`[]byte` completely unchanged. Two independent failure modes follow from
+the same root cause: `fmt.Sprintf("%v", []byte(...))` renders a UUID as
+its decimal byte values (`[50 48 53 ...]`), not its text, breaking
+`same_order_ok`'s string comparison outright; and `Condition`'s
+`compareValues` does `reflect.DeepEqual(actual, expected)`, so
+`DeepEqual([]byte("BUY"), "BUY")` is `false` - not because the values
+differ, but because the *types* differ, which meant the price-vs-limit
+rule's `order_side != 'BUY'` escape branch was very likely always
+evaluating `true` (always "not equal", regardless of the order's real
+side) before this fix, silently defeating the whole rule for every BUY
+order in a way that would have kept "passing" in this session's own test
+suite for the wrong reason had it not been caught.
+
+Fixed with `normalizeScanned` (`shadow_evaluation.go`): converts `[]byte`
+to `string` *before* handing off to the existing `coerceNumeric`, so a
+numeric `[]byte` still promotes to `float64` exactly as before, and a
+non-numeric one (a UUID, a status string, a side) becomes a clean `string`
+instead of staying raw bytes. Applied at all four `MapScan`-based context
+sites (`loadExecutionContext`, `loadOrderContext`'s account lookup,
+`loadOrderAllocationContext`'s account lookup, `loadExecutionAllocationContext`) -
+deliberately not applied to the record's own top-level fields (still
+`coerceNumeric` only), since those are already stringified by
+`CreateBORecord`/`UpdateBORecord` before this code ever sees them (a
+different code path, unaffected by this bug). Re-verified the
+price-vs-limit rule specifically after this fix (a real SELL-below-limit
+and BUY-above-limit case, not just re-running the existing suite) to
+confirm it now fires for the right reason, not just that the test suite
+still reports green.
+
+### 50. `orm.broker` - the fourth minimal reference table, same pattern as `orm.account`
+`backend/migrations/20260910_create_orm_broker.sql`: `broker_id`/`status`
+only, no BO (no "broker" BO exists in the catalog, same reasoning
+`orm.account` used). Applied directly against `alpha` with
+`search_path=public` forced explicitly, per the Session 5 landmine note -
+checked, not assumed, this time.
+
+### 51. Two proof scripts, one honesty note about "oracle" claims
+`cmd/verify_oms_validations` (permanent): all 20 new rules plus the 2 new
+Order rules, each proven with both a passing and a violating case through
+the real `CreateBORecord`/`UpdateBORecord` path - 27 pass/fail assertions
+in one run, all against real Postgres writes, real persisted violations.
+Checked `pg_constraint` on the `orm` schema before writing this file's
+doc comment: only `orm."order".chk_order_target_qty_positive` is a real
+DB CHECK today. The spec's table calls several other new rules "oracle"
+rules (Placement.RoutedQuantity > 0, Execution's qty/price positivity,
+ExecutionAllocation/OrderAllocation's positive-quantity rules) - none of
+those have a live CHECK constraint backing them, so this file states that
+plainly rather than reusing the "oracle" label for a comparison that
+doesn't exist. Adding the missing CHECK constraints was out of this
+pass's scope.
+
+Two non-determinism bugs found running this multiple times against the
+same persistent database, both the same shape: a fixed literal value
+(order `target_qty=77/78`, a `broker_exec_id` string) that was fine on a
+single run became a false positive/negative on every subsequent run, once
+a real duplicate-detection rule started comparing this run's fixture
+against every prior run's identical one. Fixed by making the specific
+values that must NOT collide across runs derive from
+`time.Now().UnixNano()` instead of a fixed literal - the same fix applied
+retroactively to `cmd/verify_order_validations`'s Test 2 (item 52 below),
+which predates the duplicate-order rule and started tripping over its own
+old fixture data for the identical reason once that rule went live
+tenant-wide.
+
+Also retired one genuinely stale rule found mid-session: `cmd/verify_shadow_context`'s
+original "Overfill Guard (shadow-mode verification)" probe (Session 3,
+item 8), authored against the pre-migration `quantity` field name, was
+still `is_active = true` in the catalog and - because it's an
+`Expression`-type rule referencing a field that doesn't exist on the
+current schema - errored on every single Execution write, tenant-wide,
+compounding into every other Execution rule's rejection message. Retired
+(`is_active = false`, same reversible convention as the 233-rule corpus),
+confirmed via the same live-catalog query discipline as every other
+retirement this engagement has done.
+
+### 52. `cmd/verify_order_validations` needed one line changed - not because it broke, because a new correct rule changed what "clean" means
+Test 2 (`testCleanChainPasses`) asserts a fully-consistent order chain
+produces zero new violations after enforcement is turned on. Adding the
+tenant-wide duplicate-order WARN rule (item 47) meant this test's own
+fixed `target_qty: 100` (unchanged across many runs of this script over
+many sessions) started matching a *prior run's own order* - a real,
+correctly-detected duplicate, not a false trigger, but one this
+19-days-old test had no way to anticipate when it was written. Fixed by
+making `target_qty` (and everything downstream that has to match it)
+run-unique via `time.Now().UnixNano()`, the same fix shape
+`verify_oms_validations`' own duplicate-order test needed for an
+identical reason. Re-ran the full 7-test script afterward to confirm
+green, not just the one changed test.
+
+### What's left - unchanged from the spec's own framing
+- **UI, both surfaces** (BO Validations tab, system validations page) -
+  not started. Per the spec's own sequencing note, this was always meant
+  to come after the rules existed and fired for real, which is now true
+  for all 5 OMS BOs.
+- **Phase 2 rules** (trade-date/exchange-calendar, FX-rate-exists,
+  corporate-action, STOP/STOP_LIMIT stop price, trading-session hours,
+  concentration thresholds) - still blocked on the reference data the
+  spec named, untouched this session.
+- **New tickets, not fixed this pass**: `Condition`'s `equals`/`greater_than`/etc.
+  have no cross-field comparison support (`Value` is always a literal,
+  never a second `FieldPath`) - every cross-field Condition this session
+  needed (`same_order_ok`, `causality_ok`) had to be precomputed as a
+  boolean context key instead. Worth a real design pass if a future rule
+  needs a cross-field comparison the engine can't precompute cheaply
+  (e.g. a comparison the SQL-pushdown side would also need, unlike these
+  two, which are both native/shadow-only checks). Separately: the
+  `MapScan`-returns-`[]byte` finding (item 49) was fixed only at this
+  file's four call sites - if another part of the codebase does its own
+  `MapScan` into a generic map and compares the result against a string,
+  it likely has the identical latent bug, unaudited outside this file.
