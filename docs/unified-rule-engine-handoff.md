@@ -1,26 +1,29 @@
 # Unified Rule Engine — Handoff
 
-Written 2026-09-09, updated across seven sessions on the same day, that
+Written 2026-09-09, updated across eight sessions on the same day, that
 took the rule/calc engine from "three-plus disconnected AST formats, one
-of them silently broken in the browser" through a single unified engine,
-then completed the validation path around it end to end: authoring
-(real UI, real BO catalog, real Save, semantic terms not physical column
-names), storage, evaluation, severity-driven enforcement (BLOCK rejects,
-WARN logs, a flag away from shadow mode), cross-BO context, a queryable
-*and viewable* violations surface that distinguishes a real violation
-from a rule that couldn't evaluate at all, all 5 OMS BOs live on one
-consistent local schema. Proven three times over: a runnable backend
-proof (`cmd/verify_order_validations`, 7 cases), a real browser
-click-through with a real login - author a rule, save it, reload, watch
-it round-trip, evaluate it, watch it agree with a live database CHECK
-constraint, see real violations rendered in the editor itself - and a
-cross-binding portability proof (`cmd/verify_second_binding`): the exact
-same rule, authored once against a semantic term, evaluates correctly
-against two different physical bindings of the same BO. Rules are
-authored against semantic terms (portable across whichever physical
-binding a BO resolves to, proven not just asserted), and an unresolvable
-reference fails loud - a persisted, queryable rule error - never a
-silent pass. This document is the state to hand into a fresh session —
+of them silently broken in the browser" through **two** fully-proven
+packages. The validation engine: authoring (real UI, real BO catalog,
+real Save, semantic terms not physical column names), storage,
+evaluation, severity-driven enforcement, cross-BO context, a queryable
+*and viewable* violations surface, rules portable across physical
+bindings and provably fail-loud on anything unresolvable - proven a
+backend suite, a real browser click-through, and a cross-binding
+portability proof. The calc engine: IRR/XIRR implemented once and
+inherited by native, WASM, and (once built) editor autocomplete alike,
+golden-tested three distinct ways including real Microsoft-published
+Excel fixtures, TVPI/DPI/MOIC proven as compositions needing no new
+function code, and - the two items the very first handoff of this whole
+engagement left unfinished - a calculated term compiling to real SQL and
+producing a real computed value (`499375`, the same figure this
+engagement's first session ever produced, now recomputed through the
+complete architecture) in a live StarRocks materialized view. Both
+packages sit on `feat/unified-rule-engine`, now pushed and open as
+[PR #38](https://github.com/hondyman/uisce/pull/38) - not yet merged,
+deliberately gated on CI (first real run: Go backend green, frontend CI
+confirmed broken on `main` too, not a regression), a human diff review,
+and open deploy-contract questions. This document is the state to hand
+into a fresh session —
 what's real, what's verified, what's still open, and exactly what the
 next task is.
 
@@ -864,6 +867,169 @@ merge plan, not a continuing stack of sessions; see item 10's still-open
 canonical-stratum question and the branch/commit list under "Key IDs"
 for what a merge would need to reconcile.
 
+## Session 8 addendum (2026-09-09, continued a sixth time) — the merge gate opened, and the calc engine joins the validation engine as a second fully-proven package
+
+### 25. The merge gate: pushed, PR'd, CI running - not merged
+`feat/unified-rule-engine` had never been pushed - three sessions of
+verified work existed on exactly one local checkout. Pushed it
+(`git push -u origin feat/unified-rule-engine`), opened
+[hondyman/uisce#38](https://github.com/hondyman/uisce/pull/38) against
+`main` (merge-base is `main`'s current HEAD - a clean fast-forward, no
+conflicts). **Not merged** - deliberately gated on CI, a human diff
+review nobody has done yet, and the deploy-contract questions below,
+none of which are this session's call to resolve unilaterally.
+
+CI's first real run on this branch surfaced a real, separate problem:
+`check-drift` had been silently red since sessions 3-7 added
+`models.ValidationRuleProperties` without regenerating
+`asl.d.ts`/`asl.schema.json`/`version.json` to match. Fixed by
+regenerating (`go generate ./...` from `backend/rule-engine`, rebuilding
+`rule_engine.wasm`, re-syncing it to `frontend/public/`, verifying it
+functionally via `verify_wasm.js`) and **committing that fix directly to
+the PR branch** (`41e4766c5`) - not just the calc branch it was
+discovered from - so CI's first honest look at this branch isn't red for
+a reason unrelated to review. The wasm rebuild→sync→verify sequence was
+done proactively this time, before `check-drift` could catch it, not
+after.
+
+**CI results, read relative to `main` as instructed, not in isolation**:
+`Unit Tests` and `Validate Metadata Package` (the Go backend suite) pass.
+Every frontend/e2e/integration/a11y job fails at the dependency-install
+step (`Unable to locate executable file: pnpm` / `npm ci` can't find a
+lockfile) - confirmed **pre-existing on `main`**, not a regression: the
+most recent push to `main` (`91017d32e`, the day before this branch was
+cut) shows the identical class of failure (`npm error EUSAGE ... npm ci
+... existing package-lock.json`) across Integration/Acceptance/E2E/CI
+workflows. This is the split-brain question from several sessions ago,
+finally answered: the repo's frontend CI toolchain is broken
+independent of any content, and has been for at least the last several
+merges to `main`. `Build Backend`/`backend-tests` were still running as
+of this addendum (large Go monorepo, ~12+ minutes in-progress, not
+stuck) - their result isn't in this document; check the PR directly.
+
+**Deploy-contract questions, still open, still gating the merge
+decision** (not this session's to answer): what `auto-deploy-on-main.yml`
+actually deploys and whether it runs migrations; confirmation that
+`VALIDATION_RULES_ENFORCE` is unset/false in whatever config that deploy
+uses (the property that makes shipping this code low-risk anywhere not
+deliberately configured otherwise); and that the local-only catalog
+mutations this whole arc has accumulated (bindings rows, retired probe
+rules, `driver_table_name` corrections - see "Key IDs" and each
+session's own DB-mutations note) don't matter to a freshly-deployed
+environment, since none of them are in git.
+
+### 26. The calc engine - second package, same closing discipline as the validation engine
+Branched `feat/calc-engine-measures` off the pushed
+`feat/unified-rule-engine` (not off `main` - inherits the drift fix and
+everything else already merged in). The number `499375` computed twice -
+once in this engagement's very first session, through a hand-authored
+test term and a one-off path, and again this session, through the
+complete architecture built in between (semantic terms → shared resolver
+→ pushdown compiler → live materialized view) - is the concrete marker
+that the first handoff's two stated unfinished items (formula-to-SQL
+compilation, DDL execution) are both closed, by the system now, not a
+workaround.
+
+**IRR/XIRR** (`internal/rules/vm/irr.go`): Newton-Raphson with a
+bisection fallback, implemented once, registered in `nativeFuncs` -
+flows to native server evaluation and the WASM browser build with zero
+separate implementation, the actual payoff of one unified engine
+materializing rather than just being asserted. Deliberately
+native/WASM-only (no closed-form solution exists, so neither function
+has a `starrocksFuncs`/SQL-pushdown entry) - stated explicitly now in
+the new capability registry (item 27) rather than only in scattered
+comments.
+
+**Golden tests, three distinct kinds, each proving something different**
+(`irr_test.go`, `irr_excel_fixtures_test.go` - 12 cases total):
+- Exact-by-construction (cash flows engineered so the IRR is a known
+  rate) - the primary correctness bar, mathematically indisputable,
+  independent of any spreadsheet.
+- One case independently cross-checked against a from-scratch Python
+  bisection solver (different language, different implementation) -
+  documented honestly as an independent cross-check, not mislabeled as
+  an Excel value.
+- **Excel compatibility fixtures**, added this pass as a distinct
+  residual rather than folded into the above: real values fetched
+  directly from Microsoft's own published IRR/XIRR function
+  documentation (not recalled from memory - the pages were fetched live
+  for this test). Both the business-example IRR case (-$70,000 then
+  five years of income, published results -2.1%/8.7%/-44.4% for three
+  sub-ranges) and the XIRR case (irregular dates, published result
+  0.373362535) pass. This answers the interoperability question
+  ("does it match a real spreadsheet") the other two kinds of golden
+  test don't - deliberately kept separate rather than presented as
+  something it isn't.
+- One real slip caught by the tests themselves, not a second manual
+  check: an early XIRR construction used the wrong cash-flow value
+  (whole-year math applied to a half-year case) - the test failed
+  against the solver, not the other way around, and the fix is
+  documented inline in the test rather than silently corrected.
+
+**Measure compilation, proven live** (`cmd/verify_calc_measure`): authors
+"Gross Notional" (`SUM(ExecQuantity * ExecPrice)`) as a real
+`rule_ast`-backed calculated term on the Execution BO, registers a
+pre-aggregation, generates DDL (confirmed no `NULL /* TODO */`
+placeholder - the measure compiles through the same
+`ResolveSemanticFieldMap` the validation-rule retrofit uses), applies it
+to the live StarRocks instance (`100.84.50.65:9030`, directly reachable,
+no tunnel needed), and reads back the resulting materialized view:
+`Gross Notional = 499375` for the one real live execution row
+(`5000 * 99.875`). Polls briefly after `ApplyMaterialization` before
+querying - `REFRESH ASYNC` doesn't populate synchronously, and an
+immediate read races the background refresh (caught by the proof
+script's own first run reporting zero rows, not by assuming either
+"populated" or "broken" from one read).
+
+**The capability registry** (`internal/rules/vm/registry.go`): states in
+one place, cross-checked against `nativeFuncs`/`starrocksFuncs` directly
+in `registry_test.go` so the three can't silently drift apart, which
+functions are pushdownable versus native/WASM-only. Built as the data
+layer capability badges (still a parked follow-up) would read from, not
+the badges themselves.
+
+**TVPI/DPI/MOIC - proven as compositions, not new functions**
+(`registry_test.go`): all three are `SUM(...) / SUM(...)` (TVPI adds a
+second `SUM` in the numerator) - already fully supported by existing
+`BinaryExpr`/`FuncCall` evaluation and SQL compilation. Proved both
+directions: native evaluation against constructed data, and the same
+TVPI composition compiling to real SQL
+(`(SUM(distributions) + SUM(residual_value)) / SUM(paid_in_capital)`)
+with zero new function code. Registering them in the capability registry
+would have been wrong - it would claim they need dedicated function
+support they don't.
+
+**The IRR browser proof** (mirroring the validation engine's click-
+through): with the real login, `window.evaluateRule` (the live WASM
+module) called directly for `IRR([-100,110]) ∈ (0.099, 0.101)` → `true`,
+`IRR([-100,90])` against the same bound → `false`, and
+`XIRR([-1000,300,420,380,500], [0,365,730,1095,1460]) > 0.20` → `true`
+(same series this session independently verified at 0.20132155150637107)
+- all through the actual browser, actual WASM binary, actual click
+(technically a `window.evaluateRule` console call rather than the UI's
+boolean-condition-builder, since the editor's Backend Preview panel is
+built for boolean rules and IRR returns a number - the same real
+evaluator either way).
+
+### 27. New tickets from this pass
+- **`UpsertPreAggregation` has the same class of bug as
+  `UpsertValidationRule`'s `is_active` gap (item 23)**: on the
+  `ON CONFLICT DO UPDATE` path, it returns a client-side-generated
+  `nodeID` that was never actually written - the existing row keeps its
+  original id (not in the `SET` clause), so the caller gets told a
+  UUID that doesn't correspond to any row. Worked around in
+  `cmd/verify_calc_measure` by re-resolving the real id by `node_name`
+  after upserting, rather than fixed. Two independent instances of the
+  same shape of bug in sibling `Upsert*` functions is worth a shared fix
+  (or a shared test), not two separate patches whenever each is next
+  hit.
+- **Frontend/e2e/integration/a11y CI is broken repo-wide**, confirmed
+  pre-existing on `main` (item 25) - a real gap, not this branch's
+  problem to fix, but worth its own ticket given "the check-drift and
+  wasm-verify guards are already in" was true and "the test suite should
+  be beside them" (per the standing instruction) currently isn't, for
+  the whole frontend surface.
+
 ## What's NOT done — the actual next task
 
 ### A. ~~Editor save-wiring~~ — done (Session 5)
@@ -888,23 +1054,52 @@ for what a merge would need to reconcile.
    calcengine` (mine its watermark/tier-routing logic *first* — the one
    genuinely reusable piece — before deleting the rest).
 5. Capability badges (`pushdownable`/`wasm`/`bytecode-fallback`) in the
-   Monaco editor, sourced from the function registry — folds in the
+   Monaco editor — **the data layer now exists** (`internal/rules/vm/
+   registry.go`, item 26), building against it whenever the UI work
+   happens is now a smaller task than it was. Folds in the
    FuncCall-runs-at-tree-walking-speed perf-cliff warning as the same UI
    feature.
 6. Function-name autocomplete/snippets pointed at the real function
    registry (`cmd/generate-monaco` currently derives `nodeKinds`/`enums`
-   from real types but `keywords` is still a hardcoded literal list).
+   from real types but `keywords` is still a hardcoded literal list) -
+   same registry as item 5 above now backs this too.
 7. ~45 legacy calc terms: re-author or translate into `rule_ast`. Raw-SQL
    leaf-node decision still open for the 52 plain-SQL-shaped ones
    (pragmatic escape hatch vs. full translation — not yet decided).
-8. IRR/XIRR: need Newton-with-bisection-fallback solvers, golden-tested
-   against real Excel output, before they can be native `FuncCall`
-   predicates.
+8. ~~IRR/XIRR~~ — done (item 26): Newton-with-bisection-fallback,
+   golden-tested (exact-by-construction, independent-solver cross-check,
+   and Microsoft-published Excel compatibility fixtures), native
+   `FuncCall` registered and proven live in the browser WASM build.
 9. Bytecode `FuncCall` dispatch — demand-driven per item 4 above.
    Prerequisite: make the `AdvancedEvaluator` fallback observable (a log
    line or metric at the `Unsupported != nil` gate in `engine.go`/
    `batch.go`/`orchestrator.go`) so there's a real signal for when this
-   becomes worth building, instead of speculation.
+   becomes worth building, instead of speculation. IRR/XIRR (item 26)
+   are exactly the kind of FuncCall that would benefit most, being
+   the ones guaranteed to hit the tree-walking fallback.
+
+### D. Calc engine authoring surface - the one piece of the mirror not yet built
+`cmd/verify_calc_measure` proves measure compilation end-to-end through
+the real service layer, but - unlike the validation engine's Order BO
+proof - nothing was authored through the editor UI itself for a calc
+term; the "Gross Notional" term was written directly via SQL/Go, the
+same way the very first session's proof was. The validation engine's
+click-through (Session 5) needed real frontend wiring
+(`AdvancedRuleBuilderPage.tsx`) to close that gap; the calc side's
+equivalent - a calc-term authoring surface in the editor, Save wired to
+a calc-term endpoint the way `/api/validation-rule-nodes` closed the
+loop for rules - doesn't exist yet. Worth naming as the actual remaining
+mirror-image gap, distinct from items 5-7 (badges/autocomplete/legacy
+terms), which assume an authoring surface already exists.
+
+### E. Tailwind → MUI conversion (`AdvancedConditionBuilder` and any other
+Tailwind-styled shared components) - explicitly scoped as its own
+stream, not interleaved with calc work per the standing instruction: a
+different risk profile (visual regression across every page that embeds
+the condition builder, not just the rule editor), needs its own branch,
+its own verification approach (visual diffing or a deliberate manual
+pass across every consumer, not just the one page this arc has been
+exercising), and its own session boundary. Not started.
 
 ## Key IDs / hosts for continuity
 
