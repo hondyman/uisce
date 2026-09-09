@@ -12,7 +12,7 @@ import {
   evaluateRuleWasm, parseExpressionWasm, evaluateExpressionTextWasm,
   ExpressionParseError,
 } from '../rules/wasmRuntime';
-import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE } from '../rules/aslMonacoRegistry';
+import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setAslFields } from '../rules/aslMonacoRegistry';
 import apiClient from '../utils/apiClient';
 
 // Converts the editor's ConditionNode shape into the wire format
@@ -180,6 +180,16 @@ const AdvancedRuleBuilderPage: React.FC = () => {
   useEffect(() => {
     loadFieldsAndRules();
   }, [loadFieldsAndRules]);
+
+  // Keep the expression editor's field-completion source in sync with
+  // the BO's real fields (dot notation: "client.risk_score" would need
+  // an `entity`-tagged field here - fields is flat/single-entity today,
+  // so entityScope filtering in aslMonacoRegistry currently just means
+  // "no dotted fields offered yet for this BO," not a limitation of the
+  // completion provider itself).
+  useEffect(() => {
+    setAslFields(fields.map((f) => ({ name: f.name, type: f.type, entity: f.entity, description: f.description })));
+  }, [fields]);
 
   // Live syntax checking: reparse on every edit (debounced) and render
   // the result as an inline Monaco marker at the real character offset
@@ -399,7 +409,15 @@ const AdvancedRuleBuilderPage: React.FC = () => {
                 theme="vs-light"
                 beforeMount={(monaco) => { void registerUisceExpressionLanguage(monaco); }}
                 onMount={handleExpressionEditorMount}
-                options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'off', folding: false, scrollBeyondLastLine: false }}
+                options={{
+                  minimap: { enabled: false }, fontSize: 14, lineNumbers: 'off', folding: false, scrollBeyondLastLine: false,
+                  quickSuggestions: { other: true, comments: false, strings: false },
+                  quickSuggestionsDelay: 10,
+                  suggestOnTriggerCharacters: true,
+                  parameterHints: { enabled: true },
+                  wordBasedSuggestions: false,
+                  suggest: { showFunctions: true, showFields: true, snippetsPreventQuickSuggestions: false },
+                }}
               />
             </Paper>
             {exprParseError ? (

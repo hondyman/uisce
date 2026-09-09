@@ -27,6 +27,34 @@ interface AslMonacoMetadata {
   functions?: AslFunctionMeta[];
 }
 
+// A field this expression's data context can resolve - the BO's real
+// physical fields today (see AdvancedRuleBuilderPage's `fields` state,
+// sourced from GET /validation-rule-nodes/bo-fields), and any dotted
+// related-entity field a future cross-entity binding adds. `entity` is
+// the identifier that precedes the dot for a dotted field (e.g. "client"
+// in "client.risk_score") - present only for fields that are reached
+// that way; a flat field like "ExecQuantity" has none.
+export interface AslFieldMeta {
+  name: string;
+  type: string;
+  entity?: string;
+  description?: string;
+}
+
+// setAslFields updates the live field list every registered completion/
+// hover provider reads from - called whenever the authoring page's BO
+// selection (and therefore its field list) changes. A plain module-level
+// variable, not a React prop threaded into the provider: Monaco's
+// providers are registered once per language for the whole page
+// (registerUisceExpressionLanguage no-ops after the first call), so the
+// provider closure can't capture a fresh `fields` array per BO switch -
+// it has to read a mutable source at call time instead.
+let currentFields: AslFieldMeta[] = [];
+
+export function setAslFields(fields: AslFieldMeta[]): void {
+  currentFields = fields;
+}
+
 // The language id every expression-mode Monaco instance in this app
 // should use - exported as a plain string constant (not returned from
 // the async registration below) so it's available synchronously for a
@@ -103,8 +131,26 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
   const byName = new Map(functions.map((f) => [f.name.toUpperCase(), f]));
 
   monaco.languages.registerCompletionItemProvider(UISCE_EXPRESSION_LANGUAGE, {
-    triggerCharacters: [],
+    // '.' triggers dot-notation completion (a related entity's fields);
+    // '(' and ',' re-trigger right where a function's first/next
+    // argument goes, since that's exactly where a field reference
+    // belongs. Monaco's own word-character triggering (typing "XI",
+    // "Exec", ...) fires without being listed here - trigger characters
+    // are for characters that AREN'T word constituents.
+    triggerCharacters: ['.', '(', ','],
     provideCompletionItems(model, position) {
+      const lineUpToCursor = model.getValueInRange({
+        startLineNumber: position.lineNumber, startColumn: 1,
+        endLineNumber: position.lineNumber, endColumn: position.column,
+      });
+
+      // Dot notation: "client." completing to that entity's fields only.
+      // Matches a trailing "<ident>." immediately before the cursor
+      // (allowing the word already being typed after the dot, which
+      // getWordUntilPosition below excludes from the replace range).
+      const dotMatch = lineUpToCursor.match(/([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z0-9_]*$/);
+      const entityScope = dotMatch ? dotMatch[1] : null;
+
       const word = model.getWordUntilPosition(position);
       const range: Monaco.IRange = {
         startLineNumber: position.lineNumber,
@@ -112,7 +158,42 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
         startColumn: word.startColumn,
         endColumn: word.endColumn,
       };
-      const suggestions: Monaco.languages.CompletionItem[] = functions.map((fn) => ({
+
+      const toFieldItem = (f: AslFieldMeta): Monaco.languages.CompletionItem => ({
+        label: f.name,
+        kind: monaco.languages.CompletionItemKind.Field,
+        detail: f.type,
+        documentation: f.description
+          ? { value: `**${f.name}**  \`${f.type}\`\n\n${f.description}` }
+          : { value: `**${f.name}**  \`${f.type}\`` },
+        insertText: f.name,
+        sortText: '0_' + f.name,
+        range,
+      });
+
+      let fieldSuggestions: Monaco.languages.CompletionItem[] = currentFields
+        .filter((f) => (entityScope ? f.entity === entityScope : !f.entity))
+        .map(toFieldItem);
+
+      // A dot after an identifier this BO's fields don't recognize as an
+      // entity (no cross-entity binding tagged that name) falls back to
+      // every field rather than an empty list - more useful than
+      // silence, and an empty completion result lets Monaco's own
+      // unrelated "Text" suggestion (from whatever last identifier was
+      // typed) surface as the only entry, which reads as a wrong answer
+      // rather than an honestly-empty one.
+      if (entityScope && fieldSuggestions.length === 0) {
+        fieldSuggestions = currentFields.map(toFieldItem);
+      }
+
+      // Dot-scoped completion only offers fields - a function call
+      // doesn't make sense as the right-hand side of a dotted field
+      // access.
+      if (entityScope) {
+        return { suggestions: fieldSuggestions };
+      }
+
+      const functionSuggestions: Monaco.languages.CompletionItem[] = functions.map((fn) => ({
         label: fn.name,
         kind: monaco.languages.CompletionItemKind.Function,
         detail: `${fn.signature}  ·  ${capabilityBadge(fn)}`,
@@ -121,9 +202,12 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
         },
         insertText: `${fn.name}($1)`,
         insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+        command: { id: 'editor.action.triggerParameterHints', title: 'Trigger Parameter Hints' },
+        sortText: '1_' + fn.name,
         range,
       }));
-      return { suggestions };
+
+      return { suggestions: [...fieldSuggestions, ...functionSuggestions] };
     },
   });
 
@@ -131,16 +215,105 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
     provideHover(model, position) {
       const word = model.getWordAtPosition(position);
       if (!word) return null;
+      const range = new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn);
+
       const fn = byName.get(word.word.toUpperCase());
+      if (fn) {
+        return {
+          range,
+          contents: [
+            { value: `**${fn.name}**  \`${capabilityBadge(fn)}\`` },
+            { value: '```\n' + fn.signature + '\n```' },
+            { value: fn.description },
+          ],
+        };
+      }
+
+      const field = currentFields.find((f) => f.name === word.word);
+      if (field) {
+        return {
+          range,
+          contents: [
+            { value: `**${field.name}**  \`${field.type}\`` },
+            ...(field.description ? [{ value: field.description }] : []),
+          ],
+        };
+      }
+      return null;
+    },
+  });
+
+  // Signature help (parameter hints): shows the active function's full
+  // signature while inside its parentheses, bolding the parameter the
+  // cursor is currently on - derived by parsing FunctionSpec.Signature's
+  // "(a type, b type) -> type" text into individual parameter labels,
+  // not a second, hand-maintained parameter list.
+  monaco.languages.registerSignatureHelpProvider(UISCE_EXPRESSION_LANGUAGE, {
+    signatureHelpTriggerCharacters: ['(', ','],
+    signatureHelpRetriggerCharacters: [','],
+    provideSignatureHelp(model, position) {
+      const lineUpToCursor = model.getValueInRange({
+        startLineNumber: position.lineNumber, startColumn: 1,
+        endLineNumber: position.lineNumber, endColumn: position.column,
+      });
+      const call = findEnclosingCall(lineUpToCursor);
+      if (!call) return null;
+      const fn = byName.get(call.name.toUpperCase());
       if (!fn) return null;
+
+      const params = parseSignatureParams(fn.signature);
       return {
-        range: new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn),
-        contents: [
-          { value: `**${fn.name}**  \`${capabilityBadge(fn)}\`` },
-          { value: '```\n' + fn.signature + '\n```' },
-          { value: fn.description },
-        ],
+        value: {
+          signatures: [{
+            label: fn.signature,
+            documentation: fn.description,
+            parameters: params.map((p) => ({ label: p })),
+            activeParameter: Math.min(call.argIndex, Math.max(params.length - 1, 0)),
+          }],
+          activeSignature: 0,
+          activeParameter: Math.min(call.argIndex, Math.max(params.length - 1, 0)),
+        },
+        dispose() {},
       };
     },
   });
+}
+
+// findEnclosingCall walks backward from the cursor through the current
+// line's text, tracking paren depth, to find the nearest unclosed
+// "funcName(" the cursor sits inside, and which comma-separated argument
+// index the cursor is currently in. Returns null outside any call (or
+// inside a nested, already-closed one).
+function findEnclosingCall(lineUpToCursor: string): { name: string; argIndex: number } | null {
+  let depth = 0;
+  let argIndex = 0;
+  for (let i = lineUpToCursor.length - 1; i >= 0; i--) {
+    const c = lineUpToCursor[i];
+    if (c === ')') {
+      depth++;
+    } else if (c === '(') {
+      if (depth === 0) {
+        const before = lineUpToCursor.slice(0, i);
+        const nameMatch = before.match(/([A-Za-z_][A-Za-z0-9_]*)$/);
+        if (!nameMatch) return null;
+        return { name: nameMatch[1], argIndex };
+      }
+      depth--;
+    } else if (c === ',' && depth === 0) {
+      argIndex++;
+    }
+  }
+  return null;
+}
+
+// parseSignatureParams extracts individual parameter labels from a
+// FunctionSpec.Signature string like "(rate number, cash_flows
+// number[]) -> number" -> ["rate number", "cash_flows number[]"] -
+// display-only text, parsed from the same signature the hover/
+// completion detail already shows rather than a second hand-maintained
+// parameter list.
+function parseSignatureParams(signature: string): string[] {
+  const match = signature.match(/\(([^)]*)\)/);
+  if (!match || !match[1].trim()) return [];
+  return match[1].split(',').map((p) => p.trim());
 }
