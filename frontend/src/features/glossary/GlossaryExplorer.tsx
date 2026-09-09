@@ -20,6 +20,7 @@ import {
 } from '@mui/icons-material';
 import { useDeleteTerm } from '../../api/glossary';
 import { RelationshipExplorer } from './components/RelationshipExplorer';
+import { useEntityRelationships } from './hooks/useEntityRelationships';
 import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 
 // ─────────────────────────────────────────────
@@ -371,6 +372,84 @@ export default function GlossaryExplorer() {
 
     return null;
   }, [selectedId, semTermsRaw, busTermsRaw]);
+
+  // Lineage tab data. Reuses the same node-graph endpoint the Relationships
+  // tab already uses successfully (the dedicated /api/lineage/* endpoints
+  // this used to call are unimplemented placeholders on the backend) and
+  // splits edges by direction relative to the focal term: outgoing edges
+  // (focal is source) become downstream nodes, incoming edges (focal is
+  // target) become upstream nodes. For a semantic term this naturally
+  // produces Business Term (upstream) -> Semantic Term (focal) -> Database
+  // Column (downstream); for a business term, just -> Semantic Term.
+  const { data: lineageRel } = useEntityRelationships(
+    selectedTerm?._kind === 'semantic' ? 'semantic_term' : 'business_term',
+    selectedId,
+    { enabled: activeTab === 'lineage' && !!selectedTerm }
+  );
+
+  const { upstreamNodes, downstreamNodes, lineageNodeTypes } = useMemo(() => {
+    const up: any[] = [];
+    const down: any[] = [];
+    const typeMap: Record<string, string> = {};
+    if (!lineageRel || !selectedId) return { upstreamNodes: up, downstreamNodes: down, lineageNodeTypes: typeMap };
+
+    const nodeById = new Map((lineageRel.nodes || []).map((n: any) => [n.id, n]));
+    const seen = new Set<string>();
+
+    // Some catalog data has reciprocal edges for the same node pair (both
+    // term->column and column->term MAPS_TO rows exist for a handful of
+    // legacy mappings), which would otherwise make a node appear on both
+    // sides of the focal node. Process outbound edges first so downstream
+    // wins that tie - once a related node is bucketed, later edges for the
+    // same node (in either direction) are skipped.
+    const allEdges = [...(lineageRel.edges || [])];
+    allEdges.sort((a: any, b: any) => {
+      const aOut = ((a.subject_node_id || a.source_node_id) === selectedId) ? 0 : 1;
+      const bOut = ((b.subject_node_id || b.source_node_id) === selectedId) ? 0 : 1;
+      return aOut - bOut;
+    });
+
+    for (const edge of allEdges) {
+      const sourceId = (edge as any).subject_node_id || (edge as any).source_node_id;
+      const targetId = (edge as any).object_node_id || (edge as any).target_node_id;
+      const predicate = (edge as any).predicate || (edge as any).edge_type_name || 'RELATED_TO';
+      const isOutbound: boolean = sourceId === selectedId;
+      const relatedId: string = isOutbound ? targetId : sourceId;
+      if (!relatedId || relatedId === selectedId) continue;
+      if (seen.has(relatedId)) continue;
+      seen.add(relatedId);
+
+      const node = nodeById.get(relatedId);
+      const rawName = node?.node_name || '';
+      let nodeType = node?.catalog_type_name || node?.node_type;
+      let cleanName = rawName;
+      if (rawName.startsWith('semantic_term/')) { nodeType = 'semantic_term'; cleanName = rawName.replace('semantic_term/', ''); }
+      else if (rawName.startsWith('business_term/')) { nodeType = 'business_term'; cleanName = rawName.replace('business_term/', ''); }
+      else if (rawName.startsWith('business_object/') || rawName.startsWith('/business_object/')) { nodeType = 'business_object'; cleanName = rawName.split('/').filter(Boolean).pop() || rawName; }
+      else if (rawName.startsWith('/')) { nodeType = 'column'; cleanName = rawName.split('/').filter(Boolean).pop() || rawName; }
+
+      const entry = {
+        id: relatedId,
+        node_name: cleanName || relatedId.substring(0, 8),
+        description: node?.description,
+        qualified_path: node?.qualified_path || (rawName.startsWith('/') ? rawName : undefined),
+        node_type: nodeType,
+        catalog_type_name: nodeType === 'business_term' ? 'Business Term' : nodeType === 'semantic_term' ? 'Semantic Term' : nodeType === 'business_object' ? 'Business Object' : nodeType === 'column' ? 'Database Column' : nodeType,
+        relLabel: predicate,
+      };
+      typeMap[relatedId] = nodeType || 'node';
+
+      if (isOutbound) down.push(entry);
+      else up.push(entry);
+    }
+
+    return { upstreamNodes: up, downstreamNodes: down, lineageNodeTypes: typeMap };
+  }, [lineageRel, selectedId]);
+
+  const handleLineageNavigate = useCallback((nodeId: string) => {
+    const nodeType = lineageNodeTypes[nodeId];
+    if (nodeType) handleRelatedNodeClick(nodeId, nodeType);
+  }, [lineageNodeTypes, handleRelatedNodeClick]);
 
   // Mutations
   const createSemantic = async () => {
@@ -1082,13 +1161,14 @@ export default function GlossaryExplorer() {
                 <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
                   <LineageGraph
                     focalTerm={selectedTerm}
-                    focalLabel="Glossary Term (Focal)"
-                    upstreamNodes={[]}
-                    downstreamNodes={[]}
-                    edges={[]}
+                    focalLabel={selectedTerm._kind === 'semantic' ? 'Semantic Term (Focal)' : 'Business Term (Focal)'}
+                    upstreamNodes={upstreamNodes}
+                    downstreamNodes={downstreamNodes}
+                    edges={lineageRel?.edges || []}
+                    onNavigate={handleLineageNavigate}
                     showDatasourceLayer={false}
                     height={600}
-                    emptyMessage="No lineage data available."
+                    emptyMessage="No lineage data available for this term."
                   />
                 </div>
               )}
