@@ -6,13 +6,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"time"
 )
 
 const (
-	outputDir     = "generated"
 	outputVersion = "version.json"
 )
+
+// outputDir is resolved from this file's own location, not the process
+// cwd - see the matching comment in cmd/generate-schema/main.go.
+var outputDir = func() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "generated")
+}()
 
 type VersionInfo struct {
 	SchemaVersion   string `json:"schemaVersion"`

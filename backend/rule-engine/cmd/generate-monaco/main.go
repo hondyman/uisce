@@ -6,16 +6,28 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 
 	"golang.org/x/tools/go/packages"
 )
 
 const (
+	// goPkgPath is a Go import path, not a filesystem path - packages.Load
+	// resolves it via the module system (go.mod), so it works from any cwd
+	// inside the module. outputDir is a filesystem path and does need the
+	// runtime.Caller-based fix below (this generator previously assumed
+	// cwd = rule-engine/, the opposite assumption from generate-schema and
+	// generate-types, which is exactly what produced stray
+	// cmd/generate-monaco/generated/ directories when invoked the other way).
 	goPkgPath    = "github.com/hondyman/uisce/backend/internal/services"
-	outputDir    = "generated"
 	outputMonaco = "asl.monaco.json"
 )
+
+var outputDir = func() string {
+	_, thisFile, _, _ := runtime.Caller(0)
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", "generated")
+}()
 
 type MonacoSnippet struct {
 	Label  string `json:"label"`

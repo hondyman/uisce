@@ -65,6 +65,19 @@ jobs:
         go build ./...
         go vet ./...
 
+    - name: Check ASL Schema/WASM Drift
+      working-directory: backend/rule-engine
+      run: |
+        # Regenerates the Monaco editor schema/types/version info and the
+        # browser rule_engine.wasm build from the current Go source
+        # (internal/rules/vm), then fails if either is out of sync with
+        # what's committed. Without this gate, a source change to the
+        # rule/calc AST can land while the editor schema and the browser
+        # evaluator silently keep describing the old shape - exactly the
+        # failure mode (Monaco authoring a node the browser WASM build
+        # couldn't evaluate) this pipeline exists to prevent.
+        go run ./cmd/check-drift
+
     - name: Run Tests
       working-directory: backend
       run: |
@@ -111,6 +124,19 @@ jobs:
     - name: Install Dependencies
       working-directory: frontend
       run: pnpm install --frozen-lockfile
+
+    - name: Verify rule_engine.wasm
+      run: |
+        # frontend/public/rule_engine.wasm is a manually-synced copy of
+        # backend/rule-engine/generated/rule_engine.wasm, not built or
+        # symlinked from it - nothing else in this pipeline catches it
+        # going stale (a prior session's AST rewrite shipped without this
+        # file being updated, so the browser kept silently mis-evaluating
+        # rules against the old AST shape for a while). Byte-diffing
+        # against a fresh build doesn't work either - Go's GOOS=js/wasm
+        # output isn't reproducible build-to-build - so this checks
+        # functional correctness of the exact shipped file instead.
+        node backend/rule-engine/scripts/verify_wasm.js
 
     - name: Run Tests
       working-directory: frontend

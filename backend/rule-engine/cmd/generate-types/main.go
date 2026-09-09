@@ -8,7 +8,9 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -33,6 +35,13 @@ type FieldInfo struct {
 type ASLTypeGenerator struct {
 	packages  []string
 	outputDir string
+
+	// skippedAliases records cross-package type aliases (aliasName ->
+	// targetTypeName), e.g. "RuleNode" -> "RuleNode" for
+	// "type RuleNode = vm.RuleNode" - see the matching field in
+	// cmd/generate-schema/main.go for why only genuinely-unresolved
+	// targets should block generation.
+	skippedAliases map[string]string
 }
 
 // NewASLTypeGenerator creates a new generator
@@ -46,6 +55,24 @@ func NewASLTypeGenerator(packages []string, outputDir string) *ASLTypeGenerator 
 // Generate runs the full generation process
 func (g *ASLTypeGenerator) Generate() error {
 	structs, enums := g.parsePackages()
+
+	var unresolved []string
+	for aliasName, targetType := range g.skippedAliases {
+		_, isStruct := structs[targetType]
+		_, isEnum := enums[targetType]
+		if !isStruct && !isEnum {
+			unresolved = append(unresolved, fmt.Sprintf("%s = %s", aliasName, targetType))
+		}
+	}
+	if len(unresolved) > 0 {
+		sort.Strings(unresolved)
+		return fmt.Errorf(
+			"refusing to generate types that silently omit these cross-package type aliases whose "+
+				"target was never resolved - add the target's package to the `packages` list in this "+
+				"file's main(): %s",
+			strings.Join(unresolved, ", "),
+		)
+	}
 
 	if err := g.generateTypeScript(structs, enums); err != nil {
 		return fmt.Errorf("failed to generate TypeScript: %w", err)
@@ -157,6 +184,14 @@ func (g *ASLTypeGenerator) extractTypes(decl *ast.GenDecl, structs map[string]*S
 				enums[typeSpec.Name.Name] = []string{}
 				// We'll populate enum values from const declarations
 			}
+
+		case *ast.SelectorExpr:
+			// Cross-package type alias, e.g. "type RuleNode = vm.RuleNode" -
+			// see the matching case in cmd/generate-schema/main.go.
+			if g.skippedAliases == nil {
+				g.skippedAliases = make(map[string]string)
+			}
+			g.skippedAliases[typeSpec.Name.Name] = t.Sel.Name
 		}
 	}
 }
@@ -478,14 +513,22 @@ func (g *ASLTypeGenerator) generateVersionInfo() error {
 }
 
 func main() {
+	// See the matching comment in cmd/generate-schema/main.go: resolve
+	// paths from this file's own location, not the process cwd, so this
+	// behaves identically under `go generate ./...` and a direct
+	// `cd cmd/generate-types && go run .`.
+	_, thisFile, _, _ := runtime.Caller(0)
+	ruleEngineRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	backendRoot := filepath.Join(ruleEngineRoot, "..")
+
 	packages := []string{
-		"../../../internal/services",
-		"../../../internal/rules",
-		"../../../internal/rules/vm",
-		"../../../internal/models",
+		filepath.Join(backendRoot, "internal/services"),
+		filepath.Join(backendRoot, "internal/rules"),
+		filepath.Join(backendRoot, "internal/rules/vm"),
+		filepath.Join(backendRoot, "internal/models"),
 	}
 
-	generator := NewASLTypeGenerator(packages, "../../generated")
+	generator := NewASLTypeGenerator(packages, filepath.Join(ruleEngineRoot, "generated"))
 	if err := generator.Generate(); err != nil {
 		log.Fatalf("Failed to generate ASL types: %v", err)
 	}
