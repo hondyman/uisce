@@ -16,21 +16,16 @@ func TestGenerateVersionInfo(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Change to temp directory so the relative outputDir works
-	oldDir, _ := os.Getwd()
-	os.Chdir(tempDir)
-	defer os.Chdir(oldDir)
-
-	// Create the generated directory
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		t.Fatalf("Failed to create generated dir: %v", err)
+	// generateVersionInfo takes the output dir explicitly - outputDir
+	// itself is now a fixed absolute path (runtime.Caller-based, see
+	// main.go), not the process cwd, so there's no relative path here to
+	// redirect via os.Chdir any more.
+	if err := generateVersionInfo(tempDir); err != nil {
+		t.Fatalf("generateVersionInfo failed: %v", err)
 	}
 
-	// Generate version info by calling main()
-	main()
-
 	// Check if file was created
-	versionFile := filepath.Join(tempDir, outputDir, outputVersion)
+	versionFile := filepath.Join(tempDir, outputVersion)
 	if _, err := os.Stat(versionFile); os.IsNotExist(err) {
 		t.Fatalf("Version file was not created: %s", versionFile)
 	}

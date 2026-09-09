@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"go/types"
 	"log"
 	"os"
@@ -13,16 +14,24 @@ import (
 )
 
 const (
-	// goPkgPath is a Go import path, not a filesystem path - packages.Load
-	// resolves it via the module system (go.mod), so it works from any cwd
-	// inside the module. outputDir is a filesystem path and does need the
-	// runtime.Caller-based fix below (this generator previously assumed
-	// cwd = rule-engine/, the opposite assumption from generate-schema and
-	// generate-types, which is exactly what produced stray
-	// cmd/generate-monaco/generated/ directories when invoked the other way).
-	goPkgPath    = "github.com/hondyman/uisce/backend/internal/services"
+	// outputDir is a filesystem path and needs the runtime.Caller-based fix
+	// below (this generator previously assumed cwd = rule-engine/, the
+	// opposite assumption from generate-schema and generate-types, which
+	// is exactly what produced stray cmd/generate-monaco/generated/
+	// directories when invoked the other way).
 	outputMonaco = "asl.monaco.json"
 )
+
+// goPkgPaths are Go import paths, not filesystem paths - packages.Load
+// resolves them via the module system (go.mod), so this works from any cwd
+// inside the module. internal/rules/vm is the canonical rule/calc AST
+// (RuleNode, RuleGroup, RuleCondition, Expression, FuncCall, ...) - without
+// it this generator's NodeKinds/Snippets never included any of it, the
+// same class of gap fixed for generate-schema/generate-types.
+var goPkgPaths = []string{
+	"github.com/hondyman/uisce/backend/internal/services",
+	"github.com/hondyman/uisce/backend/internal/rules/vm",
+}
 
 var outputDir = func() string {
 	_, thisFile, _, _ := runtime.Caller(0)
@@ -44,11 +53,25 @@ type MonacoMetadata struct {
 }
 
 func main() {
+	meta := buildMetadata()
+	if err := writeMetadata(outputDir, meta); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// buildMetadata loads goPkgPaths and derives Monaco completion metadata
+// from their real types (go/types, not go/ast text parsing - so it
+// resolves cross-package references, unlike generate-schema/generate-types).
+// Pure/no I/O so tests can call it directly instead of running main()
+// after os.Chdir()'ing into a temp dir: packages.Load needs a real cwd
+// inside the module to resolve goPkgPaths at all (chdir'ing outside it, as
+// the old test did, made every load fail with "go.mod file not found").
+func buildMetadata() MonacoMetadata {
 	cfg := &packages.Config{
 		Mode: packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
 	}
 
-	pkgs, err := packages.Load(cfg, goPkgPath)
+	pkgs, err := packages.Load(cfg, goPkgPaths...)
 	if err != nil {
 		log.Printf("Warning: failed to load packages: %v", err)
 		// Continue with empty metadata
@@ -120,19 +143,28 @@ func main() {
 		return meta.Snippets[i].Label < meta.Snippets[j].Label
 	})
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		log.Fatalf("failed to create output dir: %v", err)
+	return meta
+}
+
+// writeMetadata writes meta to dir/asl.monaco.json. Takes dir explicitly
+// (rather than the package-level outputDir global) for the same reason as
+// generate-version's generateVersionInfo: real dependency injection for
+// tests instead of routing through cwd and a global.
+func writeMetadata(dir string, meta MonacoMetadata) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output dir: %w", err)
 	}
 
-	outPath := filepath.Join(outputDir, outputMonaco)
+	outPath := filepath.Join(dir, outputMonaco)
 	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
-		log.Fatalf("failed to marshal monaco metadata: %v", err)
+		return fmt.Errorf("failed to marshal monaco metadata: %w", err)
 	}
 
 	if err := os.WriteFile(outPath, data, 0o644); err != nil {
-		log.Fatalf("failed to write %s: %v", outPath, err)
+		return fmt.Errorf("failed to write %s: %w", outPath, err)
 	}
+	return nil
 }
 
 func isEnum(named *types.Named) bool {

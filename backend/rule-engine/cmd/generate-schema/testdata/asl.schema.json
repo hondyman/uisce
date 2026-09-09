@@ -61,8 +61,14 @@
         "Permissions": {
           "$ref": "#/definitions/string[]"
         },
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
         "TenantID": {
           "type": "string"
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
         },
         "UserID": {
           "type": "string"
@@ -72,11 +78,50 @@
         "Key",
         "UserID",
         "TenantID",
+        "TenantIDs",
+        "Roles",
         "Permissions",
         "CreatedAt",
         "LastUsedAt",
         "ExpiresAt",
         "Active"
+      ],
+      "type": "object"
+    },
+    "APIKeyCreateRequest": {
+      "properties": {
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "ExpiresAt": {},
+        "Name": {
+          "type": "string"
+        },
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "UserID",
+        "TenantID",
+        "TenantIDs",
+        "Roles",
+        "Name",
+        "Description",
+        "CreatedBy",
+        "ExpiresAt"
       ],
       "type": "object"
     },
@@ -91,6 +136,74 @@
       "required": [
         "apiKeys",
         "mu"
+      ],
+      "type": "object"
+    },
+    "APIKeyUsage": {
+      "description": "APIKeyUsage represents a single API key usage record for audit trail",
+      "properties": {
+        "APIKeyID": {},
+        "CreatedAt": {},
+        "ID": {},
+        "IPAddress": {},
+        "Method": {
+          "type": "string"
+        },
+        "Path": {
+          "type": "string"
+        },
+        "Region": {
+          "type": "string"
+        },
+        "TenantID": {},
+        "UserAgent": {
+          "type": "string"
+        },
+        "UserID": {}
+      },
+      "required": [
+        "ID",
+        "APIKeyID",
+        "UserID",
+        "TenantID",
+        "Path",
+        "Method",
+        "Region",
+        "IPAddress",
+        "UserAgent",
+        "CreatedAt"
+      ],
+      "type": "object"
+    },
+    "APIKeyUsageCreateRequest": {
+      "description": "APIKeyUsageCreateRequest represents a request to log API key usage",
+      "properties": {
+        "APIKeyID": {},
+        "IPAddress": {},
+        "Method": {
+          "type": "string"
+        },
+        "Path": {
+          "type": "string"
+        },
+        "Region": {
+          "type": "string"
+        },
+        "TenantID": {},
+        "UserAgent": {
+          "type": "string"
+        },
+        "UserID": {}
+      },
+      "required": [
+        "APIKeyID",
+        "UserID",
+        "TenantID",
+        "Path",
+        "Method",
+        "Region",
+        "IPAddress",
+        "UserAgent"
       ],
       "type": "object"
     },
@@ -335,7 +448,6 @@
       "type": "object"
     },
     "AdvancedEvaluator": {
-      "description": "AdvancedEvaluator handles recursive evaluation of complex rule structures",
       "properties": {
         "baseEvaluator": {
           "$ref": "#/definitions/ConditionEvaluator"
@@ -392,15 +504,32 @@
       ],
       "type": "object"
     },
+    "AdvisorWorker": {
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/RuleEngine"
+        },
+        "interval": {},
+        "stopChan": {},
+        "threshold": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "required": [
+        "engine",
+        "interval",
+        "stopChan",
+        "threshold"
+      ],
+      "type": "object"
+    },
     "AlertsService": {
       "description": "AlertsService handles business logic for alerts.",
       "properties": {
-        "db": {},
-        "modelProvider": {}
+        "db": {}
       },
       "required": [
-        "db",
-        "modelProvider"
+        "db"
       ],
       "type": "object"
     },
@@ -487,7 +616,6 @@
       "type": "object"
     },
     "AllocationItem": {
-      "description": "AllocationItem represents an allocation breakdown item",
       "properties": {
         "Category": {
           "type": "string"
@@ -580,19 +708,11 @@
         },
         "TargetEntityPath": {
           "type": "string"
-        },
-        "TenantDatasourceID": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
         }
       },
       "required": [
         "Question",
-        "TargetEntityPath",
-        "TenantID",
-        "TenantDatasourceID"
+        "TargetEntityPath"
       ],
       "type": "object"
     },
@@ -633,6 +753,122 @@
         "Caveats",
         "DataQuality",
         "FactorBreakdown"
+      ],
+      "type": "object"
+    },
+    "AsyncJob": {
+      "description": "AsyncJob represents an asynchronous bulk operation job",
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "CreatedBy": {
+          "type": "string"
+        },
+        "ErrorDetails": {},
+        "FailedItems": {
+          "type": "number"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "MaxRetries": {
+          "type": "number"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Payload": {},
+        "Priority": {
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "ResultIDs": {},
+        "RetryCount": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        },
+        "WebhookAttempts": {
+          "type": "number"
+        },
+        "WebhookSent": {
+          "type": "boolean"
+        },
+        "WebhookURL": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "OperationType",
+        "Status",
+        "TotalItems",
+        "ProcessedItems",
+        "SucceededItems",
+        "FailedItems",
+        "Payload",
+        "ResultIDs",
+        "ErrorDetails",
+        "WebhookURL",
+        "WebhookSent",
+        "WebhookAttempts",
+        "CreatedBy",
+        "CreatedAt",
+        "StartedAt",
+        "CompletedAt",
+        "Priority",
+        "RetryCount",
+        "MaxRetries"
+      ],
+      "type": "object"
+    },
+    "AsyncJobResponse": {
+      "description": "AsyncJobResponse is returned when job is created",
+      "properties": {
+        "EstimatedTime": {
+          "type": "string"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "OperationType": {
+          "type": "string"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "StatusURL": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "JobID",
+        "Status",
+        "StatusURL",
+        "EstimatedTime",
+        "OperationType",
+        "TotalItems",
+        "Message"
       ],
       "type": "object"
     },
@@ -725,7 +961,6 @@
       "type": "object"
     },
     "AuditEntry": {
-      "description": "AuditEntry represents an audit log entry",
       "properties": {
         "Action": {
           "type": "string"
@@ -885,13 +1120,10 @@
       "type": "object"
     },
     "AuditService": {
-      "description": "AuditService provides comprehensive audit logging",
       "properties": {
-        "hasuraClient": {},
         "logger": {}
       },
       "required": [
-        "hasuraClient",
         "logger"
       ],
       "type": "object"
@@ -1003,6 +1235,226 @@
       ],
       "type": "object"
     },
+    "BOAIAnomalyDetectRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "SampleSize": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "BOIDOrKey",
+        "SampleSize"
+      ],
+      "type": "object"
+    },
+    "BOAIAnomalyDetectResponse": {
+      "properties": {
+        "Anomalies": {
+          "$ref": "#/definitions/BODataAnomaly[]"
+        },
+        "DataQualityScore": {
+          "type": "number"
+        },
+        "Recommendations": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Anomalies",
+        "DataQualityScore",
+        "Summary",
+        "Recommendations"
+      ],
+      "type": "object"
+    },
+    "BOAIExplainDeltaRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOIDOrKey"
+      ],
+      "type": "object"
+    },
+    "BOAIExplainDeltaResponse": {
+      "properties": {
+        "BreakingChanges": {
+          "$ref": "#/definitions/string[]"
+        },
+        "GovernanceRisks": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ImpactScore": {
+          "type": "string"
+        },
+        "MarkdownNarrative": {
+          "type": "string"
+        },
+        "SuggestedActions": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Summary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Summary",
+        "BreakingChanges",
+        "GovernanceRisks",
+        "SuggestedActions",
+        "ImpactScore",
+        "MarkdownNarrative"
+      ],
+      "type": "object"
+    },
+    "BOAINLQRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "Query": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOIDOrKey",
+        "Query"
+      ],
+      "type": "object"
+    },
+    "BOAINLQResponse": {
+      "properties": {
+        "Dimensions": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Explanation": {
+          "type": "string"
+        },
+        "Filters": {
+          "$ref": "#/definitions/NLQFilterItem[]"
+        },
+        "GeneratedSQL": {
+          "type": "string"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Measures": {
+          "$ref": "#/definitions/string[]"
+        },
+        "QueryDef": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "SortBy": {
+          "type": "string"
+        },
+        "SortOrder": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "QueryDef",
+        "Dimensions",
+        "Measures",
+        "Filters",
+        "SortBy",
+        "SortOrder",
+        "Limit",
+        "GeneratedSQL",
+        "Explanation"
+      ],
+      "type": "object"
+    },
+    "BOAISynthesizeRequest": {
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "IncludeCalc": {
+          "type": "boolean"
+        },
+        "IncludeRules": {
+          "type": "boolean"
+        },
+        "Prompt": {
+          "type": "string"
+        },
+        "TableID": {
+          "type": "string"
+        },
+        "TableName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Prompt",
+        "TableID",
+        "TableName",
+        "Category",
+        "IncludeRules",
+        "IncludeCalc"
+      ],
+      "type": "object"
+    },
+    "BOAISynthesizeResponse": {
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "PrimaryKey": {
+          "type": "string"
+        },
+        "Reasoning": {
+          "type": "string"
+        },
+        "SuggestedCalculatedFields": {
+          "$ref": "#/definitions/SynthesizedCalculatedField[]"
+        },
+        "SuggestedDisplayName": {
+          "type": "string"
+        },
+        "SuggestedDriverTable": {
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "$ref": "#/definitions/FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "type": "string"
+        },
+        "SuggestedName": {
+          "type": "string"
+        },
+        "SuggestedRules": {
+          "$ref": "#/definitions/SynthesizedRule[]"
+        }
+      },
+      "required": [
+        "SuggestedKey",
+        "SuggestedName",
+        "SuggestedDisplayName",
+        "Description",
+        "Category",
+        "PrimaryKey",
+        "SuggestedDriverTable",
+        "SuggestedFields",
+        "SuggestedCalculatedFields",
+        "SuggestedRules",
+        "Reasoning"
+      ],
+      "type": "object"
+    },
     "BOAdvisorResponse": {
       "description": "BOAdvisorResponse is the API response for BO-level advisor.",
       "properties": {
@@ -1020,6 +1472,37 @@
         "Workload",
         "Recommendations",
         "ExistingPreAggregations"
+      ],
+      "type": "object"
+    },
+    "BOArtifactGenerationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BOKey": {
+          "type": "string"
+        },
+        "CubeJSSchemaJS": {
+          "type": "string"
+        },
+        "OpenAPISpecJSON": {
+          "type": "string"
+        },
+        "RESTEndpointURL": {
+          "type": "string"
+        },
+        "StarRocksMVDDL": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOID",
+        "BOKey",
+        "OpenAPISpecJSON",
+        "CubeJSSchemaJS",
+        "StarRocksMVDDL",
+        "RESTEndpointURL"
       ],
       "type": "object"
     },
@@ -1075,83 +1558,146 @@
       ],
       "type": "object"
     },
-    "BOField": {
-      "description": "BOField represents a business object field with metadata",
+    "BOCrudRecordRequest": {
+      "description": "BOCrudRecordRequest represents a request to create or update a physical record via BO",
       "properties": {
-        "DisplayName": {
-          "type": "string"
+        "Record": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
         },
-        "ID": {
-          "type": "string"
-        },
-        "InheritedFrom": {
-          "type": "string"
-        },
-        "InheritedFromKey": {
-          "type": "string"
-        },
-        "IsCore": {
-          "type": "boolean"
-        },
-        "IsCustom": {
-          "type": "boolean"
-        },
-        "IsInherited": {
-          "type": "boolean"
-        },
-        "IsRequired": {
-          "type": "boolean"
-        },
-        "Key": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Role": {
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "type": "string"
-        },
-        "Sequence": {
-          "type": "number"
-        },
-        "Type": {
+        "SubtypeKey": {
           "type": "string"
         }
       },
       "required": [
-        "ID",
-        "Key",
-        "Name",
-        "DisplayName",
-        "Type",
-        "IsCore",
-        "IsCustom",
-        "IsInherited",
-        "IsRequired",
-        "Role",
-        "SemanticTermID",
-        "InheritedFrom",
-        "InheritedFromKey",
-        "Sequence"
+        "Record",
+        "SubtypeKey"
       ],
       "type": "object"
     },
-    "BOFieldInput": {
-      "description": "BOFieldInput represents input for creating/updating a field",
+    "BODataAnomaly": {
       "properties": {
-        "BusinessObjectID": {
+        "AnomalyType": {
           "type": "string"
         },
         "Description": {
           "type": "string"
         },
+        "Field": {
+          "type": "string"
+        },
+        "SampleCount": {
+          "type": "number"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Field",
+        "AnomalyType",
+        "Severity",
+        "Description",
+        "SampleCount"
+      ],
+      "type": "object"
+    },
+    "BODataQualitySentinelResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "DistinctRatios": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "DriftProposals": {
+          "$ref": "#/definitions/SchemaDriftProposal[]"
+        },
+        "FinancialVerifications": {
+          "$ref": "#/definitions/FinancialPatternResult[]"
+        },
+        "NullDrift": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "OverallQualityScore": {
+          "type": "number"
+        },
+        "SampleStrategy": {
+          "type": "string"
+        },
+        "SentinelSummary": {
+          "type": "string"
+        },
+        "TotalSampledRows": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "BOID",
+        "SampleStrategy",
+        "TotalSampledRows",
+        "OverallQualityScore",
+        "DistinctRatios",
+        "NullDrift",
+        "FinancialVerifications",
+        "DriftProposals",
+        "SentinelSummary"
+      ],
+      "type": "object"
+    },
+    "BODeltaFieldDiff": {
+      "description": "BODeltaFieldDiff represents the diff of a field between Core and Custom",
+      "properties": {
+        "CoreField": {
+          "$ref": "#/definitions/FieldDefinition"
+        },
+        "CustomField": {
+          "$ref": "#/definitions/FieldDefinition"
+        },
+        "FieldKey": {
+          "type": "string"
+        },
+        "FieldName": {
+          "type": "string"
+        },
+        "Overrides": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "FieldKey",
+        "FieldName",
+        "Status",
+        "CoreField",
+        "CustomField",
+        "Overrides"
+      ],
+      "type": "object"
+    },
+    "BODeltaResponse": {
+      "description": "BODeltaResponse represents the Workday-style delta comparison between tenant BO and gold copy Core BO",
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "CoreID": {
+          "type": "string"
+        },
+        "CustomCount": {
+          "type": "number"
+        },
         "DisplayName": {
           "type": "string"
         },
-        "IsRequired": {
+        "FieldsDelta": {
+          "$ref": "#/definitions/BODeltaFieldDiff[]"
+        },
+        "InheritedCount": {
+          "type": "number"
+        },
+        "IsCore": {
           "type": "boolean"
         },
         "Key": {
@@ -1160,42 +1706,598 @@
         "Name": {
           "type": "string"
         },
-        "ReferenceEntity": {
-          "type": "string"
-        },
-        "Role": {
-          "type": "string"
-        },
-        "SemanticTermID": {
-          "type": "string"
-        },
-        "Sequence": {
+        "OverriddenCount": {
           "type": "number"
-        },
-        "SubtypeID": {
+        }
+      },
+      "required": [
+        "BOID",
+        "Key",
+        "Name",
+        "DisplayName",
+        "IsCore",
+        "CoreID",
+        "FieldsDelta",
+        "InheritedCount",
+        "OverriddenCount",
+        "CustomCount"
+      ],
+      "type": "object"
+    },
+    "BODriftRepairPatchRequest": {
+      "properties": {
+        "Action": {
           "type": "string"
         },
-        "TechnicalName": {
+        "BOIDOrKey": {
           "type": "string"
         },
-        "Type": {
+        "Note": {
+          "type": "string"
+        },
+        "ProposalID": {
           "type": "string"
         }
       },
       "required": [
-        "BusinessObjectID",
-        "SubtypeID",
-        "Key",
-        "Name",
+        "BOIDOrKey",
+        "ProposalID",
+        "Action",
+        "Note"
+      ],
+      "type": "object"
+    },
+    "BODriftRepairPatchResponse": {
+      "properties": {
+        "Message": {
+          "type": "string"
+        },
+        "ProposalID": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ProposalID",
+        "Status",
+        "Message"
+      ],
+      "type": "object"
+    },
+    "BOEventTrigger": {
+      "properties": {
+        "ActionType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Enabled": {
+          "type": "boolean"
+        },
+        "Event": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Target": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Event",
+        "ActionType",
+        "Target",
+        "Enabled",
+        "Description"
+      ],
+      "type": "object"
+    },
+    "BOFieldEligibilityItem": {
+      "properties": {
+        "DataType": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "EligibilityLevel": {
+          "$ref": "#/definitions/BOFieldEligibilityLevel"
+        },
+        "FieldKey": {
+          "type": "string"
+        },
+        "FieldName": {
+          "type": "string"
+        },
+        "GateReason": {
+          "type": "string"
+        },
+        "MissingInputs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "PhysicalColumn": {
+          "type": "string"
+        },
+        "PhysicalTable": {
+          "type": "string"
+        },
+        "ResolutionPath": {
+          "type": "string"
+        },
+        "ResolutionStatus": {
+          "$ref": "#/definitions/BOFieldResolutionStatus"
+        },
+        "Role": {
+          "$ref": "#/definitions/FieldRole"
+        }
+      },
+      "required": [
+        "FieldKey",
+        "FieldName",
         "DisplayName",
-        "TechnicalName",
-        "Type",
-        "IsRequired",
-        "Description",
+        "DataType",
         "Role",
-        "SemanticTermID",
-        "ReferenceEntity",
-        "Sequence"
+        "EligibilityLevel",
+        "ResolutionStatus",
+        "ResolutionPath",
+        "PhysicalTable",
+        "PhysicalColumn",
+        "MissingInputs",
+        "GateReason"
+      ],
+      "type": "object"
+    },
+    "BOLineageImpactSimulationRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        }
+      },
+      "required": [
+        "BOIDOrKey",
+        "ProposedChanges"
+      ],
+      "type": "object"
+    },
+    "BOLineageImpactSimulationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BlastRadiusScore": {
+          "type": "number"
+        },
+        "HighestSeverity": {
+          "type": "string"
+        },
+        "ImpactedAssets": {
+          "$ref": "#/definitions/ImpactedAsset[]"
+        },
+        "IsBreakingChange": {
+          "type": "boolean"
+        },
+        "SimulationReport": {
+          "type": "string"
+        },
+        "TotalImpacted": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "BOID",
+        "TotalImpacted",
+        "HighestSeverity",
+        "IsBreakingChange",
+        "ImpactedAssets",
+        "BlastRadiusScore",
+        "SimulationReport"
+      ],
+      "type": "object"
+    },
+    "BOMultiBackendConfiguration": {
+      "properties": {
+        "ActiveTier": {
+          "$ref": "#/definitions/StorageTier"
+        },
+        "BOID": {
+          "type": "string"
+        },
+        "Bindings": {
+          "$ref": "#/definitions/MultiBackendBinding[]"
+        },
+        "WatermarkDate": {}
+      },
+      "required": [
+        "BOID",
+        "ActiveTier",
+        "Bindings",
+        "WatermarkDate"
+      ],
+      "type": "object"
+    },
+    "BOPromotionProposal": {
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "CreatedAt": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ProposedChanges": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ReviewerNote": {
+          "type": "string"
+        },
+        "SourceTenantID": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "SourceTenantID",
+        "BOKey",
+        "ProposedChanges",
+        "Status",
+        "ReviewerNote",
+        "CreatedAt",
+        "CreatedBy"
+      ],
+      "type": "object"
+    },
+    "BOPublishGateValidationResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "CanPublish": {
+          "type": "boolean"
+        },
+        "GateSummary": {
+          "type": "string"
+        },
+        "MissingDependencies": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UnresolvedFields": {
+          "$ref": "#/definitions/BOFieldEligibilityItem[]"
+        }
+      },
+      "required": [
+        "BOID",
+        "CanPublish",
+        "UnresolvedFields",
+        "MissingDependencies",
+        "GateSummary"
+      ],
+      "type": "object"
+    },
+    "BOQueryCostEvaluationRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "EstimatedLimit": {
+          "type": "number"
+        },
+        "Filters": {
+          "$ref": "#/definitions/BORecordFilter[]"
+        },
+        "SelectedFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TargetDialect": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOIDOrKey",
+        "SelectedFields",
+        "Filters",
+        "EstimatedLimit",
+        "TargetDialect"
+      ],
+      "type": "object"
+    },
+    "BOQueryCostEvaluationResponse": {
+      "properties": {
+        "ComplexityScore": {
+          "type": "number"
+        },
+        "CostBand": {
+          "$ref": "#/definitions/QueryCostBand"
+        },
+        "EstimatedDurationMs": {
+          "type": "number"
+        },
+        "EstimatedRowsScanned": {
+          "type": "number"
+        },
+        "IsForbidden": {
+          "type": "boolean"
+        },
+        "PreAggregationTips": {
+          "$ref": "#/definitions/string[]"
+        },
+        "RequiresPartitionScan": {
+          "type": "boolean"
+        },
+        "SuggestedMaterializedView": {
+          "type": "string"
+        },
+        "Violations": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "ComplexityScore",
+        "CostBand",
+        "IsForbidden",
+        "EstimatedRowsScanned",
+        "EstimatedDurationMs",
+        "RequiresPartitionScan",
+        "Violations",
+        "PreAggregationTips",
+        "SuggestedMaterializedView"
+      ],
+      "type": "object"
+    },
+    "BORecordFilter": {
+      "description": "BORecordFilter represents a filter applied to physical records",
+      "properties": {
+        "Field": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Value": {}
+      },
+      "required": [
+        "Field",
+        "Operator",
+        "Value"
+      ],
+      "type": "object"
+    },
+    "BORecordQueryRequest": {
+      "description": "BORecordQueryRequest represents a request to query physical records through a Business Object",
+      "properties": {
+        "AsOfTransactionTime": {},
+        "AsOfValidTime": {},
+        "Filters": {
+          "$ref": "#/definitions/BORecordFilter[]"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Page": {
+          "type": "number"
+        },
+        "Search": {
+          "type": "string"
+        },
+        "SortBy": {
+          "type": "string"
+        },
+        "SortDir": {
+          "type": "string"
+        },
+        "SubtypeKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Page",
+        "Limit",
+        "Search",
+        "Filters",
+        "SortBy",
+        "SortDir",
+        "SubtypeKey",
+        "AsOfValidTime",
+        "AsOfTransactionTime"
+      ],
+      "type": "object"
+    },
+    "BORecordQueryResponse": {
+      "description": "BORecordQueryResponse represents the paginated result of querying physical records",
+      "properties": {
+        "Columns": {
+          "$ref": "#/definitions/string[]"
+        },
+        "DatasourceID": {
+          "type": "string"
+        },
+        "DriverTable": {
+          "type": "string"
+        },
+        "ExecutionTimeMs": {
+          "type": "number"
+        },
+        "Limit": {
+          "type": "number"
+        },
+        "Page": {
+          "type": "number"
+        },
+        "Rows": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
+        },
+        "Total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Total",
+        "Page",
+        "Limit",
+        "Columns",
+        "Rows",
+        "ExecutionTimeMs",
+        "DriverTable",
+        "DatasourceID"
+      ],
+      "type": "object"
+    },
+    "BOScopeDiscoveryResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "BlockingIssues": {
+          "$ref": "#/definitions/string[]"
+        },
+        "CalculatedCount": {
+          "type": "number"
+        },
+        "DirectCount": {
+          "type": "number"
+        },
+        "DrivingNodeID": {
+          "type": "string"
+        },
+        "DrivingTableName": {
+          "type": "string"
+        },
+        "EligibleFields": {
+          "$ref": "#/definitions/BOFieldEligibilityItem[]"
+        },
+        "IsPublishReady": {
+          "type": "boolean"
+        },
+        "ManualCount": {
+          "type": "number"
+        },
+        "RelatedCount": {
+          "type": "number"
+        },
+        "TotalDiscovered": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "BOID",
+        "DrivingNodeID",
+        "DrivingTableName",
+        "TotalDiscovered",
+        "DirectCount",
+        "RelatedCount",
+        "CalculatedCount",
+        "ManualCount",
+        "EligibleFields",
+        "IsPublishReady",
+        "BlockingIssues"
+      ],
+      "type": "object"
+    },
+    "BOWorkflowActionRequest": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Proposal": {
+          "$ref": "#/definitions/BOPromotionProposal"
+        },
+        "ReviewerNote": {
+          "type": "string"
+        },
+        "Trigger": {
+          "$ref": "#/definitions/BOEventTrigger"
+        }
+      },
+      "required": [
+        "Action",
+        "ReviewerNote",
+        "Trigger",
+        "Proposal"
+      ],
+      "type": "object"
+    },
+    "BOWorkflowExecution": {
+      "properties": {
+        "EndTime": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "StartTime": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TriggeredBy": {
+          "type": "string"
+        },
+        "Workflow": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Workflow",
+        "TriggeredBy",
+        "Status",
+        "StartTime",
+        "EndTime",
+        "Error"
+      ],
+      "type": "object"
+    },
+    "BOWorkflowStatusResponse": {
+      "properties": {
+        "BOID": {
+          "type": "string"
+        },
+        "EventTriggers": {
+          "$ref": "#/definitions/BOEventTrigger[]"
+        },
+        "IsCore": {
+          "type": "boolean"
+        },
+        "Key": {
+          "type": "string"
+        },
+        "LifecycleStatus": {
+          "$ref": "#/definitions/BOWorkflowLifecycleStatus"
+        },
+        "PendingProposals": {
+          "$ref": "#/definitions/BOPromotionProposal[]"
+        },
+        "RecentExecutions": {
+          "$ref": "#/definitions/BOWorkflowExecution[]"
+        }
+      },
+      "required": [
+        "BOID",
+        "Key",
+        "LifecycleStatus",
+        "IsCore",
+        "PendingProposals",
+        "EventTriggers",
+        "RecentExecutions"
       ],
       "type": "object"
     },
@@ -1363,6 +2465,25 @@
       ],
       "type": "object"
     },
+    "BatchResult": {
+      "properties": {
+        "PassedAll": {
+          "type": "boolean"
+        },
+        "Results": {
+          "$ref": "#/definitions/RuleResult[]"
+        },
+        "TotalTimeNs": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Results",
+        "TotalTimeNs",
+        "PassedAll"
+      ],
+      "type": "object"
+    },
     "BenchmarkScoreResponse": {
       "properties": {
         "CalculatedAt": {},
@@ -1489,6 +2610,33 @@
       ],
       "type": "object"
     },
+    "BinaryExpr": {
+      "properties": {
+        "Left": {
+          "$ref": "#/definitions/ExprNode"
+        },
+        "Op": {
+          "type": "string"
+        },
+        "Right": {
+          "$ref": "#/definitions/ExprNode"
+        }
+      },
+      "required": [
+        "Op",
+        "Left",
+        "Right"
+      ],
+      "type": "object"
+    },
+    "BindingRequirement": {
+      "enum": [
+        "BACKEND_SPECIFIC",
+        "OPTIONAL",
+        "REQUIRED"
+      ],
+      "type": "string"
+    },
     "BrokenReference": {
       "properties": {
         "Path": {
@@ -1509,6 +2657,50 @@
         "Reason",
         "Suggestions",
         "Selected"
+      ],
+      "type": "object"
+    },
+    "BulkCreatePayload": {
+      "description": "BulkCreatePayload represents items for bulk create",
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "Expression": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Variables": {}
+      },
+      "required": [
+        "Name",
+        "Description",
+        "Variables",
+        "Expression"
+      ],
+      "type": "object"
+    },
+    "BulkOperationHandler": {
+      "description": "BulkOperationHandler implements the OperationHandler interface for bulk operations",
+      "properties": {
+        "db": {}
+      },
+      "required": [
+        "db"
+      ],
+      "type": "object"
+    },
+    "BulkPublishPayload": {
+      "description": "BulkPublishPayload represents items for bulk publish",
+      "properties": {
+        "TemplateID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TemplateID"
       ],
       "type": "object"
     },
@@ -2117,9 +3309,17 @@
     "BusinessObjectDefinition": {
       "description": "BusinessObjectDefinition represents a complete Business Object",
       "properties": {
+        "BOTypeID": {
+          "description": "Core Identity Triple \u0026 Semantic Governance (Feature 1)"
+        },
+        "Bindings": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
+        },
+        "BusinessKeyNodeID": {},
         "Category": {
           "type": "string"
         },
+        "ClassificationNodeID": {},
         "CloneParentDisplayName": {
           "type": "string"
         },
@@ -2134,6 +3334,7 @@
           "$ref": "#/definitions/FieldDefinition[]"
         },
         "CoreID": {},
+        "CoreReferenceBOID": {},
         "CreatedAt": {},
         "CreatedBy": {
           "type": "string"
@@ -2155,6 +3356,7 @@
         "EnableHistory": {
           "type": "boolean"
         },
+        "GrainNodeID": {},
         "HistoryMode": {
           "$ref": "#/definitions/HistoryMode"
         },
@@ -2180,10 +3382,17 @@
         "LastModifiedBy": {
           "type": "string"
         },
+        "ModelID": {
+          "type": "string"
+        },
         "Name": {
           "type": "string"
         },
         "ParentID": {},
+        "SemanticIDNodeID": {},
+        "Status": {
+          "type": "string"
+        },
         "Subtypes": {
           "$ref": "#/definitions/Record\u003cstring, SubtypeDefinition\u003e"
         },
@@ -2224,21 +3433,27 @@
         "DriverTableName",
         "TenantID",
         "DatasourceID",
-        "CoreID"
+        "CoreID",
+        "Bindings",
+        "BOTypeID",
+        "ModelID",
+        "ClassificationNodeID",
+        "BusinessKeyNodeID",
+        "SemanticIDNodeID",
+        "GrainNodeID",
+        "CoreReferenceBOID",
+        "Status"
       ],
       "type": "object"
     },
     "BusinessObjectFieldService": {
-      "description": "BusinessObjectFieldService manages BO fields with Workday-style inheritance",
       "properties": {
-        "hasuraClient": {},
         "isAdminCore": {
           "type": "boolean"
         },
         "logger": {}
       },
       "required": [
-        "hasuraClient",
         "logger",
         "isAdminCore"
       ],
@@ -2301,6 +3516,74 @@
         "LastModifiedBy",
         "IsDeleted",
         "DeletedAt"
+      ],
+      "type": "object"
+    },
+    "BusinessObjectListField": {
+      "description": "BusinessObjectListField represents a field in the legacy listing format",
+      "properties": {
+        "ColumnName": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Label": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "TechnicalName": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Type",
+        "Label",
+        "ColumnName",
+        "TechnicalName",
+        "Description"
+      ],
+      "type": "object"
+    },
+    "BusinessObjectListItem": {
+      "description": "BusinessObjectListItem represents a BO in the legacy listing format",
+      "properties": {
+        "Config": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "Fields": {
+          "$ref": "#/definitions/BusinessObjectListField[]"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Icon": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "DisplayName",
+        "Description",
+        "Fields",
+        "Icon",
+        "Config"
       ],
       "type": "object"
     },
@@ -2376,28 +3659,21 @@
       "description": "BusinessObjectService handles business object operations with real database queries",
       "properties": {
         "db": {},
-        "hasura": {
-          "$ref": "#/definitions/HasuraClient"
-        },
         "rules": {
           "$ref": "#/definitions/AccessRuleRepository"
         }
       },
       "required": [
         "db",
-        "hasura",
         "rules"
       ],
       "type": "object"
     },
     "BusinessProcessService": {
-      "description": "BusinessProcessService manages business process execution",
       "properties": {
-        "client": {},
         "logger": {}
       },
       "required": [
-        "client",
         "logger"
       ],
       "type": "object"
@@ -3116,6 +4392,90 @@
       ],
       "type": "string"
     },
+    "CompileError": {
+      "description": "CompileError provides observability into why a rule failed to compile.\nIt carries the offending AST node, the operator that triggered the\nfailure, and a human-readable reason — surfaced via Snapshot.Fallbacks\nmetrics and emitted to logs for post-mortem analysis.",
+      "properties": {
+        "Node": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Node",
+        "Operator",
+        "Reason"
+      ],
+      "type": "object"
+    },
+    "CompileResult": {
+      "description": "CompileResult tells the caller whether the VM path is usable.\nIf Unsupported is non-nil, the engine must use the recursive fallback.\n\nUnsupported is a plain error to keep vm package dependency-free.\nThe richer *CompileError (with Node + Operator fields) is defined in\nthe rules package where the AST types live.",
+      "properties": {
+        "Program": {
+          "$ref": "#/definitions/CompiledProgram"
+        },
+        "Unsupported": {
+          "$ref": "#/definitions/error"
+        }
+      },
+      "required": [
+        "Program",
+        "Unsupported"
+      ],
+      "type": "object"
+    },
+    "CompiledProgram": {
+      "description": "CompiledProgram is the output of Compile(). It is immutable and\nsafe for concurrent reads — no internal locking required.",
+      "properties": {
+        "BoolConsts": {
+          "$ref": "#/definitions/bool[]"
+        },
+        "BoolPeakDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "EnumConsts": {
+          "$ref": "#/definitions/uint32[]"
+        },
+        "FNumConsts": {
+          "$ref": "#/definitions/float64[]"
+        },
+        "FNumPeakDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "Insts": {
+          "$ref": "#/definitions/Instruction[]"
+        },
+        "NumConsts": {
+          "$ref": "#/definitions/int64[]"
+        },
+        "NumInSet": {
+          "$ref": "#/definitions/int64[][]"
+        },
+        "NumPeakDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "StrConsts": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "Insts",
+        "NumConsts",
+        "StrConsts",
+        "BoolConsts",
+        "EnumConsts",
+        "NumInSet",
+        "FNumConsts",
+        "NumPeakDepth",
+        "BoolPeakDepth",
+        "FNumPeakDepth"
+      ],
+      "type": "object"
+    },
     "ComplexCondition": {
       "description": "ComplexCondition supports AND/OR logic for multi-field validation",
       "properties": {
@@ -3136,24 +4496,93 @@
       ],
       "type": "object"
     },
-    "ComplianceReport": {
+    "ComplianceBreachRecord": {
+      "description": "ComplianceBreachRecord defines internal struct for breaching inserts",
       "properties": {
-        "ClientID": {
+        "BreachID": {},
+        "Deviation": {
+          "type": "number"
+        },
+        "EvaluationID": {},
+        "Message": {
           "type": "string"
         },
-        "Events": {
-          "$ref": "#/definitions/any[]"
+        "MetricValue": {
+          "type": "number"
         },
-        "GeneratedAt": {},
-        "Summary": {
+        "PortfolioID": {},
+        "RuleID": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {},
+        "ThresholdValue": {
+          "type": "number"
+        },
+        "ValuationDate": {
           "type": "string"
         }
       },
       "required": [
-        "ClientID",
+        "BreachID",
+        "EvaluationID",
+        "RuleID",
+        "PortfolioID",
+        "ValuationDate",
+        "Severity",
+        "MetricValue",
+        "ThresholdValue",
+        "Deviation",
+        "Message",
+        "Status",
+        "TenantID"
+      ],
+      "type": "object"
+    },
+    "ComplianceReport": {
+      "description": "ComplianceReport represents a compliance report",
+      "properties": {
+        "GeneratedAt": {},
+        "GeneratedBy": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Recommendations": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ReportType": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Summary": {
+          "$ref": "#/definitions/AuditSummary"
+        },
+        "TimeRange": {
+          "$ref": "#/definitions/AuditTimeRange"
+        },
+        "Violations": {
+          "$ref": "#/definitions/AuditEvent[]"
+        }
+      },
+      "required": [
+        "ID",
+        "ReportType",
+        "TimeRange",
         "GeneratedAt",
-        "Events",
-        "Summary"
+        "GeneratedBy",
+        "Summary",
+        "Violations",
+        "Recommendations",
+        "Status"
       ],
       "type": "object"
     },
@@ -3192,6 +4621,46 @@
         "Enabled",
         "CreatedAt",
         "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "ComplianceService": {
+      "description": "ComplianceService orchestrates compliance evaluation ETL",
+      "properties": {
+        "audit": {},
+        "db": {},
+        "tenantID": {},
+        "wasm": {}
+      },
+      "required": [
+        "db",
+        "wasm",
+        "audit",
+        "tenantID"
+      ],
+      "type": "object"
+    },
+    "ConcentrationMetrics": {
+      "description": "ConcentrationMetrics represents portfolio concentration metrics.",
+      "properties": {
+        "GiniCoefficient": {
+          "type": "number"
+        },
+        "HerfindahlHirschmanIndex": {
+          "type": "number"
+        },
+        "Top10Concentration": {
+          "type": "number"
+        },
+        "Top5Concentration": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "HerfindahlHirschmanIndex",
+        "Top5Concentration",
+        "Top10Concentration",
+        "GiniCoefficient"
       ],
       "type": "object"
     },
@@ -3245,12 +4714,16 @@
       "type": "object"
     },
     "Connection": {
-      "description": "Connection represents a unified datasource connection",
+      "description": "Connection represents a datasource connection from the `connections` table\n(the table tenant_product_datasource.connection_id actually references).",
       "properties": {
         "APIKey": {
           "type": "string"
         },
         "BaseURL": {
+          "type": "string"
+        },
+        "CoreID": {
+          "description": "CoreID is set when this row was propagated from a gold-copy connection\n(see internal/temporal/activities/gold_copy_activities.go). A tenant's\nown credentials/is_active are never touched by that propagation.",
           "type": "string"
         },
         "CreatedAt": {},
@@ -3266,10 +4739,12 @@
         "IsActive": {
           "type": "boolean"
         },
-        "Metadata": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
+        "Metadata": {},
         "Name": {
+          "type": "string"
+        },
+        "Origin": {
+          "description": "Origin is derived, not stored: \"gold_copy\" for the gold-copy tenant's\nown row, \"inherited\" when CoreID is set, \"custom\" otherwise.",
           "type": "string"
         },
         "Password": {
@@ -3279,6 +4754,9 @@
           "type": "number"
         },
         "Schema": {
+          "type": "string"
+        },
+        "SecretPath": {
           "type": "string"
         },
         "TenantID": {
@@ -3303,22 +4781,27 @@
         "Schema",
         "Username",
         "Password",
+        "SecretPath",
         "BaseURL",
         "APIKey",
         "Metadata",
         "IsActive",
+        "CoreID",
         "CreatedAt",
-        "UpdatedAt"
+        "UpdatedAt",
+        "Origin"
       ],
       "type": "object"
     },
     "ConnectionsService": {
       "description": "ConnectionsService handles unified connection management",
       "properties": {
-        "db": {}
+        "db": {},
+        "goldCopyEvents": {}
       },
       "required": [
-        "db"
+        "db",
+        "goldCopyEvents"
       ],
       "type": "object"
     },
@@ -3618,6 +5101,47 @@
       ],
       "type": "object"
     },
+    "CoreCompiler": {
+      "properties": {
+        "cache": {
+          "$ref": "#/definitions/CoreFnCache"
+        },
+        "predeclared": {}
+      },
+      "required": [
+        "cache",
+        "predeclared"
+      ],
+      "type": "object"
+    },
+    "CoreFnCache": {
+      "properties": {
+        "m": {
+          "$ref": "#/definitions/Record\u003cCoreFnKey, any\u003e"
+        },
+        "mu": {}
+      },
+      "required": [
+        "mu",
+        "m"
+      ],
+      "type": "object"
+    },
+    "CoreFnKey": {
+      "properties": {
+        "CoreRuleID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "CoreRuleID",
+        "Version"
+      ],
+      "type": "object"
+    },
     "CoreValidationRule": {
       "description": "CoreValidationRule represents a compiled core rule",
       "properties": {
@@ -3656,6 +5180,28 @@
       ],
       "type": "object"
     },
+    "CreateAsyncJobRequest": {
+      "description": "CreateAsyncJobRequest is the request body for creating an async job",
+      "properties": {
+        "Items": {},
+        "OperationType": {
+          "type": "string"
+        },
+        "Priority": {
+          "type": "number"
+        },
+        "WebhookURL": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "OperationType",
+        "Items",
+        "WebhookURL",
+        "Priority"
+      ],
+      "type": "object"
+    },
     "CreateBusinessObjectRequest": {
       "description": "CreateBusinessObjectRequest represents a request to create a new BO",
       "properties": {
@@ -3668,10 +5214,16 @@
         "CloneFromKey": {
           "type": "string"
         },
+        "CloneFromKeySnake": {
+          "type": "string"
+        },
         "Config": {
           "$ref": "#/definitions/Record\u003cstring, any\u003e"
         },
         "DatasourceID": {
+          "type": "string"
+        },
+        "DatasourceIDSnake": {
           "type": "string"
         },
         "Description": {
@@ -3680,10 +5232,19 @@
         "DisplayName": {
           "type": "string"
         },
+        "DisplayNameSnake": {
+          "type": "string"
+        },
         "DriverTableID": {
           "type": "string"
         },
+        "DriverTableIDSnake": {
+          "type": "string"
+        },
         "DriverTableName": {
+          "type": "string"
+        },
+        "DriverTableNameSnake": {
           "type": "string"
         },
         "EnableHistory": {
@@ -3701,10 +5262,16 @@
         "ParentID": {
           "type": "string"
         },
+        "ParentIDSnake": {
+          "type": "string"
+        },
         "Status": {
           "type": "string"
         },
         "TechnicalName": {
+          "type": "string"
+        },
+        "TechnicalNameSnake": {
           "type": "string"
         }
       },
@@ -3712,19 +5279,46 @@
         "Name",
         "BOKey",
         "DisplayName",
+        "DisplayNameSnake",
         "Description",
         "Icon",
         "Category",
         "TechnicalName",
+        "TechnicalNameSnake",
         "DriverTableID",
+        "DriverTableIDSnake",
         "DriverTableName",
+        "DriverTableNameSnake",
         "Status",
         "CloneFromKey",
+        "CloneFromKeySnake",
         "ParentID",
+        "ParentIDSnake",
         "DatasourceID",
+        "DatasourceIDSnake",
         "EnableHistory",
         "HistoryMode",
         "Config"
+      ],
+      "type": "object"
+    },
+    "CreateExportRequest": {
+      "description": "CreateExportRequest is the request to create an export",
+      "properties": {
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FilterCriteria": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "IncludeErrors": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ExportFormat",
+        "FilterCriteria",
+        "IncludeErrors"
       ],
       "type": "object"
     },
@@ -3833,14 +5427,10 @@
           "type": "string"
         },
         "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        },
         "httpClient": {}
       },
       "required": [
         "db",
-        "hasuraClient",
         "httpClient",
         "apiKey"
       ],
@@ -4181,6 +5771,31 @@
         "MaxArgs",
         "ReturnType",
         "Handler"
+      ],
+      "type": "object"
+    },
+    "DBAPIKeyStore": {
+      "properties": {
+        "db": {}
+      },
+      "required": [
+        "db"
+      ],
+      "type": "object"
+    },
+    "DailyUsageStats": {
+      "description": "DailyUsageStats represents daily usage statistics",
+      "properties": {
+        "Count": {
+          "type": "number"
+        },
+        "Day": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Day",
+        "Count"
       ],
       "type": "object"
     },
@@ -4688,6 +6303,88 @@
       ],
       "type": "object"
     },
+    "DiscoveryConfig": {
+      "description": "DiscoveryConfig holds configuration for feature discovery",
+      "properties": {
+        "MinCardinalityScore": {
+          "type": "number"
+        },
+        "MinCompletenessRate": {
+          "type": "number"
+        },
+        "PostgresDatabases": {
+          "$ref": "#/definitions/string[]"
+        },
+        "PrometheusURL": {
+          "type": "string"
+        },
+        "S3Buckets": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ScanInterval": {},
+        "ScoringWeights": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "TrinoDatabases": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "ScanInterval",
+        "PostgresDatabases",
+        "TrinoDatabases",
+        "S3Buckets",
+        "PrometheusURL",
+        "MinCardinalityScore",
+        "MinCompletenessRate",
+        "ScoringWeights"
+      ],
+      "type": "object"
+    },
+    "DiscoveryResult": {
+      "description": "DiscoveryResult represents output of a discovery run",
+      "properties": {
+        "Candidates": {
+          "$ref": "#/definitions/FeatureCandidate[]"
+        },
+        "CandidatesFound": {
+          "type": "number"
+        },
+        "EndTime": {},
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "RunID": {
+          "type": "string"
+        },
+        "RunStatus": {
+          "type": "string"
+        },
+        "SourcesScanned": {
+          "$ref": "#/definitions/string[]"
+        },
+        "StartTime": {},
+        "Stats": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        }
+      },
+      "required": [
+        "ID",
+        "RunID",
+        "StartTime",
+        "EndTime",
+        "SourcesScanned",
+        "CandidatesFound",
+        "Candidates",
+        "Stats",
+        "RunStatus",
+        "ErrorMessage"
+      ],
+      "type": "object"
+    },
     "DocumentProcessingService": {
       "description": "DocumentProcessingService handles AI-powered document processing\nThis is a stub implementation - full Gemini integration to be added",
       "properties": {
@@ -4705,6 +6402,36 @@
       },
       "required": [
         "db"
+      ],
+      "type": "object"
+    },
+    "DownloadURLRequest": {
+      "description": "DownloadURLRequest is the request for a download URL",
+      "properties": {
+        "ExpiryHours": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ExpiryHours"
+      ],
+      "type": "object"
+    },
+    "DownloadURLResponse": {
+      "description": "DownloadURLResponse is the response with download URL",
+      "properties": {
+        "ExpiresAt": {},
+        "Format": {
+          "type": "string"
+        },
+        "URL": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "URL",
+        "ExpiresAt",
+        "Format"
       ],
       "type": "object"
     },
@@ -4847,6 +6574,22 @@
       ],
       "type": "object"
     },
+    "EndpointUsageStats": {
+      "description": "EndpointUsageStats represents per-endpoint usage statistics",
+      "properties": {
+        "Count": {
+          "type": "number"
+        },
+        "Path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Path",
+        "Count"
+      ],
+      "type": "object"
+    },
     "EngagementNotification": {
       "description": "EngagementNotification extends the basic notification with engagement features",
       "properties": {
@@ -4958,6 +6701,62 @@
       ],
       "type": "object"
     },
+    "EngineMetrics": {
+      "description": "EngineMetrics holds cumulative counters that survive state swaps.\nThese are business-level metrics (cache hit rate, fallback rate, etc.)\nand must not be lost when an EngineState is replaced. Fields are\nunexported; use the typed accessor methods.",
+      "properties": {
+        "cacheHits": {},
+        "cacheMisses": {},
+        "compileErrors": {},
+        "fallbacks": {},
+        "vmPathCount": {}
+      },
+      "required": [
+        "cacheHits",
+        "cacheMisses",
+        "fallbacks",
+        "vmPathCount",
+        "compileErrors"
+      ],
+      "type": "object"
+    },
+    "EngineMetricsSnapshot": {
+      "description": "EngineMetricsSnapshot is a point-in-time copy of the metrics.",
+      "properties": {
+        "CacheHits": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "required": [
+        "CacheHits"
+      ],
+      "type": "object"
+    },
+    "EngineState": {
+      "description": "EngineState is an immutable snapshot of the rule engine's schema and\ncompile cache. Created by Rewarm() (or SetInitialState at startup) and\nnever mutated thereafter. The atomic.Pointer swap is the only way to\npublish a new state — readers see a consistent view at all times.",
+      "properties": {
+        "Cache": {},
+        "Enums": {},
+        "LastUsedUnixNano": {
+          "type": "number"
+        },
+        "Revision": {
+          "$ref": "#/definitions/uint64"
+        },
+        "Syms": {},
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Syms",
+        "Enums",
+        "Cache",
+        "Version",
+        "Revision",
+        "LastUsedUnixNano"
+      ],
+      "type": "object"
+    },
     "EnhancedLineageData": {
       "description": "EnhancedLineageData holds the data for the lineage chart, including the layout type.",
       "properties": {
@@ -4975,6 +6774,34 @@
         "Layout",
         "Nodes",
         "Edges"
+      ],
+      "type": "object"
+    },
+    "EnumDict": {
+      "description": "EnumDict interns categorical string literals (\"GOLD\", \"ACTIVE\") into\nuint32 IDs so equality becomes an integer compare instead of a string compare.",
+      "properties": {
+        "frozen": {},
+        "mu": {},
+        "values": {
+          "$ref": "#/definitions/Record\u003cstring, uint32\u003e"
+        }
+      },
+      "required": [
+        "mu",
+        "values",
+        "frozen"
+      ],
+      "type": "object"
+    },
+    "ErrUnsupportedFunction": {
+      "description": "ErrUnsupportedFunction is wrapped into the error returned by CompileToSQL\nwhen the AST references a function this compiler doesn't know how to\npush down to SQL.",
+      "properties": {
+        "Name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name"
       ],
       "type": "object"
     },
@@ -5030,6 +6857,42 @@
       "required": [
         "db",
         "nlqService"
+      ],
+      "type": "object"
+    },
+    "EvalTrace": {
+      "description": "EvalTrace provides observability into a single evaluation. Returned\nalongside the boolean result so SREs can log/alert on fallback rates.",
+      "properties": {
+        "FailureReasons": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Fallback": {
+          "type": "string"
+        },
+        "IsTenant": {
+          "type": "boolean"
+        },
+        "Revision": {
+          "$ref": "#/definitions/uint64"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "UsedVM": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "RuleID",
+        "UsedVM",
+        "Fallback",
+        "FailureReasons",
+        "Revision",
+        "IsTenant",
+        "TenantID"
       ],
       "type": "object"
     },
@@ -5521,6 +7384,103 @@
       ],
       "type": "object"
     },
+    "ExportFormat": {
+      "enum": [
+        "csv",
+        "json",
+        "parquet"
+      ],
+      "type": "string"
+    },
+    "ExportStatusResponse": {
+      "description": "ExportStatusResponse is the response for export status",
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ExpiresAt": {},
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FileSize": {
+          "type": "number"
+        },
+        "ID": {},
+        "IsDownloadable": {
+          "type": "boolean"
+        },
+        "JobID": {},
+        "PresignedURL": {
+          "type": "string"
+        },
+        "PresignedURLExpires": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "JobID",
+        "Status",
+        "ExportFormat",
+        "FileSize",
+        "RecordCount",
+        "CreatedAt",
+        "CompletedAt",
+        "ExpiresAt",
+        "PresignedURL",
+        "PresignedURLExpires",
+        "IsDownloadable",
+        "ErrorMessage"
+      ],
+      "type": "object"
+    },
+    "ExportSummary": {
+      "description": "ExportSummary is a summary of an export",
+      "properties": {
+        "CreatedAt": {},
+        "ExpiresAt": {},
+        "FileSize": {
+          "type": "number"
+        },
+        "Format": {
+          "type": "string"
+        },
+        "ID": {},
+        "Records": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Format",
+        "Status",
+        "FileSize",
+        "Records",
+        "CreatedAt",
+        "ExpiresAt"
+      ],
+      "type": "object"
+    },
+    "Expression": {
+      "properties": {
+        "Root": {
+          "$ref": "#/definitions/ExprNode"
+        }
+      },
+      "required": [
+        "Root"
+      ],
+      "type": "object"
+    },
     "ExtensionFix": {
       "properties": {
         "FilePath": {
@@ -5595,6 +7555,224 @@
       ],
       "type": "object"
     },
+    "FailedJobItem": {
+      "description": "FailedJobItem represents a failed item in job results",
+      "properties": {
+        "Details": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "Index": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Index",
+        "Name",
+        "Error",
+        "Details"
+      ],
+      "type": "object"
+    },
+    "FallbackQueryPattern": {
+      "description": "FallbackQueryPattern is the input to the advisor: a summary of one\nquery pattern that is currently falling back to the recursive evaluator\nbecause it is too expensive for the VM fast path.",
+      "properties": {
+        "FallbackCount": {
+          "type": "number"
+        },
+        "GroupByFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "MeasureFields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TargetBOID": {
+          "type": "string"
+        },
+        "TargetTable": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TargetBOID",
+        "TargetTable",
+        "GroupByFields",
+        "MeasureFields",
+        "FallbackCount"
+      ],
+      "type": "object"
+    },
+    "FastRecord": {
+      "description": "FastRecord is the dense, projection-ready view of an MDM record.\nAll slices are sized to syms.Num() at construction time.\nAll field access is O(1) array indexing by SymbolID.",
+      "properties": {
+        "BoolVals": {
+          "$ref": "#/definitions/bool[]"
+        },
+        "EnumVals": {
+          "$ref": "#/definitions/uint32[]"
+        },
+        "FNumVals": {
+          "$ref": "#/definitions/float64[]"
+        },
+        "NumVals": {
+          "$ref": "#/definitions/int64[]"
+        },
+        "Present": {
+          "$ref": "#/definitions/uint8[]"
+        },
+        "StrVals": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "NumVals",
+        "BoolVals",
+        "StrVals",
+        "EnumVals",
+        "FNumVals",
+        "Present"
+      ],
+      "type": "object"
+    },
+    "FeatureCandidate": {
+      "description": "FeatureCandidate represents a discovered feature that could be added to the catalog",
+      "properties": {
+        "ApprovedAt": {},
+        "ApprovedBy": {
+          "type": "string"
+        },
+        "BusinessValue": {
+          "type": "number"
+        },
+        "Cardinality": {
+          "type": "number"
+        },
+        "Completeness": {
+          "type": "number"
+        },
+        "DataType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "DiscoveredAt": {},
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Notes": {
+          "type": "string"
+        },
+        "RejectionReason": {
+          "type": "string"
+        },
+        "SourceDatabase": {
+          "type": "string"
+        },
+        "SourceField": {
+          "type": "string"
+        },
+        "SourceSchema": {
+          "type": "string"
+        },
+        "SourceTable": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TechnicalScore": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "SourceDatabase",
+        "SourceSchema",
+        "SourceTable",
+        "SourceField",
+        "DataType",
+        "Description",
+        "Completeness",
+        "Cardinality",
+        "BusinessValue",
+        "TechnicalScore",
+        "DiscoveredAt",
+        "Status",
+        "ApprovedBy",
+        "ApprovedAt",
+        "RejectionReason",
+        "Notes"
+      ],
+      "type": "object"
+    },
+    "FeatureCatalog": {
+      "description": "FeatureCatalog represents the master feature catalog",
+      "properties": {
+        "CreatedAt": {},
+        "Description": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "LocalFeatures": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "UpdatedAt": {},
+        "Version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "Description",
+        "Version",
+        "LocalFeatures",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "FeatureDiscoveryLog": {
+      "description": "FeatureDiscoveryLog represents activity in the discovery process",
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Details": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Timestamp": {}
+      },
+      "required": [
+        "ID",
+        "Timestamp",
+        "Action",
+        "Details",
+        "Status"
+      ],
+      "type": "object"
+    },
     "FeatureFlags": {
       "description": "FeatureFlags controls per-tenant feature availability",
       "properties": {
@@ -5616,6 +7794,46 @@
         "ConversationalFeatures",
         "AdvancedAnalytics",
         "CustomIntegrations"
+      ],
+      "type": "object"
+    },
+    "FeatureVersion": {
+      "description": "FeatureVersion represents a version of a feature in the catalog",
+      "properties": {
+        "ComputeLogic": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "DeployedAt": {},
+        "FeatureName": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Performance": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "SchemaLocation": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "VersionNumber": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "FeatureName",
+        "VersionNumber",
+        "ComputeLogic",
+        "SchemaLocation",
+        "CreatedAt",
+        "DeployedAt",
+        "Status",
+        "Performance"
       ],
       "type": "object"
     },
@@ -5648,14 +7866,10 @@
     "FeedbackService": {
       "description": "FeedbackService handles user feedback for NLQ responses.",
       "properties": {
-        "db": {},
-        "hasura": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "required": [
-        "db",
-        "hasura"
+        "db"
       ],
       "type": "object"
     },
@@ -5766,6 +7980,17 @@
       ],
       "type": "object"
     },
+    "FieldRef": {
+      "properties": {
+        "Path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Path"
+      ],
+      "type": "object"
+    },
     "FieldRole": {
       "enum": [
         "DIMENSION",
@@ -5821,6 +8046,41 @@
       ],
       "type": "object"
     },
+    "FinancialPatternResult": {
+      "properties": {
+        "FieldName": {
+          "type": "string"
+        },
+        "InvalidCount": {
+          "type": "number"
+        },
+        "PassRate": {
+          "type": "number"
+        },
+        "PatternType": {
+          "type": "string"
+        },
+        "SampleCount": {
+          "type": "number"
+        },
+        "SampleErrors": {
+          "$ref": "#/definitions/string[]"
+        },
+        "ValidCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "FieldName",
+        "PatternType",
+        "SampleCount",
+        "ValidCount",
+        "InvalidCount",
+        "PassRate",
+        "SampleErrors"
+      ],
+      "type": "object"
+    },
     "FinancialPlugin": {
       "description": "FinancialPlugin implementation for Financial Calculations (IRR, XIRR, Black-Scholes, etc.)",
       "properties": {
@@ -5843,6 +8103,29 @@
       ],
       "type": "object"
     },
+    "Fixture": {
+      "properties": {
+        "AST": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "Compiled": {},
+        "Enums": {},
+        "FastRecord": {},
+        "MapInput": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Syms": {}
+      },
+      "required": [
+        "AST",
+        "Compiled",
+        "Syms",
+        "Enums",
+        "MapInput",
+        "FastRecord"
+      ],
+      "type": "object"
+    },
     "FolderService": {
       "description": "FolderService provides methods for managing folders.",
       "properties": {
@@ -5850,6 +8133,22 @@
       },
       "required": [
         "db"
+      ],
+      "type": "object"
+    },
+    "FuncCall": {
+      "description": "FuncCall represents a named function applied to a list of argument\nexpressions, e.g. SUM(field) or NPV(rate, cash_flows). Added to let the\nsame rule/calc AST express aggregate and financial functions used by\ncalculated semantic terms, not just the scalar arithmetic BinaryExpr\nalready supported. Backends (VM compiler, SQL compiler, ...) that don't\nyet support a given function name should fail explicitly rather than\nsilently mis-evaluate.",
+      "properties": {
+        "Args": {
+          "$ref": "#/definitions/ExprNode[]"
+        },
+        "Name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Args"
       ],
       "type": "object"
     },
@@ -6068,6 +8367,110 @@
       ],
       "type": "object"
     },
+    "GoldCopyEvent": {
+      "description": "GoldCopyEvent represents a canonical data entity published to downstream systems",
+      "properties": {
+        "ChangeReason": {
+          "type": "string"
+        },
+        "ChangeType": {
+          "type": "string"
+        },
+        "CorrelationID": {
+          "description": "Operational Context",
+          "type": "string"
+        },
+        "Data": {
+          "description": "Canonical Data"
+        },
+        "DataHash": {
+          "type": "string"
+        },
+        "EntityID": {
+          "type": "string"
+        },
+        "EntityKey": {
+          "type": "string"
+        },
+        "EntityType": {
+          "type": "string"
+        },
+        "EventID": {
+          "description": "Event Metadata",
+          "type": "string"
+        },
+        "EventType": {
+          "$ref": "#/definitions/GoldCopyEventType"
+        },
+        "Metadata": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ParentEntityID": {
+          "description": "Lineage \u0026 Audit",
+          "type": "string"
+        },
+        "PublishedAt": {},
+        "PublishedBy": {
+          "type": "string"
+        },
+        "SchemaVersion": {
+          "type": "string"
+        },
+        "SemanticLayer": {
+          "type": "string"
+        },
+        "TenantID": {
+          "description": "Entity Identification",
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "EventID",
+        "EventType",
+        "PublishedAt",
+        "PublishedBy",
+        "TenantID",
+        "EntityType",
+        "EntityID",
+        "EntityKey",
+        "Version",
+        "SemanticLayer",
+        "Data",
+        "DataHash",
+        "SchemaVersion",
+        "ParentEntityID",
+        "ChangeType",
+        "ChangeReason",
+        "CorrelationID",
+        "Metadata"
+      ],
+      "type": "object"
+    },
+    "GoldCopyPublisher": {
+      "description": "GoldCopyPublisher publishes gold copy entities to Redpanda for downstream consumption",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "eventPublisher": {
+          "$ref": "#/definitions/EventPublisher"
+        },
+        "topic": {
+          "type": "string"
+        },
+        "writer": {}
+      },
+      "required": [
+        "eventPublisher",
+        "writer",
+        "topic",
+        "enabled"
+      ],
+      "type": "object"
+    },
     "GoldenQuery": {
       "properties": {
         "Description": {
@@ -6179,6 +8582,91 @@
       ],
       "type": "object"
     },
+    "GraphRAGContextRequest": {
+      "properties": {
+        "BOIDOrKey": {
+          "type": "string"
+        },
+        "IncludeEdges": {
+          "type": "boolean"
+        },
+        "MaxDepth": {
+          "type": "number"
+        },
+        "UserQuery": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOIDOrKey",
+        "UserQuery",
+        "IncludeEdges",
+        "MaxDepth"
+      ],
+      "type": "object"
+    },
+    "GraphRAGContextResponse": {
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "MatchedNodes": {
+          "$ref": "#/definitions/GraphRAGNode[]"
+        },
+        "PromptContext": {
+          "type": "string"
+        },
+        "ResolvedIntent": {
+          "type": "string"
+        },
+        "TenantScoped": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "BOKey",
+        "ResolvedIntent",
+        "MatchedNodes",
+        "TenantScoped",
+        "PromptContext"
+      ],
+      "type": "object"
+    },
+    "GraphRAGNode": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "NodeType": {
+          "type": "string"
+        },
+        "Properties": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Similarity": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "NodeType",
+        "Name",
+        "DisplayName",
+        "Description",
+        "Similarity",
+        "Properties"
+      ],
+      "type": "object"
+    },
     "GroupByProfile": {
       "description": "GroupByProfile represents usage stats for a specific grain.",
       "properties": {
@@ -6210,14 +8698,56 @@
     "GuardrailService": {
       "description": "GuardrailService handles the logic for proactive access guardrails.",
       "properties": {
-        "db": {},
-        "semanticService": {
-          "description": "Dependency on SemanticModelService to get asset metadata like certification status."
+        "db": {}
+      },
+      "required": [
+        "db"
+      ],
+      "type": "object"
+    },
+    "HTTPWebhookNotifier": {
+      "description": "HTTPWebhookNotifier sends job completion notifications via HTTP",
+      "properties": {
+        "client": {},
+        "maxRetries": {
+          "type": "number"
+        },
+        "retryInterval": {},
+        "timeout": {}
+      },
+      "required": [
+        "client",
+        "timeout",
+        "maxRetries",
+        "retryInterval"
+      ],
+      "type": "object"
+    },
+    "HealthMetrics": {
+      "description": "HealthMetrics summarizes the complexity/depth of a rule, surfaced in the\nMonaco editor as authoring guidance.",
+      "properties": {
+        "Complexity": {
+          "type": "number"
+        },
+        "ConditionCount": {
+          "type": "number"
+        },
+        "Depth": {
+          "type": "number"
+        },
+        "Issues": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Score": {
+          "type": "number"
         }
       },
       "required": [
-        "db",
-        "semanticService"
+        "Complexity",
+        "Depth",
+        "ConditionCount",
+        "Score",
+        "Issues"
       ],
       "type": "object"
     },
@@ -6290,46 +8820,6 @@
     },
     "HierarchyResolver": {
       "properties": {},
-      "type": "object"
-    },
-    "HierarchyRule": {
-      "description": "Structs to hold rule data and validation errors",
-      "properties": {
-        "Condition": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "Entity": {
-          "type": "string"
-        },
-        "FieldPath": {
-          "$ref": "#/definitions/string[]"
-        },
-        "HierarchyDepth": {
-          "type": "number"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Severity": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "ID",
-        "Name",
-        "Entity",
-        "Description",
-        "Severity",
-        "Condition",
-        "FieldPath",
-        "HierarchyDepth"
-      ],
       "type": "object"
     },
     "HistoryMode": {
@@ -6411,6 +8901,28 @@
       ],
       "type": "object"
     },
+    "ImpactNode": {
+      "description": "ImpactNode represents a node in the rule impact analysis graph",
+      "properties": {
+        "ID": {},
+        "Label": {
+          "type": "string"
+        },
+        "Properties": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Type",
+        "Label",
+        "Properties"
+      ],
+      "type": "object"
+    },
     "ImpactReport": {
       "description": "ImpactReport summarizes the downstream dependencies of a script.",
       "properties": {
@@ -6436,6 +8948,37 @@
         "ImpactedBundles",
         "ImpactedViews",
         "ImpactedObjects"
+      ],
+      "type": "object"
+    },
+    "ImpactedAsset": {
+      "properties": {
+        "AssetID": {
+          "type": "string"
+        },
+        "AssetName": {
+          "type": "string"
+        },
+        "AssetType": {
+          "type": "string"
+        },
+        "Details": {
+          "type": "string"
+        },
+        "ImpactLevel": {
+          "type": "string"
+        },
+        "Relationship": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "AssetID",
+        "AssetName",
+        "AssetType",
+        "ImpactLevel",
+        "Relationship",
+        "Details"
       ],
       "type": "object"
     },
@@ -6522,13 +9065,21 @@
         "ConflictStrategy": {
           "$ref": "#/definitions/ConflictStrategy"
         },
+        "DatasourceID": {
+          "type": "string"
+        },
         "Mode": {
           "$ref": "#/definitions/ImportMode"
+        },
+        "Region": {
+          "type": "string"
         }
       },
       "required": [
         "Mode",
         "ConflictStrategy",
+        "DatasourceID",
+        "Region",
         "Bundle"
       ],
       "type": "object"
@@ -6690,14 +9241,42 @@
     "InstanceCommandHandler": {
       "description": "InstanceCommandHandler handles all CRUD commands for Business Object Instances\nThis follows the same pattern as BOCommandHandler for consistency and scalability\n\nArchitecture:\n- Receives CRUD commands from the command bus (RabbitMQ)\n- Extracts business logic from HTTP handlers\n- Executes service layer operations (CreateInstance, UpdateInstance, DeleteInstance)\n- Publishes events to the event store for audit trail and event sourcing\n- Returns CommandResponse with status and result data\n\nThis handler is registered with the CommandConsumer and routes:\n- command.instance.create -\u003e HandleCreateInstance\n- command.instance.update -\u003e HandleUpdateInstance\n- command.instance.delete -\u003e HandleDeleteInstance",
       "properties": {
+        "audit": {},
         "boService": {},
         "eventPublisher": {
           "$ref": "#/definitions/EventPublisher"
-        }
+        },
+        "policy": {}
       },
       "required": [
         "boService",
-        "eventPublisher"
+        "eventPublisher",
+        "audit",
+        "policy"
+      ],
+      "type": "object"
+    },
+    "Instruction": {
+      "description": "Instruction is exactly 8 bytes, packed for one 64-byte cache line\n(8 instructions per line). Field order chosen so Go does NOT add\ntrailing alignment padding:\n\n\tSymbolID uint32  // 4 bytes — offsets 0-3 (4-byte aligned)\n\tAux      uint16  // 2 bytes — offsets 4-5\n\tOp       OpCode  // 1 byte  — offset 6\n\t_pad     [1]byte // 1 byte  — offset 7 (compiler would otherwise pad here)\n\nAux is uint16 in memory; compiler emits signed jump offsets via\nuint16(int16(x)), VM reads them back via int(int16(inst.Aux)).",
+      "properties": {
+        "Aux": {
+          "$ref": "#/definitions/uint16"
+        },
+        "Op": {
+          "$ref": "#/definitions/OpCode"
+        },
+        "SymbolID": {
+          "$ref": "#/definitions/uint32"
+        },
+        "_pad": {
+          "$ref": "#/definitions/byte[]"
+        }
+      },
+      "required": [
+        "SymbolID",
+        "Aux",
+        "Op",
+        "_pad"
       ],
       "type": "object"
     },
@@ -6773,6 +9352,66 @@
       ],
       "type": "object"
     },
+    "InternalEvent": {
+      "description": "InternalEvent represents the system's native event format\nThis corresponds to the 'internal_events' table",
+      "properties": {
+        "CreatedAt": {},
+        "Description": {
+          "type": "string"
+        },
+        "EndTime": {},
+        "ID": {},
+        "IsAllDay": {
+          "type": "boolean"
+        },
+        "IsRecurring": {
+          "type": "boolean"
+        },
+        "Location": {
+          "type": "string"
+        },
+        "RecurrenceRule": {
+          "type": "string"
+        },
+        "StartTime": {},
+        "TenantID": {},
+        "Title": {
+          "type": "string"
+        },
+        "UpdatedAt": {},
+        "UserID": {}
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "UserID",
+        "Title",
+        "Description",
+        "Location",
+        "StartTime",
+        "EndTime",
+        "IsAllDay",
+        "IsRecurring",
+        "RecurrenceRule",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "InternalEventService": {
+      "description": "InternalEventService manages internal events and publishes changes",
+      "properties": {
+        "publisher": {
+          "$ref": "#/definitions/EventPublisher"
+        },
+        "repo": {}
+      },
+      "required": [
+        "repo",
+        "publisher"
+      ],
+      "type": "object"
+    },
     "IpWhitelistEntry": {
       "description": "IpWhitelistEntry corresponds to a row in the tenant_ip_whitelist_entries table.",
       "properties": {
@@ -6790,6 +9429,16 @@
         "IPAddress"
       ],
       "type": "object"
+    },
+    "ItemStatus": {
+      "enum": [
+        "failed",
+        "pending",
+        "processing",
+        "skipped",
+        "succeeded"
+      ],
+      "type": "string"
     },
     "JITGrantAuditEvent": {
       "properties": {
@@ -6844,9 +9493,24 @@
     "JWTClaims": {
       "description": "JWTClaims represents JWT token claims",
       "properties": {
+        "Email": {
+          "type": "string"
+        },
+        "EmailVerified": {
+          "type": "boolean"
+        },
+        "IdpGroups": {
+          "$ref": "#/definitions/string[]"
+        },
         "IssuedAt": {},
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
         "TenantID": {
           "type": "string"
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
         },
         "UserID": {
           "type": "string"
@@ -6854,7 +9518,12 @@
       },
       "required": [
         "UserID",
+        "Email",
+        "EmailVerified",
         "TenantID",
+        "TenantIDs",
+        "Roles",
+        "IdpGroups",
         "IssuedAt"
       ],
       "type": "object"
@@ -6862,7 +9531,12 @@
     "JWTManager": {
       "description": "JWTManager handles JWT token operations",
       "properties": {
+        "mu": {},
         "refreshDuration": {},
+        "rsaPublicKey": {},
+        "rsaPublicKeys": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
         "secretKey": {
           "$ref": "#/definitions/byte[]"
         },
@@ -6870,8 +9544,11 @@
       },
       "required": [
         "secretKey",
+        "rsaPublicKey",
+        "rsaPublicKeys",
         "tokenDuration",
-        "refreshDuration"
+        "refreshDuration",
+        "mu"
       ],
       "type": "object"
     },
@@ -6899,6 +9576,484 @@
       ],
       "type": "object"
     },
+    "JobCancelResponse": {
+      "description": "JobCancelResponse is returned when cancelling a job",
+      "properties": {
+        "JobID": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "required": [
+        "JobID",
+        "Status",
+        "ProcessedItems",
+        "Message"
+      ],
+      "type": "object"
+    },
+    "JobExport": {
+      "description": "JobExport represents an export job",
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "CreatedBy": {},
+        "DownloadCount": {
+          "type": "number"
+        },
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ExpiresAt": {},
+        "ExportFormat": {
+          "type": "string"
+        },
+        "FileLocation": {
+          "type": "string"
+        },
+        "FileSize": {
+          "type": "number"
+        },
+        "FilterCriteria": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "ID": {},
+        "IncludeErrors": {
+          "type": "boolean"
+        },
+        "JobID": {},
+        "PresignedURL": {
+          "type": "string"
+        },
+        "PresignedURLExpires": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {}
+      },
+      "required": [
+        "ID",
+        "JobID",
+        "TenantID",
+        "ExportFormat",
+        "Status",
+        "FileLocation",
+        "FileSize",
+        "RecordCount",
+        "PresignedURL",
+        "PresignedURLExpires",
+        "DownloadCount",
+        "FilterCriteria",
+        "IncludeErrors",
+        "CreatedBy",
+        "CreatedAt",
+        "StartedAt",
+        "CompletedAt",
+        "ExpiresAt",
+        "ErrorMessage"
+      ],
+      "type": "object"
+    },
+    "JobExportJSON": {
+      "description": "JobExportJSON is for database JSON storage",
+      "properties": {
+        "CreatedAt": {},
+        "FileSize": {
+          "type": "number"
+        },
+        "ID": {},
+        "RecordCount": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Status",
+        "FileSize",
+        "RecordCount",
+        "CreatedAt"
+      ],
+      "type": "object"
+    },
+    "JobItem": {
+      "description": "JobItem represents a single item in a bulk operation",
+      "properties": {
+        "ErrorMessage": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ItemData": {},
+        "ItemIndex": {
+          "type": "number"
+        },
+        "ItemName": {
+          "type": "string"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "ProcessedAt": {},
+        "ResultID": {
+          "type": "string"
+        },
+        "Status": {
+          "$ref": "#/definitions/ItemStatus"
+        }
+      },
+      "required": [
+        "ID",
+        "JobID",
+        "ItemIndex",
+        "ItemName",
+        "ItemData",
+        "Status",
+        "ErrorMessage",
+        "ResultID",
+        "ProcessedAt"
+      ],
+      "type": "object"
+    },
+    "JobListItem": {
+      "description": "JobListItem is a summary of a job for list response",
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Progress": {
+          "$ref": "#/definitions/JobProgress"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "required": [
+        "JobID",
+        "OperationType",
+        "Status",
+        "Progress",
+        "StartedAt",
+        "CompletedAt",
+        "CreatedAt"
+      ],
+      "type": "object"
+    },
+    "JobListResponse": {
+      "description": "JobListResponse is returned when listing jobs",
+      "properties": {
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "Jobs": {
+          "$ref": "#/definitions/JobListItem[]"
+        },
+        "RunningCount": {
+          "type": "number"
+        },
+        "TotalCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Jobs",
+        "TotalCount",
+        "CompletedCount",
+        "FailedCount",
+        "RunningCount"
+      ],
+      "type": "object"
+    },
+    "JobProcessor": {
+      "description": "JobProcessor handles background processing of async jobs",
+      "properties": {
+        "batchSize": {
+          "type": "number"
+        },
+        "db": {},
+        "isRunning": {
+          "type": "boolean"
+        },
+        "mu": {},
+        "operationHandler": {
+          "$ref": "#/definitions/OperationHandler"
+        },
+        "pollInterval": {},
+        "queue": {
+          "$ref": "#/definitions/JobQueue"
+        },
+        "stopChan": {},
+        "webhookNotifier": {
+          "$ref": "#/definitions/WebhookNotifier"
+        },
+        "wg": {},
+        "workerCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "queue",
+        "db",
+        "operationHandler",
+        "webhookNotifier",
+        "workerCount",
+        "batchSize",
+        "pollInterval",
+        "stopChan",
+        "wg",
+        "isRunning",
+        "mu"
+      ],
+      "type": "object"
+    },
+    "JobProgress": {
+      "description": "JobProgress tracks progress of a job",
+      "properties": {
+        "Failed": {
+          "type": "number"
+        },
+        "Percentage": {
+          "type": "number"
+        },
+        "Processed": {
+          "type": "number"
+        },
+        "Succeeded": {
+          "type": "number"
+        },
+        "Total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Total",
+        "Processed",
+        "Succeeded",
+        "Failed",
+        "Percentage"
+      ],
+      "type": "object"
+    },
+    "JobProgressSummary": {
+      "description": "JobProgressSummary provides aggregated job progress information",
+      "properties": {
+        "CompletedAt": {},
+        "CreatedAt": {},
+        "DurationSeconds": {
+          "type": "number"
+        },
+        "FailedItems": {
+          "type": "number"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "ItemErrors": {
+          "type": "number"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "PendingItems": {
+          "type": "number"
+        },
+        "ProcessedItems": {
+          "type": "number"
+        },
+        "ProcessingItems": {
+          "type": "number"
+        },
+        "ProgressPercent": {
+          "type": "number"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "OperationType",
+        "Status",
+        "TotalItems",
+        "ProcessedItems",
+        "SucceededItems",
+        "FailedItems",
+        "PendingItems",
+        "ProcessingItems",
+        "ItemErrors",
+        "ProgressPercent",
+        "CreatedAt",
+        "StartedAt",
+        "CompletedAt",
+        "DurationSeconds"
+      ],
+      "type": "object"
+    },
+    "JobResults": {
+      "description": "JobResults contains the results of completed job",
+      "properties": {
+        "ErrorSummary": {
+          "$ref": "#/definitions/Record\u003cstring, int\u003e"
+        },
+        "FailedItems": {
+          "$ref": "#/definitions/FailedJobItem[]"
+        },
+        "FailureCount": {
+          "type": "number"
+        },
+        "SkippedCount": {
+          "type": "number"
+        },
+        "SuccessCount": {
+          "type": "number"
+        },
+        "SuccessIDs": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "SuccessCount",
+        "FailureCount",
+        "SkippedCount",
+        "SuccessIDs",
+        "FailedItems",
+        "ErrorSummary"
+      ],
+      "type": "object"
+    },
+    "JobStatus": {
+      "enum": [
+        "cancelled",
+        "completed",
+        "failed",
+        "queued",
+        "running"
+      ],
+      "type": "string"
+    },
+    "JobStatusResponse": {
+      "description": "JobStatusResponse is returned when querying job status",
+      "properties": {
+        "CompletedAt": {},
+        "EstimatedCompletion": {},
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Progress": {
+          "$ref": "#/definitions/JobProgress"
+        },
+        "Results": {
+          "$ref": "#/definitions/JobResults"
+        },
+        "StartedAt": {},
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        }
+      },
+      "required": [
+        "JobID",
+        "OperationType",
+        "Status",
+        "Progress",
+        "StartedAt",
+        "EstimatedCompletion",
+        "CompletedAt",
+        "Results"
+      ],
+      "type": "object"
+    },
+    "JobWebhookPayload": {
+      "description": "JobWebhookPayload is sent to webhook URL on job completion",
+      "properties": {
+        "CompletionTime": {},
+        "DurationSeconds": {
+          "type": "number"
+        },
+        "ErrorDetails": {
+          "type": "string"
+        },
+        "Event": {
+          "type": "string"
+        },
+        "FailedItems": {
+          "type": "number"
+        },
+        "JobID": {
+          "type": "string"
+        },
+        "OperationType": {
+          "$ref": "#/definitions/OperationType"
+        },
+        "Results": {
+          "$ref": "#/definitions/JobResults"
+        },
+        "Status": {
+          "$ref": "#/definitions/JobStatus"
+        },
+        "StatusURL": {
+          "type": "string"
+        },
+        "SucceededItems": {
+          "type": "number"
+        },
+        "TotalItems": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Event",
+        "JobID",
+        "OperationType",
+        "Status",
+        "TotalItems",
+        "SucceededItems",
+        "FailedItems",
+        "CompletionTime",
+        "DurationSeconds",
+        "Results",
+        "ErrorDetails",
+        "StatusURL"
+      ],
+      "type": "object"
+    },
     "LLMProfile": {
       "description": "LLMProfile defines how an LLM should derive this field",
       "properties": {
@@ -6919,6 +10074,47 @@
       ],
       "type": "object"
     },
+    "LakehouseMaintenanceReport": {
+      "properties": {
+        "BytesCompacted": {
+          "type": "number"
+        },
+        "CompactedFilesCount": {
+          "type": "number"
+        },
+        "DurationMs": {
+          "type": "number"
+        },
+        "ExecutedAt": {},
+        "ManifestsRewritten": {
+          "type": "number"
+        },
+        "SnapshotsExpired": {
+          "type": "number"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Table": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "Table",
+        "CompactedFilesCount",
+        "BytesCompacted",
+        "ManifestsRewritten",
+        "SnapshotsExpired",
+        "DurationMs",
+        "Status",
+        "ExecutedAt"
+      ],
+      "type": "object"
+    },
     "LatencyHistogram": {
       "description": "LatencyHistogram tracks latency distributions for percentile calculations",
       "properties": {
@@ -6934,6 +10130,42 @@
         "buckets",
         "mu",
         "maxSamples"
+      ],
+      "type": "object"
+    },
+    "LatencyProfiler": {
+      "properties": {
+        "idx": {},
+        "samples": {
+          "$ref": "#/definitions/any[]"
+        }
+      },
+      "required": [
+        "samples",
+        "idx"
+      ],
+      "type": "object"
+    },
+    "LatencyReport": {
+      "properties": {
+        "Count": {
+          "$ref": "#/definitions/uint64"
+        },
+        "P50Ns": {
+          "type": "number"
+        },
+        "P95Ns": {
+          "type": "number"
+        },
+        "P99Ns": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "P50Ns",
+        "P95Ns",
+        "P99Ns",
+        "Count"
       ],
       "type": "object"
     },
@@ -6996,6 +10228,33 @@
       },
       "required": [
         "db"
+      ],
+      "type": "object"
+    },
+    "ListExportsResponse": {
+      "description": "ListExportsResponse lists exports for a job",
+      "properties": {
+        "Exports": {
+          "$ref": "#/definitions/ExportSummary[]"
+        },
+        "Total": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Exports",
+        "Total"
+      ],
+      "type": "object"
+    },
+    "Literal": {
+      "properties": {
+        "Value": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Value"
       ],
       "type": "object"
     },
@@ -7290,6 +10549,26 @@
       ],
       "type": "object"
     },
+    "MaterializationProposal": {
+      "description": "MaterializationProposal is the output of the advisor: a StarRocks MV\nDDL statement that pre-aggregates the hot pattern so subsequent rule\nevaluations can hit the VM fast path instead of the recursive fallback.",
+      "properties": {
+        "EstimatedGain": {
+          "type": "string"
+        },
+        "SuggestedMV": {
+          "type": "string"
+        },
+        "TargetBOID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TargetBOID",
+        "SuggestedMV",
+        "EstimatedGain"
+      ],
+      "type": "object"
+    },
     "MeasureProfile": {
       "description": "MeasureProfile represents usage stats for a specific measure.",
       "properties": {
@@ -7454,13 +10733,53 @@
       ],
       "type": "object"
     },
+    "MockEventPublisher": {
+      "description": "MockEventPublisher mocks the EventPublisher interface",
+      "properties": {
+        "": {}
+      },
+      "required": [
+        ""
+      ],
+      "type": "object"
+    },
     "MockRepo": {
       "properties": {},
       "type": "object"
     },
     "MockRuleRepository": {
-      "description": "MockRuleRepository implements RuleRepository for testing",
+      "description": "MockRuleRepository is a no-op RuleRepository used by tests in this package.\nKept here (rather than in engine_test.go) so scenario_test.go and any\nfuture test files can reuse it without duplicating the type.",
       "properties": {},
+      "type": "object"
+    },
+    "MockSampleEntityRepository": {
+      "properties": {
+        "": {}
+      },
+      "required": [
+        ""
+      ],
+      "type": "object"
+    },
+    "MockScenarioRepository": {
+      "properties": {
+        "": {}
+      },
+      "required": [
+        ""
+      ],
+      "type": "object"
+    },
+    "MockWebhookNotifier": {
+      "description": "MockWebhookNotifier for testing",
+      "properties": {
+        "notificationsSent": {
+          "$ref": "#/definitions/NotificationRecord[]"
+        }
+      },
+      "required": [
+        "notificationsSent"
+      ],
       "type": "object"
     },
     "ModelDefinition": {
@@ -7513,6 +10832,19 @@
       ],
       "type": "string"
     },
+    "ModuleLoader": {
+      "description": "ModuleLoader implements starlark.Thread.Load for whitelisted modules.",
+      "properties": {
+        "Allowed": {
+          "$ref": "#/definitions/Record\u003cstring, string\u003e",
+          "description": "Allowed maps module name -\u003e source code"
+        }
+      },
+      "required": [
+        "Allowed"
+      ],
+      "type": "object"
+    },
     "MonteCarloSnapshot": {
       "description": "MonteCarloSnapshot contains simulation parameters for reproducibility.",
       "properties": {
@@ -7529,6 +10861,45 @@
       ],
       "type": "object"
     },
+    "MultiBackendBinding": {
+      "properties": {
+        "BackendName": {
+          "type": "string"
+        },
+        "CoveragePercentage": {
+          "type": "number"
+        },
+        "DatasourceID": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "IsActive": {
+          "type": "boolean"
+        },
+        "PhysicalTarget": {
+          "type": "string"
+        },
+        "Requirement": {
+          "$ref": "#/definitions/BindingRequirement"
+        },
+        "StorageTier": {
+          "$ref": "#/definitions/StorageTier"
+        }
+      },
+      "required": [
+        "ID",
+        "StorageTier",
+        "BackendName",
+        "DatasourceID",
+        "PhysicalTarget",
+        "Requirement",
+        "IsActive",
+        "CoveragePercentage"
+      ],
+      "type": "object"
+    },
     "MultiUpgradeOverviewResponse": {
       "properties": {
         "Versions": {
@@ -7537,6 +10908,23 @@
       },
       "required": [
         "Versions"
+      ],
+      "type": "object"
+    },
+    "NLQFilterItem": {
+      "properties": {
+        "Field": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Value": {}
+      },
+      "required": [
+        "Field",
+        "Operator",
+        "Value"
       ],
       "type": "object"
     },
@@ -7920,7 +11308,6 @@
       "type": "object"
     },
     "NotificationMessage": {
-      "description": "NotificationMessage represents a notification message",
       "properties": {
         "Category": {
           "type": "string"
@@ -7967,14 +11354,27 @@
       ],
       "type": "object"
     },
-    "NotificationService": {
-      "description": "NotificationService provides notification management",
+    "NotificationRecord": {
+      "description": "NotificationRecord tracks a sent notification",
       "properties": {
-        "hasuraClient": {},
+        "JobID": {
+          "type": "string"
+        },
+        "Payload": {},
+        "Timestamp": {}
+      },
+      "required": [
+        "JobID",
+        "Timestamp",
+        "Payload"
+      ],
+      "type": "object"
+    },
+    "NotificationService": {
+      "properties": {
         "logger": {}
       },
       "required": [
-        "hasuraClient",
         "logger"
       ],
       "type": "object"
@@ -8028,6 +11428,113 @@
         "CreatedBy",
         "CreatedAt",
         "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "OAuthAuditEvent": {
+      "description": "OAuthAuditEvent represents an OAuth-related audit event",
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Error": {
+          "type": "string"
+        },
+        "IPAddress": {
+          "type": "string"
+        },
+        "Metadata": {},
+        "Provider": {
+          "type": "string"
+        },
+        "Success": {
+          "type": "boolean"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "UserAgent": {
+          "type": "string"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "UserID",
+        "Action",
+        "Provider",
+        "Metadata",
+        "IPAddress",
+        "UserAgent",
+        "Success",
+        "Error"
+      ],
+      "type": "object"
+    },
+    "OAuthAuditService": {
+      "description": "OAuthAuditService handles recording of audit events",
+      "properties": {
+        "db": {}
+      },
+      "required": [
+        "db"
+      ],
+      "type": "object"
+    },
+    "OkRule": {
+      "description": "OkRule represents an ok-style Starlark rule.\n\nScript must set a global `ok = \u003cbool\u003e` and may set `message = \u003cstring\u003e`.",
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "Script": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Script"
+      ],
+      "type": "object"
+    },
+    "OkRuleMeta": {
+      "description": "OkRuleMeta is lightweight execution metadata used to optimize BO-scale runs.",
+      "properties": {
+        "Cost": {
+          "description": "Cost is a relative cost score (lower runs earlier).",
+          "type": "number"
+        },
+        "FailureLikelihood": {
+          "description": "FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost).",
+          "type": "number"
+        },
+        "RequiredFieldPaths": {
+          "$ref": "#/definitions/string[]",
+          "description": "RequiredFieldPaths are dot-paths that must be present in the input record for this rule.\nExample: \"account.account_type\" or \"page.aum\"."
+        }
+      },
+      "required": [
+        "Cost",
+        "FailureLikelihood",
+        "RequiredFieldPaths"
+      ],
+      "type": "object"
+    },
+    "OkRuleWithMeta": {
+      "description": "OkRuleWithMeta bundles a rule with its execution metadata.",
+      "properties": {
+        "": {
+          "$ref": "#/definitions/OkRule"
+        },
+        "Meta": {
+          "$ref": "#/definitions/OkRuleMeta"
+        }
+      },
+      "required": [
+        "",
+        "Meta"
       ],
       "type": "object"
     },
@@ -8178,7 +11685,6 @@
       "type": "object"
     },
     "PerformanceMetrics": {
-      "description": "PerformanceMetrics represents calculated performance data",
       "properties": {
         "Alpha": {
           "type": "number"
@@ -8838,14 +12344,10 @@
     "PoPService": {
       "description": "PoPService handles Period-over-Period analysis and anomaly detection",
       "properties": {
-        "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "required": [
-        "db",
-        "hasuraClient"
+        "db"
       ],
       "type": "object"
     },
@@ -8902,20 +12404,108 @@
       ],
       "type": "object"
     },
-    "PortfolioService": {
-      "description": "PortfolioService handles portfolio aggregations and calculations",
+    "Portfolio": {
+      "description": "Portfolio basic struct",
       "properties": {
-        "client": {},
+        "AUM": {
+          "type": "number"
+        },
+        "ID": {},
+        "Strategy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "AUM",
+        "Strategy"
+      ],
+      "type": "object"
+    },
+    "PortfolioAnalytics": {
+      "description": "PortfolioAnalytics represents the analytics for a portfolio.",
+      "properties": {
+        "AsOfDate": {},
+        "AssetClassBreakdown": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "BaseCurrency": {
+          "type": "string"
+        },
+        "ConcentrationMetrics": {
+          "$ref": "#/definitions/ConcentrationMetrics"
+        },
+        "ConfidenceScore": {
+          "type": "number"
+        },
+        "CurrencyExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "InceptionDate": {},
+        "LiquidityProfile": {
+          "$ref": "#/definitions/Record\u003cstring, int\u003e"
+        },
+        "PerformanceMetrics": {
+          "$ref": "#/definitions/PerformanceMetrics"
+        },
+        "PortfolioCode": {
+          "type": "string"
+        },
+        "PortfolioID": {},
+        "PortfolioName": {
+          "type": "string"
+        },
+        "RegionExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "RiskMetrics": {
+          "$ref": "#/definitions/RiskMetrics"
+        },
+        "SectorExposure": {
+          "$ref": "#/definitions/Record\u003cstring, float64\u003e"
+        },
+        "TopHoldings": {
+          "$ref": "#/definitions/PositionConcentration[]"
+        },
+        "TotalPositions": {
+          "type": "number"
+        },
+        "TotalValue": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "PortfolioID",
+        "PortfolioName",
+        "PortfolioCode",
+        "BaseCurrency",
+        "InceptionDate",
+        "AsOfDate",
+        "TotalValue",
+        "TotalPositions",
+        "ConfidenceScore",
+        "AssetClassBreakdown",
+        "SectorExposure",
+        "RegionExposure",
+        "CurrencyExposure",
+        "LiquidityProfile",
+        "TopHoldings",
+        "ConcentrationMetrics",
+        "RiskMetrics",
+        "PerformanceMetrics"
+      ],
+      "type": "object"
+    },
+    "PortfolioService": {
+      "properties": {
         "logger": {}
       },
       "required": [
-        "client",
         "logger"
       ],
       "type": "object"
     },
     "PortfolioSummary": {
-      "description": "PortfolioSummary represents aggregated portfolio data",
       "properties": {
         "AccountCount": {
           "type": "number"
@@ -8980,8 +12570,33 @@
       ],
       "type": "object"
     },
+    "PositionConcentration": {
+      "description": "PositionConcentration represents concentration of a single position.",
+      "properties": {
+        "ISIN": {
+          "type": "string"
+        },
+        "MarketValue": {
+          "type": "number"
+        },
+        "SecurityID": {},
+        "SecurityName": {
+          "type": "string"
+        },
+        "Weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "SecurityID",
+        "SecurityName",
+        "ISIN",
+        "Weight",
+        "MarketValue"
+      ],
+      "type": "object"
+    },
     "PositionSummary": {
-      "description": "PositionSummary represents a position for display",
       "properties": {
         "DayChange": {
           "type": "number"
@@ -9025,6 +12640,46 @@
         "DayChangePercent",
         "UnrealizedGL",
         "UnrealizedGLPercent"
+      ],
+      "type": "object"
+    },
+    "PostgresExportService": {
+      "description": "PostgresExportService implements ExportService using PostgreSQL",
+      "properties": {
+        "db": {},
+        "exportStoragePath": {
+          "type": "string"
+        },
+        "urlBasePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "db",
+        "exportStoragePath",
+        "urlBasePath"
+      ],
+      "type": "object"
+    },
+    "PostgresJobQueue": {
+      "description": "PostgresJobQueue is a PostgreSQL-backed implementation of JobQueue",
+      "properties": {
+        "db": {}
+      },
+      "required": [
+        "db"
+      ],
+      "type": "object"
+    },
+    "PostgresSchedulerService": {
+      "description": "PostgresSchedulerService implements SchedulerService",
+      "properties": {
+        "cron": {},
+        "db": {}
+      },
+      "required": [
+        "db",
+        "cron"
       ],
       "type": "object"
     },
@@ -9122,20 +12777,39 @@
     },
     "PreAggDescriptor": {
       "properties": {
+        "AvgLatencyReductionMs": {
+          "type": "number"
+        },
         "BOName": {
           "type": "string"
         },
         "CreatedAt": {},
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Datasource": {
+          "type": "string"
+        },
         "Description": {
           "type": "string"
         },
         "Dialect": {
           "type": "string"
         },
+        "FiltersSupported": {
+          "$ref": "#/definitions/string[]"
+        },
         "GovernanceStatus": {
           "type": "string"
         },
+        "GroupBy": {
+          "$ref": "#/definitions/string[]"
+        },
         "ID": {},
+        "IcebergTable": {
+          "description": "Storage references",
+          "type": "string"
+        },
         "LastMaterializedAt": {},
         "LastRefreshError": {
           "type": "string"
@@ -9148,10 +12822,17 @@
           "description": "Lifecycle fields",
           "type": "string"
         },
+        "Measures": {
+          "$ref": "#/definitions/string[]"
+        },
         "Name": {
           "type": "string"
         },
         "NextScheduledRefresh": {},
+        "PatternFingerprint": {
+          "description": "Pattern matching fields",
+          "type": "string"
+        },
         "RefreshIntervalMinutes": {
           "type": "number"
         },
@@ -9164,6 +12845,12 @@
         "SizeBytes": {
           "type": "number"
         },
+        "StarRocksMV": {
+          "type": "string"
+        },
+        "Status": {
+          "$ref": "#/definitions/PreAggStatus"
+        },
         "TargetDatabase": {
           "type": "string"
         },
@@ -9173,12 +12860,17 @@
         "TenantID": {
           "type": "string"
         },
-        "UpdatedAt": {}
+        "UpdatedAt": {},
+        "UsageCount": {
+          "description": "Usage tracking",
+          "type": "number"
+        }
       },
       "required": [
         "ID",
         "TenantID",
         "BOName",
+        "Datasource",
         "Name",
         "Description",
         "TargetDatabase",
@@ -9187,8 +12879,16 @@
         "RefreshStrategy",
         "RefreshIntervalMinutes",
         "GovernanceStatus",
+        "Status",
         "CreatedAt",
+        "CreatedBy",
         "UpdatedAt",
+        "PatternFingerprint",
+        "GroupBy",
+        "Measures",
+        "FiltersSupported",
+        "IcebergTable",
+        "StarRocksMV",
         "LifecycleStatus",
         "LastMaterializedAt",
         "LastRefreshedAt",
@@ -9196,7 +12896,9 @@
         "LastRefreshError",
         "NextScheduledRefresh",
         "RowCount",
-        "SizeBytes"
+        "SizeBytes",
+        "UsageCount",
+        "AvgLatencyReductionMs"
       ],
       "type": "object"
     },
@@ -9214,6 +12916,9 @@
     "PreAggProperties": {
       "description": "PreAggregation node properties (stored in catalog_node.properties)",
       "properties": {
+        "AvgLatencyReductionMs": {
+          "type": "number"
+        },
         "BOName": {
           "type": "string"
         },
@@ -9253,6 +12958,10 @@
         },
         "TenantID": {
           "type": "string"
+        },
+        "UsageCount": {
+          "description": "Usage tracking (persisted snapshot)",
+          "type": "number"
         }
       },
       "required": [
@@ -9270,7 +12979,9 @@
         "LastRefreshError",
         "NextScheduledRefresh",
         "RowCount",
-        "SizeBytes"
+        "SizeBytes",
+        "UsageCount",
+        "AvgLatencyReductionMs"
       ],
       "type": "object"
     },
@@ -9349,6 +13060,69 @@
       "required": [
         "RowCount",
         "SizeBytes"
+      ],
+      "type": "object"
+    },
+    "PreAggStatus": {
+      "enum": [
+        "active",
+        "disabled",
+        "draft",
+        "error"
+      ],
+      "type": "string"
+    },
+    "PreAggSuggestion": {
+      "description": "PreAggSuggestion represents a suggested pre-aggregation from the suggestion engine.",
+      "properties": {
+        "AvgLatency": {
+          "type": "number"
+        },
+        "AvgRows": {
+          "type": "number"
+        },
+        "CreatedAt": {},
+        "Datasource": {
+          "type": "string"
+        },
+        "Filters": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Fingerprint": {
+          "type": "string"
+        },
+        "Freq": {
+          "type": "number"
+        },
+        "GroupBy": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Measures": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Reason": {
+          "type": "string"
+        },
+        "Score": {
+          "type": "number"
+        },
+        "TenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "Datasource",
+        "Fingerprint",
+        "GroupBy",
+        "Filters",
+        "Measures",
+        "AvgLatency",
+        "AvgRows",
+        "Freq",
+        "Score",
+        "Reason",
+        "CreatedAt"
       ],
       "type": "object"
     },
@@ -9526,6 +13300,42 @@
       "required": [
         "UserID",
         "Groups"
+      ],
+      "type": "object"
+    },
+    "ProcessorStats": {
+      "description": "ProcessorStats provides statistics about the processor",
+      "properties": {
+        "AverageDuration": {},
+        "AverageWaitTime": {},
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "IsRunning": {
+          "type": "boolean"
+        },
+        "QueuedCount": {
+          "type": "number"
+        },
+        "RunningCount": {
+          "type": "number"
+        },
+        "WorkerCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "WorkerCount",
+        "IsRunning",
+        "QueuedCount",
+        "RunningCount",
+        "CompletedCount",
+        "FailedCount",
+        "AverageWaitTime",
+        "AverageDuration"
       ],
       "type": "object"
     },
@@ -9828,6 +13638,13 @@
         "Measures": {
           "$ref": "#/definitions/string[]"
         },
+        "PreAggHit": {
+          "type": "boolean"
+        },
+        "PreAggID": {
+          "description": "Pre-aggregation tracking",
+          "type": "string"
+        },
         "RowsReturned": {
           "type": "number"
         },
@@ -9865,7 +13682,9 @@
         "Measures",
         "Filters",
         "Source",
-        "CreatedAt"
+        "CreatedAt",
+        "PreAggID",
+        "PreAggHit"
       ],
       "type": "object"
     },
@@ -9876,6 +13695,34 @@
         "realtime"
       ],
       "type": "string"
+    },
+    "QueueStats": {
+      "description": "QueueStats provides statistics about the job queue",
+      "properties": {
+        "AverageDuration": {},
+        "AverageWaitTime": {},
+        "CompletedCount": {
+          "type": "number"
+        },
+        "FailedCount": {
+          "type": "number"
+        },
+        "QueuedCount": {
+          "type": "number"
+        },
+        "RunningCount": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "QueuedCount",
+        "RunningCount",
+        "CompletedCount",
+        "FailedCount",
+        "AverageWaitTime",
+        "AverageDuration"
+      ],
+      "type": "object"
     },
     "QuotaDef": {
       "properties": {
@@ -10096,6 +13943,80 @@
       ],
       "type": "object"
     },
+    "ResolvedRule": {
+      "description": "ResolvedRule represents a finalized validation rule ready for evaluation",
+      "properties": {
+        "CompiledCUE": {
+          "type": "string"
+        },
+        "CompiledSQL": {
+          "type": "string"
+        },
+        "CompiledWASM": {
+          "$ref": "#/definitions/byte[]"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "EvaluationOrder": {
+          "type": "number"
+        },
+        "ExecuteClientSide": {
+          "type": "boolean"
+        },
+        "ExecuteServerSide": {
+          "type": "boolean"
+        },
+        "Fields": {
+          "$ref": "#/definitions/any[]"
+        },
+        "ID": {},
+        "ImpactNodes": {
+          "$ref": "#/definitions/ImpactNode[]"
+        },
+        "IsActive": {
+          "type": "boolean"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RemediationHint": {
+          "type": "string"
+        },
+        "RuleType": {
+          "type": "string"
+        },
+        "RunOnSubmit": {
+          "type": "boolean"
+        },
+        "SemanticTerms": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "Description",
+        "RuleType",
+        "CompiledSQL",
+        "CompiledWASM",
+        "CompiledCUE",
+        "ExecuteServerSide",
+        "ExecuteClientSide",
+        "RunOnSubmit",
+        "Severity",
+        "RemediationHint",
+        "EvaluationOrder",
+        "IsActive",
+        "SemanticTerms",
+        "Fields",
+        "ImpactNodes"
+      ],
+      "type": "object"
+    },
     "ResolverMockRepo": {
       "description": "ResolverMockRepo for standalone testing",
       "properties": {
@@ -10132,6 +14053,50 @@
         "LastReviewDate",
         "DueDate",
         "OverdueCount"
+      ],
+      "type": "object"
+    },
+    "RiskMetrics": {
+      "description": "RiskMetrics represents portfolio risk metrics.",
+      "properties": {
+        "Beta": {
+          "type": "number"
+        },
+        "ExpectedShortfall": {
+          "type": "number"
+        },
+        "TrackingError": {
+          "type": "number"
+        },
+        "ValueAtRisk": {
+          "type": "number"
+        },
+        "Volatility": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Volatility",
+        "Beta",
+        "TrackingError",
+        "ValueAtRisk",
+        "ExpectedShortfall"
+      ],
+      "type": "object"
+    },
+    "RiskService": {
+      "description": "RiskService orchestrates risk computation ETL",
+      "properties": {
+        "audit": {},
+        "db": {},
+        "tenantID": {},
+        "wasm": {}
+      },
+      "required": [
+        "db",
+        "wasm",
+        "audit",
+        "tenantID"
       ],
       "type": "object"
     },
@@ -10448,6 +14413,100 @@
       ],
       "type": "object"
     },
+    "Rule": {
+      "description": "Rule represents a semantic priority rule for gold copy publishing",
+      "properties": {
+        "BusinessObject": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "ExpressionLanguage": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleEngine": {
+          "type": "string"
+        },
+        "SemanticTerm": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "Name",
+        "BusinessObject",
+        "Description",
+        "SemanticTerm",
+        "Status",
+        "Version",
+        "RuleEngine",
+        "ExpressionLanguage",
+        "CreatedBy"
+      ],
+      "type": "object"
+    },
+    "RuleAction": {
+      "properties": {
+        "Params": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Type",
+        "Params"
+      ],
+      "type": "object"
+    },
+    "RuleChain": {
+      "properties": {
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Rules": {
+          "$ref": "#/definitions/RuleWithMetadata[]"
+        },
+        "StopOnFirst": {
+          "$ref": "#/definitions/Severity"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "Operator",
+        "Rules",
+        "StopOnFirst"
+      ],
+      "type": "object"
+    },
     "RuleCondition": {
       "description": "RuleCondition represents a single validation condition",
       "properties": {
@@ -10467,16 +14526,40 @@
       "type": "object"
     },
     "RuleEngine": {
-      "description": "RuleEngine evaluates CEL expressions against input data.",
+      "description": "RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with\natomic-pointer state swaps for multi-tenant dynamic rewarming.\n\nArchitecture: Two-Level Execution Model\n\n  Level 1 — Core (platform-wide):  coreState atomic.Pointer[EngineState]\n    Holds gold-copy rules and standard fields. Serves all tenants.\n\n  Level 2 — Custom (tenant-isolated): tenantStates sync.Map\n    Per-tenant states for custom fields and custom rules. A tenant\n    state is built by merging Core rules + Tenant rules so it is\n    fully self-contained. When Tenant A adds a custom field, only\n    Tenant A's state is rebuilt; Tenant B and Core are untouched.\n\nLifecycle:\n\n  1. NewRuleEngine → empty core state\n  2. RewarmCore(allCoreRules, version) once at platform startup\n  3. RewarmTenant(tenantID, allTenantRules, version) when a tenant\n     adds a custom field or custom rule\n  4. UpdateRule / DeleteRule for O(1) rule logic changes\n  5. Evaluate(ctx, tenantID, ruleID, version, node, input, force)\n\nConcurrency: Evaluate is lock-free. getState() resolves the correct\nstate via atomic.Pointer.Load (core) or sync.Map.Load (tenant) — both\nare wait-free reads. RewarmCore/RewarmTenant build a new state in local\nmemory and atomically swap it in.",
       "properties": {
+        "coreState": {},
+        "driftHealer": {
+          "$ref": "#/definitions/DriftHealerInterface"
+        },
         "env": {},
+        "metrics": {
+          "$ref": "#/definitions/EngineMetrics"
+        },
+        "profiler": {
+          "$ref": "#/definitions/LatencyProfiler"
+        },
+        "recursive": {},
         "repo": {
           "$ref": "#/definitions/RuleRepository"
-        }
+        },
+        "rewarmGroup": {},
+        "tenantStates": {
+          "description": "tenantStates holds isolated states for tenants with custom rules/fields.\nKey: tenantID (string). Value: *EngineState.\nIf a tenant has no custom state, evaluation falls back to coreState."
+        },
+        "vm": {}
       },
       "required": [
         "env",
-        "repo"
+        "repo",
+        "coreState",
+        "tenantStates",
+        "vm",
+        "metrics",
+        "recursive",
+        "rewarmGroup",
+        "profiler",
+        "driftHealer"
       ],
       "type": "object"
     },
@@ -10511,7 +14594,6 @@
       "type": "object"
     },
     "RuleGroup": {
-      "description": "RuleGroup represents a logical grouping of rules (AND/OR/NOT)",
       "properties": {
         "Conditions": {
           "$ref": "#/definitions/RuleNode[]"
@@ -10559,10 +14641,12 @@
       "type": "object"
     },
     "RuleNode": {
-      "description": "RuleNode is a wrapper that can hold either a Group or a Condition",
       "properties": {
         "Condition": {
           "$ref": "#/definitions/RuleCondition"
+        },
+        "Expression": {
+          "$ref": "#/definitions/Expression"
         },
         "Group": {
           "$ref": "#/definitions/RuleGroup"
@@ -10574,7 +14658,8 @@
       "required": [
         "Type",
         "Group",
-        "Condition"
+        "Condition",
+        "Expression"
       ],
       "type": "object"
     },
@@ -10595,6 +14680,126 @@
         "RuleID",
         "SemanticTrend",
         "RefreshTrend"
+      ],
+      "type": "object"
+    },
+    "RuleRecord": {
+      "properties": {
+        "CompiledCUE": {
+          "type": "string"
+        },
+        "CompiledSQL": {
+          "type": "string"
+        },
+        "CompiledWASM": {
+          "$ref": "#/definitions/byte[]"
+        },
+        "CoreRuleID": {},
+        "DatasourceID": {},
+        "Description": {
+          "type": "string"
+        },
+        "EvaluationOrder": {
+          "type": "number"
+        },
+        "ExecuteClientSide": {
+          "type": "boolean"
+        },
+        "ExecuteServerSide": {
+          "type": "boolean"
+        },
+        "ID": {},
+        "IsActive": {
+          "type": "boolean"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RemediationHint": {
+          "type": "string"
+        },
+        "RuleType": {
+          "type": "string"
+        },
+        "RunOnSubmit": {
+          "type": "boolean"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "TargetEntityID": {},
+        "TenantID": {}
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "TargetEntityID",
+        "Name",
+        "Description",
+        "RuleType",
+        "CompiledSQL",
+        "CompiledWASM",
+        "CompiledCUE",
+        "ExecuteServerSide",
+        "ExecuteClientSide",
+        "RunOnSubmit",
+        "Severity",
+        "RemediationHint",
+        "EvaluationOrder",
+        "IsActive",
+        "CoreRuleID",
+        "DatasourceID"
+      ],
+      "type": "object"
+    },
+    "RuleResult": {
+      "properties": {
+        "Actions": {
+          "$ref": "#/definitions/RuleAction[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Details": {
+          "$ref": "#/definitions/string[]"
+        },
+        "EvalTimeNs": {
+          "type": "number"
+        },
+        "FailureReasons": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Passed": {
+          "type": "boolean"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Score": {
+          "type": "number"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "Violations": {
+          "$ref": "#/definitions/RuleViolation[]"
+        }
+      },
+      "required": [
+        "Passed",
+        "Score",
+        "Severity",
+        "Actions",
+        "RuleID",
+        "RuleName",
+        "Category",
+        "Details",
+        "FailureReasons",
+        "Violations",
+        "EvalTimeNs"
       ],
       "type": "object"
     },
@@ -10666,6 +14871,26 @@
       ],
       "type": "object"
     },
+    "RuleSchema": {
+      "description": "RuleSchema contains all available fields and terms for building validation rules",
+      "properties": {
+        "Fields": {
+          "$ref": "#/definitions/any[]"
+        },
+        "Locale": {
+          "type": "string"
+        },
+        "Terms": {
+          "$ref": "#/definitions/any[]"
+        }
+      },
+      "required": [
+        "Fields",
+        "Terms",
+        "Locale"
+      ],
+      "type": "object"
+    },
     "RuleTemplate": {
       "description": "RuleTemplate provides common validation scenarios",
       "properties": {
@@ -10719,6 +14944,84 @@
         "FailureCount",
         "StartedAt",
         "CompletedAt"
+      ],
+      "type": "object"
+    },
+    "RuleViolation": {
+      "properties": {
+        "ConditionID": {
+          "type": "string"
+        },
+        "EvaluatedVal": {},
+        "FieldPath": {
+          "type": "string"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "ThresholdLimit": {}
+      },
+      "required": [
+        "ConditionID",
+        "FieldPath",
+        "Operator",
+        "EvaluatedVal",
+        "ThresholdLimit",
+        "Message",
+        "RuleID",
+        "RuleName",
+        "Severity"
+      ],
+      "type": "object"
+    },
+    "RuleWithMetadata": {
+      "properties": {
+        "Actions": {
+          "$ref": "#/definitions/RuleAction[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Node": {
+          "$ref": "#/definitions/RuleNode"
+        },
+        "ScoringFormula": {
+          "type": "string"
+        },
+        "Severity": {
+          "$ref": "#/definitions/Severity"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Node",
+        "ID",
+        "Version",
+        "Name",
+        "Severity",
+        "Category",
+        "Actions",
+        "ScoringFormula"
       ],
       "type": "object"
     },
@@ -10802,14 +15105,10 @@
     "SQLRuleRepository": {
       "description": "SQLRuleRepository implements RuleRepository using a SQL database.",
       "properties": {
-        "db": {},
-        "hasuraClient": {
-          "$ref": "#/definitions/HasuraClient"
-        }
+        "db": {}
       },
       "required": [
-        "db",
-        "hasuraClient"
+        "db"
       ],
       "type": "object"
     },
@@ -10890,6 +15189,25 @@
       ],
       "type": "object"
     },
+    "ScenarioRunner": {
+      "properties": {
+        "engine": {
+          "$ref": "#/definitions/RuleEngine"
+        },
+        "repo": {
+          "$ref": "#/definitions/ScenarioRepository"
+        },
+        "sampleRepo": {
+          "$ref": "#/definitions/SampleEntityRepository"
+        }
+      },
+      "required": [
+        "repo",
+        "sampleRepo",
+        "engine"
+      ],
+      "type": "object"
+    },
     "ScenarioService": {
       "properties": {
         "repo": {
@@ -10898,6 +15216,115 @@
       },
       "required": [
         "repo"
+      ],
+      "type": "object"
+    },
+    "ScheduleStatus": {
+      "enum": [
+        "active",
+        "completed",
+        "disabled",
+        "failed",
+        "paused"
+      ],
+      "type": "string"
+    },
+    "ScheduleType": {
+      "enum": [
+        "daily",
+        "monthly",
+        "once",
+        "weekly"
+      ],
+      "type": "string"
+    },
+    "ScheduledJob": {
+      "description": "ScheduledJob represents a scheduled job",
+      "properties": {
+        "CreatedAt": {},
+        "CreatedBy": {},
+        "CronExpression": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "EndTime": {},
+        "FailureCount": {
+          "type": "number"
+        },
+        "ID": {},
+        "IsActive": {
+          "type": "boolean"
+        },
+        "JobTemplate": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "LastRunAt": {},
+        "MaxRetries": {
+          "type": "number"
+        },
+        "MaxRunDuration": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "NextRunAt": {},
+        "OperationType": {
+          "type": "string"
+        },
+        "Priority": {
+          "type": "number"
+        },
+        "RetryOnFailure": {
+          "type": "boolean"
+        },
+        "RunCount": {
+          "type": "number"
+        },
+        "ScheduleType": {
+          "$ref": "#/definitions/ScheduleType"
+        },
+        "StartTime": {},
+        "Status": {
+          "$ref": "#/definitions/ScheduleStatus"
+        },
+        "SuccessCount": {
+          "type": "number"
+        },
+        "TenantID": {},
+        "Timezone": {
+          "type": "string"
+        },
+        "UpdatedAt": {}
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "OperationType",
+        "JobTemplate",
+        "ScheduleType",
+        "StartTime",
+        "EndTime",
+        "CronExpression",
+        "Timezone",
+        "MaxRunDuration",
+        "RetryOnFailure",
+        "MaxRetries",
+        "Status",
+        "IsActive",
+        "LastRunAt",
+        "NextRunAt",
+        "RunCount",
+        "SuccessCount",
+        "FailureCount",
+        "Name",
+        "Description",
+        "Priority",
+        "CreatedBy",
+        "CreatedAt",
+        "UpdatedAt"
       ],
       "type": "object"
     },
@@ -10934,6 +15361,47 @@
         "Table",
         "Change",
         "Details"
+      ],
+      "type": "object"
+    },
+    "SchemaDriftProposal": {
+      "properties": {
+        "AutoRepairScript": {
+          "type": "string"
+        },
+        "BOID": {
+          "type": "string"
+        },
+        "ConfidenceScore": {
+          "type": "number"
+        },
+        "DetectedAt": {},
+        "DriftType": {
+          "type": "string"
+        },
+        "ProposalID": {
+          "type": "string"
+        },
+        "SourceColumn": {
+          "type": "string"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TargetColumn": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "ProposalID",
+        "BOID",
+        "DriftType",
+        "SourceColumn",
+        "TargetColumn",
+        "ConfidenceScore",
+        "AutoRepairScript",
+        "Status",
+        "DetectedAt"
       ],
       "type": "object"
     },
@@ -11232,6 +15700,9 @@
         "apiKeyManager": {
           "$ref": "#/definitions/APIKeyManager"
         },
+        "apiKeyStore": {
+          "$ref": "#/definitions/APIKeyStore"
+        },
         "auditLogger": {
           "$ref": "#/definitions/AuditLogger"
         },
@@ -11245,8 +15716,57 @@
       "required": [
         "jwtManager",
         "apiKeyManager",
+        "apiKeyStore",
         "encryptionMgr",
         "auditLogger"
+      ],
+      "type": "object"
+    },
+    "SecurityPosition": {
+      "description": "SecurityPosition represents a portfolio position with security details.",
+      "properties": {
+        "Confidence": {
+          "type": "number"
+        },
+        "CostBasis": {
+          "type": "number"
+        },
+        "FieldCoverage": {
+          "type": "number"
+        },
+        "ID": {},
+        "MarketValue": {
+          "type": "number"
+        },
+        "PortfolioID": {},
+        "Quantity": {
+          "type": "number"
+        },
+        "Security": {},
+        "SecurityID": {},
+        "SourceSystems": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "Weight": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "PortfolioID",
+        "SecurityID",
+        "Security",
+        "Quantity",
+        "CostBasis",
+        "MarketValue",
+        "Weight",
+        "Confidence",
+        "SourceSystems",
+        "FieldCoverage",
+        "Status"
       ],
       "type": "object"
     },
@@ -11322,7 +15842,6 @@
       "type": "object"
     },
     "SemanticDimension": {
-      "description": "SemanticDimension represents a cube dimension",
       "properties": {
         "ID": {
           "type": "string"
@@ -11358,7 +15877,6 @@
       "type": "object"
     },
     "SemanticMeasure": {
-      "description": "SemanticMeasure represents a cube measure",
       "properties": {
         "ID": {
           "type": "string"
@@ -11394,7 +15912,6 @@
       "type": "object"
     },
     "SemanticModel": {
-      "description": "SemanticModel represents a semantic cube with inheritance",
       "properties": {
         "BusinessObjectID": {
           "type": "string"
@@ -11442,13 +15959,10 @@
       "type": "object"
     },
     "SemanticModelInheritanceService": {
-      "description": "SemanticModelInheritanceService manages semantic cubes with BO sync",
       "properties": {
-        "hasuraClient": {},
         "logger": {}
       },
       "required": [
-        "hasuraClient",
         "logger"
       ],
       "type": "object"
@@ -11625,6 +16139,16 @@
       ],
       "type": "object"
     },
+    "Severity": {
+      "enum": [
+        "error",
+        "hard_block",
+        "info",
+        "quarantine",
+        "warning"
+      ],
+      "type": "string"
+    },
     "ShadowRunResult": {
       "description": "ShadowRunResult holds results of shadow queries.",
       "properties": {
@@ -11756,6 +16280,86 @@
       ],
       "type": "object"
     },
+    "Stack": {
+      "description": "Stack provides fixed-size, allocation-free operand stacks for the VM.\nArrays are exactly 256 elements. Because the stack pointers (nTop, bTop, sTop, fTop)\nare uint8, they mathematically cannot exceed 255. This allows the Go compiler\nto completely elide bounds checks in the dispatch loop.",
+      "properties": {
+        "bTop": {
+          "$ref": "#/definitions/uint8"
+        },
+        "bools": {
+          "$ref": "#/definitions/bool[]"
+        },
+        "fNums": {
+          "$ref": "#/definitions/float64[]"
+        },
+        "fTop": {
+          "$ref": "#/definitions/uint8"
+        },
+        "nTop": {
+          "$ref": "#/definitions/uint8"
+        },
+        "nums": {
+          "$ref": "#/definitions/int64[]"
+        },
+        "sTop": {
+          "$ref": "#/definitions/uint8"
+        },
+        "strs": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "nums",
+        "bools",
+        "strs",
+        "fNums",
+        "nTop",
+        "bTop",
+        "sTop",
+        "fTop"
+      ],
+      "type": "object"
+    },
+    "StarlarkEngine": {
+      "description": "StarlarkEngine provides Workday-style expression evaluation",
+      "properties": {
+        "cache": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "cacheMu": {},
+        "logger": {},
+        "maxSteps": {
+          "$ref": "#/definitions/uint64"
+        }
+      },
+      "required": [
+        "logger",
+        "cache",
+        "cacheMu",
+        "maxSteps"
+      ],
+      "type": "object"
+    },
+    "StarlarkValidationResult": {
+      "description": "StarlarkValidationResult represents the result of a validation expression",
+      "properties": {
+        "IsValid": {
+          "type": "boolean"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "IsValid",
+        "Message",
+        "Severity"
+      ],
+      "type": "object"
+    },
     "StewardReview": {
       "description": "StewardReview represents steward review sessions",
       "properties": {
@@ -11807,6 +16411,15 @@
         "UpdatedAt"
       ],
       "type": "object"
+    },
+    "StorageTier": {
+      "enum": [
+        "API_FEDERATION",
+        "TIER_1_POSTGRES",
+        "TIER_2_STARROCKS",
+        "TIER_3_ICEBERG"
+      ],
+      "type": "string"
     },
     "SubtypeDefinition": {
       "description": "SubtypeDefinition represents a subtype within a BO",
@@ -11876,6 +16489,80 @@
       ],
       "type": "object"
     },
+    "SymbolDict": {
+      "description": "SymbolDict maps dotted field paths (\"customer.account.tier\") to\ndensely-packed uint32 IDs used as array indices into FastRecord.",
+      "properties": {
+        "frozen": {},
+        "index": {
+          "$ref": "#/definitions/Record\u003cstring, uint32\u003e"
+        },
+        "mu": {},
+        "paths": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "mu",
+        "index",
+        "paths",
+        "frozen"
+      ],
+      "type": "object"
+    },
+    "SynthesizedCalculatedField": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "DisplayName": {
+          "type": "string"
+        },
+        "Formula": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "DisplayName",
+        "Type",
+        "Formula",
+        "Description"
+      ],
+      "type": "object"
+    },
+    "SynthesizedRule": {
+      "properties": {
+        "Description": {
+          "type": "string"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "Script": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "RuleName",
+        "Description",
+        "Severity",
+        "Field",
+        "Script"
+      ],
+      "type": "object"
+    },
     "Table": {
       "description": "Table represents a table within a schema.",
       "properties": {
@@ -11889,6 +16576,78 @@
       "required": [
         "Name",
         "Columns"
+      ],
+      "type": "object"
+    },
+    "TableColumnIntrospection": {
+      "description": "TableColumnIntrospection represents an introspected database column",
+      "properties": {
+        "DataType": {
+          "type": "string"
+        },
+        "DefaultValue": {
+          "type": "string"
+        },
+        "ForeignTable": {
+          "type": "string"
+        },
+        "IsForeignKey": {
+          "type": "boolean"
+        },
+        "IsNullable": {
+          "type": "boolean"
+        },
+        "IsPrimaryKey": {
+          "type": "boolean"
+        },
+        "Name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "DataType",
+        "IsNullable",
+        "IsPrimaryKey",
+        "IsForeignKey",
+        "ForeignTable",
+        "DefaultValue"
+      ],
+      "type": "object"
+    },
+    "TableIntrospectionResponse": {
+      "description": "TableIntrospectionResponse represents the result of introspecting a table for BO creation",
+      "properties": {
+        "Columns": {
+          "$ref": "#/definitions/TableColumnIntrospection[]"
+        },
+        "QualifiedPath": {
+          "type": "string"
+        },
+        "SuggestedFields": {
+          "$ref": "#/definitions/FieldDefinition[]"
+        },
+        "SuggestedKey": {
+          "type": "string"
+        },
+        "SuggestedName": {
+          "type": "string"
+        },
+        "TableID": {
+          "type": "string"
+        },
+        "TableName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TableID",
+        "TableName",
+        "QualifiedPath",
+        "Columns",
+        "SuggestedFields",
+        "SuggestedName",
+        "SuggestedKey"
       ],
       "type": "object"
     },
@@ -12201,6 +16960,13 @@
         "Measures": {
           "$ref": "#/definitions/string[]"
         },
+        "PreAggHit": {
+          "type": "boolean"
+        },
+        "PreAggID": {
+          "description": "Pre-aggregation tracking",
+          "type": "string"
+        },
         "RowsReturned": {
           "type": "number"
         },
@@ -12234,7 +17000,120 @@
         "Filters",
         "Status",
         "ErrorMessage",
-        "Source"
+        "Source",
+        "PreAggID",
+        "PreAggHit"
+      ],
+      "type": "object"
+    },
+    "Template": {
+      "description": "Template represents a rule template for gold copy publishing",
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "CreatedBy": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "ID": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Status": {
+          "type": "string"
+        },
+        "TemplateType": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "Name",
+        "Category",
+        "TemplateType",
+        "Description",
+        "Status",
+        "Version",
+        "RuleIDs",
+        "CreatedBy"
+      ],
+      "type": "object"
+    },
+    "Tenant": {
+      "description": "Tenant represents a first-class tenant in the system",
+      "properties": {
+        "Code": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "ID": {},
+        "IsSuspended": {
+          "type": "boolean"
+        },
+        "MaxRequests": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Plan": {
+          "type": "string"
+        },
+        "Region": {
+          "type": "string"
+        },
+        "UpdatedAt": {},
+        "WindowSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "Code",
+        "Region",
+        "Plan",
+        "MaxRequests",
+        "WindowSeconds",
+        "IsSuspended",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "TenantCompiler": {
+      "properties": {
+        "coreCompiler": {
+          "$ref": "#/definitions/CoreCompiler"
+        },
+        "coreRepo": {
+          "$ref": "#/definitions/CoreRuleRepository"
+        },
+        "predeclared": {},
+        "tenantCache": {
+          "$ref": "#/definitions/TenantFnCache"
+        }
+      },
+      "required": [
+        "coreCompiler",
+        "tenantCache",
+        "predeclared",
+        "coreRepo"
       ],
       "type": "object"
     },
@@ -12251,6 +17130,72 @@
         "db",
         "configs",
         "mu"
+      ],
+      "type": "object"
+    },
+    "TenantCreateRequest": {
+      "description": "TenantCreateRequest represents a request to create a new tenant",
+      "properties": {
+        "Code": {
+          "type": "string"
+        },
+        "ID": {},
+        "MaxRequests": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Plan": {
+          "type": "string"
+        },
+        "Region": {
+          "type": "string"
+        },
+        "WindowSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "ID",
+        "Name",
+        "Code",
+        "Region",
+        "Plan",
+        "MaxRequests",
+        "WindowSeconds"
+      ],
+      "type": "object"
+    },
+    "TenantFnCache": {
+      "properties": {
+        "m": {
+          "$ref": "#/definitions/Record\u003cTenantFnKey, any\u003e"
+        },
+        "mu": {}
+      },
+      "required": [
+        "mu",
+        "m"
+      ],
+      "type": "object"
+    },
+    "TenantFnKey": {
+      "properties": {
+        "CoreVer": {
+          "type": "number"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "RuleID",
+        "CoreVer"
       ],
       "type": "object"
     },
@@ -12380,6 +17325,38 @@
       ],
       "type": "object"
     },
+    "TenantUpdateRequest": {
+      "description": "TenantUpdateRequest represents a request to update a tenant",
+      "properties": {
+        "IsSuspended": {
+          "type": "boolean"
+        },
+        "MaxRequests": {
+          "type": "number"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Plan": {
+          "type": "string"
+        },
+        "Region": {
+          "type": "string"
+        },
+        "WindowSeconds": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Name",
+        "Region",
+        "Plan",
+        "MaxRequests",
+        "WindowSeconds",
+        "IsSuspended"
+      ],
+      "type": "object"
+    },
     "TenantValidationRule": {
       "description": "TenantValidationRule represents a tenant's customization of a rule",
       "properties": {
@@ -12413,6 +17390,23 @@
         "ConditionSrc",
         "CreatedAt",
         "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "TermDefinition": {
+      "description": "TermDefinition is a business-term definition grounded in an industry\nstandard (FINRA, EDM Council/FIBO, ISO 20022) where one applies.",
+      "properties": {
+        "Definition": {
+          "type": "string"
+        },
+        "Source": {
+          "description": "Source names the standard the definition is drawn from (e.g. \"FINRA\",\n\"EDM Council FIBO\", \"ISO 20022\"), or \"generated\" if no standard body\ndefines this concept and the model had to draft a plain definition.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Definition",
+        "Source"
       ],
       "type": "object"
     },
@@ -12506,17 +17500,44 @@
       ],
       "type": "object"
     },
+    "TraceStep": {
+      "description": "TraceStep represents one step in a rule's execution trace. Used by the\nMonaco editor's live-preview panel to show why a rule passed or failed.",
+      "properties": {
+        "Executed": {
+          "type": "boolean"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "Operator": {
+          "type": "string"
+        },
+        "Result": {
+          "type": "boolean"
+        },
+        "Type": {
+          "type": "string"
+        },
+        "Value": {}
+      },
+      "required": [
+        "Type",
+        "Executed",
+        "Field",
+        "Operator",
+        "Value",
+        "Result"
+      ],
+      "type": "object"
+    },
     "TranslationService": {
-      "description": "TranslationService provides multilingual support",
       "properties": {
         "cache": {
           "$ref": "#/definitions/Record\u003cstring, Record\u003cstring, string\u003e\u003e"
         },
-        "hasuraClient": {},
         "logger": {}
       },
       "required": [
-        "hasuraClient",
         "logger",
         "cache"
       ],
@@ -13148,6 +18169,52 @@
       ],
       "type": "object"
     },
+    "UisceASTNode": {
+      "properties": {
+        "Attributes": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Children": {
+          "$ref": "#/definitions/UisceASTNode[]"
+        },
+        "NodeType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "NodeType",
+        "Attributes",
+        "Children"
+      ],
+      "type": "object"
+    },
+    "UisceSemanticAST": {
+      "properties": {
+        "Dialects": {
+          "$ref": "#/definitions/string[]"
+        },
+        "GeneratedSQL": {
+          "$ref": "#/definitions/Record\u003cstring, string\u003e"
+        },
+        "RootNode": {
+          "$ref": "#/definitions/UisceASTNode"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "Version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Version",
+        "RootNode",
+        "TenantID",
+        "Dialects",
+        "GeneratedSQL"
+      ],
+      "type": "object"
+    },
     "UpdateBusinessObjectRequest": {
       "description": "UpdateBusinessObjectRequest represents a request to update a BO",
       "properties": {
@@ -13433,12 +18500,34 @@
       "type": "object"
     },
     "UpgradeService": {
-      "description": "UpgradeService provides methods for upgrading semantic models.",
       "properties": {
         "DB": {}
       },
       "required": [
         "DB"
+      ],
+      "type": "object"
+    },
+    "UpgradeSimulation": {
+      "properties": {
+        "Diff": {
+          "$ref": "#/definitions/patchDiff"
+        },
+        "FromVersion": {
+          "type": "string"
+        },
+        "ToVersion": {
+          "type": "string"
+        },
+        "Warnings": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "FromVersion",
+        "ToVersion",
+        "Diff",
+        "Warnings"
       ],
       "type": "object"
     },
@@ -13732,69 +18821,8 @@
       ],
       "type": "object"
     },
-    "ValidationContext": {
-      "description": "ValidationContext represents the context for validation",
-      "properties": {
-        "AccountID": {
-          "type": "string"
-        },
-        "AccountType": {
-          "type": "string"
-        },
-        "ClientID": {
-          "type": "string"
-        },
-        "ClientProfile": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "DatasourceID": {
-          "type": "string"
-        },
-        "OverrideAuthorization": {
-          "type": "string"
-        },
-        "PortfolioData": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "Timestamp": {},
-        "TransactionData": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "UserID": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "AccountID",
-        "AccountType",
-        "ClientID",
-        "PortfolioData",
-        "TransactionData",
-        "ClientProfile",
-        "Timestamp",
-        "UserID",
-        "OverrideAuthorization",
-        "TenantID",
-        "DatasourceID"
-      ],
-      "type": "object"
-    },
-    "ValidationEngineWithHierarchy": {
-      "properties": {
-        "db": {},
-        "evaluator": {
-          "$ref": "#/definitions/ConditionEvaluator"
-        },
-        "logger": {}
-      },
-      "required": [
-        "db",
-        "evaluator",
-        "logger"
-      ],
+    "VM": {
+      "properties": {},
       "type": "object"
     },
     "ValidationError": {
@@ -13843,56 +18871,6 @@
       ],
       "type": "object"
     },
-    "ValidationExecutionResult": {
-      "description": "ValidationExecutionResult represents the overall validation result",
-      "properties": {
-        "AccountID": {
-          "type": "string"
-        },
-        "BlockedRules": {
-          "$ref": "#/definitions/ValidationResult[]"
-        },
-        "ContextID": {
-          "type": "string"
-        },
-        "DatasourceID": {
-          "type": "string"
-        },
-        "ExecutionTimeMs": {
-          "type": "number"
-        },
-        "InfoRules": {
-          "$ref": "#/definitions/ValidationResult[]"
-        },
-        "Passed": {
-          "type": "boolean"
-        },
-        "Results": {
-          "$ref": "#/definitions/ValidationResult[]"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "Timestamp": {},
-        "WarningRules": {
-          "$ref": "#/definitions/ValidationResult[]"
-        }
-      },
-      "required": [
-        "ContextID",
-        "AccountID",
-        "Passed",
-        "Timestamp",
-        "Results",
-        "BlockedRules",
-        "WarningRules",
-        "InfoRules",
-        "ExecutionTimeMs",
-        "TenantID",
-        "DatasourceID"
-      ],
-      "type": "object"
-    },
     "ValidationReport": {
       "description": "ValidationReport holds validation results.",
       "properties": {
@@ -13921,121 +18899,19 @@
       ],
       "type": "object"
     },
-    "ValidationResult": {
-      "description": "ValidationResult represents the result of a single validation",
+    "ValidationResponse": {
+      "description": "ValidationResponse is the struct returned by success() and fail()",
       "properties": {
-        "AllowedOverrideAuthority": {
-          "type": "string"
-        },
-        "Details": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "FailedValue": {},
         "Message": {
           "type": "string"
         },
-        "Passed": {
+        "Pass": {
           "type": "boolean"
-        },
-        "RequiresOverride": {
-          "type": "boolean"
-        },
-        "RuleID": {
-          "type": "string"
-        },
-        "RuleName": {
-          "type": "string"
-        },
-        "Severity": {
-          "$ref": "#/definitions/RuleSeverity"
-        },
-        "Threshold": {},
-        "Timestamp": {}
+        }
       },
       "required": [
-        "RuleID",
-        "RuleName",
-        "Passed",
-        "Severity",
-        "Message",
-        "Details",
-        "Timestamp",
-        "RequiresOverride",
-        "AllowedOverrideAuthority",
-        "FailedValue",
-        "Threshold"
-      ],
-      "type": "object"
-    },
-    "ValidationRule": {
-      "description": "ValidationRule represents a single validation rule",
-      "properties": {
-        "CreatedAt": {},
-        "DatasourceID": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "EffectiveFrom": {},
-        "EffectiveTo": {},
-        "EvaluationOrder": {
-          "type": "number"
-        },
-        "Frequency": {
-          "$ref": "#/definitions/RuleFrequency"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "IsActive": {
-          "type": "boolean"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "OverrideConditions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Parameters": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "RequiredAuthority": {
-          "type": "string"
-        },
-        "RuleType": {
-          "type": "string"
-        },
-        "Scope": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Severity": {
-          "$ref": "#/definitions/RuleSeverity"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "UpdatedAt": {}
-      },
-      "required": [
-        "ID",
-        "Name",
-        "Description",
-        "RuleType",
-        "Scope",
-        "Severity",
-        "IsActive",
-        "EffectiveFrom",
-        "EffectiveTo",
-        "Frequency",
-        "EvaluationOrder",
-        "OverrideConditions",
-        "RequiredAuthority",
-        "Parameters",
-        "CreatedAt",
-        "UpdatedAt",
-        "TenantID",
-        "DatasourceID"
+        "Pass",
+        "Message"
       ],
       "type": "object"
     },
@@ -14093,11 +18969,15 @@
       "description": "ValidationRuleEngineImpl implements ValidationRuleEngine",
       "properties": {
         "db": {},
+        "operators": {
+          "description": "operators delegates actual comparison semantics to RuleFabric's\nOperatorRegistry (backend/internal/rulefabric) so this engine and\nRuleFabric's tree-based rules share one implementation of what \"=\",\n\"\u003e\", \"contains\", etc. mean, instead of maintaining two independently\nbug-prone copies."
+        },
         "resolver": {}
       },
       "required": [
         "db",
-        "resolver"
+        "resolver",
+        "operators"
       ],
       "type": "object"
     },
@@ -14330,26 +19210,6 @@
       "properties": {},
       "type": "object"
     },
-    "WealthManagementValidationEngine": {
-      "description": "WealthManagementValidationEngine orchestrates validation rules",
-      "properties": {
-        "db": {},
-        "rules": {
-          "$ref": "#/definitions/Record\u003cstring, ValidationRule\u003e"
-        },
-        "topicName": {
-          "type": "string"
-        },
-        "writer": {}
-      },
-      "required": [
-        "db",
-        "writer",
-        "topicName",
-        "rules"
-      ],
-      "type": "object"
-    },
     "WebSocketHub": {
       "description": "WebSocketHub manages WebSocket connections and broadcasting with advanced error handling",
       "properties": {
@@ -14470,6 +19330,29 @@
       ],
       "type": "object"
     },
+    "apiKeyFileEntry": {
+      "properties": {
+        "Key": {
+          "type": "string"
+        },
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Key",
+        "UserID",
+        "TenantIDs",
+        "Roles"
+      ],
+      "type": "object"
+    },
     "bundleServiceDBWrapper": {
       "description": "bundleServiceDBWrapper wraps an in-memory BundleService but synchronizes\npersistence with the backing database when one is configured.",
       "properties": {
@@ -14526,17 +19409,6 @@
       "required": [
         "Term",
         "MaskType"
-      ],
-      "type": "object"
-    },
-    "complianceServiceImpl": {
-      "properties": {
-        "auditSvc": {
-          "$ref": "#/definitions/AuditQueryer"
-        }
-      },
-      "required": [
-        "auditSvc"
       ],
       "type": "object"
     },
@@ -14601,6 +19473,15 @@
       ],
       "type": "object"
     },
+    "fakeDriftHealer": {
+      "properties": {
+        "calls": {}
+      },
+      "required": [
+        "calls"
+      ],
+      "type": "object"
+    },
     "inMemoryBundleStore": {
       "description": "inMemoryBundleStore simulates a database for bundles and their policies.",
       "properties": {
@@ -14638,6 +19519,25 @@
       "required": [
         "mu",
         "scripts"
+      ],
+      "type": "object"
+    },
+    "jsonScanner": {
+      "properties": {
+        "data": {
+          "$ref": "#/definitions/byte[]"
+        },
+        "path": {
+          "$ref": "#/definitions/byte[]"
+        },
+        "pos": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "data",
+        "pos",
+        "path"
       ],
       "type": "object"
     },
@@ -14853,6 +19753,55 @@
       ],
       "type": "object"
     },
+    "starlarkBundleSpan": {
+      "properties": {
+        "span": {},
+        "start": {}
+      },
+      "required": [
+        "span",
+        "start"
+      ],
+      "type": "object"
+    },
+    "starlarkRuleMetricChildren": {
+      "properties": {
+        "duration": {},
+        "lastError": {},
+        "lastRun": {}
+      },
+      "required": [
+        "duration",
+        "lastRun",
+        "lastError"
+      ],
+      "type": "object"
+    },
+    "starlarkRuleSpan": {
+      "properties": {
+        "ctxUsed": {},
+        "ended": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "ruleID": {
+          "type": "string"
+        },
+        "span": {},
+        "start": {}
+      },
+      "required": [
+        "span",
+        "start",
+        "ruleID",
+        "mode",
+        "ended",
+        "ctxUsed"
+      ],
+      "type": "object"
+    },
     "valuesServiceImpl": {
       "properties": {
         "auditSvc": {
@@ -14863,6 +19812,48 @@
       "required": [
         "db",
         "auditSvc"
+      ],
+      "type": "object"
+    },
+    "vmCompiler": {
+      "description": "vmCompiler walks a RuleNode tree once and emits a flat vm.CompiledProgram.\nIt is unexported because callers should use CompileVM() rather than\nconstructing a vmCompiler directly — that gives the package control\nover emit order and stack-depth tracking invariants.",
+      "properties": {
+        "boolDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "boolMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "enums": {},
+        "err": {
+          "$ref": "#/definitions/CompileError"
+        },
+        "fNumDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "fNumMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "numDepth": {
+          "$ref": "#/definitions/uint8"
+        },
+        "numMax": {
+          "$ref": "#/definitions/uint8"
+        },
+        "out": {},
+        "syms": {}
+      },
+      "required": [
+        "syms",
+        "enums",
+        "out",
+        "err",
+        "numDepth",
+        "boolDepth",
+        "fNumDepth",
+        "numMax",
+        "boolMax",
+        "fNumMax"
       ],
       "type": "object"
     }

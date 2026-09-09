@@ -146,3 +146,11 @@ backend/rule-engine/*
 !backend/rule-engine/*.*
 !backend/rule-engine/*/
 !backend/rule-engine/Dockerfile
+# backend/rule-engine/cmd/<name>/ is its own nested cmd/ tree (separate
+# from top-level backend/cmd/*/ above) - missed on the first pass of this
+# rule, which is exactly how generate-monaco/generate-types binaries got
+# committed here mid-session even after the first fix.
+backend/rule-engine/cmd/*/*
+!backend/rule-engine/cmd/*/*.*
+!backend/rule-engine/cmd/*/*/
+!backend/rule-engine/cmd/*/Dockerfile

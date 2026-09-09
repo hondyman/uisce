@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -29,6 +30,19 @@ type VersionInfo struct {
 }
 
 func main() {
+	if err := generateVersionInfo(outputDir); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// generateVersionInfo writes version.json into dir. Takes an explicit
+// directory (rather than reading the package-level outputDir global
+// itself) so tests can point it at a temp dir directly - outputDir is now
+// an absolute path fixed at package init via runtime.Caller (see above),
+// so the old os.Chdir()-based test technique for redirecting a "relative"
+// outputDir no longer applies, and isn't worth preserving: real dependency
+// injection is simpler than routing through cwd and a global.
+func generateVersionInfo(dir string) error {
 	commit := gitCommit()
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -39,19 +53,20 @@ func main() {
 		CompatibleSince: "1.0.0",
 	}
 
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		log.Fatalf("failed to create output dir: %v", err)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("failed to create output dir: %w", err)
 	}
 
-	outPath := filepath.Join(outputDir, outputVersion)
+	outPath := filepath.Join(dir, outputVersion)
 	data, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
-		log.Fatalf("failed to marshal version: %v", err)
+		return fmt.Errorf("failed to marshal version: %w", err)
 	}
 
 	if err := os.WriteFile(outPath, data, 0o644); err != nil {
-		log.Fatalf("failed to write %s: %v", outPath, err)
+		return fmt.Errorf("failed to write %s: %w", outPath, err)
 	}
+	return nil
 }
 
 func gitCommit() string {
