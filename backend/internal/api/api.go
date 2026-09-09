@@ -1644,6 +1644,18 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc)
 		glossaryHandler.RegisterRoutes(r)
+
+		// Semantic Relationships Handler (AI-suggested term relationships,
+		// rejections store, taxonomy classification). This was fully
+		// implemented but never mounted, which is why the glossary UI's "AI
+		// suggestions" card 404s on /api/semantic-terms/{id}/related and
+		// /api/semantic-mapper/rejections - it must be registered here,
+		// inside the /api Route() block, since RegisterRoutes uses relative
+		// paths like "/semantic-terms/{id}/related" rather than prefixing
+		// "/api" itself.
+		termRelationshipSvc := analytics.NewTermRelationshipService(sqlxDB)
+		semanticRelationshipsHandler := NewSemanticRelationshipsHandler(termRelationshipSvc, sqlxDB)
+		semanticRelationshipsHandler.RegisterRoutes(r)
 		apiDispatcherEncryptor, encryptorErr := buildApiDispatcherEncryptor()
 		if encryptorErr != nil {
 			log.Fatalf("Failed to construct API dispatcher encryptor: %v", encryptorErr)

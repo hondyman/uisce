@@ -39,9 +39,21 @@ interface RelationshipListProps {
   onDeleted?: () => void;
   onUpdated?: () => void;
   darkMode?: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
   getNodeName?: (nodeId: string) => string;
   getNodePath?: (nodeId: string) => string | undefined;
+  /**
+   * Called when the user clicks the related node's name. Only invoked for
+   * node types that actually have a destination page (semantic_term,
+   * business_term, business_object) - other types (raw physical columns,
+   * tables, API endpoints) render as plain text since there's nowhere to
+   * navigate to for those yet.
+   */
+  onNodeClick?: (nodeId: string, nodeType: string) => void;
 }
+
+const NAVIGABLE_TYPES = new Set(['semantic_term', 'business_term', 'business_object']);
 
 interface ThemeColors {
   bg: string;
@@ -100,12 +112,16 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
   onDeleted,
   onUpdated,
   darkMode = true,
+  canEdit = true,
+  canDelete = true,
   getNodeName,
   getNodePath,
+  onNodeClick,
 }) => {
   const C = darkMode ? DARK_COLORS : LIGHT_COLORS;
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editingEdge, setEditingEdge] = useState<CatalogEdge | null>(null);
+  const [search, setSearch] = useState('');
   const deleteEdge = useDeleteTermEdge();
 
   const nodeMap = React.useMemo(() => {
@@ -168,6 +184,93 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
     return result;
   }, [edges, resolvePredicateKey]);
 
+  // Derive display fields for every edge once, so search filtering doesn't
+  // have to recompute name/type parsing on every keystroke.
+  const rows = React.useMemo(() => {
+    return uniqueEdges.map((edge) => {
+      const sourceId = edge.subject_node_id || edge.source_node_id;
+      const targetId = edge.object_node_id || edge.target_node_id;
+      const isOutbound = sourceId === selectedNodeId;
+      const relatedNodeId = isOutbound ? targetId : sourceId;
+      const relatedNode = relatedNodeId ? resolveNode(relatedNodeId) : undefined;
+
+      let rawName = (isOutbound ? edge.target_name : edge.source_name)
+        || (relatedNodeId ? getNodeName?.(relatedNodeId) : undefined)
+        || relatedNode?.node_name
+        || relatedNode?.name
+        || relatedNodeId?.substring(0, 8)
+        || '';
+
+      let parsedType = (isOutbound ? edge.target_node_type : edge.source_node_type)
+        || relatedNode?.catalog_type_name
+        || relatedNode?.node_type
+        || relatedNode?.type;
+
+      let cleanName = rawName;
+      if (rawName.startsWith('business_object/') || rawName.startsWith('/business_object/')) {
+        parsedType = 'business_object';
+        cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
+      } else if (rawName.startsWith('semantic_term/')) {
+        parsedType = 'semantic_term';
+        cleanName = rawName.replace('semantic_term/', '');
+      } else if (rawName.startsWith('business_term/')) {
+        parsedType = 'business_term';
+        cleanName = rawName.replace('business_term/', '');
+      } else if (rawName.startsWith('api_endpoint/') || rawName.startsWith('/api_endpoint/')) {
+        parsedType = 'api_endpoint';
+        cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
+      } else if (rawName.startsWith('/orm/') || rawName.startsWith('/public/')) {
+        const parts = rawName.split('/').filter(Boolean);
+        if (parts.length >= 3) {
+          parsedType = 'column';
+          cleanName = parts[parts.length - 1];
+        } else if (parts.length === 2) {
+          parsedType = 'table';
+          cleanName = parts[1];
+        }
+      }
+
+      const relatedPath = (isOutbound ? edge.target_path : edge.source_path)
+        || (relatedNodeId ? getNodePath?.(relatedNodeId) : undefined)
+        || relatedNode?.qualified_path
+        || (rawName.startsWith('/') ? rawName : undefined);
+
+      const nodeTypeLower = (parsedType || 'node').toLowerCase();
+      const isBO = nodeTypeLower.includes('business_object') || nodeTypeLower.includes('bo');
+      const isApi = nodeTypeLower.includes('api_endpoint') || nodeTypeLower.includes('endpoint') || nodeTypeLower.includes('api');
+      const isColumn = nodeTypeLower.includes('column');
+      const isTable = nodeTypeLower.includes('table');
+      const isSemTerm = nodeTypeLower.includes('semantic');
+      const isBusTerm = nodeTypeLower.includes('business_term') || nodeTypeLower.includes('businessterm');
+
+      const typeKey = isBO ? 'business_object' : isApi ? 'api_endpoint' : isColumn ? 'column' : isTable ? 'table' : isSemTerm ? 'semantic_term' : isBusTerm ? 'business_term' : 'node';
+      const typeColor = isBO ? '#A855F7' : isApi ? '#38BDF8' : isColumn ? C.teal : isTable ? C.blue : isSemTerm ? C.accent : isBusTerm ? '#10B981' : C.textMuted;
+      const typeIcon = isBO ? '🏢' : isApi ? '🌐' : isColumn ? '🏷️' : isTable ? '📊' : isSemTerm ? '🧠' : isBusTerm ? '💼' : '📄';
+      const typeLabel = isBO ? 'Business Object' : isApi ? 'API Endpoint' : isColumn ? 'Database Column' : isTable ? 'Database Table' : isSemTerm ? 'Semantic Term' : isBusTerm ? 'Business Term' : (parsedType || 'Entity');
+
+      const predicateMeta = getPredicate(resolvePredicateKey(edge));
+      const isNavigable = !!relatedNodeId && NAVIGABLE_TYPES.has(typeKey);
+
+      return {
+        edge, isOutbound, relatedNodeId, cleanName, relatedPath,
+        typeKey, typeColor, typeIcon, typeLabel, isNavigable,
+        relationshipLabel: predicateMeta.label, predicateIcon: predicateMeta.icon, predicateColor: predicateMeta.color,
+        edgeHasProps: hasProperties(edge),
+      };
+    });
+  }, [uniqueEdges, selectedNodeId, resolveNode, getNodeName, getNodePath, resolvePredicateKey]);
+
+  const filteredRows = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter(r =>
+      r.cleanName.toLowerCase().includes(q) ||
+      r.typeLabel.toLowerCase().includes(q) ||
+      r.relationshipLabel.toLowerCase().includes(q) ||
+      (r.relatedPath || '').toLowerCase().includes(q)
+    );
+  }, [rows, search]);
+
   if (!uniqueEdges || uniqueEdges.length === 0) {
     return (
       <div style={{
@@ -184,74 +287,26 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 24px' }}>
+      <input
+        placeholder="Search relationships…"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{
+          width: '100%', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 6,
+          padding: '8px 12px', color: C.text, outline: 'none', fontSize: 13,
+        }}
+      />
       <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
-        Showing {uniqueEdges.length} connected relationship{uniqueEdges.length !== 1 ? 's' : ''}
+        Showing {filteredRows.length} of {uniqueEdges.length} connected relationship{uniqueEdges.length !== 1 ? 's' : ''}
       </div>
 
-      {uniqueEdges.map((edge) => {
-        const sourceId = edge.subject_node_id || edge.source_node_id;
-        const targetId = edge.object_node_id || edge.target_node_id;
-        const isOutbound = sourceId === selectedNodeId;
-        const relatedNodeId = isOutbound ? targetId : sourceId;
-        const relatedNode = relatedNodeId ? resolveNode(relatedNodeId) : undefined;
+      {filteredRows.length === 0 && (
+        <div style={{ padding: 24, textAlign: 'center', color: C.textMuted, fontSize: 13 }}>
+          No relationships match "{search}".
+        </div>
+      )}
 
-        let rawName = (isOutbound ? edge.target_name : edge.source_name) 
-          || (relatedNodeId ? getNodeName?.(relatedNodeId) : undefined) 
-          || relatedNode?.node_name 
-          || relatedNode?.name 
-          || relatedNodeId?.substring(0, 8) 
-          || '';
-
-        let parsedType = (isOutbound ? edge.target_node_type : edge.source_node_type) 
-          || relatedNode?.catalog_type_name 
-          || relatedNode?.node_type 
-          || relatedNode?.type;
-
-        let cleanName = rawName;
-        if (rawName.startsWith('business_object/') || rawName.startsWith('/business_object/')) {
-          parsedType = 'business_object';
-          cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
-        } else if (rawName.startsWith('semantic_term/')) {
-          parsedType = 'semantic_term';
-          cleanName = rawName.replace('semantic_term/', '');
-        } else if (rawName.startsWith('business_term/')) {
-          parsedType = 'business_term';
-          cleanName = rawName.replace('business_term/', '');
-        } else if (rawName.startsWith('api_endpoint/') || rawName.startsWith('/api_endpoint/')) {
-          parsedType = 'api_endpoint';
-          cleanName = rawName.split('/').filter(Boolean).pop() || rawName;
-        } else if (rawName.startsWith('/orm/') || rawName.startsWith('/public/')) {
-          const parts = rawName.split('/').filter(Boolean);
-          if (parts.length >= 3) {
-            parsedType = 'column';
-            cleanName = parts[parts.length - 1];
-          } else if (parts.length === 2) {
-            parsedType = 'table';
-            cleanName = parts[1];
-          }
-        }
-
-        const relatedPath = (isOutbound ? edge.target_path : edge.source_path) 
-          || (relatedNodeId ? getNodePath?.(relatedNodeId) : undefined) 
-          || relatedNode?.qualified_path 
-          || (rawName.startsWith('/') ? rawName : undefined);
-
-        const nodeTypeLower = (parsedType || 'node').toLowerCase();
-        const isBO = nodeTypeLower.includes('business_object') || nodeTypeLower.includes('bo');
-        const isApi = nodeTypeLower.includes('api_endpoint') || nodeTypeLower.includes('endpoint') || nodeTypeLower.includes('api');
-        const isColumn = nodeTypeLower.includes('column');
-        const isTable = nodeTypeLower.includes('table');
-        const isSemTerm = nodeTypeLower.includes('semantic');
-        const isBusTerm = nodeTypeLower.includes('business_term') || nodeTypeLower.includes('businessterm');
-
-        const typeColor = isBO ? '#A855F7' : isApi ? '#38BDF8' : isColumn ? C.teal : isTable ? C.blue : isSemTerm ? C.accent : isBusTerm ? '#10B981' : C.textMuted;
-        const typeIcon = isBO ? '🏢' : isApi ? '🌐' : isColumn ? '🏷️' : isTable ? '📊' : isSemTerm ? '🧠' : isBusTerm ? '💼' : '📄';
-        const typeLabel = isBO ? 'Business Object' : isApi ? 'API Endpoint' : isColumn ? 'Database Column' : isTable ? 'Database Table' : isSemTerm ? 'Semantic Term' : isBusTerm ? 'Business Term' : (parsedType || 'Entity');
-
-        const predicateMeta = getPredicate(resolvePredicateKey(edge));
-        const relationshipLabel = predicateMeta.label;
-        const edgeHasProps = hasProperties(edge);
-
+      {filteredRows.map(({ edge, isOutbound, relatedNodeId, cleanName, relatedPath, typeKey, typeColor, typeIcon, typeLabel, isNavigable, relationshipLabel, predicateIcon, predicateColor, edgeHasProps }) => {
         return (
           <div
             key={edge.id}
@@ -286,8 +341,8 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                   </span>
                 </div>
                 <Badge
-                  label={`${predicateMeta.icon} ${relationshipLabel}`}
-                  color={predicateMeta.color}
+                  label={`${predicateIcon} ${relationshipLabel}`}
+                  color={predicateColor}
                 />
               </div>
             </div>
@@ -296,9 +351,23 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
             <div style={{ flex: 1, minWidth: 0, paddingLeft: 12, borderLeft: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                 <span style={{ fontSize: 14 }}>{typeIcon}</span>
-                <span style={{ fontWeight: 700, fontSize: 14, color: C.text, wordBreak: 'break-word' }}>
-                  {cleanName}
-                </span>
+                {isNavigable && onNodeClick ? (
+                  <Tooltip title={`Open ${typeLabel}`}>
+                    <span
+                      onClick={() => onNodeClick(relatedNodeId!, typeKey)}
+                      style={{
+                        fontWeight: 700, fontSize: 14, color: C.accent, wordBreak: 'break-word',
+                        cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 3,
+                      }}
+                    >
+                      {cleanName}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span style={{ fontWeight: 700, fontSize: 14, color: C.text, wordBreak: 'break-word' }}>
+                    {cleanName}
+                  </span>
+                )}
               </div>
               {relatedPath && (
                 <div style={{
@@ -330,29 +399,33 @@ export const RelationshipList: React.FC<RelationshipListProps> = ({
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip title="Edit Relationship">
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={() => setEditingEdge(edge)}
-                    sx={{ color: C.textMuted, '&:hover': { color: C.accent } }}
-                  >
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                </span>
-              </Tooltip>
-              <Tooltip title="Delete Relationship">
-                <span>
-                  <IconButton
-                    size="small"
-                    onClick={() => handleDelete(edge.id)}
-                    disabled={deletingId === edge.id}
-                    sx={{ color: C.danger, '&:hover': { color: '#FF6B6B' } }}
-                  >
-                    {deletingId === edge.id ? <CircularProgress size={16} /> : <DeleteIcon fontSize="small" />}
-                  </IconButton>
-                </span>
-              </Tooltip>
+              {canEdit && (
+                <Tooltip title="Edit Relationship">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => setEditingEdge(edge)}
+                      sx={{ color: C.textMuted, '&:hover': { color: C.accent } }}
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
+              {canDelete && (
+                <Tooltip title="Delete Relationship">
+                  <span>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDelete(edge.id)}
+                      disabled={deletingId === edge.id}
+                      sx={{ color: C.danger, '&:hover': { color: '#FF6B6B' } }}
+                    >
+                      {deletingId === edge.id ? <CircularProgress size={16} /> : <DeleteIcon fontSize="small" />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
             </div>
           </div>
         );

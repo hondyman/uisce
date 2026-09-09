@@ -25,6 +25,8 @@ export interface RelationshipExplorerProps {
   entityId: string;
   focalNode: CatalogNode;
   onNavigate?: (id: string, type?: string) => void;
+  /** Called when the user clicks a related node's name in the relationship list. */
+  onNodeClick?: (id: string, nodeType: string) => void;
   onMutated?: () => void;
   /**
    * PR 2 placeholder — when true the shell reserves a slot at the top of
@@ -50,6 +52,7 @@ export const RelationshipExplorer: React.FC<RelationshipExplorerProps> = ({
   entityId,
   focalNode,
   onNavigate,
+  onNodeClick,
   onMutated,
   showAISuggestionsStrip = true,
   showCognitiveButton = true,
@@ -160,6 +163,7 @@ export const RelationshipExplorer: React.FC<RelationshipExplorerProps> = ({
           onUpdated={handleMutated}
           getNodeName={(id) => data.nodes.find((n) => n.id === id)?.node_name ?? id.substring(0, 8)}
           getNodePath={(id) => data.nodes.find((n) => n.id === id)?.qualified_path}
+          onNodeClick={onNodeClick}
         />
       )}
     </div>

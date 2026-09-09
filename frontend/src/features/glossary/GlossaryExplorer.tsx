@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useLocale } from '../../i18n/useLocale';
 import { LineageGraph } from './components/LineageGraph';
 import { useAccess } from '../../contexts/AccessContext';
 import { readCachedSelection } from '../../utils/tenantScope';
@@ -219,6 +220,22 @@ export default function GlossaryExplorer() {
   };
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const locale = useLocale();
+
+  // Navigate to the node on the other side of a relationship edge. Semantic
+  // and business terms live in this same explorer, so switching just swaps
+  // the ?id= param; business objects have their own dedicated page.
+  // Physical columns/tables/API endpoints have no per-node page in the app
+  // yet, so RelationshipList only makes those types clickable in the first
+  // place - this should only ever see the three cases below.
+  const handleRelatedNodeClick = useCallback((nodeId: string, nodeType: string) => {
+    if (nodeType === 'semantic_term' || nodeType === 'business_term') {
+      setSearchParams({ id: nodeId });
+    } else if (nodeType === 'business_object') {
+      navigate(`/${locale}/business-objects/${nodeId}`);
+    }
+  }, [setSearchParams, navigate, locale]);
   const selectedId = searchParams.get('id');
   const tabParam = searchParams.get('tab') as 'properties' | 'technical' | 'relationships' | 'lineage' | null;
 
@@ -1056,6 +1073,7 @@ export default function GlossaryExplorer() {
                     entityId={selectedId ?? ''}
                     entityType={selectedTerm._kind === 'semantic' ? 'semantic_term' : 'business_term'}
                     focalNode={selectedTerm as any}
+                    onNodeClick={handleRelatedNodeClick}
                   />
                 </div>
               )}
