@@ -14,8 +14,11 @@ CREATE TABLE IF NOT EXISTS validation_rule_violations (
     message      TEXT NOT NULL,
     context      JSONB NOT NULL DEFAULT '{}'::jsonb,
     write_blocked BOOLEAN NOT NULL DEFAULT false,
+    rule_error   BOOLEAN NOT NULL DEFAULT false,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE validation_rule_violations ADD COLUMN IF NOT EXISTS rule_error BOOLEAN NOT NULL DEFAULT false;
 
 CREATE INDEX IF NOT EXISTS idx_validation_rule_violations_bo
     ON validation_rule_violations (tenant_id, bo_key, created_at DESC);

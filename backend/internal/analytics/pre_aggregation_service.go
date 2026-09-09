@@ -198,22 +198,20 @@ func (s *PreAggregationService) GenerateDDL(ctx context.Context, preAggID uuid.U
 	// business_object_fields -> MAPS_TO -> catalog_node(column) chain,
 	// scoped to this BO's table by qualified_path prefix (the same fields
 	// can be shared across many tables' columns, e.g. "CreatedAt", so an
-	// unscoped lookup would be ambiguous).
+	// unscoped lookup would be ambiguous). ResolveSemanticFieldMap is the
+	// single implementation of this chain - the rule-evaluation context
+	// builder (internal/metadata/shadow_evaluation.go) calls the exact
+	// same function, not a second copy of this join, so DDL generation
+	// and rule evaluation can never silently disagree about what a
+	// semantic term resolves to.
+	semanticFieldMap, err := ResolveSemanticFieldMap(ctx, s.db, bo.ID, bo.DriverTableName)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve semantic field map for BO %s: %w", bo.ID, err)
+	}
 	resolveColumn := func(fieldName string) (string, error) {
-		var col string
-		err := s.db.GetContext(ctx, &col, `
-			SELECT col.node_name
-			FROM business_object_fields bf
-			JOIN catalog_edge ce ON ce.source_node_id = bf.term_node_id
-			JOIN catalog_edge_type et ON et.id = ce.edge_type_id
-			JOIN catalog_node col ON col.id = ce.target_node_id
-			WHERE bf.bo_id = $1::uuid AND bf.field_name = $2
-			  AND et.edge_type_name = 'MAPS_TO'
-			  AND col.qualified_path LIKE $3 || '/%'
-			LIMIT 1
-		`, bo.ID, fieldName, bo.DriverTableName)
-		if err != nil {
-			return "", err
+		col, ok := semanticFieldMap[fieldName]
+		if !ok {
+			return "", fmt.Errorf("no MAPS_TO binding for field %q on BO %s", fieldName, bo.ID)
 		}
 		return col, nil
 	}

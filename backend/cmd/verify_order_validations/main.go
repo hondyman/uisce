@@ -85,6 +85,12 @@ func main() {
 	fmt.Println("\n=== Test 5: oracle agreement on target_qty > 0 ===")
 	testTargetQtyOracle(ruleSvc, ruleIDs["target_qty_positive"])
 
+	fmt.Println("\n=== Test 6: rule authored against a semantic term (TargetQuantity, not target_qty) ===")
+	testSemanticTermRule(ruleSvc)
+
+	fmt.Println("\n=== Test 7: rule referencing an unresolvable term -> persisted as a rule error, not a silent pass ===")
+	testUnresolvableTermFailsLoud(ruleSvc)
+
 	fmt.Println("\nAll checks completed. See validation_rule_violations for the persisted record of every violation above.")
 }
 
@@ -417,4 +423,141 @@ func countOrders() int {
 		log.Fatalf("count orders: %v", err)
 	}
 	return n
+}
+
+// testSemanticTermRule authors a rule against "TargetQuantity" - the
+// semantic term (business_object_fields.field_name), not "target_qty"
+// (the physical column it's currently bound to) - and proves it
+// evaluates identically to the physical-named rule. This is the whole
+// point of the semantic-term retrofit: the rule stays valid if the BO's
+// binding ever points TargetQuantity at a different physical column.
+func testSemanticTermRule(svc *analytics.ValidationRuleService) {
+	desc, err := svc.UpsertValidationRule(ctx, models.UpsertValidationRuleRequest{
+		TenantID: tenantID, BOName: "order",
+		Name:        "target_qty positive, authored via semantic term",
+		Description: "Same constraint as target_qty_positive, authored against TargetQuantity (semantic) instead of target_qty (physical) - verify_order_validations proof",
+		Severity:    models.ValidationRuleSeverityBlock,
+		Timing:      models.ValidationRuleTimingPreWrite,
+		Category:    "oms",
+		RuleAST:     json.RawMessage(`{"type":"condition","field":"TargetQuantity","operator":"greater_than","value":0}`),
+	})
+	if err != nil {
+		log.Fatalf("author semantic-term rule: %v", err)
+	}
+	fmt.Printf("Authored rule against semantic term \"TargetQuantity\": id=%s\n", desc.ID)
+
+	// svc.Evaluate has no BO/binding context at all - it evaluates the
+	// rule_ast against exactly the data map it's handed, no alias
+	// resolution. Supplying "TargetQuantity" directly here (not
+	// "target_qty") is the honest sanity check for that path: it proves
+	// the rule_ast itself is well-formed and matches its own field name,
+	// independent of the binding-resolution machinery proven below.
+	pass, err := svc.Evaluate(ctx, desc.ID, map[string]interface{}{"TargetQuantity": 100.0})
+	if err != nil {
+		log.Fatalf("evaluate semantic-term rule: %v", err)
+	}
+	if !pass {
+		log.Fatalf("MISMATCH: semantic-term rule should PASS when its own field name is supplied directly")
+	}
+	fmt.Println("svc.Evaluate (direct, no binding resolution) with TargetQuantity=100 -> PASS - the rule_ast itself is well-formed.")
+
+	// A freshly created order has no allocations yet, which independently
+	// trips the (unrelated) allocation-completeness and account-compliance
+	// rules - same staging as testCleanChainPasses. What this test cares
+	// about is only whether the semantic-term rule itself fires
+	// correctly, so create with enforcement off and check that specific
+	// rule's absence from the violations list, rather than requiring the
+	// whole write to succeed outright.
+	setEnforce(false)
+	order, err := boSvc.CreateBORecord(ctx, secCtx, "order", models.BOCrudRecordRequest{
+		Record: map[string]interface{}{
+			"sec_id": 1, "side": "BUY", "order_type": "MARKET",
+			"target_qty": 100, "executed_qty": 0, "leaves_qty": 100,
+			"trade_date": time.Now().Format("2006-01-02"),
+		},
+	}, "verify_order_validations")
+	if err != nil {
+		log.Fatalf("order creation failed unexpectedly (shadow mode never blocks): %v", err)
+	}
+	orderID := fmt.Sprintf("%v", order["id"])
+
+	violations, err := analytics.ListViolations(ctx, db, tenantID, "order", 500)
+	if err != nil {
+		log.Fatalf("list violations: %v", err)
+	}
+	for _, v := range violations {
+		if v.RecordID == orderID && v.RuleID == desc.ID {
+			log.Fatalf("semantic-term rule fired against order %s (target_qty=100 > 0 should pass): %s", orderID, v.Message)
+		}
+	}
+	fmt.Printf("Created order %s through the real write path - the semantic-term rule did not fire, proving the binding-resolution alias (\"TargetQuantity\" -> target_qty's value) worked for a real write, not just a hand-built payload.\n", orderID)
+}
+
+// testUnresolvableTermFailsLoud authors a rule against a semantic term
+// that doesn't exist on the Order BO's field list, and proves the
+// engagement's recurring failure mode (a rule that looks wired up but
+// silently never fires) can't happen here: the rule evaluation errors,
+// and that error is persisted as a rule_error=true violation - visible
+// and auditable - not swallowed as a skipped rule or a false pass.
+func testUnresolvableTermFailsLoud(svc *analytics.ValidationRuleService) {
+	// Unique name per run (not a fixed one) - UpsertValidationRule's
+	// ON CONFLICT DO UPDATE doesn't reset is_active, so reusing a fixed
+	// name across runs risks a previous run's self-retirement (see below)
+	// leaving this probe rule inactive - or, worse, active for the
+	// *entire* run (Tests 1-6 too) if a previous run's leftover row gets
+	// manually reactivated in between. A fresh name each run means a
+	// fresh row, active only for the duration of this one test, which
+	// this function retires at the end regardless.
+	probeName := fmt.Sprintf("Deliberately unresolvable term (proof, %d)", time.Now().UnixNano())
+	desc, err := svc.UpsertValidationRule(ctx, models.UpsertValidationRuleRequest{
+		TenantID: tenantID, BOName: "order",
+		Name:        probeName,
+		Description: "References a semantic term the Order BO has no MAPS_TO binding for - must fail loud, not silently pass. verify_order_validations proof.",
+		Severity:    models.ValidationRuleSeverityBlock,
+		Timing:      models.ValidationRuleTimingPreWrite,
+		Category:    "oms",
+		RuleAST:     json.RawMessage(`{"type":"condition","field":"NoSuchTerm","operator":"equals","value":"anything"}`),
+	})
+	if err != nil {
+		log.Fatalf("author unresolvable-term rule: %v", err)
+	}
+	fmt.Printf("Authored rule against nonexistent term \"NoSuchTerm\": id=%s\n", desc.ID)
+
+	setEnforce(true)
+	orderID := uuid.New().String()
+	_, err = boSvc.CreateBORecord(ctx, secCtx, "order", models.BOCrudRecordRequest{
+		Record: map[string]interface{}{
+			"id": orderID, "sec_id": 1, "side": "BUY", "order_type": "MARKET",
+			"target_qty": 100, "executed_qty": 0, "leaves_qty": 100,
+			"trade_date": time.Now().Format("2006-01-02"),
+		},
+	}, "verify_order_validations")
+	if err == nil {
+		log.Fatalf("expected the write to be rejected: an unresolvable BLOCK-severity rule must not silently pass")
+	}
+	fmt.Printf("Write correctly rejected (rule error treated as at-least-as-serious as a real BLOCK): %v\n", err)
+
+	violations, err := analytics.ListViolations(ctx, db, tenantID, "order", 500)
+	if err != nil {
+		log.Fatalf("list violations: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.RecordID == orderID && v.RuleID == desc.ID && v.RuleError {
+			found = true
+			fmt.Printf("Found persisted rule-error violation: rule_error=true message=%q\n", v.Message)
+		}
+	}
+	if !found {
+		log.Fatalf("expected a persisted rule_error=true violation for the unresolvable-term rule against order %s, found none - it was silently skipped instead", orderID)
+	}
+
+	// Retire the probe rule (same is_active=false convention as the
+	// 233-rule corpus retirement) so a second run of this script isn't
+	// polluted by a permanently-broken rule left active in the catalog -
+	// this rule exists only to prove the fail-loud behavior once.
+	if _, err := db.ExecContext(ctx, `UPDATE catalog_node SET is_active = false WHERE id = $1`, desc.ID); err != nil {
+		log.Fatalf("failed to retire probe rule %s: %v", desc.ID, err)
+	}
+	fmt.Printf("Retired probe rule %s (is_active = false) so it won't affect a future run.\n", desc.ID)
 }

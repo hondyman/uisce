@@ -15,6 +15,10 @@ import (
 )
 
 // ViolationRecord is one failed rule evaluation, ready to persist.
+// RuleError distinguishes "the rule ran and found a real violation" from
+// "the rule couldn't run at all" (unresolvable field reference,
+// malformed rule_ast) - see shadow_evaluation.go's ruleViolation for why
+// this can never be a silent skip.
 type ViolationRecord struct {
 	TenantID     string
 	RuleID       string
@@ -25,6 +29,7 @@ type ViolationRecord struct {
 	Message      string
 	Context      map[string]interface{}
 	WriteBlocked bool
+	RuleError    bool
 }
 
 // PersistViolation writes v to validation_rule_violations. Deliberately
@@ -38,9 +43,9 @@ func PersistViolation(ctx context.Context, db *sqlx.DB, v ViolationRecord) error
 	}
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO validation_rule_violations
-			(id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, created_at)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-	`, v.TenantID, v.RuleID, v.RuleName, v.BOKey, v.Severity, v.RecordID, v.Message, ctxJSON, v.WriteBlocked)
+			(id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, rule_error, created_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+	`, v.TenantID, v.RuleID, v.RuleName, v.BOKey, v.Severity, v.RecordID, v.Message, ctxJSON, v.WriteBlocked, v.RuleError)
 	return err
 }
 
@@ -58,6 +63,7 @@ type ViolationSummary struct {
 	Message      string          `db:"message" json:"message"`
 	Context      json.RawMessage `db:"context" json:"context"`
 	WriteBlocked bool            `db:"write_blocked" json:"write_blocked"`
+	RuleError    bool            `db:"rule_error" json:"rule_error"`
 	CreatedAt    string          `db:"created_at" json:"created_at"`
 }
 
@@ -70,7 +76,7 @@ func ListViolations(ctx context.Context, db *sqlx.DB, tenantID, boKey string, li
 	var rows []ViolationSummary
 	if boKey != "" {
 		err := db.SelectContext(ctx, &rows, `
-			SELECT id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, created_at::text
+			SELECT id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, rule_error, created_at::text
 			FROM validation_rule_violations
 			WHERE tenant_id = $1 AND bo_key = $2
 			ORDER BY created_at DESC LIMIT $3
@@ -78,7 +84,7 @@ func ListViolations(ctx context.Context, db *sqlx.DB, tenantID, boKey string, li
 		return rows, err
 	}
 	err := db.SelectContext(ctx, &rows, `
-		SELECT id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, created_at::text
+		SELECT id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, rule_error, created_at::text
 		FROM validation_rule_violations
 		WHERE tenant_id = $1
 		ORDER BY created_at DESC LIMIT $2

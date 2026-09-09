@@ -3707,7 +3707,7 @@ func (s *BusinessObjectService) CreateBORecord(
 		strings.Join(placeholders, ", "),
 	)
 
-	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo.Key, func(tx *sqlx.Tx) (map[string]interface{}, error) {
+	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo, func(tx *sqlx.Tx) (map[string]interface{}, error) {
 		rows, err := tx.QueryxContext(ctx, insertSQL, vals...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to insert record into %s: %w", table, err)
@@ -3794,7 +3794,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 
 	vals = append(vals, recordID)
 
-	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo.Key, func(tx *sqlx.Tx) (map[string]interface{}, error) {
+	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo, func(tx *sqlx.Tx) (map[string]interface{}, error) {
 		rows, err := tx.QueryxContext(ctx, updateSQL, vals...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to update record in %s: %w", table, err)

@@ -36,6 +36,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/models"
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 )
@@ -58,12 +59,21 @@ func enforcementEnabled() bool {
 }
 
 // ruleViolation is one failed rule evaluation, ready to log and persist.
+// RuleError distinguishes "the rule ran and found a real violation" from
+// "the rule couldn't run at all" (an unresolvable field reference, a
+// malformed rule_ast) - the second case must never be a silent skip. The
+// recurring failure mode across this whole engagement has been exactly
+// that: a rule that looks wired up but silently never fires (stale
+// bo_name, vacuous AND/OR, a schema the rule no longer matches). A rule
+// error is persisted as a violation like any other, just tagged so it's
+// not mistaken for "the data passed."
 type ruleViolation struct {
-	RuleID   string
-	RuleName string
-	Severity string
-	Message  string
-	Context  map[string]interface{}
+	RuleID    string
+	RuleName  string
+	Severity  string
+	Message   string
+	Context   map[string]interface{}
+	RuleError bool
 }
 
 // relatedRowContext describes, per BO key, how to load the simple-shape
@@ -101,7 +111,7 @@ var shadowRuleContexts = map[string]relatedRowContext{
 // outcome, on s.db rather than the transaction, so the record survives a
 // rollback. Returns an error naming the blocking rule(s) if the write
 // was rejected.
-func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID, boKey string, doWrite func(tx *sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
+func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID string, bo *models.BusinessObjectDefinition, doWrite func(tx *sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -113,7 +123,7 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID, b
 		return nil, err
 	}
 
-	violations, blocked := s.evaluateAndEnforceRules(ctx, tx, tenantID, boKey, result)
+	violations, blocked := s.evaluateAndEnforceRules(ctx, tx, tenantID, bo, result)
 
 	if blocked {
 		_ = tx.Rollback()
@@ -121,13 +131,14 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID, b
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
+	boKey := bo.Key
 	recordID := fmt.Sprintf("%v", result["id"])
 	for _, v := range violations {
 		writeBlocked := blocked && v.Severity == "BLOCK"
 		rec := analytics.ViolationRecord{
 			TenantID: tenantID, RuleID: v.RuleID, RuleName: v.RuleName, BOKey: boKey,
 			Severity: v.Severity, RecordID: recordID, Message: v.Message,
-			Context: v.Context, WriteBlocked: writeBlocked,
+			Context: v.Context, WriteBlocked: writeBlocked, RuleError: v.RuleError,
 		}
 		if perr := analytics.PersistViolation(ctx, s.db, rec); perr != nil {
 			logging.GetLogger().Sugar().Warnf("failed to persist violation for rule %s: %v", v.RuleID, perr)
@@ -164,7 +175,8 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID, b
 // never itself commits or rolls back anything - the caller decides what
 // to do with the returned violations. Panics are recovered so a bug here
 // can never propagate into the write path.
-func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exec dbExecutor, tenantID, boKey string, record map[string]interface{}) (violations []ruleViolation, blocked bool) {
+func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exec dbExecutor, tenantID string, bo *models.BusinessObjectDefinition, record map[string]interface{}) (violations []ruleViolation, blocked bool) {
+	boKey := bo.Key
 	defer func() {
 		if r := recover(); r != nil {
 			logging.GetLogger().Sugar().Errorf("rule evaluation panicked for BO %s: %v", boKey, r)
@@ -188,6 +200,20 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 		data[k] = coerceNumeric(v)
 	}
 
+	// Alias every semantic term to its currently-bound physical column's
+	// value, so a rule authored against "TargetQuantity" (portable across
+	// bindings) and one authored directly against "target_qty" (tied to
+	// this binding) both evaluate correctly against the same write.
+	if fieldMap, err := analytics.ResolveSemanticFieldMap(ctx, s.db, bo.ID, bo.DriverTableName); err != nil {
+		logging.GetLogger().Sugar().Warnf("rule evaluation: failed to resolve semantic field map for BO %s: %v", boKey, err)
+	} else {
+		for semantic, physical := range fieldMap {
+			if v, ok := data[physical]; ok {
+				data[semantic] = v
+			}
+		}
+	}
+
 	switch boKey {
 	case "order":
 		s.loadOrderContext(ctx, exec, data)
@@ -202,12 +228,62 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	for _, rule := range rules {
 		var node vm.RuleNode
 		if err := json.Unmarshal(rule.RuleAST, &node); err != nil {
-			logging.GetLogger().Sugar().Warnf("rule %s (%s): rule_ast did not parse: %v", rule.ID, rule.Name, err)
+			v := ruleViolation{
+				RuleID: rule.ID.String(), RuleName: rule.Name, Severity: rule.Severity,
+				Message:   fmt.Sprintf("rule error: rule_ast did not parse: %v", err),
+				Context:   data,
+				RuleError: true,
+			}
+			violations = append(violations, v)
+			if enforce && rule.Severity == "BLOCK" {
+				blocked = true
+			}
+			continue
+		}
+		// Condition nodes (unlike Expression/FuncCall's FieldRef) treat a
+		// missing field as false, nil, not an error -
+		// ConditionEvaluator.evaluateSimpleCondition's documented
+		// behavior, shared far too broadly to change safely from here.
+		// So an unresolvable field reference is checked explicitly,
+		// before evaluation, rather than relying on ae.Evaluate to
+		// surface it as an error - otherwise a Condition-type rule
+		// referencing a nonexistent or unbound term degrades silently
+		// into "always false" instead of failing loud the way an
+		// Expression-type rule already does.
+		if missing := unresolvedFieldRefs(node, data); len(missing) > 0 {
+			v := ruleViolation{
+				RuleID: rule.ID.String(), RuleName: rule.Name, Severity: rule.Severity,
+				Message:   fmt.Sprintf("rule error: field(s) %v not present in evaluation context (no MAPS_TO binding, and not a raw column on this record)", missing),
+				Context:   data,
+				RuleError: true,
+			}
+			violations = append(violations, v)
+			if enforce && rule.Severity == "BLOCK" {
+				blocked = true
+			}
 			continue
 		}
 		pass, err := ae.Evaluate(node, data)
 		if err != nil {
-			logging.GetLogger().Sugar().Warnf("rule %s (%s) errored during evaluation for BO %s: %v", rule.ID, rule.Name, boKey, err)
+			// A rule that can't evaluate - most commonly an unresolvable
+			// field reference (a semantic term with no MAPS_TO binding on
+			// this BO's current binding, or a genuinely typo'd field name)
+			// - is never a silent skip. It's persisted as a violation like
+			// any other, tagged RuleError so it isn't mistaken for "the
+			// data passed", and treated at least as seriously as a real
+			// BLOCK violation for enforcement purposes: not knowing
+			// whether a rule is satisfied is not the same as it being
+			// satisfied.
+			v := ruleViolation{
+				RuleID: rule.ID.String(), RuleName: rule.Name, Severity: rule.Severity,
+				Message:   fmt.Sprintf("rule error: %v", err),
+				Context:   data,
+				RuleError: true,
+			}
+			violations = append(violations, v)
+			if enforce && rule.Severity == "BLOCK" {
+				blocked = true
+			}
 			continue
 		}
 		if pass {
@@ -320,6 +396,90 @@ func (s *BusinessObjectService) loadOrderContext(ctx context.Context, exec dbExe
 		}
 		if v, ok := row["is_discretionary"]; ok {
 			data["account_is_discretionary"] = v
+		}
+	}
+}
+
+// knownTransientContextFields are related-row-context keys (loaded by
+// loadOrderContext/loadRelatedRowContext) that can legitimately be absent
+// for reasons that have nothing to do with the rule being broken - e.g.
+// "account_status" isn't there yet because this order has no allocation
+// yet, not because the term is unbound. unresolvedFieldRefs excludes
+// these from the fail-loud check entirely; a rule referencing one of
+// these that's currently absent evaluates via Condition's existing
+// "missing field -> false" behavior, same as before this check existed.
+// Deliberately not derived from shadowRuleContexts/loadOrderContext
+// automatically - keeping it a short, explicit, reviewable list here
+// beats a generic mechanism for the two BOs that need it today.
+var knownTransientContextFields = map[string]bool{
+	"sibling_qty_sum":           true,
+	"routed_qty":                true,
+	"executed_qty":              true,
+	"allocation_target_qty_sum": true,
+	"account_status":            true,
+	"account_is_discretionary":  true,
+}
+
+// unresolvedFieldRefs walks node's tree and returns every top-level
+// (no ".") field reference that is neither a key in data nor a known-
+// transient context field - the pre-evaluation check that makes a truly
+// unresolvable Condition-type reference (an unbound semantic term, a
+// typo'd field name) fail loud instead of silently evaluating to false
+// (see the call site's comment for why this can't be fixed inside
+// ConditionEvaluator itself, which the whole engine shares).
+func unresolvedFieldRefs(node vm.RuleNode, data map[string]interface{}) []string {
+	refs := make(map[string]bool)
+	collectRuleFieldRefs(node, refs)
+	var missing []string
+	for f := range refs {
+		if strings.Contains(f, ".") {
+			continue // nested paths are HierarchyResolver's concern, not this check's
+		}
+		if knownTransientContextFields[f] {
+			continue
+		}
+		if _, ok := data[f]; !ok {
+			missing = append(missing, f)
+		}
+	}
+	return missing
+}
+
+func collectRuleFieldRefs(node vm.RuleNode, out map[string]bool) {
+	switch node.Type {
+	case vm.NodeTypeGroup:
+		if node.Group != nil {
+			for _, c := range node.Group.Conditions {
+				collectRuleFieldRefs(c, out)
+			}
+		}
+	case vm.NodeTypeCondition:
+		if node.Condition != nil {
+			f := node.Condition.Field
+			if node.Condition.FieldPath != "" {
+				f = node.Condition.FieldPath
+			}
+			if f != "" {
+				out[f] = true
+			}
+		}
+	case vm.NodeTypeExpression:
+		if node.Expression != nil {
+			collectExprFieldRefs(node.Expression.Root, out)
+		}
+	}
+}
+
+func collectExprFieldRefs(n vm.ExprNode, out map[string]bool) {
+	switch t := n.(type) {
+	case *vm.BinaryExpr:
+		collectExprFieldRefs(t.Left, out)
+		collectExprFieldRefs(t.Right, out)
+	case *vm.FieldRef:
+		out[t.Path] = true
+	case *vm.FuncCall:
+		for _, a := range t.Args {
+			collectExprFieldRefs(a, out)
 		}
 	}
 }

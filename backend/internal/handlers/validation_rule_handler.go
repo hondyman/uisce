@@ -38,7 +38,34 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}", h.handleGetByID)
 		r.Post("/{id}/evaluate", h.handleEvaluate)
 		r.Get("/violations", h.handleListViolations)
+		r.Get("/bo-fields", h.handleListSemanticFields)
 	})
+}
+
+// handleListSemanticFields returns the semantic terms a rule can
+// reference for the BO named by ?bo_name= - see ListSemanticFields for
+// why this is semantic terms, not physical column names: a rule authored
+// against a semantic term stays valid if the BO's physical binding ever
+// changes, one authored directly against a column name would not.
+func (h *ValidationRuleHandler) handleListSemanticFields(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	boName := r.URL.Query().Get("bo_name")
+	if boName == "" {
+		http.Error(w, "bo_name is required", http.StatusBadRequest)
+		return
+	}
+	fields, err := h.svc.ListSemanticFields(r.Context(), tenantID.String(), boName)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/bo-fields: list failed: %v", err)
+		http.Error(w, "failed to list semantic fields", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"fields": fields})
 }
 
 // handleListViolations returns the most recent persisted rule violations

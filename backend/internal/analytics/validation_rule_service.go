@@ -242,3 +242,79 @@ func (s *ValidationRuleService) Evaluate(ctx context.Context, id uuid.UUID, data
 	ae := vm.NewAdvancedEvaluator()
 	return ae.Evaluate(node, data)
 }
+
+// PhysicalField is one field a rule can reference: Name is a semantic
+// term (business_object_fields.field_name, e.g. "TargetQuantity") - the
+// vocabulary a rule should be *authored* against, since it's portable
+// across whichever physical binding the BO currently resolves to. See
+// ListSemanticFields; the physical-column resolution happens once, at
+// evaluation time, via ResolveSemanticFieldMap - a rule referencing
+// "TargetQuantity" keeps working if the BO's binding ever points at a
+// different physical column for it, the way one authored against
+// "target_qty" directly would not.
+type PhysicalField struct {
+	Name     string `json:"name" db:"field_name"`
+	DataType string `json:"dataType" db:"data_type"`
+}
+
+// ListSemanticFields returns the semantic terms a BO exposes for rule
+// authoring, each paired with its currently-bound physical column's data
+// type (for the editor's type-aware operator list) via the same
+// business_object_fields -> MAPS_TO catalog-edge -> physical column chain
+// GenerateDDL's dimension resolution already uses. Read directly off live
+// metadata, not guessed - verified against the Order BO's 17 fields
+// before wiring the frontend to it.
+func (s *ValidationRuleService) ListSemanticFields(ctx context.Context, tenantID, boName string) ([]PhysicalField, error) {
+	var fields []PhysicalField
+	err := s.db.SelectContext(ctx, &fields, `
+		SELECT bf.field_name, COALESCE(col.properties->>'data_type', '') AS data_type
+		FROM business_object_fields bf
+		JOIN business_objects bo ON bo.id = bf.bo_id
+		JOIN catalog_edge ce ON ce.source_node_id = bf.term_node_id
+		JOIN catalog_edge_type et ON et.id = ce.edge_type_id
+		JOIN catalog_node col ON col.id = ce.target_node_id
+		WHERE bo.bo_key = $1 AND bo.tenant_id = $2::uuid
+		  AND et.edge_type_name = 'MAPS_TO'
+		  AND col.qualified_path LIKE bo.driver_table_name || '/%'
+		ORDER BY bf.field_name
+	`, boName, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list semantic fields for BO %q: %w", boName, err)
+	}
+	return fields, nil
+}
+
+// ResolveSemanticFieldMap returns {semantic term -> currently-bound
+// physical column} for one BO - the runtime counterpart to
+// ListSemanticFields, called once per rule evaluation (not per rule) to
+// translate a just-written row's physical columns into the semantic
+// vocabulary a rule was actually authored against. Reads catalog
+// metadata only (business_object_fields/catalog_edge/catalog_node), so
+// it deliberately runs against db directly rather than the write's own
+// transaction - this mapping doesn't change mid-write, and doing it
+// outside the transaction avoids holding that transaction's locks any
+// longer than the write itself needs.
+func ResolveSemanticFieldMap(ctx context.Context, db *sqlx.DB, boID, driverTableName string) (map[string]string, error) {
+	var rows []struct {
+		FieldName  string `db:"field_name"`
+		ColumnName string `db:"node_name"`
+	}
+	err := db.SelectContext(ctx, &rows, `
+		SELECT bf.field_name, col.node_name
+		FROM business_object_fields bf
+		JOIN catalog_edge ce ON ce.source_node_id = bf.term_node_id
+		JOIN catalog_edge_type et ON et.id = ce.edge_type_id
+		JOIN catalog_node col ON col.id = ce.target_node_id
+		WHERE bf.bo_id = $1::uuid
+		  AND et.edge_type_name = 'MAPS_TO'
+		  AND col.qualified_path LIKE $2 || '/%'
+	`, boID, driverTableName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve semantic field map for BO %s: %w", boID, err)
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.FieldName] = r.ColumnName
+	}
+	return m, nil
+}
