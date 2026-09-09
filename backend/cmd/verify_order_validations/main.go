@@ -181,9 +181,15 @@ func setEnforce(on bool) {
 func testLimitOrderRejected() {
 	setEnforce(true)
 	before := countOrders()
+
+	// Supply the id ourselves (CreateBORecord auto-generates one only if
+	// missing) so a rejected write's id is still known - the write's own
+	// return value is nil on rejection, but the violation row needs a
+	// known id to look up afterward.
+	rejectedID := uuid.New().String()
 	_, err := boSvc.CreateBORecord(ctx, secCtx, "order", models.BOCrudRecordRequest{
 		Record: map[string]interface{}{
-			"sec_id": 1, "side": "BUY", "order_type": "LIMIT",
+			"id": rejectedID, "sec_id": 1, "side": "BUY", "order_type": "LIMIT",
 			"target_qty": 100, "executed_qty": 0, "leaves_qty": 100,
 			"trade_date": time.Now().Format("2006-01-02"),
 		},
@@ -196,6 +202,30 @@ func testLimitOrderRejected() {
 		log.Fatalf("write was rejected (err=%v) but orm.order row count still changed: %d -> %d", err, before, after)
 	}
 	fmt.Printf("Write correctly rejected: %v\nOrder count unchanged (%d) - the row was never persisted.\n", err, after)
+
+	// Pin the subtle case: does a BLOCK rejection's own violation record
+	// survive the transaction rollback that the rejection itself caused?
+	// If PersistViolation shared the write's transaction, the rollback
+	// would erase the rejection's own evidence - a BLOCK write would
+	// leave no row AND no audit trail. It's persisted via s.db, outside
+	// the transaction, specifically so this doesn't happen - verify that
+	// design decision against the real database, not just the source.
+	violations, err := analytics.ListViolations(ctx, db, tenantID, "order", 500)
+	if err != nil {
+		log.Fatalf("list violations: %v", err)
+	}
+	found := false
+	for _, v := range violations {
+		if v.RecordID == rejectedID && v.WriteBlocked {
+			found = true
+		}
+	}
+	if !found {
+		log.Fatalf("BLOCK rejection for order %s left no write_blocked=true violation record - "+
+			"the rollback erased its own evidence, an enforcement mechanism whose rejections "+
+			"aren't auditable", rejectedID)
+	}
+	fmt.Printf("Confirmed: the rejection's own violation record survived the rollback (record_id=%s, write_blocked=true) - BLOCK rejections are auditable.\n", rejectedID)
 }
 
 func testCleanChainPasses() {

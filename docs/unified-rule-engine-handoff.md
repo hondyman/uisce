@@ -512,6 +512,21 @@ authors 5 rules against the Order BO through the real
   unified engine, asked to evaluate the same data independently, agrees
   it's a failure — same two-directions discipline as the original
   `filled_qty` oracle.
+- **Pinned separately, post-commit review**: does a BLOCK rejection's own
+  violation record survive the rollback it caused? If `PersistViolation`
+  shared the write's transaction, the answer would be no — the rollback
+  would erase the rejection's own evidence, and the violations surface
+  would only ever show WARNs and shadow hits, never the thing enforcement
+  actually blocked. It doesn't share the transaction (by design — see
+  item 12), verified against the real database (`SELECT ... FROM
+  validation_rule_violations WHERE write_blocked = true` after a run
+  showed the rows; cross-checked their `record_id`s against `orm.order`
+  and confirmed those rows don't exist there), then pinned as an explicit
+  assertion in `testLimitOrderRejected` so it can't regress silently.
+  Related, unaddressed: rule evaluation runs inside the write's own
+  transaction, so a context-provider query holds that transaction's locks
+  for its duration — fine at today's scale, worth watching if a rule's
+  related-row loading grows heavy.
 
 Run with `DATABASE_URL=... go run ./cmd/verify_order_validations/` from
 `backend/`.
