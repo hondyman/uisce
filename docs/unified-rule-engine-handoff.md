@@ -1,6 +1,6 @@
 # Unified Rule Engine — Handoff
 
-Written 2026-09-09, updated across six sessions on the same day, that
+Written 2026-09-09, updated across seven sessions on the same day, that
 took the rule/calc engine from "three-plus disconnected AST formats, one
 of them silently broken in the browser" through a single unified engine,
 then completed the validation path around it end to end: authoring
@@ -9,13 +9,16 @@ names), storage, evaluation, severity-driven enforcement (BLOCK rejects,
 WARN logs, a flag away from shadow mode), cross-BO context, a queryable
 *and viewable* violations surface that distinguishes a real violation
 from a rule that couldn't evaluate at all, all 5 OMS BOs live on one
-consistent local schema. Proven twice over: a runnable backend proof
-(`cmd/verify_order_validations`, 7 cases) and a real browser click-through
-with a real login - author a rule, save it, reload, watch it round-trip,
-evaluate it, watch it agree with a live database CHECK constraint, and
-see real violations rendered in the editor itself. Rules are authored
-against semantic terms (portable across whatever physical binding a BO
-resolves to, not tied to today's one binding), and an unresolvable
+consistent local schema. Proven three times over: a runnable backend
+proof (`cmd/verify_order_validations`, 7 cases), a real browser
+click-through with a real login - author a rule, save it, reload, watch
+it round-trip, evaluate it, watch it agree with a live database CHECK
+constraint, see real violations rendered in the editor itself - and a
+cross-binding portability proof (`cmd/verify_second_binding`): the exact
+same rule, authored once against a semantic term, evaluates correctly
+against two different physical bindings of the same BO. Rules are
+authored against semantic terms (portable across whichever physical
+binding a BO resolves to, proven not just asserted), and an unresolvable
 reference fails loud - a persisted, queryable rule error - never a
 silent pass. This document is the state to hand into a fresh session —
 what's real, what's verified, what's still open, and exactly what the
@@ -759,6 +762,108 @@ fixing production code under this much time pressure.
   One resolution chain, three consumers once that lands: DDL generation,
   rule evaluation, calc pushdown.
 
+## Session 7 addendum (2026-09-09, continued a fifth time) — the two-binding proof, and why the binding layer is now load-bearing
+
+### 21. Rule portability proven across two real physical bindings
+Extended MAPS_TO rather than replacing it, per the design this session
+settled on: MAPS_TO stays canonical (unchanged, zero risk to what's
+proven live); `field_bindings`/`business_object_bindings` - real tables,
+empty everywhere in the system before this, with a `backend_type` column
+already enumerating `POSTGRES/STARROCKS/SNOWFLAKE/ICEBERG/CRIMS` - become
+the table for every *additional* binding a BO picks up. First real
+population, anywhere: `20260909_second_binding_oms_orders.sql` creates
+one `business_object_bindings` row (Order BO, `backend_type = 'POSTGRES'`,
+`is_default = false`) and 4 `field_bindings` rows mapping
+`TargetQuantity/LimitPrice/ExecutedQuantity/LeavesQuantity` to
+`alpha.oms.orders`' `quantity/limit_price/filled_qty/leaves_qty` columns
+- deliberately partial, covering only what the proof rule needs, not all
+17 of the BO's terms.
+
+New resolver: `analytics.ResolveSemanticFieldMapForBinding(ctx, db,
+bindingID)` - `field_bindings`-backed, sibling to (not a replacement of)
+`ResolveSemanticFieldMap`. Two functions, not the single `(bo, binding?)`
+signature originally sketched - a deliberate, smaller-blast-radius choice
+under time pressure: the canonical path's call sites
+(`GenerateDDL`, `evaluateAndEnforceRules`) needed no changes at all.
+Unifying the two into one signature is a clean, low-risk follow-up
+whenever it's worth doing, not required for the portability guarantee
+itself.
+
+**Proof artifact, permanent**: `cmd/verify_second_binding` - authors the
+`TargetQuantity > 0` rule once, then evaluates it against both bindings:
+`alpha.orm.order` (canonical, both directions - a compliant and a
+violating synthetic row) and `alpha.oms.orders` (second binding, three
+*real* live rows plus one synthetic violating case). All correct. Also
+confirms the coverage guarantee directly: binding 2's resolved map has no
+entry for `"ManagerID"` (a term the canonical binding resolves but this
+one was never given a `field_bindings` row for) - proving no silent
+fallback to the canonical map for terms a partial binding doesn't cover.
+That's the same fail-loud semantic as item 19, one level up: an
+uncovered term under a specified binding must be a `rule_error`, never a
+silent hybrid resolution.
+
+Real, minor wrinkle found while building this: the existing
+`/oms/orders/*` catalog_node scan belongs to tenant `840750a5-...`
+("Soul Trader"), not the Order BO's own tenant (`99e99e99-...`).
+`field_bindings.source_node_id` has no tenant-consistency constraint (a
+plain FK to `catalog_node.id`), so this is legal but cross-tenant - fine
+for a proof fixture, worth tidying (re-scan under the right tenant, or
+add a consistency check) if this binding becomes more than that.
+
+### 22. Why this was the right next move, not a detour - and what it means for what's next
+Three threads converge on the binding layer, which is why building this
+now (rather than starting the calc side fresh) compounds instead of
+duplicating work:
+1. **Rule portability** - proven, item 21.
+2. **The calc side.** Measure pushdown (`GenerateDDL`'s
+   `NULL /* TODO */` placeholder) compiles a semantic term into
+   StarRocks SQL against the hot tier - which is *itself* another
+   binding (`backend_type: STARROCKS`). Whatever resolves
+   `ResolveSemanticFieldMapForBinding` for `field_bindings` today is the
+   same shape of resolution the calc side needs tomorrow, once a
+   STarRocks binding gets populated the same way.
+3. **The canonical-stratum question** (item 10, still open). `crims` is
+   already sitting in `backend_type`'s enum. The open question - which
+   physical source is production's system of record - is now shaped
+   exactly like "which binding is `is_default = true`," which is
+   precisely the kind of decision this layer exists to make cheap once
+   it's made. This session's work doesn't answer it and doesn't need to.
+
+### 23. Two tickets recorded before they evaporate
+- **The `ConditionEvaluator` silent-false-on-missing-field landmine is
+  still live for every consumer except this rule engine's own write
+  path.** Item 19's fix is a pre-evaluation walk scoped to
+  `shadow_evaluation.go` - deliberately, correctly, given the shared
+  evaluator's blast radius under this much time pressure. But
+  `ConditionEvaluator.evaluateSimpleCondition` itself is unchanged:
+  every *other* consumer of the shared evaluator still gets
+  `false, nil` for a missing field, indistinguishable from a real
+  negative result. This is the fifth confirmed instance of the silent-
+  no-op class this engagement keeps finding, and the most subtle: every
+  `Condition`-based rule anywhere in this system has been capable of
+  passing vacuously on an absent field the whole time this evaluator has
+  existed. The proper fix belongs in the shared evaluator - assess its
+  full blast radius (every caller of `EvaluateWithHierarchy`/
+  `compareValues`, not just this rule engine) before changing it there.
+  Not done. Open item.
+- **`UpsertValidationRule`'s `ON CONFLICT DO UPDATE` doesn't reset
+  `is_active`** (first noted in Session 6's working notes, restated here
+  so it's not lost among the rest): a retire-then-reauthor cycle using
+  the same rule name silently leaves the "reauthored" rule retired
+  forever, because the upsert only updates description/properties/
+  config, never `is_active`. Bit `cmd/verify_order_validations`'s own
+  Test 7 during this session (worked around there with a timestamped
+  probe name). Small, real, not fixed.
+
+### 24. Housekeeping that shouldn't drift
+The branch now carries **three** complete, independently-verified
+packages on top of the original two-session arc (validation engine,
+semantic-term retrofit, two-binding portability) - every one raises the
+cost of staying unmerged. `feat/unified-rule-engine` needs an actual
+merge plan, not a continuing stack of sessions; see item 10's still-open
+canonical-stratum question and the branch/commit list under "Key IDs"
+for what a merge would need to reconcile.
+
 ## What's NOT done — the actual next task
 
 ### A. ~~Editor save-wiring~~ — done (Session 5)
@@ -963,3 +1068,8 @@ fixing production code under this much time pressure.
   (`catalog_node.node_name LIKE 'Deliberately unresolvable term%'`)
   created and retired (`is_active = false`) as part of proving item 19 -
   harmless test artifacts, safe to leave retired or delete outright.
+  One more, item 21: `business_object_bindings` row `90cd2335-aa78-482b-
+  b503-7d2b9c5f2545` (Order BO's second binding) plus 4
+  `field_bindings` rows under it - not test noise, this is the real
+  fixture the two-binding proof depends on; don't delete it without
+  re-running `cmd/verify_second_binding` first.

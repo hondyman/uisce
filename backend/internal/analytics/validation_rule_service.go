@@ -318,3 +318,44 @@ func ResolveSemanticFieldMap(ctx context.Context, db *sqlx.DB, boID, driverTable
 	}
 	return m, nil
 }
+
+// ResolveSemanticFieldMapForBinding is ResolveSemanticFieldMap's
+// counterpart for a *non-canonical* binding: bindingID names a
+// business_object_bindings row, and the map comes from field_bindings
+// (RESOLVED rows only) rather than MAPS_TO. MAPS_TO stays the canonical/
+// default binding (unchanged, zero migration risk to what's already
+// proven live) - field_bindings becomes the table for every additional
+// binding a BO picks up, which is exactly what it was designed for and
+// never used for anywhere in this system before this.
+//
+// Deliberately returns only the terms this specific binding actually has
+// RESOLVED field_bindings rows for - a rule referencing a term this
+// binding doesn't cover must fail loud (a persisted rule_error via the
+// same unresolvedFieldRefs check every other unresolvable reference hits
+// - see internal/metadata/shadow_evaluation.go), never silently fall
+// back to the canonical binding's map. A partial binding silently
+// borrowing from another binding would be a new instance of the same
+// disease this whole retrofit exists to close.
+func ResolveSemanticFieldMapForBinding(ctx context.Context, db *sqlx.DB, bindingID string) (map[string]string, error) {
+	var rows []struct {
+		FieldName  string `db:"field_name"`
+		ColumnName string `db:"node_name"`
+	}
+	err := db.SelectContext(ctx, &rows, `
+		SELECT bf.field_name, col.node_name
+		FROM field_bindings fb
+		JOIN business_object_fields bf ON bf.id = fb.field_id
+		JOIN catalog_node col ON col.id = fb.source_node_id
+		WHERE fb.binding_id = $1::uuid
+		  AND fb.binding_status = 'RESOLVED'
+		  AND fb.source_type = 'COLUMN'
+	`, bindingID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve field_bindings map for binding %s: %w", bindingID, err)
+	}
+	m := make(map[string]string, len(rows))
+	for _, r := range rows {
+		m[r.FieldName] = r.ColumnName
+	}
+	return m, nil
+}
