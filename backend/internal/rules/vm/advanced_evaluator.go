@@ -288,6 +288,39 @@ var nativeFuncs = map[string]func(args []any) (any, error){
 		return npv, nil
 	},
 
+	// IRR/XIRR: the rate that makes NPV zero, solved numerically (see
+	// irr.go) - no closed-form solution exists, which is also why
+	// neither has a StarRocks-native function or a sql_compiler.go
+	// expansion. Native/WASM-only, honestly: a rule or calc term using
+	// either runs at tree-walking speed. IRR assumes regular (e.g.
+	// annual) period spacing; XIRR takes actual dates (as day-offsets -
+	// Excel serial dates or days-since-epoch, any consistent unit) for
+	// irregular cash flow timing, matching Excel's own IRR/XIRR split.
+	"IRR": func(args []any) (any, error) {
+		cashFlows, err := requireFloatSlice(args)
+		if err != nil {
+			return nil, err
+		}
+		return solveIRR(cashFlows, integerPeriods(len(cashFlows)))
+	},
+	"XIRR": func(args []any) (any, error) {
+		if len(args) != 2 {
+			return nil, fmt.Errorf("XIRR expects 2 args (cash_flows, dates), got %d", len(args))
+		}
+		cashFlows, err := requireFloatSlice(args[0:1])
+		if err != nil {
+			return nil, fmt.Errorf("XIRR cash_flows: %w", err)
+		}
+		days, err := requireFloatSlice(args[1:2])
+		if err != nil {
+			return nil, fmt.Errorf("XIRR dates: %w", err)
+		}
+		if len(days) != len(cashFlows) {
+			return nil, fmt.Errorf("XIRR cash_flows and dates must be the same length (%d vs %d)", len(cashFlows), len(days))
+		}
+		return solveIRR(cashFlows, dayPeriods(days))
+	},
+
 	// Field-format predicates, added for the catalog_validation_rules ->
 	// rule_ast migration (backend/cmd/migrate_validation_rules). These are
 	// the FuncCall side of the 12-operator vocabulary found in that
