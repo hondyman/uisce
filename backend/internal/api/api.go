@@ -1313,6 +1313,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	mdmGraph.RegisterChangeListener(analytics.PreAggInvalidationListener(sqlxDB, preAggInvalidationSvc))
 	preAggHandler := handlers.NewPreAggregationHandler(preAggSvc)
 
+	// Validation rules as catalog nodes - the unified-engine replacement
+	// for the retired catalog_validation_rules table (see
+	// docs/validation_rules_migration_report.json). Same storage
+	// convention as pre-aggregations above: catalog_node, dedicated
+	// handler, mounted alongside it.
+	validationRuleSvc := analytics.NewValidationRuleService(sqlxDB)
+	validationRuleHandler := handlers.NewValidationRuleHandler(validationRuleSvc)
+
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
 	srv.ExecutionEngine = execEngine
@@ -1478,6 +1486,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Pre-aggregation (StarRocks hot-tier rollup) routes
 		preAggHandler.RegisterRoutes(r)
+
+		// Validation rules as catalog nodes (unified rule engine)
+		validationRuleHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)
