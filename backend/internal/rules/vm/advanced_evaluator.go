@@ -198,6 +198,22 @@ func (ae *AdvancedEvaluator) evalBinaryExpr(be *BinaryExpr, data map[string]inte
 func (ae *AdvancedEvaluator) evalFieldRef(fr *FieldRef, data map[string]interface{}) (any, error) {
 	val, found := ae.baseEvaluator.GetFieldValue(fr.Path, data)
 	if !found {
+		// GetFieldValue (HierarchyResolver.ResolveFieldPath) conflates
+		// "key absent" with "key present, value is nil" - both navigate
+		// to a nil interface and both come back not-found. That's a real
+		// distinction for a top-level field: a SQL NULL column (present
+		// key, nil value - the exact case NOT_EMPTY exists to detect)
+		// must not error the same way a genuinely missing field does.
+		// Scoped to the top-level (no ".") case deliberately - it's the
+		// only shape this evaluator's own callers (FuncCall predicates
+		// like NOT_EMPTY reading a BO record's own columns) actually hit,
+		// and it leaves nested-path resolution (which HierarchyResolver
+		// still owns) untouched.
+		if !strings.Contains(fr.Path, ".") {
+			if v, ok := data[fr.Path]; ok {
+				return v, nil
+			}
+		}
 		return nil, fmt.Errorf("field not found: %s", fr.Path)
 	}
 	return val, nil
@@ -210,7 +226,9 @@ func (ae *AdvancedEvaluator) evalFieldRef(fr *FieldRef, data map[string]interfac
 // at an array-valued field), since there is no row set to aggregate over
 // here. NPV mirrors the SQL expansion: SUM(cf_i / (1+rate)^i).
 var nativeFuncs = map[string]func(args []any) (any, error){
-	"SUM": func(args []any) (any, error) { return aggFold(args, 0, func(acc, v float64) float64 { return acc + v }) },
+	"SUM": func(args []any) (any, error) {
+		return aggFold(args, 0, func(acc, v float64) float64 { return acc + v })
+	},
 	"AVG": func(args []any) (any, error) {
 		vals, err := requireFloatSlice(args)
 		if err != nil {

@@ -24,7 +24,6 @@ import (
 	"github.com/lib/pq"
 )
 
-
 // AccessLevel represents the effective permission over a Business Object.
 type AccessLevel string
 
@@ -744,7 +743,6 @@ func (s *BusinessObjectService) mergeCustomOntoCore(coreBO, customBO *models.Bus
 	// PR duplicate-fix: customFields holds only the custom (tenant-extension) fields.
 	// Do NOT prepend coreBO.CoreFields here — they already live in composed.CoreFields.
 	composed.CustomFields = customBO.CustomFields
-
 
 	// If custom BO has a config, use it (allows tenant overrides)
 	if len(customBO.Config) > 0 {
@@ -2031,18 +2029,18 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 		`
 		_ = s.db.SelectContext(ctx, &bRows, fallbackBindingQuery, bo.ID)
 	}
-		for _, b := range bRows {
-			bo.Bindings = append(bo.Bindings, map[string]interface{}{
-				"boBindingId":     b.BoBindingId,
-				"bindingName":     b.BindingName,
-				"backendId":       b.BackendId,
-				"drivingNodeName": b.QualifiedPath,
-				"nodeName":        b.NodeName,
-				"isCore":          b.IsCore,
-				"isActive":        b.IsActive,
-				"temporalMode":    b.TemporalMode,
-			})
-		}
+	for _, b := range bRows {
+		bo.Bindings = append(bo.Bindings, map[string]interface{}{
+			"boBindingId":     b.BoBindingId,
+			"bindingName":     b.BindingName,
+			"backendId":       b.BackendId,
+			"drivingNodeName": b.QualifiedPath,
+			"nodeName":        b.NodeName,
+			"isCore":          b.IsCore,
+			"isActive":        b.IsActive,
+			"temporalMode":    b.TemporalMode,
+		})
+	}
 
 	return nil
 }
@@ -3220,7 +3218,6 @@ func (s *BusinessObjectService) IntrospectTable(
 		isUUID = true
 	}
 
-
 	if isUUID {
 		var node struct {
 			ID            string `db:"id"`
@@ -3710,24 +3707,29 @@ func (s *BusinessObjectService) CreateBORecord(
 		strings.Join(placeholders, ", "),
 	)
 
-	rows, err := s.db.QueryxContext(ctx, insertSQL, vals...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to insert record into %s: %w", table, err)
-	}
-	defer rows.Close()
+	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo.Key, func(tx *sqlx.Tx) (map[string]interface{}, error) {
+		rows, err := tx.QueryxContext(ctx, insertSQL, vals...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to insert record into %s: %w", table, err)
+		}
+		defer rows.Close()
 
-	result := make(map[string]interface{})
-	if rows.Next() {
-		_ = rows.MapScan(result)
-		for k, v := range result {
-			if b, ok := v.([]byte); ok {
-				result[k] = string(b)
+		result := make(map[string]interface{})
+		if rows.Next() {
+			_ = rows.MapScan(result)
+			for k, v := range result {
+				if b, ok := v.([]byte); ok {
+					result[k] = string(b)
+				}
 			}
 		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	s.logAudit(ctx, secCtx.TenantID, "instance", toString(rec["id"]), "create", rec, userID)
-	s.evaluateShadowRules(ctx, secCtx.TenantID, bo.Key, result)
 	return result, nil
 }
 
@@ -3792,24 +3794,29 @@ func (s *BusinessObjectService) UpdateBORecord(
 
 	vals = append(vals, recordID)
 
-	rows, err := s.db.QueryxContext(ctx, updateSQL, vals...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update record in %s: %w", table, err)
-	}
-	defer rows.Close()
+	result, err := s.writeAndEnforce(ctx, secCtx.TenantID, bo.Key, func(tx *sqlx.Tx) (map[string]interface{}, error) {
+		rows, err := tx.QueryxContext(ctx, updateSQL, vals...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to update record in %s: %w", table, err)
+		}
+		defer rows.Close()
 
-	result := make(map[string]interface{})
-	if rows.Next() {
-		_ = rows.MapScan(result)
-		for k, v := range result {
-			if b, ok := v.([]byte); ok {
-				result[k] = string(b)
+		result := make(map[string]interface{})
+		if rows.Next() {
+			_ = rows.MapScan(result)
+			for k, v := range result {
+				if b, ok := v.([]byte); ok {
+					result[k] = string(b)
+				}
 			}
 		}
+		return result, nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	s.logAudit(ctx, secCtx.TenantID, "instance", recordID, "update", rec, userID)
-	s.evaluateShadowRules(ctx, secCtx.TenantID, bo.Key, result)
 	return result, nil
 }
 
@@ -4623,7 +4630,7 @@ func (s *BusinessObjectService) GetBOWorkflowStatus(ctx context.Context, secCtx 
 			TriggeredBy: "System",
 			Status:      "COMPLETED",
 			StartTime:   time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
-			EndTime:     time.Now().Add(-2 * time.Hour + 3*time.Second).Format(time.RFC3339),
+			EndTime:     time.Now().Add(-2*time.Hour + 3*time.Second).Format(time.RFC3339),
 		},
 	}
 
@@ -4668,8 +4675,6 @@ func (s *BusinessObjectService) ExecuteWorkflowAction(ctx context.Context, secCt
 		"targetStatus": targetStatus,
 		"reviewerNote": req.ReviewerNote,
 	}, userID)
-
-
 
 	return s.GetBOWorkflowStatus(ctx, secCtx, bo.ID)
 }
@@ -4780,11 +4785,11 @@ func (s *BusinessObjectService) ValidatePublishGate(ctx context.Context, secCtx 
 	}
 
 	return &models.BOPublishGateValidationResponse{
-		BOID:               bo.ID,
-		CanPublish:         canPublish,
-		UnresolvedFields:   unresolved,
+		BOID:                bo.ID,
+		CanPublish:          canPublish,
+		UnresolvedFields:    unresolved,
 		MissingDependencies: []string{},
-		GateSummary:        summary,
+		GateSummary:         summary,
 	}, nil
 }
 
@@ -5216,8 +5221,3 @@ func (s *BusinessObjectService) RunLakehouseCompaction(ctx context.Context, secC
 
 	return report, nil
 }
-
-
-
-
-

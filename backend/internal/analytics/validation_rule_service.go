@@ -184,6 +184,7 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName s
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.tenant_id = $1
 		  AND n.properties->>'bo_name' = $2
+		  AND n.is_active = true
 		ORDER BY n.node_name
 	`, tenantID, boName)
 	if err != nil {

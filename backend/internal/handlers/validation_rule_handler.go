@@ -3,12 +3,14 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/jmoiron/sqlx"
 )
 
 // ValidationRuleHandler exposes CRUD + evaluation for validation-rule
@@ -18,10 +20,11 @@ import (
 // domain objects with the same CRUD/DDL-or-evaluate pattern.
 type ValidationRuleHandler struct {
 	svc *analytics.ValidationRuleService
+	db  *sqlx.DB
 }
 
-func NewValidationRuleHandler(svc *analytics.ValidationRuleService) *ValidationRuleHandler {
-	return &ValidationRuleHandler{svc: svc}
+func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB) *ValidationRuleHandler {
+	return &ValidationRuleHandler{svc: svc, db: db}
 }
 
 // RegisterRoutes adds the validation-rule-node routes to the given
@@ -34,7 +37,35 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/", h.handleListByBO)
 		r.Get("/{id}", h.handleGetByID)
 		r.Post("/{id}/evaluate", h.handleEvaluate)
+		r.Get("/violations", h.handleListViolations)
 	})
+}
+
+// handleListViolations returns the most recent persisted rule violations
+// (validation_rule_violations), optionally filtered to one BO via
+// ?bo_name=, so a violation is something a UI or a curl call can actually
+// see rather than only a server log line.
+func (h *ValidationRuleHandler) handleListViolations(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	boName := r.URL.Query().Get("bo_name")
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil {
+			limit = parsed
+		}
+	}
+	violations, err := analytics.ListViolations(r.Context(), h.db, tenantID.String(), boName, limit)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/violations: list failed: %v", err)
+		http.Error(w, "failed to list violations", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"violations": violations})
 }
 
 func (h *ValidationRuleHandler) handleUpsert(w http.ResponseWriter, r *http.Request) {
