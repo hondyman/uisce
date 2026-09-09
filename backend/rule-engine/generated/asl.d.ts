@@ -1261,6 +1261,44 @@ export interface CQRSReadModelRepository {
   db: any;
 }
 
+/** CalcTermConfig is stored in catalog_node.config. RuleAST is a
+vm.Expression-shaped json.RawMessage (internal/rules/vm), same
+low-level-package rationale as ValidationRuleConfig.RuleAST: this
+package doesn't import internal/rules/vm, whoever evaluates or
+compiles the AST does. Expression keeps the original typed-text source
+alongside the parsed AST, so re-editing a saved calc term doesn't
+require decompiling the AST back to text. */
+export interface CalcTermConfig {
+  Expression: string;
+  RuleAST: any;
+}
+
+/** CalcTermDescriptor is the API response shape. */
+export interface CalcTermDescriptor {
+  BOName: string;
+  CreatedAt: any;
+  DataType: string;
+  Description: string;
+  Expression: string;
+  ID: any;
+  Name: string;
+  RuleAST: any;
+  TenantID: string;
+  UpdatedAt: any;
+}
+
+/** CalcTermProperties is stored in catalog_node.properties, mirroring
+ValidationRuleProperties' role for validation-rule nodes. TermType is
+always "calculated" - the marker PreAggregationService.compileCalcTermToSQL
+(internal/analytics/pre_aggregation_service.go) filters on when
+resolving a pre-aggregation's Calculations list by node_name. */
+export interface CalcTermProperties {
+  BOName: string;
+  DataType: string;
+  TenantID: string;
+  TermType: string;
+}
+
 /** CalculationStep represents a single step in a calculation breakdown. */
 export interface CalculationStep {
   Description: string;
@@ -3985,6 +4023,15 @@ export interface OkRuleWithMeta {
   Meta: OkRuleMeta;
 }
 
+/** ParseError reports a parse failure with a byte offset into the
+original source, so a caller (an editor's diagnostics, or an API
+error response) can point at the exact spot rather than just quoting
+a message. */
+export interface ParseError {
+  Message: string;
+  Pos: number;
+}
+
 /** PathResolver resolves dot-notation paths (e.g. "Manager.Location.Country")
 by traversing the relationship graph via iterative lookups. */
 export interface PathResolver {
@@ -6303,6 +6350,19 @@ export interface UpgradeStatusMessage {
   Warnings: string[];
 }
 
+/** UpsertCalcTermRequest is the API request shape for creating or
+updating a calc term. Expression is typed text (e.g. "SUM(ExecQuantity
+* ExecPrice)"), parsed server-side via vm.ParseExpression - the client
+never constructs rule_ast JSON directly. */
+export interface UpsertCalcTermRequest {
+  BOName: string;
+  DataType: string;
+  Description: string;
+  Expression: string;
+  Name: string;
+  TenantID: string;
+}
+
 export interface UpsertPreAggRequest {
   BOName: string;
   Calculations: string[];
@@ -6671,6 +6731,18 @@ export interface dbPoliciesEnvelope {
   Row: any[];
 }
 
+/** Grammar (lowest to highest precedence):
+
+	addsub := muldiv (('+' | '-') muldiv)*
+	muldiv := unary (('*' | '/') unary)*
+	unary  := '-' unary | primary
+	primary := NUMBER | IDENT '(' (addsub (',' addsub)*)? ')' | IDENT | '(' addsub ')' */
+export interface exprParser {
+  pos: number;
+  src: string;
+  toks: token[];
+}
+
 export interface fakeDriftHealer {
   calls: any;
 }
@@ -6798,6 +6870,12 @@ export interface starlarkRuleSpan {
   ruleID: string;
   span: any;
   start: any;
+}
+
+export interface token {
+  kind: tokenKind;
+  pos: number;
+  text: string;
 }
 
 export interface valuesServiceImpl {
