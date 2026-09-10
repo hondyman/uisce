@@ -91,4 +91,26 @@ func (s *ReportService) ListFolderReportIDs(ctx context.Context, tenantID uuid.U
 	return s.repo.ListFolderReportIDs(ctx, tenantID, userID, folderID)
 }
 
+// Schedule operations delegating to schedule repository
+
+func (s *ReportService) CreateSchedule(ctx context.Context, tenantID uuid.UUID, callerUserID string, input CreateScheduleInput) (*ReportSchedule, error) {
+	return s.repo.CreateSchedule(ctx, tenantID, callerUserID, input)
+}
+
+func (s *ReportService) ListSchedulesForTemplate(ctx context.Context, tenantID uuid.UUID, callerUserID string, templateID uuid.UUID) ([]ReportSchedule, error) {
+	return s.repo.ListSchedulesForTemplate(ctx, tenantID, callerUserID, templateID)
+}
+
+func (s *ReportService) GetSchedule(ctx context.Context, tenantID uuid.UUID, scheduleID uuid.UUID) (*ReportSchedule, error) {
+	return s.repo.GetSchedule(ctx, tenantID, scheduleID)
+}
+
+func (s *ReportService) DeleteSchedule(ctx context.Context, tenantID uuid.UUID, callerUserID string, isAdmin bool, scheduleID uuid.UUID) error {
+	return s.repo.DeleteSchedule(ctx, tenantID, callerUserID, isAdmin, scheduleID)
+}
+
+func (s *ReportService) TriggerScheduleRun(ctx context.Context, tenantID uuid.UUID, callerUserID string, isAdmin bool, scheduleID uuid.UUID, executor ReportExecutor) (*ScheduleExecutionResult, error) {
+	return s.repo.TriggerScheduleRun(ctx, tenantID, callerUserID, isAdmin, scheduleID, executor)
+}
+
 

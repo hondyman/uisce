@@ -14,3 +14,5 @@ var ErrCycleDetected = errors.New("folder cycle detected")
 // ErrDepthLimitExceeded is returned when a folder hierarchy exceeds the maximum depth limit.
 var ErrDepthLimitExceeded = errors.New("folder depth limit exceeded")
 
+// ErrForbidden is returned when a caller lacks permission to perform the requested schedule operation.
+var ErrForbidden = errors.New("schedule access forbidden")

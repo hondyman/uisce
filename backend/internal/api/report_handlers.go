@@ -45,6 +45,14 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}", h.DeleteTemplate)
 		r.Put("/{id}/favorite", h.SetFavorite)
 		r.Delete("/{id}/favorite", h.RemoveFavorite)
+
+		// Schedule subroutes mounted under /{id}/schedules
+		r.Route("/{id}/schedules", func(sr chi.Router) {
+			sr.Get("/", h.ListSchedulesForTemplate)
+			sr.Post("/", h.CreateScheduleForTemplate)
+			sr.Delete("/{sid}", h.DeleteSchedule)
+			sr.Post("/{sid}/run", h.TriggerScheduleRun)
+		})
 	})
 }
 
@@ -548,5 +556,185 @@ func (h *ReportHandler) RemoveFavorite(w http.ResponseWriter, r *http.Request) {
 		"is_favorite": false,
 		"template_id": id,
 	})
+}
+
+// ============================================================================
+// SCHEDULE HANDLERS (Hardened with Auth Context & Owner Scoping)
+// ============================================================================
+
+type createScheduleHTTPBody struct {
+	ScheduleName        string     `json:"schedule_name"`
+	CronExpression      string     `json:"cron_expression"`
+	Region              string     `json:"region"`
+	CalendarID          *uuid.UUID `json:"calendar_id"`
+	StartOfDayTime      string     `json:"start_of_day_time"`
+	UnscheduledBehavior string     `json:"unscheduled_behavior"`
+	BusinessDayOffset   int        `json:"business_day_offset"`
+	BurstDimension      string     `json:"burst_dimension"`
+	ExportFormat        string     `json:"export_format"`
+	NotifyInApp         bool       `json:"notify_in_app"`
+	NotifyEmail         bool       `json:"notify_email"`
+}
+
+// ListSchedulesForTemplate handles GET /api/v1/reports/{id}/schedules.
+func (h *ReportHandler) ListSchedulesForTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, _, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tmplIDStr := chi.URLParam(r, "id")
+	tmplID, err := uuid.Parse(tmplIDStr)
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	schedules, err := h.service.ListSchedulesForTemplate(r.Context(), tenantID, userID, tmplID)
+	if err != nil {
+		if errors.Is(err, reports.ErrNotFound) {
+			http.Error(w, "Report template not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(schedules)
+}
+
+// CreateScheduleForTemplate handles POST /api/v1/reports/{id}/schedules.
+func (h *ReportHandler) CreateScheduleForTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, _, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	tmplIDStr := chi.URLParam(r, "id")
+	tmplID, err := uuid.Parse(tmplIDStr)
+	if err != nil {
+		http.Error(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	var body createScheduleHTTPBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if body.ScheduleName == "" {
+		http.Error(w, "schedule_name is required", http.StatusBadRequest)
+		return
+	}
+	if body.CronExpression == "" {
+		http.Error(w, "cron_expression is required", http.StatusBadRequest)
+		return
+	}
+
+	sched, err := h.service.CreateSchedule(r.Context(), tenantID, userID, reports.CreateScheduleInput{
+		TemplateID:          tmplID,
+		ScheduleName:        body.ScheduleName,
+		CronExpression:      body.CronExpression,
+		Region:              body.Region,
+		CalendarID:          body.CalendarID,
+		StartOfDayTime:      body.StartOfDayTime,
+		UnscheduledBehavior: body.UnscheduledBehavior,
+		BusinessDayOffset:   body.BusinessDayOffset,
+		BurstDimension:      body.BurstDimension,
+		ExportFormat:        body.ExportFormat,
+		NotifyInApp:         body.NotifyInApp,
+		NotifyEmail:         body.NotifyEmail,
+	})
+	if err != nil {
+		if errors.Is(err, reports.ErrNotFound) {
+			http.Error(w, "Report template not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, reports.ErrConflict) {
+			http.Error(w, "Schedule name already exists for this report template", http.StatusConflict)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(sched)
+}
+
+// DeleteSchedule handles DELETE /api/v1/reports/{id}/schedules/{sid}.
+func (h *ReportHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	sidStr := chi.URLParam(r, "sid")
+	sid, err := uuid.Parse(sidStr)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.service.DeleteSchedule(r.Context(), tenantID, userID, isAdmin, sid); err != nil {
+		if errors.Is(err, reports.ErrNotFound) {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, reports.ErrForbidden) {
+			http.Error(w, "Forbidden: only schedule owner or tenant admin can delete schedule", http.StatusForbidden)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":      "success",
+		"schedule_id": sid,
+		"deleted":     true,
+	})
+}
+
+// TriggerScheduleRun handles POST /api/v1/reports/{id}/schedules/{sid}/run.
+func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	sidStr := chi.URLParam(r, "sid")
+	sid, err := uuid.Parse(sidStr)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	res, err := h.service.TriggerScheduleRun(r.Context(), tenantID, userID, isAdmin, sid, nil)
+	if err != nil {
+		if errors.Is(err, reports.ErrNotFound) {
+			http.Error(w, "Schedule not found", http.StatusNotFound)
+			return
+		}
+		if errors.Is(err, reports.ErrForbidden) {
+			http.Error(w, "Forbidden: only schedule owner or tenant admin can trigger schedule", http.StatusForbidden)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(res)
 }
 
