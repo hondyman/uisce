@@ -31,8 +31,20 @@ next task is.
 
 `internal/rules/vm` (`RuleNode`/`RuleGroup`/`RuleCondition`/`Expression`/
 `BinaryExpr`/`FuncCall`) is now the single AST behind validation rules,
-MDM/rulefabric rules, calc-term SQL pushdown, and the browser WASM live
-preview — one evaluator (`AdvancedEvaluator`), compiled to
+calc-term SQL pushdown, and the browser WASM live preview - **not**
+MDM/rulefabric rules, despite an earlier version of this document
+claiming otherwise. That claim was inference dressed as verification:
+rulefabric imports the `vm` package, but only for its bytecode
+primitives (`OpCode`/`CompiledProgram`/`Instruction`) to compile its
+*own* `ConditionGroup`/`Condition` model - it never constructs or
+consumes a `vm.RuleNode`/`RuleGroup`/`Expression`. The two engines share
+a bytecode instruction set, not an AST. See the "Rulefabric
+consolidation" addendum below for the live-load-verified plan to close
+this gap for real - Phase 0 inventory found no MDM/compliance
+rule-authoring UI exists at all, and a database check confirmed
+rulefabric's condition tables (`rules`/`rule_logic`) are genuinely at
+zero rows on real `alpha`, so the consolidation is mostly deletion and
+rewiring, not corpus migration. One evaluator (`AdvancedEvaluator`), compiled to
 `rule_engine.wasm` for the browser and run natively server-side, with a
 real round-trip-tested `MarshalJSON`/`UnmarshalJSON` pair. The editor
 (`AdvancedRuleBuilderPage`) is routed and click-through verified with a
@@ -2413,3 +2425,20 @@ never came up in this classification pass - none of the 57 observed
 failures showed mTLS-specific signatures, so it's not blocking anything
 identified so far, but it hasn't been ruled out for the 16 still-
 unclassified files either.
+
+## Rulefabric consolidation (2026-09-10) - the editor unification's real scope
+
+The "single AST" claim corrected at the top of this document (rulefabric
+shares `vm`'s bytecode instruction set, not its `RuleNode` AST) came out
+of designing the MDM/compliance side of "one editor, multiple domains."
+Full inventory, live-load gate, and the consolidation plan are recorded
+in the same-dated addendum on `feat/unified-rule-engine`'s copy of this
+document (commit `a44b29d28`, PR #38) - not duplicated here to avoid two
+copies drifting; read it there. Short version: no MDM/compliance
+rule-authoring UI exists yet, rulefabric's condition tables are at zero
+rows on real `alpha` (verified, not assumed - the one table that did
+have rows turned out to be an unrelated feature), so the decision is to
+consolidate rulefabric's `ConditionGroup`/`Condition` model onto
+`vm.RuleNode` now, while the count is zero, rather than build a
+translator between two ASTs. Not yet implemented as of this note -
+blast-radius mapping is the next step.
