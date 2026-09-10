@@ -40,7 +40,7 @@ jobs:
 
       - name: Start ssh-agent and add key
         if: env.HAS_SSH_KEY == 'true'
-        uses: webfactory/ssh-agent@v0.8.1
+        uses: webfactory/ssh-agent@v0.10.0
         with:
           ssh-private-key: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
 
