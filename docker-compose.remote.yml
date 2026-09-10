@@ -109,14 +109,19 @@ services:
     container_name: uisce-temporal
     environment:
       DB: postgres12
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password123
+      POSTGRES_USER: temporal
+      POSTGRES_PWD: postgres
       POSTGRES_DB: temporal
-      POSTGRES_HOST: host.docker.internal
-      POSTGRES_SEEDS: host.docker.internal
+      POSTGRES_HOST: 100.84.50.65
+      POSTGRES_SEEDS: 100.84.50.65
       DB_PORT: 5432
       DB_DATABASE: temporal
       TIMEZONE: UTC
+      SQL_TLS_ENABLED: "false"
+      SQL_HOST_VERIFICATION: "false"
+      SQL_HOST_NAME: 100.84.50.65
+    volumes:
+      - ~/.uisce/certs:/tmp/keys:ro
     networks:
       - remote-net
     ports:
@@ -167,7 +172,7 @@ services:
     environment:
       # Database Configuration
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://host.docker.internal:5432/keycloak?options=-c%20timezone=utc
+      KC_DB_URL: jdbc:postgresql://100.84.50.65:5432/keycloak?options=-c%20timezone=utc&sslmode=disable
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: postgres
 
@@ -238,7 +243,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - NODE_ENV=production
-      - DB_CONNECTION_URI=postgresql://postgres:postgres@host.docker.internal:5432/infisical?sslmode=disable&options=-c%20timezone=utc
+      - DB_CONNECTION_URI=postgresql://infisical:<PASSWORD>@100.84.50.65:5432/infisical?sslmode=require&options=-c%20timezone=utc
       - REDIS_URL=redis://uisce-redis:6379
       - SITE_URL=http://localhost:8082
       - ENCRYPTION_KEY=1030410d3281d742b960cf2ff13705f6
@@ -647,6 +652,9 @@ services:
 networks:
   remote-net:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 
 # ---------------------------------------------------------
 # Volumes
