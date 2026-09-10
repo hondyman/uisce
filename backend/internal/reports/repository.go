@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/libs/db/queries"
@@ -248,6 +249,72 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 		return nil, fmt.Errorf("failed to list scoped templates: %w", err)
 	}
 	defer rows.Close()
+
+	return scanReportTemplates(rows)
+}
+
+// SearchTemplatesScoped searches report templates using tsvector full-text search,
+// exact/prefix ILIKE, and pg_trgm word_similarity for typo tolerance.
+// It strictly composes with the exact visibility predicate from ListTemplatesScoped:
+// WHERE t.tenant_id IN ($2, $3)
+//   AND t.is_active = true
+//   AND (t.is_personal = false OR t.created_by_id = $1)
+//
+// Calibration & Threshold Note:
+// pg_trgm word_similarity($4, t.template_name) threshold is set to 0.3.
+// Lower thresholds catch more severe typos ("Portfolo" -> "Portfolio Summary" scores ~0.78),
+// but increase sensitivity to shared random substrings or common hex tokens (e.g. two templates
+// sharing an 8-char hex suffix score ~0.32). If adjusting this threshold in the future,
+// note this tradeoff between typo recall and shared token false-positive matches.
+//
+// If query is empty or whitespace, it delegates directly to ListTemplatesScoped to preserve identical ordering.
+func (r *Repository) SearchTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string, queryStr string) ([]ReportTemplate, error) {
+	trimmedQuery := strings.TrimSpace(queryStr)
+	if trimmedQuery == "" {
+		return r.ListTemplatesScoped(ctx, tenantID, callerUserID)
+	}
+
+	goldCopyID, err := r.ResolveGoldCopyTenantID(ctx)
+	if err != nil {
+		goldCopyID = tenantID
+	}
+
+	searchQuery := `
+		SELECT t.id, t.tenant_id, t.template_name, t.description, t.category,
+		       t.layout_config, t.parameter_schema,
+		       t.is_active, t.is_public, t.is_personal, t.created_by_id, t.created_by,
+		       t.created_at, t.updated_at, t.version,
+		       (f.template_id IS NOT NULL) AS is_favorite
+		FROM report_templates t
+		LEFT JOIN report_favorites f 
+		       ON f.template_id = t.id 
+		      AND f.tenant_id = $2
+		      AND f.user_id = $1
+		WHERE t.tenant_id IN ($2, $3)
+		  AND t.is_active = true
+		  AND (t.is_personal = false OR t.created_by_id = $1)
+		  AND (
+		      t.search_vector @@ websearch_to_tsquery('simple', $4)
+		      OR t.template_name ILIKE '%' || $4 || '%'
+		      OR word_similarity($4, t.template_name) > 0.3
+		  )
+		ORDER BY
+		    (t.template_name ILIKE $4 || '%') DESC NULLS LAST,
+		    ts_rank(t.search_vector, websearch_to_tsquery('simple', $4)) DESC,
+		    word_similarity($4, t.template_name) DESC,
+		    t.template_name
+	`
+
+	rows, err := r.db.QueryContext(ctx, searchQuery, callerUserID, tenantID, goldCopyID, trimmedQuery)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search scoped templates: %w", err)
+	}
+	defer rows.Close()
+
+	return scanReportTemplates(rows)
+}
+
+func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 
 
 

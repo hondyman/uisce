@@ -36,6 +36,10 @@ func (s *ReportService) ListTemplatesScoped(ctx context.Context, tenantID uuid.U
 	return s.repo.ListTemplatesScoped(ctx, tenantID, callerUserID)
 }
 
+func (s *ReportService) SearchTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string, query string) ([]ReportTemplate, error) {
+	return s.repo.SearchTemplatesScoped(ctx, tenantID, callerUserID, query)
+}
+
 
 func (s *ReportService) SetFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
 	return s.repo.SetFavorite(ctx, tenantID, userID, templateID)

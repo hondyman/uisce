@@ -33,6 +33,10 @@ func getTestDB(t *testing.T) *sql.DB {
 	err = db.Ping()
 	require.NoError(t, err, "failed to connect to database")
 
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
 	return db
 }
 
@@ -63,7 +67,10 @@ func createTestTemplate(t *testing.T, repo *reports.Repository, db *sql.DB, tmpl
 	require.NoError(t, err, "failed to create template")
 
 	t.Cleanup(func() {
-		_, _ = db.Exec(`DELETE FROM report_templates WHERE id = $1`, tmpl.ID)
+		_, err := db.Exec(`DELETE FROM report_templates WHERE id = $1`, tmpl.ID)
+		if err != nil {
+			t.Logf("cleanup error for template %s: %v", tmpl.ID, err)
+		}
 	})
 
 	return tmpl
@@ -71,7 +78,6 @@ func createTestTemplate(t *testing.T, repo *reports.Repository, db *sql.DB, tmpl
 
 func TestRepository_DuplicateNameCaseInsensitive_SameTenant(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -102,7 +108,6 @@ func TestRepository_DuplicateNameCaseInsensitive_SameTenant(t *testing.T) {
 
 func TestRepository_DuplicateName_DifferentTenant_Allowed(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -135,7 +140,6 @@ func TestRepository_DuplicateName_DifferentTenant_Allowed(t *testing.T) {
 
 func TestRepository_DuplicateName_InactiveReport_Allowed(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -169,7 +173,6 @@ func TestRepository_DuplicateName_InactiveReport_Allowed(t *testing.T) {
 
 func TestRepository_PersonalReportVisibility_UserIsolation(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -234,7 +237,6 @@ func TestRepository_PersonalReportVisibility_UserIsolation(t *testing.T) {
 
 func TestRepository_FavoritesIsolation_PerUser(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -284,7 +286,6 @@ func TestRepository_FavoritesIsolation_PerUser(t *testing.T) {
 
 func TestRepository_FavoriteIdempotency(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -310,7 +311,6 @@ func TestRepository_FavoriteIdempotency(t *testing.T) {
 
 func TestRepository_DeleteTemplate_CascadesFavorites(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -346,7 +346,6 @@ func TestRepository_DeleteTemplate_CascadesFavorites(t *testing.T) {
 
 func TestRepository_CrossTenantUpdate_Forbidden(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -384,7 +383,6 @@ func TestRepository_CrossTenantUpdate_Forbidden(t *testing.T) {
 
 func TestRepository_CoreInheritanceFromGoldCopy_PersonalIsolated(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -438,7 +436,6 @@ func TestRepository_CoreInheritanceFromGoldCopy_PersonalIsolated(t *testing.T) {
 
 func TestRepository_CrossTenantFavoriteInjection_Forbidden(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -469,7 +466,6 @@ func TestRepository_CrossTenantFavoriteInjection_Forbidden(t *testing.T) {
 
 func TestRepository_FavoriteGoldCopyCoreReport_Allowed(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -519,6 +515,273 @@ func TestRepository_FavoriteGoldCopyCoreReport_Allowed(t *testing.T) {
 	}
 	require.NotNil(t, foundB, "core report should appear in User B listing")
 	assert.False(t, foundB.IsFavorite, "User B should NOT see core report as favorite")
+}
+
+// -----------------------------------------------------------------------------
+// Full-Text Search (FTS) Integration Tests
+// -----------------------------------------------------------------------------
+
+// TestSearch_visibilityPredicate verifies that personal reports owned by another user,
+// reports owned by a different tenant, and inactive reports are strictly invisible to search
+// even when the search query matches their names exactly.
+func TestSearch_visibilityPredicate(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	userA := createTestUser(t, db, tenantA)
+	userB := createTestUser(t, db, tenantA)
+
+	// 1. User A creates personal report in Tenant A matching term
+	personalTerm := fmt.Sprintf("SecretAlpha%s", uuid.New().String()[:8])
+	tmplPersonalA := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantA,
+		TemplateName: fmt.Sprintf("Report %s", personalTerm),
+		IsPersonal:   true,
+		CreatedByID:  &userA,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmplPersonalA)
+
+	// User A searching for personalTerm MUST see it
+	resA, err := repo.SearchTemplatesScoped(ctx, tenantA, userA, personalTerm)
+	require.NoError(t, err)
+	require.Len(t, resA, 1, "User A must see their own personal report in search")
+	assert.Equal(t, tmplPersonalA.ID, resA[0].ID)
+
+	// User B searching for personalTerm MUST NOT see it (personal isolation)
+	resB, err := repo.SearchTemplatesScoped(ctx, tenantA, userB, personalTerm)
+	require.NoError(t, err)
+	assert.Empty(t, resB, "User B must NEVER see User A's personal report in search results")
+
+	// 2. Cross-tenant isolation: Tenant B creates public report matching a distinct term
+	crossTerm := fmt.Sprintf("CrossTenant%s", uuid.New().String()[:8])
+	tmplTenantB := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantB,
+		TemplateName: fmt.Sprintf("Report %s", crossTerm),
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmplTenantB)
+
+	// User A in Tenant A searching for crossTerm MUST NOT see Tenant B's report
+	resCross, err := repo.SearchTemplatesScoped(ctx, tenantA, userA, crossTerm)
+	require.NoError(t, err)
+	assert.Empty(t, resCross, "User in Tenant A must NEVER see Tenant B's reports in search")
+
+	// 3. Inactive report isolation: Inactive report matching a distinct term
+	inactiveTerm := fmt.Sprintf("InactiveOnly%s", uuid.New().String()[:8])
+	tmplInactive := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantA,
+		TemplateName: fmt.Sprintf("Report %s", inactiveTerm),
+		IsPersonal:   false,
+		IsActive:     false,
+	}
+	createTestTemplate(t, repo, db, tmplInactive)
+
+	// User A searching for inactiveTerm MUST NOT see it
+	resInactive, err := repo.SearchTemplatesScoped(ctx, tenantA, userA, inactiveTerm)
+	require.NoError(t, err)
+	assert.Empty(t, resInactive, "Inactive reports must NEVER appear in search results")
+}
+
+// TestSearch_emptyQueryEqualsListing verifies that empty or whitespace queries produce
+// the exact same results and ordering as ListTemplatesScoped.
+func TestSearch_emptyQueryEqualsListing(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userID := createTestUser(t, db, tenantID)
+
+	for i := 0; i < 3; i++ {
+		tmpl := &reports.ReportTemplate{
+			ID:           uuid.New(),
+			TenantID:     tenantID,
+			TemplateName: fmt.Sprintf("Report %c %s", 'A'+i, uuid.New().String()[:8]),
+			IsPersonal:   false,
+			IsActive:     true,
+		}
+		createTestTemplate(t, repo, db, tmpl)
+	}
+
+	listResults, err := repo.ListTemplatesScoped(ctx, tenantID, userID)
+	require.NoError(t, err)
+
+	emptySearchResults, err := repo.SearchTemplatesScoped(ctx, tenantID, userID, "")
+	require.NoError(t, err)
+	assert.Equal(t, listResults, emptySearchResults, "empty query must match ListTemplatesScoped exactly")
+
+	whitespaceSearchResults, err := repo.SearchTemplatesScoped(ctx, tenantID, userID, "   ")
+	require.NoError(t, err)
+	assert.Equal(t, listResults, whitespaceSearchResults, "whitespace query must match ListTemplatesScoped exactly")
+}
+
+// TestSearch_weightedRelevance verifies ranking order:
+// Name match (Weight A) > Description match (Weight B) > Category match (Weight C)
+func TestSearch_weightedRelevance(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userID := createTestUser(t, db, tenantID)
+
+	keyword := fmt.Sprintf("relevancekw%s", uuid.New().String()[:6])
+
+	// Category match only
+	catTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Arbitrary Title C %s", uuid.New().String()[:6]),
+		Description:  "General operations report with no keyword",
+		Category:     keyword,
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, catTmpl)
+
+	// Description match only
+	descTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Arbitrary Title B %s", uuid.New().String()[:6]),
+		Description:  fmt.Sprintf("Specialized ledger detailing %s performance metrics", keyword),
+		Category:     "finance",
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, descTmpl)
+
+	// Name match
+	nameTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("%s Core Report", keyword),
+		Description:  "Standard accounting overview",
+		Category:     "accounting",
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, nameTmpl)
+
+	results, err := repo.SearchTemplatesScoped(ctx, tenantID, userID, keyword)
+	require.NoError(t, err)
+	require.Len(t, results, 3, "All three matches should be found")
+
+	assert.Equal(t, nameTmpl.ID, results[0].ID, "Name match (Weight A) should rank first")
+	assert.Equal(t, descTmpl.ID, results[1].ID, "Description match (Weight B) should rank second")
+	assert.Equal(t, catTmpl.ID, results[2].ID, "Category match (Weight C) should rank third")
+}
+
+// TestSearch_typoTolerance verifies typo tolerance using word_similarity.
+// A search for "Portfolo" must match a multi-word template like "Portfolio Summary ...".
+func TestSearch_typoTolerance(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userID := createTestUser(t, db, tenantID)
+
+	targetTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Portfolio Summary %s", uuid.New().String()[:8]),
+		Description:  "Multi-asset consolidated portfolio holdings and valuation breakdown",
+		Category:     "wealth",
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, targetTmpl)
+
+	// Typo query: "Portfolo" (missing 'i')
+	results, err := repo.SearchTemplatesScoped(ctx, tenantID, userID, "Portfolo")
+	require.NoError(t, err)
+
+	var matched bool
+	for _, res := range results {
+		if res.ID == targetTmpl.ID {
+			matched = true
+			break
+		}
+	}
+	assert.True(t, matched, "Typo 'Portfolo' must find 'Portfolio Summary' via word_similarity")
+}
+
+// TestSearch_coreReportInheritance verifies that master gold-copy core reports are searchable
+// by client tenants.
+func TestSearch_coreReportInheritance(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	goldCopyID, err := repo.ResolveGoldCopyTenantID(ctx)
+	require.NoError(t, err)
+
+	clientTenantID := uuid.New()
+	user := createTestUser(t, db, clientTenantID)
+
+	coreKeyword := fmt.Sprintf("GlobalCoreLiquidity%s", uuid.New().String()[:6])
+	coreTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     goldCopyID,
+		TemplateName: fmt.Sprintf("Federal Reserve %s Analysis", coreKeyword),
+		Description:  "Central bank liquidity analysis and balance sheet trends",
+		Category:     "macro",
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, coreTmpl)
+
+	results, err := repo.SearchTemplatesScoped(ctx, clientTenantID, user, coreKeyword)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Client tenant must find inherited core report via search")
+	assert.Equal(t, coreTmpl.ID, results[0].ID)
+}
+
+// TestSearch_favoriteJoinPreserved verifies that the LEFT JOIN report_favorites
+// correctly sets is_favorite = true in search results for the caller.
+func TestSearch_favoriteJoinPreserved(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userA := createTestUser(t, db, tenantID)
+	userB := createTestUser(t, db, tenantID)
+
+	favKeyword := fmt.Sprintf("FavSearch%s", uuid.New().String()[:6])
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Fixed Income %s Benchmark", favKeyword),
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	// User A favorites the report
+	err := repo.SetFavorite(ctx, tenantID, userA, tmpl.ID)
+	require.NoError(t, err)
+
+	// User A searches -> is_favorite should be true
+	resA, err := repo.SearchTemplatesScoped(ctx, tenantID, userA, favKeyword)
+	require.NoError(t, err)
+	require.Len(t, resA, 1)
+	assert.True(t, resA[0].IsFavorite, "User A should see is_favorite=true in search results")
+
+	// User B searches -> is_favorite should be false
+	resB, err := repo.SearchTemplatesScoped(ctx, tenantID, userB, favKeyword)
+	require.NoError(t, err)
+	require.Len(t, resB, 1)
+	assert.False(t, resB[0].IsFavorite, "User B should see is_favorite=false in search results")
 }
 
 

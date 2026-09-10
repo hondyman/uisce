@@ -79,7 +79,6 @@ func createScheduleTestTemplate(t *testing.T, db *sql.DB, tenantID uuid.UUID, na
 // 1. TestCreateSchedule_linksToTemplate — verifies report_definition_id FK is populated
 func TestCreateSchedule_linksToTemplate(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -115,7 +114,6 @@ func TestCreateSchedule_linksToTemplate(t *testing.T) {
 // 2. TestCreateSchedule_visibilityPredicate — own personal passes; foreign/other user personal gets ErrNotFound
 func TestCreateSchedule_visibilityPredicate(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -165,7 +163,6 @@ func TestCreateSchedule_visibilityPredicate(t *testing.T) {
 // 3. TestDeleteSchedule_ownerOrAdmin and TestDeleteSchedule_isSoftDelete
 func TestDeleteSchedule_ownerOrAdminAndSoftDelete(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -238,7 +235,6 @@ func TestDeleteSchedule_ownerOrAdminAndSoftDelete(t *testing.T) {
 // 4. TestDeleteTemplate_cascadesSchedule — verifies ON DELETE CASCADE
 func TestDeleteTemplate_cascadesSchedule(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -300,7 +296,6 @@ func (m *RecordingMockExecutor) ExecuteReport(ctx context.Context, tmpl *reports
 // 5. TestTriggerRun_twoSidedIdentity — admin trigger executes as template owner; non-owner non-admin gets 403 and zero DB rows
 func TestTriggerRun_twoSidedIdentity(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -357,7 +352,6 @@ func TestTriggerRun_twoSidedIdentity(t *testing.T) {
 // 6. TestTriggerRun_writesCacheMetadata — verifies 24h TTL record in report_cache_metadata
 func TestTriggerRun_writesCacheMetadata(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -419,7 +413,6 @@ func TestTriggerRun_writesCacheMetadata(t *testing.T) {
 // 7. TestListSchedules_tenantIsolation — confirms cross-tenant bleed does not occur
 func TestListSchedules_tenantIsolation(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -460,7 +453,6 @@ func TestListSchedules_tenantIsolation(t *testing.T) {
 // 8. TestCreateSchedule_goldCopyCoreReport_Allowed — tenant user can schedule gold-copy core reports
 func TestCreateSchedule_goldCopyCoreReport_Allowed(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 

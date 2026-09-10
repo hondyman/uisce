@@ -35,7 +35,6 @@ func createTestFolder(t *testing.T, repo *reports.Repository, db *sql.DB, tenant
 
 func TestFolderRepository_SiblingNameCollision(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -85,7 +84,6 @@ func TestFolderRepository_SiblingNameCollision(t *testing.T) {
 
 func TestFolderRepository_UserIsolation(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -121,7 +119,6 @@ func TestFolderRepository_UserIsolation(t *testing.T) {
 
 func TestFolderRepository_TenantIsolation(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -152,7 +149,6 @@ func TestFolderRepository_TenantIsolation(t *testing.T) {
 
 func TestFolderRepository_GoldCopyCoreFiling_Allowed(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -198,7 +194,6 @@ func TestFolderRepository_GoldCopyCoreFiling_Allowed(t *testing.T) {
 
 func TestFolderRepository_AddItem_Idempotency(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -232,7 +227,6 @@ func TestFolderRepository_AddItem_Idempotency(t *testing.T) {
 
 func TestFolderRepository_MoveFolder_ForeignParent_Forbidden(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -257,7 +251,6 @@ func TestFolderRepository_MoveFolder_ForeignParent_Forbidden(t *testing.T) {
 
 func TestFolderRepository_DepthLimit_RejectsSixthLevel(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -303,7 +296,6 @@ func TestFolderRepository_DepthLimit_RejectsSixthLevel(t *testing.T) {
 
 func TestFolderRepository_CycleDetection_RejectsDirectAndIndirectCycle(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -333,7 +325,6 @@ func TestFolderRepository_CycleDetection_RejectsDirectAndIndirectCycle(t *testin
 
 func TestFolderRepository_ListFolderReportIDs_ExcludesInactiveOrRepersonalized(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -389,7 +380,6 @@ func TestFolderRepository_ListFolderReportIDs_ExcludesInactiveOrRepersonalized(t
 
 func TestFolderRepository_CrossTenantFiling_Forbidden(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -437,7 +427,6 @@ func TestFolderRepository_CrossTenantFiling_Forbidden(t *testing.T) {
 
 func TestFolderRepository_DeleteFolder_CascadesItemsPreservesReports(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
@@ -499,7 +488,6 @@ func TestFolderRepository_DeleteFolder_CascadesItemsPreservesReports(t *testing.
 
 func TestFolderRepository_RenameFolder_LeavesParentUntouched(t *testing.T) {
 	db := getTestDB(t)
-	defer db.Close()
 	repo := reports.NewRepository(db)
 	ctx := context.Background()
 
