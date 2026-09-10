@@ -17,7 +17,6 @@
 -- semantic term against this binding must fail loud (rule_error), not
 -- silently fall back to the canonical binding's map - see
 -- ResolveSemanticFieldMapForBinding's doc comment.
-BEGIN;
 
 DO $$
 DECLARE
@@ -79,4 +78,3 @@ BEGIN
     END IF;
 END $$;
 
-COMMIT;

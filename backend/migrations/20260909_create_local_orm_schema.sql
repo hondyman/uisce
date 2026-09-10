@@ -16,15 +16,14 @@
 -- This is a third, clearly-scoped thing: dev/proof data for the unified
 -- validation engine, matching the vocabulary the catalog already commits
 -- to. See docs/unified-rule-engine-handoff.md item 10 for the full
--- stratum discussion — this migration resolves nothing about which
--- stratum is canonical for production; it only makes the platform-local
+-- stratum discussion - this migration resolves nothing about which
+-- stratum is canonical for production, it only makes the platform-local
 -- one real.
 
-BEGIN;
 
 CREATE SCHEMA IF NOT EXISTS orm;
 
-CREATE TABLE orm."order" (
+CREATE TABLE IF NOT EXISTS orm."order" (
     id              UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     sec_id          NUMERIC(18,0) NOT NULL,
     side            VARCHAR(10)   NOT NULL,
@@ -44,7 +43,7 @@ CREATE TABLE orm."order" (
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE orm.placement (
+CREATE TABLE IF NOT EXISTS orm.placement (
     id              UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     order_id        UUID          NOT NULL,
     broker_id       VARCHAR(20)   NOT NULL,
@@ -59,7 +58,7 @@ CREATE TABLE orm.placement (
     CONSTRAINT placement_order_id_fkey FOREIGN KEY (order_id) REFERENCES orm."order"(id)
 );
 
-CREATE TABLE orm.order_allocation (
+CREATE TABLE IF NOT EXISTS orm.order_allocation (
     id              UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     order_id        UUID          NOT NULL,
     account_id      VARCHAR(20)   NOT NULL,
@@ -71,9 +70,17 @@ CREATE TABLE orm.order_allocation (
     CONSTRAINT order_allocation_order_id_fkey FOREIGN KEY (order_id) REFERENCES orm."order"(id)
 );
 
-ALTER TABLE orm."order" ADD CONSTRAINT chk_order_target_qty_positive CHECK (target_qty > 0);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'chk_order_target_qty_positive'
+          AND conrelid = 'orm."order"'::regclass
+    ) THEN
+        ALTER TABLE orm."order" ADD CONSTRAINT chk_order_target_qty_positive CHECK (target_qty > 0);
+    END IF;
+END $$;
 
-CREATE TABLE orm.execution (
+CREATE TABLE IF NOT EXISTS orm.execution (
     id              UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     placement_id    UUID          NOT NULL,
     order_id        UUID          NOT NULL,
@@ -91,7 +98,7 @@ CREATE TABLE orm.execution (
     CONSTRAINT execution_order_id_fkey FOREIGN KEY (order_id) REFERENCES orm."order"(id)
 );
 
-CREATE TABLE orm.execution_allocation (
+CREATE TABLE IF NOT EXISTS orm.execution_allocation (
     id                  UUID          NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY,
     execution_id        UUID          NOT NULL,
     order_allocation_id UUID          NOT NULL,
@@ -107,17 +114,16 @@ CREATE TABLE orm.execution_allocation (
 -- "account" BO exists in business_objects for this tenant — this is
 -- minimal reference data the rule needs, analogous to a lookup table,
 -- not a sixth BO.
-CREATE TABLE orm.account (
+CREATE TABLE IF NOT EXISTS orm.account (
     account_id      VARCHAR(20) NOT NULL PRIMARY KEY,
     status          VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
     is_discretionary BOOLEAN    NOT NULL DEFAULT true
 );
 
-CREATE INDEX idx_orm_placement_order ON orm.placement(order_id);
-CREATE INDEX idx_orm_order_allocation_order ON orm.order_allocation(order_id);
-CREATE INDEX idx_orm_execution_placement ON orm.execution(placement_id);
-CREATE INDEX idx_orm_execution_order ON orm.execution(order_id);
-CREATE INDEX idx_orm_execution_allocation_execution ON orm.execution_allocation(execution_id);
-CREATE INDEX idx_orm_execution_allocation_order_allocation ON orm.execution_allocation(order_allocation_id);
+CREATE INDEX IF NOT EXISTS idx_orm_placement_order ON orm.placement(order_id);
+CREATE INDEX IF NOT EXISTS idx_orm_order_allocation_order ON orm.order_allocation(order_id);
+CREATE INDEX IF NOT EXISTS idx_orm_execution_placement ON orm.execution(placement_id);
+CREATE INDEX IF NOT EXISTS idx_orm_execution_order ON orm.execution(order_id);
+CREATE INDEX IF NOT EXISTS idx_orm_execution_allocation_execution ON orm.execution_allocation(execution_id);
+CREATE INDEX IF NOT EXISTS idx_orm_execution_allocation_order_allocation ON orm.execution_allocation(order_allocation_id);
 
-COMMIT;
