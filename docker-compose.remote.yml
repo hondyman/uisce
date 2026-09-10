@@ -108,9 +108,9 @@ services:
     image: temporalio/auto-setup:latest
     container_name: uisce-temporal
     environment:
-      DB: postgres12
+      DB: postgres
       POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PWD: postgres
       POSTGRES_DB: temporal
       POSTGRES_HOST: 100.84.50.65
       POSTGRES_SEEDS: 100.84.50.65
