@@ -180,7 +180,7 @@ export const ReportLibrary: React.FC = () => {
         tId === '00000000-0000-0000-0000-000000000000' ||
         !tId
       );
-      const isFav = Boolean((r as any).is_favorite ?? meta.is_favorite);
+      const isFav = Boolean((r as any).is_favorite);
       const isShared = Boolean(meta.is_shared ?? (r as any).is_public ?? (r as any).is_shared);
       const shareType = (meta.share_type as 'private' | 'team' | 'public') || (isShared ? 'public' : 'private');
       const sharedWith = Array.isArray(meta.shared_with) ? meta.shared_with : [];
@@ -227,7 +227,7 @@ export const ReportLibrary: React.FC = () => {
   const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
-  const [filterType, setFilterType] = useState<'all' | 'favorites' | 'recent' | 'shared' | 'core' | 'custom'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'favorites' | 'recent' | 'shared' | 'core' | 'custom' | 'personal'>('all');
   const [selectedReport, setSelectedReport] = useState<SavedReport | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -243,6 +243,27 @@ export const ReportLibrary: React.FC = () => {
   const [reportToRename, setReportToRename] = useState<SavedReport | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
+
+  // Clone/Duplicate state
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [reportToClone, setReportToClone] = useState<SavedReport | null>(null);
+  const [cloneName, setCloneName] = useState('');
+  const [cloneIsPersonal, setCloneIsPersonal] = useState<boolean>(true);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+
+  // Helper for determining if sharing is permitted on this report
+  const getShareDisabledReason = (report: SavedReport): string | null => {
+    if (report.is_core) {
+      return 'Core reports cannot be shared';
+    }
+    if (!report.is_personal) {
+      return 'Only personal reports can be shared';
+    }
+    if (report.created_by_id && user?.id && report.created_by_id !== user.id) {
+      return 'Only the report author can share this report';
+    }
+    return null;
+  };
 
   // Share state
   const [shareTargetReport, setShareTargetReport] = useState<SavedReport | null>(null);
@@ -273,39 +294,12 @@ export const ReportLibrary: React.FC = () => {
     const report = reports.find(r => r.id === reportId);
     if (!report) return;
     const nextFavorite = !report.is_favorite;
-
-    const nextMetadata = {
-      ...(report.metadata || {}),
-      is_favorite: nextFavorite,
-      folder_id: report.folder_id,
-      share_type: report.share_type,
-      shared_with: report.shared_with,
-      is_shared: report.is_shared,
-      is_core: report.is_core,
-    };
     try {
-      await updateReportMutation.mutateAsync({
-        id: report.id,
-        payload: {
-          id: report.id,
-          name: report.name,
-          template_name: report.name,
-          tenant_id: report.tenant_id || '00000000-0000-0000-0000-000000000000',
-          description: report.description || '',
-          category: report.category || 'general',
-          is_active: true,
-          layout_config: {
-            ...(report.config || {}),
-            metadata: nextMetadata,
-          },
-          definition: {
-            ...(report.config || {}),
-            metadata: nextMetadata,
-          },
-          parameter_schema: report.config?.parameters || {},
-          metadata: nextMetadata,
-        },
-      });
+      if (nextFavorite) {
+        await setFavoriteMutation.mutateAsync(report.id);
+      } else {
+        await removeFavoriteMutation.mutateAsync(report.id);
+      }
       setSnackbar({
         open: true,
         message: nextFavorite ? `Added "${report.name}" to favorites` : `Removed "${report.name}" from favorites`,
@@ -426,44 +420,73 @@ export const ReportLibrary: React.FC = () => {
       setReportToRename(null);
       setSnackbar({ open: true, message: `Report renamed to "${newName}"`, severity: 'success' });
     } catch (err: any) {
-      setRenameError(err?.message || 'Failed to rename report.');
+      if (err?.message?.includes('409') || err?.message?.toLowerCase().includes('already exists') || err?.message?.toLowerCase().includes('conflict')) {
+        setRenameError('A report with this name already exists in this tenant.');
+      } else {
+        setRenameError(err?.message || 'Failed to rename report.');
+      }
     }
   };
 
-  const handleDuplicateReport = async (report: SavedReport) => {
-    try {
-      handleMenuClose();
-      // Ensure unique name by appending timestamp if needed
-      const baseCopyName = `${report.name} (Copy)`;
-      let copyName = baseCopyName;
-      let counter = 1;
-      while (reports.some(r => r.name.toLowerCase() === copyName.toLowerCase())) {
-        copyName = `${baseCopyName} ${++counter}`;
-      }
+  const handleOpenCloneDialog = (report: SavedReport) => {
+    setReportToClone(report);
+    const baseCopyName = `${report.name} (Copy)`;
+    let copyName = baseCopyName;
+    let counter = 1;
+    while (reports.some(r => r.name.toLowerCase() === copyName.toLowerCase())) {
+      copyName = `${baseCopyName} ${++counter}`;
+    }
+    setCloneName(copyName);
+    const isGoldCopy = Boolean(currentTenant?.gold_copy);
+    setCloneIsPersonal(isGoldCopy ? false : true);
+    setCloneError(null);
+    setCloneDialogOpen(true);
+    handleMenuClose();
+  };
 
+  const handleConfirmClone = async () => {
+    if (!reportToClone || !cloneName.trim()) return;
+    const isGoldCopy = Boolean(currentTenant?.gold_copy);
+    const isCallerAdmin = typeof isAdmin === 'function' ? isAdmin() : Boolean(isAdmin);
+    const targetIsPersonal = isGoldCopy ? false : (isCallerAdmin ? cloneIsPersonal : true);
+
+    const trimmedName = cloneName.trim();
+    if (reports.some(r => r.name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+      setCloneError('A report with this name already exists in this tenant.');
+      return;
+    }
+
+    try {
+      setCloneError(null);
       await createReportMutation.mutateAsync({
-        name: copyName,
-        template_name: copyName,
-        tenant_id: report.tenant_id || goldCopyId || '00000000-0000-0000-0000-000000000000',
-        description: report.description || '',
-        definition: report.config || {},
-        layout_config: report.config || {},
-        parameter_schema: report.config?.parameters || {},
-        category: (report as any).category || 'general',
+        name: trimmedName,
+        template_name: trimmedName,
+        tenant_id: currentTenant?.id || reportToClone.tenant_id || goldCopyId || '00000000-0000-0000-0000-000000000000',
+        description: reportToClone.description || '',
+        definition: reportToClone.config || {},
+        layout_config: reportToClone.config || {},
+        parameter_schema: reportToClone.config?.parameters || {},
+        category: (reportToClone as any).category || 'general',
         is_active: true,
-        is_public: report.is_shared,
+        is_personal: targetIsPersonal,
         metadata: {
-          folder_id: report.folder_id,
-          created_by: 'User',
-          is_favorite: false,
-          is_shared: report.is_shared,
-          share_type: report.share_type || 'private',
-          shared_with: report.shared_with || [],
+          folder_id: reportToClone.folder_id,
+          created_by: user?.name || user?.email || 'User',
+          created_by_id: user?.id,
+          is_shared: false,
+          share_type: 'private',
+          shared_with: [],
         },
       });
-      setSnackbar({ open: true, message: `Report duplicated as "${copyName}"`, severity: 'success' });
+      setCloneDialogOpen(false);
+      setReportToClone(null);
+      setSnackbar({ open: true, message: `Report duplicated as "${trimmedName}"`, severity: 'success' });
     } catch (err: any) {
-      setSnackbar({ open: true, message: `Failed to duplicate report: ${err?.message || 'Unknown error'}`, severity: 'error' });
+      if (err?.message?.includes('409') || err?.message?.toLowerCase().includes('already exists') || err?.message?.toLowerCase().includes('conflict')) {
+        setCloneError('A report with this name already exists in this tenant.');
+      } else {
+        setCloneError(err?.message || 'Failed to duplicate report.');
+      }
     }
   };
 
@@ -496,7 +519,8 @@ export const ReportLibrary: React.FC = () => {
     if (filterType === 'favorites' && !report.is_favorite) return false;
     if (filterType === 'shared' && !report.is_shared) return false;
     if (filterType === 'core' && !report.is_core) return false;
-    if (filterType === 'custom' && report.is_core) return false;
+    if (filterType === 'custom' && (report.is_core || report.is_personal)) return false;
+    if (filterType === 'personal' && (!report.is_personal || (report.created_by_id && user?.id && report.created_by_id !== user.id))) return false;
     if (filterType === 'recent' && report.last_run) {
       const daysSinceRun = (Date.now() - new Date(report.last_run).getTime()) / (1000 * 60 * 60 * 24);
       if (daysSinceRun > 7) return false;
@@ -615,14 +639,14 @@ export const ReportLibrary: React.FC = () => {
                 <ListItemText primary="Shared" />
               </ListItemButton>
               <ListItemButton
-                selected={filterType === 'core'}
+                selected={filterType === 'personal'}
                 onClick={() => {
-                  setFilterType('core');
+                  setFilterType('personal');
                   setCurrentFolder(null);
                 }}
               >
-                <ListItemIcon><CoreIcon fontSize="small" /></ListItemIcon>
-                <ListItemText primary="Core Reports" />
+                <ListItemIcon><PersonOutlineIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Personal Reports" />
               </ListItemButton>
               <ListItemButton
                 selected={filterType === 'custom'}
@@ -633,6 +657,16 @@ export const ReportLibrary: React.FC = () => {
               >
                 <ListItemIcon><CustomIcon fontSize="small" /></ListItemIcon>
                 <ListItemText primary="Custom Reports" />
+              </ListItemButton>
+              <ListItemButton
+                selected={filterType === 'core'}
+                onClick={() => {
+                  setFilterType('core');
+                  setCurrentFolder(null);
+                }}
+              >
+                <ListItemIcon><CoreIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Core Reports" />
               </ListItemButton>
             </List>
             <Divider />
@@ -795,35 +829,56 @@ export const ReportLibrary: React.FC = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Rename Report">
-                            <IconButton size="small" onClick={() => handleRenameClick(report)}>
-                              <RenameIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={report.is_core ? "Core reports cannot be renamed" : "Rename Report"}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleRenameClick(report)}
+                                disabled={report.is_core}
+                              >
+                                <RenameIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
-                          <Tooltip title="Share Report">
-                            <IconButton
-                              size="small"
-                              color={report.is_shared ? 'primary' : 'default'}
-                              onClick={() => handleOpenShareDialog(report)}
-                            >
-                              <ShareIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {(() => {
+                            const shareDisabledReason = getShareDisabledReason(report);
+                            return (
+                              <Tooltip title={shareDisabledReason || (report.is_shared ? 'Manage Sharing' : 'Share Report')}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color={report.is_shared ? 'primary' : 'default'}
+                                    onClick={() => handleOpenShareDialog(report)}
+                                    disabled={Boolean(shareDisabledReason)}
+                                  >
+                                    <ShareIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            );
+                          })()}
                           <Tooltip title="Duplicate Report">
                             <span>
                               <IconButton
                                 size="small"
-                                onClick={() => handleDuplicateReport(report)}
+                                onClick={() => handleOpenCloneDialog(report)}
                                 disabled={createReportMutation.isPending}
                               >
                                 <DuplicateIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Delete Report">
-                            <IconButton size="small" color="error" onClick={() => handleDeleteClick(report)}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={report.is_core ? "Core reports cannot be deleted" : "Delete Report"}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteClick(report)}
+                                disabled={report.is_core}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="More options">
                             <IconButton size="small" onClick={(e) => handleMenuOpen(e, report)}>
@@ -891,35 +946,56 @@ export const ReportLibrary: React.FC = () => {
                               <EditIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
-                          <Tooltip title="Rename Report">
-                            <IconButton size="small" onClick={() => handleRenameClick(report)}>
-                              <RenameIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={report.is_core ? "Core reports cannot be renamed" : "Rename Report"}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                onClick={() => handleRenameClick(report)}
+                                disabled={report.is_core}
+                              >
+                                <RenameIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
-                          <Tooltip title="Share Report">
-                            <IconButton
-                              size="small"
-                              color={report.is_shared ? 'primary' : 'default'}
-                              onClick={() => handleOpenShareDialog(report)}
-                            >
-                              <ShareIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                          {(() => {
+                            const shareDisabledReason = getShareDisabledReason(report);
+                            return (
+                              <Tooltip title={shareDisabledReason || (report.is_shared ? 'Manage Sharing' : 'Share Report')}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color={report.is_shared ? 'primary' : 'default'}
+                                    onClick={() => handleOpenShareDialog(report)}
+                                    disabled={Boolean(shareDisabledReason)}
+                                  >
+                                    <ShareIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            );
+                          })()}
                           <Tooltip title="Duplicate Report">
                             <span>
                               <IconButton
                                 size="small"
-                                onClick={() => handleDuplicateReport(report)}
+                                onClick={() => handleOpenCloneDialog(report)}
                                 disabled={createReportMutation.isPending}
                               >
                                 <DuplicateIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
-                          <Tooltip title="Delete Report">
-                            <IconButton size="small" color="error" onClick={() => handleDeleteClick(report)}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                          <Tooltip title={report.is_core ? "Core reports cannot be deleted" : "Delete Report"}>
+                            <span>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleDeleteClick(report)}
+                                disabled={report.is_core}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="More options">
                             <IconButton size="small" onClick={(e) => handleMenuOpen(e, report)}>
@@ -954,10 +1030,27 @@ export const ReportLibrary: React.FC = () => {
           {selectedReport?.is_favorite ? 'Remove from Favorites' : 'Add to Favorites'}
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => handleOpenShareDialog(selectedReport!)}>
-          <ListItemIcon><ShareIcon fontSize="small" /></ListItemIcon>
-          Share
-        </MenuItem>
+        {(() => {
+          if (!selectedReport) return null;
+          const shareDisabledReason = getShareDisabledReason(selectedReport);
+          const item = (
+            <MenuItem
+              disabled={Boolean(shareDisabledReason)}
+              onClick={() => handleOpenShareDialog(selectedReport)}
+            >
+              <ListItemIcon><ShareIcon fontSize="small" /></ListItemIcon>
+              Share
+            </MenuItem>
+          );
+          if (shareDisabledReason) {
+            return (
+              <Tooltip title={shareDisabledReason} placement="left">
+                <div>{item}</div>
+              </Tooltip>
+            );
+          }
+          return item;
+        })()}
         <MenuItem onClick={() => setScheduleDialogOpen(true)}>
           <ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
           Schedule
@@ -966,17 +1059,24 @@ export const ReportLibrary: React.FC = () => {
           <ListItemIcon><EditIcon fontSize="small" /></ListItemIcon>
           Edit
         </MenuItem>
-        <MenuItem onClick={() => handleRenameClick(selectedReport!)}>
+        <MenuItem
+          disabled={selectedReport?.is_core}
+          onClick={() => handleRenameClick(selectedReport!)}
+        >
           <ListItemIcon><RenameIcon fontSize="small" /></ListItemIcon>
           Rename
         </MenuItem>
-        <MenuItem onClick={() => handleDuplicateReport(selectedReport!)}>
+        <MenuItem onClick={() => handleOpenCloneDialog(selectedReport!)}>
           <ListItemIcon><DuplicateIcon fontSize="small" /></ListItemIcon>
           Duplicate
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => handleDeleteClick(selectedReport!)} sx={{ color: 'error.main' }}>
-          <ListItemIcon><DeleteIcon fontSize="small" color="error" /></ListItemIcon>
+        <MenuItem
+          disabled={selectedReport?.is_core}
+          onClick={() => handleDeleteClick(selectedReport!)}
+          sx={{ color: selectedReport?.is_core ? 'text.disabled' : 'error.main' }}
+        >
+          <ListItemIcon><DeleteIcon fontSize="small" color={selectedReport?.is_core ? 'disabled' : 'error'} /></ListItemIcon>
           Delete
         </MenuItem>
       </Menu>
@@ -1238,6 +1338,106 @@ export const ReportLibrary: React.FC = () => {
             startIcon={updateReportMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <RenameIcon />}
           >
             {updateReportMutation.isPending ? 'Saving...' : 'Rename'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Duplicate / Clone Report Dialog */}
+      <Dialog
+        open={cloneDialogOpen}
+        onClose={() => !createReportMutation.isPending && setCloneDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Duplicate Report</DialogTitle>
+        <DialogContent>
+          {cloneError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {cloneError}
+            </Alert>
+          )}
+          <TextField
+            margin="dense"
+            label="Report Name"
+            fullWidth
+            variant="outlined"
+            value={cloneName}
+            onChange={(e) => {
+              setCloneName(e.target.value);
+              setCloneError(null);
+            }}
+            disabled={createReportMutation.isPending}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && cloneName.trim() && !createReportMutation.isPending) {
+                handleConfirmClone();
+              }
+            }}
+            sx={{ mb: 2 }}
+          />
+          {Boolean(currentTenant?.gold_copy) ? (
+            <Alert severity="info" sx={{ mt: 1 }}>
+              Duplicating in Master Gold Copy tenant creates a Core report template.
+            </Alert>
+          ) : (typeof isAdmin === 'function' ? isAdmin() : Boolean(isAdmin)) ? (
+            <FormControl component="fieldset" sx={{ mt: 1.5, display: 'block' }}>
+              <FormLabel component="legend" sx={{ fontSize: '0.875rem', fontWeight: 600, mb: 0.5 }}>
+                Report Visibility
+              </FormLabel>
+              <RadioGroup
+                value={cloneIsPersonal ? 'personal' : 'custom'}
+                onChange={(e) => setCloneIsPersonal(e.target.value === 'personal')}
+              >
+                <FormControlLabel
+                  value="personal"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight={500}>
+                        Personal Report
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Visible only to you until shared.
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{ mb: 1 }}
+                />
+                <FormControlLabel
+                  value="custom"
+                  control={<Radio size="small" />}
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight={500}>
+                        Tenant Custom Report
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Visible to all users in this tenant.
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </RadioGroup>
+            </FormControl>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              This report will be duplicated as your personal report.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setCloneDialogOpen(false)}
+            disabled={createReportMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmClone}
+            disabled={createReportMutation.isPending || !cloneName.trim()}
+            startIcon={createReportMutation.isPending ? <CircularProgress size={16} color="inherit" /> : <DuplicateIcon />}
+          >
+            {createReportMutation.isPending ? 'Duplicating...' : 'Duplicate'}
           </Button>
         </DialogActions>
       </Dialog>

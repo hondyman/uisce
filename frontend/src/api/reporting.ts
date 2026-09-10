@@ -266,12 +266,18 @@ export interface ReportTemplate {
   metadata?: JsonRecord | null;
   createdAt?: string;
   updatedAt?: string;
+  is_favorite?: boolean;
+  is_personal?: boolean;
+  created_by_id?: string;
+  is_core?: boolean;
+  tenant_id?: string;
   [key: string]: unknown;
 }
 
 export interface SaveReportTemplateInput {
   name: string;
   template_name?: string;
+  tenant_id?: string;
   description?: string;
   definition?: JsonRecord;
   metadata?: JsonRecord;
@@ -280,6 +286,7 @@ export interface SaveReportTemplateInput {
   category?: string;
   is_active?: boolean;
   is_public?: boolean;
+  is_personal?: boolean;
   [key: string]: unknown;
 }
 
