@@ -92,13 +92,13 @@ func main() {
 	if containsNullPlaceholder(ddl) {
 		log.Fatalf("MEASURE STILL COMPILES TO NULL - the exact gap this proof exists to close is still open")
 	}
-	fmt.Println("Confirmed: no NULL /* TODO */ placeholder - Gross Notional compiled to real SQL.\n")
+	fmt.Println("Confirmed: no NULL /* TODO */ placeholder - Gross Notional compiled to real SQL.")
 
 	// 4. Apply to real StarRocks.
 	if err := svc.ApplyMaterialization(ctx, preAggID); err != nil {
 		log.Fatalf("ApplyMaterialization (real StarRocks): %v", err)
 	}
-	fmt.Println("Applied to live StarRocks - materialized view created.\n")
+	fmt.Println("Applied to live StarRocks - materialized view created.")
 
 	// 5. Query the real materialized view for real computed values.
 	srDB, err := sql.Open("mysql", starrocksDSN())

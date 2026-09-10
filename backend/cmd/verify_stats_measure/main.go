@@ -115,13 +115,13 @@ func main() {
 	if !strings.Contains(ddl, "STDDEV_SAMP") {
 		log.Fatalf("expected STDDEV_SAMP in generated DDL, got:\n%s", ddl)
 	}
-	fmt.Println("Confirmed: STDEV_S compiled to STDDEV_SAMP(exec_price), no NULL /* TODO */ placeholder.\n")
+	fmt.Println("Confirmed: STDEV_S compiled to STDDEV_SAMP(exec_price), no NULL /* TODO */ placeholder.")
 
 	// 5. Apply to real StarRocks.
 	if err := svc.ApplyMaterialization(ctx, preAggID); err != nil {
 		log.Fatalf("ApplyMaterialization (real StarRocks): %v", err)
 	}
-	fmt.Println("Applied to live StarRocks - materialized view created.\n")
+	fmt.Println("Applied to live StarRocks - materialized view created.")
 
 	// 6. Query the real materialized view.
 	srDB, err := sql.Open("mysql", starrocksDSN())
