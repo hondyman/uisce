@@ -400,6 +400,32 @@ export const useDeleteReportTemplate = () => {
   });
 };
 
+export const useSetReportFavorite = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<void>(`${API_PREFIX}/reports/${id}/favorite`, {
+        method: 'PUT',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'reports'] });
+    },
+  });
+};
+
+export const useRemoveReportFavorite = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<void>(`${API_PREFIX}/reports/${id}/favorite`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'reports'] });
+    },
+  });
+};
+
 // -------------------------------------------------------------------------------------
 // Report preview & parameters
 // -------------------------------------------------------------------------------------

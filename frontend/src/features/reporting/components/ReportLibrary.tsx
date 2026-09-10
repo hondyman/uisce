@@ -66,10 +66,12 @@ import {
   ViewModule as GridViewIcon,
   AccessTime as RecentIcon,
   Person as PersonIcon,
+  PersonOutline as PersonOutlineIcon,
   Group as GroupIcon,
   Public as PublicIcon,
   PlayArrow as PlayArrowIcon,
   DriveFileRenameOutline as RenameIcon,
+  Lock as LockIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -77,6 +79,8 @@ import {
   useDeleteReportTemplate,
   useCreateReportTemplate,
   useUpdateReportTemplate,
+  useSetReportFavorite,
+  useRemoveReportFavorite,
 } from '../../../api/reporting';
 import { useFolders } from '../../../api/explorer';
 import { resolveGoldCopyTenantId, getCachedGoldCopyId } from '../../../utils/goldCopy';
@@ -85,6 +89,7 @@ import {
   CustomIcon,
 } from '../../../components/common/CoreCustomIcons';
 import { useAccess } from '../../../contexts/AccessContext';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // ============================================================================
 // REPORT LIBRARY
@@ -111,6 +116,8 @@ interface SavedReport {
   category?: string;
   metadata?: any;
   is_core?: boolean;
+  is_personal?: boolean;
+  created_by_id?: string;
 }
 
 interface Folder {
@@ -124,6 +131,7 @@ interface Folder {
 export const ReportLibrary: React.FC = () => {
   const navigate = useNavigate();
   const { currentTenant, accessibleTenants } = useAccess();
+  const { user, isAdmin } = useAuth();
   
   // Identify the gold copy master tenant
   const goldCopyTenant = useMemo(() => {
@@ -149,6 +157,8 @@ export const ReportLibrary: React.FC = () => {
   const deleteReportMutation = useDeleteReportTemplate();
   const createReportMutation = useCreateReportTemplate();
   const updateReportMutation = useUpdateReportTemplate();
+  const setFavoriteMutation = useSetReportFavorite();
+  const removeFavoriteMutation = useRemoveReportFavorite();
   
   // Transform API data to component interfaces
   const reports = useMemo<SavedReport[]>(() => {
@@ -170,10 +180,12 @@ export const ReportLibrary: React.FC = () => {
         tId === '00000000-0000-0000-0000-000000000000' ||
         !tId
       );
-      const isFav = Boolean(meta.is_favorite ?? (r as any).is_favorite);
+      const isFav = Boolean((r as any).is_favorite ?? meta.is_favorite);
       const isShared = Boolean(meta.is_shared ?? (r as any).is_public ?? (r as any).is_shared);
       const shareType = (meta.share_type as 'private' | 'team' | 'public') || (isShared ? 'public' : 'private');
       const sharedWith = Array.isArray(meta.shared_with) ? meta.shared_with : [];
+      const isPersonal = Boolean((r as any).is_personal ?? meta.is_personal);
+      const createdById = (r as any).created_by_id || meta.created_by_id || undefined;
 
       return {
         id: r.id,
@@ -195,6 +207,8 @@ export const ReportLibrary: React.FC = () => {
         category: (r as any).category,
         metadata: meta,
         is_core: isCore,
+        is_personal: isPersonal,
+        created_by_id: createdById,
       };
     });
   }, [apiReports, currentTenant, goldCopyTenant, goldCopyId]);
