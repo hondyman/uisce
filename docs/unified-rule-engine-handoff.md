@@ -2362,10 +2362,42 @@ worth recording so the next pass doesn't re-check them:
   57 observed failures for that reason; left untagged as redundant
   rather than tagged for consistency's sake.
 
-**What's still open, precisely** (so the next pass starts from a map,
-not a pile): 14 files' true classification (naming said "integration,"
-several verified hermetic, 2 confirmed hermetic/already-protected this
-pass, most still unconfirmed either way); the
+**Classification pass closed out** (autonomous-loop continuation): checked
+every remaining file from the original 18 speculative tags individually.
+`internal/api/trace_proxy_integration_test.go` and
+`internal/handlers/bundle_handler_integration_test.go` (explicitly an
+"in-memory bundle service" per its own comment) both spin up their own
+`httptest.NewServer`/in-memory services, no external dependency.
+`internal/api/ws_integration_test.go`'s `TestWebSocketEndToEndProfiler`
+is the same self-contained `httptest`-server pattern as the file this
+session already tagged, but in a different package and not confirmed to
+be part of the observed failure set - left untagged (no evidence, not
+"probably fine"). `internal/api/validation_rules_api_integration_test.go`
+has zero test functions at all (its own comment: "Tests removed... no
+longer supported") - contributes nothing to any failure. `internal/rag/integration_test.go`,
+`internal/rules/integration_test.go`, `internal/api/api_chi_integration_test.go`,
+`internal/api/nlq_integration_test.go`, `pkg/bp/trigger_engine_integration_test.go`
+all confirmed via direct `sqlmock.New()`/`httptest.NewServer` calls -
+mocked, hermetic. The two Temporal-named files
+(`temporal-ops/admin/admin_integration_test.go`,
+`internal/temporal/describe_taskqueue_integration_test.go`) build and
+run their own local "mock admin server" subprocess via `os/exec` + a
+free OS-assigned port - genuinely self-contained (no external Temporal
+cluster), but a different failure class from "missing service" (a
+subprocess-build/spawn restriction, if it fails at all) and not
+confirmed present in the observed 57 - left untagged.
+
+**Net result**: of the original 18 files flagged by naming convention,
+4 are now correctly tagged (`internal/bundles/handler_integration_test.go`,
+`internal/handlers/websocket_integration_test.go`,
+`internal/audit/backfill_snapshot_integration_test.go`,
+`internal/api/profiler_batch_integration_test.go` - all individually
+verified against a real, unconditional external dependency), and the
+other 14 are now individually confirmed hermetic, empty, or
+unconfirmed-and-out-of-scope - not "probably fine," each checked. This
+closes the classification task this session set out to do. What's
+still genuinely open is not "which files need tagging" anymore - it's
+the
 12-test websocket cluster's actual root cause (self-contained
 `httptest`-based, so "missing service" was the wrong frame - possibly a
 real concurrency bug in the streaming handler, possibly a CI-runner
