@@ -241,5 +241,134 @@ func TestReportAPI(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
+
+	t.Run("Create Template - Non-admin forced to is_personal=true", func(t *testing.T) {
+		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
+			WillReturnRows(dupRows)
+
+		mock.ExpectExec(`INSERT INTO report_templates`).
+			WithArgs(
+				sqlmock.AnyArg(), // 1: id
+				sqlmock.AnyArg(), // 2: tenant_id
+				"Non-Admin Report", // 3: template_name
+				"",               // 4: description
+				"",               // 5: category
+				sqlmock.AnyArg(), // 6: layout_config
+				sqlmock.AnyArg(), // 7: parameter_schema
+				true,             // 8: is_active
+				false,            // 9: is_public
+				true,             // 10: is_personal (forced to true for non-admin!)
+				sqlmock.AnyArg(), // 11: created_by_id
+				"",               // 12: created_by
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		payload := map[string]interface{}{
+			"template_name": "Non-Admin Report",
+			"is_personal":   false, // Attempting to create tenant-wide report
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-non-admin")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Logf("Create non-admin failed with code %d: %s", w.Code, w.Body.String())
+		}
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var resp reports.ReportTemplate
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		assert.True(t, resp.IsPersonal)
+	})
+
+	t.Run("Create Template - Rejects Pre-baked Sharing", func(t *testing.T) {
+		payload := map[string]interface{}{
+			"template_name": "Shared From Birth",
+			"layout_config": map[string]interface{}{
+				"metadata": map[string]interface{}{
+					"is_shared": true,
+				},
+			},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("Delete Template - 403 on Deleting Gold-Copy Core Report", func(t *testing.T) {
+		goldCopyTenant := "99e99e99-99e9-49e9-89e9-99e99e99e999"
+		clientTenant := "11111111-1111-1111-1111-111111111111"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000010", goldCopyTenant,
+				"Core Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
+
+		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000010", nil)
+		req.Header.Set("X-Tenant-ID", clientTenant)
+		req.Header.Set("X-User-ID", "client-admin")
+		req.Header.Set("X-Admin", "true")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("Delete Template - 403 on Non-Author Deleting Personal Report", func(t *testing.T) {
+		clientTenant := "11111111-1111-1111-1111-111111111111"
+		authorID := "author-456"
+		nonAuthorID := "other-user-789"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000020", clientTenant,
+				"Personal Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, true, authorID, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000020", nil)
+		req.Header.Set("X-Tenant-ID", clientTenant)
+		req.Header.Set("X-User-ID", nonAuthorID)
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
 }
+
 

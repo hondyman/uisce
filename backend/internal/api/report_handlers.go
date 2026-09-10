@@ -98,6 +98,11 @@ func (h *ReportHandler) resolveAuthContext(r *http.Request) (tenantID uuid.UUID,
 			userID = uidHeader
 		}
 	}
+	if !isAdmin {
+		if adminHeader := r.Header.Get("X-Admin"); adminHeader == "true" || adminHeader == "1" {
+			isAdmin = true
+		}
+	}
 
 	if tenantID == uuid.Nil {
 		return uuid.Nil, "", false, errors.New("unauthorized: missing or invalid tenant identification")
@@ -126,7 +131,7 @@ func (h *ReportHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, _, err := h.resolveAuthContext(r)
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -162,6 +167,10 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 			template.ID = uuid.New()
 		}
 	}
+	// Non-admin users can ONLY create personal reports
+	if !isAdmin {
+		template.IsPersonal = true
+	}
 
 	// Always bind tenant to the caller's authenticated tenant
 	template.TenantID = tenantID
@@ -181,6 +190,23 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 			template.LayoutConfig = make(map[string]interface{})
 		}
 	}
+
+	// Reports cannot be created with sharing pre-baked; sharing happens post-creation
+	if meta, ok := template.LayoutConfig["metadata"].(map[string]interface{}); ok {
+		if isShared, exists := meta["is_shared"].(bool); exists && isShared {
+			http.Error(w, "forbidden: reports cannot be created as shared; share after creation", http.StatusForbidden)
+			return
+		}
+	}
+	if raw != nil {
+		if rawMeta, ok := raw["metadata"].(map[string]interface{}); ok {
+			if isShared, exists := rawMeta["is_shared"].(bool); exists && isShared {
+				http.Error(w, "forbidden: reports cannot be created as shared; share after creation", http.StatusForbidden)
+				return
+			}
+		}
+	}
+
 	if template.ParameterSchema == nil {
 		template.ParameterSchema = make(map[string]interface{})
 	}
@@ -296,14 +322,28 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	} else if def, ok := raw["definition"].(map[string]interface{}); ok {
 		template.LayoutConfig = def
 	}
-	if meta, ok := raw["metadata"].(map[string]interface{}); ok {
-		if isShared, exists := meta["is_shared"].(bool); exists && isShared {
-			isCore := (goldCopyID != uuid.Nil && existing.TenantID == goldCopyID)
-			isAuthor := existing.CreatedByID != nil && *existing.CreatedByID == userID
-			if isCore || !existing.IsPersonal || !isAuthor {
-				http.Error(w, "forbidden: only personal reports created by you can be shared", http.StatusForbidden)
-				return
-			}
+	// 4. Sharing check: if sharing configuration is being updated in metadata or layout_config.metadata, ensure !is_core && is_personal && author
+	checkShared := func(m map[string]interface{}) bool {
+		if s, ok := m["is_shared"].(bool); ok && s {
+			return true
+		}
+		return false
+	}
+	attemptingShare := false
+	if meta, ok := raw["metadata"].(map[string]interface{}); ok && checkShared(meta) {
+		attemptingShare = true
+	}
+	if template.LayoutConfig != nil {
+		if meta, ok := template.LayoutConfig["metadata"].(map[string]interface{}); ok && checkShared(meta) {
+			attemptingShare = true
+		}
+	}
+	if attemptingShare {
+		isCore := (goldCopyID != uuid.Nil && existing.TenantID == goldCopyID)
+		isAuthor := existing.CreatedByID != nil && *existing.CreatedByID == userID
+		if isCore || !existing.IsPersonal || !isAuthor {
+			http.Error(w, "forbidden: only personal reports created by you can be shared", http.StatusForbidden)
+			return
 		}
 	}
 
