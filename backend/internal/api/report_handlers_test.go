@@ -27,6 +27,11 @@ func TestReportAPI(t *testing.T) {
 	handler.RegisterRoutes(r)
 
 	t.Run("Create Template", func(t *testing.T) {
+		// Expect duplicate check pre-query
+		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+		mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM report_templates").
+			WillReturnRows(dupRows)
+
 		mock.ExpectExec("INSERT INTO report_templates").
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -51,8 +56,17 @@ func TestReportAPI(t *testing.T) {
 	})
 
 	t.Run("List Templates", func(t *testing.T) {
-		rows := sqlmock.NewRows([]string{"id", "tenant_id", "template_name", "description", "category", "is_active", "is_public", "created_at", "updated_at", "version"}).
-			AddRow("00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000000", "Report 1", "Desc 1", "perf", true, false, time.Now(), time.Now(), 1)
+		rows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_name", "description", "category",
+			"layout_config", "parameter_schema", "is_active", "is_public",
+			"is_personal", "created_by_id", "created_by",
+			"created_at", "updated_at", "version", "is_favorite",
+		}).AddRow(
+			"00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000000",
+			"Report 1", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			true, false, false, nil, nil,
+			time.Now(), time.Now(), 1, false,
+		)
 
 		mock.ExpectQuery("SELECT id, tenant_id, template_name, description, category").
 			WillReturnRows(rows)
@@ -72,4 +86,5 @@ func TestReportAPI(t *testing.T) {
 		require.Len(t, templates, 1)
 		assert.Equal(t, "Report 1", templates[0]["template_name"])
 	})
+
 }

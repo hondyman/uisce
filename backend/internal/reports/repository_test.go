@@ -1,0 +1,469 @@
+package reports_test
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/reports"
+	_ "github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func getTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	if os.Getenv("UISCE_TEST_DB") == "" {
+		t.Skip("Skipping live database integration tests. Set UISCE_TEST_DB=1 to run.")
+	}
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		t.Fatal("UISCE_TEST_DB is set but DATABASE_URL is missing. Please provide a valid database connection string.")
+	}
+
+	db, err := sql.Open("postgres", dbURL)
+	require.NoError(t, err, "failed to open database")
+
+	err = db.Ping()
+	require.NoError(t, err, "failed to connect to database")
+
+	return db
+}
+
+// createTestUser creates an ephemeral app_user record and registers cleanup.
+func createTestUser(t *testing.T, db *sql.DB, tenantID uuid.UUID) string {
+	t.Helper()
+	userID := "test-user-" + uuid.New().String()
+	email := fmt.Sprintf("%s@integration-test.internal", userID)
+
+	_, err := db.Exec(`
+		INSERT INTO app_user (id, email, tenant_id, username, is_active)
+		VALUES ($1, $2, $3, $4, true)
+	`, userID, email, tenantID.String(), userID)
+	require.NoError(t, err, "failed to insert test app_user")
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM app_user WHERE id = $1`, userID)
+	})
+
+	return userID
+}
+
+// createTestTemplate inserts a template directly and registers cleanup.
+func createTestTemplate(t *testing.T, repo *reports.Repository, db *sql.DB, tmpl *reports.ReportTemplate) *reports.ReportTemplate {
+	t.Helper()
+	ctx := context.Background()
+	err := repo.CreateTemplate(ctx, tmpl)
+	require.NoError(t, err, "failed to create template")
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM report_templates WHERE id = $1`, tmpl.ID)
+	})
+
+	return tmpl
+}
+
+func TestRepository_DuplicateNameCaseInsensitive_SameTenant(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	baseName := fmt.Sprintf("Portfolio Summary %s", uuid.New().String()[:8])
+
+	tmpl1 := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: baseName,
+		Category:     "executive",
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl1)
+
+	// Attempt creating another template with differing case in the same tenant
+	tmpl2 := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: strings.ToUpper(baseName),
+		Category:     "executive",
+		IsActive:     true,
+	}
+	err := repo.CreateTemplate(ctx, tmpl2)
+	require.Error(t, err, "expected duplicate report name to fail")
+	assert.True(t, errors.Is(err, reports.ErrConflict), "expected ErrConflict, got: %v", err)
+}
+
+func TestRepository_DuplicateName_DifferentTenant_Allowed(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenant1 := uuid.New()
+	tenant2 := uuid.New()
+	baseName := fmt.Sprintf("Cross-Tenant Report %s", uuid.New().String()[:8])
+
+	tmpl1 := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenant1,
+		TemplateName: baseName,
+		Category:     "operations",
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl1)
+
+	tmpl2 := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenant2,
+		TemplateName: baseName,
+		Category:     "operations",
+		IsActive:     true,
+	}
+	err := repo.CreateTemplate(ctx, tmpl2)
+	require.NoError(t, err, "same report name in a different tenant must succeed")
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM report_templates WHERE id = $1`, tmpl2.ID)
+	})
+}
+
+func TestRepository_DuplicateName_InactiveReport_Allowed(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	baseName := fmt.Sprintf("Decommissioned Report %s", uuid.New().String()[:8])
+
+	// Create an inactive template
+	tmplInactive := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: baseName,
+		Category:     "legacy",
+		IsActive:     false,
+	}
+	createTestTemplate(t, repo, db, tmplInactive)
+
+	// Create an active template with the same name (case-insensitive)
+	tmplActive := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: strings.ToLower(baseName),
+		Category:     "modern",
+		IsActive:     true,
+	}
+	err := repo.CreateTemplate(ctx, tmplActive)
+	require.NoError(t, err, "reusing name of inactive report in same tenant must succeed")
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM report_templates WHERE id = $1`, tmplActive.ID)
+	})
+}
+
+func TestRepository_PersonalReportVisibility_UserIsolation(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userA := createTestUser(t, db, tenantID)
+	userB := createTestUser(t, db, tenantID)
+
+	// 1. User A creates a personal report
+	personalTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("User A Personal %s", uuid.New().String()[:8]),
+		IsPersonal:   true,
+		CreatedByID:  &userA,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, personalTmpl)
+
+	// 2. Tenant-wide report (is_personal = false)
+	sharedTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Tenant Shared %s", uuid.New().String()[:8]),
+		IsPersonal:   false,
+		CreatedByID:  &userA,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, sharedTmpl)
+
+	// User A listing: should see BOTH personal and shared
+	listA, err := repo.ListTemplatesScoped(ctx, tenantID, userA)
+	require.NoError(t, err)
+	foundPersonalA := false
+	foundSharedA := false
+	for _, item := range listA {
+		if item.ID == personalTmpl.ID {
+			foundPersonalA = true
+		}
+		if item.ID == sharedTmpl.ID {
+			foundSharedA = true
+		}
+	}
+	assert.True(t, foundPersonalA, "User A must see their own personal report")
+	assert.True(t, foundSharedA, "User A must see tenant shared report")
+
+	// User B listing: should see shared report, but NOT User A's personal report
+	listB, err := repo.ListTemplatesScoped(ctx, tenantID, userB)
+	require.NoError(t, err)
+	foundPersonalB := false
+	foundSharedB := false
+	for _, item := range listB {
+		if item.ID == personalTmpl.ID {
+			foundPersonalB = true
+		}
+		if item.ID == sharedTmpl.ID {
+			foundSharedB = true
+		}
+	}
+	assert.False(t, foundPersonalB, "User B must NOT see User A's personal report")
+	assert.True(t, foundSharedB, "User B must see tenant shared report")
+}
+
+func TestRepository_FavoritesIsolation_PerUser(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	userA := createTestUser(t, db, tenantID)
+	userB := createTestUser(t, db, tenantID)
+
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Shared Favorited %s", uuid.New().String()[:8]),
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	// User A favorites the report
+	err := repo.SetFavorite(ctx, tenantID, userA, tmpl.ID)
+	require.NoError(t, err)
+
+	// Query as User A: is_favorite should be true
+	listA, err := repo.ListTemplatesScoped(ctx, tenantID, userA)
+	require.NoError(t, err)
+	var foundA *reports.ReportTemplate
+	for i := range listA {
+		if listA[i].ID == tmpl.ID {
+			foundA = &listA[i]
+			break
+		}
+	}
+	require.NotNil(t, foundA)
+	assert.True(t, foundA.IsFavorite, "User A should see report favorited")
+
+	// Query as User B: is_favorite should be false
+	listB, err := repo.ListTemplatesScoped(ctx, tenantID, userB)
+	require.NoError(t, err)
+	var foundB *reports.ReportTemplate
+	for i := range listB {
+		if listB[i].ID == tmpl.ID {
+			foundB = &listB[i]
+			break
+		}
+	}
+	require.NotNil(t, foundB)
+	assert.False(t, foundB.IsFavorite, "User B should NOT see report favorited")
+}
+
+func TestRepository_FavoriteIdempotency(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	user := createTestUser(t, db, tenantID)
+
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Idempotency Test %s", uuid.New().String()[:8]),
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	// Calling SetFavorite multiple times should not error (ON CONFLICT DO NOTHING)
+	require.NoError(t, repo.SetFavorite(ctx, tenantID, user, tmpl.ID))
+	require.NoError(t, repo.SetFavorite(ctx, tenantID, user, tmpl.ID))
+
+	// Calling RemoveFavorite multiple times should not error
+	require.NoError(t, repo.RemoveFavorite(ctx, tenantID, user, tmpl.ID))
+	require.NoError(t, repo.RemoveFavorite(ctx, tenantID, user, tmpl.ID))
+}
+
+func TestRepository_DeleteTemplate_CascadesFavorites(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	user := createTestUser(t, db, tenantID)
+
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Cascade Test %s", uuid.New().String()[:8]),
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	err := repo.SetFavorite(ctx, tenantID, user, tmpl.ID)
+	require.NoError(t, err)
+
+	// Confirm favorite exists in DB
+	var favCount int
+	err = db.QueryRowContext(ctx, `SELECT count(*) FROM report_favorites WHERE template_id = $1`, tmpl.ID).Scan(&favCount)
+	require.NoError(t, err)
+	assert.Equal(t, 1, favCount)
+
+	// Delete the template
+	err = repo.DeleteTemplate(ctx, tmpl.ID)
+	require.NoError(t, err)
+
+	// Confirm foreign key cascade removed the favorite row
+	err = db.QueryRowContext(ctx, `SELECT count(*) FROM report_favorites WHERE template_id = $1`, tmpl.ID).Scan(&favCount)
+	require.NoError(t, err)
+	assert.Equal(t, 0, favCount, "report_favorites row must cascade on template deletion")
+}
+
+func TestRepository_CrossTenantUpdate_Forbidden(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenant1 := uuid.New()
+	tenant2 := uuid.New()
+
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenant1,
+		TemplateName: fmt.Sprintf("Tenant 1 Report %s", uuid.New().String()[:8]),
+		Description:  "Original description",
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	// Attacker from tenant2 attempts to modify tenant1's template
+	attackerUpdate := &reports.ReportTemplate{
+		ID:           tmpl.ID,
+		TenantID:     tenant2, // spoofed/unauthorized tenant
+		TemplateName: "Hijacked Report",
+		Description:  "Attacker payload",
+		IsActive:     true,
+	}
+
+	err := repo.UpdateTemplate(ctx, attackerUpdate)
+	require.Error(t, err, "cross-tenant update must fail")
+	assert.True(t, errors.Is(err, reports.ErrNotFound), "expected ErrNotFound, got: %v", err)
+
+	// Verify original template is untouched
+	unmodified, err := repo.GetTemplate(ctx, tmpl.ID)
+	require.NoError(t, err)
+	assert.Equal(t, tmpl.TemplateName, unmodified.TemplateName)
+	assert.Equal(t, tmpl.Description, unmodified.Description)
+}
+
+func TestRepository_CoreInheritanceFromGoldCopy_PersonalIsolated(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	goldCopyID, err := repo.ResolveGoldCopyTenantID(ctx)
+	require.NoError(t, err, "must be able to resolve gold_copy master tenant")
+
+	clientTenantID := uuid.New()
+	goldCopyUser := createTestUser(t, db, goldCopyID)
+	clientUser := createTestUser(t, db, clientTenantID)
+
+	// 1. Core report in gold_copy tenant (is_personal = false)
+	coreTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     goldCopyID,
+		TemplateName: fmt.Sprintf("Gold Copy Core %s", uuid.New().String()[:8]),
+		IsPersonal:   false,
+		CreatedByID:  &goldCopyUser,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, coreTmpl)
+
+	// 2. Personal report in gold_copy tenant (is_personal = true)
+	goldPersonalTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     goldCopyID,
+		TemplateName: fmt.Sprintf("Gold Copy Personal %s", uuid.New().String()[:8]),
+		IsPersonal:   true,
+		CreatedByID:  &goldCopyUser,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, goldPersonalTmpl)
+
+	// Query as client tenant user
+	clientList, err := repo.ListTemplatesScoped(ctx, clientTenantID, clientUser)
+	require.NoError(t, err)
+
+	foundCore := false
+	foundGoldPersonal := false
+	for _, item := range clientList {
+		if item.ID == coreTmpl.ID {
+			foundCore = true
+		}
+		if item.ID == goldPersonalTmpl.ID {
+			foundGoldPersonal = true
+		}
+	}
+
+	assert.True(t, foundCore, "Client tenant user MUST inherit non-personal core reports from gold_copy tenant")
+	assert.False(t, foundGoldPersonal, "Gold-copy personal reports must NEVER leak into client tenant listings")
+}
+
+func TestRepository_CrossTenantFavoriteInjection_Forbidden(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantA := uuid.New()
+	tenantB := uuid.New()
+	userA := createTestUser(t, db, tenantA)
+
+	// Tenant B owns this template
+	tmplB := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantB,
+		TemplateName: fmt.Sprintf("Tenant B Template %s", uuid.New().String()[:8]),
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmplB)
+
+	// User A in Tenant A attempts to favorite Tenant B's template
+	err := repo.SetFavorite(ctx, tenantA, userA, tmplB.ID)
+	require.Error(t, err, "User in Tenant A cannot favorite a template belonging to Tenant B")
+	assert.True(t, errors.Is(err, reports.ErrNotFound), "expected ErrNotFound, got: %v", err)
+
+	// Verify no row was inserted into report_favorites
+	var count int
+	err = db.QueryRowContext(ctx, `SELECT count(*) FROM report_favorites WHERE template_id = $1`, tmplB.ID).Scan(&count)
+	require.NoError(t, err)
+	assert.Equal(t, 0, count, "No report_favorites row should exist for cross-tenant injection attempt")
+}
+

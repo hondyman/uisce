@@ -31,6 +31,18 @@ func (s *ReportService) ListTemplates(ctx context.Context) ([]ReportTemplate, er
 	return s.repo.ListTemplates(ctx)
 }
 
+func (s *ReportService) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string) ([]ReportTemplate, error) {
+	return s.repo.ListTemplatesScoped(ctx, tenantID, callerUserID)
+}
+
+func (s *ReportService) SetFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
+	return s.repo.SetFavorite(ctx, tenantID, userID, templateID)
+}
+
+func (s *ReportService) RemoveFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
+	return s.repo.RemoveFavorite(ctx, tenantID, userID, templateID)
+}
+
 func (s *ReportService) UpdateTemplate(ctx context.Context, template *ReportTemplate) error {
 	return s.repo.UpdateTemplate(ctx, template)
 }
@@ -38,3 +50,4 @@ func (s *ReportService) UpdateTemplate(ctx context.Context, template *ReportTemp
 func (s *ReportService) DeleteTemplate(ctx context.Context, id uuid.UUID) error {
 	return s.repo.DeleteTemplate(ctx, id)
 }
+
