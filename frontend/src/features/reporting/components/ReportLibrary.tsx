@@ -82,7 +82,7 @@ import {
   useSetReportFavorite,
   useRemoveReportFavorite,
 } from '../../../api/reporting';
-import { useFolders } from '../../../api/explorer';
+import { useReportFolders } from '../../../api/reportFolders';
 import { resolveGoldCopyTenantId, getCachedGoldCopyId } from '../../../utils/goldCopy';
 import {
   CoreIcon,
@@ -153,7 +153,7 @@ export const ReportLibrary: React.FC = () => {
 
   // --- Real API Data ---
   const { data: apiReports, isLoading: isLoadingReports } = useReportTemplates();
-  const { data: apiFolders, isLoading: isLoadingFolders } = useFolders();
+  const { data: apiFolders, isLoading: isLoadingFolders } = useReportFolders();
   const deleteReportMutation = useDeleteReportTemplate();
   const createReportMutation = useCreateReportTemplate();
   const updateReportMutation = useUpdateReportTemplate();
@@ -218,9 +218,9 @@ export const ReportLibrary: React.FC = () => {
     return apiFolders.map(f => ({
       id: f.id,
       name: f.name,
-      parent_id: f.parentId || undefined,
+      parent_id: f.parent_id || undefined,
       created_by: 'User',
-      report_count: f.items ? f.items.filter(i => i.itemType === 'workbook').length : 0,
+      report_count: f.report_count || 0,
     }));
   }, [apiFolders]);
   

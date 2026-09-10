@@ -332,6 +332,3 @@ var SeverityThresholds = map[string]int{
 	"low":      3,
 }
 
-// SystemUserID is the sentinel user ID for platform-level operations that are
-// not attributed to a specific human user.
-var SystemUserID = uuid.Nil

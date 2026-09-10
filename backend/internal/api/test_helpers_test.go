@@ -3,9 +3,16 @@ package api_test
 import (
 	"context"
 	"net/http"
+	"os"
 
 	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+func init() {
+	if os.Getenv("API_TOKEN_ENCRYPTION_KEY") == "" {
+		_ = os.Setenv("API_TOKEN_ENCRYPTION_KEY", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	}
+}
 
 // withAuth injects a mock AuthInfo into the request context for testing security-aware handlers.
 func withAuth(r *http.Request, tenantID string) *http.Request {

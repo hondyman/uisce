@@ -49,7 +49,46 @@ func (s *ReportService) UpdateTemplate(ctx context.Context, template *ReportTemp
 	return s.repo.UpdateTemplate(ctx, template)
 }
 
+func (s *ReportService) Repo() *Repository {
+	return s.repo
+}
+
 func (s *ReportService) DeleteTemplate(ctx context.Context, id uuid.UUID) error {
 	return s.repo.DeleteTemplate(ctx, id)
 }
+
+// Folder operations delegating to folder repository
+
+func (s *ReportService) CreateFolder(ctx context.Context, folder *ReportFolder) error {
+	return s.repo.CreateFolder(ctx, folder)
+}
+
+func (s *ReportService) RenameFolder(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID, newName string) error {
+	return s.repo.RenameFolder(ctx, tenantID, userID, folderID, newName)
+}
+
+func (s *ReportService) MoveFolder(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID, newParentID *uuid.UUID) error {
+	return s.repo.MoveFolder(ctx, tenantID, userID, folderID, newParentID)
+}
+
+func (s *ReportService) DeleteFolder(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID) error {
+	return s.repo.DeleteFolder(ctx, tenantID, userID, folderID)
+}
+
+func (s *ReportService) ListFolders(ctx context.Context, tenantID uuid.UUID, userID string) ([]ReportFolder, error) {
+	return s.repo.ListFolders(ctx, tenantID, userID)
+}
+
+func (s *ReportService) AddReportToFolder(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID, templateID uuid.UUID) error {
+	return s.repo.AddReportToFolder(ctx, tenantID, userID, folderID, templateID)
+}
+
+func (s *ReportService) RemoveReportFromFolder(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID, templateID uuid.UUID) error {
+	return s.repo.RemoveReportFromFolder(ctx, tenantID, userID, folderID, templateID)
+}
+
+func (s *ReportService) ListFolderReportIDs(ctx context.Context, tenantID uuid.UUID, userID string, folderID uuid.UUID) ([]uuid.UUID, error) {
+	return s.repo.ListFolderReportIDs(ctx, tenantID, userID, folderID)
+}
+
 

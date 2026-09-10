@@ -26,6 +26,19 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/v1/reports", func(r chi.Router) {
 		r.Get("/", h.ListTemplates)
 		r.Post("/", h.CreateTemplate)
+
+		// Folder subroutes registered BEFORE /{id} to prevent Chi matching "folders" as {id}
+		r.Route("/folders", func(fr chi.Router) {
+			fr.Get("/", h.ListFolders)
+			fr.Post("/", h.CreateFolder)
+			fr.Put("/{id}", h.RenameFolder)
+			fr.Post("/{id}/move", h.MoveFolder)
+			fr.Delete("/{id}", h.DeleteFolder)
+			fr.Get("/{id}/items", h.ListFolderItems)
+			fr.Post("/{id}/items", h.AddFolderItem)
+			fr.Delete("/{id}/items/{templateId}", h.RemoveFolderItem)
+		})
+
 		r.Get("/{id}", h.GetTemplate)
 		r.Put("/{id}", h.UpdateTemplate)
 		r.Patch("/{id}", h.UpdateTemplate)

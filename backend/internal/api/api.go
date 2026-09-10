@@ -200,7 +200,6 @@ type Server struct {
 	WriteHandler      *handlers.WriteHandler
 	MCPHandler        *handlers.MCPHandler
 	IgniteClient      *infrastructure.IgniteClient
-	FolderHandler     *handlers.FolderHandler
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
 
@@ -1397,11 +1396,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	semanticTermsHandler := NewSemanticTermsHandler(db, schedulerSecurityDeps)
 	// Registration moved to /api group
 
-	// Initialize Folder Service and Handler
-	folderService := services.NewFolderService(sqlxDB)
-	folderHandler := handlers.NewFolderHandler(folderService)
-	srv.FolderHandler = folderHandler
-	folderHandler.RegisterRoutes(r)
 
 	// Initialize Graph-Native Lineage Service (Phase 12)
 	// sqlRepo already created above

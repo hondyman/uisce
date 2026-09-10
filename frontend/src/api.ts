@@ -509,15 +509,11 @@ export function logAccessDeniedAttempt(assetType: string, assetId: string, reaso
 }
 
 export function listFolders(): Promise<FullFolder[]> {
-  return fetchAPI('/folders');
+  return Promise.resolve([]);
 }
 
-export function addItemToFolder(folderId: string, itemId: string, itemType: 'query' | 'workbook'): Promise<void> {
-  return fetchAPI(`/folders/${folderId}/items`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ item_id: itemId, item_type: itemType }),
-  });
+export function addItemToFolder(_folderId: string, _itemId: string, _itemType: 'query' | 'workbook'): Promise<void> {
+  return Promise.resolve();
 }
 
 export function listWorkbooks(params: { scope: 'mine' | 'shared' | 'all' }): Promise<Workbook[]> {
