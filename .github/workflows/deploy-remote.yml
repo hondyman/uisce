@@ -1,75 +1,93 @@
 name: Deploy Remote
 
 on:
-  workflow_dispatch: {}
+  push:
+    branches:
+      - main
+    paths:
+      - 'trino/**'
+      - 'docker-compose.remote.yml'
+      - 'scripts/deploy*'
+      - 'backend/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  actions: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      HAS_SSH_KEY: ${{ secrets.REMOTE_SSH_PRIVATE_KEY != '' }}
+      HAS_SSH_PASSWORD: ${{ secrets.REMOTE_SSH_PASSWORD != '' }}
+      HAS_TRINO_VERIFY: ${{ (secrets.TRINO_USER != '' && secrets.TRINO_PASSWORD != '') || secrets.REMOTE_TRINO_HOST != '' }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Validate required secrets
-      run: |
-        if [ -z "${{ secrets.REMOTE_SSH_HOST }}" ]; then echo "ERROR: REMOTE_SSH_HOST secret not set" && exit 1; fi
-        if [ -z "${{ secrets.REMOTE_SSH_PRIVATE_KEY }}" ]; then echo "ERROR: REMOTE_SSH_PRIVATE_KEY secret not set" && exit 1; fi
-        # REMOTE_SSH_PATH used to silently default to ~/semlayer if unset
-        # (both here and in the deploy scripts) - on the actual remote host
-        # that path resolves to a different repository checkout entirely,
-        # on a feature branch, with dozens of uncommitted files. This
-        # workflow runs 'git reset --hard' against REMOTE_SSH_PATH; a wrong
-        # default silently hard-resets the wrong repo. Fail loud instead.
-        if [ -z "${{ secrets.REMOTE_SSH_PATH }}" ]; then echo "ERROR: REMOTE_SSH_PATH secret not set - refusing to default, see comment" && exit 1; fi
+      - name: Validate required secrets
+        env:
+          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
+          REMOTE_SSH_PRIVATE_KEY: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
+          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
+        run: |
+          missing=0
+          [ -z "$REMOTE_SSH_HOST" ] && { echo "ERROR: REMOTE_SSH_HOST secret not set"; missing=1; }
+          [ -z "$REMOTE_SSH_PRIVATE_KEY" ] && { echo "ERROR: REMOTE_SSH_PRIVATE_KEY secret not set"; missing=1; }
+          [ -z "$REMOTE_SSH_PATH" ] && { echo "ERROR: REMOTE_SSH_PATH secret not set - refusing to default (was ~/semlayer)"; missing=1; }
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All required secrets present."
 
-    - name: Start ssh-agent and add key (if provided)
-      if: ${{ secrets.REMOTE_SSH_PRIVATE_KEY != '' }}
-      uses: webfactory/ssh-agent@v0.8.1
-      with:
-        ssh-private-key: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
+      - name: Start ssh-agent and add key
+        if: env.HAS_SSH_KEY == 'true'
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.REMOTE_SSH_PRIVATE_KEY }}
 
-    - name: Add remote to known_hosts (optional hardening)
-      if: ${{ secrets.REMOTE_SSH_HOST != '' }}
-      run: |
-        ssh-keyscan -p "${{ secrets.REMOTE_SSH_PORT || '22' }}" "${{ secrets.REMOTE_SSH_HOST }}" >> ~/.ssh/known_hosts || true
+      - name: Add remote to known_hosts
+        if: env.HAS_SSH_KEY == 'true'
+        env:
+          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
+          REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
+        run: ssh-keyscan -p "$REMOTE_SSH_PORT" "$REMOTE_SSH_HOST" >> ~/.ssh/known_hosts || true
 
-    - name: Run deploy script on remote (key-based)
-      if: ${{ secrets.REMOTE_SSH_PRIVATE_KEY != '' }}
-      env:
-        REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
-        REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
-        REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
-        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
-      run: |
-        chmod +x scripts/deploy_remote.sh
-        ./scripts/deploy_remote.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
+      - name: Run deploy script on remote (key-based)
+        if: env.HAS_SSH_KEY == 'true'
+        env:
+          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
+          REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
+          REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
+          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
+        run: |
+          chmod +x scripts/deploy_remote.sh
+          ./scripts/deploy_remote.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
 
-    - name: Run deploy script on remote (password-based fallback)
-      if: ${{ secrets.REMOTE_SSH_PRIVATE_KEY == '' && secrets.REMOTE_SSH_PASSWORD != '' }}
-      env:
-        REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
-        REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
-        REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
-        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
-        REMOTE_SSH_PASSWORD: ${{ secrets.REMOTE_SSH_PASSWORD }}
-      run: |
-        sudo apt-get update && sudo apt-get install -y sshpass
-        chmod +x scripts/deploy_remote_password.sh
-        ./scripts/deploy_remote_password.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_PASSWORD" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
+      - name: Run deploy script on remote (password fallback)
+        if: env.HAS_SSH_KEY != 'true' && env.HAS_SSH_PASSWORD == 'true'
+        env:
+          REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
+          REMOTE_SSH_PASSWORD: ${{ secrets.REMOTE_SSH_PASSWORD }}
+          REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
+          REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
+          REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y sshpass
+          chmod +x scripts/deploy_remote_password.sh
+          ./scripts/deploy_remote_password.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_PASSWORD" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
 
-    - name: Trigger Verify Snapshot Backfill (post-deploy)
-      if: ${{ (secrets.TRINO_USER != '' && secrets.TRINO_PASSWORD != '') || secrets.REMOTE_TRINO_HOST != '' }}
-      uses: actions/github-script@v6
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          await github.actions.createWorkflowDispatch({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'verify-snapshot-backfill.yml',
-            ref: 'main'
-          });
-          core.info('Triggered verify-snapshot-backfill workflow.');
+      - name: Trigger Verify Snapshot Backfill (post-deploy)
+        if: env.HAS_TRINO_VERIFY == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'verify-snapshot-backfill.yml',
+              ref: 'main'
+            });
+            core.info('Triggered verify-snapshot-backfill workflow.');
 
-    - name: Success
-      run: echo "Remote deploy + optional verification trigger completed"
+      - name: Success
+        run: echo "Remote deploy + optional verification trigger completed"
