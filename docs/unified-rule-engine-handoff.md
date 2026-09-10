@@ -2321,8 +2321,28 @@ env var wiring and local test behavior both check out, but "compiles
 and passes locally" isn't the same claim as "passes in the real
 workflow," stated honestly rather than assumed).
 
+**Two more files verified and moved** (autonomous-loop continuation,
+same session): `internal/audit/backfill_snapshot_integration_test.go`
+(`t.Fatal("DATABASE_URL must be set...")` if unset - a real, if
+hard-failing rather than skipping, Postgres dependency) and
+`internal/api/profiler_batch_integration_test.go` (`sql.Open("postgres",
+dsn)` directly). Both checked for shared exported symbols other files
+in their package might depend on (none found - the `internal/ops`
+mistake above doesn't repeat here) before tagging. `go build ./...`,
+`go vet ./...`, `go build -tags=integration ./...` all still clean;
+both packages' non-integration tests confirmed excluded from the
+default build (`go test -run TestBackfillSnapshotsIntegration|TestProfilerE2E`
+-> "no tests to run" under the default tag set, as intended).
+`integration-tests-backend`'s test scope extended to include both.
+**Caveat repeated deliberately**: confirmed to compile, exclude
+correctly, and read the right env var - not confirmed to actually pass
+against the CI job's blank `postgres:15` container, which has no schema/
+tables loaded. `backfill_snapshot`'s test may need real tables this job
+doesn't yet provision; that's the next thing to check once this runs in
+real CI, not assumed clean.
+
 **What's still open, precisely** (so the next pass starts from a map,
-not a pile): 16 files' true classification (naming said "integration,"
+not a pile): 14 files' true classification (naming said "integration,"
 several verified hermetic, most still unconfirmed either way); the
 12-test websocket cluster's actual root cause (self-contained
 `httptest`-based, so "missing service" was the wrong frame - possibly a

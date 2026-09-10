@@ -168,7 +168,7 @@ jobs:
       working-directory: backend
       env:
         DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
-      run: go test -tags=integration -v ./internal/bundles/... ./internal/handlers/...
+      run: go test -tags=integration -v ./internal/bundles/... ./internal/handlers/... ./internal/audit/... ./internal/api/...
 
   build-frontend:
     name: Build Frontend
