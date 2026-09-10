@@ -196,3 +196,26 @@ backend/internal/catalog/sti_column_scanner_test.go
 backend/internal/catalog/subtype_semantic_linker_test.go
 backend/internal/catalog/sti_e2e_test.go
 ```
+
+---
+
+## Engineering Discipline & Process Invariants
+
+### 1. Mandatory Failures Reporting in Every Checkpoint
+Every turn and checkpoint summary MUST contain a dedicated section:
+`### Failures Encountered & Remediations Applied`
+- If tests, commands, or checks failed, explicitly record: what failed, the exact error/exit code, the root cause, and the exact remediation applied.
+- If no failures occurred during the turn, explicitly state: `"None"`. Silent omissions or hiding intermediate failures/fixes is strictly forbidden.
+
+### 2. Database Access & Connection Strings
+- ZERO improvised connection strings (e.g. `sslmode=disable` or inline user/password overrides).
+- All live database access and integration tests MUST strictly use the established `.env` mTLS configuration:
+  `UISCE_TEST_DB=1 DATABASE_URL="postgres://postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslcert=/Users/eganpj/.uisce/certs/postgres-client.crt&sslkey=/Users/eganpj/.uisce/certs/postgres-client.key&sslrootcert=/Users/eganpj/.uisce/certs/ca.crt"`
+
+### 3. Git Operations & Destructive Actions
+- NEVER execute destructive git commands (`git checkout --`, `git reset`, `git stash`) without explicit, upfront user confirmation.
+- Keep commits atomic and isolated: UI/UX changes, bugfixes, and test infrastructure must be committed separately with accurate descriptions.
+
+### 4. Test Attribution & Accuracy
+- Mocked UI-contract tests must NEVER be labeled or summarized as verifying backend security invariants (e.g., identity resolution or isolation). State clearly what is mocked and where real security coverage lives (e.g., in the live-DB Go integration suite).
+
