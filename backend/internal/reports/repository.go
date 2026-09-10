@@ -297,68 +297,6 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 	return templates, nil
 }
 
-// ListTemplates returns all active templates for backward compatibility.
-func (r *Repository) ListTemplates(ctx context.Context) ([]ReportTemplate, error) {
-	query := `
-		SELECT id, tenant_id, template_name, description, category,
-		       layout_config, parameter_schema,
-		       is_active, is_public, is_personal, created_by_id, created_by,
-		       created_at, updated_at, version, false AS is_favorite
-		FROM report_templates
-		ORDER BY template_name
-	`
-
-	rows, err := r.db.QueryContext(ctx, query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list templates: %w", err)
-	}
-	defer rows.Close()
-
-	var templates []ReportTemplate
-	for rows.Next() {
-		var tmpl ReportTemplate
-		var layoutJSON, paramJSON []byte
-		var createdByID sql.NullString
-		var createdBy sql.NullString
-
-		if err := rows.Scan(
-			&tmpl.ID,
-			&tmpl.TenantID,
-			&tmpl.TemplateName,
-			&tmpl.Description,
-			&tmpl.Category,
-			&layoutJSON,
-			&paramJSON,
-			&tmpl.IsActive,
-			&tmpl.IsPublic,
-			&tmpl.IsPersonal,
-			&createdByID,
-			&createdBy,
-			&tmpl.CreatedAt,
-			&tmpl.UpdatedAt,
-			&tmpl.Version,
-			&tmpl.IsFavorite,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan template: %w", err)
-		}
-
-		if createdByID.Valid {
-			tmpl.CreatedByID = &createdByID.String
-		}
-		if createdBy.Valid {
-			tmpl.CreatedBy = createdBy.String
-		}
-		if len(layoutJSON) > 0 {
-			_ = json.Unmarshal(layoutJSON, &tmpl.LayoutConfig)
-		}
-		if len(paramJSON) > 0 {
-			_ = json.Unmarshal(paramJSON, &tmpl.ParameterSchema)
-		}
-		templates = append(templates, tmpl)
-	}
-
-	return templates, nil
-}
 
 // SetFavorite idempotently favorites a report template for a user within their tenant.
 // Uses INSERT ... SELECT FROM report_templates with the exact visibility predicate matching ListTemplatesScoped:
