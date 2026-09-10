@@ -15,6 +15,7 @@
     "test:phase4": "node e2e/verify_phase4.mjs",
     "test:e2e:folders": "node e2e/verify_phase4_folders.mjs",
     "test:e2e:schedules": "node e2e/verify_phase4_schedules.mjs",
+    "test:e2e:search": "node e2e/verify_search.mjs",
     "lint:react-hooks": "eslint 'src/**/*.{js,ts,jsx,tsx}' --rule 'react-hooks/rules-of-hooks:error' --rule 'react-hooks/exhaustive-deps:warn'",
     "lint:hooks": "eslint 'src/**/*.{js,ts,jsx,tsx}' || true",
     "lint": "eslint .",
