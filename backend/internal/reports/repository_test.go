@@ -467,3 +467,58 @@ func TestRepository_CrossTenantFavoriteInjection_Forbidden(t *testing.T) {
 	assert.Equal(t, 0, count, "No report_favorites row should exist for cross-tenant injection attempt")
 }
 
+func TestRepository_FavoriteGoldCopyCoreReport_Allowed(t *testing.T) {
+	db := getTestDB(t)
+	defer db.Close()
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	goldCopyID, err := repo.ResolveGoldCopyTenantID(ctx)
+	require.NoError(t, err, "must be able to resolve gold_copy master tenant")
+
+	clientTenantID := uuid.New()
+	userA := createTestUser(t, db, clientTenantID)
+	userB := createTestUser(t, db, clientTenantID)
+
+	// Create a core report in gold-copy tenant
+	coreTmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     goldCopyID,
+		TemplateName: fmt.Sprintf("Gold Copy Favorite Core %s", uuid.New().String()[:8]),
+		IsPersonal:   false,
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, coreTmpl)
+
+	// User A in client tenant favorites the inherited core report
+	err = repo.SetFavorite(ctx, clientTenantID, userA, coreTmpl.ID)
+	require.NoError(t, err, "tenant user MUST be able to favorite an inherited gold-copy core report")
+
+	// Verify User A listing shows is_favorite = true
+	listA, err := repo.ListTemplatesScoped(ctx, clientTenantID, userA)
+	require.NoError(t, err)
+	var foundA *reports.ReportTemplate
+	for i := range listA {
+		if listA[i].ID == coreTmpl.ID {
+			foundA = &listA[i]
+			break
+		}
+	}
+	require.NotNil(t, foundA, "core report should appear in User A listing")
+	assert.True(t, foundA.IsFavorite, "User A should see core report as favorite")
+
+	// Verify User B listing shows is_favorite = false
+	listB, err := repo.ListTemplatesScoped(ctx, clientTenantID, userB)
+	require.NoError(t, err)
+	var foundB *reports.ReportTemplate
+	for i := range listB {
+		if listB[i].ID == coreTmpl.ID {
+			foundB = &listB[i]
+			break
+		}
+	}
+	require.NotNil(t, foundB, "core report should appear in User B listing")
+	assert.False(t, foundB.IsFavorite, "User B should NOT see core report as favorite")
+}
+
+

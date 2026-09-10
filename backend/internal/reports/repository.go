@@ -217,7 +217,8 @@ func (r *Repository) ResolveGoldCopyTenantID(ctx context.Context) (uuid.UUID, er
 }
 
 // ListTemplatesScoped lists report templates for the caller with personal-report visibility filtering,
-// core report inheritance from the server-resolved gold_copy tenant, and per-caller favorite state.
+// core report inheritance from the server-resolved gold_copy tenant, is_active = true filter,
+// and per-caller favorite state via LEFT JOIN on report_favorites.
 func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string) ([]ReportTemplate, error) {
 	goldCopyID, err := r.ResolveGoldCopyTenantID(ctx)
 	if err != nil {
@@ -234,9 +235,10 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 		FROM report_templates t
 		LEFT JOIN report_favorites f 
 		       ON f.template_id = t.id 
-		      AND f.tenant_id = t.tenant_id 
+		      AND f.tenant_id = $2
 		      AND f.user_id = $1
 		WHERE t.tenant_id IN ($2, $3)
+		  AND t.is_active = true
 		  AND (t.is_personal = false OR t.created_by_id = $1)
 		ORDER BY t.template_name
 	`
@@ -246,6 +248,7 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 		return nil, fmt.Errorf("failed to list scoped templates: %w", err)
 	}
 	defer rows.Close()
+
 
 
 	var templates []ReportTemplate
@@ -358,32 +361,51 @@ func (r *Repository) ListTemplates(ctx context.Context) ([]ReportTemplate, error
 }
 
 // SetFavorite idempotently favorites a report template for a user within their tenant.
-// Uses INSERT ... SELECT FROM report_templates to guarantee the template belongs to the caller's tenant.
+// Uses INSERT ... SELECT FROM report_templates with the exact visibility predicate matching ListTemplatesScoped:
+// caller can only favorite a visible report (their tenant or gold-copy core, and not someone else's personal report).
 func (r *Repository) SetFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
+	goldCopyID, err := r.ResolveGoldCopyTenantID(ctx)
+	if err != nil {
+		goldCopyID = tenantID
+	}
+
 	query := `
 		INSERT INTO report_favorites (tenant_id, user_id, template_id)
-		SELECT $1, $2, id FROM report_templates
-		WHERE id = $3 AND tenant_id = $1
+		SELECT $1, $2, t.id
+		FROM report_templates t
+		WHERE t.id = $3
+		  AND t.tenant_id IN ($1, $4)
+		  AND t.is_active = true
+		  AND (t.is_personal = false OR t.created_by_id = $2)
 		ON CONFLICT (tenant_id, user_id, template_id) DO NOTHING
 	`
-	res, err := r.db.ExecContext(ctx, query, tenantID, userID, templateID)
+	_, err = r.db.ExecContext(ctx, query, tenantID, userID, templateID, goldCopyID)
 	if err != nil {
 		return fmt.Errorf("failed to set favorite: %w", err)
 	}
 
-	// Verify template exists in this tenant
-	var exists bool
-	err = r.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM report_templates WHERE id = $1 AND tenant_id = $2)`, templateID, tenantID).Scan(&exists)
+	// Verify template was visible to caller
+	var isVisible bool
+	checkQuery := `
+		SELECT EXISTS(
+			SELECT 1 FROM report_templates t
+			WHERE t.id = $1
+			  AND t.tenant_id IN ($2, $3)
+			  AND t.is_active = true
+			  AND (t.is_personal = false OR t.created_by_id = $4)
+		)
+	`
+	err = r.db.QueryRowContext(ctx, checkQuery, templateID, tenantID, goldCopyID, userID).Scan(&isVisible)
 	if err != nil {
-		return fmt.Errorf("failed to verify template: %w", err)
+		return fmt.Errorf("failed to verify template visibility: %w", err)
 	}
-	if !exists {
-		return fmt.Errorf("%w: report template %s not found in tenant %s", ErrNotFound, templateID, tenantID)
+	if !isVisible {
+		return fmt.Errorf("%w: report template %s not found or not accessible for tenant %s", ErrNotFound, templateID, tenantID)
 	}
 
-	_ = res
 	return nil
 }
+
 
 // RemoveFavorite idempotently removes a report template favorite for a user within their tenant.
 func (r *Repository) RemoveFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
