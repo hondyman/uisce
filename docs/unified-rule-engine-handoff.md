@@ -2094,3 +2094,107 @@ page (see item 56).
   file's four call sites - if another part of the codebase does its own
   `MapScan` into a generic map and compares the result against a string,
   it likely has the identical latent bug, unaudited outside this file.
+
+## Session 13 addendum (2026-09-09, continued a tenth time) - both merge-gate security questions closed; PR #38's CI verdict
+
+### 56. `POST /calc/preview` SQL injection - confirmed live, fixed
+Flagged as a background task in an earlier session, never verified as
+mounted-and-reachable vs. dead code. Confirmed this session:
+`registerCalculationRoutes` (`internal/api/api.go`) mounts
+`CalcHandler.Preview` at `POST /calc/preview`; `frontend/src/components/CalcFieldModal.tsx`
+actively calls it. `req.SQLExpr` was interpolated directly into
+`"SELECT %s as result LIMIT %d"` via `fmt.Sprintf` - any authenticated
+caller could run arbitrary SQL, no tenant scoping in the query at all
+(cross-tenant reads via subquery/UNION, destructive DML).
+
+Fixed with `validateCalcSQLExpr` (`internal/handlers/calc_handler.go`):
+a character allowlist plus whole-word keyword blocking. The first pass
+used raw `strings.Contains` for the keyword check and wrongly rejected
+the legitimate `AVG(exec_price)` for containing the substring `exec` -
+caught by this fix's own test (`calc_handler_test.go`) before it
+shipped, fixed with word-boundary matching instead. This is explicitly
+the "inherently-fragile allowlist" interim option this document already
+named as legitimate under time pressure - the real fix (stop accepting
+raw SQL from the client entirely, via either `internal/rules/vm`'s real
+expression parser or a validated reference to a pre-registered calc
+field) is flagged inline in the code as a follow-up, not attempted here.
+
+### 57. `ALLOW_CLIENT_TENANT_HEADER_FALLBACK` / Keycloak claims - verified, nothing to fix
+The other merge-gate item from item 25. Searched every committed `.env`,
+GitHub Actions workflow, and docker-compose file in the repo: the flag
+is unset everywhere, so any deployment built from this repo's tracked
+config has it off by default. Read `infrastructure/keycloak/uisce-realm.json`
+directly: a real `tenant-id-mapper` (`oidc-usermodel-attribute-mapper`,
+`user.attribute=tenant_id` -> claim `tenant_id`) is configured on the
+`semlayer-frontend` client. The reason a prior session's (and this
+session's own) test admin login carried no `tenant_id` claim is that
+`global_admin` users are intentionally tenant-less - they select a
+tenant via `X-Tenant-ID` instead, which `auth_context.go`'s fallback
+logic already gates on verified role claims (`global_admin`/`global_ops`),
+not on the env flag; only non-admin callers are gated by
+`ALLOW_CLIENT_TENANT_HEADER_FALLBACK`, and that path is closed by
+default everywhere. Design was already correct - this item closes with
+nothing to fix, which is itself the useful finding: a flagged risk that
+verification retired rather than confirmed.
+
+### 58. PR #38's CI: not a regression - a pre-existing condition, confirmed against `main` directly
+A background-loop tick this session initially read PR #38's `Build
+Backend`/`backend-tests` failures as "CI has regressed since it was
+last checked" - a real instance of the summary-drift failure mode this
+whole engagement warns about: the last *recorded* state for those
+specific jobs was "still in progress," not "green," because the session
+that last looked ended before they finished. Comparing against an
+unobserved baseline is exactly the claim-vs-evidence gap this document
+exists to prevent.
+
+Corrected by running the actual comparison: `main`'s own most recent
+`CI/CD Pipeline` run (`34175141805`, 2026-09-08) has `Build Backend:
+failure` too - same job, same branch-independent red, on a branch with
+none of PR #38's content. Diffed the exact failing-test-name sets
+between PR #38's run and `main`'s: 57 vs. 58 failures, essentially
+identical (one extra flaky test on `main`, almost certainly the same
+10-minute suite timeout truncating slightly differently run to run).
+**Verdict: PR #38 is no worse than `main`. This is a pre-existing
+condition, not a regression this PR introduced.**
+
+Root cause, confirmed by reading the workflow directly
+(`.github/workflows/ci-cd.yml`'s `build-backend` job): **no `services:`
+block at all** - it runs `go test -v -race ./...` against the entire
+backend module with zero Postgres/Redis/Docker containers provisioned.
+The failure shapes all point the same direction: nil datasource
+resolver -> 401s (`TestUpdateModel_*`), a Docker-daemon-connection-refused
+integration test (`TestGetBusinessObjectIncludesChildIntegration_Container`,
+also independently hit locally this session, item pending), a
+LISTEN/NOTIFY panic (`pkg/bp`, also hit locally this session and
+confirmed unrelated to any of this session's changes), and a hard
+10-minute suite timeout that cascades into a wall of unrelated failures
+(chaos tests, memory-leak tests, notification handlers, tenant-scoping
+SQL, catalog-scan) once one integration-shaped test blocks waiting for
+a service that was never started. A partial mitigation convention
+already exists (`t.Skip("skipping test: no database available")`,
+10 call sites found this session, e.g. `internal/analytics/semantic_service_test.go:24`)
+but most of the 57 failing tests don't use it - they hard-fail instead
+of skipping gracefully when their dependency is absent.
+
+**This is the CI hermeticity ticket from the first CI run, at a bigger
+scale than previously measured** - not a new finding, but now backed by
+an exact failing-test count and a root cause read directly from the
+workflow file rather than inferred. The durable fix (CI-side service
+containers for the tests that need them, or a build-tag/skip-guard
+convention applied consistently so integration tests run when their
+services exist and skip visibly - never hard-fail - otherwise) is
+correctly scoped as its own dedicated pass, not attempted in this
+session: triaging 57 failures across a dozen+ unrelated packages, per-
+test, to decide "needs a real service container" vs. "needs a skip
+guard" vs. "is a genuine bug," is real engineering work that shouldn't
+be rushed under autonomous-loop time pressure. Flagged as the next
+concrete build, per this session's own framing: it closes the red CI,
+the long-standing hermeticity/split-brain ticket, and every future
+"is it us or the runners" question in one pass.
+
+**Merge readiness, stated plainly**: CI is legible now (no worse than
+`main`, same pre-existing failure class, root cause identified) but the
+merge decision itself was never CI's to make - zero human reviews have
+landed on PR #38, and the human diff review is a named, still-open gate
+item from item 25. This session's job was to make the picture clear
+enough that the decision is easy, not to adjudicate it.
