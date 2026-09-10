@@ -1073,3 +1073,122 @@ for what a merge would need to reconcile.
   `field_bindings` rows under it - not test noise, this is the real
   fixture the two-binding proof depends on; don't delete it without
   re-running `cmd/verify_second_binding` first.
+
+## Merge-readiness addendum (2026-09-10) - the migration ledger, and why five rows in it are hand-inserted
+
+Before merging PR #38, `backend/migrations/cmd`'s `migrate status` was
+run against the real `alpha` database (`100.84.50.65`, via the mTLS
+`postgres` role). Result: **all 377 migration files in the repo showed
+"Pending" - `vend.schema_migrations` had zero rows, for the entire
+project's history, not just this PR's files.**
+
+**Root cause, verified, not guessed**: nothing in CI/CD ever points the
+runner at real `alpha`. `auto-deploy-on-main.yml` only restarts the
+Trino container (the backend app server's build context is commented
+out in `docker-compose.remote.yml` - it isn't deployed by anything).
+The only two workflows that invoke `migrations/cmd` at all
+(`verify-region-not-null.yml`, `verify-snapshot-backfill.yml`) run it
+against an ephemeral, same-named `postgres:15` container inside the CI
+job itself, never the real database. The ledger isn't drifted - it was
+never used against this database. (Separately, and worth keeping
+distinct: `verify-region-not-null.yml` has never run at all, and
+`verify-snapshot-backfill.yml` has failed on every recorded run - the
+runner's reliability even against its own ephemeral container is
+unverified, which bounds but doesn't by itself explain the empty
+ledger.)
+
+**Do not backfill the other 372.** A full backfill would assert that
+those files describe the live schema, and this document has already
+shown they mostly don't (the DDL-vs-live-DB drift, the `vend`-schema
+trap, hand-created tables). That would convert a visible gap into an
+invisible lie. This is a standing policy, not deferred work: **the
+migration runner does not currently govern real `alpha`, and nothing
+should assume otherwise until a human reconciles the other 372 files
+deliberately** (see below for why the runner also can't be pointed at
+production yet, even if someone wanted to).
+
+**The five files this PR ships were reconciled**, narrowly, after
+confirming each was already safe to re-apply (checked object-by-object
+against live `alpha`, not assumed):
+
+- `20260909_create_local_orm_schema.sql` - **was not actually
+  idempotent as first written**, despite an earlier pass in this same
+  document reporting it as guarded. Only the `CREATE SCHEMA` line had
+  `IF NOT EXISTS`; none of its 6 `CREATE TABLE`s, 6 `CREATE INDEX`es, or
+  its `ALTER TABLE ADD CONSTRAINT` did, and the schema already exists
+  live. Fixed: `IF NOT EXISTS` added throughout, the constraint add
+  wrapped in an existence-checked `DO` block.
+- `20260909_second_binding_oms_orders.sql` - same class of gap: a bare
+  `INSERT` into `business_object_bindings`/`field_bindings` with no
+  guard, and the one real unique constraint on that table
+  (`uq_tenant_bo_backend`) is defeated by its own
+  `backend_id = gen_random_uuid()`. Fixed with an explicit
+  existence-check guard on the semantic key (tenant, bo, driving_node).
+- `20260909_retire_validation_rule_corpus.sql`, `20260909_validation_rule_ast.sql`,
+  `20260909_validation_rule_violations.sql` - confirmed already
+  idempotent (self-limiting `WHERE is_active = true` / `IF NOT EXISTS`
+  throughout) as originally written.
+
+**Attempting to actually run these through `migrations/cmd` (to record
+them properly, not just verify them) surfaced four real, pre-existing
+bugs in the shared runner** (`migration_runner.go`'s
+`splitSQLStatements`), independent of anything specific to this PR:
+
+1. Splits on `;` without skipping `--` line comments - a semicolon
+   inside a comment sentence breaks statement parsing.
+2. Dollar-quote (`$$...$$`) handling has an off-by-one that **drops the
+   tag and closing delimiter from the SQL it sends to Postgres** - not
+   a mis-parse, active corruption of the statement - for any `DO` block,
+   bare-tagged or named. Real `psql` has no such issue; verified
+   directly against the same files.
+3. The runner wraps every migration in its own transaction, but several
+   of these files also carried their own `BEGIN;`/`COMMIT;` (written
+   for direct `psql` use) - the file's own `COMMIT` ends the runner's
+   transaction early, and the runner's later `tx.Commit()` fails with
+   "unexpected transaction status idle." **This one has a sharp edge**:
+   the SQL had already executed and the ledger `INSERT` had already
+   committed via implicit autocommit by the time the tool reported
+   failure - one ledger row was silently written with a stale,
+   pre-final-edit checksum this way, caught only by re-querying the
+   table directly and fixed with an `UPDATE`.
+4. (Consequence of #1-#3, not a fifth bug) between these, **the runner
+   could not cleanly apply any of these 5 files as originally written**.
+
+Given bug #3, the fix adopted was to make these files match the
+runner's actual expected convention - no explicit `BEGIN;`/`COMMIT;`,
+runner-owned transactions - not to keep the files self-transacting and
+permanently quarantine them from a repaired runner. All four files that
+had explicit `BEGIN;`/`COMMIT;` had it stripped (all but
+`20260909_validation_rule_ast.sql`, which never had it).
+
+**What actually happened, mechanically**: with the files finalized and
+committed, each was applied directly via `psql -1 -f` (bypassing the
+broken Go wrapper; `-1` gives single-transaction semantics equivalent
+to what the runner is supposed to provide) - all five no-op cleanly
+against the already-existing objects. The runner's own `calculateChecksum`
+(`sum of rune values mod 1,000,000`, byte-for-byte reimplemented in a
+throwaway verifier) was used to compute checksums against the exact
+committed file content, then five `INSERT`s into `vend.schema_migrations`
+recorded them. `migrate status` scoped to just these five files now
+shows all `Applied`; the full-repo status still shows exactly 372
+`Pending` - confirmed unchanged, not incidentally touched.
+
+**The runner repair is its own follow-up, not attempted here.** The
+spec is drawn directly from what broke: comment-aware statement
+splitting, correct dollar-quote tag handling (fix the corruption, not
+just the mis-parse), and an explicit transaction-ownership policy
+(runner-owned, files stay plain SQL - now the documented convention).
+Test corpus: semicolons inside comments, bare and named dollar-quote
+tags, `DO` blocks, `BEGIN`/`COMMIT`-bearing files rejected per the new
+convention - literally the patterns that broke this session, run
+against an ephemeral Postgres in CI. This pairs naturally with the
+hermeticity/CI work already in progress elsewhere in this repo's
+history. Note for whoever picks it up: the repair does not invalidate
+the five manually-recorded rows above, since their checksums are
+computed from file content, not from anything the buggy parser
+produced - as long as `calculateChecksum` itself is left untouched.
+
+The **never-target-real-alpha vs. eventually-reconcile-372** policy
+question raised earlier in this document's history now explicitly
+*waits on* that repair - adopting the runner for real reconciliation
+isn't a choice available until it can actually run the files.
