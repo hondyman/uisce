@@ -192,20 +192,36 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reports cannot be created with sharing pre-baked; sharing happens post-creation
-	if meta, ok := template.LayoutConfig["metadata"].(map[string]interface{}); ok {
-		if isShared, exists := meta["is_shared"].(bool); exists && isShared {
-			http.Error(w, "forbidden: reports cannot be created as shared; share after creation", http.StatusForbidden)
-			return
+	checkPrebakedShare := func() bool {
+		if s, ok := raw["is_shared"].(bool); ok && s {
+			return true
 		}
-	}
-	if raw != nil {
+		if s, ok := raw["is_public"].(bool); ok && s {
+			return true
+		}
 		if rawMeta, ok := raw["metadata"].(map[string]interface{}); ok {
 			if isShared, exists := rawMeta["is_shared"].(bool); exists && isShared {
-				http.Error(w, "forbidden: reports cannot be created as shared; share after creation", http.StatusForbidden)
-				return
+				return true
+			}
+			if isPub, exists := rawMeta["is_public"].(bool); exists && isPub {
+				return true
 			}
 		}
+		if meta, ok := template.LayoutConfig["metadata"].(map[string]interface{}); ok {
+			if isShared, exists := meta["is_shared"].(bool); exists && isShared {
+				return true
+			}
+			if isPub, exists := meta["is_public"].(bool); exists && isPub {
+				return true
+			}
+		}
+		return false
 	}
+	if checkPrebakedShare() {
+		http.Error(w, "forbidden: reports cannot be created as shared; share after creation", http.StatusForbidden)
+		return
+	}
+	template.IsPublic = false
 
 	if template.ParameterSchema == nil {
 		template.ParameterSchema = make(map[string]interface{})
@@ -288,7 +304,7 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. Tenant isolation check: cannot modify another tenant's report
-	if existing.TenantID != tenantID && !isAdmin {
+	if existing.TenantID != tenantID {
 		http.Error(w, "report template not found or unauthorized", http.StatusNotFound)
 		return
 	}
@@ -316,20 +332,29 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// 4. Sharing check: if sharing configuration is being updated in metadata, ensure !is_core && is_personal && author
 	if layout, ok := raw["layout_config"].(map[string]interface{}); ok {
 		template.LayoutConfig = layout
 	} else if def, ok := raw["definition"].(map[string]interface{}); ok {
 		template.LayoutConfig = def
 	}
-	// 4. Sharing check: if sharing configuration is being updated in metadata or layout_config.metadata, ensure !is_core && is_personal && author
+
+	// 4. Sharing check: if sharing configuration is being set in metadata, layout_config, or root, ensure !is_core && is_personal && author
 	checkShared := func(m map[string]interface{}) bool {
 		if s, ok := m["is_shared"].(bool); ok && s {
+			return true
+		}
+		if s, ok := m["is_public"].(bool); ok && s {
 			return true
 		}
 		return false
 	}
 	attemptingShare := false
+	if s, ok := raw["is_shared"].(bool); ok && s {
+		attemptingShare = true
+	}
+	if s, ok := raw["is_public"].(bool); ok && s {
+		attemptingShare = true
+	}
 	if meta, ok := raw["metadata"].(map[string]interface{}); ok && checkShared(meta) {
 		attemptingShare = true
 	}
@@ -414,7 +439,7 @@ func (h *ReportHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Tenant isolation check
-	if existing.TenantID != tenantID && !isAdmin {
+	if existing.TenantID != tenantID {
 		http.Error(w, "report template not found or unauthorized", http.StatusNotFound)
 		return
 	}

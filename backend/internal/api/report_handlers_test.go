@@ -369,6 +369,55 @@ func TestReportAPI(t *testing.T) {
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
+
+	t.Run("Delete Template - 404 on Cross-Tenant Delete even for Admin", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+		tenantB := "22222222-2222-2222-2222-222222222222"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000030", tenantB,
+				"Tenant B Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		// Admin of tenant A trying to delete tenant B's report
+		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000030", nil)
+		req.Header.Set("X-Tenant-ID", tenantA)
+		req.Header.Set("X-User-ID", "tenant-a-admin")
+		req.Header.Set("X-Admin", "true")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Create Template - Rejects Top-Level is_public", func(t *testing.T) {
+		payload := map[string]interface{}{
+			"template_name": "Public From Birth",
+			"is_public":     true,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
 }
 
 
