@@ -85,22 +85,21 @@ func (h *ReportHandler) resolveAuthContext(r *http.Request) (tenantID uuid.UUID,
 		}
 	}
 
-	// 4. Request header fallback if set by upstream auth/proxy
-	if tenantID == uuid.Nil {
-		if tidHeader := r.Header.Get("X-Tenant-ID"); tidHeader != "" {
-			if tid, parseErr := uuid.Parse(tidHeader); parseErr == nil && tid != uuid.Nil {
-				tenantID = tid
+	// 4. Request header fallback ONLY if ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (dev/local use only).
+	// In production, this fallback is strictly disabled: headers are client-controlled and untrusted.
+	// Admin status NEVER falls back to headers under any circumstances.
+	if allowClientTenantHeaderFallback() {
+		if tenantID == uuid.Nil {
+			if tidHeader := r.Header.Get("X-Tenant-ID"); tidHeader != "" {
+				if tid, parseErr := uuid.Parse(tidHeader); parseErr == nil && tid != uuid.Nil {
+					tenantID = tid
+				}
 			}
 		}
-	}
-	if userID == "" {
-		if uidHeader := r.Header.Get("X-User-ID"); uidHeader != "" {
-			userID = uidHeader
-		}
-	}
-	if !isAdmin {
-		if adminHeader := r.Header.Get("X-Admin"); adminHeader == "true" || adminHeader == "1" {
-			isAdmin = true
+		if userID == "" {
+			if uidHeader := r.Header.Get("X-User-ID"); uidHeader != "" {
+				userID = uidHeader
+			}
 		}
 	}
 

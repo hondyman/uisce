@@ -39,6 +39,22 @@ async function request<T>(path: string, { method = 'GET', body, headers, ...rest
   const resolvedPath = resolvePath(path);
   const finalHeaders = new Headers(headers ?? undefined);
 
+  if (typeof localStorage !== 'undefined') {
+    const token = localStorage.getItem('auth_token');
+    if (token && !finalHeaders.has('Authorization')) {
+      finalHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    const tenantContext = localStorage.getItem('tenant_context');
+    if (tenantContext) {
+      try {
+        const parsed = JSON.parse(tenantContext);
+        if (parsed?.tenantId && !finalHeaders.has('X-Tenant-ID')) {
+          finalHeaders.set('X-Tenant-ID', parsed.tenantId);
+        }
+      } catch (_) {}
+    }
+  }
+
   if (body != null && !finalHeaders.has('Content-Type')) {
     finalHeaders.set('Content-Type', 'application/json');
   }

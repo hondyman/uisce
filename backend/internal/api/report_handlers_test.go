@@ -10,13 +10,16 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	httpapi "github.com/hondyman/uisce/backend/internal/api"
 	"github.com/hondyman/uisce/backend/internal/reports"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReportAPI(t *testing.T) {
+	t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -328,9 +331,12 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000010", nil)
-		req.Header.Set("X-Tenant-ID", clientTenant)
-		req.Header.Set("X-User-ID", "client-admin")
-		req.Header.Set("X-Admin", "true")
+		auth := security.AuthInfo{
+			UserID:    "client-admin",
+			TenantIDs: []string{clientTenant},
+			Roles:     []string{"admin"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -393,9 +399,12 @@ func TestReportAPI(t *testing.T) {
 
 		// Admin of tenant A trying to delete tenant B's report
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000030", nil)
-		req.Header.Set("X-Tenant-ID", tenantA)
-		req.Header.Set("X-User-ID", "tenant-a-admin")
-		req.Header.Set("X-Admin", "true")
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-admin",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"admin"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
 		w := httptest.NewRecorder()
 
 		r.ServeHTTP(w, req)
@@ -417,6 +426,119 @@ func TestReportAPI(t *testing.T) {
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("Security - Reject Client Headers in Production (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=false)", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/", nil)
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "unauthenticated-user")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("Security - Spoofed X-Admin Header Is Ignored", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+
+		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
+			WillReturnRows(dupRows)
+
+		// Expect insert where is_personal is STILL FORCED to true because X-Admin header is ignored
+		mock.ExpectExec(`INSERT INTO report_templates`).
+			WithArgs(
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				"Spoof Attempt Report",
+				"",
+				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				true,
+				false,
+				true, // Forced to personal!
+				sqlmock.AnyArg(),
+				"",
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		payload := map[string]interface{}{
+			"template_name": "Spoof Attempt Report",
+			"is_personal":   false,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "attacker")
+		req.Header.Set("X-Admin", "true") // Malicious admin header
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusCreated, w.Code)
+		var resp reports.ReportTemplate
+		err := json.NewDecoder(w.Body).Decode(&resp)
+		require.NoError(t, err)
+		assert.True(t, resp.IsPersonal, "Spoofed X-Admin must not allow creating tenant-wide report")
+	})
+
+	t.Run("Security - JWT Auth Takes Absolute Precedence Over Headers", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+
+		realTenant := "11111111-1111-1111-1111-111111111111"
+		realTenantUUID := uuid.MustParse(realTenant)
+		spoofedTenant := "22222222-2222-2222-2222-222222222222"
+
+		// Query must be scoped to realTenant, NOT spoofedTenant
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
+			WithArgs(realTenantUUID, "JWT Precedence Report", sqlmock.AnyArg()).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		mock.ExpectExec(`INSERT INTO report_templates`).
+			WithArgs(
+				sqlmock.AnyArg(),
+				realTenantUUID, // Real tenant inserted!
+				"JWT Precedence Report",
+				"",
+				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				true,
+				false,
+				true,
+				"real-user-id", // Real user inserted!
+				"",
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		payload := map[string]interface{}{
+			"template_name": "JWT Precedence Report",
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		// Spoofed headers in request:
+		req.Header.Set("X-Tenant-ID", spoofedTenant)
+		req.Header.Set("X-User-ID", "spoofed-user")
+
+		// Valid authenticated AuthInfo in context:
+		auth := security.AuthInfo{
+			UserID:    "real-user-id",
+			TenantIDs: []string{realTenant},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Logf("JWT Precedence test failed with code %d: %s", w.Code, w.Body.String())
+		}
+		assert.Equal(t, http.StatusCreated, w.Code)
 	})
 }
 

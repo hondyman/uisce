@@ -398,6 +398,10 @@ export const ReportLibrary: React.FC = () => {
   const handleConfirmRename = async () => {
     if (!reportToRename || !renameValue.trim()) return;
     const newName = renameValue.trim();
+    if (reports.some(r => r.id !== reportToRename.id && r.name.trim().toLowerCase() === newName.toLowerCase())) {
+      setRenameError('A report with this name already exists in this tenant.');
+      return;
+    }
     try {
       setRenameError(null);
       await updateReportMutation.mutateAsync({

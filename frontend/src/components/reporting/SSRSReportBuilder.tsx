@@ -262,6 +262,7 @@ const SSRSReportBuilderContent: React.FC = () => {
 
   // Report title (editable in top bar)
   const [reportTitle, setReportTitle] = useState('Untitled Report');
+  const [reportTitleEdited, setReportTitleEdited] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
 
   const handleAddParameter = (param: Omit<ReportParameter, 'id'>) => {
@@ -336,7 +337,13 @@ const SSRSReportBuilderContent: React.FC = () => {
 
   // Load + auto-migrate v1 → v2 on mount
   useEffect(() => {
-    if (!loadedTemplate?.definition) return;
+    if (!loadedTemplate) return;
+
+    if (loadedTemplate.name && !reportTitleEdited) {
+      setReportTitle(loadedTemplate.name);
+    }
+
+    if (!loadedTemplate.definition) return;
 
     try {
       const def = deserializeFromBackend(loadedTemplate.definition as Record<string, unknown>);
@@ -451,6 +458,8 @@ const SSRSReportBuilderContent: React.FC = () => {
             : (selectedBO as BOBinding | null))
         : (selectedBO as BOBinding | null);
 
+      const targetTenantId = (loadedTemplate as any)?.tenant_id || tenant?.id || getCachedGoldCopyId() || '00000000-0000-0000-0000-000000000000';
+
       const payload = buildSavePayload(
         {
           elements,
@@ -460,7 +469,8 @@ const SSRSReportBuilderContent: React.FC = () => {
           parameters: reportParameters,
         },
         savedBO,
-        urlReportId
+        urlReportId,
+        targetTenantId
       );
       try {
         if (urlReportId) {
@@ -476,7 +486,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       } catch (err) {
         setSnackbar({ open: true, message: `Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`, severity: 'error' });
       }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, createMutation, updateMutation]);
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation]);
 
     const handleCloneReport = useCallback(async () => {
       try {
@@ -1231,31 +1241,53 @@ const SSRSReportBuilderContent: React.FC = () => {
               )}
               {editingTitle && !isReadOnlyCore ? (
                 <TextField
-                  autoFocus
+                  inputRef={(input) => input?.focus()}
                   value={reportTitle}
-                  onChange={(e) => setReportTitle(e.target.value)}
+                  onChange={(e) => {
+                    setReportTitle(e.target.value);
+                    setReportTitleEdited(true);
+                  }}
                   onBlur={() => setEditingTitle(false)}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'Escape') setEditingTitle(false); }}
                   size="small"
+                  placeholder="Report Title"
                   sx={{
-                    '& .MuiInputBase-root': { color: '#FFF', fontSize: '0.88rem', fontWeight: 700, bgcolor: 'rgba(255,255,255,0.1)', height: 30 },
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.3)' },
-                    width: 280,
+                    '& .MuiInputBase-root': { color: 'inherit', fontSize: '0.88rem', fontWeight: 700, bgcolor: 'action.hover', height: 32 },
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: 'divider' },
+                    minWidth: 240,
+                    maxWidth: 360,
                   }}
                 />
               ) : (
-                <Box
-                  onClick={() => !isReadOnlyCore && setEditingTitle(true)}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.5, cursor: isReadOnlyCore ? 'default' : 'text', px: 1, py: 0.5, borderRadius: 1,
-                    '&:hover': isReadOnlyCore ? {} : { bgcolor: 'rgba(255,255,255,0.07)', '& .pencil': { opacity: 1 } },
-                  }}
-                >
-                  <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: '#FFF', letterSpacing: '-0.01em' }}>
-                    {reportTitle}
-                  </Typography>
-                  {!isReadOnlyCore && <EditIcon className="pencil" sx={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', opacity: 0, transition: 'opacity 0.15s' }} />}
-                </Box>
+                <Tooltip title={isReadOnlyCore ? "Core template (read-only)" : "Click or tap pencil to rename report"}>
+                  <Box
+                    onClick={() => !isReadOnlyCore && setEditingTitle(true)}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      cursor: isReadOnlyCore ? 'default' : 'pointer',
+                      px: 1.5,
+                      py: 0.5,
+                      borderRadius: 1,
+                      border: isReadOnlyCore ? '1px solid transparent' : '1px dashed',
+                      borderColor: 'divider',
+                      bgcolor: 'action.hover',
+                      transition: 'all 0.15s ease-in-out',
+                      '&:hover': isReadOnlyCore ? {} : {
+                        bgcolor: 'action.selected',
+                        borderColor: 'primary.main',
+                      },
+                    }}
+                  >
+                    <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
+                      {reportTitle}
+                    </Typography>
+                    {!isReadOnlyCore && (
+                      <EditIcon sx={{ fontSize: 15, color: 'primary.main', opacity: 0.8 }} />
+                    )}
+                  </Box>
+                </Tooltip>
               )}
             </Box>
 
