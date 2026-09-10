@@ -110,7 +110,7 @@ services:
     environment:
       DB: postgres12
       POSTGRES_USER: temporal
-      POSTGRES_PASSWORD: password123
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: temporal
       POSTGRES_HOST: 100.84.50.65
       POSTGRES_SEEDS: 100.84.50.65
