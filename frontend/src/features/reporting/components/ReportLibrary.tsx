@@ -1515,7 +1515,10 @@ export const ReportLibrary: React.FC = () => {
           }
           return item;
         })()}
-        <MenuItem onClick={() => setScheduleDialogOpen(true)}>
+        <MenuItem onClick={() => {
+          setScheduleDialogOpen(true);
+          handleMenuClose();
+        }}>
           <ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
           Schedule
         </MenuItem>
@@ -1763,7 +1766,6 @@ export const ReportLibrary: React.FC = () => {
               reportId={selectedReport.id}
               reportName={selectedReport.name}
               tenantId={currentTenant?.id}
-              onScheduleSaved={() => setScheduleDialogOpen(false)}
             />
           )}
         </DialogContent>
