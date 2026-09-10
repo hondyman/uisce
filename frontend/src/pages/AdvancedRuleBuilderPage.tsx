@@ -135,12 +135,21 @@ const AdvancedRuleBuilderPage: React.FC = () => {
     ? [{ name: selectedBOKey, label: selectedBOKey, fields, relationships: [] }]
     : [];
 
-  // Load the real BO catalog (replaces MOCK_ENTITIES).
+  // Load the real BO catalog (replaces MOCK_ENTITIES). Preselects
+  // ?bo_name= from the URL when present - the "open in editor" link from
+  // the BO Validations tab (BusinessObjectDetailsPage) lands here with
+  // that param set, so the editor opens already scoped to the BO the
+  // user came from instead of the catalog's first entry.
   useEffect(() => {
     apiClient<BOOption[]>('/business-objects?format=array')
       .then((bos) => {
         setBusinessObjects(bos);
-        if (bos.length > 0) setSelectedBOKey((prev) => prev || bos[0].key);
+        const fromURL = new URLSearchParams(window.location.search).get('bo_name');
+        if (fromURL && bos.some((bo) => bo.key === fromURL)) {
+          setSelectedBOKey(fromURL);
+        } else if (bos.length > 0) {
+          setSelectedBOKey((prev) => prev || bos[0].key);
+        }
       })
       .catch((err) => console.error('Failed to load business objects:', err));
   }, []);

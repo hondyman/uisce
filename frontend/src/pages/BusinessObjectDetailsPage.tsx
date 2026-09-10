@@ -114,6 +114,7 @@ import {
   BODeltaTab,
   LiveQueryTab,
   WorkflowTab,
+  ValidationsAndTriggersTab,
 } from './BusinessObjectDetailsPage/components/tabs';
 import { PageHeader } from './BusinessObjectDetailsPage/components/PageHeader';
 import { HierarchyTreePanel } from './BusinessObjectDetailsPage/components/HierarchyTreePanel';
@@ -1927,6 +1928,7 @@ export default function BusinessObjectDetailsPage() {
             <Tab label="Graph" icon={<AccountTreeIcon />} iconPosition="start" />
             <Tab label="Semantic Model" />
             <Tab label="Lineage" icon={<AccountTreeIcon />} iconPosition="start" />
+            <Tab label="Validations & Triggers" />
           </Tabs>
 
           {/* Main Content Area with Sidebar */}
@@ -2103,12 +2105,23 @@ export default function BusinessObjectDetailsPage() {
                      Visualize upstream dependencies and downstream impact using dynamic analysis.
                    </Typography>
                    
-                   <UnifiedLineageTab 
-                      nodeType="business_object" 
+                   <UnifiedLineageTab
+                      nodeType="business_object"
                       nodeId={businessObject?.id || id || ''}
                       initialDirection="both"
                    />
                 </Box>
+              )}
+
+              {/* Validations & Triggers Tab - the real node-based
+                  validation engine (backend/internal/metadata/shadow_evaluation.go),
+                  distinct from the "Validations" tab above (activeTab === 6),
+                  which is the older catalog_validation_rules-era
+                  ValidationRulesPage. Appended at the end rather than
+                  inserted earlier so every existing activeTab index above
+                  stays unchanged. */}
+              {activeTab === 11 && (
+                <ValidationsAndTriggersTab businessObject={businessObject} />
               )}
             </Paper>
             </Box>

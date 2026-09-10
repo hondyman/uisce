@@ -102,20 +102,20 @@ func ListViolations(ctx context.Context, db *sqlx.DB, tenantID, boKey string, li
 // schema-version binding on rules so one can't silently outlive the
 // schema it targets - is a separate, unbuilt design question).
 type RuleHealthSummary struct {
-	RuleID         uuid.UUID `db:"rule_id" json:"ruleId"`
-	RuleName       string    `db:"rule_name" json:"ruleName"`
-	BOKey          string    `db:"bo_key" json:"boKey"`
+	RuleID         uuid.UUID `db:"rule_id" json:"rule_id"`
+	RuleName       string    `db:"rule_name" json:"rule_name"`
+	BOKey          string    `db:"bo_key" json:"bo_key"`
 	Severity       string    `db:"severity" json:"severity"`
-	ViolationCount int       `db:"violation_count" json:"violationCount"`
-	RuleErrorCount int       `db:"rule_error_count" json:"ruleErrorCount"`
-	BlockedCount   int       `db:"blocked_count" json:"blockedCount"`
-	LoggedCount    int       `json:"loggedCount"`
-	LastFiredAt    *string   `db:"last_fired_at" json:"lastFiredAt"`
+	ViolationCount int       `db:"violation_count" json:"violation_count"`
+	RuleErrorCount int       `db:"rule_error_count" json:"rule_error_count"`
+	BlockedCount   int       `db:"blocked_count" json:"blocked_count"`
+	LoggedCount    int       `json:"logged_count"`
+	LastFiredAt    *string   `db:"last_fired_at" json:"last_fired_at"`
 	// Suspect/SuspectReason are the health signal itself - a heuristic,
 	// not a certainty. See GetRuleHealthSummary's doc comment for exactly
 	// what "suspect" does and doesn't mean.
 	Suspect       bool   `json:"suspect"`
-	SuspectReason string `json:"suspectReason,omitempty"`
+	SuspectReason string `json:"suspect_reason,omitempty"`
 }
 
 // GetRuleHealthSummary aggregates validation_rule_violations per rule and
