@@ -15,27 +15,27 @@
 --   names are immediately freed up for reuse without causing 409 conflicts.
 
 -- 1. Extend report_templates
-ALTER TABLE report_templates 
+ALTER TABLE public.report_templates 
     ADD COLUMN IF NOT EXISTS is_personal BOOLEAN NOT NULL DEFAULT false,
-    ADD COLUMN IF NOT EXISTS created_by_id TEXT REFERENCES app_user(id) ON DELETE SET NULL;
+    ADD COLUMN IF NOT EXISTS created_by_id TEXT REFERENCES public.app_user(id) ON DELETE SET NULL;
 
-CREATE INDEX IF NOT EXISTS idx_report_templates_personal ON report_templates(tenant_id, is_personal);
-CREATE INDEX IF NOT EXISTS idx_report_templates_creator ON report_templates(created_by_id);
+CREATE INDEX IF NOT EXISTS idx_report_templates_personal ON public.report_templates(tenant_id, is_personal);
+CREATE INDEX IF NOT EXISTS idx_report_templates_creator ON public.report_templates(created_by_id);
 
 -- 2. Tenant-scoped case-insensitive partial unique index on active report name
 CREATE UNIQUE INDEX IF NOT EXISTS uq_report_templates_tenant_lower_name 
-    ON report_templates(tenant_id, LOWER(template_name))
+    ON public.report_templates(tenant_id, LOWER(template_name))
     WHERE is_active = true;
 
 -- 3. Dedicated per-user favorites table
-CREATE TABLE IF NOT EXISTS report_favorites (
+CREATE TABLE IF NOT EXISTS public.report_favorites (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
-    user_id TEXT NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,
-    template_id UUID NOT NULL REFERENCES report_templates(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES public.app_user(id) ON DELETE CASCADE,
+    template_id UUID NOT NULL REFERENCES public.report_templates(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_report_favorites_user_template UNIQUE (tenant_id, user_id, template_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_report_favorites_user ON report_favorites(tenant_id, user_id);
-CREATE INDEX IF NOT EXISTS idx_report_favorites_template ON report_favorites(template_id);
+CREATE INDEX IF NOT EXISTS idx_report_favorites_user ON public.report_favorites(tenant_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_report_favorites_template ON public.report_favorites(template_id);
