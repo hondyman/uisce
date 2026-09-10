@@ -271,14 +271,21 @@ export interface ReportTemplate {
 
 export interface SaveReportTemplateInput {
   name: string;
+  template_name?: string;
   description?: string;
-  definition: JsonRecord;
+  definition?: JsonRecord;
   metadata?: JsonRecord;
+  layout_config?: JsonRecord;
+  parameter_schema?: JsonRecord;
+  category?: string;
+  is_active?: boolean;
+  is_public?: boolean;
+  [key: string]: unknown;
 }
 
 export interface UpdateReportTemplateInput {
   id: string;
-  payload: SaveReportTemplateInput;
+  payload: Partial<SaveReportTemplateInput>;
 }
 
 const tryParseDefinition = (value: unknown): JsonRecord | null => {
@@ -303,13 +310,13 @@ const toReportTemplate = (raw: JsonRecord | null | undefined): ReportTemplate | 
     return null;
   }
   const id = (raw.id as string) ?? (raw.report_id as string) ?? (raw.uuid as string);
-  const name = (raw.name as string) ?? (raw.title as string) ?? 'Untitled Report';
+  const name = (raw.name as string) ?? (raw.template_name as string) ?? (raw.title as string) ?? 'Untitled Report';
   if (!id) {
     return null;
   }
 
-  const definition = tryParseDefinition(raw.definition ?? raw.template ?? raw.payload ?? raw.report_definition);
-  const metadata = tryParseDefinition(raw.metadata ?? raw.meta);
+  const definition = tryParseDefinition(raw.definition ?? raw.template ?? raw.payload ?? raw.report_definition ?? raw.layout_config);
+  const metadata = tryParseDefinition(raw.metadata ?? (raw.layout_config as any)?.metadata ?? (definition as any)?.metadata ?? raw.meta);
 
   return {
     id,
@@ -356,7 +363,7 @@ export const useUpdateReportTemplate = () => {
   return useMutation({
     mutationFn: async ({ id, payload }: UpdateReportTemplateInput) =>
       request<JsonRecord>(`${API_PREFIX}/reports/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         body: JSON.stringify(payload),
       }),
     onSuccess: (_data, variables) => {
