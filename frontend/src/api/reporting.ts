@@ -353,17 +353,19 @@ const toReportTemplate = (raw: JsonRecord | null | undefined): ReportTemplate | 
   };
 };
 
-const fetchReportTemplates = async (): Promise<ReportTemplate[]> => {
-  const raw = await request<unknown>(`${API_PREFIX}/reports`);
+const fetchReportTemplates = async (query?: string): Promise<ReportTemplate[]> => {
+  const trimmed = query?.trim();
+  const path = trimmed ? `${API_PREFIX}/reports?q=${encodeURIComponent(trimmed)}` : `${API_PREFIX}/reports`;
+  const raw = await request<unknown>(path);
   return normaliseCollection(raw)
     .map(toReportTemplate)
     .filter((item): item is ReportTemplate => item !== null);
 };
 
-export const useReportTemplates = () =>
+export const useReportTemplates = (query?: string) =>
   useQuery({
-    queryKey: ['reporting', 'reports'],
-    queryFn: fetchReportTemplates,
+    queryKey: ['reporting', 'reports', query?.trim() || ''],
+    queryFn: () => fetchReportTemplates(query),
     staleTime: 30_000,
   });
 

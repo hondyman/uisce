@@ -171,8 +171,19 @@ export const ReportLibrary: React.FC = () => {
     });
   }, []);
 
+  // Search query state with debounce for server-side full-text search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
+
   // --- Real API Data ---
-  const { data: apiReports, isLoading: isLoadingReports } = useReportTemplates();
+  const { data: apiReports, isLoading: isLoadingReports } = useReportTemplates(debouncedSearchQuery);
   const { data: apiFolders, isLoading: isLoadingFolders } = useReportFolders();
   const deleteReportMutation = useDeleteReportTemplate();
   const createReportMutation = useCreateReportTemplate();
@@ -353,7 +364,6 @@ export const ReportLibrary: React.FC = () => {
     return result;
   }, [folderTree, expandedFolders, matchingFolderIds]);
   
-  const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [filterType, setFilterType] = useState<'all' | 'favorites' | 'recent' | 'shared' | 'core' | 'custom' | 'personal'>('all');
   const [selectedReport, setSelectedReport] = useState<SavedReport | null>(null);
@@ -788,8 +798,13 @@ export const ReportLibrary: React.FC = () => {
       if (daysSinceRun > 7) return false;
     }
 
-    // Search filter
-    if (searchQuery && !report.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+    // Search filter: When debounced server search is active, the backend performs full-text & typo search
+    // across title, description, and category. Applying client-side name substring filtering would drop
+    // fuzzy matches (e.g. typos, description matches). However, while the user is actively typing (prior
+    // to the 300ms debounce), or when server search is not active, we can filter client-side.
+    // If debouncedSearchQuery is set, server already filtered; if searchQuery has extra chars not yet debounced,
+    // let server debounce settle.
+    if (!debouncedSearchQuery.trim() && searchQuery && !report.name.toLowerCase().includes(searchQuery.toLowerCase())) {
       return false;
     }
 

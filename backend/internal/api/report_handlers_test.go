@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -539,6 +540,104 @@ func TestReportAPI(t *testing.T) {
 			t.Logf("JWT Precedence test failed with code %d: %s", w.Code, w.Body.String())
 		}
 		assert.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	t.Run("List Templates - Unauthenticated 401", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/v1/reports/", nil)
+		// No auth context or headers
+		w := httptest.NewRecorder()
+
+		// Temporarily disable fallback for strict test
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false")
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("List Templates - Search with ?q= binds parameter", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		rows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_name", "description", "category",
+			"layout_config", "parameter_schema", "is_active", "is_public",
+			"is_personal", "created_by_id", "created_by",
+			"created_at", "updated_at", "version", "is_favorite",
+		}).AddRow(
+			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
+			"Portfolio Summary", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			true, false, false, nil, nil,
+			time.Now(), time.Now(), 1, false,
+		)
+
+		// Must execute search query with $4 bound to query string
+		mock.ExpectQuery(`websearch_to_tsquery`).
+			WithArgs("user-123", sqlmock.AnyArg(), sqlmock.AnyArg(), "Portfolo").
+			WillReturnRows(rows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/?q=Portfolo", nil)
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var templates []map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&templates)
+		require.NoError(t, err)
+		require.Len(t, templates, 1)
+		assert.Equal(t, "Portfolio Summary", templates[0]["template_name"])
+	})
+
+	t.Run("List Templates - Query exceeding 256 chars returns 400 Bad Request", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+		tooLongQuery := strings.Repeat("a", 257)
+		req := httptest.NewRequest("GET", "/api/v1/reports/?q="+tooLongQuery, nil)
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("List Templates - Empty or whitespace ?q= delegates to standard listing", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		rows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_name", "description", "category",
+			"layout_config", "parameter_schema", "is_active", "is_public",
+			"is_personal", "created_by_id", "created_by",
+			"created_at", "updated_at", "version", "is_favorite",
+		}).AddRow(
+			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
+			"Standard Listing Report", "Desc", "perf", []byte("{}"), []byte("{}"),
+			true, false, false, nil, nil,
+			time.Now(), time.Now(), 1, false,
+		)
+
+		// Must execute standard listing query (NOT websearch_to_tsquery)
+		mock.ExpectQuery(`SELECT t\.id, t\.tenant_id, t\.template_name`).
+			WillReturnRows(rows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/?q=%20%20%20", nil)
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var templates []map[string]interface{}
+		err := json.NewDecoder(w.Body).Decode(&templates)
+		require.NoError(t, err)
+		require.Len(t, templates, 1)
+		assert.Equal(t, "Standard Listing Report", templates[0]["template_name"])
 	})
 }
 

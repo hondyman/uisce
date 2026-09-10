@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -138,7 +139,19 @@ func (h *ReportHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templates, err := h.service.ListTemplatesScoped(r.Context(), tenantID, userID)
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(query) > 256 {
+		http.Error(w, "query parameter 'q' exceeds maximum length of 256 characters", http.StatusBadRequest)
+		return
+	}
+
+	var templates []reports.ReportTemplate
+	if query != "" {
+		templates, err = h.service.SearchTemplatesScoped(r.Context(), tenantID, userID, query)
+	} else {
+		templates, err = h.service.ListTemplatesScoped(r.Context(), tenantID, userID)
+	}
+
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
