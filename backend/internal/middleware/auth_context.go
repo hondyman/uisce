@@ -107,6 +107,27 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 							// Inject UserID into headers for legacy handlers that rely on it
 							r.Header.Set("X-User-ID", uid)
 
+							// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.
+							// Computed before tenant resolution below: a verified global admin's JWT
+							// legitimately carries no tenant claim (they aren't scoped to one tenant), so
+							// the client-supplied X-Tenant-ID header is the only way they can select a
+							// tenant to operate on. SecurityContextFromRequest / ResolveTenantID already
+							// treat that header as untrusted for everyone else and independently verify
+							// auth.IsGlobalAdmin from the role claims before honoring it - so trusting the
+							// header here for a verified admin does not reopen the tenant-header-spoofing
+							// hole the 2026-09-07 hotfix closed for non-admin callers.
+							isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
+								hasRole(normalizeStringList(jclaims.Roles), "global_ops")
+							// Backward-compat: also accept legacy "core_admin" / "is_core_admin" claim if present.
+							if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
+								for _, role := range normalizeStringList(jclaims.Roles) {
+									if role == "core_admin" || role == "is_core_admin" {
+										isGlobalAdmin = true
+										break
+									}
+								}
+							}
+
 							// Authoritative Tenant ID from token
 							tenantID := strings.TrimSpace(jclaims.TenantID)
 							tenantIDs := normalizeTenantIDs(jclaims.TenantIDs, tenantID)
@@ -116,40 +137,26 @@ func AuthContextMiddleware(secMgr *services.SecurityManager) func(http.Handler) 
 							} else if len(tenantIDs) == 1 {
 								tenantID = tenantIDs[0]
 								r.Header.Set("X-Tenant-ID", tenantID)
-							} else if len(tenantIDs) == 0 && allowClientTenantHeaderFallback() {
-								// Dev-only fallback (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true): some
-								// local tokens don't carry a tenant claim, but the UI always sends the
-								// active tenant in the X-Tenant-ID header. This must stay disabled in
-								// production — the header is client-controlled and trusting it here
-								// would let any tenantless-but-validly-signed token assert an arbitrary
-								// tenant identity. Parse it as a UUID to reject malicious/injected values.
+							} else if len(tenantIDs) == 0 && (isGlobalAdmin || allowClientTenantHeaderFallback()) {
+								// A verified global admin/ops caller (role checked above) may select a
+								// tenant via the client-supplied X-Tenant-ID header, since their JWT never
+								// carries a tenant claim of its own. Non-admin callers only get this
+								// fallback in dev (ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true) - the header
+								// is otherwise client-controlled and untrusted for them. Parse it as a UUID
+								// to reject malicious/injected values either way.
 								headerTenant := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 								if parsed, err := uuid.Parse(headerTenant); err == nil {
 									tenantID = parsed.String()
 									r.Header.Set("X-Tenant-ID", tenantID)
 									tenantIDs = []string{tenantID}
-									logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] JWT lacks tenant claim; falling back to X-Tenant-ID header: tenant=%s user=%s", tenantID, uid)
+									logging.GetLogger().Sugar().Infof("[AuthContextMiddleware] JWT lacks tenant claim; falling back to X-Tenant-ID header: tenant=%s user=%s isGlobalAdmin=%v", tenantID, uid, isGlobalAdmin)
 								} else {
 									logging.GetLogger().Sugar().Warnf("[AuthContextMiddleware] JWT lacks tenant claim and X-Tenant-ID header is missing or not a valid UUID: header=%q user=%s", headerTenant, uid)
+									r.Header.Del("X-Tenant-ID")
 								}
 							} else if len(tenantIDs) == 0 {
 								r.Header.Del("X-Tenant-ID")
 							}
-
-							// isGlobalAdmin is true for global_admin, global_ops, or the legacy is_core_admin flag.
-							// The jclaims.IsCoreAdmin field may be absent in newer JWT lib versions; we treat it
-						// as zero-value (false) via the safe field access pattern below.
-						isGlobalAdmin := hasRole(normalizeStringList(jclaims.Roles), "global_admin") ||
-							hasRole(normalizeStringList(jclaims.Roles), "global_ops")
-						// Backward-compat: also accept legacy "core_admin" / "is_core_admin" claim if present.
-						if !isGlobalAdmin && len(normalizeStringList(jclaims.Roles)) > 0 {
-							for _, role := range normalizeStringList(jclaims.Roles) {
-								if role == "core_admin" || role == "is_core_admin" {
-									isGlobalAdmin = true
-									break
-								}
-							}
-						}
 
 						ctx := identity.WithActorTenant(r.Context(), uid, tenantID)
 						ctx = security.WithAuthInfo(ctx, security.AuthInfo{

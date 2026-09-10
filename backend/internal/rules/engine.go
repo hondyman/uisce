@@ -75,7 +75,7 @@ type RuleEngine struct {
 
 	vm          *vm.VM
 	metrics     *EngineMetrics
-	recursive   *AdvancedEvaluator
+	recursive   *vm.AdvancedEvaluator
 	rewarmGroup singleflight.Group
 	profiler    *LatencyProfiler
 	driftHealer DriftHealerInterface
@@ -93,7 +93,7 @@ func NewRuleEngine(repo RuleRepository) *RuleEngine {
 		repo:      repo,
 		vm:        vm.NewVM(),
 		metrics:   &EngineMetrics{},
-		recursive: NewAdvancedEvaluator(),
+		recursive: vm.NewAdvancedEvaluator(),
 	}
 	e.coreState.Store(&EngineState{
 		Syms:     vm.NewSymbolDict(),

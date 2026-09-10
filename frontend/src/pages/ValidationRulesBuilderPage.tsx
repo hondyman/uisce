@@ -11,6 +11,7 @@
  */
 
 import React, { useEffect, useCallback, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Save, X, AlertCircle, CheckCircle } from 'lucide-react';
 import { WEALTH_VALIDATION_RULES } from '../data/wealthValidationRules';
 import { useTenant } from '../contexts/TenantContext';
@@ -94,12 +95,17 @@ export const ValidationRulesBuilderPage: React.FC = () => {
   }, []);
 
   /**
-   * Handle new rule button
+   * Handle new rule button - routes to the unified rule editor. The
+   * template form below (ParameterBuilder -> flat condition_json) is
+   * retired: its create endpoint now returns 410, and its output format
+   * has no path to internal/rules/vm.RuleNode, the engine everything else
+   * (validation, MDM/rulefabric, calc-term SQL pushdown, the browser wasm
+   * preview) runs on. New rules belong in the Monaco/vm.RuleNode editor.
    */
+  const navigate = useNavigate();
   const handleNewRule = useCallback(() => {
-    form.resetToBlank();
-    setShowForm(true);
-  }, [form]);
+    navigate('editor');
+  }, [navigate]);
 
   /**
    * Handle edit rule

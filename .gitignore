@@ -125,3 +125,32 @@ datafusion-engine/target/
 
 # Go devjwt binary
 backend/devjwt
+
+# `go build ./cmd/<name>` (or `go run .` in some setups) without -o drops
+# a binary named after the directory into wherever the invoking cwd was -
+# backend/, backend/cmd/<name>/, or backend/rule-engine/, depending on how
+# it was run. This has produced many accidentally-committed stray
+# binaries across the repo (backend/bp-starter, backend/catalog-admin,
+# backend/cmd/bundles/bundles, ...; backend/devjwt above is one instance
+# of the same problem, patched one-off). General rule instead of another
+# one-off: an extensionless file directly in backend/cmd/*/ or
+# backend/rule-engine/ is a binary, never source - except Dockerfile.
+# (Ignore all direct children, then un-ignore anything with a dot in its
+# name and any subdirectory - a plain "no-dot filename" glob isn't
+# expressible directly in gitignore's pattern language.)
+backend/cmd/*/*
+!backend/cmd/*/*.*
+!backend/cmd/*/*/
+!backend/cmd/*/Dockerfile
+backend/rule-engine/*
+!backend/rule-engine/*.*
+!backend/rule-engine/*/
+!backend/rule-engine/Dockerfile
+# backend/rule-engine/cmd/<name>/ is its own nested cmd/ tree (separate
+# from top-level backend/cmd/*/ above) - missed on the first pass of this
+# rule, which is exactly how generate-monaco/generate-types binaries got
+# committed here mid-session even after the first fix.
+backend/rule-engine/cmd/*/*
+!backend/rule-engine/cmd/*/*.*
+!backend/rule-engine/cmd/*/*/
+!backend/rule-engine/cmd/*/Dockerfile

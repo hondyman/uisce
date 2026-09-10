@@ -225,9 +225,9 @@ func main() {
 
 	// 2. Get Master / Gold Copy Tenant ID
 	var tenantID string
-	err = db.QueryRow("SELECT id FROM tenants WHERE gold_copy = true OR is_core = true OR name = 'core' LIMIT 1").Scan(&tenantID)
+	err = db.QueryRow("SELECT id FROM public.tenants WHERE gold_copy = true OR is_core = true OR name = 'core' LIMIT 1").Scan(&tenantID)
 	if err != nil {
-		err = db.QueryRow("SELECT id FROM tenants ORDER BY created_at ASC LIMIT 1").Scan(&tenantID)
+		err = db.QueryRow("SELECT id FROM public.tenants ORDER BY created_at ASC LIMIT 1").Scan(&tenantID)
 		if err != nil {
 			log.Fatalf("Fatal: No tenant found: %v", err)
 		}

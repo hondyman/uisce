@@ -42,7 +42,7 @@ func (r *DBDatasourceResolver) Resolve(ctx context.Context, datasourceID string)
 		FROM tenant_product_datasource tpd
 		JOIN tenant_product tp ON tpd.tenant_product_id = tp.id
 		JOIN tenant_instance ti ON tp.datasource_id = ti.id
-		JOIN tenants t ON ti.tenant_id = t.id
+		JOIN public.tenants t ON ti.tenant_id = t.id
 		WHERE tpd.id = $1
 		  AND tpd.is_active = true
 		  AND tp.is_active = true

@@ -1,0 +1,21 @@
+{
+  "name": "orm-oms-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "host.docker.internal",
+    "database.port": "5432",
+    "database.user": "postgres",
+    "database.password": "postgres",
+    "database.dbname": "crims",
+    "database.sslmode": "verify-ca",
+    "database.sslrootcert": "/tmp/orm_ca.crt",
+    "database.sslcert": "/tmp/orm_client.crt",
+    "database.sslkey": "/tmp/orm_client_der.pk8",
+    "topic.prefix": "orm_oms",
+    "schema.include.list": "orm",
+    "plugin.name": "pgoutput",
+    "publication.name": "orm_cdc_publication",
+    "publication.autocreate.mode": "disabled",
+    "slot.name": "orm_oms_slot"
+  }
+}

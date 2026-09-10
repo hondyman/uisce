@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useLocale } from '../i18n/useLocale';
 import { GOLD_COPY } from '../config';
 import { getSelectedRegion } from '../lib/region';
 
@@ -167,6 +168,7 @@ export default function BusinessObjectDetailsPage() {
   const { id: _id } = useParams<{ id: string }>();
   const id = _id;
   const navigate = useNavigate();
+  const locale = useLocale();
   const { tenant, datasource } = useTenant();
   const { token } = useAuth();
   const notification = useNotification();
@@ -932,7 +934,7 @@ export default function BusinessObjectDetailsPage() {
       
       // Validate that the business object belongs to the current tenant or is a gold_copy / core object
       const isCoreObject = data.isCore || data.is_core || data.goldCopy || data.gold_copy;
-      if (data.tenantId && data.tenantId !== tenant.id && !isCoreObject) {
+      if (data.tenantId && data.tenantId !== tenant?.id && !isCoreObject) {
         throw new Error('Business object does not belong to the current tenant');
       }
       
@@ -1066,7 +1068,7 @@ export default function BusinessObjectDetailsPage() {
           displayName: mappedObject.displayName || 'Root',
           icon: mappedObject.icon || 'business',
           children: hierarchy.length > 0 ? hierarchy : undefined,
-          fields: hierarchy.length === 0 ? uniqueFields : undefined
+          fields: hierarchy.length === 0 ? allFields : undefined
         },
       ];
       setHierarchyNodes(rootHierarchy);
@@ -1271,29 +1273,34 @@ export default function BusinessObjectDetailsPage() {
   };
 
   const handleSaveRule = useCallback(async (rule: any) => {
+    // New-rule creation (POST /api/validation-rules) is retired - that
+    // intake now 410s (see validation_rules_routes.go). Editing existing
+    // rules via PATCH is unaffected: only the creation route was closed.
+    // New rules go through the unified-engine editor (/validation-rule-nodes),
+    // which authors a real rule_ast rather than the flat condition shape
+    // this dialog builds.
+    if (!rule.id) {
+      setValidationRuleCreatorOpen(false);
+      const boName = businessObject?.technicalName || businessObject?.key || _id;
+      navigate(`/${locale}/core/validation-rules/editor?bo_name=${encodeURIComponent(boName ?? '')}`);
+      return;
+    }
     try {
-      // Save the rule to the backend
-      const method = rule.id ? 'PATCH' : 'POST';
-      const endpoint = rule.id 
-        ? `/api/validation-rules/${rule.id}`
-        : '/api/validation-rules';
-
-      // apiClient throws on non-OK. Saves the rule and refreshes the list.
-      await apiClient<void>(endpoint, {
-        method,
+      await apiClient<void>(`/api/validation-rules/${rule.id}`, {
+        method: 'PATCH',
         headers: getAuthHeaders(),
         body: JSON.stringify(rule),
       });
 
       // Refresh rules after successful save
       await fetchValidationRules();
-      notification.success(rule.id ? 'Rule updated successfully' : 'Rule created successfully');
+      notification.success('Rule updated successfully');
       setValidationRuleCreatorOpen(false);
       setEditingRule(null);
     } catch (err) {
       notification.error(err instanceof Error ? err.message : 'Failed to save rule');
     }
-  }, [tenantId, datasourceId, fetchValidationRules, notification]);
+  }, [tenantId, datasourceId, fetchValidationRules, notification, navigate, locale, businessObject, _id]);
 
   const handleAddSubtype = async () => {
     // Validate required context from operating scope

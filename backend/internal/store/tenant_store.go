@@ -66,7 +66,7 @@ func (s *tenantStoreImpl) CreateTenant(ctx context.Context, req models.TenantCre
 func (s *tenantStoreImpl) GetTenantByID(ctx context.Context, id uuid.UUID) (*models.Tenant, error) {
 	query := `
 		SELECT id, name, code, region, plan, max_requests, window_seconds, is_suspended, created_at, updated_at
-		FROM tenants
+		FROM public.tenants
 		WHERE id = $1
 	`
 
@@ -87,7 +87,7 @@ func (s *tenantStoreImpl) GetTenantByID(ctx context.Context, id uuid.UUID) (*mod
 func (s *tenantStoreImpl) GetTenantByCode(ctx context.Context, code string) (*models.Tenant, error) {
 	query := `
 		SELECT id, name, code, region, plan, max_requests, window_seconds, is_suspended, created_at, updated_at
-		FROM tenants
+		FROM public.tenants
 		WHERE code = $1
 	`
 
@@ -108,7 +108,7 @@ func (s *tenantStoreImpl) GetTenantByCode(ctx context.Context, code string) (*mo
 func (s *tenantStoreImpl) ListTenants(ctx context.Context, limit int, offset int) ([]*models.Tenant, int, error) {
 	query := `
 		SELECT id, name, code, region, plan, max_requests, window_seconds, is_suspended, created_at, updated_at
-		FROM tenants
+		FROM public.tenants
 		ORDER BY created_at DESC
 		LIMIT $1 OFFSET $2
 	`
@@ -129,7 +129,7 @@ func (s *tenantStoreImpl) ListTenants(ctx context.Context, limit int, offset int
 	}
 
 	// Get total count
-	countQuery := `SELECT COUNT(*) FROM tenants`
+	countQuery := `SELECT COUNT(*) FROM public.tenants`
 	var total int
 	if err := s.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("failed to count tenants: %w", err)

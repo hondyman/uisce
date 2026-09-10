@@ -151,7 +151,7 @@ func (h *TriggerHandler) ListWorkflowEventsHTTP(w http.ResponseWriter, r *http.R
 func (h *TriggerHandler) ListBusinessObjectsHTTP(w http.ResponseWriter, r *http.Request) {
 	tenantID := tenantIDFromRequest(r)
 
-	query := `SELECT id, name, display_name, description, fields FROM business_objects WHERE tenant_id = $1 ORDER BY display_name`
+	query := `SELECT id, bo_key AS name, bo_name AS display_name, COALESCE(description, '') AS description FROM public.business_objects WHERE tenant_id = $1 ORDER BY bo_name`
 
 	var objects []map[string]interface{}
 	rows, err := h.db.QueryxContext(r.Context(), query, tenantID)

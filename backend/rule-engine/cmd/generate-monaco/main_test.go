@@ -16,21 +16,17 @@ func TestGenerateMonacoMetadata(t *testing.T) {
 	}
 	defer os.RemoveAll(tempDir)
 
-	// Change to temp directory and run main
-	oldWd, _ := os.Getwd()
-	os.Chdir(tempDir)
-	defer os.Chdir(oldWd)
-
-	// Create the generated directory
-	if err := os.MkdirAll("generated", 0o755); err != nil {
-		t.Fatalf("Failed to create generated dir: %v", err)
+	// buildMetadata/writeMetadata take the output dir and package set
+	// explicitly - no os.Chdir needed (and none would work here: chdir'ing
+	// outside the module, as the old version of this test did, makes
+	// packages.Load fail to resolve goPkgPaths at all).
+	built := buildMetadata()
+	if err := writeMetadata(tempDir, built); err != nil {
+		t.Fatalf("writeMetadata failed: %v", err)
 	}
 
-	// Run the generator (may fail due to missing packages, but should still create valid JSON)
-	main()
-
 	// Check if output file exists
-	outputFile := filepath.Join("generated", "asl.monaco.json")
+	outputFile := filepath.Join(tempDir, "asl.monaco.json")
 	if _, err := os.Stat(outputFile); os.IsNotExist(err) {
 		t.Fatalf("Output file %s was not created", outputFile)
 	}

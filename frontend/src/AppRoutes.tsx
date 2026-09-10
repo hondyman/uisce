@@ -45,6 +45,7 @@ import CustomComponentPage from "./pages/CustomComponentPage";
 import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
 import Marketplace from "./pages/marketplace/Marketplace";
 import { ValidationRulesBuilderPage } from "./pages/ValidationRulesBuilderPage";
+import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import { UisceBuilderPage } from "./pages/UisceBuilderPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
@@ -283,6 +284,7 @@ function ProtectedApp() {
         <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="core/validation-rules" element={<ProtectedRoute><ValidationRulesBuilderPage /></ProtectedRoute>} />
+        <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
         <Route path="reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />

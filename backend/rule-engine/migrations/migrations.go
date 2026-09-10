@@ -1,17 +1,17 @@
 package migrations
 
-import "github.com/hondyman/uisce/backend/rule-engine/runtime"
+import vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 
 type Migration struct {
 	Version string
-	Apply   func(runtime.RuleNode) runtime.RuleNode
+	Apply   func(vm.RuleNode) vm.RuleNode
 }
 
 var Migrations = []Migration{
 	{
 		Version: "1.1.0",
-		Apply: func(rule runtime.RuleNode) runtime.RuleNode {
-			if rule.Type == "Condition" && rule.Condition.Operator == "eq" {
+		Apply: func(rule vm.RuleNode) vm.RuleNode {
+			if rule.Type == vm.NodeTypeCondition && rule.Condition.Operator == "eq" {
 				rule.Condition.Operator = "equals"
 			}
 			return rule
@@ -19,7 +19,7 @@ var Migrations = []Migration{
 	},
 }
 
-func Migrate(rule runtime.RuleNode) runtime.RuleNode {
+func Migrate(rule vm.RuleNode) vm.RuleNode {
 	for _, m := range Migrations {
 		rule = m.Apply(rule)
 	}

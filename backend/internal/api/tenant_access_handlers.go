@@ -515,7 +515,7 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 		       COALESCE(gold_copy, false) as gold_copy,
 		       COALESCE(region, 'us-west') as region,
 		       COALESCE(allowed_regions, '[]'::jsonb) as allowed_regions
-		FROM tenants WHERE 1=1
+		FROM public.tenants WHERE 1=1
 	`
 	if targetTenantID != nil {
 		query += " AND id = $1"

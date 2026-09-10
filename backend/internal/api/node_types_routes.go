@@ -113,7 +113,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 				  cnt.parent_type_id, cnt.config, cnt.created_at, cnt.updated_at,
 				  COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
-				JOIN tenants t ON cnt.tenant_id::uuid = t.id
+				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
 				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
@@ -125,7 +125,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 					   cnt.parent_type_id, cnt.config, cnt.created_at, cnt.updated_at,
 					   COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
-				JOIN tenants t ON cnt.tenant_id::uuid = t.id
+				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
 				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 				  AND (cnt.catalog_type_name ILIKE $2 OR COALESCE(cnt.description, '') ILIKE $2)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
@@ -263,7 +263,7 @@ func (h *NodeTypesHandler) handleGetNodeType(w http.ResponseWriter, r *http.Requ
 				   cond.parent_type_id, cond.config, cond.created_at, cond.updated_at,
 				   COALESCE(t.gold_copy, false) as is_core
 			FROM catalog_node_type cond
-			LEFT JOIN tenants t ON cond.tenant_id = t.id
+			LEFT JOIN public.tenants t ON cond.tenant_id = t.id
 			WHERE cond.id = $1 AND cond.tenant_id = $2
 		`
 
@@ -356,7 +356,7 @@ func (h *NodeTypesHandler) handleUpdateNodeType(w http.ResponseWriter, r *http.R
 	nt.ID = id
 	nt.TenantID = tenantID
 
-	coreQuery := `SELECT COALESCE(t.gold_copy, false) FROM tenants t WHERE t.id = $1`
+	coreQuery := `SELECT COALESCE(t.gold_copy, false) FROM public.tenants t WHERE t.id = $1`
 	var isCore bool
 	if err := h.db.QueryRow(coreQuery, tenantID).Scan(&isCore); err == nil {
 		if isCore {

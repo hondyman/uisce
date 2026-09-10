@@ -79,7 +79,7 @@ func main() {
 
 	// Get all tenants
 	var tenantIDs []string
-	err = db.SelectContext(ctx, &tenantIDs, `SELECT id FROM tenants`)
+	err = db.SelectContext(ctx, &tenantIDs, `SELECT id FROM public.tenants`)
 	if err != nil {
 		log.Fatalf("failed to fetch tenants: %v", err)
 	}

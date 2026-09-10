@@ -472,6 +472,178 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ---------------------------------------------------------
+  # StarRocks — hot-tier OLAP store for pre-aggregated
+  # calculated semantic terms, fed by the CDC pipeline:
+  # cmd/cdc_service or a Debezium Postgres connector ->
+  # uisce-redpanda -> cmd/stream_loader -> StarRocks stream
+  # load API. Uses the existing uisce-minio for object storage.
+  # ---------------------------------------------------------
+  starrocks-fe:
+    image: starrocks/fe-ubuntu:3.3-latest
+    hostname: starrocks-fe
+    container_name: starrocks-fe
+    ports:
+      - "8030:8030"
+      - "9020:9020"
+      - "9030:9030"
+    volumes:
+      - starrocks_fe_meta:/opt/starrocks/fe/meta
+      - ./backend/internal/analytics/starrocks_init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+      - TZ=UTC
+    command: >
+      /opt/starrocks/fe/bin/start_fe.sh
+    networks:
+      - remote-net
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8030/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+  starrocks-be:
+    image: starrocks/be-ubuntu:3.3-latest
+    hostname: starrocks-be
+    container_name: starrocks-be
+    ports:
+      - "8040:8040"
+      - "9060:9060"
+    volumes:
+      - starrocks_be_storage:/opt/starrocks/be/storage
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+      - TZ=UTC
+    command: >
+      /opt/starrocks/be/bin/start_be.sh
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    networks:
+      - remote-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
+  # Stream Loader — consumes Debezium change events for
+  # orm.execution from Kafka and stream-loads decoded rows
+  # into StarRocks (oms.orm_execution). One instance per
+  # source table; add more services here (same image, different
+  # CDC_TOPIC/STARROCKS_TABLE) as additional OMS tables get
+  # pre-aggregation coverage. See cmd/stream_loader/main.go for
+  # the Debezium envelope / Decimal-field decoding.
+  # ---------------------------------------------------------
+  uisce-stream-loader-execution:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-execution
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.execution
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_execution
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-order:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-order
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.order
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_order
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-placement:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-placement
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.placement
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_placement
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-order-allocation:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-order-allocation
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.order_allocation
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_order_allocation
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-execution-allocation:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-execution-allocation
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      CDC_TOPIC: orm_oms.orm.execution_allocation
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: oms
+      STARROCKS_TABLE: orm_execution_allocation
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   remote-net:
     driver: bridge
@@ -484,3 +656,5 @@ volumes:
   uisce_redis_data:
   uisce_minio_data:
   lakekeeper_pgdata:
+  starrocks_fe_meta:
+  starrocks_be_storage:

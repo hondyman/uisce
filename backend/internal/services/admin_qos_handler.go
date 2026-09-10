@@ -169,7 +169,7 @@ func (h *AdminQoSHandler) listTenants(w http.ResponseWriter, r *http.Request) {
 		{"id": "tenant_2", "name": "Beta Inc", "tier": "professional", "status": "active"},
 	}
 
-	// In production: SELECT * FROM tenants WHERE active = true
+	// In production: SELECT * FROM public.tenants WHERE active = true
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"tenants": tenants, "count": len(tenants)})
 }

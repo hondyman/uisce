@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/jmoiron/sqlx"
 
@@ -27,10 +29,11 @@ type GlossaryHandler struct {
 	governance   *governance.GovernanceEngine
 	lineageRepo  lineage.LineageRepository
 	securityDeps handlers.SecurityContextDeps
+	abbrevSvc    *services.AbbreviationService
 }
 
 // NewGlossaryHandler creates a new glossary handler
-func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps) *GlossaryHandler {
+func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps, abbrevSvc *services.AbbreviationService) *GlossaryHandler {
 	dbx := sqlx.NewDb(db, "postgres")
 	return &GlossaryHandler{
 		db:           db,
@@ -38,6 +41,7 @@ func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, secur
 		governance:   governance.NewGovernanceEngine(dbx),
 		lineageRepo:  lineageRepo,
 		securityDeps: securityDeps,
+		abbrevSvc:    abbrevSvc,
 	}
 }
 
@@ -50,6 +54,7 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/terms", h.CreateTerm)
 		r.Delete("/terms/{id}", h.DeleteTerm)
 		r.Post("/edges", h.CreateEdge)
+		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
 		r.Put("/edges/{id}", h.UpdateEdge)
 		r.Delete("/edges/{id}", h.DeleteEdge)
 		// Technical assets & graph endpoints for selected term detail view
@@ -1641,15 +1646,15 @@ func (h *GlossaryHandler) ListTechnicalAssets(w http.ResponseWriter, r *http.Req
 		}
 
 		assets = append(assets, map[string]interface{}{
-			"edge_id":         edgeID,
-			"id":              id,
-			"node_name":       name,
-			"qualified_path":  path,
-			"node_type":       nType,
-			"properties":      props,
-			"is_core":         isActive,
-			"datasource":      datasource,
-			"datasource_id":   dsID,
+			"edge_id":        edgeID,
+			"id":             id,
+			"node_name":      name,
+			"qualified_path": path,
+			"node_type":      nType,
+			"properties":     props,
+			"is_core":        isActive,
+			"datasource":     datasource,
+			"datasource_id":  dsID,
 		})
 	}
 
@@ -1870,16 +1875,16 @@ type ProfileSampleRequest struct {
 
 // ProfileSampleResponse returns statistical and pattern metadata from zero-impact sampling
 type ProfileSampleResponse struct {
-	ColumnName        string   `json:"column_name"`
-	TableName         string   `json:"table_name"`
-	SampleCount       int      `json:"sample_count"`
-	SampleValues      []string `json:"sample_values"`
-	DistinctCount     int      `json:"distinct_count"`
-	NullCount         int      `json:"null_count"`
-	InferredType      string   `json:"inferred_type"`
-	PatternDetected   string   `json:"pattern_detected"`
-	BloombergCandidate string  `json:"bloomberg_candidate,omitempty"`
-	IsSafeSampled     bool     `json:"is_safe_sampled"`
+	ColumnName         string   `json:"column_name"`
+	TableName          string   `json:"table_name"`
+	SampleCount        int      `json:"sample_count"`
+	SampleValues       []string `json:"sample_values"`
+	DistinctCount      int      `json:"distinct_count"`
+	NullCount          int      `json:"null_count"`
+	InferredType       string   `json:"inferred_type"`
+	PatternDetected    string   `json:"pattern_detected"`
+	BloombergCandidate string   `json:"bloomberg_candidate,omitempty"`
+	IsSafeSampled      bool     `json:"is_safe_sampled"`
 }
 
 // ProfileSample handles safe, zero-impact physical page sampling on columns for billion-row tables
@@ -2053,4 +2058,425 @@ func (h *GlossaryHandler) ProfileSample(w http.ResponseWriter, r *http.Request) 
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// tokenizeColumnName splits a raw column/technical name into candidate
+// words: breaks on underscores/spaces/dots and on camelCase boundaries,
+// e.g. "AcctCd" -> ["Acct", "Cd"], "customer_acct_no" -> ["customer", "acct", "no"].
+var camelBoundary = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+
+func tokenizeColumnName(name string) []string {
+	spaced := camelBoundary.ReplaceAllString(name, "$1 $2")
+	spaced = strings.NewReplacer("_", " ", ".", " ", "-", " ", "/", " ").Replace(spaced)
+	var tokens []string
+	for _, t := range strings.Fields(spaced) {
+		if t != "" {
+			tokens = append(tokens, t)
+		}
+	}
+	return tokens
+}
+
+// commonWords are short tokens that look abbreviation-like but are already
+// real English words - skip these when deciding whether a token needs
+// abbreviation lookup/LLM disambiguation.
+var commonShortWords = map[string]bool{
+	"ID": true, "NO": true, "OF": true, "IN": true, "ON": true, "AT": true,
+	"IS": true, "OR": true, "TO": true, "BY": true, "AN": true, "UP": true,
+	"DUE": true, "NEW": true, "OLD": true, "KEY": true, "PIN": true,
+}
+
+func looksLikeAbbreviation(token string) bool {
+	upper := strings.ToUpper(token)
+	if commonShortWords[upper] {
+		return false
+	}
+	// All-caps short token (<=6 chars) with no vowels, or a short token where
+	// the original casing was already all-uppercase, is a likely abbreviation
+	// (ACCT, CD, MGR, XREF). Longer already-capitalized words (Country,
+	// Customer) are left alone.
+	if token == strings.ToUpper(token) && len(token) <= 6 {
+		return true
+	}
+	return false
+}
+
+func titleCase(tokens []string) string {
+	out := make([]string, 0, len(tokens))
+	for _, t := range tokens {
+		if t == "" {
+			continue
+		}
+		if len(t) == 1 {
+			out = append(out, strings.ToUpper(t))
+			continue
+		}
+		out = append(out, strings.ToUpper(t[:1])+strings.ToLower(t[1:]))
+	}
+	return strings.Join(out, " ")
+}
+
+// pascalCase joins tokens with no separator, capitalizing each word - except
+// a token that is already all-uppercase (an acronym like "ID", "CD", "CUSIP"),
+// which is kept as-is rather than title-cased down to "Id".
+func pascalCase(tokens []string) string {
+	var b strings.Builder
+	for _, t := range tokens {
+		if t == "" {
+			continue
+		}
+		// Dictionary expansions are stored all-uppercase regardless of length
+		// (e.g. "TYPE", "ACCOUNT"), so uppercase alone doesn't mean acronym.
+		// Only genuinely short tokens (<=3 chars: ID, CD, CO...) are kept as
+		// acronyms; everything else is title-cased like any other word.
+		if t == strings.ToUpper(t) && len(t) <= 3 {
+			b.WriteString(t)
+			continue
+		}
+		b.WriteString(strings.ToUpper(t[:1]) + strings.ToLower(t[1:]))
+	}
+	return b.String()
+}
+
+// derivedTermNames holds the two names generated for a single physical
+// column: a compact, cross-datasource-stable identifier for the semantic
+// term layer, and a fully human-readable name for the business term layer.
+type derivedTermNames struct {
+	// SemanticName is a PascalCase identifier with no spaces (e.g.
+	// "CustomerTypeID"), suitable as a stable cross-datasource key: any
+	// column representing the same concept, in any datasource, derives the
+	// same SemanticName and so maps to the same semantic_term node.
+	SemanticName string
+	// BusinessName is the fully-expanded, human-readable name (e.g.
+	// "Customer Type Identifier") for the business term layer.
+	BusinessName string
+}
+
+// idSuffixWords are trailing tokens that stay abbreviated at the semantic
+// (identifier) layer even though the business layer spells them out in
+// full - e.g. "customer_type_id" -> semantic "CustomerTypeID", business
+// "Customer Type Identifier". This mirrors the common data-modeling
+// convention of "...ID" suffixes on identifier columns.
+var idSuffixWords = map[string]string{
+	"IDENTIFIER": "ID",
+	"CODE":       "CD",
+}
+
+// deriveTermNames expands abbreviations (dictionary lookup, then Gemini
+// disambiguation for anything unresolved) and returns both the compact
+// semantic-term name and the fully-expanded business-term name for a raw
+// column/technical name. Newly-disambiguated abbreviations are persisted
+// back to the abbreviation dictionary so the next generation for the same
+// column name doesn't need the LLM again.
+func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName string) derivedTermNames {
+	tokens := tokenizeColumnName(rawName)
+	if len(tokens) == 0 {
+		return derivedTermNames{}
+	}
+	if h.abbrevSvc == nil {
+		return derivedTermNames{SemanticName: pascalCase(tokens), BusinessName: titleCase(tokens)}
+	}
+
+	svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
+
+	abbrevs, err := h.abbrevSvc.GetAllAbbreviations(svcCtx)
+	if err != nil {
+		log.Printf("[deriveTermNames] abbreviation lookup failed, falling back to raw tokens: %v", err)
+		return derivedTermNames{SemanticName: pascalCase(tokens), BusinessName: titleCase(tokens)}
+	}
+	abbrMap := make(map[string]string, len(abbrevs))
+	for _, a := range abbrevs {
+		abbrMap[strings.ToUpper(a.Abbreviation)] = a.FullWord
+	}
+
+	resolved := make([]string, len(tokens))
+	var unresolvedIdx []int
+	var unresolvedTokens []string
+	for i, tok := range tokens {
+		upper := strings.ToUpper(tok)
+		if full, ok := abbrMap[upper]; ok {
+			resolved[i] = full
+		} else if looksLikeAbbreviation(tok) {
+			resolved[i] = tok // placeholder, may be overwritten below
+			unresolvedIdx = append(unresolvedIdx, i)
+			unresolvedTokens = append(unresolvedTokens, upper)
+		} else {
+			resolved[i] = tok
+		}
+	}
+
+	if len(unresolvedTokens) > 0 {
+		suggestions, err := h.abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName)
+		if err != nil {
+			log.Printf("[deriveTermNames] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
+		} else {
+			for _, idx := range unresolvedIdx {
+				upper := strings.ToUpper(tokens[idx])
+				if full, ok := suggestions[upper]; ok && full != "" {
+					resolved[idx] = full
+					// Persist so future generations reuse the dictionary instead of the LLM.
+					if addErr := h.abbrevSvc.AddAbbreviation(svcCtx, upper, full, "auto-learned via semantic term generation"); addErr != nil {
+						log.Printf("[deriveTermNames] failed to persist learned abbreviation %s=%s: %v", upper, full, addErr)
+					}
+				}
+			}
+		}
+	}
+
+	// The semantic layer keeps common identifier/code suffixes abbreviated
+	// (ID, CD) even though the business layer spells them out fully.
+	semanticTokens := make([]string, len(resolved))
+	copy(semanticTokens, resolved)
+	if len(semanticTokens) > 0 {
+		last := strings.ToUpper(semanticTokens[len(semanticTokens)-1])
+		if abbr, ok := idSuffixWords[last]; ok {
+			semanticTokens[len(semanticTokens)-1] = abbr
+		}
+	}
+
+	return derivedTermNames{
+		SemanticName: pascalCase(semanticTokens),
+		BusinessName: titleCase(resolved),
+	}
+}
+
+// GenerateSemanticTerms creates one semantic_term catalog node per requested
+// physical column, deriving a real business-term name (dictionary
+// abbreviation expansion + Gemini disambiguation for anything unresolved,
+// with existing-term reuse to avoid duplicates) rather than using the raw
+// qualified path as the term name. Links each term to its source column via
+// a MAPS_TO edge.
+// resolveOrCreateNodeType looks up a catalog_node_type by name, creating it
+// for the tenant if it doesn't exist yet.
+func (h *GlossaryHandler) resolveOrCreateNodeType(tenantID, typeName string) (string, error) {
+	var id string
+	err := h.db.QueryRow(`SELECT id FROM catalog_node_type WHERE catalog_type_name = $1 LIMIT 1`, typeName).Scan(&id)
+	if err == sql.ErrNoRows {
+		err = h.db.QueryRow(
+			`INSERT INTO catalog_node_type (tenant_id, catalog_type_name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id`,
+			tenantID, typeName,
+		).Scan(&id)
+	}
+	return id, err
+}
+
+// resolveOrCreateEdgeType looks up a catalog_edge_type by name, creating it
+// for the tenant if it doesn't exist yet.
+func (h *GlossaryHandler) resolveOrCreateEdgeType(tenantID, typeName string) (string, error) {
+	var id string
+	err := h.db.QueryRow(`SELECT id FROM catalog_edge_type WHERE edge_type_name = $1 LIMIT 1`, typeName).Scan(&id)
+	if err == sql.ErrNoRows {
+		err = h.db.QueryRow(
+			`INSERT INTO catalog_edge_type (tenant_id, edge_type_name, created_at, updated_at) VALUES ($1, $2, NOW(), NOW()) RETURNING id`,
+			tenantID, typeName,
+		).Scan(&id)
+	}
+	return id, err
+}
+
+// findOrCreateTermNode reuses an existing catalog_node of the given type for
+// this tenant whose name matches (case-insensitively) - across every
+// datasource, since semantic and business terms are cross-datasource
+// concepts, not per-datasource ones - or creates a new one carrying the
+// given definition (used only when creating; an existing node's definition
+// is left untouched).
+func (h *GlossaryHandler) findOrCreateTermNode(ctx context.Context, tenantID, datasourceID, nodeTypeID, qualifiedPrefix, name, definition string) (id string, reused bool, err error) {
+	if datasourceID == "none" {
+		datasourceID = ""
+	}
+	qualifiedPath := fmt.Sprintf("%s/%s", qualifiedPrefix, name)
+	err = h.db.QueryRowContext(ctx,
+		`SELECT id FROM catalog_node WHERE node_type_id = $1 AND tenant_id = $2 AND (qualified_path = $3 OR lower(node_name) = lower($4)) LIMIT 1`,
+		nodeTypeID, tenantID, qualifiedPath, name,
+	).Scan(&id)
+	if err == nil && id != "" {
+		return id, true, nil
+	}
+
+	properties := "{}"
+	if definition != "" {
+		propsBytes, marshalErr := json.Marshal(map[string]string{"description": definition})
+		if marshalErr == nil {
+			properties = string(propsBytes)
+		}
+	}
+	err = h.db.QueryRowContext(ctx,
+		`INSERT INTO catalog_node (node_name, node_type_id, tenant_id, tenant_datasource_id, properties, qualified_path, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6, NOW(), NOW()) RETURNING id`,
+		name, nodeTypeID, tenantID, datasourceID, properties, qualifiedPath,
+	).Scan(&id)
+	if err != nil {
+		return "", false, err
+	}
+	return id, false, nil
+}
+
+// ensureEdge creates a catalog_edge between subject and object if one of
+// this edge type doesn't already exist between them.
+func (h *GlossaryHandler) ensureEdge(tenantID, datasourceID, subjectID, objectID, edgeTypeID string) error {
+	if datasourceID == "none" {
+		datasourceID = ""
+	}
+	var existingID string
+	err := h.db.QueryRow(
+		`SELECT id FROM catalog_edge WHERE source_node_id = $1 AND target_node_id = $2 AND edge_type_id = $3 LIMIT 1`,
+		subjectID, objectID, edgeTypeID,
+	).Scan(&existingID)
+	if err == nil && existingID != "" {
+		return nil
+	}
+	_, err = h.db.Exec(
+		`INSERT INTO catalog_edge (id, tenant_id, tenant_datasource_id, source_node_id, target_node_id, properties, edge_type_id, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, $6, NOW(), NOW())`,
+		uuid.New().String(), tenantID, datasourceID, subjectID, objectID, edgeTypeID,
+	)
+	return err
+}
+
+func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	var req struct {
+		// Name is accepted for backward compatibility / manual override, but
+		// is only used verbatim when it does NOT look like a raw catalog path
+		// (contains "/"). Otherwise the name is derived from the column itself.
+		Name      string   `json:"name"`
+		ColumnIDs []string `json:"column_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if len(req.ColumnIDs) == 0 {
+		http.Error(w, "column_ids is required", http.StatusBadRequest)
+		return
+	}
+
+	datasourceID := secCtx.DatasourceID
+	if datasourceID == "" || datasourceID == "none" {
+		datasourceID = ""
+		_ = h.db.QueryRow(
+			`SELECT tenant_datasource_id::text FROM catalog_node WHERE id = $1 AND tenant_datasource_id IS NOT NULL`,
+			req.ColumnIDs[0],
+		).Scan(&datasourceID)
+	}
+
+	// Derive names: manual override wins for the semantic name only if it
+	// isn't a raw path; otherwise both names derive from the first column's
+	// own node_name. Semantic names are compact/stable so the same concept
+	// on any datasource ("orm.corporate_action.record_date",
+	// "public.customers.customer_type_id") maps to the same semantic term -
+	// there is no per-datasource "ORM" vs "CRM" semantic term, by design.
+	var columnNodeName string
+	_ = h.db.QueryRow(`SELECT node_name FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&columnNodeName)
+	if columnNodeName == "" {
+		http.Error(w, "could not resolve a name for this term: column not found", http.StatusBadRequest)
+		return
+	}
+	names := h.deriveTermNames(r.Context(), secCtx.TenantID, columnNodeName)
+	semanticName := names.SemanticName
+	if req.Name != "" && !strings.Contains(req.Name, "/") {
+		semanticName = req.Name
+	}
+	if semanticName == "" {
+		http.Error(w, "could not derive a semantic term name", http.StatusBadRequest)
+		return
+	}
+	businessName := names.BusinessName
+	if businessName == "" {
+		businessName = semanticName
+	}
+
+	// Resolve (or create) the semantic_term catalog_node_type, same as CreateTerm.
+	semanticNodeTypeID, err := h.resolveOrCreateNodeType(secCtx.TenantID, "semantic_term")
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve semantic_term node type: %v", err)
+		http.Error(w, "Failed to resolve semantic term type", http.StatusInternalServerError)
+		return
+	}
+
+	// Reuse an existing term with the same name for this tenant (across every
+	// datasource) before creating a duplicate - a repeated concept must map
+	// to one semantic term, not one per table or per datasource.
+	semanticTermID, semanticReused, err := h.findOrCreateTermNode(r.Context(), secCtx.TenantID, datasourceID, semanticNodeTypeID, "semantic_term", semanticName, "")
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve semantic term %q: %v", semanticName, err)
+		http.Error(w, "Failed to resolve semantic term: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Resolve (or create) the MAPS_TO edge type, same lookup pattern as CreateEdge.
+	mapsToEdgeTypeID, err := h.resolveOrCreateEdgeType(secCtx.TenantID, "MAPS_TO")
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve MAPS_TO edge type: %v", err)
+		http.Error(w, "Failed to resolve MAPS_TO edge type", http.StatusInternalServerError)
+		return
+	}
+
+	linked := 0
+	for _, colID := range req.ColumnIDs {
+		if colID == "" {
+			continue
+		}
+		if err := h.ensureEdge(secCtx.TenantID, datasourceID, semanticTermID, colID, mapsToEdgeTypeID); err != nil {
+			log.Printf("[GenerateSemanticTerms] failed to link column %s to term %s: %v", colID, semanticTermID, err)
+			continue
+		}
+		linked++
+	}
+
+	// Resolve (or create) the business_term layer: a human-readable term
+	// linked to the semantic term via has_semantic_context, per the
+	// established two-layer convention (see business_term_generation.go).
+	businessNodeTypeID, err := h.resolveOrCreateNodeType(secCtx.TenantID, "business_term")
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve business_term node type: %v", err)
+		http.Error(w, "Failed to resolve business term type", http.StatusInternalServerError)
+		return
+	}
+
+	definitionSource := ""
+	var definition string
+	if h.abbrevSvc != nil {
+		svcCtx := context.WithValue(r.Context(), "tenant_id", secCtx.TenantID)
+		if def, defErr := h.abbrevSvc.GenerateStandardDefinition(svcCtx, businessName, columnNodeName); defErr != nil {
+			log.Printf("[GenerateSemanticTerms] definition generation failed for %q: %v", businessName, defErr)
+		} else {
+			definition = def.Definition
+			definitionSource = def.Source
+		}
+	}
+	businessTermID, businessReused, err := h.findOrCreateTermNode(r.Context(), secCtx.TenantID, datasourceID, businessNodeTypeID, "business_term", businessName, definition)
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve business term %q: %v", businessName, err)
+		http.Error(w, "Failed to resolve business term: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	hasSemanticEdgeTypeID, err := h.resolveOrCreateEdgeType(secCtx.TenantID, "has_semantic_context")
+	if err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to resolve has_semantic_context edge type: %v", err)
+		http.Error(w, "Failed to resolve has_semantic_context edge type", http.StatusInternalServerError)
+		return
+	}
+	if err := h.ensureEdge(secCtx.TenantID, datasourceID, businessTermID, semanticTermID, hasSemanticEdgeTypeID); err != nil {
+		log.Printf("[GenerateSemanticTerms] failed to link business term %s to semantic term %s: %v", businessTermID, semanticTermID, err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":                   semanticTermID,
+		"name":                 semanticName,
+		"reused_existing":      semanticReused,
+		"business_term_id":     businessTermID,
+		"business_term_name":   businessName,
+		"business_term_reused": businessReused,
+		"definition_source":    definitionSource,
+		"columns_linked":       linked,
+		"columns_total":        len(req.ColumnIDs),
+	})
 }

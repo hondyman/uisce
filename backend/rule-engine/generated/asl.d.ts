@@ -2,6 +2,8 @@
 
 export type AccessLevel = NONE | READ | WRITE;
 
+export type BindingRequirement = BACKEND_SPECIFIC | OPTIONAL | REQUIRED;
+
 export type CommandStatus = failed | pending | success;
 
 export type DataSource = ignite | postgres | starrocks;
@@ -36,7 +38,9 @@ export type ScheduleType = daily | monthly | once | weekly;
 
 export type ScriptState = certified | deprecated | draft | published;
 
-export type Severity = BLOCK | INFO | WARNING | error | hard_block | info | quarantine | warning;
+export type Severity = error | hard_block | info | quarantine | warning;
+
+export type StorageTier = API_FEDERATION | TIER_1_POSTGRES | TIER_2_STARROCKS | TIER_3_ICEBERG;
 
 /** ABACPolicy contains the fine-grained access control rules for a view. */
 export interface ABACPolicy {
@@ -231,7 +235,6 @@ export interface AdvisorWorker {
 /** AlertsService handles business logic for alerts. */
 export interface AlertsService {
   db: any;
-  modelProvider: any;
 }
 
 export interface AliasEntry {
@@ -473,11 +476,85 @@ export interface AutoscalingConfig {
   TargetP99Latency: any;
 }
 
+export interface BOAIAnomalyDetectRequest {
+  BOIDOrKey: string;
+  SampleSize: number;
+}
+
+export interface BOAIAnomalyDetectResponse {
+  Anomalies: BODataAnomaly[];
+  DataQualityScore: number;
+  Recommendations: string[];
+  Summary: string;
+}
+
+export interface BOAIExplainDeltaRequest {
+  BOIDOrKey: string;
+}
+
+export interface BOAIExplainDeltaResponse {
+  BreakingChanges: string[];
+  GovernanceRisks: string[];
+  ImpactScore: string;
+  MarkdownNarrative: string;
+  SuggestedActions: string[];
+  Summary: string;
+}
+
+export interface BOAINLQRequest {
+  BOIDOrKey: string;
+  Query: string;
+}
+
+export interface BOAINLQResponse {
+  Dimensions: string[];
+  Explanation: string;
+  Filters: NLQFilterItem[];
+  GeneratedSQL: string;
+  Limit: number;
+  Measures: string[];
+  QueryDef: Record<string, any>;
+  SortBy: string;
+  SortOrder: string;
+}
+
+export interface BOAISynthesizeRequest {
+  Category: string;
+  IncludeCalc: boolean;
+  IncludeRules: boolean;
+  Prompt: string;
+  TableID: string;
+  TableName: string;
+}
+
+export interface BOAISynthesizeResponse {
+  Category: string;
+  Description: string;
+  PrimaryKey: string;
+  Reasoning: string;
+  SuggestedCalculatedFields: SynthesizedCalculatedField[];
+  SuggestedDisplayName: string;
+  SuggestedDriverTable: string;
+  SuggestedFields: FieldDefinition[];
+  SuggestedKey: string;
+  SuggestedName: string;
+  SuggestedRules: SynthesizedRule[];
+}
+
 /** BOAdvisorResponse is the API response for BO-level advisor. */
 export interface BOAdvisorResponse {
   ExistingPreAggregations: PreAggDescriptor[];
   Recommendations: PreAggRecommendation[];
   Workload: BOWorkloadProfile;
+}
+
+export interface BOArtifactGenerationResponse {
+  BOID: string;
+  BOKey: string;
+  CubeJSSchemaJS: string;
+  OpenAPISpecJSON: string;
+  RESTEndpointURL: string;
+  StarRocksMVDDL: string;
 }
 
 /** BOAuditLog tracks changes to BOs, subtypes, and fields */
@@ -496,6 +573,227 @@ export interface BOAuditLog {
 export interface BOCommandHandler {
   boService: any;
   eventPublisher: EventPublisher;
+}
+
+/** BOCrudRecordRequest represents a request to create or update a physical record via BO */
+export interface BOCrudRecordRequest {
+  Record: Record<string, any>;
+  SubtypeKey: string;
+}
+
+export interface BODataAnomaly {
+  AnomalyType: string;
+  Description: string;
+  Field: string;
+  SampleCount: number;
+  Severity: string;
+}
+
+export interface BODataQualitySentinelResponse {
+  BOID: string;
+  DistinctRatios: Record<string, float64>;
+  DriftProposals: SchemaDriftProposal[];
+  FinancialVerifications: FinancialPatternResult[];
+  NullDrift: Record<string, float64>;
+  OverallQualityScore: number;
+  SampleStrategy: string;
+  SentinelSummary: string;
+  TotalSampledRows: number;
+}
+
+/** BODeltaFieldDiff represents the diff of a field between Core and Custom */
+export interface BODeltaFieldDiff {
+  CoreField: FieldDefinition;
+  CustomField: FieldDefinition;
+  FieldKey: string;
+  FieldName: string;
+  Overrides: Record<string, any>;
+  Status: string;
+}
+
+/** BODeltaResponse represents the Workday-style delta comparison between tenant BO and gold copy Core BO */
+export interface BODeltaResponse {
+  BOID: string;
+  CoreID: string;
+  CustomCount: number;
+  DisplayName: string;
+  FieldsDelta: BODeltaFieldDiff[];
+  InheritedCount: number;
+  IsCore: boolean;
+  Key: string;
+  Name: string;
+  OverriddenCount: number;
+}
+
+export interface BODriftRepairPatchRequest {
+  Action: string;
+  BOIDOrKey: string;
+  Note: string;
+  ProposalID: string;
+}
+
+export interface BODriftRepairPatchResponse {
+  Message: string;
+  ProposalID: string;
+  Status: string;
+}
+
+export interface BOEventTrigger {
+  ActionType: string;
+  Description: string;
+  Enabled: boolean;
+  Event: string;
+  ID: string;
+  Target: string;
+}
+
+export interface BOFieldEligibilityItem {
+  DataType: string;
+  DisplayName: string;
+  EligibilityLevel: BOFieldEligibilityLevel;
+  FieldKey: string;
+  FieldName: string;
+  GateReason: string;
+  MissingInputs: string[];
+  PhysicalColumn: string;
+  PhysicalTable: string;
+  ResolutionPath: string;
+  ResolutionStatus: BOFieldResolutionStatus;
+  Role: FieldRole;
+}
+
+export interface BOLineageImpactSimulationRequest {
+  BOIDOrKey: string;
+  ProposedChanges: Record<string, any>;
+}
+
+export interface BOLineageImpactSimulationResponse {
+  BOID: string;
+  BlastRadiusScore: number;
+  HighestSeverity: string;
+  ImpactedAssets: ImpactedAsset[];
+  IsBreakingChange: boolean;
+  SimulationReport: string;
+  TotalImpacted: number;
+}
+
+export interface BOMultiBackendConfiguration {
+  ActiveTier: StorageTier;
+  BOID: string;
+  Bindings: MultiBackendBinding[];
+  WatermarkDate: any;
+}
+
+export interface BOPromotionProposal {
+  BOKey: string;
+  CreatedAt: string;
+  CreatedBy: string;
+  ID: string;
+  ProposedChanges: Record<string, any>;
+  ReviewerNote: string;
+  SourceTenantID: string;
+  Status: string;
+}
+
+export interface BOPublishGateValidationResponse {
+  BOID: string;
+  CanPublish: boolean;
+  GateSummary: string;
+  MissingDependencies: string[];
+  UnresolvedFields: BOFieldEligibilityItem[];
+}
+
+export interface BOQueryCostEvaluationRequest {
+  BOIDOrKey: string;
+  EstimatedLimit: number;
+  Filters: BORecordFilter[];
+  SelectedFields: string[];
+  TargetDialect: string;
+}
+
+export interface BOQueryCostEvaluationResponse {
+  ComplexityScore: number;
+  CostBand: QueryCostBand;
+  EstimatedDurationMs: number;
+  EstimatedRowsScanned: number;
+  IsForbidden: boolean;
+  PreAggregationTips: string[];
+  RequiresPartitionScan: boolean;
+  SuggestedMaterializedView: string;
+  Violations: string[];
+}
+
+/** BORecordFilter represents a filter applied to physical records */
+export interface BORecordFilter {
+  Field: string;
+  Operator: string;
+  Value: any;
+}
+
+/** BORecordQueryRequest represents a request to query physical records through a Business Object */
+export interface BORecordQueryRequest {
+  AsOfTransactionTime: any;
+  AsOfValidTime: any;
+  Filters: BORecordFilter[];
+  Limit: number;
+  Page: number;
+  Search: string;
+  SortBy: string;
+  SortDir: string;
+  SubtypeKey: string;
+}
+
+/** BORecordQueryResponse represents the paginated result of querying physical records */
+export interface BORecordQueryResponse {
+  Columns: string[];
+  DatasourceID: string;
+  DriverTable: string;
+  ExecutionTimeMs: number;
+  Limit: number;
+  Page: number;
+  Rows: Record<string, any>[];
+  Total: number;
+}
+
+export interface BOScopeDiscoveryResponse {
+  BOID: string;
+  BlockingIssues: string[];
+  CalculatedCount: number;
+  DirectCount: number;
+  DrivingNodeID: string;
+  DrivingTableName: string;
+  EligibleFields: BOFieldEligibilityItem[];
+  IsPublishReady: boolean;
+  ManualCount: number;
+  RelatedCount: number;
+  TotalDiscovered: number;
+}
+
+export interface BOWorkflowActionRequest {
+  Action: string;
+  Proposal: BOPromotionProposal;
+  ReviewerNote: string;
+  Trigger: BOEventTrigger;
+}
+
+export interface BOWorkflowExecution {
+  EndTime: string;
+  Error: string;
+  ID: string;
+  StartTime: string;
+  Status: string;
+  TriggeredBy: string;
+  Workflow: string;
+}
+
+export interface BOWorkflowStatusResponse {
+  BOID: string;
+  EventTriggers: BOEventTrigger[];
+  IsCore: boolean;
+  Key: string;
+  LifecycleStatus: BOWorkflowLifecycleStatus;
+  PendingProposals: BOPromotionProposal[];
+  RecentExecutions: BOWorkflowExecution[];
 }
 
 /** BOWorkloadProfile represents aggregated workload metrics for a BO. */
@@ -591,6 +889,12 @@ export interface BestPractice {
   Tags: string[];
   Title: string;
   UpdatedAt: any;
+}
+
+export interface BinaryExpr {
+  Left: ExprNode;
+  Op: string;
+  Right: ExprNode;
 }
 
 export interface BrokenReference {
@@ -815,13 +1119,19 @@ export interface BundleViewRef {
 
 /** BusinessObjectDefinition represents a complete Business Object */
 export interface BusinessObjectDefinition {
+  /** Core Identity Triple & Semantic Governance (Feature 1) */
+  BOTypeID: any;
+  Bindings: Record<string, any>[];
+  BusinessKeyNodeID: any;
   Category: string;
+  ClassificationNodeID: any;
   CloneParentDisplayName: string;
   CloneParentKey: string;
   ClonesFrom: string;
   Config: any;
   CoreFields: FieldDefinition[];
   CoreID: any;
+  CoreReferenceBOID: any;
   CreatedAt: any;
   CreatedBy: string;
   CustomFields: FieldDefinition[];
@@ -831,6 +1141,7 @@ export interface BusinessObjectDefinition {
   DriverTableID: any;
   DriverTableName: string;
   EnableHistory: boolean;
+  GrainNodeID: any;
   HistoryMode: HistoryMode;
   ID: string;
   Icon: string;
@@ -840,8 +1151,11 @@ export interface BusinessObjectDefinition {
   Key: string;
   LastModifiedAt: any;
   LastModifiedBy: string;
+  ModelID: string;
   Name: string;
   ParentID: any;
+  SemanticIDNodeID: any;
+  Status: string;
   Subtypes: Record<string, SubtypeDefinition>;
   TechnicalName: string;
   TenantID: string;
@@ -916,7 +1230,6 @@ export interface BusinessObjectProjection {
 /** BusinessObjectService handles business object operations with real database queries */
 export interface BusinessObjectService {
   db: any;
-  hasura: HasuraClient;
   rules: AccessRuleRepository;
 }
 
@@ -1184,6 +1497,32 @@ export interface CompileError {
   Reason: string;
 }
 
+/** CompileResult tells the caller whether the VM path is usable.
+If Unsupported is non-nil, the engine must use the recursive fallback.
+
+Unsupported is a plain error to keep vm package dependency-free.
+The richer *CompileError (with Node + Operator fields) is defined in
+the rules package where the AST types live. */
+export interface CompileResult {
+  Program: CompiledProgram;
+  Unsupported: error;
+}
+
+/** CompiledProgram is the output of Compile(). It is immutable and
+safe for concurrent reads — no internal locking required. */
+export interface CompiledProgram {
+  BoolConsts: bool[];
+  BoolPeakDepth: uint8;
+  EnumConsts: uint32[];
+  FNumConsts: float64[];
+  FNumPeakDepth: uint8;
+  Insts: Instruction[];
+  NumConsts: int64[];
+  NumInSet: int64[][];
+  NumPeakDepth: uint8;
+  StrConsts: string[];
+}
+
 /** ComplexCondition supports AND/OR logic for multi-field validation */
 export interface ComplexCondition {
   And: RuleCondition[];
@@ -1268,20 +1607,29 @@ export interface ConflictDetail {
   Postgres: any;
 }
 
-/** Connection represents a unified datasource connection */
+/** Connection represents a datasource connection from the `connections` table
+(the table tenant_product_datasource.connection_id actually references). */
 export interface Connection {
   APIKey: string;
   BaseURL: string;
+  /** CoreID is set when this row was propagated from a gold-copy connection
+(see internal/temporal/activities/gold_copy_activities.go). A tenant's
+own credentials/is_active are never touched by that propagation. */
+  CoreID: string;
   CreatedAt: any;
   Database: string;
   Host: string;
   ID: string;
   IsActive: boolean;
-  Metadata: Record<string, any>;
+  Metadata: any;
   Name: string;
+  /** Origin is derived, not stored: "gold_copy" for the gold-copy tenant's
+own row, "inherited" when CoreID is set, "custom" otherwise. */
+  Origin: string;
   Password: string;
   Port: number;
   Schema: string;
+  SecretPath: string;
   TenantID: string;
   Type: string;
   UpdatedAt: any;
@@ -1291,6 +1639,7 @@ export interface Connection {
 /** ConnectionsService handles unified connection management */
 export interface ConnectionsService {
   db: any;
+  goldCopyEvents: any;
 }
 
 export interface ConstraintInput {
@@ -1434,19 +1783,26 @@ export interface CreateBusinessObjectRequest {
   BOKey: string;
   Category: string;
   CloneFromKey: string;
+  CloneFromKeySnake: string;
   Config: Record<string, any>;
   DatasourceID: string;
+  DatasourceIDSnake: string;
   Description: string;
   DisplayName: string;
+  DisplayNameSnake: string;
   DriverTableID: string;
+  DriverTableIDSnake: string;
   DriverTableName: string;
+  DriverTableNameSnake: string;
   EnableHistory: boolean;
   HistoryMode: string;
   Icon: string;
   Name: string;
   ParentID: string;
+  ParentIDSnake: string;
   Status: string;
   TechnicalName: string;
+  TechnicalNameSnake: string;
 }
 
 /** CreateExportRequest is the request to create an export */
@@ -1494,7 +1850,6 @@ export interface CryptoCustodyService {
 export interface CryptoPricingService {
   apiKey: string;
   db: any;
-  hasuraClient: HasuraClient;
   httpClient: any;
 }
 
@@ -1967,6 +2322,21 @@ export interface EnhancedLineageData {
   Nodes: ReactFlowNode[];
 }
 
+/** EnumDict interns categorical string literals ("GOLD", "ACTIVE") into
+uint32 IDs so equality becomes an integer compare instead of a string compare. */
+export interface EnumDict {
+  frozen: any;
+  mu: any;
+  values: Record<string, uint32>;
+}
+
+/** ErrUnsupportedFunction is wrapped into the error returned by CompileToSQL
+when the AST references a function this compiler doesn't know how to
+push down to SQL. */
+export interface ErrUnsupportedFunction {
+  Name: string;
+}
+
 /** EvalCase represents a test case from the database. */
 export interface EvalCase {
   ExpectedAnswer: string;
@@ -2191,6 +2561,10 @@ export interface ExportSummary {
   Status: string;
 }
 
+export interface Expression {
+  Root: ExprNode;
+}
+
 export interface ExtensionFix {
   FilePath: string;
   Fixes: ExtensionFixEntry[];
@@ -2231,6 +2605,18 @@ export interface FallbackQueryPattern {
   MeasureFields: string[];
   TargetBOID: string;
   TargetTable: string;
+}
+
+/** FastRecord is the dense, projection-ready view of an MDM record.
+All slices are sized to syms.Num() at construction time.
+All field access is O(1) array indexing by SymbolID. */
+export interface FastRecord {
+  BoolVals: bool[];
+  EnumVals: uint32[];
+  FNumVals: float64[];
+  NumVals: int64[];
+  Present: uint8[];
+  StrVals: string[];
 }
 
 /** FeatureCandidate represents a discovered feature that could be added to the catalog */
@@ -2308,7 +2694,6 @@ export interface FeedbackRequest {
 /** FeedbackService handles user feedback for NLQ responses. */
 export interface FeedbackService {
   db: any;
-  hasura: HasuraClient;
 }
 
 export interface FieldChange {
@@ -2345,6 +2730,10 @@ export interface FieldError {
   Message: string;
 }
 
+export interface FieldRef {
+  Path: string;
+}
+
 /** Filter represents a filter expression in telemetry. */
 export interface Filter {
   Operator: string;
@@ -2358,6 +2747,16 @@ export interface FilterProfile {
   Operator: string;
   QueryCount: number;
   Term: string;
+}
+
+export interface FinancialPatternResult {
+  FieldName: string;
+  InvalidCount: number;
+  PassRate: number;
+  PatternType: string;
+  SampleCount: number;
+  SampleErrors: string[];
+  ValidCount: number;
 }
 
 /** FinancialPlugin implementation for Financial Calculations (IRR, XIRR, Black-Scholes, etc.) */
@@ -2382,6 +2781,18 @@ export interface Fixture {
 /** FolderService provides methods for managing folders. */
 export interface FolderService {
   db: any;
+}
+
+/** FuncCall represents a named function applied to a list of argument
+expressions, e.g. SUM(field) or NPV(rate, cash_flows). Added to let the
+same rule/calc AST express aggregate and financial functions used by
+calculated semantic terms, not just the scalar arithmetic BinaryExpr
+already supported. Backends (VM compiler, SQL compiler, ...) that don't
+yet support a given function name should fail explicitly rather than
+silently mis-evaluate. */
+export interface FuncCall {
+  Args: ExprNode[];
+  Name: string;
 }
 
 /** Fund represents a private markets fund */
@@ -2523,6 +2934,31 @@ export interface GovernanceDiff {
   Scope: string;
 }
 
+export interface GraphRAGContextRequest {
+  BOIDOrKey: string;
+  IncludeEdges: boolean;
+  MaxDepth: number;
+  UserQuery: string;
+}
+
+export interface GraphRAGContextResponse {
+  BOKey: string;
+  MatchedNodes: GraphRAGNode[];
+  PromptContext: string;
+  ResolvedIntent: string;
+  TenantScoped: boolean;
+}
+
+export interface GraphRAGNode {
+  Description: string;
+  DisplayName: string;
+  ID: string;
+  Name: string;
+  NodeType: string;
+  Properties: Record<string, any>;
+  Similarity: number;
+}
+
 /** GroupByProfile represents usage stats for a specific grain. */
 export interface GroupByProfile {
   AvgDurationMs: number;
@@ -2535,8 +2971,6 @@ export interface GroupByProfile {
 /** GuardrailService handles the logic for proactive access guardrails. */
 export interface GuardrailService {
   db: any;
-  /** Dependency on SemanticModelService to get asset metadata like certification status. */
-  semanticService: any;
 }
 
 /** HTTPWebhookNotifier sends job completion notifications via HTTP */
@@ -2545,6 +2979,16 @@ export interface HTTPWebhookNotifier {
   maxRetries: number;
   retryInterval: any;
   timeout: any;
+}
+
+/** HealthMetrics summarizes the complexity/depth of a rule, surfaced in the
+Monaco editor as authoring guidance. */
+export interface HealthMetrics {
+  Complexity: number;
+  ConditionCount: number;
+  Depth: number;
+  Issues: string[];
+  Score: number;
 }
 
 /** HealthStatus represents the health check response */
@@ -2571,18 +3015,6 @@ export interface HierarchyPath {
 }
 
 export interface HierarchyResolver {
-}
-
-/** Structs to hold rule data and validation errors */
-export interface HierarchyRule {
-  Condition: string;
-  Description: string;
-  Entity: string;
-  FieldPath: string[];
-  HierarchyDepth: number;
-  ID: string;
-  Name: string;
-  Severity: string;
 }
 
 /** HoldingsPlugin implementation for Holdings-based semantic terms with tie-breaker resolution */
@@ -2628,6 +3060,15 @@ export interface ImpactReport {
   ImpactedViews: ImpactedView[];
   ScriptID: string;
   ScriptVersion: string;
+}
+
+export interface ImpactedAsset {
+  AssetID: string;
+  AssetName: string;
+  AssetType: string;
+  Details: string;
+  ImpactLevel: string;
+  Relationship: string;
 }
 
 /** ImpactedBundle represents a bundle affected by a script change. */
@@ -2730,6 +3171,24 @@ export interface InstanceCommandHandler {
   policy: any;
 }
 
+/** Instruction is exactly 8 bytes, packed for one 64-byte cache line
+(8 instructions per line). Field order chosen so Go does NOT add
+trailing alignment padding:
+
+	SymbolID uint32  // 4 bytes — offsets 0-3 (4-byte aligned)
+	Aux      uint16  // 2 bytes — offsets 4-5
+	Op       OpCode  // 1 byte  — offset 6
+	_pad     [1]byte // 1 byte  — offset 7 (compiler would otherwise pad here)
+
+Aux is uint16 in memory; compiler emits signed jump offsets via
+uint16(int16(x)), VM reads them back via int(int16(inst.Aux)). */
+export interface Instruction {
+  Aux: uint16;
+  Op: OpCode;
+  SymbolID: uint32;
+  _pad: byte[];
+}
+
 /** IntegrityCheckResult represents the result of an integrity check */
 export interface IntegrityCheckResult {
   CheckType: string;
@@ -2802,6 +3261,9 @@ export interface JSONFieldDiff {
 
 /** JWTClaims represents JWT token claims */
 export interface JWTClaims {
+  Email: string;
+  EmailVerified: boolean;
+  IdpGroups: string[];
   IssuedAt: any;
   Roles: string[];
   TenantID: string;
@@ -2811,7 +3273,10 @@ export interface JWTClaims {
 
 /** JWTManager handles JWT token operations */
 export interface JWTManager {
+  mu: any;
   refreshDuration: any;
+  rsaPublicKey: any;
+  rsaPublicKeys: Record<string, any>;
   secretKey: byte[];
   tokenDuration: any;
 }
@@ -2987,6 +3452,18 @@ export interface LLMProfile {
   PromptTemplate: string;
 }
 
+export interface LakehouseMaintenanceReport {
+  BytesCompacted: number;
+  CompactedFilesCount: number;
+  DurationMs: number;
+  ExecutedAt: any;
+  ManifestsRewritten: number;
+  SnapshotsExpired: number;
+  Status: string;
+  Table: string;
+  TenantID: string;
+}
+
 /** LatencyHistogram tracks latency distributions for percentile calculations */
 export interface LatencyHistogram {
   buckets: Record<string, any[]>;
@@ -3034,6 +3511,10 @@ export interface LineageService {
 export interface ListExportsResponse {
   Exports: ExportSummary[];
   Total: number;
+}
+
+export interface Literal {
+  Value: number;
 }
 
 /** LoadTestConfig configures the load test parameters */
@@ -3254,8 +3735,25 @@ export interface MonteCarloSnapshot {
   Seed: number;
 }
 
+export interface MultiBackendBinding {
+  BackendName: string;
+  CoveragePercentage: number;
+  DatasourceID: string;
+  ID: string;
+  IsActive: boolean;
+  PhysicalTarget: string;
+  Requirement: BindingRequirement;
+  StorageTier: StorageTier;
+}
+
 export interface MultiUpgradeOverviewResponse {
   Versions: UpgradeOverviewResponse[];
+}
+
+export interface NLQFilterItem {
+  Field: string;
+  Operator: string;
+  Value: any;
 }
 
 /** NLQService provides natural language Q&A over the catalog. */
@@ -3437,7 +3935,7 @@ export interface OAuthAuditEvent {
 
 /** OAuthAuditService handles recording of audit events */
 export interface OAuthAuditService {
-  hasuraClient: HasuraClient;
+  db: any;
 }
 
 /** OkRule represents an ok-style Starlark rule.
@@ -3725,7 +4223,6 @@ export interface PoPMetricWithLatest {
 /** PoPService handles Period-over-Period analysis and anomaly detection */
 export interface PoPService {
   db: any;
-  hasuraClient: HasuraClient;
 }
 
 /** Policy defines a single access control rule for administrative actions on bundles. */
@@ -4477,7 +4974,7 @@ export interface RuleEngine {
   env: any;
   metrics: EngineMetrics;
   profiler: LatencyProfiler;
-  recursive: AdvancedEvaluator;
+  recursive: any;
   repo: RuleRepository;
   rewarmGroup: any;
   /** tenantStates holds isolated states for tenants with custom rules/fields.
@@ -4497,6 +4994,12 @@ export interface RuleEvaluationResult {
   RuleID: string;
 }
 
+export interface RuleGroup {
+  Conditions: RuleNode[];
+  ID: string;
+  Operator: string;
+}
+
 /** RuleMetrics holds the calculated global approval/rejection rates for a rule. */
 export interface RuleMetrics {
   ApprovalRate: number;
@@ -4506,6 +5009,13 @@ export interface RuleMetrics {
   Total: number;
 }
 
+export interface RuleNode {
+  Condition: RuleCondition;
+  Expression: Expression;
+  Group: RuleGroup;
+  Type: RuleNodeType;
+}
+
 /** RulePerformanceResponse is the top-level struct for the rule performance cockpit. */
 export interface RulePerformanceResponse {
   RefreshTrend: RefreshTrendPoint[];
@@ -4513,21 +5023,20 @@ export interface RulePerformanceResponse {
   SemanticTrend: SemanticTrendPoint[];
 }
 
-/** RuleRecord represents a raw validation rule from the database */
 export interface RuleRecord {
-  CompiledCUE: any;
-  CompiledSQL: any;
+  CompiledCUE: string;
+  CompiledSQL: string;
   CompiledWASM: byte[];
   CoreRuleID: any;
   DatasourceID: any;
-  Description: any;
+  Description: string;
   EvaluationOrder: number;
   ExecuteClientSide: boolean;
   ExecuteServerSide: boolean;
   ID: any;
   IsActive: boolean;
   Name: string;
-  RemediationHint: any;
+  RemediationHint: string;
   RuleType: string;
   RunOnSubmit: boolean;
   Severity: string;
@@ -4650,7 +5159,6 @@ export interface SMSService {
 /** SQLRuleRepository implements RuleRepository using a SQL database. */
 export interface SQLRuleRepository {
   db: any;
-  hasuraClient: HasuraClient;
 }
 
 /** SQLTermRepository implements SemanticTermRepository using DB */
@@ -4731,6 +5239,18 @@ export interface SchemaChange {
   Change: string;
   Details: string;
   Table: string;
+}
+
+export interface SchemaDriftProposal {
+  AutoRepairScript: string;
+  BOID: string;
+  ConfidenceScore: number;
+  DetectedAt: any;
+  DriftType: string;
+  ProposalID: string;
+  SourceColumn: string;
+  Status: string;
+  TargetColumn: string;
 }
 
 /** SchemaSnapshot represents a point-in-time schema snapshot */
@@ -5018,6 +5538,21 @@ export interface SourceReference {
   Type: string;
 }
 
+/** Stack provides fixed-size, allocation-free operand stacks for the VM.
+Arrays are exactly 256 elements. Because the stack pointers (nTop, bTop, sTop, fTop)
+are uint8, they mathematically cannot exceed 255. This allows the Go compiler
+to completely elide bounds checks in the dispatch loop. */
+export interface Stack {
+  bTop: uint8;
+  bools: bool[];
+  fNums: float64[];
+  fTop: uint8;
+  nTop: uint8;
+  nums: int64[];
+  sTop: uint8;
+  strs: string[];
+}
+
 /** StarlarkEngine provides Workday-style expression evaluation */
 export interface StarlarkEngine {
   cache: Record<string, any>;
@@ -5071,10 +5606,57 @@ export interface SubtypeDefinition {
   TechnicalName: string;
 }
 
+/** SymbolDict maps dotted field paths ("customer.account.tier") to
+densely-packed uint32 IDs used as array indices into FastRecord. */
+export interface SymbolDict {
+  frozen: any;
+  index: Record<string, uint32>;
+  mu: any;
+  paths: string[];
+}
+
+export interface SynthesizedCalculatedField {
+  Description: string;
+  DisplayName: string;
+  Formula: string;
+  Name: string;
+  Type: string;
+}
+
+export interface SynthesizedRule {
+  Description: string;
+  Field: string;
+  RuleName: string;
+  Script: string;
+  Severity: string;
+}
+
 /** Table represents a table within a schema. */
 export interface Table {
   Columns: Column[];
   Name: string;
+}
+
+/** TableColumnIntrospection represents an introspected database column */
+export interface TableColumnIntrospection {
+  DataType: string;
+  DefaultValue: string;
+  ForeignTable: string;
+  IsForeignKey: boolean;
+  IsNullable: boolean;
+  IsPrimaryKey: boolean;
+  Name: string;
+}
+
+/** TableIntrospectionResponse represents the result of introspecting a table for BO creation */
+export interface TableIntrospectionResponse {
+  Columns: TableColumnIntrospection[];
+  QualifiedPath: string;
+  SuggestedFields: FieldDefinition[];
+  SuggestedKey: string;
+  SuggestedName: string;
+  TableID: string;
+  TableName: string;
 }
 
 /** TableSchema represents the schema of a single table */
@@ -5317,6 +5899,16 @@ export interface TenantValidationRule {
   UpdatedAt: any;
 }
 
+/** TermDefinition is a business-term definition grounded in an industry
+standard (FINRA, EDM Council/FIBO, ISO 20022) where one applies. */
+export interface TermDefinition {
+  Definition: string;
+  /** Source names the standard the definition is drawn from (e.g. "FINRA",
+"EDM Council FIBO", "ISO 20022"), or "generated" if no standard body
+defines this concept and the model had to draft a plain definition. */
+  Source: string;
+}
+
 export interface ThreeWayDiff {
   Added: Record<string, any>;
   Changed: Record<string, FieldChange>;
@@ -5349,6 +5941,17 @@ export interface ToolDefinition {
 /** TourService provides methods for managing interactive tours. */
 export interface TourService {
   db: any;
+}
+
+/** TraceStep represents one step in a rule's execution trace. Used by the
+Monaco editor's live-preview panel to show why a rule passed or failed. */
+export interface TraceStep {
+  Executed: boolean;
+  Field: string;
+  Operator: string;
+  Result: boolean;
+  Type: string;
+  Value: any;
 }
 
 export interface TranslationService {
@@ -5552,6 +6155,20 @@ export interface UMASleeve {
   UpdatedAt: any;
 }
 
+export interface UisceASTNode {
+  Attributes: Record<string, any>;
+  Children: UisceASTNode[];
+  NodeType: string;
+}
+
+export interface UisceSemanticAST {
+  Dialects: string[];
+  GeneratedSQL: Record<string, string>;
+  RootNode: UisceASTNode;
+  TenantID: string;
+  Version: string;
+}
+
 /** UpdateBusinessObjectRequest represents a request to update a BO */
 export interface UpdateBusinessObjectRequest {
   Category: string;
@@ -5638,9 +6255,15 @@ export interface UpgradeRuntimeService {
   wsHub: WebSocketHub;
 }
 
-/** UpgradeService provides methods for upgrading semantic models. */
 export interface UpgradeService {
   DB: any;
+}
+
+export interface UpgradeSimulation {
+  Diff: patchDiff;
+  FromVersion: string;
+  ToVersion: string;
+  Warnings: string[];
 }
 
 export interface UpgradeStatus {
@@ -5670,6 +6293,19 @@ export interface UpsertPreAggRequest {
   RefreshStrategy: string;
   TenantID: string;
   Terms: string[];
+}
+
+/** UpsertValidationRuleRequest is the API request shape for creating or
+updating a validation rule. */
+export interface UpsertValidationRuleRequest {
+  BOName: string;
+  Category: string;
+  Description: string;
+  Name: string;
+  RuleAST: any;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
 }
 
 /** User represents a user in the system */
@@ -5733,25 +6369,7 @@ export interface UserRateLimit {
   WindowStart: any;
 }
 
-/** ValidationContext represents the context for validation */
-export interface ValidationContext {
-  AccountID: string;
-  AccountType: string;
-  ClientID: string;
-  ClientProfile: Record<string, any>;
-  DatasourceID: string;
-  OverrideAuthorization: string;
-  PortfolioData: Record<string, any>;
-  TenantID: string;
-  Timestamp: any;
-  TransactionData: Record<string, any>;
-  UserID: string;
-}
-
-export interface ValidationEngineWithHierarchy {
-  db: any;
-  evaluator: ConditionEvaluator;
-  logger: any;
+export interface VM {
 }
 
 /** ValidationError captures one or more field level issues coming from the service layer. */
@@ -5770,21 +6388,6 @@ export interface ValidationEvent {
   Timestamp: any;
 }
 
-/** ValidationExecutionResult represents the overall validation result */
-export interface ValidationExecutionResult {
-  AccountID: string;
-  BlockedRules: ValidationResult[];
-  ContextID: string;
-  DatasourceID: string;
-  ExecutionTimeMs: number;
-  InfoRules: ValidationResult[];
-  Passed: boolean;
-  Results: ValidationResult[];
-  TenantID: string;
-  Timestamp: any;
-  WarningRules: ValidationResult[];
-}
-
 /** ValidationReport holds validation results. */
 export interface ValidationReport {
   ExtensionHealth: string[];
@@ -5800,41 +6403,13 @@ export interface ValidationResponse {
   Pass: boolean;
 }
 
-/** ValidationResult represents the result of a single validation */
-export interface ValidationResult {
-  AllowedOverrideAuthority: string;
-  Details: Record<string, any>;
-  FailedValue: any;
-  Message: string;
-  Passed: boolean;
-  RequiresOverride: boolean;
-  RuleID: string;
-  RuleName: string;
-  Severity: RuleSeverity;
-  Threshold: any;
-  Timestamp: any;
-}
-
-/** ValidationRule represents a single validation rule */
-export interface ValidationRule {
-  CreatedAt: any;
-  DatasourceID: string;
-  Description: string;
-  EffectiveFrom: any;
-  EffectiveTo: any;
-  EvaluationOrder: number;
-  Frequency: RuleFrequency;
-  ID: string;
-  IsActive: boolean;
-  Name: string;
-  OverrideConditions: string[];
-  Parameters: Record<string, any>;
-  RequiredAuthority: string;
-  RuleType: string;
-  Scope: string[];
-  Severity: RuleSeverity;
-  TenantID: string;
-  UpdatedAt: any;
+/** ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
+vm.RuleNode-shaped json.RawMessage (internal/rules/vm) - kept as
+json.RawMessage here rather than a typed vm.RuleNode so this package
+doesn't need to import internal/rules/vm (models is a low-level,
+widely-imported package; the AST is parsed by whoever evaluates it). */
+export interface ValidationRuleConfig {
+  RuleAST: any;
 }
 
 /** ValidationRuleDefinition represents a complete validation rule */
@@ -5853,40 +6428,45 @@ export interface ValidationRuleDefinition {
   UpdatedAt: any;
 }
 
-/** ValidationRuleEngineImpl implements ValidationRuleEngine */
-export interface ValidationRuleEngineImpl {
-  db: any;
-  resolver: any;
-}
-
-/** New types for validation rule resolution */
-export interface ValidationRuleRecord {
-  CompiledCUE: any;
-  CompiledSQL: any;
-  CompiledWASM: any;
-  CoreRuleID: any;
+/** ValidationRuleDescriptor is the API response shape. */
+export interface ValidationRuleDescriptor {
+  BOName: string;
+  Category: string;
   CreatedAt: any;
-  DatasourceID: any;
-  Description: any;
-  EvaluationOrder: number;
-  ExecuteClientSide: boolean;
-  ExecuteServerSide: boolean;
+  Description: string;
+  GovernanceStatus: string;
   ID: any;
-  IsActive: boolean;
   Name: string;
-  RemediationHint: any;
-  RuleType: string;
-  RunOnSubmit: boolean;
+  RuleAST: any;
   Severity: string;
-  TargetEntityID: any;
-  TenantID: any;
+  TenantID: string;
+  Timing: string;
   UpdatedAt: any;
 }
 
-/** ValidationRuleRepository handles validation rules for business objects */
-export interface ValidationRuleRepository {
-  catalogService: CatalogService;
+/** ValidationRuleEngineImpl implements ValidationRuleEngine */
+export interface ValidationRuleEngineImpl {
   db: any;
+  /** operators delegates actual comparison semantics to RuleFabric's
+OperatorRegistry (backend/internal/rulefabric) so this engine and
+RuleFabric's tree-based rules share one implementation of what "=",
+">", "contains", etc. mean, instead of maintaining two independently
+bug-prone copies. */
+  operators: any;
+  resolver: any;
+}
+
+/** ValidationRuleProperties is stored in catalog_node.properties, mirroring
+PreAggProperties' role for pre-aggregation nodes and term_type/
+return_type's role for calculated semantic terms - node metadata that
+isn't the AST itself. */
+export interface ValidationRuleProperties {
+  BOName: string;
+  Category: string;
+  GovernanceStatus: string;
+  Severity: string;
+  TenantID: string;
+  Timing: string;
 }
 
 /** ValidationTask represents a single validation job */
@@ -5968,14 +6548,6 @@ export interface ViewPolicyBundle {
 
 /** ViewService handles view operations */
 export interface ViewService {
-}
-
-/** WealthManagementValidationEngine orchestrates validation rules */
-export interface WealthManagementValidationEngine {
-  db: any;
-  rules: Record<string, ValidationRule>;
-  topicName: string;
-  writer: any;
 }
 
 /** WebSocketHub manages WebSocket connections and broadcasting with advanced error handling */
@@ -6094,6 +6666,12 @@ export interface inMemoryBundleStore {
 export interface inMemoryScriptStore {
   mu: any;
   scripts: Record<string, any>;
+}
+
+export interface jsonScanner {
+  data: byte[];
+  path: byte[];
+  pos: number;
 }
 
 export interface nodeQualityMetrics {

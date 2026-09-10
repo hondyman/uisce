@@ -311,7 +311,7 @@ func (h *ApiDispatcherHandler) resolveSpecBytes(ctx context.Context, req OpenAPI
 // resolveGoldCopyTenant returns the id of the tenant marked gold_copy=true.
 func (h *ApiDispatcherHandler) resolveGoldCopyTenant(ctx context.Context) string {
 	var id string
-	row := h.db.QueryRowContext(ctx, "SELECT id FROM tenants WHERE gold_copy = true ORDER BY created_at LIMIT 1")
+	row := h.db.QueryRowContext(ctx, "SELECT id FROM public.tenants WHERE gold_copy = true ORDER BY created_at LIMIT 1")
 	if err := row.Scan(&id); err != nil {
 		return ""
 	}
@@ -522,7 +522,7 @@ func (h *ApiDispatcherHandler) linkSemanticTermByName(ctx context.Context, tenan
 	var termNodeID string
 	row := h.db.QueryRowContext(ctx, `
 		SELECT id FROM catalog_node
-		WHERE node_type_id = (SELECT id FROM catalog_node_types WHERE catalog_type_name = 'semantic_term' AND (tenant_id = $1::uuid OR tenant_id IN (SELECT id FROM tenants WHERE gold_copy = true)) LIMIT 1)
+		WHERE node_type_id = (SELECT id FROM catalog_node_types WHERE catalog_type_name = 'semantic_term' AND (tenant_id = $1::uuid OR tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true)) LIMIT 1)
 		  AND LOWER(node_name) = LOWER($2)
 		ORDER BY (tenant_id = $1::uuid) DESC, created_at ASC LIMIT 1
 	`, tenantID, termName)
@@ -534,7 +534,7 @@ func (h *ApiDispatcherHandler) linkSemanticTermByName(ctx context.Context, tenan
 	row = h.db.QueryRowContext(ctx, `
 		SELECT id FROM catalog_edge_types
 		WHERE edge_type_name = 'has_context'
-		  AND (tenant_id = $1::uuid OR tenant_id IN (SELECT id FROM tenants WHERE gold_copy = true))
+		  AND (tenant_id = $1::uuid OR tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true))
 		ORDER BY (tenant_id = $1::uuid) DESC LIMIT 1
 	`, tenantID)
 	if err := row.Scan(&hasContextEdgeID); err != nil {

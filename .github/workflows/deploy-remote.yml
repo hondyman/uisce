@@ -14,6 +14,13 @@ jobs:
       run: |
         if [ -z "${{ secrets.REMOTE_SSH_HOST }}" ]; then echo "ERROR: REMOTE_SSH_HOST secret not set" && exit 1; fi
         if [ -z "${{ secrets.REMOTE_SSH_PRIVATE_KEY }}" ]; then echo "ERROR: REMOTE_SSH_PRIVATE_KEY secret not set" && exit 1; fi
+        # REMOTE_SSH_PATH used to silently default to ~/semlayer if unset
+        # (both here and in the deploy scripts) - on the actual remote host
+        # that path resolves to a different repository checkout entirely,
+        # on a feature branch, with dozens of uncommitted files. This
+        # workflow runs 'git reset --hard' against REMOTE_SSH_PATH; a wrong
+        # default silently hard-resets the wrong repo. Fail loud instead.
+        if [ -z "${{ secrets.REMOTE_SSH_PATH }}" ]; then echo "ERROR: REMOTE_SSH_PATH secret not set - refusing to default, see comment" && exit 1; fi
 
     - name: Start ssh-agent and add key (if provided)
       if: ${{ secrets.REMOTE_SSH_PRIVATE_KEY != '' }}
@@ -32,7 +39,7 @@ jobs:
         REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
         REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
         REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
-        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '~/semlayer' }}
+        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
       run: |
         chmod +x scripts/deploy_remote.sh
         ./scripts/deploy_remote.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
@@ -43,7 +50,7 @@ jobs:
         REMOTE_SSH_HOST: ${{ secrets.REMOTE_SSH_HOST }}
         REMOTE_SSH_USER: ${{ secrets.REMOTE_SSH_USER || 'ubuntu' }}
         REMOTE_SSH_PORT: ${{ secrets.REMOTE_SSH_PORT || '22' }}
-        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH || '~/semlayer' }}
+        REMOTE_SSH_PATH: ${{ secrets.REMOTE_SSH_PATH }}
         REMOTE_SSH_PASSWORD: ${{ secrets.REMOTE_SSH_PASSWORD }}
       run: |
         sudo apt-get update && sudo apt-get install -y sshpass

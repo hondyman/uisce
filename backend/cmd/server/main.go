@@ -5,12 +5,28 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/api"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
+
+// withPublicSearchPath forces every physical connection opened from this DSN to
+// start with search_path=public. The shared "alpha" database has a
+// database-level `ALTER DATABASE alpha SET search_path = 'vend, public'`
+// (another service's schema, unrelated to Uisce) - without this, unqualified
+// table names like `tenants` silently resolve to that other schema's
+// same-named-but-differently-shaped tables instead of public.tenants.
+func withPublicSearchPath(dsn string) string {
+	sep := "&"
+	if !strings.Contains(dsn, "?") {
+		sep = "?"
+	}
+	return dsn + sep + "options=" + url.QueryEscape("-c search_path=public")
+}
 
 func main() {
 	dbURL := os.Getenv("DATABASE_URL")
@@ -20,6 +36,7 @@ func main() {
 	if dbURL == "" || dbURL == "<VALUE_TO_BE_PROVIDED>" {
 		dbURL = "postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable"
 	}
+	dbURL = withPublicSearchPath(dbURL)
 
 	port := os.Getenv("PORT")
 	if port == "" {

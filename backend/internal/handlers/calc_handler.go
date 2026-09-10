@@ -4,10 +4,83 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strings"
 
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
+
+// validateCalcSQLExpr is a defense-in-depth allowlist for Preview's
+// client-supplied sql_expr, interpolated directly into
+// "SELECT %s as result LIMIT %d" below (fmt.Sprintf, not a parameterized
+// query - any authenticated caller can otherwise inject arbitrary SQL,
+// confirmed live and exploitable this session, not dead code: this
+// handler is mounted at POST /calc/preview and actively called by
+// frontend/src/components/CalcFieldModal.tsx). The real fix - stop
+// accepting raw SQL from the client at all, replacing it with either a
+// real expression parser (internal/rules/vm already has one - see
+// docs/unified-rule-engine-handoff.md item 34) or a validated reference
+// to a pre-registered calc field - is a larger redesign than this pass
+// covers, flagged as its own follow-up rather than attempted here under
+// the same time pressure that left this unfixed the first time it was
+// found. This allowlist closes the worst paths (statement chaining, data
+// exfiltration via UNION/subqueries to other tables, destructive DML)
+// without breaking the simple arithmetic/aggregate expressions the
+// feature is actually used for.
+var calcSQLExprAllowed = regexp.MustCompile(`^[A-Za-z0-9_.,()\s+\-*/<>=!'%]+$`)
+
+// calcSQLExprBlockedKeywords are matched as whole words/tokens (via
+// wordBoundary below), not raw substrings - a naive strings.Contains
+// pass rejected the legitimate "AVG(exec_price)" for containing "exec",
+// caught by this fix's own test before it shipped.
+var calcSQLExprBlockedKeywords = []string{
+	"select", "insert", "update", "delete", "drop", "alter", "create",
+	"union", "grant", "revoke", "truncate", "exec", "execute",
+	"pg_sleep", "pg_read", "copy", "into", "information_schema",
+}
+
+func validateCalcSQLExpr(expr string) error {
+	if !calcSQLExprAllowed.MatchString(expr) {
+		return fmt.Errorf("sql_expr contains characters outside the allowed set (letters, digits, arithmetic/comparison operators, parentheses)")
+	}
+	if strings.Contains(expr, ";") || strings.Contains(expr, "--") ||
+		strings.Contains(expr, "/*") || strings.Contains(expr, "*/") {
+		return fmt.Errorf("sql_expr must not contain statement separators or comments")
+	}
+	lower := strings.ToLower(expr)
+	for _, kw := range calcSQLExprBlockedKeywords {
+		if wordBoundaryMatch(lower, kw) {
+			return fmt.Errorf("sql_expr contains a disallowed keyword: %q", kw)
+		}
+	}
+	return nil
+}
+
+// wordBoundaryMatch reports whether kw appears in s as a whole token
+// (not part of a longer identifier) - non-alphanumeric characters (or
+// the string's own start/end) on both sides.
+func wordBoundaryMatch(s, kw string) bool {
+	idx := 0
+	for {
+		i := strings.Index(s[idx:], kw)
+		if i < 0 {
+			return false
+		}
+		start := idx + i
+		end := start + len(kw)
+		beforeOK := start == 0 || !isIdentChar(s[start-1])
+		afterOK := end == len(s) || !isIdentChar(s[end])
+		if beforeOK && afterOK {
+			return true
+		}
+		idx = start + 1
+	}
+}
+
+func isIdentChar(b byte) bool {
+	return b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9')
+}
 
 type CalcHandler struct {
 	db *sqlx.DB
@@ -212,6 +285,11 @@ func (h *CalcHandler) Preview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateCalcSQLExpr(req.SQLExpr); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":%q}`, err.Error()), http.StatusBadRequest)
+		return
+	}
+
 	limit := req.Limit
 	if limit <= 0 || limit > 1000 {
 		limit = 100
@@ -221,7 +299,7 @@ func (h *CalcHandler) Preview(w http.ResponseWriter, r *http.Request) {
 	var rows [][]string
 
 	columns = []string{"result"}
-	
+
 	query := fmt.Sprintf("SELECT %s as result LIMIT %d", req.SQLExpr, limit)
 	
 	dbRows, err := h.db.QueryContext(r.Context(), query)

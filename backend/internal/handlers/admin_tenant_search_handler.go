@@ -83,7 +83,7 @@ func (h *AdminTenantSearchHandler) SearchTenants(w http.ResponseWriter, r *http.
 	query := `SELECT t.id, t.name, t.code, t.region, t.plan,
 	                 COALESCE(t.is_suspended, false) as is_suspended,
 	                 (SELECT COUNT(*) FROM tenant_instance ti WHERE ti.tenant_id = t.id) AS instance_count
-	          FROM tenants t`
+	          FROM public.tenants t`
 	if len(where) > 0 {
 		query += " WHERE " + strings.Join(where, " AND ")
 	}

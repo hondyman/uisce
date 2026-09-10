@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useLocale } from '../../i18n/useLocale';
 import { LineageGraph } from './components/LineageGraph';
 import { useAccess } from '../../contexts/AccessContext';
 import { readCachedSelection } from '../../utils/tenantScope';
@@ -9,14 +10,17 @@ import apiClient from '../../utils/apiClient';
 import GenericCatalogNodePicker from '../../components/common/GenericCatalogNodePicker';
 import EditSemanticTermDialog from '../../components/EditSemanticTermDialog';
 import { IconButton, Tooltip } from '@mui/material';
-import { 
-  Edit as EditIcon, 
-  Delete as DeleteIcon, 
-  Add as AddIcon, 
-  AutoFixHigh as AutoFixIcon 
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  Add as AddIcon,
+  AutoFixHigh as AutoFixIcon,
+  ContentCopy as ContentCopyIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { useDeleteTerm } from '../../api/glossary';
 import { RelationshipExplorer } from './components/RelationshipExplorer';
+import { useEntityRelationships } from './hooks/useEntityRelationships';
 import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 
 // ─────────────────────────────────────────────
@@ -102,16 +106,37 @@ const Pill: React.FC<{ children: React.ReactNode; active?: boolean; onClick: () 
   </button>
 );
 
-const Spinner: React.FC = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 48 }}>
+const Spinner: React.FC<{ size?: number }> = ({ size }) => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: size ? 0 : 48 }}>
     <div style={{
-      width: 36, height: 36, border: `3px solid ${C.border}`,
-      borderTop: `3px solid ${C.accent}`, borderRadius: '50%',
+      width: size || 36, height: size || 36, border: `${size ? 2 : 3}px solid ${C.border}`,
+      borderTop: `${size ? 2 : 3}px solid ${C.accent}`, borderRadius: '50%',
       animation: 'spin 0.8s linear infinite',
     }} />
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
   </div>
 );
+
+const CopyButton: React.FC<{ value: string }> = ({ value }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Tooltip title={copied ? 'Copied!' : 'Copy to clipboard'}>
+      <IconButton
+        size="small"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1500);
+          } catch { /* clipboard unavailable, ignore */ }
+        }}
+        sx={{ color: copied ? C.success : C.textMuted, padding: '2px', '&:hover': { color: C.accent, background: 'rgba(255,255,255,0.05)' } }}
+      >
+        {copied ? <CheckIcon sx={{ fontSize: 14 }} /> : <ContentCopyIcon sx={{ fontSize: 14 }} />}
+      </IconButton>
+    </Tooltip>
+  );
+};
 
 const Empty: React.FC<{ icon: string; title: string; subtitle?: string }> = ({ icon, title, subtitle }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 64, gap: 12, textAlign: 'center' }}>
@@ -129,9 +154,13 @@ const parsePath = (path: string) => {
     return { datasource: 'API Endpoints', schema: 'REST API', table: 'Endpoints', column: parts.length > 1 ? parts[1] : 'Endpoint' };
   }
   const slashParts = clean.split('/').filter(Boolean);
+  // The real qualified_path convention used throughout the catalog is
+  // /schema/table/column (e.g. "/orm/account/manager_id" -> schema "orm",
+  // table "account", column "manager_id") - there is no datasource segment
+  // embedded in the path; the datasource comes from a separate field.
   if (slashParts.length >= 4) return { datasource: slashParts[0], schema: slashParts[1], table: slashParts[2], column: slashParts[3] };
-  else if (slashParts.length === 3) return { datasource: slashParts[0], schema: slashParts[1], table: slashParts[1], column: slashParts[2] };
-  else if (slashParts.length === 2) return { datasource: slashParts[0], schema: 'public', table: slashParts[0], column: slashParts[1] };
+  else if (slashParts.length === 3) return { datasource: 'N/A', schema: slashParts[0], table: slashParts[1], column: slashParts[2] };
+  else if (slashParts.length === 2) return { datasource: 'N/A', schema: 'public', table: slashParts[0], column: slashParts[1] };
   const dotParts = clean.split('.').filter(Boolean);
   if (dotParts.length === 4) return { datasource: dotParts[0], schema: dotParts[1], table: dotParts[2], column: dotParts[3] };
   else if (dotParts.length === 3) return { datasource: dotParts[0], schema: 'public', table: dotParts[1], column: dotParts[2] };
@@ -192,6 +221,22 @@ export default function GlossaryExplorer() {
   };
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const locale = useLocale();
+
+  // Navigate to the node on the other side of a relationship edge. Semantic
+  // and business terms live in this same explorer, so switching just swaps
+  // the ?id= param; business objects have their own dedicated page.
+  // Physical columns/tables/API endpoints have no per-node page in the app
+  // yet, so RelationshipList only makes those types clickable in the first
+  // place - this should only ever see the three cases below.
+  const handleRelatedNodeClick = useCallback((nodeId: string, nodeType: string) => {
+    if (nodeType === 'semantic_term' || nodeType === 'business_term') {
+      setSearchParams({ id: nodeId });
+    } else if (nodeType === 'business_object') {
+      navigate(`/${locale}/business-objects/${nodeId}`);
+    }
+  }, [setSearchParams, navigate, locale]);
   const selectedId = searchParams.get('id');
   const tabParam = searchParams.get('tab') as 'properties' | 'technical' | 'relationships' | 'lineage' | null;
 
@@ -212,6 +257,7 @@ export default function GlossaryExplorer() {
   const [isCreateBusModalOpen, setIsCreateBusModalOpen] = useState(false);
   const [isGenModalOpen, setIsGenModalOpen] = useState(false);
   const [isEditSemModalOpen, setIsEditSemModalOpen] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   // Forms
   const [semName, setSemName] = useState('');
@@ -291,6 +337,23 @@ export default function GlossaryExplorer() {
     enabled: !!tenantId && (isGenModalOpen || isAddMappingOpen),
   });
 
+  // Columns that already have a MAPS_TO edge to a semantic term - these are
+  // excluded from the "Generate from Columns" wizard below, since they're
+  // already mapped and re-offering them just invites accidental duplicates.
+  const { data: allEdges } = useQuery<any[]>({
+    queryKey: ['glossary-all-edges', tenantId, isGenModalOpen],
+    queryFn: () => apiClient<any[]>(`/api/glossary/edges?tenant_id=${tenantId}`),
+    enabled: !!tenantId && isGenModalOpen,
+  });
+  const mappedColumnIds = useMemo(() => {
+    const list = Array.isArray(allEdges) ? allEdges : (allEdges as any)?.data ?? [];
+    const ids = new Set<string>();
+    list.forEach((e: any) => {
+      if (e.edge_type_name === 'MAPS_TO') ids.add(e.target_node_id);
+    });
+    return ids;
+  }, [allEdges]);
+
   const semTerms = useMemo(() => {
     const list = Array.isArray(semTermsRaw) ? semTermsRaw : (semTermsRaw as any)?.data ?? [];
     const sorted = [...list].sort((a, b) => (a.node_name || '').localeCompare(b.node_name || ''));
@@ -309,6 +372,84 @@ export default function GlossaryExplorer() {
 
     return null;
   }, [selectedId, semTermsRaw, busTermsRaw]);
+
+  // Lineage tab data. Reuses the same node-graph endpoint the Relationships
+  // tab already uses successfully (the dedicated /api/lineage/* endpoints
+  // this used to call are unimplemented placeholders on the backend) and
+  // splits edges by direction relative to the focal term: outgoing edges
+  // (focal is source) become downstream nodes, incoming edges (focal is
+  // target) become upstream nodes. For a semantic term this naturally
+  // produces Business Term (upstream) -> Semantic Term (focal) -> Database
+  // Column (downstream); for a business term, just -> Semantic Term.
+  const { data: lineageRel } = useEntityRelationships(
+    selectedTerm?._kind === 'semantic' ? 'semantic_term' : 'business_term',
+    selectedId,
+    { enabled: activeTab === 'lineage' && !!selectedTerm }
+  );
+
+  const { upstreamNodes, downstreamNodes, lineageNodeTypes } = useMemo(() => {
+    const up: any[] = [];
+    const down: any[] = [];
+    const typeMap: Record<string, string> = {};
+    if (!lineageRel || !selectedId) return { upstreamNodes: up, downstreamNodes: down, lineageNodeTypes: typeMap };
+
+    const nodeById = new Map((lineageRel.nodes || []).map((n: any) => [n.id, n]));
+    const seen = new Set<string>();
+
+    // Some catalog data has reciprocal edges for the same node pair (both
+    // term->column and column->term MAPS_TO rows exist for a handful of
+    // legacy mappings), which would otherwise make a node appear on both
+    // sides of the focal node. Process outbound edges first so downstream
+    // wins that tie - once a related node is bucketed, later edges for the
+    // same node (in either direction) are skipped.
+    const allEdges = [...(lineageRel.edges || [])];
+    allEdges.sort((a: any, b: any) => {
+      const aOut = ((a.subject_node_id || a.source_node_id) === selectedId) ? 0 : 1;
+      const bOut = ((b.subject_node_id || b.source_node_id) === selectedId) ? 0 : 1;
+      return aOut - bOut;
+    });
+
+    for (const edge of allEdges) {
+      const sourceId = (edge as any).subject_node_id || (edge as any).source_node_id;
+      const targetId = (edge as any).object_node_id || (edge as any).target_node_id;
+      const predicate = (edge as any).predicate || (edge as any).edge_type_name || 'RELATED_TO';
+      const isOutbound: boolean = sourceId === selectedId;
+      const relatedId: string = isOutbound ? targetId : sourceId;
+      if (!relatedId || relatedId === selectedId) continue;
+      if (seen.has(relatedId)) continue;
+      seen.add(relatedId);
+
+      const node = nodeById.get(relatedId);
+      const rawName = node?.node_name || '';
+      let nodeType = node?.catalog_type_name || node?.node_type;
+      let cleanName = rawName;
+      if (rawName.startsWith('semantic_term/')) { nodeType = 'semantic_term'; cleanName = rawName.replace('semantic_term/', ''); }
+      else if (rawName.startsWith('business_term/')) { nodeType = 'business_term'; cleanName = rawName.replace('business_term/', ''); }
+      else if (rawName.startsWith('business_object/') || rawName.startsWith('/business_object/')) { nodeType = 'business_object'; cleanName = rawName.split('/').filter(Boolean).pop() || rawName; }
+      else if (rawName.startsWith('/')) { nodeType = 'column'; cleanName = rawName.split('/').filter(Boolean).pop() || rawName; }
+
+      const entry = {
+        id: relatedId,
+        node_name: cleanName || relatedId.substring(0, 8),
+        description: node?.description,
+        qualified_path: node?.qualified_path || (rawName.startsWith('/') ? rawName : undefined),
+        node_type: nodeType,
+        catalog_type_name: nodeType === 'business_term' ? 'Business Term' : nodeType === 'semantic_term' ? 'Semantic Term' : nodeType === 'business_object' ? 'Business Object' : nodeType === 'column' ? 'Database Column' : nodeType,
+        relLabel: predicate,
+      };
+      typeMap[relatedId] = nodeType || 'node';
+
+      if (isOutbound) down.push(entry);
+      else up.push(entry);
+    }
+
+    return { upstreamNodes: up, downstreamNodes: down, lineageNodeTypes: typeMap };
+  }, [lineageRel, selectedId]);
+
+  const handleLineageNavigate = useCallback((nodeId: string) => {
+    const nodeType = lineageNodeTypes[nodeId];
+    if (nodeType) handleRelatedNodeClick(nodeId, nodeType);
+  }, [lineageNodeTypes, handleRelatedNodeClick]);
 
   // Mutations
   const createSemantic = async () => {
@@ -367,21 +508,32 @@ export default function GlossaryExplorer() {
 
   const generateColumns = async (selectedGroups: any[]) => {
     if (!tenantId || selectedGroups.length === 0) return;
+    setIsGenerating(true);
     try {
-      for (const group of selectedGroups) {
-        await apiClient(`/api/glossary/generate-semantic-terms?tenant_id=${tenantId}`, {
-          method: 'POST',
-          body: JSON.stringify({
-            name: group.suggestedName,
-            column_ids: group.columns.map((c: any) => c.id)
+      const results = await Promise.allSettled(
+        selectedGroups.map(group =>
+          apiClient(`/api/glossary/generate-semantic-terms?tenant_id=${tenantId}`, {
+            method: 'POST',
+            body: JSON.stringify({
+              name: group.suggestedName,
+              column_ids: group.columns.map((c: any) => c.id)
+            })
           })
-        });
-      }
-      setIsGenModalOpen(false);
+        )
+      );
+      const failed = results.filter(r => r.status === 'rejected');
       refetchSem();
+      if (failed.length > 0) {
+        console.error('Failed to generate some semantic terms:', failed);
+        alert(`Created ${results.length - failed.length} of ${results.length} semantic terms. ${failed.length} failed - see console for details.`);
+      } else {
+        setIsGenModalOpen(false);
+      }
     } catch (e) {
       console.error(e);
       alert('Error generating semantic terms');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -471,8 +623,13 @@ export default function GlossaryExplorer() {
 
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
-    const colList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
-    if (colList.length === 0) return;
+    const rawColList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
+    const colList = rawColList.filter((c: any) => !mappedColumnIds.has(c.id));
+    if (colList.length === 0) {
+      setGenGroups([]);
+      setSelectedGenGroups(new Set());
+      return;
+    }
     const groups: Record<string, any[]> = {};
     colList.forEach((c: any) => {
       if (!c.qualified_path) return;
@@ -485,7 +642,7 @@ export default function GlossaryExplorer() {
 
     setGenGroups(Object.entries(groups).map(([name, cols]) => ({ suggestedName: name, columns: cols })));
     setSelectedGenGroups(new Set());
-  }, [allColumns, isGenModalOpen]);
+  }, [allColumns, isGenModalOpen, mappedColumnIds]);
 
   const inputStyle = {
     background: '#1E2130', border: `1px solid ${C.border}`, color: C.text,
@@ -493,7 +650,7 @@ export default function GlossaryExplorer() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', width: '100%', background: C.bg, color: C.text, fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', width: '100%', background: C.bg, color: C.text, fontFamily: 'system-ui, sans-serif', overflow: 'hidden' }}>
       
       {/* Modals */}
       {isCreateSemModalOpen && (
@@ -538,53 +695,70 @@ export default function GlossaryExplorer() {
 
       {isGenModalOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: C.panel, padding: 24, borderRadius: 12, width: 800, maxHeight: '80vh', overflow: 'auto', border: `1px solid ${C.border}` }}>
-            <h2 style={{ margin: '0 0 16px 0' }}>Generate Semantic Terms from Columns</h2>
-            {columnsLoading ? <Spinner /> : (
-              <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <th style={{ padding: '8px' }}><input type="checkbox" onChange={e => {
-                      if (e.target.checked) setSelectedGenGroups(new Set(genGroups.map(g => g.suggestedName)));
-                      else setSelectedGenGroups(new Set());
-                    }} /></th>
-                    <th style={{ padding: '8px' }}>Suggested Name</th>
-                    <th style={{ padding: '8px' }}>Columns Count</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {genGroups.map((g, i) => (
-                    <tr key={i} style={{ borderBottom: `1px solid ${C.border}` }}>
-                      <td style={{ padding: '8px' }}>
-                        <input type="checkbox" checked={selectedGenGroups.has(g.suggestedName)} onChange={e => {
-                          const next = new Set(selectedGenGroups);
-                          if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
-                          setSelectedGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>
-                        <input style={{ ...inputStyle, marginBottom: 0, width: 'auto' }} value={g.suggestedName} onChange={e => {
-                          const next = [...genGroups];
-                          next[i].suggestedName = e.target.value;
-                          setGenGroups(next);
-                        }} />
-                      </td>
-                      <td style={{ padding: '8px' }}>{g.columns.length}</td>
+          <div style={{ background: C.panel, borderRadius: 12, width: 800, maxHeight: '80vh', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ margin: 0, padding: '24px 24px 16px 24px' }}>Generate Semantic Terms from Columns</h2>
+            <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '0 24px', minHeight: 0 }}>
+              {columnsLoading ? <Spinner /> : (
+                <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <th style={{ padding: '8px' }}><input type="checkbox" onChange={e => {
+                        if (e.target.checked) setSelectedGenGroups(new Set(genGroups.map(g => g.suggestedName)));
+                        else setSelectedGenGroups(new Set());
+                      }} /></th>
+                      <th style={{ padding: '8px' }}>Suggested Name</th>
+                      <th style={{ padding: '8px' }}>Columns Count</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', marginTop: 24 }}>
-              <button onClick={() => setIsGenModalOpen(false)} style={{ background: 'transparent', color: C.text, border: 'none', cursor: 'pointer' }}>Cancel</button>
-              <button onClick={() => generateColumns(genGroups.filter(g => selectedGenGroups.has(g.suggestedName)))} style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: 'pointer' }}>Create Selected</button>
+                  </thead>
+                  <tbody>
+                    {genGroups.map((g, i) => {
+                      const isSelected = selectedGenGroups.has(g.suggestedName);
+                      return (
+                        <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: isSelected ? 'rgba(124, 58, 237, 0.12)' : 'transparent' }}>
+                          <td style={{ padding: '8px' }}>
+                            <input type="checkbox" disabled={isGenerating} checked={isSelected} onChange={e => {
+                              const next = new Set(selectedGenGroups);
+                              if (e.target.checked) next.add(g.suggestedName); else next.delete(g.suggestedName);
+                              setSelectedGenGroups(next);
+                            }} />
+                          </td>
+                          <td style={{ padding: '8px' }}>
+                            <input disabled={isGenerating} style={{ ...inputStyle, marginBottom: 0, width: 'auto' }} value={g.suggestedName} onChange={e => {
+                              const next = [...genGroups];
+                              next[i].suggestedName = e.target.value;
+                              setGenGroups(next);
+                            }} />
+                          </td>
+                          <td style={{ padding: '8px' }}>{g.columns.length}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', padding: '16px 24px 24px 24px', borderTop: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: 13, color: C.textMuted }}>
+                {isGenerating ? 'Creating terms…' : `${selectedGenGroups.size} selected`}
+              </span>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button disabled={isGenerating} onClick={() => setIsGenModalOpen(false)} style={{ background: 'transparent', color: C.text, border: 'none', cursor: isGenerating ? 'default' : 'pointer', opacity: isGenerating ? 0.5 : 1 }}>Cancel</button>
+                <button
+                  disabled={isGenerating || selectedGenGroups.size === 0}
+                  onClick={() => generateColumns(genGroups.filter(g => selectedGenGroups.has(g.suggestedName)))}
+                  style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: (isGenerating || selectedGenGroups.size === 0) ? 'default' : 'pointer', opacity: (isGenerating || selectedGenGroups.size === 0) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}
+                >
+                  {isGenerating && <Spinner size={14} />}
+                  {isGenerating ? 'Creating…' : `Create Selected (${selectedGenGroups.size})`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* Sidebar */}
-      <div style={{ width: 280, minWidth: 280, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: 280, minWidth: 280, minHeight: 0, background: C.sidebar, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: 16, borderBottom: `1px solid ${C.border}` }}>
           <input 
             placeholder="Search terms..." 
@@ -621,7 +795,7 @@ export default function GlossaryExplorer() {
       </div>
 
       {/* Main Panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: C.bg }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: C.bg }}>
         
         {/* Topbar */}
         <div style={{ height: 60, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', padding: '0 24px', justifyContent: 'space-between', background: C.panel }}>
@@ -670,7 +844,7 @@ export default function GlossaryExplorer() {
         {!selectedTerm ? (
           <Empty icon="📖" title="Select a term" subtitle="Choose a semantic term from the sidebar to view details." />
         ) : (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: 24, borderBottom: `1px solid ${C.border}`, background: C.panel }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                 <span style={{ fontSize: 24 }}>{selectedTerm._kind === 'semantic' ? '🧠' : '💼'}</span>
@@ -732,7 +906,10 @@ export default function GlossaryExplorer() {
                       </tr>
                       <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                         <td style={{ padding: '12px 0', color: C.textMuted }}>Node ID</td>
-                        <td style={{ padding: '12px 0', fontFamily: 'monospace', color: C.textMuted }}>{selectedTerm.id}</td>
+                        <td style={{ padding: '12px 0', fontFamily: 'monospace', color: C.textMuted, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {selectedTerm.id}
+                          <CopyButton value={selectedTerm.id} />
+                        </td>
                       </tr>
                       {(() => {
                         const props = typeof selectedTerm.properties === 'string' 
@@ -869,7 +1046,7 @@ export default function GlossaryExplorer() {
                         <thead>
                           <tr style={{ borderBottom: `2px solid ${C.border}`, background: 'rgba(255,255,255,0.03)' }}>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Datasource</th>
-                            <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Table · Schema</th>
+                            <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Schema · Table</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Physical Column</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Data Type</th>
                             <th style={{ padding: '12px 18px', fontSize: 11, color: C.textMuted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Source</th>
@@ -975,6 +1152,7 @@ export default function GlossaryExplorer() {
                     entityId={selectedId ?? ''}
                     entityType={selectedTerm._kind === 'semantic' ? 'semantic_term' : 'business_term'}
                     focalNode={selectedTerm as any}
+                    onNodeClick={handleRelatedNodeClick}
                   />
                 </div>
               )}
@@ -983,13 +1161,14 @@ export default function GlossaryExplorer() {
                 <div style={{ flex: 1, overflow: 'auto', position: 'relative' }}>
                   <LineageGraph
                     focalTerm={selectedTerm}
-                    focalLabel="Glossary Term (Focal)"
-                    upstreamNodes={[]}
-                    downstreamNodes={[]}
-                    edges={[]}
+                    focalLabel={selectedTerm._kind === 'semantic' ? 'Semantic Term (Focal)' : 'Business Term (Focal)'}
+                    upstreamNodes={upstreamNodes}
+                    downstreamNodes={downstreamNodes}
+                    edges={lineageRel?.edges || []}
+                    onNavigate={handleLineageNavigate}
                     showDatasourceLayer={false}
                     height={600}
-                    emptyMessage="No lineage data available."
+                    emptyMessage="No lineage data available for this term."
                   />
                 </div>
               )}

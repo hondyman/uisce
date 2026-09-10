@@ -33,10 +33,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
 	"github.com/hondyman/uisce/backend/internal/cache"
-	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
-	"github.com/hondyman/uisce/backend/internal/calculation"
-	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/calcengine"
+	"github.com/hondyman/uisce/backend/internal/calculation"
+	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
+	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
@@ -47,20 +47,19 @@ import (
 	"github.com/hondyman/uisce/backend/internal/governance"
 	"github.com/hondyman/uisce/backend/internal/governance/contracts"
 	"github.com/hondyman/uisce/backend/internal/handlers"
-	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/household"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/infrastructure"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
-	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/master/customer"
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
-	"github.com/hondyman/uisce/backend/internal/migrations"
+	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
+	"github.com/hondyman/uisce/backend/internal/migrations"
 	models "github.com/hondyman/uisce/backend/internal/models"
 	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/oms/account"
@@ -70,20 +69,21 @@ import (
 	"github.com/hondyman/uisce/backend/internal/optimizer"
 	"github.com/hondyman/uisce/backend/internal/platform"
 	"github.com/hondyman/uisce/backend/internal/portfoliomaster"
-	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/preference"
 	"github.com/hondyman/uisce/backend/internal/profiler"
+	"github.com/hondyman/uisce/backend/internal/querybuilder"
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
-	"github.com/hondyman/uisce/backend/internal/simulation"
+	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/internal/shadow"
-	"github.com/hondyman/uisce/backend/internal/succession"
+	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/streaming"
+	"github.com/hondyman/uisce/backend/internal/succession"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
@@ -101,24 +101,24 @@ import (
 	"github.com/jmoiron/sqlx"
 
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 	temporalclientlib "github.com/hondyman/uisce/libs/temporal-client"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	grpcmetadata "google.golang.org/grpc/metadata"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type ComplianceDeps struct {
-	RuleEngine          *rules.RuleEngine
-	RedisClient         *redis.Client
-	DB                  *sql.DB
-	KafkaBrokers        string
+	RuleEngine         *rules.RuleEngine
+	RedisClient        *redis.Client
+	DB                 *sql.DB
+	KafkaBrokers       string
 	SurvivorshipEngine *mdm.SurvivorshipEngine
 	DriftHealer        *governance.SelfHealingService
-	AdvisorWorker       *rules.AdvisorWorker
-	FIXServer           *fix.Server
+	AdvisorWorker      *rules.AdvisorWorker
+	FIXServer          *fix.Server
 	CDCConsumer        *streaming.SchemaCDCConsumer
 	FlightServer       *flight.FlightServer
 	ShadowEngine       *shadow.ReplayEngine
@@ -190,19 +190,19 @@ type Server struct {
 	ApprovalService         *services.ApprovalService
 	ImpersonationSweeper    *security.Sweeper
 
-	GeminiClient            LLMProvider
-	HouseholdService        *household.Service
-	AltInvestService        *altinvest.Service
-	BillingService          *billing.Service
-	TaxPlanService          *taxplan.Service
-	SuccessionService       *succession.Service
-	GraphService            *catalogmeta.GraphService
-	WriteHandler            *handlers.WriteHandler
-	MCPHandler              *handlers.MCPHandler
-	IgniteClient            *infrastructure.IgniteClient
-	FolderHandler           *handlers.FolderHandler
-	LineageSvc              *services.LineageService
-	CueEngine               *services.CueEngine
+	GeminiClient      LLMProvider
+	HouseholdService  *household.Service
+	AltInvestService  *altinvest.Service
+	BillingService    *billing.Service
+	TaxPlanService    *taxplan.Service
+	SuccessionService *succession.Service
+	GraphService      *catalogmeta.GraphService
+	WriteHandler      *handlers.WriteHandler
+	MCPHandler        *handlers.MCPHandler
+	IgniteClient      *infrastructure.IgniteClient
+	FolderHandler     *handlers.FolderHandler
+	LineageSvc        *services.LineageService
+	CueEngine         *services.CueEngine
 
 	PageLayoutHandler       *handlers.PageLayoutHandler
 	PipelineHandler         *handlers.PipelineHandler
@@ -401,11 +401,11 @@ func (s *Server) listBusinessObjects(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Log but try to proceed with minimal context if tenant is present (legacy fallback)
 		claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
 		if tenantID != "" {
 			secCtx = &security.Context{TenantID: tenantID}
 			ctx = r.Context()
@@ -436,11 +436,11 @@ func (s *Server) getBusinessObjectByID(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		claims := jwtmiddleware.GetClaimsFromContext(r)
-	if claims == nil {
-		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-		return
-	}
-	tenantID := claims.TenantID
+		if claims == nil {
+			http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		tenantID := claims.TenantID
 		if tenantID != "" {
 			secCtx = &security.Context{TenantID: tenantID}
 			ctx = r.Context()
@@ -937,17 +937,17 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		resolver = security.NewDBDatasourceResolver(sqlxDB)
 	}
 	srv := &Server{
-		DB:                     db,
-		auditService:           audit.NewChannelAuditService(sqlxDB),
-		Reg:                    &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
-		WsHub:                  newWebSocketHub(),
-		SemanticNameResolver:   semanticNameResolver,
-		AuditSvc:               auditSvc,
-		NotificationSvc:        notificationSvc,
-		CampaignSvc:            campaignSvc,
-		NotificationHandlers:   NewNotificationAPIHandlers(notificationSvc, campaignSvc),
-		DashboardHandlers:      NewDashboardAPIHandlers(db),
-		ModelCatalogHandler:    handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{
+		DB:                   db,
+		auditService:         audit.NewChannelAuditService(sqlxDB),
+		Reg:                  &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
+		WsHub:                newWebSocketHub(),
+		SemanticNameResolver: semanticNameResolver,
+		AuditSvc:             auditSvc,
+		NotificationSvc:      notificationSvc,
+		CampaignSvc:          campaignSvc,
+		NotificationHandlers: NewNotificationAPIHandlers(notificationSvc, campaignSvc),
+		DashboardHandlers:    NewDashboardAPIHandlers(db),
+		ModelCatalogHandler: handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{
 			Resolver: resolver,
 		}),
 		CatalogScanHandler:     catalogScanHandler, // Set early initialized handler
@@ -1302,6 +1302,25 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		_ = mdmGraph.Initialize()
 	}
 
+	// Pre-aggregation service: StarRocks hot-tier rollup definitions for
+	// calculated semantic terms, materialized off the CDC pipeline
+	// (cmd/cdc_service -> Kafka -> cmd/stream_loader -> StarRocks) instead
+	// of Postgres triggers.
+	boContextResolver := analytics.NewBOContextResolver(sqlxDB, mdmGraph)
+	preAggLifecycleSvc := analytics.NewPreAggLifecycleService(sqlxDB)
+	preAggInvalidationSvc := analytics.NewPreAggInvalidationService(sqlxDB, preAggLifecycleSvc)
+	preAggSvc := analytics.NewPreAggregationService(sqlxDB, boContextResolver, mdmGraph)
+	mdmGraph.RegisterChangeListener(analytics.PreAggInvalidationListener(sqlxDB, preAggInvalidationSvc))
+	preAggHandler := handlers.NewPreAggregationHandler(preAggSvc)
+
+	// Validation rules as catalog nodes - the unified-engine replacement
+	// for the retired catalog_validation_rules table (see
+	// docs/validation_rules_migration_report.json). Same storage
+	// convention as pre-aggregations above: catalog_node, dedicated
+	// handler, mounted alongside it.
+	validationRuleSvc := analytics.NewValidationRuleService(sqlxDB)
+	validationRuleHandler := handlers.NewValidationRuleHandler(validationRuleSvc, sqlxDB)
+
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
 	srv.ExecutionEngine = execEngine
@@ -1464,6 +1483,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
 		r.Post("/calculation/compile", calculation.NewService().CompileExpressionHandler)
+
+		// Pre-aggregation (StarRocks hot-tier rollup) routes
+		preAggHandler.RegisterRoutes(r)
+
+		// Validation rules as catalog nodes (unified rule engine)
+		validationRuleHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)
@@ -1642,8 +1667,20 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		if srv.SemanticMappingHandler != nil {
 			srv.SemanticMappingHandler.RegisterRoutes(r)
 		}
-		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver})
+		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc)
 		glossaryHandler.RegisterRoutes(r)
+
+		// Semantic Relationships Handler (AI-suggested term relationships,
+		// rejections store, taxonomy classification). This was fully
+		// implemented but never mounted, which is why the glossary UI's "AI
+		// suggestions" card 404s on /api/semantic-terms/{id}/related and
+		// /api/semantic-mapper/rejections - it must be registered here,
+		// inside the /api Route() block, since RegisterRoutes uses relative
+		// paths like "/semantic-terms/{id}/related" rather than prefixing
+		// "/api" itself.
+		termRelationshipSvc := analytics.NewTermRelationshipService(sqlxDB)
+		semanticRelationshipsHandler := NewSemanticRelationshipsHandler(termRelationshipSvc, sqlxDB)
+		semanticRelationshipsHandler.RegisterRoutes(r)
 		apiDispatcherEncryptor, encryptorErr := buildApiDispatcherEncryptor()
 		if encryptorErr != nil {
 			log.Fatalf("Failed to construct API dispatcher encryptor: %v", encryptorErr)
@@ -1701,7 +1738,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			// Session-history queries (used by the picker)
 			r.Get("/admin/impersonate/sessions/active", impersonateHandler.ListActiveSessions)
 			r.Get("/admin/impersonate/sessions/recent", impersonateHandler.ListRecentSessions)
-
 
 			// Tenant search + scope (impersonation picker) & audit logs
 			r.Get("/api/v1/audit/channel-billing", srv.GetChannelAuditBillingSummaryHandler)
@@ -1776,8 +1812,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		w.Header().Set("Access-Control-Allow-Headers", "*")
 		w.WriteHeader(http.StatusOK)
 	})
-
-
 
 	rootMux.Mount("/", r)
 	return rootMux
@@ -3998,8 +4032,6 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 	if tenantDatasourceID == "" {
 		tenantDatasourceID = r.URL.Query().Get("datasource_id")
 	}
-
-
 
 	// Parse query parameters
 	nodeType := r.URL.Query().Get("type")

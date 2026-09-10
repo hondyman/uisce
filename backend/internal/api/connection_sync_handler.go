@@ -35,7 +35,7 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 	// 1. Verify tenant exists and is not gold copy
 	var isGoldCopy bool
 	err := h.DB.QueryRowContext(ctx, `
-		SELECT COALESCE(gold_copy, false) FROM tenants WHERE id = $1
+		SELECT COALESCE(gold_copy, false) FROM public.tenants WHERE id = $1
 	`, tenantID).Scan(&isGoldCopy)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch tenant: %v", err), http.StatusInternalServerError)
@@ -49,7 +49,7 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 	// 2. Find the gold copy tenant
 	var goldCopyTenantID string
 	err = h.DB.QueryRowContext(ctx, `
-		SELECT id FROM tenants WHERE gold_copy = true LIMIT 1
+		SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1
 	`).Scan(&goldCopyTenantID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to find gold copy tenant: %v", err), http.StatusInternalServerError)

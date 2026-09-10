@@ -257,7 +257,7 @@ func (r *Reconciler) loadDesiredStates(ctx context.Context) (map[string]DesiredS
 			COALESCE(t.is_gold_copy, false) AS is_premium,
 			COALESCE(td.is_active, true) AS is_active,
 			td.config
-		FROM tenants t
+		FROM public.tenants t
 		JOIN tenant_datasources td ON td.tenant_id = t.id
 		WHERE t.deleted_at IS NULL
 		  AND td.deleted_at IS NULL

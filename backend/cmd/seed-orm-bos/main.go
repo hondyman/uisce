@@ -28,9 +28,9 @@ func main() {
 
 	// Resolve gold_copy tenant at runtime — no hardcoded UUID
 	var tenantID string
-	err = db.GetContext(ctx, &tenantID, `SELECT id FROM tenants WHERE gold_copy = true LIMIT 1`)
+	err = db.GetContext(ctx, &tenantID, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
 	if err != nil || tenantID == "" {
-		err = db.GetContext(ctx, &tenantID, `SELECT id FROM tenants LIMIT 1`)
+		err = db.GetContext(ctx, &tenantID, `SELECT id FROM public.tenants LIMIT 1`)
 		if err != nil {
 			log.Fatalf("Failed to find tenant: %v", err)
 		}

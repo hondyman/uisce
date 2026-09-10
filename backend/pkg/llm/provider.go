@@ -29,7 +29,7 @@ func NewGeminiProvider(apiKey, modelName string) *GeminiProvider {
 		apiKey = os.Getenv("GEMINI_API_KEY")
 	}
 	if modelName == "" {
-		modelName = "gemini-2.0-flash-exp" // Default model
+		modelName = "gemini-2.5-flash" // Default model
 	}
 	return &GeminiProvider{
 		APIKey:         apiKey,

@@ -152,7 +152,7 @@ func (h *IpWhitelistAPIHandlers) listTenants(w http.ResponseWriter, r *http.Requ
 	if !requireGlobalAdmin(w, r) {
 		return
 	}
-	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, COALESCE(display_name, name, tenant_code, id::text) as display_name FROM tenants ORDER BY display_name`)
+	rows, err := h.DB.QueryContext(r.Context(), `SELECT id, COALESCE(display_name, name, tenant_code, id::text) as display_name FROM public.tenants ORDER BY display_name`)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

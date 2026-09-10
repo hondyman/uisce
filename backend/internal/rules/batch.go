@@ -83,7 +83,7 @@ func (e *RuleEngine) EvaluateBatch(
 			if res.Unsupported != nil {
 				fallbackReason = res.Unsupported.Error()
 			}
-			evaluator := NewConditionEvaluator()
+			evaluator := vm.NewConditionEvaluator()
 			passed, violations, _ := EvaluateRecursiveWithDiagnostics(evaluator, rule.Node, input)
 			results[i] = &RuleResult{
 				Passed:         passed,

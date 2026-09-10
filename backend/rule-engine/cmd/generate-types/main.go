@@ -1,14 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -33,6 +34,13 @@ type FieldInfo struct {
 type ASLTypeGenerator struct {
 	packages  []string
 	outputDir string
+
+	// skippedAliases records cross-package type aliases (aliasName ->
+	// targetTypeName), e.g. "RuleNode" -> "RuleNode" for
+	// "type RuleNode = vm.RuleNode" - see the matching field in
+	// cmd/generate-schema/main.go for why only genuinely-unresolved
+	// targets should block generation.
+	skippedAliases map[string]string
 }
 
 // NewASLTypeGenerator creates a new generator
@@ -47,21 +55,43 @@ func NewASLTypeGenerator(packages []string, outputDir string) *ASLTypeGenerator 
 func (g *ASLTypeGenerator) Generate() error {
 	structs, enums := g.parsePackages()
 
+	var unresolved []string
+	for aliasName, targetType := range g.skippedAliases {
+		_, isStruct := structs[targetType]
+		_, isEnum := enums[targetType]
+		if !isStruct && !isEnum {
+			unresolved = append(unresolved, fmt.Sprintf("%s = %s", aliasName, targetType))
+		}
+	}
+	if len(unresolved) > 0 {
+		sort.Strings(unresolved)
+		return fmt.Errorf(
+			"refusing to generate types that silently omit these cross-package type aliases whose "+
+				"target was never resolved - add the target's package to the `packages` list in this "+
+				"file's main(): %s",
+			strings.Join(unresolved, ", "),
+		)
+	}
+
 	if err := g.generateTypeScript(structs, enums); err != nil {
 		return fmt.Errorf("failed to generate TypeScript: %w", err)
 	}
 
-	if err := g.generateJSONSchema(structs, enums); err != nil {
-		return fmt.Errorf("failed to generate JSON Schema: %w", err)
-	}
-
-	if err := g.generateMonacoMetadata(structs, enums); err != nil {
-		return fmt.Errorf("failed to generate Monaco metadata: %w", err)
-	}
-
-	if err := g.generateVersionInfo(); err != nil {
-		return fmt.Errorf("failed to generate version info: %w", err)
-	}
+	// asl.schema.json, asl.monaco.json, and version.json are NOT generated
+	// here - see cmd/generate-schema, cmd/generate-monaco, and
+	// cmd/generate-version, the canonical writer for each. This package
+	// used to have its own competing generateJSONSchema/
+	// generateMonacoMetadata/generateVersionInfo, each producing genuinely
+	// different content for the same three files (this package's
+	// generateJSONSchema omitted "required" and struct-level
+	// "description"; hardcoded keyword/operator literals here vs. real
+	// go/types-derived data in generate-monaco; a hardcoded
+	// "timestamp":"2026-02-02" stub here vs. the real git commit/timestamp
+	// in generate-version) - whichever ran last in `go generate ./...`
+	// silently won, and when run concurrently (e.g. `go test ./...`,
+	// which runs each package's tests as a separate process) they raced
+	// on the same file. Removed rather than reconciled: one canonical
+	// writer per file, not several kept in sync by discipline.
 
 	return nil
 }
@@ -157,6 +187,14 @@ func (g *ASLTypeGenerator) extractTypes(decl *ast.GenDecl, structs map[string]*S
 				enums[typeSpec.Name.Name] = []string{}
 				// We'll populate enum values from const declarations
 			}
+
+		case *ast.SelectorExpr:
+			// Cross-package type alias, e.g. "type RuleNode = vm.RuleNode" -
+			// see the matching case in cmd/generate-schema/main.go.
+			if g.skippedAliases == nil {
+				g.skippedAliases = make(map[string]string)
+			}
+			g.skippedAliases[typeSpec.Name.Name] = t.Sel.Name
 		}
 	}
 }
@@ -337,154 +375,24 @@ func (g *ASLTypeGenerator) goTypeToTSType(goType string, enums map[string][]stri
 	}
 }
 
-// generateJSONSchema generates JSON Schema for validation
-func (g *ASLTypeGenerator) generateJSONSchema(structs map[string]*StructInfo, enums map[string][]string) error {
-	schema := map[string]interface{}{
-		"$schema":     "http://json-schema.org/draft-07/schema#",
-		"$id":         "https://semlayer.com/schemas/asl-rule.schema.json",
-		"title":       "ASL Rule Schema",
-		"type":        "object",
-		"definitions": make(map[string]interface{}),
-	}
-
-	definitions := schema["definitions"].(map[string]interface{})
-
-	// Add enum definitions
-	for enumName, values := range enums {
-		if len(values) > 0 {
-			definitions[enumName] = map[string]interface{}{
-				"type": "string",
-				"enum": values,
-			}
-		}
-	}
-
-	// Add struct definitions
-	for name, structInfo := range structs {
-		properties := make(map[string]interface{})
-
-		for _, field := range structInfo.Fields {
-			fieldSchema := g.fieldToJSONSchema(field, enums)
-			properties[field.Name] = fieldSchema
-		}
-
-		definitions[name] = map[string]interface{}{
-			"type":       "object",
-			"properties": properties,
-		}
-	}
-
-	data, err := json.MarshalIndent(schema, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(g.outputDir+"/asl.schema.json", data, 0644)
-}
-
-// fieldToJSONSchema converts a field to JSON Schema
-func (g *ASLTypeGenerator) fieldToJSONSchema(field FieldInfo, enums map[string][]string) map[string]interface{} {
-	schema := make(map[string]interface{})
-
-	tsType := g.goTypeToTSType(field.Type, enums)
-
-	switch tsType {
-	case "string":
-		schema["type"] = "string"
-	case "number":
-		schema["type"] = "number"
-	case "boolean":
-		schema["type"] = "boolean"
-	case "any":
-		// Allow any type
-	default:
-		// Reference to another type
-		schema["$ref"] = "#/definitions/" + tsType
-	}
-
-	if field.Doc != "" {
-		schema["description"] = field.Doc
-	}
-
-	return schema
-}
-
-// generateMonacoMetadata generates Monaco editor completion metadata
-func (g *ASLTypeGenerator) generateMonacoMetadata(structs map[string]*StructInfo, enums map[string][]string) error {
-	metadata := map[string]interface{}{
-		"keywords": []string{
-			"rule", "condition", "group", "and", "or", "not",
-			"equals", "gt", "lt", "gte", "lte", "contains",
-		},
-		"types":     make(map[string]interface{}),
-		"operators": []string{"=", ">", "<", ">=", "<=", "!=", "in", "contains"},
-	}
-
-	types := metadata["types"].(map[string]interface{})
-
-	// Add type information for completion
-	for name, structInfo := range structs {
-		properties := make(map[string]interface{})
-
-		for _, field := range structInfo.Fields {
-			properties[field.Name] = map[string]interface{}{
-				"type":          g.goTypeToTSType(field.Type, enums),
-				"documentation": field.Doc,
-			}
-		}
-
-		typeInfo := map[string]interface{}{
-			"kind":          "interface",
-			"documentation": structInfo.Doc,
-			"properties":    properties,
-		}
-		types[name] = typeInfo
-	}
-
-	// Add enum completions
-	for enumName, values := range enums {
-		if len(values) > 0 {
-			types[enumName] = map[string]interface{}{
-				"kind":   "enum",
-				"values": values,
-			}
-		}
-	}
-
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(g.outputDir+"/asl.monaco.json", data, 0644)
-}
-
-// generateVersionInfo generates version metadata
-func (g *ASLTypeGenerator) generateVersionInfo() error {
-	version := map[string]interface{}{
-		"generator": "asl-type-generator",
-		"version":   "1.0.0",
-		"timestamp": "2026-02-02T00:00:00Z", // Would be dynamic in real implementation
-		"commit":    "unknown",              // Would be git hash in real implementation
-		"packages":  g.packages,
-	}
-
-	data, err := json.MarshalIndent(version, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(g.outputDir+"/version.json", data, 0644)
-}
 
 func main() {
+	// See the matching comment in cmd/generate-schema/main.go: resolve
+	// paths from this file's own location, not the process cwd, so this
+	// behaves identically under `go generate ./...` and a direct
+	// `cd cmd/generate-types && go run .`.
+	_, thisFile, _, _ := runtime.Caller(0)
+	ruleEngineRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	backendRoot := filepath.Join(ruleEngineRoot, "..")
+
 	packages := []string{
-		"../../../internal/services",
-		"../../../internal/rules",
-		"../../../internal/models",
+		filepath.Join(backendRoot, "internal/services"),
+		filepath.Join(backendRoot, "internal/rules"),
+		filepath.Join(backendRoot, "internal/rules/vm"),
+		filepath.Join(backendRoot, "internal/models"),
 	}
 
-	generator := NewASLTypeGenerator(packages, "../../generated")
+	generator := NewASLTypeGenerator(packages, filepath.Join(ruleEngineRoot, "generated"))
 	if err := generator.Generate(); err != nil {
 		log.Fatalf("Failed to generate ASL types: %v", err)
 	}

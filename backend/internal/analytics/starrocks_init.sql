@@ -147,3 +147,84 @@ GROUP BY 1, 2, 3, 4, 5;
 -- Optimize for Iceberg queries
 -- SET enable_scan_block_cache = true;
 -- SET pipeline_dop = 0;  -- Auto-detect parallelism
+
+-- ============================================
+-- 7. OMS Hot Tier (CDC-fed via Debezium + cmd/stream_loader)
+-- ============================================
+-- Mirrors of orm.{order,placement,order_allocation,execution,
+-- execution_allocation}, kept current by the Debezium Postgres
+-- connector (orm-oms-connector, registered against crims/orm's
+-- orm_cdc_publication) publishing to Kafka topics orm_oms.orm.*,
+-- consumed by one uisce-stream-loader-* service per table
+-- (docker-compose.remote.yml). PRIMARY KEY model gives natural
+-- upsert-by-id semantics for CDC UPDATE events. Timestamps and IDs
+-- are stored as strings since Debezium ships ZonedTimestamp/Uuid
+-- logical types as plain strings already; numeric(p,s) columns are
+-- decoded from Debezium's base64 Decimal encoding by stream_loader
+-- before the row reaches here (see cmd/stream_loader/main.go).
+CREATE DATABASE IF NOT EXISTS oms;
+
+CREATE TABLE IF NOT EXISTS oms.orm_order (
+    id VARCHAR(36) NOT NULL,
+    sec_id VARCHAR(20),
+    side VARCHAR(10),
+    order_type VARCHAR(20),
+    status VARCHAR(20),
+    target_qty DECIMAL(18,4),
+    executed_qty DECIMAL(18,4),
+    leaves_qty DECIMAL(18,4),
+    limit_price DECIMAL(18,9),
+    avg_price DECIMAL(18,9),
+    time_in_force VARCHAR(10),
+    trade_date VARCHAR(20),
+    manager_id VARCHAR(36),
+    trader_id VARCHAR(36),
+    created_at VARCHAR(64),
+    updated_at VARCHAR(64)
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ('replication_num'='1');
+
+CREATE TABLE IF NOT EXISTS oms.orm_placement (
+    id VARCHAR(36) NOT NULL,
+    order_id VARCHAR(36),
+    broker_id VARCHAR(20),
+    venue_id VARCHAR(20),
+    routed_qty DECIMAL(18,4),
+    executed_qty DECIMAL(18,4),
+    leaves_qty DECIMAL(18,4),
+    status VARCHAR(20),
+    fix_clordid VARCHAR(120),
+    created_at VARCHAR(64),
+    updated_at VARCHAR(64)
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ('replication_num'='1');
+
+CREATE TABLE IF NOT EXISTS oms.orm_order_allocation (
+    id VARCHAR(36) NOT NULL,
+    order_id VARCHAR(36),
+    account_id VARCHAR(20),
+    target_qty DECIMAL(18,4),
+    allocated_qty DECIMAL(18,4),
+    status VARCHAR(20),
+    created_at VARCHAR(64),
+    updated_at VARCHAR(64)
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ('replication_num'='1');
+
+CREATE TABLE IF NOT EXISTS oms.orm_execution (
+    id VARCHAR(36) NOT NULL,
+    placement_id VARCHAR(36),
+    order_id VARCHAR(36),
+    exec_qty DECIMAL(18,4),
+    exec_price DECIMAL(18,9),
+    exec_time VARCHAR(64),
+    broker_exec_id VARCHAR(120),
+    last_capacity VARCHAR(1),
+    created_at VARCHAR(64)
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ('replication_num'='1');
+
+CREATE TABLE IF NOT EXISTS oms.orm_execution_allocation (
+    id VARCHAR(36) NOT NULL,
+    execution_id VARCHAR(36),
+    order_allocation_id VARCHAR(36),
+    alloc_exec_qty DECIMAL(18,4),
+    alloc_exec_price DECIMAL(18,9),
+    created_at VARCHAR(64)
+) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 4 PROPERTIES ('replication_num'='1');

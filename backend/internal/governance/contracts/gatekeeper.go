@@ -170,12 +170,11 @@ func (g *Gatekeeper) checkDroppedColumn(ctx context.Context, tenantID, tableName
 	}
 
 	query := `
-		SELECT bf.field_key, bf.is_required, bo.key as bo_key
-		FROM bo_fields bf
-		JOIN business_objects bo ON bf.business_object_id = bo.id
+		SELECT bf.technical_name as field_key, bf.is_required, bo.bo_key as bo_key
+		FROM public.business_object_fields bf
+		JOIN public.business_objects bo ON bf.bo_id = bo.id
 		WHERE bo.tenant_id = $1
 		  AND bf.technical_name = $2
-		  AND bo.tenant_datasource_id = $3
 		  AND bo.is_active = true
 		LIMIT 20
 	`
@@ -184,7 +183,8 @@ func (g *Gatekeeper) checkDroppedColumn(ctx context.Context, tenantID, tableName
 		IsRequired bool   `db:"is_required"`
 		BOKey     string `db:"bo_key"`
 	}
-	err := g.db.SelectContext(ctx, &rows, query, tenantID, columnName, datasourceID)
+	err := g.db.SelectContext(ctx, &rows, query, tenantID, columnName)
+	_ = datasourceID
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("[Gatekeeper] warning: bo_fields lookup failed: %v", err)
 		return nil
@@ -240,20 +240,20 @@ func (g *Gatekeeper) traverseDownstreamBOs(ctx context.Context, tenantID string,
 	}
 
 	query := fmt.Sprintf(`
-		SELECT DISTINCT bo.key
-		FROM business_objects bo
-		JOIN bo_fields bf ON bf.business_object_id = bo.id
+		SELECT DISTINCT bo.bo_key
+		FROM public.business_objects bo
+		JOIN public.business_object_fields bf ON bf.bo_id = bo.id
 		WHERE bo.tenant_id = $1
 		  AND bo.is_active = true
 		  AND bf.technical_name IN (%s)
 		UNION
-		SELECT DISTINCT bo.key
-		FROM business_objects bo
+		SELECT DISTINCT bo.bo_key
+		FROM public.business_objects bo
 		JOIN catalog_edge ce ON ce.target_id = bo.id
 		JOIN catalog_node cn ON ce.source_id = cn.id
 		WHERE bo.tenant_id = $1
 		  AND bo.is_active = true
-		  AND cn.name IN (%s)
+		  AND cn.node_name IN (%s)
 		LIMIT 50
 	`, strings.Join(placeholders, ","), strings.Join(placeholders, ","))
 

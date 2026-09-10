@@ -307,7 +307,7 @@ func (s *featureStoreService) ComputeAllFeatures(ctx context.Context, env string
 	// Get all tenants
 	var tenantIDs []uuid.UUID
 	err := s.db.SelectContext(ctx, &tenantIDs, `
-		SELECT DISTINCT id FROM tenants WHERE env = $1
+		SELECT DISTINCT id FROM public.tenants WHERE env = $1
 	`, env)
 	if err != nil {
 		return err

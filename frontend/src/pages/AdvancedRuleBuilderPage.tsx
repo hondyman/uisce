@@ -1,71 +1,197 @@
-import React, { useState } from 'react';
-import { Box, Container, Typography, Paper, Button, Tabs, Tab } from '@mui/material';
-import AdvancedConditionBuilder, { ConditionGroup, EntityDefinition } from '../components/ExpressionBuilder/AdvancedConditionBuilder';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  Box, Container, Typography, Paper, Button, Tabs, Tab, TextField,
+  MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip,
+  List, ListItem, ListItemText, Divider, CircularProgress,
+} from '@mui/material';
+import AdvancedConditionBuilder, { ConditionGroup, ConditionNode, EntityDefinition, FieldDefinition } from '../components/ExpressionBuilder/AdvancedConditionBuilder';
+import { evaluateRuleWasm } from '../rules/wasmRuntime';
+import apiClient from '../utils/apiClient';
 
-// Mock Data
-const MOCK_ENTITIES: EntityDefinition[] = [
-  {
-    name: 'order',
-    label: 'Order',
-    fields: [
-      { name: 'id', label: 'Order ID', type: 'string' },
-      { name: 'total', label: 'Total Amount', type: 'number' },
-      { name: 'status', label: 'Status', type: 'enum', enumValues: ['pending', 'shipped', 'delivered', 'cancelled'] },
-      { name: 'created_at', label: 'Created At', type: 'date' },
-      { name: 'is_gift', label: 'Is Gift', type: 'boolean' },
-    ],
-    relationships: [
-      { name: 'customer', targetEntity: 'customer', type: 'many-to-one', label: 'Customer' },
-      { name: 'line_items', targetEntity: 'line_item', type: 'one-to-many', label: 'Line Items' },
-    ]
-  },
-  {
-    name: 'customer',
-    label: 'Customer',
-    fields: [
-      { name: 'id', label: 'Customer ID', type: 'string' },
-      { name: 'name', label: 'Name', type: 'string' },
-      { name: 'email', label: 'Email', type: 'string' },
-      { name: 'vip_status', label: 'VIP Status', type: 'boolean' },
-      { name: 'signup_date', label: 'Signup Date', type: 'date' },
-    ],
-    relationships: [
-      { name: 'orders', targetEntity: 'order', type: 'one-to-many', label: 'Orders' },
-    ]
-  },
-  {
-    name: 'line_item',
-    label: 'Line Item',
-    fields: [
-      { name: 'id', label: 'ID', type: 'string' },
-      { name: 'product_name', label: 'Product Name', type: 'string' },
-      { name: 'quantity', label: 'Quantity', type: 'number' },
-      { name: 'price', label: 'Price', type: 'number' },
-    ],
-    relationships: [
-      { name: 'order', targetEntity: 'order', type: 'many-to-one', label: 'Order' },
-    ]
+// Converts the editor's ConditionNode shape into the wire format
+// internal/rules/vm.RuleNode.UnmarshalJSON expects (flat "type" +
+// sibling fields, not nested under a "Condition"/"Group" key - see
+// backend/internal/rules/vm/ast.go). Structural discrimination
+// ("conditions" in node) rather than trusting node.type, since Condition
+// nodes from the builder don't always set an explicit type.
+function toRuleNode(node: ConditionNode): unknown {
+  if ('conditions' in node) {
+    return {
+      type: 'group',
+      id: node.id,
+      operator: node.operator,
+      conditions: node.conditions.map(toRuleNode),
+    };
   }
-];
+  return {
+    type: 'condition',
+    id: node.id,
+    field: node.fieldPath || node.field,
+    operator: node.operator,
+    value: node.value,
+  };
+}
 
 const INITIAL_RULE: ConditionGroup = {
   id: 'root',
   type: 'group',
   operator: 'AND',
   conditions: [
-    {
-      id: 'c1',
-      type: 'condition',
-      field: 'total',
-      operator: 'greater_than',
-      value: 100
-    }
-  ]
+    { id: 'c1', type: 'condition', field: '', operator: 'greater_than', value: 0 },
+  ],
 };
+
+const SAMPLE_CONTEXT = { total: 150, status: 'pending', is_gift: false };
+
+// Postgres data_type -> the editor's field-type vocabulary.
+function toFieldType(dataType: string): FieldDefinition['type'] {
+  if (dataType.startsWith('numeric') || dataType.startsWith('integer') || dataType.startsWith('double')) return 'number';
+  if (dataType === 'boolean') return 'boolean';
+  if (dataType.startsWith('timestamp') || dataType === 'date') return 'date';
+  return 'string';
+}
+
+interface BOOption {
+  id: string;
+  key: string;
+  name: string;
+}
+
+interface SavedRule {
+  id: string;
+  name: string;
+  bo_name: string;
+  severity: string;
+  timing: string;
+  category?: string;
+}
+
+interface ViolationRow {
+  id: string;
+  rule_name: string;
+  bo_key: string;
+  severity: string;
+  record_id: string;
+  message: string;
+  write_blocked: boolean;
+  rule_error: boolean;
+  created_at: string;
+}
 
 const AdvancedRuleBuilderPage: React.FC = () => {
   const [rule, setRule] = useState<ConditionGroup>(INITIAL_RULE);
   const [tabIndex, setTabIndex] = useState(0);
+  const [contextJson, setContextJson] = useState(JSON.stringify(SAMPLE_CONTEXT, null, 2));
+  const [evalResult, setEvalResult] = useState<{ result?: boolean; error?: string } | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
+
+  // Real BO catalog data, replacing MOCK_ENTITIES.
+  const [businessObjects, setBusinessObjects] = useState<BOOption[]>([]);
+  const [selectedBOKey, setSelectedBOKey] = useState<string>('');
+  const [fields, setFields] = useState<FieldDefinition[]>([]);
+  const [loadingFields, setLoadingFields] = useState(false);
+
+  // Save form fields - the editor previously collected none of these,
+  // even though ValidationRuleProperties requires them.
+  const [ruleName, setRuleName] = useState('');
+  const [severity, setSeverity] = useState('BLOCK');
+  const [timing, setTiming] = useState('pre_write');
+  const [category, setCategory] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveResult, setSaveResult] = useState<{ id?: string; error?: string } | null>(null);
+
+  const [savedRules, setSavedRules] = useState<SavedRule[]>([]);
+  const [violations, setViolations] = useState<ViolationRow[]>([]);
+
+  const entities: EntityDefinition[] = selectedBOKey
+    ? [{ name: selectedBOKey, label: selectedBOKey, fields, relationships: [] }]
+    : [];
+
+  // Load the real BO catalog (replaces MOCK_ENTITIES).
+  useEffect(() => {
+    apiClient<BOOption[]>('/business-objects?format=array')
+      .then((bos) => {
+        setBusinessObjects(bos);
+        if (bos.length > 0) setSelectedBOKey((prev) => prev || bos[0].key);
+      })
+      .catch((err) => console.error('Failed to load business objects:', err));
+  }, []);
+
+  // Load physical fields (the vocabulary rules actually evaluate against
+  // - see ValidationRuleService.ListPhysicalFields) whenever the BO
+  // selection changes.
+  const loadFieldsAndRules = useCallback(async () => {
+    if (!selectedBOKey) return;
+    setLoadingFields(true);
+    try {
+      const fieldsRes = await apiClient<{ fields: { name: string; dataType: string }[] }>(
+        `/validation-rule-nodes/bo-fields?bo_name=${encodeURIComponent(selectedBOKey)}`
+      );
+      setFields(
+        (fieldsRes.fields || []).map((f) => ({
+          name: f.name,
+          label: f.name,
+          type: toFieldType(f.dataType || ''),
+        }))
+      );
+      const rulesRes = await apiClient<{ validationRules: SavedRule[] }>(
+        `/validation-rule-nodes?bo_name=${encodeURIComponent(selectedBOKey)}`
+      );
+      setSavedRules(rulesRes.validationRules || []);
+      const violationsRes = await apiClient<{ violations: ViolationRow[] }>(
+        `/validation-rule-nodes/violations?bo_name=${encodeURIComponent(selectedBOKey)}&limit=25`
+      );
+      setViolations(violationsRes.violations || []);
+    } catch (err) {
+      console.error('Failed to load fields/rules/violations for BO:', err);
+    } finally {
+      setLoadingFields(false);
+    }
+  }, [selectedBOKey]);
+
+  useEffect(() => {
+    loadFieldsAndRules();
+  }, [loadFieldsAndRules]);
+
+  const runBackendPreview = async () => {
+    setEvaluating(true);
+    setEvalResult(null);
+    try {
+      const ctx = JSON.parse(contextJson);
+      const ruleNode = toRuleNode(rule);
+      const result = await evaluateRuleWasm(ruleNode, ctx);
+      setEvalResult({ result });
+    } catch (err) {
+      setEvalResult({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaveResult(null);
+    try {
+      const ruleAst = toRuleNode(rule);
+      const desc = await apiClient<{ id: string }>('/validation-rule-nodes', {
+        method: 'POST',
+        body: JSON.stringify({
+          bo_name: selectedBOKey,
+          name: ruleName,
+          severity,
+          timing,
+          category,
+          rule_ast: ruleAst,
+        }),
+      });
+      setSaveResult({ id: desc.id });
+      await loadFieldsAndRules();
+    } catch (err) {
+      setSaveResult({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
@@ -76,16 +202,124 @@ const AdvancedRuleBuilderPage: React.FC = () => {
         Build complex validation rules with nested conditions, cross-entity traversal, and type-aware operators.
       </Typography>
 
-      <Paper sx={{ p: 3, mb: 4 }}>
-        <AdvancedConditionBuilder
-          value={rule}
-          onChange={setRule}
-          entities={MOCK_ENTITIES}
-          primaryEntity="order"
-          enableCrossEntity={true}
-          enableDragDrop={true}
-          showValidation={true}
-        />
+      <Paper sx={{ p: 3, mb: 2 }}>
+        <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+          <FormControl size="small" sx={{ minWidth: 220 }}>
+            <InputLabel id="bo-select-label">Business Object</InputLabel>
+            <Select
+              labelId="bo-select-label"
+              label="Business Object"
+              value={selectedBOKey}
+              onChange={(e) => setSelectedBOKey(e.target.value)}
+            >
+              {businessObjects.map((bo) => (
+                <MenuItem key={bo.key} value={bo.key}>{bo.name || bo.key}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {loadingFields && <CircularProgress size={20} />}
+          {!loadingFields && fields.length === 0 && selectedBOKey && (
+            <Alert severity="warning" sx={{ py: 0 }}>No physical fields found for this BO's driver_table_name.</Alert>
+          )}
+        </Stack>
+
+        {entities.length > 0 && (
+          <AdvancedConditionBuilder
+            // AdvancedConditionBuilder seeds its own currentEntity state
+            // from the primaryEntity prop via useState(primaryEntity) once,
+            // at mount, with no effect resyncing it when the prop changes
+            // later - switching the BO dropdown here changed `entities`/
+            // `primaryEntity` without the field picker noticing, so it kept
+            // looking up fields on the old entity name (which no longer
+            // exists in the new single-entity `entities` array) and showed
+            // "No fields found". Forcing a remount on BO change is the
+            // correct fix scoped to this page - fixing the shared
+            // component's internal state sync is a separate, larger change
+            // with its own other consumers to consider.
+            key={selectedBOKey}
+            value={rule}
+            onChange={setRule}
+            entities={entities}
+            primaryEntity={selectedBOKey}
+            enableCrossEntity={false}
+            enableDragDrop={true}
+            showValidation={true}
+          />
+        )}
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 2 }}>
+        <Typography variant="h6" gutterBottom>Save</Typography>
+        <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+          <TextField label="Rule name" value={ruleName} onChange={(e) => setRuleName(e.target.value)} size="small" sx={{ minWidth: 260 }} />
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel id="severity-label">Severity</InputLabel>
+            <Select labelId="severity-label" label="Severity" value={severity} onChange={(e) => setSeverity(e.target.value)}>
+              <MenuItem value="BLOCK">BLOCK</MenuItem>
+              <MenuItem value="WARN">WARN</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 160 }}>
+            <InputLabel id="timing-label">Timing</InputLabel>
+            <Select labelId="timing-label" label="Timing" value={timing} onChange={(e) => setTiming(e.target.value)}>
+              <MenuItem value="pre_write">pre_write</MenuItem>
+              <MenuItem value="reconcile">reconcile</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} />
+        </Stack>
+        <Button
+          variant="contained"
+          onClick={handleSave}
+          disabled={saving || !ruleName || !selectedBOKey}
+        >
+          {saving ? 'Saving...' : 'Save Rule'}
+        </Button>
+        {saveResult && (
+          <Box sx={{ mt: 2 }}>
+            {saveResult.error ? (
+              <Alert severity="error">{saveResult.error}</Alert>
+            ) : (
+              <Alert severity="success">Saved as {saveResult.id}</Alert>
+            )}
+          </Box>
+        )}
+
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle2" gutterBottom>Saved rules for {selectedBOKey || '...'}</Typography>
+        <List dense>
+          {savedRules.map((r) => (
+            <ListItem key={r.id}>
+              <ListItemText primary={r.name} secondary={`${r.severity} · ${r.timing}${r.category ? ` · ${r.category}` : ''}`} />
+            </ListItem>
+          ))}
+          {savedRules.length === 0 && <Typography variant="body2" color="text.secondary">No rules saved yet for this BO.</Typography>}
+        </List>
+      </Paper>
+
+      <Paper sx={{ p: 3, mb: 2 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Typography variant="h6">Recent violations for {selectedBOKey || '...'}</Typography>
+          <Button size="small" onClick={loadFieldsAndRules}>Refresh</Button>
+        </Stack>
+        <List dense>
+          {violations.map((v) => (
+            <ListItem key={v.id} alignItems="flex-start">
+              <ListItemText
+                primary={
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <span>{v.rule_name}</span>
+                    <Chip size="small" label={v.severity} color={v.severity === 'BLOCK' ? 'error' : 'warning'} />
+                    <Chip size="small" label={v.write_blocked ? 'write blocked' : 'logged only'} variant="outlined" />
+                    {v.rule_error && <Chip size="small" label="rule error" color="secondary" />}
+                  </Stack>
+                }
+                secondary={`record ${v.record_id} - ${v.created_at}${v.rule_error ? ' - could not evaluate: ' + v.message : ''}`}
+              />
+            </ListItem>
+          ))}
+          {violations.length === 0 && <Typography variant="body2" color="text.secondary">No violations recorded yet for this BO.</Typography>}
+        </List>
       </Paper>
 
       <Paper sx={{ p: 2 }}>
@@ -102,9 +336,34 @@ const AdvancedRuleBuilderPage: React.FC = () => {
 
         {tabIndex === 1 && (
           <Box sx={{ p: 2 }}>
-            <Typography variant="body2" color="textSecondary">
-              This JSON structure is directly compatible with the backend <code>AdvancedEvaluator</code>.
+            <Typography variant="body2" color="textSecondary" paragraph>
+              Runs this rule against internal/rules/vm.AdvancedEvaluator via the same
+              rule_engine.wasm build the browser live-preview panel uses (see
+              frontend/src/rules/wasmRuntime.ts) - the real evaluator, not a claim about it.
             </Typography>
+            <TextField
+              label="Sample data (JSON)"
+              value={contextJson}
+              onChange={(e) => setContextJson(e.target.value)}
+              multiline
+              minRows={4}
+              fullWidth
+              sx={{ mb: 2, fontFamily: 'monospace' }}
+            />
+            <Button variant="contained" onClick={runBackendPreview} disabled={evaluating}>
+              {evaluating ? 'Evaluating...' : 'Evaluate against sample data'}
+            </Button>
+            {evalResult && (
+              <Box sx={{ mt: 2 }}>
+                {evalResult.error ? (
+                  <Typography color="error">Error: {evalResult.error}</Typography>
+                ) : (
+                  <Typography sx={{ fontWeight: 'bold' }} color={evalResult.result ? 'success.main' : 'text.secondary'}>
+                    Result: {evalResult.result ? 'PASS' : 'FAIL'}
+                  </Typography>
+                )}
+              </Box>
+            )}
           </Box>
         )}
       </Paper>

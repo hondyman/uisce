@@ -206,7 +206,7 @@ func (r *BusinessObjectCachedRepository) GetBusinessObject(ctx context.Context, 
 
 	var bo BusinessObjectWithMetadata
 	err := r.db.GetContext(ctx, &bo,
-		`SELECT id, name, technical_name, is_system, created_at
+		`SELECT id, bo_name AS name, bo_key AS technical_name, false AS is_system, created_at
 		 FROM business_objects
 		 WHERE id = $1`,
 		id)

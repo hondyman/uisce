@@ -205,7 +205,7 @@ func (h *ApiDispatcherHandler) ListApiDatasources(w http.ResponseWriter, r *http
 		JOIN catalog_node_types cnt ON cn.node_type_id = cnt.id
 		LEFT JOIN tenant_api_connections tac ON (tac.api_datasource_id = cn.id AND tac.tenant_id = NULLIF($1, '')::uuid)
 		WHERE cnt.catalog_type_name = 'api_datasource'
-		  AND (cn.tenant_id = NULLIF($1, '')::uuid OR cn.tenant_id IN (SELECT id FROM tenants WHERE gold_copy = true))
+		  AND (cn.tenant_id = NULLIF($1, '')::uuid OR cn.tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true))
 		ORDER BY cn.node_name ASC
 	`
 	rows, err := h.db.QueryContext(r.Context(), query, tenantID)
@@ -277,7 +277,7 @@ func (h *ApiDispatcherHandler) ListApiEndpoints(w http.ResponseWriter, r *http.R
 		LEFT JOIN catalog_node res ON ep.parent_id = res.id
 		LEFT JOIN catalog_node ds ON (res.parent_id = ds.id OR ep.parent_id = ds.id)
 		WHERE cnt.catalog_type_name = 'api_endpoint'
-		  AND (ep.tenant_id = NULLIF($1, '')::uuid OR ep.tenant_id IN (SELECT id FROM tenants WHERE gold_copy = true))
+		  AND (ep.tenant_id = NULLIF($1, '')::uuid OR ep.tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true))
 		ORDER BY ep.node_name ASC
 	`
 	rows, err := h.db.QueryContext(r.Context(), query, tenantID)
@@ -481,7 +481,7 @@ func (h *ApiDispatcherHandler) ListSemanticTerms(w http.ResponseWriter, r *http.
 		FROM catalog_node cn
 		JOIN catalog_node_types cnt ON cn.node_type_id = cnt.id
 		WHERE cnt.catalog_type_name = 'semantic_term'
-		  AND (cn.tenant_id = NULLIF($1, '')::uuid OR cn.tenant_id IN (SELECT id FROM tenants WHERE gold_copy = true))
+		  AND (cn.tenant_id = NULLIF($1, '')::uuid OR cn.tenant_id IN (SELECT id FROM public.tenants WHERE gold_copy = true))
 		  AND ($2 = '' OR cn.node_name ILIKE '%' || $2 || '%' OR cn.description ILIKE '%' || $2 || '%')
 		ORDER BY cn.node_name ASC
 		LIMIT 100

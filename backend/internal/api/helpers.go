@@ -341,13 +341,17 @@ func nilIfNullFloat64(n sql.NullFloat64) *float64 {
 	return &v
 }
 
-// getSecureTenantID extracts tenant ID from validated JWT claims.
-// SECURITY: This function intentionally does NOT fall back to URL query parameters,
-// and only trusts the client-supplied X-Tenant-ID header when
+// getSecureTenantID extracts tenant ID for the request.
+// SECURITY: This function intentionally does NOT fall back to URL query parameters.
+// Resolution order matches TenantIDFromRequest: (1) security.AuthInfo set by
+// AuthContextMiddleware - includes the verified-global-admin X-Tenant-ID header
+// fallback (AuthContextMiddleware only honors that header for a caller whose JWT
+// role claims proved global_admin/global_ops); (2) jwtmiddleware claims for
+// standalone services; (3) the raw X-Tenant-ID header, but only when
 // ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (local/dev use only).
 func getSecureTenantID(r *http.Request) string {
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		return claims.TenantID
+	if tenantID, ok := TenantIDFromRequest(r); ok && tenantID != "" {
+		return tenantID
 	}
 	if allowClientTenantHeaderFallback() {
 		if tid := r.Header.Get("X-Tenant-ID"); tid != "" {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -40,6 +41,22 @@ type FieldInfo struct {
 type ASLTypeGenerator struct {
 	packages  []string
 	outputDir string
+
+	// skippedAliases records cross-package type aliases (e.g.
+	// "type RuleNode = vm.RuleNode") found while scanning packages, as
+	// aliasName -> targetTypeName. This parser works on raw go/ast source
+	// text with no import resolution, so it cannot follow such an alias
+	// into its target package - it can only notice one exists. That's fine
+	// when the target's real struct/enum is ALSO found (by name) in
+	// another scanned package - the common, intentional "re-export for
+	// backward compatibility" pattern. It's only a problem when the target
+	// is never resolved anywhere, which silently produces an incomplete
+	// schema for that name. Generate() checks skippedAliases against the
+	// final structs/enums maps and only errors on the unresolved ones.
+	// This is exactly the failure mode that let the ASL schema ship for a
+	// long time without RuleNode/RuleGroup/Expression/FuncCall at all,
+	// despite internal/rules re-exporting them for this purpose.
+	skippedAliases map[string]string
 }
 
 // NewASLTypeGenerator creates a new generator
@@ -53,6 +70,24 @@ func NewASLTypeGenerator(packages []string, outputDir string) *ASLTypeGenerator 
 // Generate runs the full generation process
 func (g *ASLTypeGenerator) Generate() error {
 	structs, enums := g.parsePackages()
+
+	var unresolved []string
+	for aliasName, targetType := range g.skippedAliases {
+		_, isStruct := structs[targetType]
+		_, isEnum := enums[targetType]
+		if !isStruct && !isEnum {
+			unresolved = append(unresolved, fmt.Sprintf("%s = %s", aliasName, targetType))
+		}
+	}
+	if len(unresolved) > 0 {
+		sort.Strings(unresolved)
+		return fmt.Errorf(
+			"refusing to generate a schema that silently omits these cross-package type aliases whose "+
+				"target was never resolved - add the target's package to the `packages` list in this "+
+				"file's main(): %s",
+			strings.Join(unresolved, ", "),
+		)
+	}
 
 	if err := g.generateJSONSchema(structs, enums); err != nil {
 		return fmt.Errorf("failed to generate JSON Schema: %w", err)
@@ -154,6 +189,17 @@ func (g *ASLTypeGenerator) extractTypes(decl *ast.GenDecl, structs map[string]*S
 					Values: []string{},
 				}
 			}
+
+		case *ast.SelectorExpr:
+			// Cross-package type alias, e.g. "type RuleNode = vm.RuleNode".
+			// Plain go/ast parsing can't follow this into the vm package to
+			// see the real struct - record the target name so Generate()
+			// can check whether it was resolved by scanning that package
+			// too, and only complain if it wasn't.
+			if g.skippedAliases == nil {
+				g.skippedAliases = make(map[string]string)
+			}
+			g.skippedAliases[typeSpec.Name.Name] = t.Sel.Name
 		}
 	}
 }
@@ -340,13 +386,25 @@ func (g *ASLTypeGenerator) goTypeToTSType(goType string, enums map[string]*EnumI
 }
 
 func main() {
+	// Resolve paths from this source file's own location rather than the
+	// process's working directory - that varies depending on whether this
+	// is invoked as `go generate ./...` (cwd = rule-engine/, the directory
+	// holding the go:generate directive) or `cd cmd/generate-schema &&
+	// go run .` (cwd = cmd/generate-schema/), and the two disagreed before
+	// this fix (see cmd/check-drift's history: `go generate ./...` failed
+	// to find any of these packages at all).
+	_, thisFile, _, _ := runtime.Caller(0)
+	ruleEngineRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	backendRoot := filepath.Join(ruleEngineRoot, "..")
+
 	packages := []string{
-		"../../../internal/services",
-		"../../../internal/rules",
-		"../../../internal/models",
+		filepath.Join(backendRoot, "internal/services"),
+		filepath.Join(backendRoot, "internal/rules"),
+		filepath.Join(backendRoot, "internal/rules/vm"),
+		filepath.Join(backendRoot, "internal/models"),
 	}
 
-	generator := NewASLTypeGenerator(packages, "../../generated")
+	generator := NewASLTypeGenerator(packages, filepath.Join(ruleEngineRoot, "generated"))
 	if err := generator.Generate(); err != nil {
 		log.Fatalf("Failed to generate ASL schema: %v", err)
 	}
