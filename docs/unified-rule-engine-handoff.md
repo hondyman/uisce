@@ -28,8 +28,16 @@ next task is.
 
 `internal/rules/vm` (`RuleNode`/`RuleGroup`/`RuleCondition`/`Expression`/
 `BinaryExpr`/`FuncCall`) is now the single AST behind validation rules,
-MDM/rulefabric rules, calc-term SQL pushdown, and the browser WASM live
-preview — one evaluator (`AdvancedEvaluator`), compiled to
+calc-term SQL pushdown, and the browser WASM live preview - **not**
+MDM/rulefabric rules, despite an earlier version of this document
+claiming otherwise. That claim was inference dressed as verification:
+rulefabric imports the `vm` package, but only for its bytecode
+primitives (`OpCode`/`CompiledProgram`/`Instruction`) to compile its
+*own* `ConditionGroup`/`Condition` model - it never constructs or
+consumes a `vm.RuleNode`/`RuleGroup`/`Expression`. The two engines share
+a bytecode instruction set, not an AST. See the 2026-09-10 addendum
+below ("rulefabric consolidation") for the live-load-verified plan to
+close this gap for real. One evaluator (`AdvancedEvaluator`), compiled to
 `rule_engine.wasm` for the browser and run natively server-side, with a
 real round-trip-tested `MarshalJSON`/`UnmarshalJSON` pair. The editor
 (`AdvancedRuleBuilderPage`) is routed and click-through verified with a
@@ -1192,3 +1200,86 @@ The **never-target-real-alpha vs. eventually-reconcile-372** policy
 question raised earlier in this document's history now explicitly
 *waits on* that repair - adopting the runner for real reconciliation
 isn't a choice available until it can actually run the files.
+
+## Rulefabric consolidation (2026-09-10) - the editor unification's real scope, and the correction that started it
+
+Attempting to design the "one editor, multiple domains" surface for
+MDM/compliance rule authoring surfaced that the "single AST" claim at
+the top of this document was wrong about rulefabric - corrected there,
+this section is the evidence and the plan.
+
+**Phase 0 inventory (read-only), what it actually found:**
+- **No frontend page authors MDM or compliance rules today.** No route
+  in `AppRoutes.tsx`, no create/edit UI. The compliance pages that
+  exist (`ComplianceGuardrailDashboard.tsx`, `ComplianceMasterDashboard.tsx`)
+  are read-only, hitting `GET /api/guardrails/stats` and
+  `GET /api/audit/events` only.
+- The one adjacent authoring surface, `frontend/src/features/bo/PolicyRuleBuilder.tsx`
+  (BO governance policies) - **not even registered as a route**, reachable
+  only embedded in `BOGovernanceStudio` - is a plain textarea authoring
+  raw CEL strings, POSTing to `/api/rule-fabric/bo/{boKey}/policies`
+  (`backend/internal/rulefabric/bo_policy_handler.go`).
+- Rulefabric's own domain model (`backend/internal/rulefabric/evaluator.go`):
+  `Rule`/`RuleLogic{ConditionJSON}` → its own `ConditionGroup`/`Condition`
+  types, with `RuleCategory` values `CategoryCompliance`/`CategoryMDM`
+  already defined but never authored against. `vm_compiler.go` compiles
+  *this* model onto `vm`'s bytecode ops - confirmed by reading
+  `CompileRuleFabric`/`CompileRuleFabricFromJSON` directly, not inferred
+  from the import line (the mistake being corrected here).
+- A third format, `edm.compliance_rule` (`ComplianceRule{Expression,
+  ExpressionType}`), has no write endpoint at all - `compliance_handler.go`
+  registers only `GET /rules`, `/evaluations`, `/breaches`, `.../lineage`.
+
+**Live-load gate (read-only, run before deciding anything, same standard
+as every prior fork in this document):**
+- `rules` and `rule_logic` (rulefabric's actual condition model): **0
+  rows** in real `alpha`.
+- `compliance_rules` (the bare `public` one): **0 rows**.
+- The one table with rows, `policies` (4 rows, all `"Test Policy"`/`"test
+  policy"` test data) - checked its schema (`schedule`, `location_rules`,
+  `start_date`/`end_date`) and confirmed it's an **unrelated** scheduling/
+  geofence feature, not rulefabric's model. Would have been a false
+  positive if not checked at the row level, not just "a table named
+  policies has rows."
+- `CategoryWashTrade`/`CategoryRebalancing`: grepped every hit in
+  `evaluator.go` and `orchestration.go` - bare enum constants and an
+  event-type switch, **no hardcoded detection algorithm** behind either.
+  Nothing to preserve as fallback content.
+
+**Decision: consolidate rulefabric's condition model onto `vm.RuleNode`
+now, while the count is zero** - the same reasoning this document has
+applied every other time two of something were found (the semantic-term
+retrofit at six rules, the 410 retirement before a translator got
+built). The alternative - author against `vm.RuleNode` and bridge to
+rulefabric's evaluator - means permanently maintaining a translator
+between two ASTs, the dual-writer failure mode this whole document is a
+record of exterminating elsewhere, deliberately reintroduced at the
+layer where rule semantics live. It would also cap what MDM/compliance
+rules can express at rulefabric's condition-only model forever - no
+`FuncCall`, no aggregates, none of the function-library work - since a
+bridge only carries what the bridged side already understands.
+
+**Scope, precisely:** retire the *condition* AST
+(`ConditionGroup`/`Condition`), not rulefabric's domain value - policy
+concerns (categories, BLOCK/WARN actions, exemptions, lookbacks, target
+scoping) stay and become properties on `catalog_node` rows, the same
+`validation_rule` convention extended with MDM/compliance domain values.
+Execution changes least of all: rulefabric already compiles its
+condition model onto `vm`'s bytecode instruction set, so routing through
+the existing `CompileVM`/`AdvancedEvaluator` paths is swapping the input
+AST, not the runtime. `PolicyRuleBuilder`'s raw-CEL-textarea folds into
+the same move - it's the primitive ancestor of the unified editor's
+expression mode (Monaco, the real parser, autocomplete), not a separate
+migration. `edm.compliance_rule` (no write path, zero rows) is a
+retirement-pass line item, same disposition as the original 233-row
+corpus.
+
+**Not yet done**: the actual code changes (retiring `ConditionGroup`/
+`Condition`, wiring `catalog_node`+`rule_ast` for MDM/compliance domain
+values, the context-object editor model with term autocomplete in the
+Monaco provider). This section records the verified plan and the gate
+that cleared it, not a completed migration - the next session's task is
+to execute it, then close with the proof this design has pointed at
+from the start: author one MDM rule, one compliance rule, and one BO
+validation in the same editor, same autocomplete, same terms, evaluate
+all three through the same engine.
