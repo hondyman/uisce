@@ -114,9 +114,25 @@ func seedReferenceData() {
 }
 
 func author(boName, name, severity, timing, ast string) uuid.UUID {
+	return authorWithNote(boName, name, severity, timing, ast, "")
+}
+
+// authorWithNote is author() plus a disclosure note appended to the
+// rule's own Description - required whenever the rule_ast references a
+// field the AST itself can't compute (a precomputed boolean from a
+// context loader, e.g. causality_ok/same_order_ok - see
+// docs/unified-rule-engine-handoff.md item 54's "operator completeness"
+// gap). A rule auditor reading only the catalog - not this file - has no
+// other way to find the hidden half of the logic; the Description is the
+// only place that lineage survives.
+func authorWithNote(boName, name, severity, timing, ast, note string) uuid.UUID {
+	description := "OMS validation spec, Phase 1 - verify_oms_validations proof"
+	if note != "" {
+		description += ". " + note
+	}
 	desc, err := ruleS.UpsertValidationRule(ctx, models.UpsertValidationRuleRequest{
 		TenantID: tenantID, BOName: boName, Name: name,
-		Description: "OMS validation spec, Phase 1 - verify_oms_validations proof",
+		Description: description,
 		Severity:    severity, Timing: timing, Category: "oms",
 		RuleAST: []byte(ast),
 	})
@@ -419,9 +435,10 @@ func testExecutionRules() {
 				]}
 			]}
 		]}`)
-	author("execution", "Execution time must not precede its placement",
+	authorWithNote("execution", "Execution time must not precede its placement",
 		models.ValidationRuleSeverityWarn, models.ValidationRuleTimingPreWrite,
-		`{"type":"condition","field":"causality_ok","operator":"equals","value":true}`)
+		`{"type":"condition","field":"causality_ok","operator":"equals","value":true}`,
+		"causality_ok is a precomputed boolean (exec_time >= parent placement's created_at), computed in internal/metadata/shadow_evaluation.go's loadExecutionContext - not expressible directly in this AST, since neither comparator supports timestamp comparison. See the field's own comment for why.")
 	author("execution", "LastCapacity must be a recognized value",
 		models.ValidationRuleSeverityWarn, models.ValidationRuleTimingPreWrite,
 		`{"type":"group","operator":"OR","conditions":[
@@ -606,9 +623,10 @@ func testAllocationRules() {
 	author("execution_allocation", "Allocation price must match the parent execution's price",
 		models.ValidationRuleSeverityBlock, models.ValidationRuleTimingPreWrite,
 		`{"type":"expression","root":{"op":"==","left":{"path":"AllocationExecPrice"},"right":{"path":"parent_exec_price"}}}`)
-	author("execution_allocation", "Allocation must link to the same order as its execution",
+	authorWithNote("execution_allocation", "Allocation must link to the same order as its execution",
 		models.ValidationRuleSeverityBlock, models.ValidationRuleTimingPreWrite,
-		`{"type":"condition","field":"same_order_ok","operator":"equals","value":true}`)
+		`{"type":"condition","field":"same_order_ok","operator":"equals","value":true}`,
+		"same_order_ok is a precomputed boolean (parent execution's order_id == the linked order_allocation's order_id), computed in internal/metadata/shadow_evaluation.go's loadExecutionAllocationContext - not expressible directly in this AST, since Expression's BinaryExpr == is numeric-only (see the field's own comment).")
 	author("execution_allocation", "Allocation execution quantity must be positive",
 		models.ValidationRuleSeverityBlock, models.ValidationRuleTimingPreWrite,
 		`{"type":"condition","field":"AllocationExecQuantity","operator":"greater_than","value":0}`)

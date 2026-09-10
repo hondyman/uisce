@@ -64,6 +64,7 @@ type ValidationRuleDescriptor struct {
 	GovernanceStatus string          `json:"governance_status"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
+	IsActive         bool            `json:"is_active"`
 }
 
 // ParseValidationRuleProperties unmarshals ValidationRuleProperties from

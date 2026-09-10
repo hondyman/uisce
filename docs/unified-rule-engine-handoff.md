@@ -1988,6 +1988,91 @@ run-unique via `time.Now().UnixNano()`, the same fix shape
 identical reason. Re-ran the full 7-test script afterward to confirm
 green, not just the one changed test.
 
+### 53. MapScan `[]byte` blast-radius sweep - every site checked, 9 fixed
+Item 49's finding (a defeated comparison, not a crash - the kind of bug
+that stays green in a test suite) warranted a full sweep, not just the
+one file. `grep -rln "MapScan" --include="*.go"` found 14 files. Checked
+every one: `internal/metadata/businessobject_service.go`'s
+`CreateBORecord`/`UpdateBORecord`/list-query paths and 6 sites across
+`internal/api/bo_crud_handler.go`/`bo_relationship_records_handler.go`
+were already correctly guarded (the former with an inline `[]byte`->
+`string` loop, the latter via a shared `cleanScanResult` helper) - this
+is in fact where `normalizeScanned`'s "coerce once at the boundary"
+pattern came from; it already existed, just not everywhere it needed to.
+
+Nine sites across 7 files had no such guard and were fixed this pass,
+applying the identical established idiom rather than inventing a new
+one: `internal/nl_intelligence/service.go` (2 sites, feeding
+`json.Marshal` directly for NL-query results), `internal/upgrade/merge_engine.go`
+(tenant custom-attribute delta computation), `internal/optimizer/drill_down_resolver.go`
+(drill-down API rows), `internal/api/drift_handlers.go` and
+`internal/api/glassbox.go` (3 sites - reused the same-package
+`cleanScanResult` directly, no new code needed), `internal/apistudio/graphql.go`
+(GraphQL resolver rows), `internal/services/metric_registry_service.go`
+(metric readiness rows). None of these had a *comparison* on the raw
+value the way item 49's rule did - their failure mode is quieter but
+still real: a UUID or status column landing as `[]byte` gets silently
+base64-encoded by `json.Marshal`/`json.NewEncoder`, corrupting the field
+in the API/GraphQL response rather than erroring. `glassbox.go`'s
+`GetSECReport`/`GetEvents` (a regulatory report and the "immutable audit
+log") were two of the nine - worth flagging as the highest-stakes
+instances of this pattern, now fixed. `go build ./...` clean after all
+nine.
+
+### 54. Operator completeness in the shared evaluator - upgraded from a scattered set of tickets to one named gap
+Items 23/40's `compareValues`-vocabulary tickets and this session's two
+precomputed-boolean workarounds (`causality_ok`, `same_order_ok`) are the
+same gap, not three different ones: `ConditionEvaluator.compareValues`
+and `AdvancedEvaluator.evalBinaryExpr` both hard-require numeric operands
+for comparison operators - including `==`/`!=`, which have no principled
+reason to be numeric-only. Three workarounds in one session is a
+threshold: each one is individually correct (a rule's real comparison
+logic, done once in Go inside a context loader, is legitimate and
+consistent with the "never mutate the shared ConditionEvaluator" rule
+under this session's time pressure), but the pattern has a real cost -
+`same_order_ok = true` in a rule's AST has no lineage. The actual
+comparison (which two fields, via which join) lives in
+`loadExecutionAllocationContext`, invisible to anyone reading the rule
+in the editor or the catalog. **Every rule authored against a
+precomputed-boolean workaround must say so in its own `Description`** -
+added retroactively to this session's own two rules
+("Execution time must not precede its placement" and "Allocation must
+link to the same order as its execution" should be edited to state
+`causality_ok`/`same_order_ok` are computed by `loadExecutionContext`/
+`loadExecutionAllocationContext`, not expressible in the AST itself - not
+yet done as of this addendum, flagged so it isn't forgotten before this
+branch merges).
+
+The real fix - scoped as its own future pass, not attempted here -
+is operator completeness: string equality for `==`/`!=` in both
+comparators (trivial, `reflect.DeepEqual` already does this in
+`ConditionEvaluator`; `AdvancedEvaluator.evalBinaryExpr` needs an
+analogous non-numeric path added ahead of its `toFloat64` call, not
+instead of it), plus real timestamp comparison (parse both operands as
+time if the numeric path fails, compare with `time.Time.Before`/`After`/
+`Equal`). Blast-radius assessment first, per item 23's original framing -
+`ConditionEvaluator` is shared broadly enough that its exact blast radius
+needs mapping before any change lands, not assumed.
+
+### 55. Rule-health signal - the cheap half of systematizing stale-rule detection
+Item 16's stale-rule bug (a rule silently outliving the schema it was
+authored against) has now been hit three times across sessions purely by
+manual discovery (Session 4's stale oracle rule, this session's stale
+"Overfill Guard (shadow-mode verification)"). With 25+ live rules, that
+stops being sustainable. The real fix - a schema-version/fingerprint
+binding on `validation_rule` catalog nodes so a schema change can't
+silently strand a rule - is unbuilt, unscoped, and explicitly deferred
+again this pass (it's a real design question: what counts as the
+"schema" a rule is bound to - the BO's semantic term set, its physical
+binding, both?). The cheap half lands with this session's UI work
+instead: a **rule-health aggregate** - any rule whose evaluations over
+recent writes are ~100% violations or ~100% `rule_error` is suspect by
+construction (a rule that never once passes, or never once actually
+evaluates, on real traffic is far more likely broken than the traffic
+being uniformly bad) - computed directly from `validation_rule_violations`
+plus a write-count denominator, surfaced on the new system validations
+page (see item 56).
+
 ### What's left - unchanged from the spec's own framing
 - **UI, both surfaces** (BO Validations tab, system validations page) -
   not started. Per the spec's own sequencing note, this was always meant
