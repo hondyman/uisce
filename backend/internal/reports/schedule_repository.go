@@ -39,15 +39,21 @@ func (e *DefaultReportExecutor) ExecuteReport(ctx context.Context, tmpl *ReportT
 		reqBy = &tmpl.CreatedBy
 	}
 
+	lineageJSON, _ := json.Marshal(map[string]interface{}{
+		"synthetic": true,
+		"engine":    "default_stub",
+		"note":      "Placeholder execution prior to full orchestrator wiring",
+	})
+
 	query := `
 		INSERT INTO public.report_executions (
 			id, tenant_id, template_id, report_key, status, parameters,
 			output_format, output_url, rows_processed, execution_time_ms,
-			requested_by, created_at, completed_at
+			requested_by, lineage, created_at, completed_at
 		) VALUES (
-			$1, $2, $3, $4, 'completed', $5,
+			$1, $2, $3, $4, 'synthetic', $5,
 			'pdf', $6, 10, 250,
-			$7, NOW(), NOW()
+			$7, $8, NOW(), NOW()
 		) RETURNING id, status, output_url, COALESCE(requested_by, '')
 	`
 
@@ -57,7 +63,7 @@ func (e *DefaultReportExecutor) ExecuteReport(ctx context.Context, tmpl *ReportT
 
 	err := e.db.QueryRowContext(ctx, query,
 		execID, tmpl.TenantID, tmpl.ID, tmpl.TemplateName, paramsJSON,
-		outputURL, reqBy,
+		outputURL, reqBy, lineageJSON,
 	).Scan(&res.ExecutionID, &res.Status, &res.OutputURL, &res.RequestedBy)
 
 	if err != nil {

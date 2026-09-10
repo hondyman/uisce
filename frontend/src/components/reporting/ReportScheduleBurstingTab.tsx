@@ -17,20 +17,29 @@ import {
   Table,
   TableHead,
   TableRow,
+  TableCell,
+  TableBody,
   CircularProgress
 } from '@mui/material';
 import ReportBurstTelemetryHUD from './ReportBurstTelemetryHUD';
+import { apiFetch } from '../../lib/apiClient';
 
 interface ReportScheduleBurstingTabProps {
   reportId?: string;
+  reportName?: string;
   tenantId?: string;
+  onScheduleSaved?: () => void;
 }
 
 export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps> = ({
   reportId,
+  reportName,
   tenantId,
+  onScheduleSaved,
 }) => {
-  const [scheduleName, setScheduleName] = useState('Daily Institutional Client Valuation');
+  const [scheduleName, setScheduleName] = useState(
+    reportName ? `${reportName} Schedule` : 'Daily Valuation Schedule'
+  );
   const [cronExpression, setCronExpression] = useState('0 8 * * 1-5'); // Mon-Fri 08:00
   const [region, setRegion] = useState('us-west');
   const [calendarCode, setCalendarCode] = useState('NYSE');
@@ -38,7 +47,7 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
   const [burstDimension, setBurstDimension] = useState('client_id');
   const [exportFormat, setExportFormat] = useState<'PDF' | 'EXCEL' | 'BOTH'>('PDF');
   const [notifyInApp, setNotifyInApp] = useState(true);
-  const [notifyEmail, setNotifyEmail] = useState(true);
+  const [notifyEmail, setNotifyEmail] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [triggering, setTriggering] = useState(false);
@@ -47,10 +56,21 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
   const [batchesList, setBatchesList] = useState<any[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
+  // Sync default scheduleName when reportName changes
+  useEffect(() => {
+    if (reportName) {
+      setScheduleName(`${reportName} Schedule`);
+    }
+  }, [reportName]);
+
   // Load existing schedules
   const loadSchedules = async () => {
     try {
-      const res = await fetch('/api/reports/schedules');
+      const endpoint = reportId
+        ? `/api/v1/reports/${reportId}/schedules`
+        : '/api/reports/schedules';
+
+      const res = await apiFetch(endpoint);
       if (res.ok) {
         const data = await res.json();
         setSchedulesList(Array.isArray(data) ? data : []);
@@ -66,7 +86,7 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
 
   const loadBatches = async (scheduleId: string) => {
     try {
-      const res = await fetch(`/api/reports/schedules/${scheduleId}/batches`);
+      const res = await apiFetch(`/api/reports/schedules/${scheduleId}/batches`);
       if (res.ok) {
         const data = await res.json();
         setBatchesList(Array.isArray(data) ? data : []);
@@ -78,15 +98,18 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
 
   useEffect(() => {
     loadSchedules();
-  }, []);
+  }, [reportId]);
 
   const handleSaveSchedule = async () => {
     setSaving(true);
     setStatusMessage(null);
     try {
-      const res = await fetch('/api/reports/schedules', {
+      const endpoint = reportId
+        ? `/api/v1/reports/${reportId}/schedules`
+        : '/api/reports/schedules';
+
+      const res = await apiFetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           schedule_name: scheduleName,
           cron_expression: cronExpression,
@@ -108,6 +131,9 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
         if (data.id) {
           setSelectedScheduleId(data.id);
         }
+        if (onScheduleSaved) {
+          onScheduleSaved();
+        }
       } else {
         setStatusMessage('Failed to save schedule.');
       }
@@ -123,19 +149,23 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
     setTriggering(true);
     setStatusMessage(null);
     try {
-      const res = await fetch(`/api/reports/schedules/${selectedScheduleId}/run`, {
+      const endpoint = reportId
+        ? `/api/v1/reports/${reportId}/schedules/${selectedScheduleId}/run`
+        : `/api/reports/schedules/${selectedScheduleId}/run`;
+
+      const res = await apiFetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
       });
       if (res.ok) {
         const data = await res.json();
-        setStatusMessage(`Burst batch started successfully! Batch ID: ${data.batch_id || data.id}`);
+        setStatusMessage(`Run started successfully! Execution ID: ${data.execution_id || data.batch_id || data.id}`);
         loadBatches(selectedScheduleId);
+        loadSchedules();
       } else {
-        setStatusMessage('Failed to trigger burst batch.');
+        setStatusMessage('Failed to trigger run.');
       }
     } catch (err: any) {
-      setStatusMessage(`Error triggering batch: ${err.message}`);
+      setStatusMessage(`Error triggering run: ${err.message}`);
     } finally {
       setTriggering(false);
     }

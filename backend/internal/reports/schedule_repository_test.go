@@ -230,8 +230,8 @@ func TestDeleteSchedule_ownerOrAdminAndSoftDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("query report_executions after schedule soft delete failed: %v", err)
 	}
-	if execStatus != "completed" {
-		t.Errorf("expected execution row to survive schedule soft delete with status completed, got: %s", execStatus)
+	if execStatus != "synthetic" {
+		t.Errorf("expected execution row to survive schedule soft delete with status synthetic, got: %s", execStatus)
 	}
 }
 

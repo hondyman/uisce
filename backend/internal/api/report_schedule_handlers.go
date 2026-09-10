@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -9,7 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
+	"github.com/hondyman/uisce/backend/internal/identity"
 	"github.com/hondyman/uisce/backend/internal/reporting"
+	"github.com/hondyman/uisce/backend/internal/security"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 type ReportScheduleHandler struct {
@@ -24,6 +28,41 @@ func NewReportScheduleHandler(db *sqlx.DB) *ReportScheduleHandler {
 		db:                db,
 		burstOrchestrator: orchestrator,
 	}
+}
+
+// resolveTenantID resolves tenant from security context, identity, JWT, or dev fallback.
+func (h *ReportScheduleHandler) resolveTenantID(r *http.Request) (uuid.UUID, error) {
+	// 1. Try security.AuthInfoFromContext
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		if tid, err := uuid.Parse(auth.TenantIDs[0]); err == nil && tid != uuid.Nil {
+			return tid, nil
+		}
+	}
+
+	// 2. Try identity context
+	if tidStr, ok := identity.TenantIDFromContext(r.Context()); ok {
+		if tid, err := uuid.Parse(tidStr); err == nil && tid != uuid.Nil {
+			return tid, nil
+		}
+	}
+
+	// 3. Try jwtmiddleware claims
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		if tid, err := uuid.Parse(claims.TenantID); err == nil && tid != uuid.Nil {
+			return tid, nil
+		}
+	}
+
+	// 4. Request header fallback ONLY if ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true (dev/local use only).
+	if allowClientTenantHeaderFallback() {
+		if tidHeader := r.Header.Get("X-Tenant-ID"); tidHeader != "" {
+			if tid, err := uuid.Parse(tidHeader); err == nil && tid != uuid.Nil {
+				return tid, nil
+			}
+		}
+	}
+
+	return uuid.Nil, errors.New("unauthorized: missing or invalid tenant identification")
 }
 
 func (h *ReportScheduleHandler) RegisterRoutes(r chi.Router) {
@@ -41,8 +80,7 @@ func (h *ReportScheduleHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *ReportScheduleHandler) ListCalendars(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
 		// Fallback mock calendars if tenant id header not present or invalid
 		calendars := []map[string]interface{}{
@@ -85,11 +123,9 @@ func (h *ReportScheduleHandler) ListCalendars(w http.ResponseWriter, r *http.Req
 }
 
 func (h *ReportScheduleHandler) ListSchedules(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode([]interface{}{})
+		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
 
@@ -141,10 +177,10 @@ type CreateScheduleRequest struct {
 }
 
 func (h *ReportScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
-		tenantID = uuid.New()
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
 	}
 
 	var req CreateScheduleRequest
@@ -284,11 +320,14 @@ func (h *ReportScheduleHandler) GetBatchTelemetry(w http.ResponseWriter, r *http
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
-		// Fallback tenant query if header missing
-		_ = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
+		// Verify batch belongs to tenant in DB before servicing
+		err = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
+		if err != nil {
+			http.Error(w, "unauthorized: missing or invalid tenant identification", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	svc := reporting.NewTelemetryDLQService(h.db)
@@ -310,10 +349,13 @@ func (h *ReportScheduleHandler) RetryBatchDLQ(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
-		_ = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
+		err = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.report_burst_batches WHERE id = $1`, batchID)
+		if err != nil {
+			http.Error(w, "unauthorized: missing or invalid tenant identification", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	svc := reporting.NewTelemetryDLQService(h.db)
@@ -343,10 +385,13 @@ func (h *ReportScheduleHandler) SyncCalendarHolidays(w http.ResponseWriter, r *h
 		return
 	}
 
-	tenantIDStr := r.Header.Get("X-Tenant-ID")
-	tenantID, err := uuid.Parse(tenantIDStr)
+	tenantID, err := h.resolveTenantID(r)
 	if err != nil {
-		_ = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.tenant_exchange_calendars WHERE id = $1`, calendarID)
+		err = h.db.GetContext(r.Context(), &tenantID, `SELECT tenant_id FROM public.tenant_exchange_calendars WHERE id = $1`, calendarID)
+		if err != nil {
+			http.Error(w, "unauthorized: missing or invalid tenant identification", http.StatusUnauthorized)
+			return
+		}
 	}
 
 	var req SyncCalendarRequest

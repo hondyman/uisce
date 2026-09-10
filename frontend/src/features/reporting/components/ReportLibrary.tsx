@@ -109,6 +109,7 @@ import {
 } from '../../../components/common/CoreCustomIcons';
 import { useAccess } from '../../../contexts/AccessContext';
 import { useAuth } from '../../../contexts/AuthContext';
+import { ReportScheduleBurstingTab } from '../../../components/reporting/ReportScheduleBurstingTab';
 
 // ============================================================================
 // REPORT LIBRARY
@@ -1746,14 +1747,30 @@ export const ReportLibrary: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={scheduleDialogOpen} onClose={() => setScheduleDialogOpen(false)}>
-        <DialogTitle>Schedule Report</DialogTitle>
-        <DialogContent>
-          <Typography>Schedule settings would go here.</Typography>
+      {/* Schedule Report Dialog (Option B: Hardened /api/v1/reports/:id/schedules) */}
+      <Dialog
+        open={scheduleDialogOpen}
+        onClose={() => setScheduleDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ bgcolor: '#071526', color: '#F8FAFC', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          Schedule Report — {selectedReport?.name}
+        </DialogTitle>
+        <DialogContent sx={{ p: 0, bgcolor: '#071526' }}>
+          {selectedReport && (
+            <ReportScheduleBurstingTab
+              reportId={selectedReport.id}
+              reportName={selectedReport.name}
+              tenantId={currentTenant?.id}
+              onScheduleSaved={() => setScheduleDialogOpen(false)}
+            />
+          )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setScheduleDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => setScheduleDialogOpen(false)}>Save</Button>
+        <DialogActions sx={{ bgcolor: '#071526', borderTop: '1px solid rgba(255,255,255,0.08)', px: 3, py: 1.5 }}>
+          <Button onClick={() => setScheduleDialogOpen(false)} sx={{ color: '#94A3B8' }}>
+            Close
+          </Button>
         </DialogActions>
       </Dialog>
 

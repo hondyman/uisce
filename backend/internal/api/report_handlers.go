@@ -695,13 +695,7 @@ func (h *ReportHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":      "success",
-		"schedule_id": sid,
-		"deleted":     true,
-	})
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // TriggerScheduleRun handles POST /api/v1/reports/{id}/schedules/{sid}/run.
