@@ -117,11 +117,8 @@ services:
       DB_PORT: 5432
       DB_DATABASE: temporal
       TIMEZONE: UTC
-      SQL_TLS_ENABLED: "true"
-      SQL_CA: /tmp/keys/ca.crt
-      SQL_CERT: /tmp/keys/temporal-client.crt
-      SQL_CERT_KEY: /tmp/keys/temporal-client.key
-      SQL_HOST_VERIFICATION: "true"
+      SQL_TLS_ENABLED: "false"
+      SQL_HOST_VERIFICATION: "false"
       SQL_HOST_NAME: 100.84.50.65
     volumes:
       - ~/.uisce/certs:/tmp/keys:ro
