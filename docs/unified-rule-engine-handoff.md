@@ -2198,3 +2198,144 @@ merge decision itself was never CI's to make - zero human reviews have
 landed on PR #38, and the human diff review is a named, still-open gate
 item from item 25. This session's job was to make the picture clear
 enough that the decision is easy, not to adjudicate it.
+
+### 59. Hermeticity: classification pass, two-tier CI skeleton built, two files verified and moved - most of the classification work still open
+Ran a real classification pass on the 57 `build-backend` failures rather
+than treating them as one undifferentiated pile. Extracted the actual
+assertion/error line preceding each `--- FAIL` (the log interleaves
+packages, but each package's own serial test output keeps its error
+message directly before that test's `--- FAIL` line - reliable once the
+noise lines from other packages are filtered out) and grouped by
+signature. The classes that emerged are **not all the same kind of
+problem**, which matters for what "fixing CI" actually requires:
+
+- **Genuinely missing service dependency** - Postgres
+  (`TestReloadGuardrailsHandler_Integration`: `dial tcp [::1]:5432:
+  connect: connection refused`), Docker daemon (`testcontainers`-based
+  tests - already correctly guarded with `testing.Short()`, just needs
+  `-short` passed somewhere for that guard to matter), a real websocket
+  round trip that's failing for a reason still uninvestigated (12 tests,
+  `websocket: bad handshake` - see below, this one turned out more
+  complicated than "missing service").
+- **Real, pre-existing bugs the `-race` flag is correctly catching** -
+  7 tests (`TestHireEmployeeWorkflow_ProvisioningFailure`,
+  `TestShadowReplayEngine_*` x4, `TestMetadataCache_ConcurrentAccess`,
+  `TestRegionFailoverLoadScenario`), all `"race detected during
+  execution of test"`. These are not a hermeticity problem - they're
+  real data races, unrelated to service availability, that happen to
+  only surface under `-race`. Two-tier CI does not fix these; they need
+  their own bug tickets.
+- **Real assertion/logic mismatches** - wrong HTTP status codes
+  (`TestRegionValidation_*`, 3 tests expecting 400, getting 200/403), a
+  stale `sqlmock` expectation that no longer matches the real generated
+  SQL (`TestGetRulesByTenant` - the query text changed, the test's
+  hard-coded expected-SQL regex didn't), `TestBuildMultiBOSQL_RejectsUnknownFilterOperator`
+  expecting an error and getting none. Also not hermeticity - real test/
+  code drift, needs per-case triage.
+- **Flaky performance assertion** - `TestBenchmarkAcceptance` (and its 3
+  subtests): asserts `ns/op <= 1500`, CI measured `4526`. A shared/
+  throttled CI runner is not the same machine the ceiling was tuned
+  against; this assertion doesn't belong in a correctness gate as
+  written.
+- **Golden-file drift** - `TestGenerateSchemaGoldenFile`/
+  `TestGenerateTypesGoldenFile`, pre-existing on both branches, separate
+  from this engagement's own generator work.
+- **Cascade artifacts of the global 10-minute suite timeout** - once one
+  package hangs waiting for an absent service, everything scheduled
+  after it in the same `go test ./...` invocation dies with it. An
+  unknown fraction of the 57 are this, not independent failures - they
+  should shrink or disappear once the real infra-dependent tests are
+  removed from the hermetic tier's execution path.
+
+**Two files verified individually and moved this session**, after two
+real false positives taught the actual lesson here (below):
+`internal/bundles/handler_integration_test.go` (confirmed via the
+package's own non-test code: `handler.go` reads `DATABASE_URL`/
+`ALPHA_DATABASE_URL`/`ROLE_DATABASE_URL`, falling back to a hard-coded
+`localhost:5432` - a real, unconditional Postgres dependency, matching
+the exact observed CI error) and `internal/handlers/websocket_integration_test.go`
+(matches the 12-test `websocket: bad handshake` cluster by direct grep
+for `websocket.DefaultDialer.Dial` calls). Both now carry
+`//go:build integration`, excluded from the hermetic tier by
+construction (not a runtime skip - the file doesn't even compile into
+that tier's test binary). `go build ./...`, `go vet ./...`, and
+`go build -tags=integration ./...` all still pass; `internal/bundles`'s
+non-integration tests now pass cleanly and hermetically
+(`go test ./internal/bundles/...`, all green, no external dependency).
+
+**The false positives, worth naming because they're the actual finding**:
+this session's first pass tagged 18 files by naming convention alone
+(`*integration*_test.go` / `func Test*Integration*`) - a heuristic that
+turned out badly unreliable in this codebase specifically.
+`internal/ops/ops_integration_test.go` was caught first: tagging it
+broke compilation (`internal/ops/region_router_test.go` depends on a
+`TestStore` mock type defined in the "integration" file), and reading
+its actual body showed ~25 tests that are pure in-memory unit tests
+(rate limiters, validators, sanitizers) with no external dependency at
+all - "integration" in its name meant "tests integration *between*
+components," not "needs external infrastructure." A second pass
+checking imports found several more of the 18 import `go-sqlmock` or
+only use `net/http/httptest` (both fully hermetic, in-process
+mechanisms) despite the same naming pattern - `internal/rag/integration_test.go`,
+`internal/rules/integration_test.go`, `internal/api/api_chi_integration_test.go`,
+`internal/api/nlq_integration_test.go`, `pkg/bp/trigger_engine_integration_test.go`,
+and others. Even the two Temporal-named files
+(`temporal-ops/admin/admin_integration_test.go`,
+`internal/temporal/describe_taskqueue_integration_test.go`) turned out
+to have test names containing "MockServer" - a strong signal they're
+also self-contained, not a confirmed match to anything in the actual
+57-failure list. All 16 speculative tags were reverted; only the 2
+individually verified against real evidence (a real code-level
+dependency, or a real observed CI failure) were kept.
+
+**The lesson, stated as the actual deliverable of this pass**: in this
+codebase, `*_integration_test.go` naming is not a reliable signal for
+"needs real infrastructure" - it's inconsistently used to also mean
+"tests more than one component together" or simply predates whatever
+convention was originally intended. Any future classification pass
+needs to verify each file's actual dependency (does it call
+`sql.Open`/read a connection-string env var/dial a real remote address
+unconditionally, vs. use `sqlmock`/`httptest.NewServer`/an in-process
+fake) rather than trust the filename - exactly the "evidence over
+inference" discipline this whole document runs on, now demonstrated
+against itself catching its own two mistakes before they shipped.
+
+**Two-tier CI skeleton, built and validated**: `.github/workflows/ci-cd.yml`
+gained `integration-tests-backend`, reusing the exact Postgres
+service-container recipe `.github/workflows/integration.yml` already
+proves works (health-checked, `pg_isready`-gated startup), running
+`go test -tags=integration -v ./internal/bundles/... ./internal/handlers/...`
+against it. `build-backend` (the hermetic tier) needed zero changes -
+Go's build-tag exclusion means the two tagged files simply don't
+compile into that tier's binary, by construction, which is the
+"every test runs in exactly one tier, observably" property the pipeline
+handoff's §5 rule requires (a test that only ever skips is not a gate -
+build-tag exclusion is stronger than a runtime skip precisely because
+there's no environment-dependent branch where it could silently do
+neither). Deliberately scoped to the two verified packages, not `./...`
+- broadening it to cover more of the 55 remaining failures requires the
+same one-file-at-a-time verification discipline above, not a bulk pass.
+Not yet run in real CI (would need a push to confirm the Postgres
+service container actually satisfies `handler.go`'s connection - the
+env var wiring and local test behavior both check out, but "compiles
+and passes locally" isn't the same claim as "passes in the real
+workflow," stated honestly rather than assumed).
+
+**What's still open, precisely** (so the next pass starts from a map,
+not a pile): 16 files' true classification (naming said "integration,"
+several verified hermetic, most still unconfirmed either way); the
+12-test websocket cluster's actual root cause (self-contained
+`httptest`-based, so "missing service" was the wrong frame - possibly a
+real concurrency bug in the streaming handler, possibly a CI-runner
+networking quirk, undetermined); 7 real `-race` bugs; ~6 real assertion/
+logic mismatches including one stale `sqlmock` expectation; 1 CI-
+runner-relative flaky benchmark ceiling; 2 pre-existing golden-file
+drifts. None of these are "hermeticity" in the sense of missing service
+containers - conflating them with the infra-dependent classes would be
+exactly the wrong fix for each. The mTLS Postgres question the plan
+flagged early (a distinct class from standard `DATABASE_URL` Postgres,
+entangled with the pipeline handoff's outstanding `ca.key` custody item)
+never came up in this classification pass - none of the 57 observed
+failures showed mTLS-specific signatures, so it's not blocking anything
+identified so far, but it hasn't been ruled out for the 16 still-
+unclassified files either.
