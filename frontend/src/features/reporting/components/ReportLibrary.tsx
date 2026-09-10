@@ -8,6 +8,7 @@ import {
   Button,
   Grid,
   List,
+  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -72,6 +73,12 @@ import {
   PlayArrow as PlayArrowIcon,
   DriveFileRenameOutline as RenameIcon,
   Lock as LockIcon,
+  ChevronRight as ChevronRightIcon,
+  ExpandMore as ExpandMoreIcon,
+  CreateNewFolder as CreateNewFolderIcon,
+  DriveFileMove as MoveIcon,
+  FolderDelete as FolderDeleteIcon,
+  Clear as ClearIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import {
@@ -82,7 +89,19 @@ import {
   useSetReportFavorite,
   useRemoveReportFavorite,
 } from '../../../api/reporting';
-import { useReportFolders } from '../../../api/reportFolders';
+import {
+  useReportFolders,
+  useCreateReportFolder,
+  useRenameReportFolder,
+  useDeleteReportFolder,
+  useMoveReportFolder,
+  useFolderReportIDs,
+  useAddReportToFolder,
+  useRemoveReportFromFolder,
+  buildFolderTree,
+  FolderTreeNode,
+  ReportFolder,
+} from '../../../api/reportFolders';
 import { resolveGoldCopyTenantId, getCachedGoldCopyId } from '../../../utils/goldCopy';
 import {
   CoreIcon,
@@ -213,6 +232,16 @@ export const ReportLibrary: React.FC = () => {
     });
   }, [apiReports, currentTenant, goldCopyTenant, goldCopyId]);
 
+  // Folder Mutations
+  const createFolderMutation = useCreateReportFolder();
+  const renameFolderMutation = useRenameReportFolder();
+  const deleteFolderMutation = useDeleteReportFolder();
+  const addReportToFolderMutation = useAddReportToFolder();
+  const removeReportFromFolderMutation = useRemoveReportFromFolder();
+
+  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
+  const { data: currentFolderReportIds = [] } = useFolderReportIDs(currentFolder);
+
   const folders = useMemo<Folder[]>(() => {
     if (!apiFolders) return [];
     return apiFolders.map(f => ({
@@ -220,11 +249,109 @@ export const ReportLibrary: React.FC = () => {
       name: f.name,
       parent_id: f.parent_id || undefined,
       created_by: 'User',
-      report_count: f.report_count || 0,
+      report_count: f.item_count ?? f.report_count ?? 0,
     }));
   }, [apiFolders]);
+
+  // Expanded folders & folder search state
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const [folderSearchQuery, setFolderSearchQuery] = useState('');
+
+  // Folder modal state (Create, Rename, Delete)
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
+  const [folderModalMode, setFolderModalMode] = useState<'create' | 'rename' | 'delete'>('create');
+  const [folderModalTarget, setFolderModalTarget] = useState<Folder | null>(null);
+  const [folderModalInput, setFolderModalInput] = useState('');
+  const [folderModalError, setFolderModalError] = useState<string | null>(null);
+
+  // Filing modal state (Add to folder, Move to folder)
+  const [filingModalOpen, setFilingModalOpen] = useState(false);
+  const [filingModalMode, setFilingModalMode] = useState<'add' | 'move'>('add');
+  const [filingReport, setFilingReport] = useState<SavedReport | null>(null);
+  const [filingSourceFolderId, setFilingSourceFolderId] = useState<string | null>(null);
+  const [filingTargetFolderId, setFilingTargetFolderId] = useState<string | null>(null);
+  const [filingModalError, setFilingModalError] = useState<string | null>(null);
+
+  // Build tree from folders
+  const folderTree = useMemo(() => {
+    const rawReportFolders: ReportFolder[] = folders.map(f => ({
+      id: f.id,
+      name: f.name,
+      parent_id: f.parent_id || null,
+      tenant_id: currentTenant?.id || '',
+      user_id: user?.id || '',
+      created_at: '',
+      updated_at: '',
+      item_count: f.report_count,
+      report_count: f.report_count,
+    }));
+    return buildFolderTree(rawReportFolders);
+  }, [folders, currentTenant, user]);
+
+  // Determine matching folder IDs and their ancestors when search query is active
+  const matchingFolderIds = useMemo(() => {
+    if (!folderSearchQuery.trim()) return null;
+    const q = folderSearchQuery.toLowerCase();
+    const matches = new Set<string>();
+
+    const parentMap = new Map<string, string | null>();
+    folders.forEach(f => parentMap.set(f.id, f.parent_id || null));
+
+    folders.forEach(f => {
+      if (f.name.toLowerCase().includes(q)) {
+        matches.add(f.id);
+        let curr = parentMap.get(f.id);
+        while (curr) {
+          matches.add(curr);
+          curr = parentMap.get(curr);
+        }
+      }
+    });
+
+    return matches;
+  }, [folders, folderSearchQuery]);
+
+  // Auto-expand nodes when searching
+  useEffect(() => {
+    if (matchingFolderIds) {
+      setExpandedFolders(prev => {
+        const next = { ...prev };
+        matchingFolderIds.forEach(id => { next[id] = true; });
+        return next;
+      });
+    }
+  }, [matchingFolderIds]);
+
+  interface FlatTreeNode {
+    folder: ReportFolder;
+    depth: number;
+    hasChildren: boolean;
+  }
+
+  const flattenedFolderNodes = useMemo(() => {
+    const result: FlatTreeNode[] = [];
+
+    function traverse(nodes: FolderTreeNode[]) {
+      for (const node of nodes) {
+        if (matchingFolderIds && !matchingFolderIds.has(node.folder.id)) {
+          continue;
+        }
+        result.push({
+          folder: node.folder,
+          depth: node.depth,
+          hasChildren: node.children.length > 0,
+        });
+        const isExpanded = expandedFolders[node.folder.id] || (matchingFolderIds && matchingFolderIds.has(node.folder.id));
+        if (node.children.length > 0 && isExpanded) {
+          traverse(node.children);
+        }
+      }
+    }
+
+    traverse(folderTree);
+    return result;
+  }, [folderTree, expandedFolders, matchingFolderIds]);
   
-  const [currentFolder, setCurrentFolder] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [filterType, setFilterType] = useState<'all' | 'favorites' | 'recent' | 'shared' | 'core' | 'custom' | 'personal'>('all');
@@ -232,8 +359,6 @@ export const ReportLibrary: React.FC = () => {
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
-  const [newFolderName, setNewFolderName] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<SavedReport | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -273,7 +398,7 @@ export const ReportLibrary: React.FC = () => {
   const [shareError, setShareError] = useState<string | null>(null);
 
   // Feedback notifications
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' | 'warning' }>({
     open: false,
     message: '',
     severity: 'info',
@@ -371,10 +496,140 @@ export const ReportLibrary: React.FC = () => {
     }
   };
 
-  const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return;
-    setNewFolderDialogOpen(false);
-    setNewFolderName('');
+  const handleOpenFolderModal = (mode: 'create' | 'rename' | 'delete', target?: Folder | null) => {
+    setFolderModalMode(mode);
+    setFolderModalTarget(target || null);
+    setFolderModalInput(mode === 'rename' && target ? target.name : '');
+    setFolderModalError(null);
+    setFolderModalOpen(true);
+  };
+
+  const handleFolderModalSubmit = async () => {
+    setFolderModalError(null);
+    try {
+      if (folderModalMode === 'create') {
+        const name = folderModalInput.trim();
+        if (!name) {
+          setFolderModalError('Folder name cannot be empty.');
+          return;
+        }
+        await createFolderMutation.mutateAsync({
+          name,
+          parent_id: folderModalTarget ? folderModalTarget.id : null,
+        });
+        if (folderModalTarget) {
+          setExpandedFolders(prev => ({ ...prev, [folderModalTarget.id]: true }));
+        }
+        setSnackbar({ open: true, message: `Folder "${name}" created successfully.`, severity: 'success' });
+      } else if (folderModalMode === 'rename') {
+        if (!folderModalTarget) return;
+        const name = folderModalInput.trim();
+        if (!name) {
+          setFolderModalError('Folder name cannot be empty.');
+          return;
+        }
+        await renameFolderMutation.mutateAsync({
+          folderId: folderModalTarget.id,
+          name,
+        });
+        setSnackbar({ open: true, message: `Folder renamed to "${name}" successfully.`, severity: 'success' });
+      } else if (folderModalMode === 'delete') {
+        if (!folderModalTarget) return;
+        await deleteFolderMutation.mutateAsync(folderModalTarget.id);
+        if (currentFolder === folderModalTarget.id) {
+          setCurrentFolder(null);
+        }
+        setSnackbar({ open: true, message: `Folder "${folderModalTarget.name}" deleted.`, severity: 'success' });
+      }
+      setFolderModalOpen(false);
+      setFolderModalTarget(null);
+      setFolderModalInput('');
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('already exists') || err?.status === 409) {
+        setFolderModalError('A folder with this name already exists in this location.');
+      } else if (errMsg.includes('depth') || errMsg.includes('5 levels')) {
+        setFolderModalError('Maximum folder depth limit of 5 exceeded.');
+      } else if (errMsg.includes('cycle') || errMsg.includes('circular')) {
+        setFolderModalError('Cannot create circular folder structure.');
+      } else {
+        setFolderModalError(errMsg || 'An unexpected error occurred.');
+      }
+    }
+  };
+
+  const handleOpenFilingModal = (report: SavedReport, mode: 'add' | 'move') => {
+    setFilingReport(report);
+    setFilingModalMode(mode);
+    setFilingSourceFolderId(currentFolder);
+    setFilingTargetFolderId(null);
+    setFilingModalError(null);
+    setFilingModalOpen(true);
+    handleMenuClose();
+  };
+
+  const handleFilingModalSubmit = async () => {
+    if (!filingReport || !filingTargetFolderId) {
+      setFilingModalError('Please select a target folder.');
+      return;
+    }
+    setFilingModalError(null);
+    try {
+      if (filingModalMode === 'add') {
+        await addReportToFolderMutation.mutateAsync({
+          folderId: filingTargetFolderId,
+          templateId: filingReport.id,
+        });
+        const targetFolderName = folders.find(f => f.id === filingTargetFolderId)?.name || 'folder';
+        setSnackbar({ open: true, message: `Report filed into "${targetFolderName}".`, severity: 'success' });
+      } else if (filingModalMode === 'move') {
+        // Move semantics: Add to target first, then remove from source.
+        // The failure mode of this ordering is a report temporarily appearing in two folders (harmless, recoverable),
+        // rather than in zero folders (permanent data loss from the user's perspective if the target call fails).
+        await addReportToFolderMutation.mutateAsync({
+          folderId: filingTargetFolderId,
+          templateId: filingReport.id,
+        });
+        if (filingSourceFolderId && filingSourceFolderId !== filingTargetFolderId) {
+          try {
+            await removeReportFromFolderMutation.mutateAsync({
+              folderId: filingSourceFolderId,
+              templateId: filingReport.id,
+            });
+          } catch (removeErr: any) {
+            setSnackbar({
+              open: true,
+              message: `Report was added to target folder, but could not be removed from source folder: ${removeErr?.message || removeErr}`,
+              severity: 'warning',
+            });
+            setFilingModalOpen(false);
+            return;
+          }
+        }
+        const targetFolderName = folders.find(f => f.id === filingTargetFolderId)?.name || 'folder';
+        setSnackbar({ open: true, message: `Report moved to "${targetFolderName}".`, severity: 'success' });
+      }
+      setFilingModalOpen(false);
+      setFilingReport(null);
+      setFilingTargetFolderId(null);
+    } catch (err: any) {
+      setFilingModalError(err?.message || 'Failed to file report.');
+    }
+  };
+
+  const handleRemoveFromCurrentFolder = async (report: SavedReport) => {
+    if (!currentFolder) return;
+    handleMenuClose();
+    try {
+      await removeReportFromFolderMutation.mutateAsync({
+        folderId: currentFolder,
+        templateId: report.id,
+      });
+      const folderName = folders.find(f => f.id === currentFolder)?.name || 'folder';
+      setSnackbar({ open: true, message: `Report removed from "${folderName}".`, severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: `Failed to remove from folder: ${err?.message || err}`, severity: 'error' });
+    }
   };
 
   const handleRunReport = (report: SavedReport) => {
@@ -516,8 +771,10 @@ export const ReportLibrary: React.FC = () => {
   };
 
   const filteredReports = reports.filter(report => {
-    // Filter by folder only in the general "all" view; specific facets show across all folders
-    if (filterType === 'all' && currentFolder && report.folder_id !== currentFolder) return false;
+    // If a folder is selected, filter by the reports filed in that folder via junction table
+    if (currentFolder && !currentFolderReportIds.includes(report.id)) {
+      return false;
+    }
 
     // Filter by type
     if (filterType === 'favorites' && !report.is_favorite) return false;
@@ -583,7 +840,7 @@ export const ReportLibrary: React.FC = () => {
           <Button
             variant="outlined"
             startIcon={<FolderIcon />}
-            onClick={() => setNewFolderDialogOpen(true)}
+            onClick={() => handleOpenFolderModal('create')}
           >
             New Folder
           </Button>
@@ -674,28 +931,230 @@ export const ReportLibrary: React.FC = () => {
               </ListItemButton>
             </List>
             <Divider />
-            <List subheader={<Typography variant="overline" sx={{ px: 2 }}>Folders</Typography>}>
-              {folders.map(folder => (
-                <ListItemButton
-                  key={folder.id}
-                  selected={currentFolder === folder.id}
-                  onClick={() => setCurrentFolder(folder.id)}
+            
+            {/* Folders Section Header */}
+            <Box sx={{ px: 2, pt: 2, pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: 1 }}>
+                Folders
+              </Typography>
+              <Tooltip title="Create Folder">
+                <IconButton
+                  size="small"
+                  aria-label="Create Folder"
+                  onClick={() => handleOpenFolderModal('create')}
                 >
-                  <ListItemIcon>
-                    {currentFolder === folder.id ? <FolderOpenIcon color="primary" /> : <FolderIcon />}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={folder.name}
-                    secondary={`${folder.report_count} reports`}
-                  />
-                </ListItemButton>
-              ))}
+                  <CreateNewFolderIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+
+            {/* Folder search input */}
+            <Box sx={{ px: 2, pb: 1 }}>
+              <TextField
+                placeholder="Filter folders..."
+                size="small"
+                fullWidth
+                value={folderSearchQuery}
+                onChange={(e) => setFolderSearchQuery(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: folderSearchQuery ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setFolderSearchQuery('')} aria-label="Clear folder search">
+                        <ClearIcon fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : null,
+                  sx: { fontSize: '0.8125rem', height: 32 }
+                }}
+              />
+            </Box>
+
+            <List dense sx={{ pt: 0 }}>
+              {flattenedFolderNodes.length === 0 ? (
+                <ListItem sx={{ px: 2 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    {folderSearchQuery ? 'No matching folders' : 'No folders yet'}
+                  </Typography>
+                </ListItem>
+              ) : (
+                flattenedFolderNodes.map(({ folder, depth, hasChildren }) => {
+                  const isExpanded = expandedFolders[folder.id] || (matchingFolderIds && matchingFolderIds.has(folder.id));
+                  const isSelected = currentFolder === folder.id;
+
+                  return (
+                    <ListItem
+                      key={folder.id}
+                      disablePadding
+                      sx={{
+                        display: 'block',
+                        '&:hover .folder-actions': {
+                          display: 'flex',
+                        },
+                      }}
+                      secondaryAction={
+                        <Box className="folder-actions" sx={{ display: 'none', alignItems: 'center', pr: 0.5 }}>
+                          <Tooltip title="Add Subfolder">
+                            <IconButton
+                              size="small"
+                              aria-label={`Add subfolder to ${folder.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFolderModal('create', {
+                                  id: folder.id,
+                                  name: folder.name,
+                                  created_by: 'User',
+                                  report_count: folder.report_count || 0,
+                                });
+                              }}
+                            >
+                              <CreateNewFolderIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Rename">
+                            <IconButton
+                              size="small"
+                              aria-label={`Rename folder ${folder.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFolderModal('rename', {
+                                  id: folder.id,
+                                  name: folder.name,
+                                  created_by: 'User',
+                                  report_count: folder.report_count || 0,
+                                });
+                              }}
+                            >
+                              <EditIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete">
+                            <IconButton
+                              size="small"
+                              color="error"
+                              aria-label={`Delete folder ${folder.name}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenFolderModal('delete', {
+                                  id: folder.id,
+                                  name: folder.name,
+                                  created_by: 'User',
+                                  report_count: folder.report_count || 0,
+                                });
+                              }}
+                            >
+                              <DeleteIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      }
+                    >
+                      <ListItemButton
+                        selected={isSelected}
+                        onClick={() => {
+                          setCurrentFolder(folder.id);
+                          setFilterType('all');
+                        }}
+                        sx={{
+                          pl: 1 + depth * 2,
+                          pr: 6,
+                        }}
+                      >
+                        {hasChildren ? (
+                          <IconButton
+                            size="small"
+                            sx={{ mr: 0.5, p: 0.25 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedFolders(prev => ({ ...prev, [folder.id]: !prev[folder.id] }));
+                            }}
+                            aria-label={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {isExpanded ? (
+                              <ExpandMoreIcon sx={{ fontSize: 18 }} />
+                            ) : (
+                              <ChevronRightIcon sx={{ fontSize: 18 }} />
+                            )}
+                          </IconButton>
+                        ) : (
+                          <Box sx={{ width: 22 }} />
+                        )}
+
+                        <ListItemIcon sx={{ minWidth: 28 }}>
+                          {isSelected ? (
+                            <FolderOpenIcon color="primary" fontSize="small" />
+                          ) : (
+                            <FolderIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={folder.name}
+                          primaryTypographyProps={{
+                            variant: 'body2',
+                            noWrap: true,
+                            fontWeight: isSelected ? 600 : 400,
+                          }}
+                        />
+                        <Chip
+                          label={folder.report_count}
+                          size="small"
+                          variant="outlined"
+                          sx={{ height: 20, fontSize: '0.7rem', ml: 1 }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  );
+                })
+              )}
             </List>
           </Card>
         </Grid>
 
         {/* Main Content */}
         <Grid size={{ 'xs': 12, 'md': 9 }}>
+          {/* Active Folder Filter Banner */}
+          {currentFolder && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                bgcolor: 'action.hover',
+                px: 2,
+                py: 1,
+                mb: 2,
+                borderRadius: 1,
+                border: 1,
+                borderColor: 'divider',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <FolderOpenIcon color="primary" fontSize="small" />
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Folder: {folders.find(f => f.id === currentFolder)?.name || 'Folder'}
+                </Typography>
+                <Chip
+                  label={`${currentFolderReportIds.length} ${currentFolderReportIds.length === 1 ? 'report' : 'reports'}`}
+                  size="small"
+                  variant="outlined"
+                  sx={{ height: 22, fontSize: '0.75rem' }}
+                />
+              </Box>
+              <Button
+                size="small"
+                startIcon={<ClearIcon />}
+                onClick={() => setCurrentFolder(null)}
+                sx={{ textTransform: 'none' }}
+              >
+                Clear Folder Filter
+              </Button>
+            </Box>
+          )}
+
           {/* Controls */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
             <TextField
@@ -1075,6 +1534,23 @@ export const ReportLibrary: React.FC = () => {
           Duplicate
         </MenuItem>
         <Divider />
+        <MenuItem onClick={() => handleOpenFilingModal(selectedReport!, 'add')}>
+          <ListItemIcon><FolderIcon fontSize="small" /></ListItemIcon>
+          Add to Folder
+        </MenuItem>
+        {currentFolder && (
+          <MenuItem onClick={() => handleOpenFilingModal(selectedReport!, 'move')}>
+            <ListItemIcon><MoveIcon fontSize="small" /></ListItemIcon>
+            Move to Folder
+          </MenuItem>
+        )}
+        {currentFolder && (
+          <MenuItem onClick={() => handleRemoveFromCurrentFolder(selectedReport!)}>
+            <ListItemIcon><FolderDeleteIcon fontSize="small" /></ListItemIcon>
+            Remove from Folder
+          </MenuItem>
+        )}
+        <Divider />
         <MenuItem
           disabled={selectedReport?.is_core}
           onClick={() => handleDeleteClick(selectedReport!)}
@@ -1281,21 +1757,141 @@ export const ReportLibrary: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={newFolderDialogOpen} onClose={() => setNewFolderDialogOpen(false)}>
-        <DialogTitle>New Folder</DialogTitle>
+      {/* Folder Management Dialog (Create, Rename, Delete) */}
+      <Dialog
+        open={folderModalOpen}
+        onClose={() => !createFolderMutation.isPending && !renameFolderMutation.isPending && !deleteFolderMutation.isPending && setFolderModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {folderModalMode === 'create'
+            ? folderModalTarget
+              ? `New Subfolder in "${folderModalTarget.name}"`
+              : 'New Folder'
+            : folderModalMode === 'rename'
+            ? `Rename Folder "${folderModalTarget?.name}"`
+            : `Delete Folder "${folderModalTarget?.name}"`}
+        </DialogTitle>
         <DialogContent>
-           <TextField
-             margin="dense"
-             label="Folder Name"
-             fullWidth
-             variant="outlined"
-             value={newFolderName}
-             onChange={(e) => setNewFolderName(e.target.value)}
-           />
+          {folderModalError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {folderModalError}
+            </Alert>
+          )}
+          {folderModalMode === 'delete' ? (
+            <Typography variant="body2" color="text.secondary">
+              Are you sure you want to delete this folder? Any reports filed inside will remain in your library, but any subfolders will also be deleted.
+            </Typography>
+          ) : (
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Folder Name"
+              fullWidth
+              variant="outlined"
+              value={folderModalInput}
+              onChange={(e) => setFolderModalInput(e.target.value)}
+              disabled={createFolderMutation.isPending || renameFolderMutation.isPending}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleFolderModalSubmit();
+                }
+              }}
+            />
+          )}
         </DialogContent>
         <DialogActions>
-           <Button onClick={() => setNewFolderDialogOpen(false)}>Cancel</Button>
-            <Button variant="contained" onClick={handleCreateFolder}>Create</Button>
+          <Button
+            onClick={() => setFolderModalOpen(false)}
+            disabled={createFolderMutation.isPending || renameFolderMutation.isPending || deleteFolderMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color={folderModalMode === 'delete' ? 'error' : 'primary'}
+            onClick={handleFolderModalSubmit}
+            disabled={createFolderMutation.isPending || renameFolderMutation.isPending || deleteFolderMutation.isPending}
+          >
+            {folderModalMode === 'create' ? 'Create' : folderModalMode === 'rename' ? 'Rename' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Report Filing Dialog (Add to Folder / Move to Folder) */}
+      <Dialog
+        open={filingModalOpen}
+        onClose={() => !addReportToFolderMutation.isPending && !removeReportFromFolderMutation.isPending && setFilingModalOpen(false)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {filingModalMode === 'add'
+            ? `Add "${filingReport?.name}" to Folder`
+            : `Move "${filingReport?.name}" to Folder`}
+        </DialogTitle>
+        <DialogContent>
+          {filingModalError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {filingModalError}
+            </Alert>
+          )}
+          {folders.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
+              No folders available. Create a folder first.
+            </Typography>
+          ) : (
+            <FormControl fullWidth sx={{ mt: 1 }}>
+              <FormLabel id="target-folder-select-label" sx={{ mb: 1, fontSize: '0.875rem' }}>
+                Select Target Folder
+              </FormLabel>
+              <RadioGroup
+                aria-labelledby="target-folder-select-label"
+                value={filingTargetFolderId || ''}
+                onChange={(e) => setFilingTargetFolderId(e.target.value)}
+              >
+                {flattenedFolderNodes.map(({ folder, depth }) => {
+                  const isCurrent = filingSourceFolderId === folder.id;
+                  const isMoveDisabled = filingModalMode === 'move' && isCurrent;
+
+                  return (
+                    <FormControlLabel
+                      key={folder.id}
+                      value={folder.id}
+                      disabled={isMoveDisabled}
+                      control={<Radio size="small" />}
+                      label={
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: depth * 1.5 }}>
+                          <FolderIcon fontSize="small" color={isMoveDisabled ? 'disabled' : 'primary'} />
+                          <Typography variant="body2" color={isMoveDisabled ? 'text.disabled' : 'text.primary'}>
+                            {folder.name} {isCurrent ? '(current folder)' : ''}
+                          </Typography>
+                        </Box>
+                      }
+                      sx={{ py: 0.25 }}
+                    />
+                  );
+                })}
+              </RadioGroup>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setFilingModalOpen(false)}
+            disabled={addReportToFolderMutation.isPending || removeReportFromFolderMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleFilingModalSubmit}
+            disabled={!filingTargetFolderId || addReportToFolderMutation.isPending || removeReportFromFolderMutation.isPending}
+          >
+            {filingModalMode === 'add' ? 'Add' : 'Move'}
+          </Button>
         </DialogActions>
       </Dialog>
 

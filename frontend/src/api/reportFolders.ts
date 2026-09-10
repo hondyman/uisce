@@ -11,7 +11,8 @@ export interface ReportFolder {
   user_id: string;
   created_at: string;
   updated_at: string;
-  report_count?: number;
+  item_count?: number;
+  report_count?: number; // Normalized from item_count
 }
 
 export interface CreateReportFolderInput {
@@ -31,12 +32,60 @@ export interface RenameReportFolderInput {
 
 export interface AddReportToFolderInput {
   folderId: string;
+  // Standard identifier sent in JSON payload as template_id.
+  // Note: Backend also accepts report_id as a backwards-compatible alias.
   templateId: string;
 }
 
 export interface RemoveReportFromFolderInput {
   folderId: string;
   templateId: string;
+}
+
+export interface FolderTreeNode {
+  folder: ReportFolder;
+  children: FolderTreeNode[];
+  depth: number;
+}
+
+export function buildFolderTree(folders: ReportFolder[]): FolderTreeNode[] {
+  const map = new Map<string, FolderTreeNode>();
+  const roots: FolderTreeNode[] = [];
+
+  const normalized = folders.map(f => ({
+    ...f,
+    report_count: f.item_count ?? f.report_count ?? 0,
+  }));
+
+  for (const folder of normalized) {
+    map.set(folder.id, {
+      folder,
+      children: [],
+      depth: 0,
+    });
+  }
+
+  for (const folder of normalized) {
+    const node = map.get(folder.id)!;
+    if (folder.parent_id && map.has(folder.parent_id)) {
+      const parent = map.get(folder.parent_id)!;
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  }
+
+  function updateDepths(node: FolderTreeNode, currentDepth: number) {
+    node.depth = currentDepth;
+    for (const child of node.children) {
+      updateDepths(child, currentDepth + 1);
+    }
+  }
+  for (const root of roots) {
+    updateDepths(root, 0);
+  }
+
+  return roots;
 }
 
 export const fetchReportFolders = async (): Promise<ReportFolder[]> => {

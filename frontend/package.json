@@ -13,6 +13,7 @@
     "test:vitest": "vitest",
     "test:e2e": "playwright test",
     "test:phase4": "node e2e/verify_phase4.mjs",
+    "test:e2e:folders": "node e2e/verify_phase4_folders.mjs",
     "lint:react-hooks": "eslint 'src/**/*.{js,ts,jsx,tsx}' --rule 'react-hooks/rules-of-hooks:error' --rule 'react-hooks/exhaustive-deps:warn'",
     "lint:hooks": "eslint 'src/**/*.{js,ts,jsx,tsx}' || true",
     "lint": "eslint .",
