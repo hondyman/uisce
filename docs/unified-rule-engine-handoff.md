@@ -2341,9 +2341,31 @@ tables loaded. `backfill_snapshot`'s test may need real tables this job
 doesn't yet provision; that's the next thing to check once this runs in
 real CI, not assumed clean.
 
+**Two more findings, autonomous-loop continuation, no new tags this
+pass** - both narrow the remaining uncertainty rather than resolve it,
+worth recording so the next pass doesn't re-check them:
+- `internal/api/api_integration_test.go`'s `TestViewsPaginationHandler_DBOnly`
+  - despite the name and its own comment ("Test DB-backed views
+  pagination") - reading the body shows `SetupRouter(nil, nil, nil,
+  nil, nil, nil, nil, nil, nil)` (every dependency nil) and a
+  `SEMLAYER_RUNTIME_DIR` pointed at a `t.TempDir()` - no database
+  connection anywhere. Hermetic despite both the filename and the
+  in-code comment actively claiming otherwise; left untagged.
+- `integration/ip_whitelist_integration_test.go` - genuinely needs
+  Postgres (`StartPostgres(t)` in the same package's
+  `docker_helper.go`, via `dockertest`), but that helper already
+  self-gates: `if os.Getenv("CI") == "true" { t.Skip(...) }`. A third
+  legitimate protection mechanism now confirmed in this codebase
+  (alongside `testing.Short()` and this session's build tags) -
+  already correctly excluded from the real CI run (GitHub Actions sets
+  `CI=true`) independent of anything this pass does. Not part of the
+  57 observed failures for that reason; left untagged as redundant
+  rather than tagged for consistency's sake.
+
 **What's still open, precisely** (so the next pass starts from a map,
 not a pile): 14 files' true classification (naming said "integration,"
-several verified hermetic, most still unconfirmed either way); the
+several verified hermetic, 2 confirmed hermetic/already-protected this
+pass, most still unconfirmed either way); the
 12-test websocket cluster's actual root cause (self-contained
 `httptest`-based, so "missing service" was the wrong frame - possibly a
 real concurrency bug in the streaming handler, possibly a CI-runner
