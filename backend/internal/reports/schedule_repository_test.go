@@ -190,7 +190,7 @@ func TestDeleteSchedule_ownerOrAdminAndSoftDelete(t *testing.T) {
 	}
 
 	// Trigger an execution prior to deletion to verify audit linkage persists
-	res, err := repo.TriggerScheduleRun(ctx, tenantID, ownerID, false, sched.ID, reports.NewDefaultReportExecutor(db))
+	res, err := repo.TriggerScheduleRun(ctx, tenantID, ownerID, false, sched.ID, reports.NewTestInProcessExecutor(db))
 	if err != nil {
 		t.Fatalf("TriggerScheduleRun before delete failed: %v", err)
 	}
@@ -374,7 +374,7 @@ func TestTriggerRun_writesCacheMetadata(t *testing.T) {
 	}()
 
 	// Trigger using default executor
-	res, err := repo.TriggerScheduleRun(ctx, tenantID, ownerID, false, sched.ID, reports.NewDefaultReportExecutor(db))
+	res, err := repo.TriggerScheduleRun(ctx, tenantID, ownerID, false, sched.ID, reports.NewTestInProcessExecutor(db))
 	if err != nil {
 		t.Fatalf("TriggerScheduleRun failed: %v", err)
 	}
