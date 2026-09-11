@@ -13,12 +13,12 @@ import (
 	"github.com/lib/pq"
 )
 
-// DefaultReportExecutor creates execution records in report_executions and generates a snapshot path.
+// DefaultReportExecutor creates execution records in report_executions synchronously.
 //
-// PLACEHOLDER NOTE: This default implementation uses synthetic metrics (rows_processed=10,
+// PLACEHOLDER NOTE: This implementation uses synthetic metrics (rows_processed=10,
 // execution_time_ms=250) and a deterministic s3:// output path as an integration bridge.
-// In Phase 3, this executor will be replaced or wrapped by the full ReportOrchestrator
-// and ReportBurstOrchestrator runtime pipelines.
+// In Phase 2, this executor is superseded by TemporalReportExecutor which dispatches
+// ReportGenerationWorkflow on the live Temporal cluster for durable async execution.
 type DefaultReportExecutor struct {
 	db *sql.DB
 }
