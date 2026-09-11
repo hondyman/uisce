@@ -5,19 +5,16 @@ import (
 	"fmt"
 
 	clientContext "github.com/hondyman/uisce/backend/internal/context"
-	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // RuleEngine evaluates card rules against client context
 type RuleEngine struct {
-	rules       []CardRule
-	vmEvaluator *vm.AdvancedEvaluator
+	rules []CardRule
 }
 
 func NewRuleEngine() (*RuleEngine, error) {
 	return &RuleEngine{
-		rules:       getHardcodedRules(),
-		vmEvaluator: vm.NewAdvancedEvaluator(),
+		rules: getHardcodedRules(),
 	}, nil
 }
 
@@ -151,20 +148,17 @@ func (e *RuleEngine) Evaluate(rule *CardRule, ctx *clientContext.ClientContext) 
 }
 
 // getHardcodedRules returns card rules using the Conditions field,
-// evaluated via evaluateHardcoded (no CEL dependency). RankScore is
-// computed via vm expression (see RankScoreExpr on CardRule).
+// evaluated via evaluateHardcoded (no CEL dependency).
 func getHardcodedRules() []CardRule {
 	return []CardRule{
 		{
-			CardID:        "welcome_message",
-			RankScoreExpr: "1.0",
+			CardID: "welcome_message",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.UnrealizedLossPct", Operator: "gt", Value: -999999.0},
 			},
 		},
 		{
-			CardID:        "tax_loss_harvest",
-			RankScoreExpr: "(-client.Portfolio.UnrealizedLossPct) * 100.0",
+			CardID: "tax_loss_harvest",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.UnrealizedLossPct", Operator: "lt", Value: -0.01},
 				{Field: "Profile.TaxStatus", Operator: "eq", Value: "taxable"},
@@ -172,8 +166,7 @@ func getHardcodedRules() []CardRule {
 			},
 		},
 		{
-			CardID:        "portfolio_drift",
-			RankScoreExpr: "client.Portfolio.DriftPct * 100.0",
+			CardID: "portfolio_drift",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.DriftPct", Operator: "gt", Value: 0.05},
 			},
