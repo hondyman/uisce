@@ -212,9 +212,9 @@ Option 2: umbrella project with RDL spun out as a separate project.
 
 > **CEL retirement project rescope, with explicit sign-off.** Three live request-path packages (`internal/rules`, `internal/rulefabric`, `internal/feed` via `pkg/policy`). Two dead-bridge packages (`internal/boresolver`, `internal/genui`). One spin-out package (`internal/rdl`). Original policy-editor through-line (handoff Slices 1–2) preserved. Closing claim and dependency removal both gated on cross-project boundary with RDL spin-out.
 >
-> **Static facts** (no DB dependency): code-liveness per §1; both dead-bridge findings are independent; feed enumeration is exact (6 CEL strings in `getHardcodedRulesWithCEL` — 3 cards × 2 CEL fields); UMA rebalance path (`UMARebalanceRulesEngine` in `internal/workflows/uma_activities.go`) calls `ListRules` which queries `compliance_rules.expression` — a table and column that never existed in any migration — every invocation errors at query time; genui dead-bridge confirmed by unpopulated `Config["visibility"]` (no producer found).
+> **Static facts** (no DB dependency): code-liveness per §1; both dead-bridge findings are independent; feed enumeration is exact (6 CEL strings in `getHardcodedRulesWithCEL` — 3 cards × 2 CEL fields); UMA rebalance expressions are database-backed via `compliance_rules.expression`; genui dead-bridge confirmed by unpopulated `Config["visibility"]` (no producer found).
 >
-> **Authoring surfaces** (§2.5): `rule_logic.condition_json` authored through `PolicyRuleBuilder.tsx` and `CreateRuleVersion` handler; `compliance_rules.expression` was nominally Hasura-authored (GraphQL) but the table/column never existed in any migration — dead-on-arrival, not a live authoring surface; BP `entryCondition`/`delayExpr` authored through `bp/designer.go` backend or workflow JSON.
+> **Authoring surfaces** (§2.5): `rule_logic.condition_json` authored through `PolicyRuleBuilder.tsx` and `CreateRuleVersion` handler; `compliance_rules.expression` authored through Hasura (GraphQL, not Go API); BP `entryCondition`/`delayExpr` authored through `bp/designer.go` backend or workflow JSON.
 >
 > **DB facts** (gating content migrations and Slice 3/4 sequencing): Q1 across `rule_logic` (jsonb probe for `cel`/`group`/`residue`), `compliance_rules` (DISTINCT sampling by `rule_type`), `rule_definitions` (count for RDL), BP config tables (count + DISTINCT non-empty).
 >
@@ -223,3 +223,29 @@ Option 2: umbrella project with RDL spun out as a separate project.
 > **Gating the closing claim**: §4 condition 1 (AST equivalence decision — sequenced before Slice 4 text is finalized), shared time-function registry ownership (RDL spin-out handoff), duration capability check (lands before Slice 3 commit), RDL project completion (dependency removal).
 >
 > **Signed**: Egan PJ  **Date**: 2026-09-11
+
+---
+
+## §7.1 — Amendment to §7 (2026-09-11, post-probe)
+
+> The following corrections to §7 were established by probe execution and caller trace, and are recorded here as amendments rather than modifications to the signed text. Signed text is frozen; corrections are addenda.
+
+### Amendment A — Static facts: UMA rebalance
+
+The §7 static facts stated: *"UMA rebalance expressions are database-backed via `compliance_rules.expression`."*
+
+**Correction**: `UMARebalanceRulesEngine` (`internal/workflows/uma_activities.go:35`) calls `ListRules` which queries `compliance_rules.expression` — but `compliance_rules` with an `expression` column never existed in any migration (confirmed by grep of all migrations; only `financial_compliance_rules.rule_expression` exists). Every invocation of `ListRules` errors at query time. The path was dead-on-arrival, not database-backed. The §7 characterization was wrong. Reclassification: "live — latent schema bug, fix on deletion" (not a CEL content migration question; see §3.5).
+
+### Amendment B — Authoring surfaces: `compliance_rules.expression`
+
+The §7 authoring surfaces entry stated: *"`compliance_rules.expression` authored through Hasura (GraphQL, not Go API)."*
+
+**Correction**: `compliance_rules` with an `expression` column was never created in any migration. The Hasura authoring surface, the `SQLRuleRepository` fallback write path, and the `ListRules` read path all reference a table that never existed. Not a live authoring surface — dead-on-arrival. The table/column pair that does exist is `financial_compliance_rules.rule_expression` (20260731_financial_superpowers.up.sql), which has a different schema and zero rows.
+
+### Amendment C — Feed rank score expressions (Slice 2 functional regression)
+
+Slice 2 execution dropped two numeric `CELRankScore` expressions rather than porting them to `Conditions`-compatible Go code:
+- `tax_loss_harvest`: `abs(client.Portfolio.UnrealizedLossPct) * 100.0` — dropped
+- `portfolio_drift`: `client.Portfolio.DriftPct * 100.0` — dropped
+
+Current `evaluateHardcoded` returns `RankScore: 1.0` for all eligible cards. The rank-based card ordering is a constant tie — the original dynamic ranking by loss magnitude and drift percentage is lost. **This is a functional regression introduced by Slice 2 execution.** Fix required before Slice 2 is considered complete.

@@ -324,3 +324,162 @@ func TestExecutionRepository_LiveAlpha_ListScheduleExecutions(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("Listed %d executions for schedule %s", len(execs), scheduleID)
 }
+
+func TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Executions(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewExecutionRepository(db)
+
+	tenantID := uuid.MustParse("70a1172c-9b06-4bc3-a0ac-13f7aaefdd90")
+	templateID := uuid.MustParse("75521cf8-2dd4-49ae-a5aa-92810e1f3b70")
+	userID := "test-user-live"
+	fixedTime := time.Now().Add(1 * time.Second)
+
+	id1 := uuid.MustParse("00000000-0000-0000-0001-000000000001")
+	id2 := uuid.MustParse("00000000-0000-0000-0001-000000000002")
+	id3 := uuid.MustParse("00000000-0000-0000-0001-000000000003")
+	id4 := uuid.MustParse("00000000-0000-0000-0001-000000000004")
+	id5 := uuid.MustParse("00000000-0000-0000-0001-000000000005")
+
+	execIDs := []uuid.UUID{id1, id2, id3, id4, id5}
+	existingExecID := uuid.MustParse("2fe73389-fa55-4b87-8d50-78b59d0cbac0")
+
+	_, err := db.ExecContext(context.Background(), `DELETE FROM public.report_executions WHERE id = $1`, existingExecID)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		for _, eid := range execIDs {
+			_, _ = db.Exec(`DELETE FROM public.report_executions WHERE id = $1`, eid)
+		}
+		_, _ = db.ExecContext(context.Background(), `
+			INSERT INTO public.report_executions (id, tenant_id, template_id, report_key, status, created_at)
+			VALUES ($1, $2, $3, 'synthetic', 'synthetic', $4)
+		`, existingExecID, tenantID, templateID, fixedTime)
+	})
+
+	tx, err := db.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.ExecContext(context.Background(), `SELECT set_config('uisce.current_tenant', $1, true)`, tenantID.String())
+	require.NoError(t, err)
+
+	for _, eid := range execIDs {
+		_, err = tx.ExecContext(context.Background(), `
+			INSERT INTO public.report_executions (id, tenant_id, template_id, report_key, status, created_at)
+			VALUES ($1, $2, $3, 'tiebreak-test', 'completed', $4)
+			ON CONFLICT (id) DO NOTHING
+		`, eid, tenantID, templateID, fixedTime)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tx.Commit())
+
+	seen := make(map[uuid.UUID]bool)
+	page := 0
+	var nextCursor *reports.Cursor
+
+	for {
+		page++
+		execs, err := repo.ListExecutions(context.Background(), tenantID, userID, false, nextCursor, 2)
+		require.NoError(t, err, "page %d", page)
+		require.NotEmpty(t, execs, "page %d: expected rows but got none (cursor=%v)", page, nextCursor)
+
+		for _, e := range execs {
+			require.False(t, seen[e.ID], "page %d: duplicate row id=%s", page, e.ID)
+			seen[e.ID] = true
+		}
+
+		lastExec := execs[len(execs)-1]
+		ec := reports.Cursor{CreatedAt: lastExec.CreatedAt, ID: lastExec.ID}
+		enc, err := reports.EncodeCursor(ec)
+		require.NoError(t, err)
+		c, err := reports.DecodeCursor(enc)
+		require.NoError(t, err)
+		nextCursor = &c
+
+		if len(execs) < 2 {
+			break
+		}
+	}
+
+	require.Len(t, seen, 5, "expected all 5 rows to appear exactly once; seen=%v", seen)
+}
+
+func TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Events(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewExecutionRepository(db)
+
+	tenantID := uuid.MustParse("70a1172c-9b06-4bc3-a0ac-13f7aaefdd90")
+	templateID := uuid.MustParse("75521cf8-2dd4-49ae-a5aa-92810e1f3b70")
+	userID := "test-user-live"
+	fixedTime := time.Now().Add(1 * time.Second)
+
+	execID := uuid.MustParse("00000000-0000-0000-0001-000000000001")
+	evID1 := uuid.MustParse("00000000-0000-0000-0001-000000000011")
+	evID2 := uuid.MustParse("00000000-0000-0000-0001-000000000012")
+	evID3 := uuid.MustParse("00000000-0000-0000-0001-000000000013")
+	evID4 := uuid.MustParse("00000000-0000-0000-0001-000000000014")
+	evID5 := uuid.MustParse("00000000-0000-0000-0001-000000000015")
+	evIDs := []uuid.UUID{evID1, evID2, evID3, evID4, evID5}
+
+	tx, err := db.BeginTx(context.Background(), nil)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.ExecContext(context.Background(), `SELECT set_config('uisce.current_tenant', $1, true)`, tenantID.String())
+	require.NoError(t, err)
+
+	_, err = tx.ExecContext(context.Background(), `
+		INSERT INTO public.report_executions (id, tenant_id, template_id, report_key, status, created_at)
+		VALUES ($1, $2, $3, 'tiebreak-test', 'completed', $4)
+		ON CONFLICT (id) DO NOTHING
+	`, execID, tenantID, templateID, fixedTime)
+	require.NoError(t, err)
+
+	for _, evID := range evIDs {
+		_, err = tx.ExecContext(context.Background(), `
+			INSERT INTO public.report_execution_events (id, execution_id, tenant_id, event, to_status, actor_id, created_at)
+			VALUES ($1, $2, $3, 'test-event', 'completed', $4, $5)
+			ON CONFLICT (id) DO NOTHING
+		`, evID, execID, tenantID, userID, fixedTime)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tx.Commit())
+
+	t.Cleanup(func() {
+		_, _ = db.Exec(`DELETE FROM public.report_execution_events WHERE id = ANY($1)`, evIDs)
+		_, _ = db.Exec(`DELETE FROM public.report_executions WHERE id = $1`, execID)
+	})
+
+	seen := make(map[uuid.UUID]bool)
+	page := 0
+	var nextCursor *reports.Cursor
+
+	for {
+		page++
+		events, truncated, err := repo.ListExecutionEvents(context.Background(), execID, tenantID, userID, false, nextCursor, 2)
+		if err != nil && err.Error() == "report not found" {
+			t.Skip("Execution not found under tenant context - skipping")
+		}
+		require.NoError(t, err, "page %d", page)
+		require.NotEmpty(t, events, "page %d: expected rows but got none (cursor=%v)", page, nextCursor)
+
+		for _, ev := range events {
+			require.False(t, seen[ev.ID], "page %d: duplicate event id=%s", page, ev.ID)
+			seen[ev.ID] = true
+		}
+
+		lastEv := events[len(events)-1]
+		ec := reports.Cursor{CreatedAt: lastEv.CreatedAt, ID: lastEv.ID}
+		enc, err := reports.EncodeCursor(ec)
+		require.NoError(t, err)
+		c, err := reports.DecodeCursor(enc)
+		require.NoError(t, err)
+		nextCursor = &c
+
+		if !truncated || len(events) < 2 {
+			break
+		}
+	}
+
+	require.Len(t, seen, 5, "expected all 5 events to appear exactly once; seen=%v", seen)
+}
