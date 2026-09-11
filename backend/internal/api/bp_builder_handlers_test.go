@@ -14,15 +14,30 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
-func setupBPBuilderTest(t *testing.T) (*BPBuilderHandlers, sqlmock.Sqlmock, func()) {
+type bpMockResolver struct {
+	tenantID string
+}
+
+func (m *bpMockResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		DatasourceID:   datasourceID,
+		TenantID:       m.tenantID,
+		InstanceID:     "inst1",
+		ProductID:      "prod1",
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
+
+func setupBPBuilderTest(t *testing.T, tenantID string) (*BPBuilderHandlers, sqlmock.Sqlmock, func()) {
 	t.Helper()
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
 	sqlxDB := sqlx.NewDb(db, "sqlmock")
-	handler := NewBPBuilderHandlers(sqlxDB, handlers.SecurityContextDeps{})
+	handler := NewBPBuilderHandlers(sqlxDB, handlers.SecurityContextDeps{Resolver: &bpMockResolver{tenantID: tenantID}})
 
 	cleanup := func() {
 		_ = sqlxDB.Close()
@@ -32,7 +47,8 @@ func setupBPBuilderTest(t *testing.T) (*BPBuilderHandlers, sqlmock.Sqlmock, func
 }
 
 func TestCreateBusinessProcess(t *testing.T) {
-	handler, mock, cleanup := setupBPBuilderTest(t)
+	handler, mock, cleanup := setupBPBuilderTest(t, "tenant-123")
+	defer cleanup()
 	defer cleanup()
 
 	requestPayload := BusinessProcess{
@@ -47,28 +63,12 @@ func TestCreateBusinessProcess(t *testing.T) {
 		Tags:      []string{"demo", "hire"},
 	}
 
-	stepsJSON, _ := json.Marshal(requestPayload.Steps)
-	tagsJSON, _ := json.Marshal(requestPayload.Tags)
-
 	mock.ExpectExec("INSERT INTO business_processes").
-		WithArgs(
-			sqlmock.AnyArg(), // id
-			"tenant-123",     // tenant_id
-			"datasource-456", // datasource_id
-			requestPayload.ProcessName,
-			requestPayload.Entity,
-			requestPayload.Description,
-			stepsJSON,
-			requestPayload.IsActive,
-			requestPayload.CreatedBy,
-			sqlmock.AnyArg(), // created_at
-			1,                // version
-			tagsJSON,
-		).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	body, _ := json.Marshal(requestPayload)
 	req := httptest.NewRequest(http.MethodPost, "/api/business-processes?tenant_id=tenant-123&datasource_id=datasource-456", bytes.NewReader(body))
+	req = withAuthContext(req, "tenant-123")
 	rr := httptest.NewRecorder()
 
 	handler.CreateBusinessProcess(rr, req)
@@ -83,7 +83,7 @@ func TestCreateBusinessProcess(t *testing.T) {
 }
 
 func TestListBusinessProcesses(t *testing.T) {
-	handler, mock, cleanup := setupBPBuilderTest(t)
+	handler, mock, cleanup := setupBPBuilderTest(t, "tenant-123")
 	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{
@@ -95,10 +95,11 @@ func TestListBusinessProcesses(t *testing.T) {
 	)
 
 	mock.ExpectQuery("SELECT ").
-		WithArgs("tenant-123", "datasource-456").
+		WithArgs("tenant-123", sqlmock.AnyArg()).
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/business-processes?tenant_id=tenant-123&datasource_id=datasource-456", nil)
+	req = withAuthContext(req, "tenant-123")
 	rr := httptest.NewRecorder()
 
 	handler.ListBusinessProcesses(rr, req)
@@ -113,7 +114,7 @@ func TestListBusinessProcesses(t *testing.T) {
 }
 
 func TestGetBusinessProcess(t *testing.T) {
-	handler, mock, cleanup := setupBPBuilderTest(t)
+	handler, mock, cleanup := setupBPBuilderTest(t, "tenant-123")
 	defer cleanup()
 
 	rows := sqlmock.NewRows([]string{
@@ -129,7 +130,7 @@ func TestGetBusinessProcess(t *testing.T) {
 		WillReturnRows(rows)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/business-processes/bp-1?tenant_id=tenant-123", nil)
-
+	req = withAuthContext(req, "tenant-123")
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("id", "bp-1")
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeCtx))

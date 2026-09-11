@@ -1,26 +1,71 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/identity"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
-// Helper to create server with sqlmock DB
-func newServerWithMockDB(t *testing.T) (*Server, sqlmock.Sqlmock) {
+type profileResultsMockResolver struct {
+	tenantID string
+}
+
+func (m *profileResultsMockResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		DatasourceID:   datasourceID,
+		TenantID:       m.tenantID,
+		InstanceID:     "inst1",
+		ProductID:      "prod1",
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
+
+// withSecurityContext injects a complete, self-contained security context into the request,
+// bypassing SecurityContextFromRequest's resolver-based resolution. This is necessary because
+// getProfileResults calls SecurityContextFromRequest which uses BuildContext with the passed
+// datasourceID parameter (empty string), causing BuildContext to use DatasourceID="none".
+func withSecurityContext(req *http.Request, tenantID, datasourceID string) *http.Request {
+	auth := security.AuthInfo{
+		UserID:    "test-user-001",
+		TenantIDs: []string{tenantID},
+		Roles:     []string{"admin"},
+	}
+	secCtx := &security.Context{
+		UserID:         "test-user-001",
+		Roles:          []string{"admin"},
+		TenantID:       tenantID,
+		DatasourceID:   datasourceID,
+		InstanceID:     "inst1",
+		ProductID:      "prod1",
+		Region:         "us-east-1",
+		OperatingScope: tenantID + ":default:default:none",
+	}
+	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
+	ctx = security.WithAuthInfo(ctx, auth)
+	ctx = security.WithContext(ctx, secCtx)
+	return req.WithContext(ctx)
+}
+
+// Helper to create server with sqlmock DB and proper SecurityContextDeps
+// tenantID sets the mock resolver's returned TenantID, which must match the auth context's TenantIDs for tenantAllowed check to pass.
+func newServerWithMockDB(t *testing.T, tenantID string) (*Server, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("failed to open sqlmock: %v", err)
 	}
-	srv := &Server{DB: db}
+	srv := &Server{DB: db, SecurityContextDeps: handlers.SecurityContextDeps{Resolver: &profileResultsMockResolver{tenantID: tenantID}}}
 	return srv, mock
 }
 
 func TestGetProfileResults_FiltersBySchemaAndTable(t *testing.T) {
-	srv, mock := newServerWithMockDB(t)
+	srv, mock := newServerWithMockDB(t, "t-1")
 	defer srv.DB.Close()
 
 	tenant := "t-1"
@@ -35,6 +80,7 @@ func TestGetProfileResults_FiltersBySchemaAndTable(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/api/profiler/results?tenant_id="+tenant+"&datasource_id="+ds+"&schema=public&table=shipper", nil)
 	req.Header.Set("Content-Type", "application/json")
+	req = withSecurityContext(req, tenant, ds)
 
 	rr := httptest.NewRecorder()
 	srv.getProfileResults(rr, req)
@@ -58,7 +104,7 @@ func TestGetProfileResults_FiltersBySchemaAndTable(t *testing.T) {
 }
 
 func TestGetProfileResults_FallbackToHeaders(t *testing.T) {
-	srv, mock := newServerWithMockDB(t)
+	srv, mock := newServerWithMockDB(t, "t-2")
 	defer srv.DB.Close()
 
 	tenant := "t-2"
@@ -73,6 +119,7 @@ func TestGetProfileResults_FallbackToHeaders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/profiler/results", nil)
 	req.Header.Set("X-Tenant-ID", tenant)
 	req.Header.Set("X-Tenant-Datasource-ID", ds)
+	req = withSecurityContext(req, tenant, ds)
 	rr := httptest.NewRecorder()
 	srv.getProfileResults(rr, req)
 
@@ -95,7 +142,7 @@ func TestGetProfileResults_FallbackToHeaders(t *testing.T) {
 }
 
 func TestGetProfileResults_InvalidSchemaTableParams(t *testing.T) {
-	srv, _ := newServerWithMockDB(t)
+	srv, _ := newServerWithMockDB(t, "t-3")
 	defer srv.DB.Close()
 
 	tenant := "t-3"
@@ -103,6 +150,7 @@ func TestGetProfileResults_InvalidSchemaTableParams(t *testing.T) {
 
 	// invalid characters in schema
 	req := httptest.NewRequest("GET", "/api/profiler/results?tenant_id="+tenant+"&datasource_id="+ds+"&schema=bad!schema", nil)
+	req = withSecurityContext(req, tenant, ds)
 	rr := httptest.NewRecorder()
 	srv.getProfileResults(rr, req)
 	if rr.Code != http.StatusBadRequest {
@@ -116,6 +164,7 @@ func TestGetProfileResults_InvalidSchemaTableParams(t *testing.T) {
 	}
 	longName := string(long)
 	req2 := httptest.NewRequest("GET", "/api/profiler/results?tenant_id="+tenant+"&datasource_id="+ds+"&table="+longName, nil)
+	req2 = withSecurityContext(req2, tenant, ds)
 	rr2 := httptest.NewRecorder()
 	srv.getProfileResults(rr2, req2)
 	if rr2.Code != http.StatusBadRequest {
@@ -124,7 +173,7 @@ func TestGetProfileResults_InvalidSchemaTableParams(t *testing.T) {
 }
 
 func TestGetProfileResults_WithPaging(t *testing.T) {
-	srv, mock := newServerWithMockDB(t)
+	srv, mock := newServerWithMockDB(t, "t-4")
 	defer srv.DB.Close()
 
 	tenant := "t-4"
@@ -137,6 +186,7 @@ func TestGetProfileResults_WithPaging(t *testing.T) {
 			AddRow("/public/orders/order_id", "order_id", "integer", 100, nil, nil, nil, `{}`, `{}`))
 
 	req := httptest.NewRequest("GET", "/api/profiler/results?tenant_id="+tenant+"&datasource_id="+ds+"&limit=50&offset=10", nil)
+	req = withSecurityContext(req, tenant, ds)
 	rr := httptest.NewRecorder()
 	srv.getProfileResults(rr, req)
 	if rr.Code != http.StatusOK {

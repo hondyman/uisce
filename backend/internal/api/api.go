@@ -2866,7 +2866,8 @@ func (s *Server) getProfileStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getProfileResults(w http.ResponseWriter, r *http.Request) {
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
+	datasourceIDFromQuery := r.URL.Query().Get("datasource_id")
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, datasourceIDFromQuery, "", s.SecurityContextDeps)
 	if err != nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return

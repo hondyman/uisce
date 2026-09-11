@@ -16,7 +16,7 @@ import (
 )
 
 func TestUpdateUserPreferences_Success(t *testing.T) {
-	srv, mock := newServerWithMockDB(t)
+	srv, mock := newServerWithMockDB(t, "default")
 	defer srv.DB.Close()
 
 	userId := "user-1"
@@ -60,7 +60,7 @@ func TestUpdateUserPreferences_Success(t *testing.T) {
 }
 
 func TestUpdateUserPreferences_Unauthorized(t *testing.T) {
-	srv, _ := newServerWithMockDB(t)
+	srv, _ := newServerWithMockDB(t, "default")
 	defer srv.DB.Close()
 
 	userId := "user-1"

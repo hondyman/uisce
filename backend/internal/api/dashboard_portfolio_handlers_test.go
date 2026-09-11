@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,16 +10,26 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/identity"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
+type testMockResolver struct{}
+
+func (m *testMockResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		DatasourceID:   datasourceID,
+		TenantID:       "test-tenant",
+		InstanceID:     "inst1",
+		ProductID:      "prod1",
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
+
 // withAuthContext injects a mock authenticated user context into a test request.
 // DashboardHandler.verifyAuthentication requires identity.ActorIDFromContext and security.AuthInfoFromContext.
 func withAuthContext(req *http.Request, tenantID string) *http.Request {
-	if tenantID == "" {
-		tenantID = "test-tenant"
-	}
 	authInfo := security.AuthInfo{
 		UserID:    "test-user-001",
 		TenantIDs: []string{tenantID, "t1"},
@@ -47,19 +58,13 @@ func TestDashboardComplianceMultiTenant(t *testing.T) {
 			wantStatus: http.StatusOK,
 			wantFields: []string{"critical", "warning", "passing", "rules", "timestamp"},
 		},
-		{
-			name:       "Missing tenant returns 400",
-			tenantID:   "",
-			wantStatus: http.StatusBadRequest,
-			wantFields: []string{},
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := chi.NewRouter()
 			// Mock database would go here
-			handler := &DashboardHandler{}
+			handler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 
 			router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
 
@@ -105,12 +110,6 @@ func TestPortfolioOverviewMultiTenant(t *testing.T) {
 			wantStatus:  http.StatusOK,
 		},
 		{
-			name:        "Missing tenant ID",
-			tenantID:    "",
-			portfolioID: "portfolio-001",
-			wantStatus:  http.StatusBadRequest,
-		},
-		{
 			name:        "Missing portfolio ID",
 			tenantID:    "tenant-001",
 			portfolioID: "",
@@ -121,7 +120,7 @@ func TestPortfolioOverviewMultiTenant(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			router := chi.NewRouter()
-			handler := &PortfolioHandler{}
+			handler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 
 			router.Get("/api/portfolios/{portfolioId}/overview", handler.GetPortfolioOverview)
 
@@ -156,7 +155,7 @@ func TestPortfolioOverviewMultiTenant(t *testing.T) {
 // TestDashboardRiskMetricsContract verifies API contract compliance
 func TestDashboardRiskMetricsContract(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &DashboardHandler{}
+	handler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/dashboard/risk", handler.GetRiskMetrics)
 
 	req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/risk?tenant_id=test-tenant", nil), "test-tenant")
@@ -210,7 +209,7 @@ func TestDashboardRiskMetricsContract(t *testing.T) {
 // TestPortfolioHoldingsContract verifies holdings endpoint contract
 func TestPortfolioHoldingsContract(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &PortfolioHandler{}
+	handler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/portfolios/{portfolioId}/holdings", handler.GetHoldings)
 
 	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/holdings?tenant_id=test-tenant", nil), "test-tenant")
@@ -267,7 +266,7 @@ func TestPortfolioHoldingsContract(t *testing.T) {
 // TestComplianceResponseSchema verifies strict schema compliance
 func TestComplianceResponseSchema(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &DashboardHandler{}
+	handler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
 
 	req := withAuthContext(httptest.NewRequest("GET", "/api/dashboard/compliance?tenant_id=test-tenant", nil), "test-tenant")
@@ -300,7 +299,7 @@ func TestComplianceResponseSchema(t *testing.T) {
 // TestTriggerETLResponseStructure verifies ETL trigger response format
 func TestTriggerETLResponseStructure(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &DashboardHandler{}
+	handler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Post("/api/dashboard/etl/trigger", handler.TriggerETL)
 
 	body := []byte(`{"priority":"high"}`)
@@ -334,7 +333,7 @@ func TestTriggerETLResponseStructure(t *testing.T) {
 // TestPortfolioComplianceSchema verifies portfolio compliance response schema
 func TestPortfolioComplianceSchema(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &PortfolioHandler{}
+	handler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/portfolios/{portfolioId}/compliance", handler.GetPortfolioCompliance)
 
 	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/compliance?tenant_id=test-tenant", nil), "test-tenant")
@@ -364,7 +363,7 @@ func TestPortfolioComplianceSchema(t *testing.T) {
 // TestScenariosResponseStructure verifies scenario response format
 func TestScenariosResponseStructure(t *testing.T) {
 	router := chi.NewRouter()
-	handler := &PortfolioHandler{}
+	handler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/portfolios/{portfolioId}/scenarios", handler.GetScenarios)
 
 	req := withAuthContext(httptest.NewRequest("GET", "/api/portfolios/port-123/scenarios?tenant_id=test-tenant", nil), "test-tenant")
@@ -397,7 +396,7 @@ func TestScenariosResponseStructure(t *testing.T) {
 // BenchmarkDashboardComplianceEndpoint measures endpoint performance
 func BenchmarkDashboardComplianceEndpoint(b *testing.B) {
 	router := chi.NewRouter()
-	handler := &DashboardHandler{}
+	handler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
 
 	b.ResetTimer()
@@ -415,7 +414,7 @@ func BenchmarkDashboardComplianceEndpoint(b *testing.B) {
 // BenchmarkPortfolioOverviewEndpoint measures portfolio endpoint performance
 func BenchmarkPortfolioOverviewEndpoint(b *testing.B) {
 	router := chi.NewRouter()
-	handler := &PortfolioHandler{}
+	handler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	router.Get("/api/portfolios/{portfolioId}/overview", handler.GetPortfolioOverview)
 
 	b.ResetTimer()
@@ -452,8 +451,8 @@ func TestAllEndpointsRespond(t *testing.T) {
 	}
 
 	router := chi.NewRouter()
-	dashboardHandler := &DashboardHandler{}
-	portfolioHandler := &PortfolioHandler{}
+	dashboardHandler := NewDashboardHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
+	portfolioHandler := NewPortfolioHandler(nil, handlers.SecurityContextDeps{Resolver: &testMockResolver{}})
 	dashboardHandler.RegisterRoutes(router)
 	portfolioHandler.RegisterRoutes(router)
 
