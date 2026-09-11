@@ -56,6 +56,15 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 
 ---
 
+## Process notes
+
+| Date | Note | File(s) |
+|---|---|---|
+| 2026-09-11 | **`gh pr create` backtick safety**: always use `--body-file` heredoc for PR bodies that include commit hashes or any text that could be interpreted as shell command substitutions. `--body` is parsed through the shell before `gh` processes it; backtick-quoted content runs as command substitutions first. Caused empty cells in PR #55's commit table. | `gh pr create` calls site-wide |
+| 2026-09-11 | **`git rev-parse HEAD` before every gate run**: tree identity proof, institutionalized after the stale-branch incident. Any gate table that does not begin with `git rev-parse HEAD` + `git status` output is not a trusted result. | All gate templates |
+
+---
+
 ## Entry 2026-09-10 — Arc 4 (collection aggregation, Phase 3 close)
 
 *[To be populated by the next session that produces a failure or verification worth recording.]*
