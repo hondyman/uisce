@@ -156,6 +156,16 @@ func (ae *AdvancedEvaluator) evalBinaryExpr(be *BinaryExpr, data map[string]inte
 		return nil, err
 	}
 
+	if ae.baseEvaluator.hierarchyResolver.isArray(lVal) || ae.baseEvaluator.hierarchyResolver.isArray(rVal) {
+		var which string
+		if ae.baseEvaluator.hierarchyResolver.isArray(lVal) {
+			which = "left"
+		} else {
+			which = "right"
+		}
+		return nil, fmt.Errorf("collection used in comparison (on %s side) — did you mean an aggregate function like SUM?", which)
+	}
+
 	a, b, ok := toFloat64(lVal, rVal)
 	if !ok {
 		return nil, fmt.Errorf("expression operands not numeric: %T, %T", lVal, rVal)
@@ -191,25 +201,41 @@ func (ae *AdvancedEvaluator) evalBinaryExpr(be *BinaryExpr, data map[string]inte
 }
 
 func (ae *AdvancedEvaluator) evalFieldRef(fr *FieldRef, data map[string]interface{}) (any, error) {
+	if strings.Contains(fr.Path, ".") {
+		return ae.evalDottedFieldRef(fr.Path, data)
+	}
 	val, found := ae.baseEvaluator.GetFieldValue(fr.Path, data)
 	if !found {
-		// GetFieldValue (HierarchyResolver.ResolveFieldPath) conflates
-		// "key absent" with "key present, value is nil" - both navigate
-		// to a nil interface and both come back not-found. That's a real
-		// distinction for a top-level field: a SQL NULL column (present
-		// key, nil value - the exact case NOT_EMPTY exists to detect)
-		// must not error the same way a genuinely missing field does.
-		// Scoped to the top-level (no ".") case deliberately - it's the
-		// only shape this evaluator's own callers (FuncCall predicates
-		// like NOT_EMPTY reading a BO record's own columns) actually hit,
-		// and it leaves nested-path resolution (which HierarchyResolver
-		// still owns) untouched.
-		if !strings.Contains(fr.Path, ".") {
-			if v, ok := data[fr.Path]; ok {
-				return v, nil
-			}
+		if v, ok := data[fr.Path]; ok {
+			return v, nil
 		}
 		return nil, fmt.Errorf("field not found: %s", fr.Path)
+	}
+	if ae.baseEvaluator.hierarchyResolver.isArray(val) {
+		return ae.evalDottedFieldRef(fr.Path, data)
+	}
+	return val, nil
+}
+
+func (ae *AdvancedEvaluator) evalDottedFieldRef(path string, data map[string]interface{}) (any, error) {
+	segments := strings.Split(path, ".")
+	if arr, ok := data[segments[0]].([]any); ok {
+		parentArrayLen := len(arr)
+		vals, ok := ae.baseEvaluator.hierarchyResolver.ResolveFieldPathArray(data, path)
+		if !ok || len(vals) == 0 {
+			return nil, fmt.Errorf("field not found: %s", path)
+		}
+		if len(vals) != parentArrayLen {
+			return nil, fmt.Errorf("field not found in one or more rows: %s (got values for %d of %d rows)", path, len(vals), parentArrayLen)
+		}
+		return vals, nil
+	}
+	val, found := ae.baseEvaluator.GetFieldValue(path, data)
+	if !found {
+		return nil, fmt.Errorf("field not found: %s", path)
+	}
+	if ae.baseEvaluator.hierarchyResolver.isArray(val) {
+		return nil, fmt.Errorf("collection %q used outside an aggregate function — did you mean SUM(%s.<field>)?", segments[0], segments[0])
 	}
 	return val, nil
 }

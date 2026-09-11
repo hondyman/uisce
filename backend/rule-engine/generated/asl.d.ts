@@ -2818,11 +2818,6 @@ export interface Fixture {
   Syms: any;
 }
 
-/** FolderService provides methods for managing folders. */
-export interface FolderService {
-  db: any;
-}
-
 /** FuncCall represents a named function applied to a list of argument
 expressions, e.g. SUM(field) or NPV(rate, cash_flows). Added to let the
 same rule/calc AST express aggregate and financial functions used by
@@ -6383,6 +6378,10 @@ export interface UpsertValidationRuleRequest {
   BOName: string;
   Category: string;
   Description: string;
+  /** Domain: "mdm" or "compliance" for the rulefabric-consolidation
+domain values; empty defaults to ValidationRuleDomainDefault
+("validation") in the service layer. */
+  Domain: string;
   Name: string;
   RuleAST: any;
   Severity: string;
@@ -6516,6 +6515,7 @@ export interface ValidationRuleDescriptor {
   Category: string;
   CreatedAt: any;
   Description: string;
+  Domain: string;
   GovernanceStatus: string;
   ID: any;
   Name: string;
@@ -6545,6 +6545,16 @@ isn't the AST itself. */
 export interface ValidationRuleProperties {
   BOName: string;
   Category: string;
+  /** Domain distinguishes which rule-authoring surface produced this
+rule - "validation" (the original BO-scoped surface), "mdm", or
+"compliance" (the domain values the rulefabric consolidation adds;
+see docs/unified-rule-engine-handoff.md, "Rulefabric consolidation").
+Empty/omitted (every rule written before this field existed) is
+read as ValidationRuleDomainDefault ("validation") by GetByID/
+ListByBO's descriptorFromNode - the service defaults new writes to
+it explicitly rather than leaving new rows blank too, so "domain"
+is unambiguous for anything written from this point forward. */
+  Domain: string;
   GovernanceStatus: string;
   Severity: string;
   TenantID: string;

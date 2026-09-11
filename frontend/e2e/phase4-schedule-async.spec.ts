@@ -4,6 +4,10 @@
  * Tests the frontend polling state machine end-to-end using Playwright's
  * page.route() to mock the backend contract (no live backend needed).
  *
+ * PREREQUISITE: Browser must have an active authenticated session.
+ * The app redirects unauthenticated requests to the Keycloak login page.
+ * Set BASE_URL via PLAYWRIGHT_BASE_URL env var (defaults to localhost:3000).
+ *
  * Backend contract (Phase 3, commit 81ff74506f):
  *   POST /api/v1/reports/{id}/schedules/{sid}/run
  *     → 202 Accepted  { status: "pending", execution_id, workflow_id }
