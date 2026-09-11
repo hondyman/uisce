@@ -51,7 +51,14 @@ CREATE TABLE IF NOT EXISTS public.report_execution_events (
     event           TEXT NOT NULL,  -- 'CREATED'|'STARTED'|'COMPLETED'|'FAILED'|'SWEEP_RECONCILED'|'DISPATCH_FAILED'
     from_status     TEXT NULL,      -- nullable for CREATED
     to_status       TEXT NOT NULL,
-    actor_id        TEXT NOT NULL,  -- user_id or service identifier
+    -- actor_id vocabulary (by writer):
+    --   Writer 1 (pending insert):   user_id of the API caller (from JWT / context)
+    --   Writer 2 (running):          'system:executor' (the temporal executor service)
+    --   Writer 3 (markExecutionFailed): 'system:executor' (same)
+    --   Writer 4 (StoreResult):       'system:activity' (the Temporal activity)
+    --   Writer 5 (SweepStale):        'system:sweep'
+    --   DISPATCH_FAILED:              user_id of the trigger caller (from JWT / context)
+    actor_id        TEXT NOT NULL,
     detail          JSONB NULL,     -- {error_message, output_url, rows_processed, execution_time_ms, ...}
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -61,10 +68,12 @@ CREATE INDEX idx_ree_execution_id_created_at ON public.report_execution_events(e
 CREATE INDEX idx_ree_created_at ON public.report_execution_events(created_at);
 CREATE INDEX idx_ree_tenant_id_created_at ON public.report_execution_events(tenant_id, created_at);
 
--- RLS: same policy shape as report_executions
+-- RLS: same policy shape as report_executions (FORCE to match report_executions posture)
 ALTER TABLE public.report_execution_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.report_execution_events FORCE ROW LEVEL SECURITY;
 CREATE POLICY ree_tenant_isolation ON public.report_execution_events
-    USING (tenant_id = current_setting('uisce.current_tenant', true)::UUID);
+    USING (tenant_id = current_setting('uisce.current_tenant', true)::UUID)
+    WITH CHECK (tenant_id = current_setting('uisce.current_tenant', true)::UUID);
 
 -- Insert-only enforcement: app role gets INSERT+SELECT only; PUBLIC blocked
 -- Migration runner must create the app role grant:
@@ -102,7 +111,7 @@ func SweepStaleExecutions(ctx context.Context, ... ) error {
             UPDATE report_executions
             SET status = 'failed', updated_at = NOW()
             WHERE status = 'running' AND updated_at < $1
-            RETURNING id, tenant_id, status, previous_status, error_message
+            RETURNING id, tenant_id, error_message
         `, cutoff)
         if err != nil {
             return err
@@ -112,19 +121,26 @@ func SweepStaleExecutions(ctx context.Context, ... ) error {
         var events []InsertEvent
         var executionIDs []uuid.UUID
         for rows.Next() {
-            var e Execution
-            var prevStatus string
-            // scan e.ID, e.TenantID, e.Status, prevStatus, e.ErrorMessage
+            var eID, tenantID uuid.UUID
+            var errMsg *string
+            if err := rows.Scan(&eID, &tenantID, &errMsg); err != nil {
+                return err
+            }
+            // from_status is always 'running' — the WHERE clause guarantees it
+            var detail JSONB
+            if errMsg != nil {
+                detail = jsonb.BuildObject("error_message", *errMsg)
+            }
             events = append(events, InsertEvent{
-                ExecutionID: e.ID,
-                TenantID:    e.TenantID,
+                ExecutionID: eID,
+                TenantID:    tenantID,
                 Event:       "SWEEP_RECONCILED",
-                FromStatus:  prevStatus,
+                FromStatus:  "running",
                 ToStatus:    "failed",
                 ActorID:     "system:sweep",
-                Detail:      jsonb.BuildObject("reason", "stale_timeout"),
+                Detail:      detail,
             })
-            executionIDs = append(executionIDs, e.ID)
+            executionIDs = append(executionIDs, eID)
         }
 
         // Bulk insert events
@@ -135,8 +151,14 @@ func SweepStaleExecutions(ctx context.Context, ... ) error {
         }
 
         // Broken-chain check in same transaction
-        // Executions with terminal status but no terminal event
-        if nonZero := checkBrokenChains(ctx, tx, executionIDs); nonZero > 0 {
+        // Runs unscoped — detects any execution with terminal status and no terminal event,
+        // including pre-instrumentation history and writer-bug products. The swept-IDs variant
+        // (limited to rows this sweep touched) is a per-transaction subset; the unscoped query
+        // is the authoritative detection.
+        //
+        // NOTE: the 11 pre-instrumentation rows on alpha are expected broken chains on day one.
+        // Disposition: one-time mark/ignore-by-date in the sweep handler, not a data migration.
+        if nonZero := checkBrokenChainsUnscoped(ctx, tx); nonZero > 0 {
             // Log + alert; do not fail the sweep
             log.Warn("broken chains detected", "count", nonZero)
         }
@@ -146,10 +168,25 @@ func SweepStaleExecutions(ctx context.Context, ... ) error {
 }
 ```
 
-**Broken-chain detection query** (in same transaction):
+**Broken-chain detection query** (unscoped — authoritative detection):
 ```sql
+-- Runs against all terminal executions; call after every sweep
+SELECT e.id, e.tenant_id, e.status, e.created_at
+FROM report_executions e
+WHERE e.status IN ('completed', 'failed', 'failed_dispatch')
+  AND NOT EXISTS (
+      SELECT 1 FROM report_execution_events ree
+      WHERE ree.execution_id = e.id
+        AND ree.event IN ('COMPLETED', 'FAILED', 'DISPATCH_FAILED')
+  )
+ORDER BY e.created_at;
+```
+
+**Per-transaction variant** (subset: only rows this sweep touched):
+```sql
+-- Call within the sweep transaction; limits scope to swept IDs only
 SELECT e.id FROM report_executions e
-WHERE e.id = ANY($1)  -- the swept execution IDs
+WHERE e.id = ANY($1)  -- swept execution IDs from this transaction
   AND e.status IN ('completed', 'failed', 'failed_dispatch')
   AND NOT EXISTS (
       SELECT 1 FROM report_execution_events ree
@@ -157,6 +194,8 @@ WHERE e.id = ANY($1)  -- the swept execution IDs
         AND ree.event IN ('COMPLETED', 'FAILED', 'DISPATCH_FAILED')
   )
 ```
+
+**Day-one disposition**: the 11 pre-instrumentation executions on alpha are expected broken chains. Handle via a date cutoff: executions created before the Phase 1 go-live date are excluded from the check with `AND e.created_at >= :phase1_go_live_date`. This is a handler-level filter, not a data migration.
 
 ### 2.3 Endpoints
 
@@ -259,6 +298,14 @@ auditLogAdminRead(ctx, db, "monitoring.read.cross_tenant", filtersJSON)
 - New Debezium publication
 - Iceberg schema + StarRocks external catalog registration
 - Round-trip verification
+
+**CDC publication scope — design decision** (to be confirmed before Phase 4 starts):
+
+Option A — **Events table only**: publish `report_execution_events` (append-only) to `audit.report_executions.events`. Current execution state is derived by folding the events stream: the latest event per `execution_id` gives current status. Iceberg table is append-only; upsert logic lives in the StarRocks materialized view. No mutable-table publication needed.
+
+Option B — **Both tables**: publish `report_executions` (mutable) + `report_execution_events`. Lake receives change events for the mutable table, requiring upsert reconciliation on the Iceberg side. More operational complexity; the mutable table's state is already recoverable from the events stream.
+
+**Recommendation**: Option A. The events stream is the authoritative source of truth; the mutable table is an optimization cache that the application already knows how to reconstruct from events. Publishing only the events table means the lake schema is simpler (append-only), the audit-sink consumer is stateless (append-only consumer), and no upsert complexity enters the pipeline. The Phase 4 pre-flight should verify that the existing `audit-sink` consumer can operate as a stateless append-only consumer before committing to Option A; if the consumer requires upsert semantics for late-arriving events, Option B is the fallback with the upsert path documented explicitly in the Phase 4 migration.
 
 ### Phase 5 — Frontend + E2E
 - New routes, components, hooks
