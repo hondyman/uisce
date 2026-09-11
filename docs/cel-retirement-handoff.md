@@ -249,3 +249,5 @@ Slice 2 execution dropped two numeric `CELRankScore` expressions rather than por
 - `portfolio_drift`: `client.Portfolio.DriftPct * 100.0` — dropped
 
 Current `evaluateHardcoded` returns `RankScore: 1.0` for all eligible cards. The rank-based card ordering is a constant tie — the original dynamic ranking by loss magnitude and drift percentage is lost. **This is a functional regression introduced by Slice 2 execution.** Fix required before Slice 2 is considered complete.
+
+**Fix applied**: RankScore expressions are now evaluated via `vm.AdvancedEvaluator.EvaluateNumeric` using `vm.ParseExpression`. `tax_loss_harvest` rank: `(-client.Portfolio.UnrealizedLossPct) * 100.0`; `portfolio_drift` rank: `client.Portfolio.DriftPct * 100.0`. Both-directions tests added in `internal/feed/rules/engine_test.go` (2026-09-11).
