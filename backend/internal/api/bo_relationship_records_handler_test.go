@@ -12,7 +12,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/hondyman/uisce/backend/internal/identity"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+func withTestAuth(req *http.Request, tenantID string) *http.Request {
+	auth := security.AuthInfo{
+		UserID:    "test-user-001",
+		TenantIDs: []string{tenantID},
+		Roles:     []string{"admin"},
+	}
+	ctx := identity.WithActorTenant(req.Context(), "test-user-001", tenantID)
+	ctx = security.WithAuthInfo(ctx, auth)
+	return req.WithContext(ctx)
+}
 
 func newRelationshipTestRouter(handler *BOCRUDHandler) chi.Router {
 	r := chi.NewRouter()
@@ -76,6 +90,7 @@ func TestHandleListRelatedRecords_ResolvesJoinAndFiltersByParentId(t *testing.T)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bo/account/records/acc-123/relationships/allocations", nil)
 	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -137,6 +152,7 @@ func TestHandleCreateRelatedRecord_ForcesParentFKOverridingClientPayload(t *test
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/bo/account/records/acc-123/relationships/allocations", bytes.NewBuffer(body))
 	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 
@@ -166,6 +182,7 @@ func TestResolveRelationship_UnknownRelKey_Returns404(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/bo/account/records/acc-123/relationships/does_not_exist", nil)
 	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
 

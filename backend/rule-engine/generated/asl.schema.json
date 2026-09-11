@@ -8210,16 +8210,6 @@
       ],
       "type": "object"
     },
-    "FolderService": {
-      "description": "FolderService provides methods for managing folders.",
-      "properties": {
-        "db": {}
-      },
-      "required": [
-        "db"
-      ],
-      "type": "object"
-    },
     "FuncCall": {
       "description": "FuncCall represents a named function applied to a list of argument\nexpressions, e.g. SUM(field) or NPV(rate, cash_flows). Added to let the\nsame rule/calc AST express aggregate and financial functions used by\ncalculated semantic terms, not just the scalar arithmetic BinaryExpr\nalready supported. Backends (VM compiler, SQL compiler, ...) that don't\nyet support a given function name should fail explicitly rather than\nsilently mis-evaluate.",
       "properties": {
@@ -18811,6 +18801,10 @@
         "Description": {
           "type": "string"
         },
+        "Domain": {
+          "description": "Domain: \"mdm\" or \"compliance\" for the rulefabric-consolidation\ndomain values; empty defaults to ValidationRuleDomainDefault\n(\"validation\") in the service layer.",
+          "type": "string"
+        },
         "Name": {
           "type": "string"
         },
@@ -18833,6 +18827,7 @@
         "Severity",
         "Timing",
         "Category",
+        "Domain",
         "RuleAST"
       ],
       "type": "object"
@@ -19196,6 +19191,9 @@
         "Description": {
           "type": "string"
         },
+        "Domain": {
+          "type": "string"
+        },
         "GovernanceStatus": {
           "type": "string"
         },
@@ -19224,6 +19222,7 @@
         "Severity",
         "Timing",
         "Category",
+        "Domain",
         "RuleAST",
         "GovernanceStatus",
         "CreatedAt",
@@ -19256,6 +19255,10 @@
         "Category": {
           "type": "string"
         },
+        "Domain": {
+          "description": "Domain distinguishes which rule-authoring surface produced this\nrule - \"validation\" (the original BO-scoped surface), \"mdm\", or\n\"compliance\" (the domain values the rulefabric consolidation adds;\nsee docs/unified-rule-engine-handoff.md, \"Rulefabric consolidation\").\nEmpty/omitted (every rule written before this field existed) is\nread as ValidationRuleDomainDefault (\"validation\") by GetByID/\nListByBO's descriptorFromNode - the service defaults new writes to\nit explicitly rather than leaving new rows blank too, so \"domain\"\nis unambiguous for anything written from this point forward.",
+          "type": "string"
+        },
         "GovernanceStatus": {
           "type": "string"
         },
@@ -19275,7 +19278,8 @@
         "Severity",
         "Timing",
         "Category",
-        "GovernanceStatus"
+        "GovernanceStatus",
+        "Domain"
       ],
       "type": "object"
     },

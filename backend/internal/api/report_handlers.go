@@ -784,7 +784,7 @@ func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Reques
 //   (e.tenant_id = $2 OR e.triggered_by = $3)
 // Returns 404 if execution is not found or inaccessible (zero existence leak).
 func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, _, err := h.resolveAuthContext(r)
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
@@ -812,6 +812,11 @@ func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 		JOIN public.report_templates t ON t.id = e.template_id
 		WHERE e.id = $1
 		  AND (e.tenant_id = $2 OR e.triggered_by = $3)
+		  AND (
+		      t.is_personal = false
+		      OR (t.created_by_id IS NOT NULL AND t.created_by_id = $3)
+		      OR $4 = true
+		  )
 	`
 
 	var (
@@ -837,7 +842,7 @@ func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 		createdByID     sql.NullString
 	)
 
-	row := h.db.QueryRowContext(r.Context(), query, execID, tenantID, userID)
+	row := h.db.QueryRowContext(r.Context(), query, execID, tenantID, userID, isAdmin)
 	if err := row.Scan(
 		&id, &rowTenantID, &templateID, &reportKey, &status, &paramsBytes,
 		&outputURL, &outputSizeBytes, &rowsProcessed, &executionTimeMS,

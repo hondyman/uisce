@@ -40,6 +40,7 @@ export interface AslFieldMeta {
   type: string;
   entity?: string;
   description?: string;
+  cardinality?: string; // e.g. "array" for collection keys like "OrderAllocations"
 }
 
 // setAslFields updates the live field list every registered completion/
@@ -199,7 +200,10 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
       const fieldDetail = isCelContext ? 'record field' : 'semantic term';
       let fieldSuggestions: Monaco.languages.CompletionItem[] = sourceFields
         .filter((f) => (entityScope && !isCelContext ? f.entity === entityScope : !f.entity))
-        .map((f) => toFieldItem(f, fieldDetail));
+        .map((f) => {
+          const detail = f.cardinality === 'array' ? `${fieldDetail}  []` : fieldDetail;
+          return toFieldItem(f, detail);
+        });
 
       // A dot after an identifier this BO's fields don't recognize as an
       // entity (no cross-entity binding tagged that name) falls back to
@@ -209,7 +213,10 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
       // typed) surface as the only entry, which reads as a wrong answer
       // rather than an honestly-empty one.
       if (entityScope && !isCelContext && fieldSuggestions.length === 0) {
-        fieldSuggestions = sourceFields.map((f) => toFieldItem(f, fieldDetail));
+        fieldSuggestions = sourceFields.map((f) => {
+          const detail = f.cardinality === 'array' ? `${fieldDetail}  []` : fieldDetail;
+          return toFieldItem(f, detail);
+        });
       }
 
       // Dot-scoped completion only offers fields - a function call
