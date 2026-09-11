@@ -125,7 +125,8 @@ func (h *ValidationRuleHandler) handleListByBO(w http.ResponseWriter, r *http.Re
 		return
 	}
 	boName := r.URL.Query().Get("bo_name")
-	list, err := h.svc.ListByBO(r.Context(), tenantID.String(), boName)
+	domain := r.URL.Query().Get("domain")
+	list, err := h.svc.ListByBO(r.Context(), tenantID.String(), boName, domain)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("validation-rule-nodes: list failed: %v", err)
 		http.Error(w, "failed to list validation rules", http.StatusInternalServerError)

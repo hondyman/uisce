@@ -66,12 +66,17 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 		return nil, fmt.Errorf("BO %q not found: %w", req.BOName, err)
 	}
 
+	domain := req.Domain
+	if domain == "" {
+		domain = models.ValidationRuleDomainDefault
+	}
 	props := models.ValidationRuleProperties{
 		BOName:           req.BOName,
 		TenantID:         req.TenantID,
 		Severity:         req.Severity,
 		Timing:           req.Timing,
 		Category:         req.Category,
+		Domain:           domain,
 		GovernanceStatus: "draft",
 	}
 	propsJSON, err := json.Marshal(props)
@@ -167,8 +172,14 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 	return descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config)
 }
 
-// ListByBO returns all validation rules targeting the given BO.
-func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName string) ([]models.ValidationRuleDescriptor, error) {
+// ListByBO returns all validation rules targeting the given BO. If domain
+// is non-empty, results are further filtered to that domain
+// ("mdm"/"compliance"/models.ValidationRuleDomainDefault) - rows written
+// before the domain field existed are treated as
+// models.ValidationRuleDomainDefault, matching descriptorFromNode's
+// read-side default, so an empty-string domain filter doesn't need a
+// separate "or properties->>'domain' is null" clause.
+func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, domain string) ([]models.ValidationRuleDescriptor, error) {
 	var nodes []struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -184,9 +195,10 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName s
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.tenant_id = $1
 		  AND n.properties->>'bo_name' = $2
+		  AND ($3 = '' OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
 		  AND n.is_active = true
 		ORDER BY n.node_name
-	`, tenantID, boName)
+	`, tenantID, boName, domain, models.ValidationRuleDomainDefault)
 	if err != nil {
 		return nil, err
 	}
@@ -211,6 +223,10 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 	if err != nil {
 		return nil, err
 	}
+	domain := props.Domain
+	if domain == "" {
+		domain = models.ValidationRuleDomainDefault
+	}
 	return &models.ValidationRuleDescriptor{
 		ID:               id,
 		TenantID:         props.TenantID,
@@ -220,6 +236,7 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 		Severity:         props.Severity,
 		Timing:           props.Timing,
 		Category:         props.Category,
+		Domain:           domain,
 		RuleAST:          cfg.RuleAST,
 		GovernanceStatus: props.GovernanceStatus,
 	}, nil

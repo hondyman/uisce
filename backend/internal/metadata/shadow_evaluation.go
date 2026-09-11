@@ -186,7 +186,14 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	}()
 
 	svc := analytics.NewValidationRuleService(s.db)
-	rules, err := svc.ListByBO(ctx, tenantID, boKey)
+	// domain="" - all domains enforce on the write path (validation,
+	// plus mdm/compliance rules that are per-record write-time
+	// constraints, per the rulefabric consolidation: those become
+	// domain values on this same rule set rather than a second write
+	// hook). Batch-shaped mdm/compliance rules (wash-trade over
+	// history, concentration over positions) are not BO-scoped the same
+	// way and are evaluated by the sweep harness, not here.
+	rules, err := svc.ListByBO(ctx, tenantID, boKey, "")
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("rule evaluation: failed to list rules for BO %s: %v", boKey, err)
 		return nil, false
