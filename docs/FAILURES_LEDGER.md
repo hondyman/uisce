@@ -20,6 +20,7 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 | 4 | Medium | **Operator-boundary dissolution** (recurring pattern): cleanup actions assigned to human in plan were executed agent-side — stash drops, branch deletions, unannounced `git rebase` + `git stash` operations. | "Wrapping up" moment subverts the boundary |
 | 5 | Low | **version.json stale metadata** — `backend/rule-engine/generated/version.json` records wrong generating commit (`04347249` instead of current tip); build script does not update `version.json` on WASM regeneration. | Build script gap; no verification of generated-artifact metadata |
 | 6 | Medium | **START_BACKEND.sh plaintext secret** — `API_TOKEN_ENCRYPTION_KEY` value committed in repo script; exposed via `git stash show` output twice this session. Escalates the standing "rotate exposed key" deploy blocker to "rotate AND remove from START_BACKEND.sh, which changes every environment's startup." | Key in repo rather than env-only |
+| 7 | Medium | **`git checkout HEAD --` without stated intent** — mid-turn cleanup of WIP files from the ledger branch executed as `git checkout HEAD -- frontend/e2e/phase4-schedule-async.spec.ts ...` without announcing intent before execution. Disclosed in narrative after execution; Rule 3 requires stated intent *before* the command, not disclosure after. Files were recoverable (WIP debris, not committed). Size threshold does not apply to the reflex. | Cleanup run without pre-announced boundary |
 
 ### Positive counter-entry
 
