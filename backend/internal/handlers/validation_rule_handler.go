@@ -39,8 +39,6 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{id}/evaluate", h.handleEvaluate)
 		r.Get("/violations", h.handleListViolations)
 		r.Get("/bo-fields", h.handleListSemanticFields)
-		r.Get("/health", h.handleRuleHealth)
-		r.Patch("/{id}/active", h.handleSetActive)
 	})
 }
 
@@ -120,13 +118,6 @@ func (h *ValidationRuleHandler) handleUpsert(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(desc)
 }
 
-// handleListByBO returns validation rules. With ?bo_name= set, it's
-// scoped to that one BO (only active rules); with it omitted, it returns
-// every rule tenant-wide - the system validations page's data source
-// (the spec's "unfiltered tenant-wide variant"). ?include_inactive=true
-// on the tenant-wide path also returns retired rules, so the page can
-// show history/the archived-corpus distinction instead of only ever
-// showing the live set.
 func (h *ValidationRuleHandler) handleListByBO(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
@@ -134,14 +125,8 @@ func (h *ValidationRuleHandler) handleListByBO(w http.ResponseWriter, r *http.Re
 		return
 	}
 	boName := r.URL.Query().Get("bo_name")
-	var list []models.ValidationRuleDescriptor
-	var err error
-	if boName != "" {
-		list, err = h.svc.ListByBO(r.Context(), tenantID.String(), boName)
-	} else {
-		includeInactive := r.URL.Query().Get("include_inactive") == "true"
-		list, err = h.svc.ListAll(r.Context(), tenantID.String(), includeInactive)
-	}
+	domain := r.URL.Query().Get("domain")
+	list, err := h.svc.ListByBO(r.Context(), tenantID.String(), boName, domain)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("validation-rule-nodes: list failed: %v", err)
 		http.Error(w, "failed to list validation rules", http.StatusInternalServerError)
@@ -149,54 +134,6 @@ func (h *ValidationRuleHandler) handleListByBO(w http.ResponseWriter, r *http.Re
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"validationRules": list})
-}
-
-// handleRuleHealth returns the per-rule violation/health aggregate (see
-// analytics.GetRuleHealthSummary) - the "is this rule possibly broken"
-// signal the system validations page and the BO tab both read.
-func (h *ValidationRuleHandler) handleRuleHealth(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := mustTenantID(r)
-	if !ok {
-		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
-		return
-	}
-	summary, err := analytics.GetRuleHealthSummary(r.Context(), h.db, tenantID.String())
-	if err != nil {
-		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/health: aggregate failed: %v", err)
-		http.Error(w, "failed to compute rule health", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"health": summary})
-}
-
-// handleSetActive flips a rule's is_active flag - the BO Validations
-// tab's active toggle. Body: {"active": true|false}.
-func (h *ValidationRuleHandler) handleSetActive(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := mustTenantID(r)
-	if !ok {
-		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
-		return
-	}
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
-	}
-	var body struct {
-		Active bool `json:"active"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	if err := h.svc.SetActive(r.Context(), tenantID.String(), id, body.Active); err != nil {
-		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/%s/active: set failed: %v", id, err)
-		http.Error(w, "failed to update rule active state: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{"id": id, "active": body.Active})
 }
 
 func (h *ValidationRuleHandler) handleGetByID(w http.ResponseWriter, r *http.Request) {
