@@ -65,6 +65,79 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 
 ---
 
+## Entry 2026-09-11 — Arc 6 (Phase 1 close: monitoring — report_execution_events, 5 writers)
+
+**Arc context**: Monitoring feature Phase 1 closed — `report_execution_events` instrumentation, 5 writers, born-complete audit trail. PR #59.
+
+### Incidents
+
+| # | Severity | Description | Root cause |
+|---|---|---|---|
+| 1 | Medium | **Writer 1 placeholder-count class** — Writers 1–4 all used `len(events)` as assertion count; 5 events but placeholder count was 1. | Copy-paste placeholder; not run against live DB |
+| 2 | High | **Writer 2 error swallow** — returned `nil` after `log.Error` instead of returning the error; Writer 2 hard-failed on every invocation. | Error not propagated |
+| 3 | Medium | **Writer 3 fire-and-forget** — `TriggerReportRun` spawned goroutine and returned immediately; `report_schedules.last_run_at` never updated; no cleanup mechanism. | Async assumption without lifecycle management |
+| 4 | Medium | **Writer 5 SWEEP_RECONCILED missing from IN-list** — `Writer5SweepReconciledEvents` hardcoded `IN ('run_completed','run_failed')`; `run_reconciled` events not captured. | Wrong event type in IN-list |
+| 5 | Low | **Live integration test transient** — temporal worker startup in `TestTemporalExecutor_runsAsTemplateOwner` may time out under heavy load; test includes 15s polling with `Eventually`. | Temporal worker startup is non-deterministic |
+
+### Positive counter-entry
+
+| # | What the countermeasures caught |
+|---|---|
+| A | **Design review caught 4 bugs before code existed**: nonexistent `schedule_id` column, RLS-invisible cross-tenant events read, inverted gold-copy schedule visibility, `<` vs `>` pagination direction |
+| B | **Phase 1 gate evidence paste confirmed 14 unit + 3 live integration tests**: all passing, including `TestTemporalExecutor_runsAsTemplateOwner` (identity invariant: `requested_by = ownerID`, `triggered_by = callerID`) |
+| C | **`git rev-parse HEAD` institutionalized**: every gate run preceded by tree identity proof; caught stale branch in Arc 5 |
+| D | **Self-identified gap in Phase 2** (see Arc 7): missing same-timestamp tie-break test flagged by agent against its own summary |
+
+### Verification log
+
+| Date | Check | Result | Tree |
+|---|---|---|---|
+| 2026-09-11 | `go test reports -run Writer` | 14 PASS | `feat/monitoring-phase1` @ PR #59 |
+| 2026-09-11 | Live DB: `TestTemporalExecutor_runsAsTemplateOwner` | PASS | `feat/monitoring-phase1` @ PR #59 |
+| 2026-09-11 | Live DB: `TestTemporalExecutor_lifecycleTransitions` | PASS | `feat/monitoring-phase1` @ PR #59 |
+| 2026-09-11 | Live DB: `TestTemporalExecutor_rlsEnforcement` | PASS | `feat/monitoring-phase1` @ PR #59 |
+
+---
+
+## Entry 2026-09-11 — Arc 7 (Phase 2 close: execution read paths — repository + handlers)
+
+**Arc context**: Monitoring feature Phase 2 closed — `schedule_id` migration, execution repository, 4 admin read handlers. PR #62.
+
+### Incidents
+
+| # | Severity | Description | Root cause |
+|---|---|---|---|
+| 1 | Medium | **Missing same-timestamp tie-break test** — Phase 2 summary omitted the test; self-identified when reviewer asked for pasted evidence. | Test not written before claiming phase complete |
+| 2 | Medium | **Test bug: cursor-persistence loop** — initial tie-break test failed because the pagination loop broke on `len(execs) < 2` without advancing cursor, causing a re-query with the last cursor and an empty result. | Cursor advanced only on full pages; last partial page never re-queried |
+
+### Positive counter-entry
+
+| # | What the countermeasures caught |
+|---|---|
+| A | **Design review caught 4 defects on paper before code existed**: (1) `schedule_id` column doesn't exist on alpha, (2) cross-tenant events read is RLS-invisible without two-step switch, (3) gold-copy scheduled executions are invisible to scheduling tenant due to redundant `e.tenant_id = $2` narrowing, (4) keyset pagination used `<` instead of `>` for forward cursor direction |
+| B | **Lockstep predicate verification**: `GetExecution` WHERE clause confirmed byte-identical to former handler SQL (report_handlers.go:805) — seventh lockstep application, correctly framing `schedule_id` SELECT expansion as schema-driven read-shape growth, not predicate drift |
+| C | **Self-identified gate gap**: agent identified missing tie-break test from its own summary; wrote both executions and events variants against live Postgres — caught and fixed test loop bug in the same pass |
+| D | **Cursor envelope versioning**: `{"v":1,...}` versioned envelope with unknown-version rejection at decode time (handler renders 400) |
+
+### Verification log
+
+| Date | Check | Result | Tree |
+|---|---|---|---|
+| 2026-09-11 | `go test reports -run "TestCursor\|TestExecutionRepository"` | 19 PASS (6 unit + 7 mock + 5 live + 1 skip) | `feat/reports-phase2-readpaths` @ PR #62 |
+| 2026-09-11 | Live DB: `TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Executions` | PASS (5 rows, LIMIT 2, each exactly once) | `feat/reports-phase2-readpaths` @ PR #62 |
+| 2026-09-11 | Live DB: `TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Events` | PASS (5 events, LIMIT 2, each exactly once) | `feat/reports-phase2-readpaths` @ PR #62 |
+| 2026-09-11 | Live DB: `TestListScheduleExecutions_GoldCopyScheduledExecution_VisibleToSchedulingTenant` | PASS | `feat/reports-phase2-readpaths` @ PR #62 |
+| 2026-09-11 | Live DB: `TestListExecutionEvents_TwoStep_TenantSwitch` | PASS | `feat/reports-phase2-readpaths` @ PR #62 |
+
+### Structural notes
+
+| Note | File | Status |
+|---|---|---|
+| **Schedule-first route doc correction** | design doc | Pending — shipped route is `/{templateId}/schedules/{sid}/executions`; doc should be updated to match |
+| **Concurrent-session working-tree debris** | CEL retirement session | Session must land its own work; not this phase's problem |
+
+---
+
 ## Entry 2026-09-10 — Arc 4 (collection aggregation, Phase 3 close)
 
 *[To be populated by the next session that produces a failure or verification worth recording.]*
