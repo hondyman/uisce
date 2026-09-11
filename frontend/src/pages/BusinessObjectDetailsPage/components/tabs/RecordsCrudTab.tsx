@@ -25,6 +25,8 @@ import {
   Chip,
   FormControlLabel,
   Switch,
+  Collapse,
+  Divider,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -39,6 +41,9 @@ import {
 import { useNotification } from '../../../../hooks/useNotification';
 import { useTenant } from '../../../../contexts/TenantContext';
 import apiClient from '../../../../utils/apiClient';
+import { RuleGridValidator } from '../../../../rules/RuleGridValidator';
+import { boHasCollectionKeys } from '../../../../rules/ruleGridValidatorService';
+import resolveApiUrl from '../../../../utils/resolveApiUrl';
 
 interface RecordsCrudTabProps {
   businessObject: any;
@@ -71,6 +76,12 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
   const [selectedRecord, setSelectedRecord] = useState<any>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  // Allocation grid state (for Order BO)
+  const [selectedOrderRecord, setSelectedOrderRecord] = useState<any>(null);
+  const [allocationRows, setAllocationRows] = useState<Record<string, unknown>[]>([]);
+  const [allocationLoading, setAllocationLoading] = useState(false);
+  const [allocationError, setAllocationError] = useState<string | null>(null);
 
   // Available Fields
   const fields = [
@@ -114,9 +125,38 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
     }
   }, [businessObject?.id, tenantId, page, rowsPerPage, search, isTimeTravelEnabled, asOfDate]);
 
+  const fetchAllocations = useCallback(async (orderRecord: any) => {
+    if (!orderRecord?.id || businessObject?.key !== 'order') return;
+    setAllocationLoading(true);
+    setAllocationError(null);
+    try {
+      const orderId = orderRecord.id || orderRecord[columns[0]];
+      const url = resolveApiUrl(
+        `/api/v1/bo/order/records/${encodeURIComponent(orderId)}/relationships/OrderAllocations`
+      );
+      const res = await fetch(url, {
+        headers: { 'X-Tenant-ID': tenantId },
+      });
+      if (!res.ok) throw new Error(`Failed to fetch allocations: ${res.statusText}`);
+      const data = await res.json();
+      setAllocationRows(data.rows ?? data.records ?? []);
+    } catch (err: any) {
+      setAllocationError(err?.message || 'Failed to load allocations');
+      setAllocationRows([]);
+    } finally {
+      setAllocationLoading(false);
+    }
+  }, [businessObject?.key, tenantId, columns]);
+
   useEffect(() => {
     fetchRecords();
   }, [fetchRecords]);
+
+  const handleRowClick = (record: any) => {
+    if (businessObject?.key !== 'order') return;
+    setSelectedOrderRecord(record);
+    fetchAllocations(record);
+  };
 
   const handleOpenCreate = () => {
     const initial: Record<string, any> = {};
@@ -366,7 +406,16 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
                 </TableHead>
                 <TableBody>
                   {rows.map((row, rIdx) => (
-                    <TableRow key={row.id || rIdx} hover>
+                    <TableRow
+                      key={row.id || rIdx}
+                      hover
+                      onClick={() => handleRowClick(row)}
+                      sx={{
+                        cursor: businessObject?.key === 'order' ? 'pointer' : 'default',
+                        bgcolor: selectedOrderRecord?.id === row.id ? 'action.selected' : 'inherit',
+                        '&:hover': { bgcolor: selectedOrderRecord?.id === row.id ? 'action.selected' : undefined },
+                      }}
+                    >
                       {columns.map((col) => (
                         <TableCell key={col} sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row[col] === null || row[col] === undefined ? (
@@ -378,7 +427,7 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
                           )}
                         </TableCell>
                       ))}
-                      <TableCell align="right">
+                      <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                         <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                           <Tooltip title="Edit Record">
                             <IconButton size="small" onClick={() => handleOpenEdit(row)}>
@@ -412,6 +461,98 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
           </>
         )}
       </Paper>
+
+      {/* Allocation Grid & Rule Validation — mounts data-driven when BO has a declared collection */}
+      {businessObject?.key === 'order' && selectedOrderRecord && (
+        <Box sx={{ mt: 3 }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              Order Allocations
+            </Typography>
+            {selectedOrderRecord?.id && (
+              <Chip
+                label={`Order: ${selectedOrderRecord.id || selectedOrderRecord[columns[0]]}`}
+                size="small"
+                variant="outlined"
+              />
+            )}
+          </Stack>
+
+          {/* Rule Grid Validator */}
+          {boHasCollectionKeys('order') && (
+            <Box sx={{ mb: 1.5 }}>
+              <RuleGridValidator
+                boKey="order"
+                parentRecord={selectedOrderRecord}
+                collectionRows={allocationRows}
+                tenantId={tenantId}
+              />
+            </Box>
+          )}
+
+          {/* Allocation Table */}
+          <Paper variant="outlined">
+            {allocationLoading && (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <CircularProgress size={24} />
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  Loading allocations…
+                </Typography>
+              </Box>
+            )}
+
+            {!allocationLoading && allocationError && (
+              <Alert severity="error" sx={{ m: 2 }} onClose={() => setAllocationError(null)}>
+                {allocationError}
+              </Alert>
+            )}
+
+            {!allocationLoading && !allocationError && allocationRows.length === 0 && (
+              <Box sx={{ p: 4, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  No allocation rows for this order yet.
+                </Typography>
+                <Button variant="outlined" size="small" sx={{ mt: 1 }} startIcon={<AddIcon />}>
+                  Add Allocation
+                </Button>
+              </Box>
+            )}
+
+            {!allocationLoading && allocationRows.length > 0 && (
+              <TableContainer sx={{ maxHeight: 320 }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      {Object.keys(allocationRows[0] || {}).map((col) => (
+                        <TableCell key={col} sx={{ fontWeight: 700, bgcolor: 'background.paper' }}>
+                          {col}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {allocationRows.map((row, rIdx) => (
+                      <TableRow key={rIdx} hover>
+                        {Object.entries(row).map(([col, val]) => (
+                          <TableCell key={col} sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {val === null || val === undefined ? (
+                              <Typography variant="caption" color="text.disabled">null</Typography>
+                            ) : typeof val === 'boolean' ? (
+                              <Chip label={val ? 'true' : 'false'} size="small" variant="outlined" color={val ? 'success' : 'default'} />
+                            ) : (
+                              String(val)
+                            )}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Paper>
+        </Box>
+      )}
 
       {/* Create Modal */}
       <Dialog open={createModalOpen} onClose={() => setCreateModalOpen(false)} maxWidth="sm" fullWidth>
