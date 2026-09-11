@@ -27,7 +27,8 @@ func setupScheduleTestRouter(t *testing.T) (*sql.DB, sqlmock.Sqlmock, *chi.Mux) 
 	t.Cleanup(func() { db.Close() })
 
 	service := reports.NewReportService(db)
-	handler := httpapi.NewReportHandler(service)
+	executor := reports.NewDefaultReportExecutor(db)
+	handler := httpapi.NewReportHandler(service, executor, db)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
 
@@ -342,10 +343,12 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, http.StatusAccepted, w.Code)
 		var res map[string]interface{}
 		_ = json.Unmarshal(w.Body.Bytes(), &res)
-		assert.Equal(t, templateOwner, res["requested_by"])
+		assert.Equal(t, "pending", res["status"])
+		assert.NotEmpty(t, res["execution_id"])
+		assert.NotEmpty(t, res["workflow_id"])
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }

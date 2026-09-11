@@ -371,9 +371,9 @@ func (r *Repository) TriggerScheduleRun(
 		tmpl.CreatedBy = createdBy.String
 	}
 
-	// 3. Delegate to executor (DefaultReportExecutor or mock passed from test)
+	// 3. Delegate to executor (TemporalReportExecutor or mock passed from test)
 	if executor == nil {
-		executor = NewDefaultReportExecutor(r.db)
+		return nil, errors.New("report executor is required: no executor provided to TriggerScheduleRun")
 	}
 	res, err := executor.ExecuteReport(ctx, &tmpl, map[string]interface{}{
 		"triggered_at": time.Now().Format(time.RFC3339),

@@ -25,7 +25,7 @@ func setupFolderTestRouter(t *testing.T) (*sql.DB, sqlmock.Sqlmock, *chi.Mux) {
 	t.Cleanup(func() { db.Close() })
 
 	service := reports.NewReportService(db)
-	handler := httpapi.NewReportHandler(service)
+	handler := httpapi.NewReportHandler(service, nil, db)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
 

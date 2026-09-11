@@ -2,7 +2,10 @@ package api_test
 
 import (
 	"bytes"
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,7 +29,7 @@ func TestReportAPI(t *testing.T) {
 	defer db.Close()
 
 	service := reports.NewReportService(db)
-	handler := httpapi.NewReportHandler(service)
+	handler := httpapi.NewReportHandler(service, nil, db)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
 
@@ -640,5 +643,331 @@ func TestReportAPI(t *testing.T) {
 		assert.Equal(t, "Standard Listing Report", templates[0]["template_name"])
 	})
 }
+
+// MockReportExecutor provides configurable responses for TriggerScheduleRun endpoint testing.
+type mockPhase3Executor struct {
+	execFunc func(ctx context.Context, template *reports.ReportTemplate, params map[string]interface{}) (*reports.ScheduleExecutionResult, error)
+}
+
+func (m *mockPhase3Executor) ExecuteReport(ctx context.Context, template *reports.ReportTemplate, params map[string]interface{}) (*reports.ScheduleExecutionResult, error) {
+	if m.execFunc != nil {
+		return m.execFunc(ctx, template, params)
+	}
+	return &reports.ScheduleExecutionResult{
+		ExecutionID: uuid.New(),
+		Status:      "pending",
+		OutputURL:   "s3://reports/async-test.pdf",
+		RequestedBy: template.CreatedBy,
+	}, nil
+}
+
+func TestReportAPI_Phase3Executions(t *testing.T) {
+	tenantID := uuid.New()
+	tmplID := uuid.New()
+	schedID := uuid.New()
+	execID := uuid.New()
+	goldCopyID := uuid.New()
+	ownerID := "template-owner"
+
+	t.Run("TriggerScheduleRun - Returns 202 Accepted with truthful pending status and workflow_id", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockExec := &mockPhase3Executor{
+			execFunc: func(ctx context.Context, template *reports.ReportTemplate, params map[string]interface{}) (*reports.ScheduleExecutionResult, error) {
+				return &reports.ScheduleExecutionResult{
+					ExecutionID: execID,
+					Status:      "pending",
+					OutputURL:   "s3://reports/async-test.pdf",
+					RequestedBy: ownerID,
+				}, nil
+			},
+		}
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, mockExec, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		// 1. Fetch schedule
+		mock.ExpectQuery(`SELECT id, tenant_id, report_definition_id, owner_id FROM public\.report_schedules WHERE id = \$1 AND tenant_id = \$2 AND is_active = true AND deleted_at IS NULL`).
+			WithArgs(schedID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "report_definition_id", "owner_id"}).
+				AddRow(schedID, tenantID, tmplID, ownerID))
+
+		// 2. Gold copy resolution
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
+
+		// 3. Fetch linked template
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name, description, category, semantic_view_ids, layout_config, parameter_schema, is_active, is_public, is_personal, created_by_id, created_by, created_at, updated_at, version FROM public\.report_templates WHERE id = \$1 AND is_active = true AND tenant_id IN \(\$2, \$3\)`).
+			WithArgs(tmplID, tenantID, goldCopyID).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				tmplID, tenantID, "Monthly PnL", "desc", "cat",
+				[]byte(`[]`), []byte(`{}`), []byte(`{}`),
+				true, false, false, ownerID, ownerID,
+				time.Now(), time.Now(), 1,
+			))
+
+		// 4. Update last_run_at
+		mock.ExpectExec(`UPDATE public\.report_schedules SET last_run_at = NOW\(\) WHERE id = \$1`).
+			WithArgs(schedID).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		// 5. Update cache metadata
+		mock.ExpectExec(`INSERT INTO public\.report_cache_metadata`).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		req := httptest.NewRequest("POST", "/api/v1/reports/"+tmplID.String()+"/schedules/"+schedID.String()+"/run", nil)
+		auth := security.AuthInfo{
+			UserID:    ownerID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusAccepted, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, "pending", res["status"])
+		assert.Equal(t, execID.String(), res["execution_id"])
+		assert.Equal(t, "report-exec-"+execID.String(), res["workflow_id"])
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("TriggerScheduleRun - Returns 503 Service Unavailable with DispatchError body", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		mockExec := &mockPhase3Executor{
+			execFunc: func(ctx context.Context, template *reports.ReportTemplate, params map[string]interface{}) (*reports.ScheduleExecutionResult, error) {
+				return nil, &reports.DispatchError{
+					ExecutionID: execID,
+					Err:         errors.New("temporal cluster unreachable"),
+				}
+			},
+		}
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, mockExec, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		mock.ExpectQuery(`SELECT id, tenant_id, report_definition_id, owner_id FROM public\.report_schedules WHERE id = \$1 AND tenant_id = \$2 AND is_active = true AND deleted_at IS NULL`).
+			WithArgs(schedID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "report_definition_id", "owner_id"}).
+				AddRow(schedID, tenantID, tmplID, ownerID))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name, description, category, semantic_view_ids, layout_config, parameter_schema, is_active, is_public, is_personal, created_by_id, created_by, created_at, updated_at, version FROM public\.report_templates WHERE id = \$1 AND is_active = true AND tenant_id IN \(\$2, \$3\)`).
+			WithArgs(tmplID, tenantID, goldCopyID).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				tmplID, tenantID, "Monthly PnL", "desc", "cat",
+				[]byte(`[]`), []byte(`{}`), []byte(`{}`),
+				true, false, false, ownerID, ownerID,
+				time.Now(), time.Now(), 1,
+			))
+
+		req := httptest.NewRequest("POST", "/api/v1/reports/"+tmplID.String()+"/schedules/"+schedID.String()+"/run", nil)
+		auth := security.AuthInfo{
+			UserID:    ownerID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, execID.String(), res["execution_id"])
+		assert.Contains(t, res["error"], "temporal cluster unreachable")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Caller is template owner (200 OK)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		execRows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+			"metadata", "created_at", "completed_at",
+			"is_personal", "created_by_id",
+		}).AddRow(
+			execID, tenantID, tmplID, "Monthly PnL", "completed", []byte(`{}`),
+			"s3://reports/out.pdf", int64(1024), int64(50), int64(300),
+			nil, "wf-1", "run-1", ownerID, "admin-trigger",
+			[]byte(`{}`), time.Now(), time.Now(),
+			false, ownerID,
+		)
+
+		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
+			WithArgs(execID, tenantID, ownerID).
+			WillReturnRows(execRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    ownerID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, execID.String(), res["id"])
+		assert.Equal(t, "completed", res["status"])
+		assert.Equal(t, "s3://reports/out.pdf", res["output_url"])
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Caller is cross-tenant trigger user (200 OK)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		callerTenant := uuid.New() // foreign tenant
+		triggerUser := "cross-tenant-caller"
+
+		execRows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+			"metadata", "created_at", "completed_at",
+			"is_personal", "created_by_id",
+		}).AddRow(
+			execID, tenantID, tmplID, "Core Valuation", "pending", []byte(`{}`),
+			nil, nil, nil, nil,
+			nil, "wf-2", "run-2", ownerID, triggerUser,
+			[]byte(`{}`), time.Now(), nil,
+			false, ownerID,
+		)
+
+		// Matched on e.triggered_by = $3
+		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
+			WithArgs(execID, callerTenant, triggerUser).
+			WillReturnRows(execRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    triggerUser,
+			TenantIDs: []string{callerTenant.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, execID.String(), res["id"])
+		assert.Equal(t, "pending", res["status"])
+		assert.Equal(t, triggerUser, res["triggered_by"])
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Unrelated user returns 404 (zero existence leak)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		intruderTenant := uuid.New()
+		intruderUser := "intruder-user"
+
+		// Query returns sql.ErrNoRows due to predicate mismatch
+		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
+			WithArgs(execID, intruderTenant, intruderUser).
+			WillReturnError(sql.ErrNoRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    intruderUser,
+			TenantIDs: []string{intruderTenant.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Contains(t, w.Body.String(), "Execution not found")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Route Specificity - GET /api/v1/reports/executions does not 400 Invalid UUID", func(t *testing.T) {
+		db, _, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions", nil)
+		auth := security.AuthInfo{
+			UserID:    ownerID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		// Assert route is not shadowed by /{id} which returns 400 "Invalid template ID"
+		assert.NotEqual(t, http.StatusBadRequest, w.Code, "GET /executions was routed to /{id} and returned 400!")
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
 
 

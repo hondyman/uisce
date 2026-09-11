@@ -1,11 +1,14 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -16,11 +19,17 @@ import (
 )
 
 type ReportHandler struct {
-	service *reports.ReportService
+	service  *reports.ReportService
+	executor reports.ReportExecutor
+	db       *sql.DB
 }
 
-func NewReportHandler(service *reports.ReportService) *ReportHandler {
-	return &ReportHandler{service: service}
+func NewReportHandler(service *reports.ReportService, executor reports.ReportExecutor, dbConn *sql.DB) *ReportHandler {
+	return &ReportHandler{
+		service:  service,
+		executor: executor,
+		db:       dbConn,
+	}
 }
 
 func (h *ReportHandler) RegisterRoutes(r chi.Router) {
@@ -38,6 +47,11 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 			fr.Get("/{id}/items", h.ListFolderItems)
 			fr.Post("/{id}/items", h.AddFolderItem)
 			fr.Delete("/{id}/items/{templateId}", h.RemoveFolderItem)
+		})
+
+		// Executions subroute registered in a separate Route block BEFORE /{id} to prevent Chi matching "executions" as {id}
+		r.Route("/executions", func(er chi.Router) {
+			er.Get("/{id}", h.GetExecution)
 		})
 
 		r.Get("/{id}", h.GetTemplate)
@@ -712,6 +726,7 @@ func (h *ReportHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
 }
 
 // TriggerScheduleRun handles POST /api/v1/reports/{id}/schedules/{sid}/run.
+// Dispatches report execution asynchronously via the injected executor and returns HTTP 202 Accepted.
 func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Request) {
 	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
 	if err != nil {
@@ -726,8 +741,18 @@ func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	res, err := h.service.TriggerScheduleRun(r.Context(), tenantID, userID, isAdmin, sid, nil)
+	res, err := h.service.TriggerScheduleRun(r.Context(), tenantID, userID, isAdmin, sid, h.executor)
 	if err != nil {
+		var dispatchErr *reports.DispatchError
+		if errors.As(err, &dispatchErr) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"execution_id": dispatchErr.ExecutionID,
+				"error":        dispatchErr.Err.Error(),
+			})
+			return
+		}
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, "Schedule not found", http.StatusNotFound)
 			return
@@ -740,8 +765,154 @@ func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	// 202 Accepted payload: truthful async execution status
+	responseBody := map[string]interface{}{
+		"status":       "pending",
+		"execution_id": res.ExecutionID,
+	}
+	// workflow_id is only populated if non-empty; never an empty string
+	workflowID := fmt.Sprintf("report-exec-%s", res.ExecutionID)
+	responseBody["workflow_id"] = workflowID
+
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(res)
+	w.WriteHeader(http.StatusAccepted)
+	_ = json.NewEncoder(w).Encode(responseBody)
+}
+
+// GetExecution handles GET /api/v1/reports/executions/{id}.
+// Enforces the pinned two-clause visibility predicate:
+//   (e.tenant_id = $2 OR e.triggered_by = $3)
+// Returns 404 if execution is not found or inaccessible (zero existence leak).
+func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, _, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	execIDStr := chi.URLParam(r, "id")
+	execID, err := uuid.Parse(execIDStr)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+
+	if h.db == nil {
+		http.Error(w, "Database unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	query := `
+		SELECT e.id, e.tenant_id, e.template_id, e.report_key, e.status, e.parameters,
+		       e.output_url, e.output_size_bytes, e.rows_processed, e.execution_time_ms,
+		       e.error_message, e.workflow_id, e.run_id, e.requested_by, e.triggered_by,
+		       e.metadata, e.created_at, e.completed_at,
+		       t.is_personal, t.created_by_id
+		FROM public.report_executions e
+		JOIN public.report_templates t ON t.id = e.template_id
+		WHERE e.id = $1
+		  AND (e.tenant_id = $2 OR e.triggered_by = $3)
+	`
+
+	var (
+		id              uuid.UUID
+		rowTenantID     uuid.UUID
+		templateID      uuid.UUID
+		reportKey       string
+		status          string
+		paramsBytes     []byte
+		outputURL       sql.NullString
+		outputSizeBytes sql.NullInt64
+		rowsProcessed   sql.NullInt64
+		executionTimeMS sql.NullInt64
+		errorMessage    sql.NullString
+		workflowID      sql.NullString
+		runID           sql.NullString
+		requestedBy     sql.NullString
+		triggeredBy     sql.NullString
+		metadataBytes   []byte
+		createdAt       time.Time
+		completedAt     *time.Time
+		isPersonal      bool
+		createdByID     sql.NullString
+	)
+
+	row := h.db.QueryRowContext(r.Context(), query, execID, tenantID, userID)
+	if err := row.Scan(
+		&id, &rowTenantID, &templateID, &reportKey, &status, &paramsBytes,
+		&outputURL, &outputSizeBytes, &rowsProcessed, &executionTimeMS,
+		&errorMessage, &workflowID, &runID, &requestedBy, &triggeredBy,
+		&metadataBytes, &createdAt, &completedAt,
+		&isPersonal, &createdByID,
+	); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			http.Error(w, "Execution not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var params map[string]interface{}
+	if len(paramsBytes) > 0 {
+		_ = json.Unmarshal(paramsBytes, &params)
+	}
+	var meta map[string]interface{}
+	if len(metadataBytes) > 0 {
+		_ = json.Unmarshal(metadataBytes, &meta)
+	}
+
+	resp := map[string]interface{}{
+		"id":          id,
+		"tenant_id":   rowTenantID,
+		"template_id": templateID,
+		"report_key":  reportKey,
+		"status":      status,
+		"created_at":  createdAt,
+		"is_personal": isPersonal,
+	}
+	if params != nil {
+		resp["parameters"] = params
+	}
+	if meta != nil {
+		resp["metadata"] = meta
+	}
+	if outputURL.Valid && outputURL.String != "" {
+		resp["output_url"] = outputURL.String
+	}
+	if outputSizeBytes.Valid {
+		resp["output_size_bytes"] = outputSizeBytes.Int64
+	}
+	if rowsProcessed.Valid {
+		resp["rows_processed"] = rowsProcessed.Int64
+	}
+	if executionTimeMS.Valid {
+		resp["execution_time_ms"] = executionTimeMS.Int64
+	}
+	if errorMessage.Valid && errorMessage.String != "" {
+		resp["error_message"] = errorMessage.String
+	}
+	if workflowID.Valid && workflowID.String != "" {
+		resp["workflow_id"] = workflowID.String
+	}
+	if runID.Valid && runID.String != "" {
+		resp["run_id"] = runID.String
+	}
+	if requestedBy.Valid && requestedBy.String != "" {
+		resp["requested_by"] = requestedBy.String
+	}
+	if triggeredBy.Valid && triggeredBy.String != "" {
+		resp["triggered_by"] = triggeredBy.String
+	}
+	if completedAt != nil {
+		resp["completed_at"] = completedAt
+	}
+	if createdByID.Valid && createdByID.String != "" {
+		resp["created_by_id"] = createdByID.String
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 

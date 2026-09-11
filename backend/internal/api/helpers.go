@@ -155,6 +155,13 @@ func AssertProductionConfig() error {
 			env,
 		)
 	}
+	if getEnv("TEMPORAL_DISABLED", "false") == "true" {
+		return fmt.Errorf(
+			"TEMPORAL_DISABLED=true is not permitted in environment %q "+
+				"(only development/local/test); durable workflow orchestration requires Temporal in production",
+			env,
+		)
+	}
 	return nil
 }
 

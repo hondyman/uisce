@@ -1346,9 +1346,20 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	slHandler := handlers.NewSecurityLineageHandler(slSvc)
 	slHandler.RegisterRoutes(r)
 
-	// Initialize report service and handler
+	// Initialize report service, executor, and handler.
+	// Production invariant: in non-dev environments, temporalClient MUST be non-nil.
+	env := strings.ToLower(getEnv("ENVIRONMENT", ""))
+	isDevEnv := env == "development" || env == "local" || env == "test"
+	if !isDevEnv && temporalClient == nil {
+		log.Fatalf("FATAL: TemporalClient is nil in environment %q; report execution requires active Temporal cluster", env)
+	}
+
 	reportService := reports.NewReportService(db)
-	reportHandler := NewReportHandler(reportService)
+	var reportExecutor reports.ReportExecutor
+	if temporalClient != nil {
+		reportExecutor = reports.NewTemporalReportExecutor(db, temporalClient)
+	}
+	reportHandler := NewReportHandler(reportService, reportExecutor, db)
 	reportHandler.RegisterRoutes(r)
 
 	// Initialize report schedule & bursting handler
