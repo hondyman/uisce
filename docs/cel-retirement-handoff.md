@@ -243,4 +243,4 @@ Option 2: umbrella project with RDL spun out as a separate project.
 >
 > **Gating the closing claim**: §4 condition 1 (AST equivalence decision — sequenced before Slice 4 text is finalized), shared time-function registry ownership (RDL spin-out handoff), duration capability check (lands before Slice 3 commit), RDL project completion (dependency removal).
 >
-> **Signed**: \_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_\_  **Date**: \_\_\_\_\_\_\_\_\_\_\_\_
+> **Signed**: Egan PJ  **Date**: 2026-09-11
