@@ -6,8 +6,9 @@ import (
 
 // CardRule defines a rule for showing a feed card
 type CardRule struct {
-	CardID     string
-	Conditions []RuleCondition
+	CardID        string
+	Conditions    []RuleCondition
+	RankScoreExpr string // vm arithmetic expression evaluated for rank ordering, e.g. "(-client.Portfolio.UnrealizedLossPct) * 100.0"
 }
 
 // RuleCondition defines a single condition within a rule
