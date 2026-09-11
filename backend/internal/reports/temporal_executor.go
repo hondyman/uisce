@@ -111,9 +111,9 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		actorID = *triggeredBy
 	}
 	// Extract schedule_id before the closure so the closure can capture it
-	scheduleIDStr := ""
+	scheduleID := ""
 	if sidVal, ok := params["schedule_id"].(string); ok && sidVal != "" {
-		scheduleIDStr = sidVal
+		scheduleID = sidVal
 	}
 	err = db.WithTenantTransaction(ctx, e.db, tmpl.TenantID.String(), func(tx *sql.Tx) error {
 		insertQuery := `
@@ -134,8 +134,8 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		}
 		// detail: include schedule_id when present (self-contained audit record)
 		var detailJSON []byte
-		if scheduleIDStr != "" {
-			detailJSON, _ = json.Marshal(map[string]interface{}{"schedule_id": scheduleIDStr})
+		if scheduleID != "" {
+			detailJSON, _ = json.Marshal(map[string]interface{}{"schedule_id": scheduleID})
 		} else {
 			detailJSON = []byte(`{}`)
 		}
@@ -176,11 +176,6 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 	}
 	if tmpl.CreatedBy != "" {
 		hydratedTmpl.CreatedBy = tmpl.CreatedBy
-	}
-
-	scheduleID := ""
-	if sidVal, ok := params["schedule_id"].(string); ok {
-		scheduleID = sidVal
 	}
 
 	workflowParams := workflows.ReportGenerationWorkflowParams{
