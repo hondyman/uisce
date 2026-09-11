@@ -220,3 +220,16 @@ Every turn and checkpoint summary MUST contain a dedicated section:
 ### 4. Test Attribution & Accuracy
 - Mocked UI-contract tests must NEVER be labeled or summarized as verifying backend security invariants (e.g., identity resolution or isolation). State clearly what is mocked and where real security coverage lives (e.g., in the live-DB Go integration suite).
 
+### 5. Test Skip Discipline
+When adding, removing, or changing the semantics of a test (including subtests), the following applies:
+
+**Gate-scoped commits require review-before-push.** A commit is gate-scoped if it:
+- Resolves a long-running test gate (removes `t.Skip`, re-enables previously skipped tests, or adds skips to silence failures)
+- Adds new skips (`t.Skip`, `t.Skipf`, `testing.Short`, `BUILD_TAG` guards)
+- Deletes tests or test cases
+- Changes test semantics (assertion type, expected status code, fixture setup that alters the code path being tested)
+
+**Both directions of `-run` / full-suite asymmetry must be stated.** A test that passes under `-run Foo` may fail under the full suite due to shared global state (package-level `init`, module-level mocks, environment variables, goroutine leaks from prior tests). A test that passes in the full suite may fail under `-run Foo` because it depends on state left behind by a prior test in the same package. When a `-run` targeted run is used to "confirm" passing tests, the full suite must also be run afterward to rule out ordering dependencies.
+
+**Shared test fixtures must not silently default inputs.** A helper that fills in `"test-tenant"` (or any sentinel value) for an empty input converts an "absence-of-tenant" test into an "presence-of-tenant" test without the test author noticing. When a test is described as testing missing/empty/malformed input, the fixture must not provide a valid fallback — the handler's empty-input path must be exercised, not circumvented by the test infrastructure. If a shared helper cannot avoid this for structural reasons, the test case must be written as a standalone test with explicit setup rather than using the helper.
+
