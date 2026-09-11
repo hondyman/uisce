@@ -27,6 +27,35 @@ import { test, expect, Page } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 
+const FALLBACK_JWT = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ0ZXN0LXVzZXIiLCJpYXQiOjE3MDAwMDAwMDAsImV4cCI6OTk5OTk5OTk5OX0.fake';
+
+const E2E_USER = {
+  id: '00000000-0000-0000-0000-000000000001',
+  email: 'e2e@uisce.test',
+  name: 'Phase 4 Fixture',
+  role: 'admin',
+  organization: 'UISCE E2E',
+  permissions: [],
+  is_active: true,
+  roles: ['admin', 'user'],
+  is_core_admin: true,
+  isCoreAdmin: true,
+  is_admin: true,
+  is_global_admin: true,
+};
+
+const EXPIRES_AT = Date.now() + 86400 * 1000;
+
+function authStorage(jwt: string) {
+  return {
+    auth_token: jwt,
+    auth_user: JSON.stringify(E2E_USER),
+    auth_expires_at: EXPIRES_AT.toString(),
+    selected_tenant: JSON.stringify({ id: '99e99e99-99e9-49e9-89e9-99e99e99e999', display_name: 'Northwind Traders' }),
+    appLocale: 'en',
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -96,8 +125,22 @@ function mockPollingFailedSequence(page: Page, sequence: Record<string, unknown>
 // ---------------------------------------------------------------------------
 
 test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, context }) => {
+    await context.addInitScript(
+      (auth) => { for (const [k, v] of Object.entries(auth)) localStorage.setItem(k, v as string); },
+      authStorage(FALLBACK_JWT),
+    );
     // Intercept schedule list — needed for the dialog to show the Run Now button
+    // Belt-and-suspenders: mock both the flat route (reportId absent) and the nested
+    // route (reportId present, e.g. 'report-001'). The app calls whichever matches
+    // its current reportId prop.
+    await page.route('/api/reports/schedules', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([{ id: 'sched-001', schedule_name: 'Daily Valuation' }]),
+      });
+    });
     await page.route('/api/v1/reports/report-001/schedules', (route) => {
       route.fulfill({
         status: 200,
@@ -111,7 +154,7 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
     await mockTriggerOk(page);
     await mockPollingSequence(page, EXECUTION_SEQUENCE);
 
-    await page.goto(`${BASE_URL}/reporting`);
+    await page.goto(`${BASE_URL}/reports/library`);
     await page.click('button:has-text("Schedule")');
 
     const runButton = page.getByRole('button', { name: /run now/i });
@@ -137,7 +180,7 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
     await mockTriggerOk(page);
     await mockPollingFailedSequence(page, EXECUTION_FAILED_SEQUENCE);
 
-    await page.goto(`${BASE_URL}/reporting`);
+    await page.goto(`${BASE_URL}/reports/library`);
     await page.click('button:has-text("Schedule")');
 
     const runButton = page.getByRole('button', { name: /run now/i });
@@ -151,7 +194,7 @@ test.describe('Phase 4: Report Schedule — Async 202 Contract', () => {
   test('503 dispatch_failed renders alert with execution_id', async ({ page }) => {
     await mockTrigger503(page);
 
-    await page.goto(`${BASE_URL}/reporting`);
+    await page.goto(`${BASE_URL}/reports/library`);
     await page.click('button:has-text("Schedule")');
 
     const runButton = page.getByRole('button', { name: /run now/i });
