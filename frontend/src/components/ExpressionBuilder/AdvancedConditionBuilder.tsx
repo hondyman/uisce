@@ -504,22 +504,40 @@ const ValueInput: React.FC<ValueInputProps> = ({
       <div className="flex items-center gap-2 flex-1">
         <input
           type={fieldType === 'number' ? 'number' : fieldType === 'date' ? 'date' : 'text'}
-          value={String(value || '')}
-          onChange={(e) => onChange(fieldType === 'number' ? Number(e.target.value) : e.target.value, secondValue)}
+          value={String(value ?? '')}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (fieldType === 'number' && raw !== '' && Number(raw) < 0) {
+              onChange(0, secondValue);
+              return;
+            }
+            onChange(fieldType === 'number' ? Number(raw) : raw, secondValue);
+          }}
           disabled={disabled}
           className="flex-1 px-3 py-2 border rounded-lg text-sm"
           placeholder="From"
           aria-label="Range start value"
+          min={fieldType === 'number' ? 0 : undefined}
+          step={fieldType === 'number' ? 1 : undefined}
         />
         <span className="text-gray-500 text-sm">to</span>
         <input
           type={fieldType === 'number' ? 'number' : fieldType === 'date' ? 'date' : 'text'}
-          value={String(secondValue || '')}
-          onChange={(e) => onChange(value, fieldType === 'number' ? Number(e.target.value) : e.target.value)}
+          value={String(secondValue ?? '')}
+          onChange={(e) => {
+            const raw = e.target.value;
+            if (fieldType === 'number' && raw !== '' && Number(raw) < 0) {
+              onChange(value, 0);
+              return;
+            }
+            onChange(value, fieldType === 'number' ? Number(raw) : raw);
+          }}
           disabled={disabled}
           className="flex-1 px-3 py-2 border rounded-lg text-sm"
           placeholder="To"
           aria-label="Range end value"
+          min={fieldType === 'number' ? 0 : undefined}
+          step={fieldType === 'number' ? 1 : undefined}
         />
       </div>
     );
@@ -563,12 +581,21 @@ const ValueInput: React.FC<ValueInputProps> = ({
   return (
     <input
       type={fieldType === 'number' ? 'number' : fieldType === 'date' ? 'date' : 'text'}
-      value={String(value || '')}
-      onChange={(e) => onChange(fieldType === 'number' ? Number(e.target.value) : e.target.value)}
+      value={String(value ?? '')}
+      onChange={(e) => {
+        const raw = e.target.value;
+        if (fieldType === 'number' && raw !== '' && Number(raw) < 0) {
+          onChange(0);
+          return;
+        }
+        onChange(fieldType === 'number' ? Number(raw) : raw);
+      }}
       placeholder={`Enter ${fieldType} value...`}
       disabled={disabled}
       className="flex-1 px-3 py-2 border rounded-lg text-sm"
       aria-label="Condition value"
+      min={fieldType === 'number' ? 0 : undefined}
+      step={fieldType === 'number' ? 1 : undefined}
     />
   );
 };

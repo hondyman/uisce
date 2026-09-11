@@ -12,6 +12,7 @@ const ValueInput: FC<Props> = ({ value, field, onChange }) => {
         type="number"
         value={value || ''}
         onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        inputProps={{ min: 0 }}
         sx={{ width: 120 }}
         size="small"
         aria-label="Number value"
