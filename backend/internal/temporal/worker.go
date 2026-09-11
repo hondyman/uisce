@@ -71,7 +71,14 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.CustomizationIntelligenceWorkflow)
 	w.RegisterWorkflow(workflows.TenantInstanceProvisioningWorkflowFn)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn")
+	// Report generation workflows registered on the analytics-worker task queue.
+	// These were previously defined but unregistered (would have failed with
+	// "unknown workflow type" on dispatch). Joining the existing worker avoids
+	// separate process/supervision overhead at current scale.
+	w.RegisterWorkflow(workflows.ReportGenerationWorkflow)
+	w.RegisterWorkflow(workflows.ClientBurstReportWorkflow)
+
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -116,5 +123,21 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 		log.Println("Tenant provisioning activities registered")
 	}
 
-	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities")
+	// Register report generation activities. db may be nil in test environments
+	// that use the in-process test executor — registration is safe with nil db;
+	// StoreExecutionResultActivity will return an error if called with nil db.
+	reportActs := activities.NewReportActivities(db)
+	w.RegisterActivity(reportActs.QuerySemanticViewsActivity)
+	w.RegisterActivity(reportActs.GenerateArtifactActivity)
+	w.RegisterActivity(reportActs.StoreExecutionResultActivity)
+	// Burst workflow activities (used by ClientBurstReportWorkflow)
+	w.RegisterActivity(reportActs.EvaluateReportCalendarActivity)
+	w.RegisterActivity(reportActs.ResolveClientSlicesActivity)
+	w.RegisterActivity(reportActs.InitBurstBatchActivity)
+	w.RegisterActivity(reportActs.RenderAndStoreClientArtifactActivity)
+	w.RegisterActivity(reportActs.FinalizeBurstBatchActivity)
+	w.RegisterActivity(reportActs.DispatchClientDistributionsActivity)
+	log.Println("Report activities registered: QuerySemanticViewsActivity, GenerateArtifactActivity, StoreExecutionResultActivity, burst activities")
+
+	log.Println("Activities registered: RunDataFusionQueryActivity, RunSparkJobActivity, RunPythonScriptActivity, PublishEventActivity, TenantActivities, TenantProvisioningActivities, ReportActivities")
 }

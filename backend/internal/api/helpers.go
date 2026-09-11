@@ -121,6 +121,50 @@ func allowClientTenantHeaderFallback() bool {
 	return getEnv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "false") == "true"
 }
 
+// AssertProductionConfig returns an error if unsafe dev-only flags are active
+// in what appears to be a production environment.
+//
+// FAIL-CLOSED design: enforcement is triggered unless ENVIRONMENT is explicitly
+// in the known-safe set {"development", "local", "test"}. An unset, misspelled,
+// or unknown ENVIRONMENT value (e.g. "prod", "") is treated as production — the
+// most dangerous misconfiguration is the one that disables the check silently.
+//
+// Call this once at startup (before db.Ping) and log.Fatalf on error.
+func AssertProductionConfig() error {
+	env := strings.ToLower(getEnv("ENVIRONMENT", ""))
+	safeEnvs := map[string]bool{
+		"development": true,
+		"local":       true,
+		"test":        true,
+	}
+	if safeEnvs[env] {
+		return nil // explicitly declared safe environment
+	}
+	// Any other value — including unset ("") — is treated as production.
+	if allowClientTenantHeaderFallback() {
+		return fmt.Errorf(
+			"ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true is not permitted in environment %q "+
+				"(only development/local/test); this flag is dev-only and must be false in production",
+			env,
+		)
+	}
+	if getEnv("API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK", "false") == "true" {
+		return fmt.Errorf(
+			"API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true is not permitted in environment %q "+
+				"(only development/local/test)",
+			env,
+		)
+	}
+	if getEnv("TEMPORAL_DISABLED", "false") == "true" {
+		return fmt.Errorf(
+			"TEMPORAL_DISABLED=true is not permitted in environment %q "+
+				"(only development/local/test); durable workflow orchestration requires Temporal in production",
+			env,
+		)
+	}
+	return nil
+}
+
 // extractTenantContext extracts tenant context from request headers (JWT-validated)
 // WARNING: This function intentionally does NOT fall back to URL query params for security.
 // Tenant ID must come from validated JWT claims; the X-Tenant-ID header is only

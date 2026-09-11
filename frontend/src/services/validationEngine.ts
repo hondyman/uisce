@@ -347,20 +347,95 @@ export class InvestmentValidationEngine {
   /**
    * Create a new validation rule
    */
-  async createRule(_rule: Omit<ValidationRule, 'createdAt' | 'updatedAt'>): Promise<ValidationRule> {
-    // POST /validation-rules (rule creation) is retired - see
-    // validation_rules_routes.go, 410 Gone. The replacement,
-    // POST /validation-rule-nodes, requires a rule_ast (an
-    // internal/rules/vm.RuleNode) rather than the flat condition shape
-    // this service built, and there is no mechanical translation from
-    // one to the other (the same reason the old catalog_validation_rules
-    // corpus was retired rather than migrated - see
-    // docs/validation_rules_migration_report.json). New rules must be
-    // authored in the unified editor (/core/validation-rules/editor)
-    // until this service is rewritten against the new endpoint.
-    throw new Error(
-      'Creating rules through this flow is retired. Use the Validation Rules editor (/core/validation-rules/editor) to author new rules.'
-    );
+  async createRule(rule: Omit<ValidationRule, 'createdAt' | 'updatedAt'>): Promise<ValidationRule> {
+    try {
+      // Normalize frontend camelCase rule object to backend snake_case shape
+      const toSnakePayload = (r: any) => {
+        const payload: any = {};
+        // Basic mapping of commonly used fields
+        if (r.id) payload.id = r.id;
+        if (r.name) payload.rule_name = r.name;
+        // Normalize rule type to backend-expected snake_case
+        const ruleTypeInput = r.rule_type || r.ruleType || r.RuleType || r.RuleTypeCC;
+        devLog(`[toSnakePayload] Normalizing rule_type for "${r.name}":`, { input: ruleTypeInput });
+        const normalizedRt = this.normalizeRuleType(ruleTypeInput);
+        if (normalizedRt) payload.rule_type = normalizedRt;
+        else devWarn(`[toSnakePayload] No valid rule_type for "${r.name}"`);
+        if (r.description) payload.description = r.description;
+        if (typeof r.isActive !== 'undefined') payload.is_active = r.isActive;
+        if (r.effectiveFrom) payload.effective_from = r.effectiveFrom;
+        if (r.effectiveTo) payload.effective_to = r.effectiveTo;
+        if (r.frequency) payload.frequency = r.frequency;
+        if (typeof r.evaluationOrder !== 'undefined') payload.evaluation_order = r.evaluationOrder;
+        if (r.overrideConditions) payload.override_conditions = r.overrideConditions;
+        if (r.requiredAuthority) payload.required_authority = r.requiredAuthority;
+        if (typeof r.is_core !== 'undefined') payload.is_core = r.is_core;
+        // Map parameters to condition_json for backend compatibility
+        if (r.parameters) payload.condition_json = { ...r.parameters };
+        if (r.condition_json) payload.condition_json = { ...r.condition_json };
+        // Map scope/scope array -> target_entities and ensure legacy single target_entity
+        if (r.scope) payload.target_entities = r.scope;
+        if (r.scopes && !payload.target_entities) payload.target_entities = r.scopes;
+        if (r.target_entities) payload.target_entities = r.target_entities;
+        if (r.target_entity) payload.target_entity = r.target_entity;
+        if (!payload.target_entity && Array.isArray(payload.target_entities) && payload.target_entities.length > 0) {
+          payload.target_entity = payload.target_entities[0];
+        }
+        // Also include camelCase alias for targetEntity for maximum compatibility
+        if (payload.target_entity) payload.targetEntity = payload.target_entity;
+        // Normalize severity
+        if (r.severity) {
+          const severityMap: Record<string, string> = {
+            BLOCK: 'error',
+            WARNING: 'warning',
+            INFO: 'info',
+          };
+          payload.severity = severityMap[r.severity.toUpperCase()] || r.severity.toLowerCase();
+        }
+        // Attach tenant/datasource metadata expected by the backend
+        payload.tenant_id = this.tenantId;
+        payload.datasource_id = this.datasourceId;
+        devLog(`[toSnakePayload] Final payload for "${r.name}":`, payload);
+        return payload;
+      };
+
+      const payload = toSnakePayload(rule);
+      devLog('[validationEngine.createRule] Sending payload:', { ruleName: String(rule.name ?? ''), ruleType: payload.rule_type, payload });
+
+      const response: any = await fetchAPI('/validation-rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': this.tenantId,
+          'X-Tenant-Datasource-ID': this.datasourceId,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      devLog('[validationEngine.createRule] Success:', { ruleName: String(rule.name ?? ''), ruleId: response.id });
+
+      return {
+        id: response.id,
+        name: response.rule_name,
+        description: response.description,
+        ruleType: response.rule_type,
+        scope: [response.target_entity],
+        severity: (String(response.severity || '') as RuleSeverity) || RuleSeverity.INFO,
+        isActive: response.is_active,
+        effectiveFrom: new Date(response.created_at),
+        effectiveTo: undefined,
+        frequency: RuleFrequency.CONTINUOUS,
+        evaluationOrder: 0,
+        parameters: {},
+        createdAt: new Date(response.created_at),
+        updatedAt: new Date(response.created_at),
+        tenantId: this.tenantId,
+        datasourceId: this.datasourceId,
+      };
+    } catch (error) {
+      devError('Failed to create validation rule:', error);
+      throw error;
+    }
   }
 
   /**

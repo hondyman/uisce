@@ -39,6 +39,22 @@ async function request<T>(path: string, { method = 'GET', body, headers, ...rest
   const resolvedPath = resolvePath(path);
   const finalHeaders = new Headers(headers ?? undefined);
 
+  if (typeof localStorage !== 'undefined') {
+    const token = localStorage.getItem('auth_token');
+    if (token && !finalHeaders.has('Authorization')) {
+      finalHeaders.set('Authorization', `Bearer ${token}`);
+    }
+    const tenantContext = localStorage.getItem('tenant_context');
+    if (tenantContext) {
+      try {
+        const parsed = JSON.parse(tenantContext);
+        if (parsed?.tenantId && !finalHeaders.has('X-Tenant-ID')) {
+          finalHeaders.set('X-Tenant-ID', parsed.tenantId);
+        }
+      } catch (_) {}
+    }
+  }
+
   if (body != null && !finalHeaders.has('Content-Type')) {
     finalHeaders.set('Content-Type', 'application/json');
   }
@@ -266,19 +282,33 @@ export interface ReportTemplate {
   metadata?: JsonRecord | null;
   createdAt?: string;
   updatedAt?: string;
+  is_favorite?: boolean;
+  is_personal?: boolean;
+  created_by_id?: string;
+  is_core?: boolean;
+  tenant_id?: string;
   [key: string]: unknown;
 }
 
 export interface SaveReportTemplateInput {
   name: string;
+  template_name?: string;
+  tenant_id?: string;
   description?: string;
-  definition: JsonRecord;
+  definition?: JsonRecord;
   metadata?: JsonRecord;
+  layout_config?: JsonRecord;
+  parameter_schema?: JsonRecord;
+  category?: string;
+  is_active?: boolean;
+  is_public?: boolean;
+  is_personal?: boolean;
+  [key: string]: unknown;
 }
 
 export interface UpdateReportTemplateInput {
   id: string;
-  payload: SaveReportTemplateInput;
+  payload: Partial<SaveReportTemplateInput>;
 }
 
 const tryParseDefinition = (value: unknown): JsonRecord | null => {
@@ -303,13 +333,13 @@ const toReportTemplate = (raw: JsonRecord | null | undefined): ReportTemplate | 
     return null;
   }
   const id = (raw.id as string) ?? (raw.report_id as string) ?? (raw.uuid as string);
-  const name = (raw.name as string) ?? (raw.title as string) ?? 'Untitled Report';
+  const name = (raw.name as string) ?? (raw.template_name as string) ?? (raw.title as string) ?? 'Untitled Report';
   if (!id) {
     return null;
   }
 
-  const definition = tryParseDefinition(raw.definition ?? raw.template ?? raw.payload ?? raw.report_definition);
-  const metadata = tryParseDefinition(raw.metadata ?? raw.meta);
+  const definition = tryParseDefinition(raw.definition ?? raw.template ?? raw.payload ?? raw.report_definition ?? raw.layout_config);
+  const metadata = tryParseDefinition(raw.metadata ?? (raw.layout_config as any)?.metadata ?? (definition as any)?.metadata ?? raw.meta);
 
   return {
     id,
@@ -323,17 +353,19 @@ const toReportTemplate = (raw: JsonRecord | null | undefined): ReportTemplate | 
   };
 };
 
-const fetchReportTemplates = async (): Promise<ReportTemplate[]> => {
-  const raw = await request<unknown>(`${API_PREFIX}/reports`);
+const fetchReportTemplates = async (query?: string): Promise<ReportTemplate[]> => {
+  const trimmed = query?.trim();
+  const path = trimmed ? `${API_PREFIX}/reports?q=${encodeURIComponent(trimmed)}` : `${API_PREFIX}/reports`;
+  const raw = await request<unknown>(path);
   return normaliseCollection(raw)
     .map(toReportTemplate)
     .filter((item): item is ReportTemplate => item !== null);
 };
 
-export const useReportTemplates = () =>
+export const useReportTemplates = (query?: string) =>
   useQuery({
-    queryKey: ['reporting', 'reports'],
-    queryFn: fetchReportTemplates,
+    queryKey: ['reporting', 'reports', query?.trim() || ''],
+    queryFn: () => fetchReportTemplates(query),
     staleTime: 30_000,
   });
 
@@ -356,7 +388,7 @@ export const useUpdateReportTemplate = () => {
   return useMutation({
     mutationFn: async ({ id, payload }: UpdateReportTemplateInput) =>
       request<JsonRecord>(`${API_PREFIX}/reports/${id}`, {
-        method: 'PATCH',
+        method: 'PUT',
         body: JSON.stringify(payload),
       }),
     onSuccess: (_data, variables) => {
@@ -389,6 +421,32 @@ export const useDeleteReportTemplate = () => {
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['reporting', 'reports'] });
       queryClient.removeQueries({ queryKey: ['reporting', 'reports', id] });
+    },
+  });
+};
+
+export const useSetReportFavorite = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<void>(`${API_PREFIX}/reports/${id}/favorite`, {
+        method: 'PUT',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'reports'] });
+    },
+  });
+};
+
+export const useRemoveReportFavorite = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) =>
+      request<void>(`${API_PREFIX}/reports/${id}/favorite`, {
+        method: 'DELETE',
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['reporting', 'reports'] });
     },
   });
 };

@@ -1,12 +1,11 @@
-import React, { 
-  useState, 
-  useCallback, 
-  useMemo, 
-  useRef, 
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
   useEffect
 } from 'react';
 import {
-  Plus,
   Trash2,
   ChevronDown,
   ChevronRight,
@@ -16,10 +15,17 @@ import {
   Check,
   Search,
   Link2,
-  Layers,
   Undo,
   Redo
 } from 'lucide-react';
+import {
+  Box, Button, IconButton, Select, MenuItem, Tooltip,
+  Popper, ClickAwayListener, Paper, TextField, Typography, Chip, Stack,
+} from '@mui/material';
+import { alpha, type Theme } from '@mui/material/styles';
+import AddIcon from '@mui/icons-material/Add';
+import LayersIcon from '@mui/icons-material/Layers';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
 // ============================================================================
 // Types
@@ -171,33 +177,21 @@ const generateId = () => `cond_${Date.now()}_${Math.random().toString(36).substr
 
 const isCondition = (node: ConditionNode): node is Condition => node.type === 'condition';
 
-const getDepthColor = (depth: number): string => {
-  const colors = [
-    'border-l-blue-500',
-    'border-l-purple-500',
-    'border-l-green-500',
-    'border-l-orange-500',
-    'border-l-pink-500',
-    'border-l-teal-500',
-    'border-l-indigo-500',
-    'border-l-red-500'
-  ];
-  return colors[depth % colors.length];
-};
+// Theme-aware replacement for the old Tailwind border-l-*/bg-*-50 depth
+// palette (hardcoded light-mode hex, invisible against a dark theme).
+// Cycles through six MUI palette hues rather than duplicating the app's
+// semantic category-color set, which means something different (Platform/
+// Catalog/Build/...) than "how deeply nested is this group."
+const DEPTH_HUES: Array<(theme: Theme) => string> = [
+  (t) => t.palette.info.main,
+  (t) => t.palette.secondary.main,
+  (t) => t.palette.success.main,
+  (t) => t.palette.warning.main,
+  (t) => t.palette.error.main,
+  (t) => t.palette.primary.main,
+];
 
-const getDepthBgColor = (depth: number): string => {
-  const colors = [
-    'bg-blue-50/50',
-    'bg-purple-50/50',
-    'bg-green-50/50',
-    'bg-orange-50/50',
-    'bg-pink-50/50',
-    'bg-teal-50/50',
-    'bg-indigo-50/50',
-    'bg-red-50/50'
-  ];
-  return colors[depth % colors.length];
-};
+const getDepthColor = (depth: number, theme: Theme): string => DEPTH_HUES[depth % DEPTH_HUES.length](theme);
 
 // ============================================================================
 // Props
@@ -303,133 +297,118 @@ const FieldAutocomplete: React.FC<FieldAutocompleteProps> = ({
   const displayValue = fieldPath || value;
   const currentPath = pathSegments.length > 0 ? pathSegments.join(' → ') + ' → ' : '';
 
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const FIELD_TYPE_COLOR: Record<string, 'success' | 'info' | 'warning' | 'secondary' | 'default'> = {
+    string: 'success', number: 'info', date: 'warning', boolean: 'secondary',
+  };
+
   return (
-    <div className="relative flex-1">
-      <div 
-        className={`flex items-center gap-2 px-3 py-2 border rounded-lg cursor-pointer transition-colors ${
-          disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white hover:border-blue-400'
-        } ${isOpen ? 'border-blue-500 ring-2 ring-blue-100' : 'border-gray-300'}`}
+    <Box sx={{ position: 'relative', flex: 1 }} ref={anchorRef}>
+      <Box
         onClick={() => !disabled && setIsOpen(true)}
         role="combobox"
-        aria-expanded={isOpen ? 'true' : 'false'}
+        aria-expanded={isOpen}
         aria-label="Field selector"
         aria-controls="field-list"
         aria-haspopup="listbox"
         tabIndex={disabled ? -1 : 0}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            setIsOpen(true);
-          }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsOpen(true); }
         }}
+        sx={(theme) => ({
+          display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1,
+          border: '1px solid',
+          borderColor: isOpen ? 'primary.main' : 'divider',
+          borderRadius: 1.5,
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          bgcolor: disabled ? 'action.disabledBackground' : 'background.paper',
+          boxShadow: isOpen ? `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}` : 'none',
+          transition: 'border-color 0.15s, box-shadow 0.15s',
+          '&:hover': disabled ? undefined : { borderColor: 'primary.main' },
+        })}
       >
         {enableCrossEntity && fieldPath && fieldPath.includes('.') && (
-          <Link2 size={14} className="text-purple-500 flex-shrink-0" />
+          <Link2 size={14} style={{ color: 'var(--mui-palette-secondary-main)', flexShrink: 0 }} />
         )}
-        <span className={`flex-1 truncate ${!displayValue ? 'text-gray-400' : 'text-gray-900'}`}>
+        <Box sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: displayValue ? 'text.primary' : 'text.disabled' }}>
           {displayValue || 'Select field...'}
-        </span>
-        <ChevronDown size={16} className="text-gray-400 flex-shrink-0" />
-      </div>
+        </Box>
+        <ChevronDown size={16} style={{ color: 'var(--mui-palette-text-disabled)', flexShrink: 0 }} />
+      </Box>
 
-      {isOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div 
-            className="absolute top-full left-0 right-0 mt-1 bg-white rounded-lg shadow-xl border z-50 max-h-80 overflow-hidden"
-            id="field-list"
-          >
-            {/* Search Input */}
-            <div className="p-2 border-b sticky top-0 bg-white">
-              <div className="relative">
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search fields..."
-                  aria-label="Search fields"
-                  className="w-full pl-9 pr-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  autoFocus
-                />
-              </div>
+      <Popper
+        open={isOpen}
+        anchorEl={anchorRef.current}
+        placement="bottom-start"
+        style={{ width: Math.max(anchorRef.current?.offsetWidth ?? 0, 320), zIndex: 1300 }}
+      >
+        <ClickAwayListener onClickAway={() => setIsOpen(false)}>
+          <Paper elevation={8} sx={{ mt: 0.5, maxHeight: 340, overflow: 'hidden', borderRadius: 1.5 }}>
+            {/* Search */}
+            <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
+              <TextField
+                inputRef={inputRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search fields..."
+                aria-label="Search fields"
+                size="small"
+                fullWidth
+                autoFocus
+                InputProps={{ startAdornment: <Search size={16} style={{ marginRight: 8, color: 'var(--mui-palette-text-disabled)', flexShrink: 0 }} /> }}
+              />
               {pathSegments.length > 0 && (
-                <div className="flex items-center gap-2 mt-2 text-xs">
-                  <button
-                    onClick={handleBack}
-                    className="flex items-center gap-1 text-blue-600 hover:underline"
-                  >
-                    ← Back
-                  </button>
-                  <span className="text-gray-500">{currentPath}</span>
-                </div>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                  <Button size="small" onClick={handleBack} sx={{ fontSize: '0.75rem', minWidth: 0, p: 0 }}>← Back</Button>
+                  <Typography variant="caption" color="text.secondary">{currentPath}</Typography>
+                </Stack>
               )}
-            </div>
+            </Box>
 
-            {/* Field List */}
-            <div className="overflow-y-auto max-h-60" role="listbox" aria-label="Available fields and related entities">
-              {/* Relationships */}
+            {/* List */}
+            <Box sx={{ overflowY: 'auto', maxHeight: 260 }} role="listbox" aria-label="Available fields and related entities">
               {filteredRelationships.length > 0 && (
-                <div className="p-2 border-b">
-                  <div className="text-xs font-semibold text-gray-500 uppercase mb-1 px-2">
-                    Related Entities
-                  </div>
+                <Box sx={{ p: 1, borderBottom: 1, borderColor: 'divider' }}>
+                  <Typography variant="overline" color="text.secondary" sx={{ px: 1, lineHeight: 2 }}>Related Entities</Typography>
                   {filteredRelationships.map(rel => (
-                    <button
-                      key={rel.name}
-                      onClick={() => handleSelectRelationship(rel)}
-                      role="option"
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-purple-50 rounded text-left"
-                    >
-                      <Link2 size={14} className="text-purple-500" />
-                      <span className="font-medium text-purple-700">{rel.label}</span>
-                      <span className="text-xs text-gray-500">→ {rel.targetEntity}</span>
-                    </button>
+                    <MenuItem key={rel.name} onClick={() => handleSelectRelationship(rel)} sx={{ borderRadius: 1, gap: 1 }}>
+                      <Link2 size={14} style={{ color: 'var(--mui-palette-secondary-main)' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'secondary.main' }}>{rel.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">→ {rel.targetEntity}</Typography>
+                    </MenuItem>
                   ))}
-                </div>
+                </Box>
               )}
 
-              {/* Fields */}
               {filteredFields.length > 0 ? (
-                <div className="p-2">
-                  <div className="text-xs font-semibold text-gray-500 uppercase mb-1 px-2">
-                    Fields
-                  </div>
+                <Box sx={{ p: 1 }}>
+                  <Typography variant="overline" color="text.secondary" sx={{ px: 1, lineHeight: 2 }}>Fields</Typography>
                   {filteredFields.map(field => (
-                    <button
-                      key={field.name}
-                      onClick={() => handleSelectField(field)}
-                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded text-left group"
-                      role="option"
-                    >
-                      <span className={`px-1.5 py-0.5 rounded text-xs font-mono ${
-                        field.type === 'string' ? 'bg-green-100 text-green-700' :
-                        field.type === 'number' ? 'bg-blue-100 text-blue-700' :
-                        field.type === 'date' ? 'bg-orange-100 text-orange-700' :
-                        field.type === 'boolean' ? 'bg-purple-100 text-purple-700' :
-                        'bg-gray-100 text-gray-700'
-                      }`}>
-                        {field.type.slice(0, 3)}
-                      </span>
-                      <span className="font-medium text-gray-900">{field.label}</span>
-                      <span className="text-xs text-gray-400 font-mono">{field.name}</span>
+                    <MenuItem key={field.name} onClick={() => handleSelectField(field)} sx={{ borderRadius: 1, gap: 1 }}>
+                      <Chip
+                        label={field.type.slice(0, 3)}
+                        size="small"
+                        color={FIELD_TYPE_COLOR[field.type] ?? 'default'}
+                        sx={{ fontFamily: 'monospace', fontSize: '0.65rem', height: 20 }}
+                      />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{field.label}</Typography>
+                      <Typography variant="caption" color="text.disabled" sx={{ fontFamily: 'monospace' }}>{field.name}</Typography>
                       {field.nullable && (
-                        <span className="text-xs text-gray-400 ml-auto">nullable</span>
+                        <Typography variant="caption" color="text.disabled" sx={{ ml: 'auto' }}>nullable</Typography>
                       )}
-                    </button>
+                    </MenuItem>
                   ))}
-                </div>
+                </Box>
               ) : (
-                <div className="p-4 text-center text-gray-500 text-sm">
+                <Typography variant="body2" color="text.secondary" sx={{ p: 2.5, textAlign: 'center' }}>
                   No fields found
-                </div>
+                </Typography>
               )}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
+            </Box>
+          </Paper>
+        </ClickAwayListener>
+      </Popper>
+    </Box>
   );
 };
 
@@ -454,22 +433,21 @@ const OperatorSelector: React.FC<OperatorSelectorProps> = ({
   const selectedOp = operators.find(op => op.value === value);
 
   return (
-    <select
+    <Select
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className={`px-3 py-2 border rounded-lg text-sm font-medium min-w-[160px] ${
-        disabled ? 'bg-gray-100 cursor-not-allowed' : 'bg-white cursor-pointer hover:border-blue-400'
-      }`}
+      size="small"
       title={selectedOp?.description || 'Select operator'}
       aria-label="Condition operator"
+      sx={{ minWidth: 160, fontWeight: 500 }}
     >
       {operators.map(op => (
-        <option key={op.value} value={op.value} title={op.description}>
+        <MenuItem key={op.value} value={op.value} title={op.description}>
           {op.label}
-        </option>
+        </MenuItem>
       ))}
-    </select>
+    </Select>
   );
 };
 
@@ -851,73 +829,98 @@ const ConditionGroupComponent: React.FC<ConditionGroupComponentProps> = ({
     }
   };
 
-  const depthColor = getDepthColor(depth);
-  const depthBg = getDepthBgColor(depth);
+  const operatorColor = (theme: Theme) =>
+    group.operator === 'AND' ? theme.palette.info.main :
+    group.operator === 'OR' ? theme.palette.secondary.main :
+    theme.palette.error.main;
 
   return (
-    <div 
-      className={`border-l-4 ${depthColor} ${depthBg} rounded-r-lg p-3 my-2 transition-all`}
+    <Box
       data-depth={depth}
+      sx={(theme) => ({
+        borderLeft: 4,
+        borderLeftColor: getDepthColor(depth, theme),
+        bgcolor: alpha(getDepthColor(depth, theme), theme.palette.mode === 'dark' ? 0.08 : 0.05),
+        borderTopRightRadius: 1.5,
+        borderBottomRightRadius: 1.5,
+        p: 1.5,
+        my: 1,
+        transition: 'all 0.15s ease',
+      })}
     >
       {/* Group Header */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className="flex items-center bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-          <select
-            value={group.operator}
-            onChange={(e) => handleOperatorChange(e.target.value as any)}
-            disabled={readOnly}
-            className={`px-3 py-1.5 text-sm font-bold border-none outline-none cursor-pointer ${
-              group.operator === 'AND' ? 'text-blue-600 bg-blue-50' :
-              group.operator === 'OR' ? 'text-purple-600 bg-purple-50' :
-              'text-red-600 bg-red-50'
-            }`}
-          >
-            <option value="AND">AND</option>
-            <option value="OR">OR</option>
-            <option value="NOT">NOT</option>
-          </select>
-        </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <Select
+          value={group.operator}
+          onChange={(e) => handleOperatorChange(e.target.value as any)}
+          disabled={readOnly}
+          size="small"
+          sx={(theme) => ({
+            fontWeight: 700,
+            fontSize: '0.8125rem',
+            color: operatorColor(theme),
+            bgcolor: alpha(operatorColor(theme), theme.palette.mode === 'dark' ? 0.16 : 0.08),
+            borderRadius: 1.5,
+            '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
+            '& .MuiSelect-select': { py: 0.75, px: 1.5 },
+          })}
+        >
+          <MenuItem value="AND">AND</MenuItem>
+          <MenuItem value="OR">OR</MenuItem>
+          <MenuItem value="NOT">NOT</MenuItem>
+        </Select>
 
         {!readOnly && (
-          <div className="flex items-center gap-1 ml-auto">
-            <button
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, ml: 'auto' }}>
+            <Button
               onClick={addCondition}
-              className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 hover:border-gray-300 transition-colors"
+              size="small"
+              variant="text"
+              startIcon={<AddIcon fontSize="small" />}
+              sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}
             >
-              <Plus size={14} />
               Condition
-            </button>
+            </Button>
             {depth < maxDepth && (
-              <button
+              <Button
                 onClick={addGroup}
-                className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded hover:bg-gray-50 hover:border-gray-300 transition-colors"
+                size="small"
+                variant="text"
+                startIcon={<LayersIcon fontSize="small" />}
                 title="Add nested group"
+                sx={{ fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}
               >
-                <Layers size={14} />
                 Group
-              </button>
+              </Button>
             )}
             {onDelete && (
-              <button
-                onClick={onDelete}
-                className="p-1.5 text-gray-400 hover:text-red-500 rounded hover:bg-red-50 transition-colors"
-                title="Delete group"
-              >
-                <Trash2 size={14} />
-              </button>
+              <Tooltip title="Delete group">
+                <IconButton
+                  onClick={onDelete}
+                  size="small"
+                  sx={{ color: 'text.disabled', '&:hover': { color: 'error.main', bgcolor: alpha('#f44336', 0.08) } }}
+                >
+                  <DeleteOutlineIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             )}
-          </div>
+          </Box>
         )}
-      </div>
+      </Box>
 
       {/* Conditions */}
-      <div className="space-y-2 pl-2">
+      <Box sx={{ pl: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
         {group.conditions.length === 0 && (
-          <div className="py-4 text-center text-sm text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
+          <Box
+            sx={{
+              py: 2.5, textAlign: 'center', fontSize: '0.875rem', color: 'text.disabled',
+              border: '2px dashed', borderColor: 'divider', borderRadius: 1.5,
+            }}
+          >
             No conditions. Add one to start.
-          </div>
+          </Box>
         )}
-        
+
         {group.conditions.map((node, index) => (
           <div key={node.id}>
             {node.type === 'condition' ? (
@@ -952,8 +955,8 @@ const ConditionGroupComponent: React.FC<ConditionGroupComponentProps> = ({
             )}
           </div>
         ))}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };
 

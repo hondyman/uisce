@@ -69,6 +69,7 @@ func (h *GlassBoxHandler) GetComplianceSummary(w http.ResponseWriter, r *http.Re
 	for rows.Next() {
 		row := make(map[string]interface{})
 		_ = rows.MapScan(row)
+		cleanScanResult(row)
 		summary = append(summary, row)
 	}
 	json.NewEncoder(w).Encode(summary)
@@ -104,6 +105,7 @@ func (h *GlassBoxHandler) GetSECReport(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		row := make(map[string]interface{})
 		_ = rows.MapScan(row)
+		cleanScanResult(row)
 		report = append(report, row)
 	}
 	json.NewEncoder(w).Encode(report)
@@ -144,6 +146,7 @@ func (h *GlassBoxHandler) GetEvents(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		cleanScanResult(evt)
 		events = append(events, evt)
 	}
 

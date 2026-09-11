@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
@@ -69,6 +70,11 @@ func (s *HourlyRollupWorkflowTestSuite) TestHourlyRollupWorkflow_PartialFailure(
 func (s *HourlyRollupWorkflowTestSuite) TestRegionHourlyRollupWorkflow_Success() {
 	env := s.NewTestWorkflowEnvironment()
 
+	env.RegisterActivityWithOptions(func(runID, region, sql string) (string, error) { return "", nil },
+		activity.RegisterOptions{Name: "RunTrinoQueryActivity"})
+	env.OnActivity("RunTrinoQueryActivity", mock.Anything, mock.Anything, mock.Anything).
+		Return("", nil)
+
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -90,6 +96,10 @@ type DailySLAWorkflowTestSuite struct {
 func (s *DailySLAWorkflowTestSuite) TestDailySLAWorkflow_Success() {
 	env := s.NewTestWorkflowEnvironment()
 
+	env.RegisterActivityWithOptions(func(runID, region, sql string) (string, error) { return "", nil },
+		activity.RegisterOptions{Name: "RunTrinoQueryActivity"})
+	env.OnActivity("RunTrinoQueryActivity", mock.Anything, mock.Anything, mock.Anything).
+		Return("", nil)
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 
@@ -114,6 +124,10 @@ func (s *DailySLAWorkflowTestSuite) TestDailySLAWorkflow_DateValidation() {
 		RunID: "daily-sla-001",
 	}
 
+	env.RegisterActivityWithOptions(func(runID, region, sql string) (string, error) { return "", nil },
+		activity.RegisterOptions{Name: "RunTrinoQueryActivity"})
+	env.OnActivity("RunTrinoQueryActivity", mock.Anything, mock.Anything, mock.Anything).
+		Return("", nil)
 	env.OnActivity(activities.PublishEventActivity, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil)
 

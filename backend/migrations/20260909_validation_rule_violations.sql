@@ -1,6 +1,7 @@
 -- Persisted validation-rule violations, so "did this rule ever fire" is
 -- queryable rather than living only in server logs. See
 -- docs/unified-rule-engine-handoff.md, "violations visible" item.
+BEGIN;
 
 CREATE TABLE IF NOT EXISTS validation_rule_violations (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,3 +25,4 @@ CREATE INDEX IF NOT EXISTS idx_validation_rule_violations_bo
 CREATE INDEX IF NOT EXISTS idx_validation_rule_violations_rule
     ON validation_rule_violations (rule_id, created_at DESC);
 
+COMMIT;

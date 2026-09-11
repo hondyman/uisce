@@ -145,6 +145,16 @@ func (s *NLService) executeSQL(ctx context.Context, plan *QueryPlan) (json.RawMe
 		if err := rows.MapScan(row); err != nil {
 			return nil, err
 		}
+		// MapScan's generic interface{} target leaves some Postgres
+		// text-like column types (uuid, at minimum) as raw []byte rather
+		// than string - json.Marshal would silently base64-encode those
+		// instead of emitting their real text. Same fix as
+		// internal/api/bo_crud_handler.go's cleanScanResult.
+		for k, v := range row {
+			if b, ok := v.([]byte); ok {
+				row[k] = string(b)
+			}
+		}
 		results = append(results, row)
 	}
 
@@ -167,6 +177,16 @@ func (s *NLService) executeCypher(ctx context.Context, plan *QueryPlan) (json.Ra
 		row := make(map[string]interface{})
 		if err := rows.MapScan(row); err != nil {
 			return nil, err
+		}
+		// MapScan's generic interface{} target leaves some Postgres
+		// text-like column types (uuid, at minimum) as raw []byte rather
+		// than string - json.Marshal would silently base64-encode those
+		// instead of emitting their real text. Same fix as
+		// internal/api/bo_crud_handler.go's cleanScanResult.
+		for k, v := range row {
+			if b, ok := v.([]byte); ok {
+				row[k] = string(b)
+			}
 		}
 		results = append(results, row)
 	}

@@ -263,6 +263,15 @@ func (s *MetricRegistryService) GetGoldenPathReadiness(ctx context.Context) ([]m
 		if err := rows.MapScan(m); err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
+		// MapScan can leave some Postgres text-like columns as raw
+		// []byte rather than string - see
+		// internal/api/bo_crud_handler.go's cleanScanResult for the
+		// established fix.
+		for k, v := range m {
+			if b, ok := v.([]byte); ok {
+				m[k] = string(b)
+			}
+		}
 		readiness = append(readiness, m)
 	}
 

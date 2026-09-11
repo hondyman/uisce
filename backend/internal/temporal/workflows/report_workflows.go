@@ -4,91 +4,157 @@ import (
 	"fmt"
 	"time"
 
-"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 )
 
-// ReportGenerationWorkflowParams contains parameters for report generation
+// ReportGenerationWorkflowParams contains parameters for report generation.
+//
+// TOCTOU CONTRACT: Template is passed as a fully hydrated snapshot captured at
+// trigger-authorization time by TriggerScheduleRun. Executing against this
+// snapshot — rather than re-fetching inside the worker — is both a security
+// requirement (eliminates TOCTOU race where template is deleted/modified between
+// dispatch and activity execution) and the correct execution semantic: the report
+// that was authorized and triggered is the report that runs.
+//
+// IDENTITY INVARIANT: Template.TenantID and Template.CreatedByID are the
+// authoritative execution identity. All activities MUST use these values when
+// writing to report_executions, never the HTTP caller's credentials.
 type ReportGenerationWorkflowParams struct {
-	TenantID   string                 `json:"tenant_id"`
-	TemplateID string                 `json:"template_id"`
-	Parameters map[string]interface{} `json:"parameters"`
+	// ExecutionID is the UUID of the pre-inserted report_executions row (status='pending').
+	// Activities use this to update the row to 'completed' or 'failed'.
+	ExecutionID string `json:"execution_id"`
+	// Template is the trigger-time snapshot — see TOCTOU CONTRACT above.
+	Template activities.HydratedReportTemplate `json:"template"`
+	// ScheduleID is the schedule that triggered this run (for audit metadata).
+	ScheduleID  string                 `json:"schedule_id"`
+	// TriggerParams contains contextual metadata (trigger time, schedule ID) passed
+	// from the schedule run API. Not used for identity resolution.
+	TriggerParams map[string]interface{} `json:"trigger_params"`
 }
 
-// ReportGenerationWorkflowResult contains the result of report generation
+// ReportGenerationWorkflowResult contains the result of report generation.
 type ReportGenerationWorkflowResult struct {
 	ExecutionID     string `json:"execution_id"`
 	OutputURL       string `json:"output_url"`
-	OutputSizeBytes int    `json:"output_size_bytes"`
+	OutputSizeBytes int64  `json:"output_size_bytes"`
 	RowsProcessed   int    `json:"rows_processed"`
+	ExecutionTimeMS int    `json:"execution_time_ms"`
+	Engine          string `json:"engine"`
 }
 
-// ReportGenerationWorkflow orchestrates async report generation
+// ReportGenerationWorkflow orchestrates async report generation.
+//
+// Workflow execution timeout: 10 minutes (wall-clock cap). If the workflow exceeds
+// this, Temporal terminates it and the execution row should be swept to 'failed'
+// by the stale-execution reconciler.
+//
+// Activity timeouts and retry policy:
+//   - StartToCloseTimeout: 3 minutes per activity attempt
+//   - ScheduleToCloseTimeout: 5 minutes total per activity (all attempts)
+//   - MaximumAttempts: 3
+//   - NonRetryableErrorTypes: ErrInvalidTemplate, ErrTenantAccessViolation, ErrSemanticViewNotFound
+//
+// StoreExecutionResultActivity is the sole exception — it does NOT retry on failure
+// because it writes the final persistent state; a retry could write duplicate rows.
+// Failure of StoreExecutionResultActivity fails the workflow so the reconciler can
+// detect and mark the execution failed, rather than swallowing the error silently.
 func ReportGenerationWorkflow(ctx workflow.Context, params ReportGenerationWorkflowParams) (*ReportGenerationWorkflowResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting report generation workflow", "tenant_id", params.TenantID, "template_id", params.TemplateID)
+	startedAt := workflow.Now(ctx)
+	logger.Info("Starting report generation workflow",
+		"execution_id", params.ExecutionID,
+		"tenant_id", params.Template.TenantID,
+		"template_id", params.Template.ID,
+		"template_name", params.Template.TemplateName,
+		"created_by_id", params.Template.CreatedByID,
+	)
 
-	// Activity options - 5 minute timeout
+	// Pinned activity options: 3m StartToClose, 5m ScheduleToClose,
+	// bounded retries with non-retryable identity/template errors.
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		StartToCloseTimeout:    3 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
+			InitialInterval:    2 * time.Second,
 			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute,
+			MaximumInterval:    30 * time.Second,
 			MaximumAttempts:    3,
+			// Non-retryable: identity/tenant violations and missing resources.
+			// Retrying these would just fail again and waste quota.
+			NonRetryableErrorTypes: []string{
+				"ErrInvalidTemplate",
+				"ErrTenantAccessViolation",
+				"ErrSemanticViewNotFound",
+			},
 		},
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
-	// Step 1: Fetch template
-	var template interface{}
-	err := workflow.ExecuteActivity(ctx, "FetchTemplateActivity", params.TemplateID, params.TenantID).Get(ctx, &template)
+	// Step 1: Query semantic views (empty SemanticViewIDs is valid — returns zero-row result).
+	var actImpl *activities.ReportActivities
+	var semanticResult map[string]interface{}
+	err := workflow.ExecuteActivity(ctx, actImpl.QuerySemanticViewsActivity, params.Template, params.TriggerParams).Get(ctx, &semanticResult)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch template: %w", err)
+		return nil, fmt.Errorf("report generation failed at QuerySemanticViewsActivity: %w", err)
 	}
 
-	// Step 2: Query semantic views
-	var semanticData interface{}
-	err = workflow.ExecuteActivity(ctx, "QuerySemanticViewsActivity", template, params.Parameters).Get(ctx, &semanticData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query semantic views: %w", err)
+	// Step 2: Generate execution artifact with honest metadata.
+	input := activities.GenerateArtifactInput{
+		ExecutionID:  params.ExecutionID,
+		Template:     params.Template,
+		Params:       params.TriggerParams,
+		StartedAt:    startedAt,
+	}
+	if v, ok := semanticResult["views_queried"]; ok {
+		if vi, ok := v.(int); ok {
+			input.ViewsQueried = vi
+		}
 	}
 
-	// Step 3: Transform data
-	var transformedData interface{}
-	err = workflow.ExecuteActivity(ctx, "TransformDataActivity", semanticData, template).Get(ctx, &transformedData)
+	var artifactResult activities.ArtifactResult
+	err = workflow.ExecuteActivity(ctx, actImpl.GenerateArtifactActivity, input, semanticResult).Get(ctx, &artifactResult)
 	if err != nil {
-		return nil, fmt.Errorf("failed to transform data: %w", err)
+		return nil, fmt.Errorf("report generation failed at GenerateArtifactActivity: %w", err)
 	}
 
-	// Step 4: Generate PDF
-	var pdfResult struct {
-		URL       string `json:"url"`
-		SizeBytes int    `json:"size_bytes"`
-		Rows      int    `json:"rows"`
+	// Step 3: Persist execution result via WithTenantTransaction (satisfies FORCE RLS).
+	// NOTE: StoreExecutionResultActivity uses a no-retry policy — it writes the
+	// terminal execution state, so retrying a partial write is more dangerous than
+	// failing loudly and letting the reconciler detect the inconsistency.
+	storeOpts := workflow.ActivityOptions{
+		StartToCloseTimeout: 1 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1, // No retry on storage — fail loudly, let reconciler detect
+		},
 	}
-	err = workflow.ExecuteActivity(ctx, "GeneratePDFActivity", transformedData, template).Get(ctx, &pdfResult)
+	storeCtx := workflow.WithActivityOptions(ctx, storeOpts)
+	err = workflow.ExecuteActivity(storeCtx, actImpl.StoreExecutionResultActivity, input, artifactResult).Get(storeCtx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate PDF: %w", err)
+		// Fail the workflow — the reconciler will detect a stale 'running' row
+		// and mark it 'failed'. Do NOT swallow this error.
+		return nil, fmt.Errorf("report generation failed at StoreExecutionResultActivity: %w", err)
 	}
 
-	// Step 5: Store execution result
-	executionID := workflow.GetInfo(ctx).WorkflowExecution.ID
-	err = workflow.ExecuteActivity(ctx, "StoreExecutionResultActivity", executionID, pdfResult).Get(ctx, nil)
-	if err != nil {
-		logger.Warn("Failed to store execution result", "error", err)
-		// Don't fail workflow if storage fails
-	}
-
-	logger.Info("Report generation workflow completed", "execution_id", executionID, "output_url", pdfResult.URL)
+	logger.Info("Report generation workflow completed",
+		"execution_id", params.ExecutionID,
+		"output_url", artifactResult.OutputURL,
+		"execution_time_ms", artifactResult.ExecutionTimeMS,
+		"engine", artifactResult.Engine,
+	)
 
 	return &ReportGenerationWorkflowResult{
-		ExecutionID:     executionID,
-		OutputURL:       pdfResult.URL,
-		OutputSizeBytes: pdfResult.SizeBytes,
-		RowsProcessed:   pdfResult.Rows,
+		ExecutionID:     params.ExecutionID,
+		OutputURL:       artifactResult.OutputURL,
+		OutputSizeBytes: artifactResult.OutputSizeBytes,
+		RowsProcessed:   artifactResult.RowsProcessed,
+		ExecutionTimeMS: artifactResult.ExecutionTimeMS,
+		Engine:          artifactResult.Engine,
 	}, nil
 }
+
 
 // AISemanticCubeWorkflowParams contains parameters for AI semantic cube generation
 type AISemanticCubeWorkflowParams struct {

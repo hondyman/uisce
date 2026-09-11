@@ -241,10 +241,22 @@ func testCleanChainPasses() {
 	// once the order is genuinely complete, and check that update alone
 	// (not the whole order's history) produced zero new violations.
 	setEnforce(false)
+	// target_qty is run-unique (not the fixed literal 100 this test used
+	// before the OMS validation spec added a duplicate-order WARN rule
+	// evaluated on every Order write, tenant-wide): a fixed value would
+	// make every re-run of this script duplicate a prior run's own order
+	// (same sec_id/side/target_qty/trade_date/manager_id), firing a real,
+	// correctly-detected WARN this test never used to see - which is a
+	// legitimate new violation, not a bug, but it breaks this test's
+	// specific "the final update produced zero new violations" assertion
+	// below. Same fix shape as cmd/verify_oms_validations' own duplicate-
+	// order test had to apply to its own fixtures for the identical
+	// reason.
+	uniqueTargetQty := float64(100 + time.Now().UnixNano()%100000)
 	order, err := boSvc.CreateBORecord(ctx, secCtx, "order", models.BOCrudRecordRequest{
 		Record: map[string]interface{}{
 			"sec_id": 1, "side": "BUY", "order_type": "MARKET",
-			"target_qty": 100, "executed_qty": 0, "leaves_qty": 100,
+			"target_qty": uniqueTargetQty, "executed_qty": 0, "leaves_qty": uniqueTargetQty,
 			"trade_date": time.Now().Format("2006-01-02"),
 		},
 	}, "verify_order_validations")
@@ -252,23 +264,23 @@ func testCleanChainPasses() {
 		log.Fatalf("clean order creation failed unexpectedly: %v", err)
 	}
 	orderID := fmt.Sprintf("%v", order["id"])
-	fmt.Printf("Created order %s (target_qty=100)\n", orderID)
+	fmt.Printf("Created order %s (target_qty=%v)\n", orderID, uniqueTargetQty)
 
 	_, err = boSvc.CreateBORecord(ctx, secCtx, "order_allocation", models.BOCrudRecordRequest{
 		Record: map[string]interface{}{
 			"order_id": orderID, "account_id": "ACCT-DISC-ACTIVE",
-			"target_qty": 100, "allocated_qty": 0,
+			"target_qty": uniqueTargetQty, "allocated_qty": 0,
 		},
 	}, "verify_order_validations")
 	if err != nil {
 		log.Fatalf("allocation creation failed: %v", err)
 	}
-	fmt.Println("Created order_allocation: 100 to ACCT-DISC-ACTIVE (discretionary, ACTIVE) - sum matches target_qty")
+	fmt.Printf("Created order_allocation: %v to ACCT-DISC-ACTIVE (discretionary, ACTIVE) - sum matches target_qty\n", uniqueTargetQty)
 
 	before := violationCountForOrder(orderID)
 	setEnforce(true)
 	_, err = boSvc.UpdateBORecord(ctx, secCtx, "order", orderID, models.BOCrudRecordRequest{
-		Record: map[string]interface{}{"executed_qty": 100, "leaves_qty": 0},
+		Record: map[string]interface{}{"executed_qty": uniqueTargetQty, "leaves_qty": 0},
 	}, "verify_order_validations")
 	if err != nil {
 		log.Fatalf("order update (full fill) failed unexpectedly, with the order now fully allocated: %v", err)

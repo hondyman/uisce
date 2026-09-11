@@ -200,7 +200,6 @@ type Server struct {
 	WriteHandler      *handlers.WriteHandler
 	MCPHandler        *handlers.MCPHandler
 	IgniteClient      *infrastructure.IgniteClient
-	FolderHandler     *handlers.FolderHandler
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
 
@@ -1321,6 +1320,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	validationRuleSvc := analytics.NewValidationRuleService(sqlxDB)
 	validationRuleHandler := handlers.NewValidationRuleHandler(validationRuleSvc, sqlxDB)
 
+	// Calc terms as catalog nodes - calculated semantic terms with a real
+	// vm.Expression rule_ast (parsed server-side via vm.ParseExpression),
+	// the calc side's mirror of validation rules above. Consumed by
+	// preAggSvc.GenerateDDL (by node_name + properties.term_type) once
+	// saved.
+	calcTermSvc := analytics.NewCalcTermService(sqlxDB)
+	calcTermHandler := handlers.NewCalcTermHandler(calcTermSvc)
+
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
 	srv.ExecutionEngine = execEngine
@@ -1339,9 +1346,20 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	slHandler := handlers.NewSecurityLineageHandler(slSvc)
 	slHandler.RegisterRoutes(r)
 
-	// Initialize report service and handler
+	// Initialize report service, executor, and handler.
+	// Production invariant: in non-dev environments, temporalClient MUST be non-nil.
+	env := strings.ToLower(getEnv("ENVIRONMENT", ""))
+	isDevEnv := env == "development" || env == "local" || env == "test"
+	if !isDevEnv && temporalClient == nil {
+		log.Fatalf("FATAL: TemporalClient is nil in environment %q; report execution requires active Temporal cluster", env)
+	}
+
 	reportService := reports.NewReportService(db)
-	reportHandler := NewReportHandler(reportService)
+	var reportExecutor reports.ReportExecutor
+	if temporalClient != nil {
+		reportExecutor = reports.NewTemporalReportExecutor(db, temporalClient)
+	}
+	reportHandler := NewReportHandler(reportService, reportExecutor, db)
 	reportHandler.RegisterRoutes(r)
 
 	// Initialize report schedule & bursting handler
@@ -1389,11 +1407,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	semanticTermsHandler := NewSemanticTermsHandler(db, schedulerSecurityDeps)
 	// Registration moved to /api group
 
-	// Initialize Folder Service and Handler
-	folderService := services.NewFolderService(sqlxDB)
-	folderHandler := handlers.NewFolderHandler(folderService)
-	srv.FolderHandler = folderHandler
-	folderHandler.RegisterRoutes(r)
 
 	// Initialize Graph-Native Lineage Service (Phase 12)
 	// sqlRepo already created above
@@ -1489,6 +1502,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Validation rules as catalog nodes (unified rule engine)
 		validationRuleHandler.RegisterRoutes(r)
+
+		// Calc terms as catalog nodes (unified rule engine, calc side)
+		calcTermHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)

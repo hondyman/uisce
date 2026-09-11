@@ -459,6 +459,29 @@ export function createUisceTheme(mode: 'light' | 'dark'): Theme {
             height: 22,
             fontSize: '0.6875rem',
           },
+          // Color-specific slots - without these, `color="error"` etc. is
+          // silently overridden back to the brand teal by `filled`/
+          // `outlined` above (those apply regardless of the `color` prop),
+          // which breaks severity color-coding (BLOCK/WARN chips, status
+          // chips) everywhere a Chip uses a semantic color instead of the
+          // default brand accent. This MUI version's ChipClasses only
+          // exposes combined color-only slots (colorError/colorWarning/
+          // colorSuccess/colorInfo, not filledError/outlinedError etc.), so
+          // variant-specific treatment is done via the ownerState-aware
+          // function form instead. Mirrors the MuiAlert standard*/outlined*
+          // pattern above, same semantic tokens.
+          colorSuccess: ({ ownerState }: { ownerState: { variant?: string } }) =>
+            ownerState.variant === 'outlined'
+              ? { borderColor: alpha(semanticSuccess.DEFAULT, 0.5), color: mode === 'light' ? semanticSuccess.DEFAULT : semanticSuccess.light }
+              : { backgroundColor: alpha(semanticSuccess.DEFAULT, 0.14), color: mode === 'light' ? semanticSuccess.dark2 : semanticSuccess.light, border: `1px solid ${alpha(semanticSuccess.DEFAULT, 0.35)}` },
+          colorWarning: ({ ownerState }: { ownerState: { variant?: string } }) =>
+            ownerState.variant === 'outlined'
+              ? { borderColor: alpha(semanticWarning.DEFAULT, 0.5), color: mode === 'light' ? semanticWarning.DEFAULT : semanticWarning.light }
+              : { backgroundColor: alpha(semanticWarning.DEFAULT, 0.14), color: mode === 'light' ? semanticWarning.dark2 : semanticWarning.light, border: `1px solid ${alpha(semanticWarning.DEFAULT, 0.35)}` },
+          colorError: ({ ownerState }: { ownerState: { variant?: string } }) =>
+            ownerState.variant === 'outlined'
+              ? { borderColor: alpha(semanticError.DEFAULT, 0.5), color: mode === 'light' ? semanticError.DEFAULT : semanticError.light }
+              : { backgroundColor: alpha(semanticError.DEFAULT, 0.14), color: mode === 'light' ? semanticError.dark2 : semanticError.light, border: `1px solid ${alpha(semanticError.DEFAULT, 0.35)}` },
         },
       },
 

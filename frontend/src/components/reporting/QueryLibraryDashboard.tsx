@@ -32,7 +32,6 @@ import {
   Sort as SortIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useFolders } from '../../api/explorer';
 import { useReportTemplates } from '../../api/reporting';
 
 // --- Types ---
@@ -58,7 +57,6 @@ export const QueryLibraryDashboard: React.FC = () => {
   const navigate = useNavigate();
 
   // --- Real Data Fetching ---
-  const { data: apiFolders, isLoading: isLoadingFolders } = useFolders();
   const { data: apiQueries, isLoading: isLoadingQueries } = useReportTemplates();
 
   // --- State ---
@@ -68,16 +66,7 @@ export const QueryLibraryDashboard: React.FC = () => {
   // --- Derived Data ---
   
   // Transform API Folders to component format
-  const folders = useMemo<FolderItem[]>(() => {
-    if (!apiFolders) return [];
-    return apiFolders.map(f => ({
-      id: f.id,
-      name: f.name,
-      queryCount: f.items ? f.items.filter(i => i.itemType === 'query').length : 0,
-      updatedAt: 'Recently', // TODO: Add updatedAt to ExplorerFolder API
-      type: 'folder'
-    }));
-  }, [apiFolders]);
+  const folders = useMemo<FolderItem[]>(() => [], []);
 
   // Transform API Queries to component format
   const queries = useMemo<QueryItem[]>(() => {
@@ -107,7 +96,7 @@ export const QueryLibraryDashboard: React.FC = () => {
     return [...queries].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 4);
   }, [queries]);
 
-  const isLoading = isLoadingFolders || isLoadingQueries;
+  const isLoading = isLoadingQueries;
 
   if (isLoading) {
     return (

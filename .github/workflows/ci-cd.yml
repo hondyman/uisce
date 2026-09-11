@@ -103,6 +103,73 @@ jobs:
         name: backend-binaries
         path: backend/bin/
 
+  # ==========================================================================
+  # Backend integration tests (real service dependencies)
+  # ==========================================================================
+  # build-backend above is the hermetic tier: `go test ./...` with no -tags,
+  # no service containers, must always be green - that's the gate that can
+  # say no. Files needing a real external dependency (Postgres, a real
+  # websocket round trip that's flaky/failing in CI for reasons still under
+  # investigation - see docs/unified-rule-engine-handoff.md item 59) declare
+  # `//go:build integration` so they're excluded from that tier by
+  # construction, not by a runtime skip that could silently vary by
+  # environment.
+  #
+  # This job is their other half: it passes -tags=integration, so those
+  # files compile and run for real, against a real Postgres (the same
+  # service-container recipe .github/workflows/integration.yml already
+  # proves works). Every integration-tagged test therefore runs in exactly
+  # one CI job, for real, with its outcome visible - not skipped in every
+  # executed run, which the pipeline handoff's own §5 rule names as the
+  # trap to avoid (a test that only ever skips is not a gate).
+  #
+  # Deliberately scoped to the two packages verified this session
+  # (internal/bundles, internal/handlers) rather than `./...` - broader
+  # classification of which other *_integration_test.go files genuinely
+  # need real services (vs. being misleadingly named - several found this
+  # session use sqlmock/httptest and are actually hermetic) is real,
+  # separate work, not yet done. See item 59 for the full audit and what's
+  # still unclassified.
+  integration-tests-backend:
+    name: Integration Tests (Backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: alpha
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+        - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=5
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: backend/go.mod
+        cache: true
+        cache-dependency-path: backend/go.sum
+
+    - name: Wait for Postgres
+      run: |
+        sudo apt-get update && sudo apt-get install -y postgresql-client
+        for i in {1..30}; do
+          pg_isready -h localhost -p 5432 -U postgres && break
+          sleep 1
+        done
+
+    - name: Run integration-tagged tests
+      working-directory: backend
+      env:
+        DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+      run: go test -tags=integration -v ./internal/bundles/... ./internal/handlers/... ./internal/audit/... ./internal/api/...
+
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest

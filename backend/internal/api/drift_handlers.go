@@ -59,6 +59,7 @@ func (h *DriftHandler) GetPendingProposals(w http.ResponseWriter, r *http.Reques
 	for rows.Next() {
 		item := make(map[string]interface{})
 		if err := rows.MapScan(item); err == nil {
+			cleanScanResult(item)
 			results = append(results, item)
 		}
 	}

@@ -108,6 +108,15 @@ func (m *GraphQLManager) ResolveGraphQLField(ctx context.Context, ep *APIEndpoin
 	for rows.Next() {
 		row := make(map[string]interface{})
 		if err := rows.MapScan(row); err == nil {
+			// MapScan can leave some Postgres text-like columns as raw
+			// []byte rather than string - see
+			// internal/api/bo_crud_handler.go's cleanScanResult for the
+			// established fix.
+			for k, v := range row {
+				if b, ok := v.([]byte); ok {
+					row[k] = string(b)
+				}
+			}
 			result = append(result, row)
 		}
 	}

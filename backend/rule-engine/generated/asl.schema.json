@@ -3720,6 +3720,84 @@
       ],
       "type": "object"
     },
+    "CalcTermConfig": {
+      "description": "CalcTermConfig is stored in catalog_node.config. RuleAST is a\nvm.Expression-shaped json.RawMessage (internal/rules/vm), same\nlow-level-package rationale as ValidationRuleConfig.RuleAST: this\npackage doesn't import internal/rules/vm, whoever evaluates or\ncompiles the AST does. Expression keeps the original typed-text source\nalongside the parsed AST, so re-editing a saved calc term doesn't\nrequire decompiling the AST back to text.",
+      "properties": {
+        "Expression": {
+          "type": "string"
+        },
+        "RuleAST": {}
+      },
+      "required": [
+        "Expression",
+        "RuleAST"
+      ],
+      "type": "object"
+    },
+    "CalcTermDescriptor": {
+      "description": "CalcTermDescriptor is the API response shape.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "DataType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Expression": {
+          "type": "string"
+        },
+        "ID": {},
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {},
+        "TenantID": {
+          "type": "string"
+        },
+        "UpdatedAt": {}
+      },
+      "required": [
+        "ID",
+        "TenantID",
+        "BOName",
+        "Name",
+        "Description",
+        "Expression",
+        "RuleAST",
+        "DataType",
+        "CreatedAt",
+        "UpdatedAt"
+      ],
+      "type": "object"
+    },
+    "CalcTermProperties": {
+      "description": "CalcTermProperties is stored in catalog_node.properties, mirroring\nValidationRuleProperties' role for validation-rule nodes. TermType is\nalways \"calculated\" - the marker PreAggregationService.compileCalcTermToSQL\n(internal/analytics/pre_aggregation_service.go) filters on when\nresolving a pre-aggregation's Calculations list by node_name.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "DataType": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "TermType": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BOName",
+        "TenantID",
+        "TermType",
+        "DataType"
+      ],
+      "type": "object"
+    },
     "CalculationStep": {
       "description": "CalculationStep represents a single step in a calculation breakdown.",
       "properties": {
@@ -6189,6 +6267,12 @@
       ],
       "type": "object"
     },
+    "Dialect": {
+      "enum": [
+        "starrocks"
+      ],
+      "type": "string"
+    },
     "DiffReport": {
       "description": "DiffReport - matches the schema structure for upgrade artifacts",
       "properties": {
@@ -8149,6 +8233,44 @@
       "required": [
         "Name",
         "Args"
+      ],
+      "type": "object"
+    },
+    "FunctionSpec": {
+      "description": "FunctionSpec is the one declaration a function needs. Category and\nDescription exist for editor autocomplete/capability badges (see\nLibraryEntries and cmd/generate-monaco) - they're read, not decorative.",
+      "properties": {
+        "Category": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Native": {
+          "$ref": "#/definitions/NativeImpl"
+        },
+        "NoClosedForm": {
+          "description": "NoClosedForm marks a function with no algebraic solution (solved\nnumerically) - explains why Pushdownable is false for it even\nthough it's a real, fully-supported function, as opposed to a\nfunction whose SQL emitter simply hasn't been written yet.",
+          "type": "boolean"
+        },
+        "SQLEmit": {
+          "$ref": "#/definitions/Record\u003cDialect, SQLEmitter\u003e"
+        },
+        "Signature": {
+          "description": "Signature is a human-readable argument/return description, e.g.\n\"(rate number, cash_flows number[]) -\u003e number\" - not parsed by\nanything, purely for editor autocomplete detail text and docs.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Name",
+        "Signature",
+        "Category",
+        "Description",
+        "NoClosedForm",
+        "Native",
+        "SQLEmit"
       ],
       "type": "object"
     },
@@ -11535,6 +11657,22 @@
       "required": [
         "",
         "Meta"
+      ],
+      "type": "object"
+    },
+    "ParseError": {
+      "description": "ParseError reports a parse failure with a byte offset into the\noriginal source, so a caller (an editor's diagnostics, or an API\nerror response) can point at the exact spot rather than just quoting\na message.",
+      "properties": {
+        "Message": {
+          "type": "string"
+        },
+        "Pos": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "Message",
+        "Pos"
       ],
       "type": "object"
     },
@@ -18578,6 +18716,38 @@
       ],
       "type": "object"
     },
+    "UpsertCalcTermRequest": {
+      "description": "UpsertCalcTermRequest is the API request shape for creating or\nupdating a calc term. Expression is typed text (e.g. \"SUM(ExecQuantity\n* ExecPrice)\"), parsed server-side via vm.ParseExpression - the client\nnever constructs rule_ast JSON directly.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "DataType": {
+          "type": "string"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Expression": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "TenantID",
+        "BOName",
+        "Name",
+        "Description",
+        "Expression",
+        "DataType"
+      ],
+      "type": "object"
+    },
     "UpsertPreAggRequest": {
       "properties": {
         "BOName": {
@@ -19601,6 +19771,26 @@
       ],
       "type": "object"
     },
+    "exprParser": {
+      "description": "Grammar (lowest to highest precedence):\n\n\taddsub := muldiv (('+' | '-') muldiv)*\n\tmuldiv := unary (('*' | '/') unary)*\n\tunary  := '-' unary | primary\n\tprimary := NUMBER | IDENT '(' (addsub (',' addsub)*)? ')' | IDENT | '(' addsub ')'",
+      "properties": {
+        "pos": {
+          "type": "number"
+        },
+        "src": {
+          "type": "string"
+        },
+        "toks": {
+          "$ref": "#/definitions/token[]"
+        }
+      },
+      "required": [
+        "toks",
+        "pos",
+        "src"
+      ],
+      "type": "object"
+    },
     "fakeDriftHealer": {
       "properties": {
         "calls": {}
@@ -19927,6 +20117,25 @@
         "mode",
         "ended",
         "ctxUsed"
+      ],
+      "type": "object"
+    },
+    "token": {
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/tokenKind"
+        },
+        "pos": {
+          "type": "number"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "pos"
       ],
       "type": "object"
     },

@@ -46,6 +46,7 @@ import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePa
 import Marketplace from "./pages/marketplace/Marketplace";
 import { ValidationRulesBuilderPage } from "./pages/ValidationRulesBuilderPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
+import SystemValidationsPage from "./pages/SystemValidationsPage";
 import { UisceBuilderPage } from "./pages/UisceBuilderPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
@@ -285,6 +286,12 @@ function ProtectedApp() {
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="core/validation-rules" element={<ProtectedRoute><ValidationRulesBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
+        {/* System-wide validation-rule-nodes view (every BO, one page) -
+            a sibling of the two routes above, not a replacement: those
+            two are the older catalog_validation_rules-era engine and the
+            per-rule node editor respectively; this is the new node
+            system's tenant-wide list. */}
+        <Route path="core/validation-rules/all" element={<ProtectedRoute><SystemValidationsPage /></ProtectedRoute>} />
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
         <Route path="reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />

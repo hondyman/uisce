@@ -18,6 +18,9 @@ type ReportTemplate struct {
 	ParameterSchema map[string]interface{} `json:"parameter_schema"`
 	IsActive        bool                   `json:"is_active"`
 	IsPublic        bool                   `json:"is_public"`
+	IsPersonal      bool                   `json:"is_personal"`
+	CreatedByID     *string                `json:"created_by_id,omitempty"`
+	IsFavorite      bool                   `json:"is_favorite"`
 	CreatedAt       time.Time              `json:"created_at"`
 	UpdatedAt       time.Time              `json:"updated_at"`
 	CreatedBy       string                 `json:"created_by,omitempty"`

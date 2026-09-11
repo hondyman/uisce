@@ -11,6 +11,8 @@ import (
 	"sort"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 const (
@@ -44,12 +46,58 @@ type MonacoSnippet struct {
 	Detail string `json:"detail"`
 }
 
+// MonacoFunction describes one registered rule/calc function for editor
+// autocomplete and capability badges - derived directly from
+// vm.LibraryEntries() (the same FunctionSpec registry that drives native
+// evaluation and SQL pushdown), not redeclared here. Pushdown is keyed by
+// dialect name so the editor can badge "pushdownable to StarRocks" vs.
+// "native/WASM only" per binding, not just a single yes/no.
+type MonacoFunction struct {
+	Name         string          `json:"name"`
+	Signature    string          `json:"signature"`
+	Category     string          `json:"category"`
+	Description  string          `json:"description"`
+	NoClosedForm bool            `json:"noClosedForm"`
+	Pushdown     map[string]bool `json:"pushdown"`
+}
+
 type MonacoMetadata struct {
 	Keywords  []string            `json:"keywords"`
 	Operators []string            `json:"operators"`
 	NodeKinds []string            `json:"nodeKinds"`
 	Snippets  []MonacoSnippet     `json:"snippets"`
 	Enums     map[string][]string `json:"enums"`
+	Functions []MonacoFunction    `json:"functions"`
+}
+
+// libraryDialects lists every SQL dialect the editor should report a
+// pushdown badge for - extend alongside vm.Dialect as new dialects gain
+// SQLEmit entries.
+var libraryDialects = []vm.Dialect{vm.DialectStarRocks}
+
+// buildFunctionMetadata derives editor-facing function metadata straight
+// from the live vm.Library (a real import, not go/types static analysis -
+// unlike NodeKinds/Enums below, function capabilities are registry data,
+// not Go type declarations, so reading them at generation time just means
+// calling the registry directly).
+func buildFunctionMetadata() []MonacoFunction {
+	entries := vm.LibraryEntries()
+	fns := make([]MonacoFunction, 0, len(entries))
+	for _, spec := range entries {
+		pushdown := make(map[string]bool, len(libraryDialects))
+		for _, d := range libraryDialects {
+			pushdown[string(d)] = spec.Pushdownable(d)
+		}
+		fns = append(fns, MonacoFunction{
+			Name:         spec.Name,
+			Signature:    spec.Signature,
+			Category:     spec.Category,
+			Description:  spec.Description,
+			NoClosedForm: spec.NoClosedForm,
+			Pushdown:     pushdown,
+		})
+	}
+	return fns
 }
 
 func main() {
@@ -135,6 +183,19 @@ func buildMetadata() MonacoMetadata {
 				})
 			}
 		}
+	}
+
+	meta.Functions = buildFunctionMetadata()
+	for _, fn := range meta.Functions {
+		detail := fn.Description
+		if fn.Signature != "" {
+			detail = fn.Signature + " - " + detail
+		}
+		meta.Snippets = append(meta.Snippets, MonacoSnippet{
+			Label:  fn.Name,
+			Insert: fn.Name + "()",
+			Detail: detail,
+		})
 	}
 
 	sort.Strings(meta.Operators)

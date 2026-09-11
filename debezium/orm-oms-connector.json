@@ -5,7 +5,7 @@
     "database.hostname": "host.docker.internal",
     "database.port": "5432",
     "database.user": "postgres",
-    "database.password": "postgres",
+    "database.password": "REPLACE_WITH_POSTGRES_PASSWORD",
     "database.dbname": "crims",
     "database.sslmode": "verify-ca",
     "database.sslrootcert": "/tmp/orm_ca.crt",

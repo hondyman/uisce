@@ -50,11 +50,11 @@ func TestFieldFormatPredicates(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.fn, func(t *testing.T) {
-			fn, ok := nativeFuncs[tt.fn]
+			spec, ok := LookupFunction(tt.fn)
 			if !ok {
 				t.Fatalf("no registered function %q", tt.fn)
 			}
-			got, err := fn(tt.args)
+			got, err := spec.Native(tt.args)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
