@@ -1,5 +1,12 @@
 # Unified Rule Engine — Handoff
 
+> **Note on commit history**: Sessions 8–13 citations in this document (e.g.
+> `5b9b32702`, `3cf823e48`, `0bfcc318a`, `6f1611482`) refer to pre-squash
+> history. After the calc-engine-measures rebase, 49 commits were squashed
+> into `1e215308c` for tractability. The full pre-squash history is
+> preserved under tag `pre-squash-calc`:
+> `git show pre-squash-calc:<path>`.
+
 Written 2026-09-09, updated across eight sessions on the same day, that
 took the rule/calc engine from "three-plus disconnected AST formats, one
 of them silently broken in the browser" through **two** fully-proven
