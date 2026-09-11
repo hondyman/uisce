@@ -30,7 +30,7 @@ next task is.
 `BinaryExpr`/`FuncCall`) is now the single AST behind validation rules,
 calc-term SQL pushdown, and the browser WASM live preview - **not**
 MDM/rulefabric rules, despite an earlier version of this document
-claiming otherwise. That claim was inference dressed as verification:
+ claiming otherwise. That claim was inference dressed as verification:
 rulefabric imports the `vm` package, but only for its bytecode
 primitives (`OpCode`/`CompiledProgram`/`Instruction`) to compile its
 *own* `ConditionGroup`/`Condition` model - it never constructs or
@@ -1283,3 +1283,154 @@ to execute it, then close with the proof this design has pointed at
 from the start: author one MDM rule, one compliance rule, and one BO
 validation in the same editor, same autocomplete, same terms, evaluate
 all three through the same engine.
+
+ ## Rulefabric consolidation, backend slice (2026-09-10) - "one write-hook, not two," and two findings the map didn't have
+
+The blast-radius map found `TriggerEngine`'s `compliance_rules` action
+case as the one live, entangled consumer - reachable from every BO CRUD
+write via `BOCRUDHandler.emitBORowEvent`. This session's design
+decision: don't rewire that case onto a rulefabric-replacement backend -
+**retire it**, because the write-blocking semantics it implements are a
+strict subset of what `shadow_evaluation.go`'s `evaluateAndEnforceRules`
+already does for every validation rule. MDM/compliance rules that are
+per-record write-time constraints become `domain` values on the same
+`catalog_node` rules (additive field, `ValidationRuleProperties.Domain`,
+default `"validation"` for every rule written before this field
+existed); batch-shaped MDM/compliance rules (wash-trade over history,
+concentration over positions) are not write-hooks and are left for the
+sweep harness, a later slice.
+
+**Commit-ordering check (done before any edit, per the standing rule):**
+confirmed the write-blocking behavior in `TriggerEngine`'s
+`compliance_rules` case **never actually blocked anything in
+production**. `BOCRUDHandler.emitBORowEvent` - the only real caller of
+`EvaluateTriggers`, the only path that reaches this case - runs trigger
+evaluation in a `go func()` goroutine *after* the write is already
+committed and explicitly never surfaces trigger errors to the caller ("failures are
+logged, never surfaced... must not roll back or fail an otherwise-
+successful BO mutation" - bo_crud_handler.go). So the case's `err =
+fmt.Errorf("%d compliance rule(s) blocked this write"...)` was always
+swallowed into a log line. This is a real, pre-existing latent bug,
+closed by this retirement rather than repaired by it - not worth fixing
+on the way out, since the whole case no longer exists.
+
+**Finding 1, not in the map: `TriggerEngine.EvaluateTriggers`'s own
+query is broken against the live schema, independent of anything in
+this migration.** It selects `vt.trigger_type_id` (joined to
+`trigger_types.id`) and `vt.event_config`/`condition_config`/
+`action_config`/`abac_policy_id`/`priority` from `validation_triggers`.
+None of those columns exist on the real table - verified by running the
+exact query against real `alpha`: `ERROR: column vt.trigger_type_id
+does not exist... Perhaps you meant "vt.trigger_type"`. The real table
+has `trigger_type` (varchar, not a `trigger_type_id` FK), `rule_ids`,
+`pipeline_id`, `dispatch_mode`, `meta` - shaped for the DATAPIPELINE
+trigger machinery, not this query. 6 active rows exist in
+`validation_triggers`, so something is meant to fire - but
+`EvaluateTriggers` cannot currently read them at all; every invocation
+silently errors and gets logged-and-swallowed by the same
+`emitBORowEvent` fire-and-forget path. **This means the "prove a
+pipeline trigger still fires" obligation from this session's plan could
+not be attempted as scoped** - the machinery that was supposed to be
+provably undamaged by this migration was already non-functional before
+this migration touched anything. Not fixed here - it's a pre-existing
+break in code this migration was explicitly scoped not to touch (the
+pipeline trigger machinery itself, per the scope boundary below), and
+repairing someone else's broken query while retiring an unrelated case
+in the same commit would blur which change caused what. Flagged for
+whoever owns the DATAPIPELINE trigger work next - it currently can't
+work at all, migration or no migration.
+
+**Finding 2, not in the map: a third, distinct validation engine.**
+`backend/internal/services/validation_rule_engine.go`
+(`ValidationRuleEngineImpl`) is not the unified `internal/rules/vm`
+engine, not rulefabric, and wasn't inventoried. It holds a real,
+behaviorally-live `*rulefabric.OperatorRegistry` field
+(`.operators.Get(name)`, terse-operator-name translation at line ~120)
+- the map's "shallow, type-only coupling, easy to decouple"
+characterization for this file was wrong; it's real delegation, just to
+`OperatorRegistry` specifically (comparison semantics), not to
+rulefabric's `ConditionGroup`/`Condition` tree. **Left untouched in this
+slice** - `OperatorRegistry` isn't part of what's being retired (only
+the condition-AST/CEL evaluation path is), so nothing here blocks the
+consolidation; it's flagged because a third rule engine existing at all
+is worth someone deciding what to do with, later, deliberately, not
+folded into this migration's scope by surprise.
+
+**Ordering constraint this creates, for whoever eventually deletes
+rulefabric's `ConditionGroup`/`Condition` compiler entirely** (the
+"types last" step in this migration's own stated caution -
+`vm.OpCode` imports stay until rulefabric's own compiler is gone):
+`OperatorRegistry` cannot go with it. `ValidationRuleEngineImpl` has a
+live, behavioral dependency on it for comparison semantics
+(`equals`/`greater_than`/etc.), so **decouple
+`validation_rule_engine.go`'s operator lookups from
+`rulefabric.OperatorRegistry` before `OperatorRegistry` can be
+deleted** - either give `ValidationRuleEngineImpl` its own copy of the
+terse-operator-name table, or point it at `internal/rules/vm`'s own
+operator vocabulary (`condition_evaluator.go`'s `equals`/`not_equals`/
+`greater_than`/`less_than`/`greater_equal`/`less_equal` set) instead.
+Discovering this the hard way - `go build` failing mid-retirement
+because a supposedly-dead type still has a real caller - is exactly
+what recording it now avoids.
+
+**Scope actually touched, precisely:**
+- `internal/models/validation_rule_types.go`: additive `Domain` field on
+  `ValidationRuleProperties`/`UpsertValidationRuleRequest`/
+  `ValidationRuleDescriptor`, plus `ValidationRuleDomainDefault`/`MDM`/
+  `Compliance` constants.
+- `internal/analytics/validation_rule_service.go`: `UpsertValidationRule`
+  defaults empty `Domain` to `"validation"` before persisting (explicit,
+  not left blank, so every rule from this point forward is unambiguous);
+  `descriptorFromNode` reads `Domain` with the same default for rows
+  written before the field existed; `ListByBO` gained an optional
+  `domain` filter parameter (empty = all domains).
+- `internal/metadata/shadow_evaluation.go`: its `ListByBO` call now
+  passes `domain=""` explicitly - all domains enforce on the write path,
+  which is the actual mechanism by which MDM/compliance per-record rules
+  now take effect.
+- `internal/handlers/validation_rule_handler.go`: `handleListByBO` reads
+  an optional `?domain=` query param.
+- `internal/api/trigger_engine.go`: the `"compliance_rules"` action case
+  and `evaluateComplianceRules` deleted, replaced with a comment
+  recording why (see above); unused `rulefabric`/`uuid` imports removed.
+  **Nothing else in this file touched** - the action dispatcher's other
+  cases (notification/temporal/rabbitmq/webhook), `DispatchTrigger`
+  (a *different* type, `validation.TriggerValidationEngine`, confirmed
+  by reading its definition - genuinely unrelated to rulefabric, matches
+  the map's "internal/validation is clean" finding), and all pipeline
+  trigger machinery are untouched, per the explicit scope boundary.
+- `cmd/verify_compliance_domain/`: new permanent proof program (pattern:
+  `verify_order_validations`).
+
+**Proof, run against real `alpha`:** `cmd/verify_compliance_domain`
+authors a `domain="compliance"`, severity BLOCK rule
+("target_qty <= 1000") on `order_allocation` through
+`ValidationRuleService`, confirms it round-trips
+(`desc.Domain == "compliance"`), then drives two real writes through
+`BusinessObjectService.CreateBORecord` with enforcement on:
+- `target_qty=5000` (violates): **rejected**, row count unchanged,
+  violation persisted and attributed to the rule by name.
+- `target_qty=100` (compliant): the write still fails, but for a
+  separate, unrelated, pre-existing reason - `order_allocation` also
+  carries an already-known rule ("Allocated quantity must equal
+  distributed execution-allocation fills") that rule-errors on this
+  branch (its context field, `alloc_fill_sum`, is the same class of gap
+  as `placement_routed_sum` on the `order` BO - a branch-local loader
+  gap, not a data problem, not fixable by this proof's fixture). What
+  the proof actually demonstrates instead, and does demonstrate
+  cleanly: the compliance-domain rule's name is **absent** from the
+  blocking-rule list for the compliant value and **present** for the
+  violating one - it discriminates correctly. Every real BO in the
+  catalog (order, order_allocation, execution, execution_allocation,
+  placement - checked directly against `alpha`) already carries multiple
+  active rules, several sharing this same context-field gap, so a
+  fully-clean "compliant write succeeds outright" demonstration isn't
+  available anywhere in the current catalog without first fixing that
+  separate, pre-existing issue - out of this slice's scope.
+`go build ./...` and `go vet ./...` clean across the whole backend after
+every edit in this slice.
+
+**Not done in this slice:** `PolicyRuleBuilder`'s fold onto the Monaco
+expression surface, `cel-go`'s removal from `go.mod`, the editor context
+model + term autocomplete, and the closing three-domain proof. Those
+remain steps 3-4 of the plan above, unstarted.
