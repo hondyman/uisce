@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -190,11 +191,26 @@ func (a *ReportActivities) StoreExecutionResultActivity(
 			result.RowsProcessed,
 			result.ExecutionTimeMS,
 			result.CompletedAt,
-			input.Template.CreatedByID, // Identity invariant: always the template owner
+			input.Template.CreatedByID,
 			result.Engine,
 			result.RowsProcessed,
 			executionID,
 		)
+		if err != nil {
+			return err
+		}
+		detailJSON, _ := json.Marshal(map[string]interface{}{
+			"output_url":         result.OutputURL,
+			"rows_processed":     result.RowsProcessed,
+			"execution_time_ms":  result.ExecutionTimeMS,
+		})
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO public.report_execution_events (
+				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
+			)
+		`, executionID, input.Template.TenantID, "COMPLETED", "running", "completed", "system:activity", detailJSON)
 		return err
 	})
 	if err != nil {

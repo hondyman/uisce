@@ -316,9 +316,10 @@ func TestTemporalExecutor_staleReconciliation(t *testing.T) {
 	}()
 
 	// Sweep executions older than 15 minutes
-	affected, err := reports.SweepStaleExecutions(context.Background(), db, 15*time.Minute)
+	swept, broken, err := reports.SweepStaleExecutions(context.Background(), db, 15*time.Minute)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, affected, int64(1))
+	require.GreaterOrEqual(t, swept, int64(1))
+	require.Equal(t, int64(0), broken, "broken-chain count should be zero for clean sweep")
 
 	var status string
 	err = db.QueryRow("SELECT status FROM public.report_executions WHERE id = $1", staleExecID).Scan(&status)
