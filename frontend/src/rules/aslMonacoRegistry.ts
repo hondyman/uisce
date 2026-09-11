@@ -59,6 +59,14 @@ export function setAslFields(fields: AslFieldMeta[]): void {
 // CEL expression completions (record.* / actor.* / changes.* contexts) for
 // PolicyRuleBuilder's expression editor. Same module-level pattern as
 // currentFields - the provider closure reads it at call time.
+//
+// INTERIM: This entire mechanism (setCelFields, celFields, isCelContext
+// detection, and the CEL completion branch) is transitional. CEL is the
+// execution backend for PolicyRuleBuilder today; it is not the target
+// architecture. When the CEL retirement project is executed (five-package
+// coupling audit + vm.Expression migration + cel-go removal), this whole
+// mechanism is removed. Do not extend it — extend the ASL/semantic-term
+// path (setAslFields, currentFields) instead.
 let celFields: AslFieldMeta[] = [];
 
 export function setCelFields(fields: AslFieldMeta[]): void {
