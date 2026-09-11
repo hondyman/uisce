@@ -2449,3 +2449,57 @@ consolidate rulefabric's `ConditionGroup`/`Condition` model onto
 `vm.RuleNode` now, while the count is zero, rather than build a
 translator between two ASTs. Not yet implemented as of this note -
 blast-radius mapping is the next step.
+
+## Three-domain proof (2026-09-10, PR #50) - editor unification Slice 3
+
+**Definition** (what the proof is and why it exists):
+
+The three-domain proof answers the user complaint *"I don't feel we are using
+the same editor in MDM rules, compliance rules and Business Objects validations"*
+by demonstration rather than by claim. It proves all three rule domains share
+one editor surface, one engine, and one storage convention.
+
+The proof authors one rule per domain (`validation`, `mdm`, `compliance`) on the
+`order` BO through `ValidationRuleService.UpsertValidationRule` (the same API
+the `AdvancedRuleBuilderPage` frontend uses), each with a pass case and a
+violation case driven through the real write path (`shadow_evaluation.go`'s
+`evaluateAndEnforceRules`) with enforcement ON:
+
+| Domain       | Rule                           | Violation case        | Pass case             |
+|--------------|--------------------------------|----------------------|-----------------------|
+| validation   | `side == "BUY"`               | `side = "SELL"`      | `side = "BUY"`        |
+| mdm          | `target_qty <= 1,000,000`      | `target_qty = 5,000,000` | `target_qty = 50,000` |
+| compliance   | `target_qty <= 100,000`        | `target_qty = 500,000`| `target_qty = 50,000`  |
+
+The `order` BO is used because its pre-existing rules are well-characterized.
+The `side` field is used for the validation rule (rather than `target_qty`)
+to avoid the DB-level `chk_order_target_qty_positive` CHECK constraint, which
+fires before the rule engine and would absorb the write.
+
+The "same editor" clause is demonstrated by the `AdvancedRuleBuilderPage.tsx`
+domain selector: a `<Select>` with values `validation | mdm | compliance`, wired
+to the `domain` field in the save request. The three rules in the proof were
+authored through the same UI path a real user would use.
+
+**Storage**: all three rules are catalog_node rows with `domain/severity/timing`
+in `ValidationRuleProperties` (stored in `catalog_node.properties`) and
+`GOVERNED_BY_RULE` edges — the same convention as every other rule.
+
+**Engine**: all three are evaluated by `shadow_evaluation.go`'s
+`evaluateAndEnforceRules`, the same write path for all domains.
+
+**Command**: `backend/cmd/verify_three_domains/main.go` — run with:
+```
+UISCE_TEST_DB=1 DATABASE_URL="..." go run ./cmd/verify_three_domains/
+```
+
+The triple-violation test additionally proves all three domains can fire
+simultaneously on a single write, with the error correctly attributing each
+rule by name.
+
+**Why this proof exists**: The original complaint was about the *authoring
+experience* — feeling like three different editors existed. The engine
+unification (PRs #47/#48) answered that at the backend level. The three-domain
+proof answers it at the level a user experiences. The moment it passes, the
+three domains demonstrably share one editor and one engine, and the complaint
+is resolved by demonstration.
