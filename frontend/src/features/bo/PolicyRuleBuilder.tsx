@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Editor from '@monaco-editor/react';
 import type { BOField } from './BOGovernanceStudio';
+import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setCelFields } from '../../rules/aslMonacoRegistry';
 import './BOGovernanceStudio.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -78,6 +80,16 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
   const [simLoading, setSimLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Push BO fields into the CEL expression completion provider so that
+  // record.<field> suggestions appear when typing inside the Monaco editor.
+  useEffect(() => {
+    setCelFields(fields.map((f) => ({
+      name: f.key,
+      type: f.type,
+      entity: undefined,
+      description: f.display_name,
+    })));
+  }, [fields]);
   const headers = useCallback(() => ({
     'Content-Type': 'application/json',
     'X-Tenant-ID': tenantId,
@@ -212,11 +224,30 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
             <div style={{ fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.5px', color: 'var(--bog-text-muted)', marginBottom: 8 }}>
               WHEN — Condition (CEL)
             </div>
-            <textarea className="bog-textarea"
+            <Editor language={UISCE_EXPRESSION_LANGUAGE}
               value={editing.condition_expr ?? ''}
-              placeholder={'record.amount > 50000 && actor.roles.exists(r, r == "ANALYST")'}
-              style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}
-              onChange={e => setEditing(p => ({ ...p!, condition_expr: e.target.value }))} />
+              height="120px"
+              theme="vs-dark"
+              beforeMount={(monaco) => { void registerUisceExpressionLanguage(monaco); }}
+              onChange={(val) => { setEditing(p => ({ ...p!, condition_expr: val ?? '' })); }}
+              options={{
+                fontSize: 13,
+                fontFamily: "'JetBrains Mono', monospace",
+                minimap: { enabled: false },
+                lineNumbers: 'off',
+                glyphMargin: false,
+                folding: false,
+                lineDecorationsWidth: 8,
+                lineNumbersMinChars: 0,
+                wordWrap: 'on',
+                scrollBeyondLastLine: false,
+                padding: { top: 8, bottom: 8 },
+                overviewRulerLanes: 0,
+                hideCursorInOverviewRuler: true,
+                scrollbar: { vertical: 'hidden', horizontal: 'hidden' },
+                renderLineHighlight: 'none',
+              }}
+            />
             <div style={{ fontSize: 11, color: 'var(--bog-text-muted)', marginTop: 4 }}>
               Variables: <code style={{ color: 'var(--bog-accent)' }}>record</code> · <code style={{ color: 'var(--bog-accent)' }}>actor</code> · <code style={{ color: 'var(--bog-accent)' }}>changes</code>
             </div>
