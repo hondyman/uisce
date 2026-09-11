@@ -83,7 +83,7 @@ func TestWriter1_CreatedEvent_ActorVocabulary_TriggeredBySet(t *testing.T) {
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "user-trigger-001", sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "user-trigger-001", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 
@@ -132,7 +132,7 @@ func TestWriter1_CreatedEvent_ActorVocabulary_SystemSchedulerFallback(t *testing
 	sqlMock.ExpectExec("INSERT INTO public.report_executions").
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectExec("INSERT INTO public.report_execution_events").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), "system:scheduler", sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), "system:scheduler", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	sqlMock.ExpectCommit()
 

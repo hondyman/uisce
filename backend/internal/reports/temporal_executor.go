@@ -143,9 +143,9 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 			INSERT INTO public.report_execution_events (
 				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
 			) VALUES (
-				gen_random_uuid(), $1, $2, 'CREATED', NULL, 'pending', $3, $4
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
 			)
-		`, execID, tmpl.TenantID, actorID, detailJSON)
+		`, execID, tmpl.TenantID, "CREATED", nil, "pending", actorID, detailJSON)
 		return txErr
 	})
 	if err != nil {
