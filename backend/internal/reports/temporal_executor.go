@@ -104,6 +104,17 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 
 	// 3. Insert 'pending' row via WithTenantTransaction (enforces FORCE RLS)
 	// Execution row belongs to tmpl.TenantID (template owner tenant).
+	// Event insert is in the SAME transaction — audit trail completeness invariant:
+	// no execution row without its CREATED event, no CREATED event without execution row.
+	actorID := "system:scheduler" // default; overridden if triggeredBy is present
+	if triggeredBy != nil && *triggeredBy != "" {
+		actorID = *triggeredBy
+	}
+	// Extract schedule_id before the closure so the closure can capture it
+	scheduleIDStr := ""
+	if sidVal, ok := params["schedule_id"].(string); ok && sidVal != "" {
+		scheduleIDStr = sidVal
+	}
 	err = db.WithTenantTransaction(ctx, e.db, tmpl.TenantID.String(), func(tx *sql.Tx) error {
 		insertQuery := `
 			INSERT INTO public.report_executions (
@@ -118,6 +129,23 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 			execID, tmpl.TenantID, tmpl.ID, tmpl.TemplateName, paramsJSON,
 			reqBy, triggeredBy, metaJSON,
 		)
+		if txErr != nil {
+			return txErr
+		}
+		// detail: include schedule_id when present (self-contained audit record)
+		var detailJSON []byte
+		if scheduleIDStr != "" {
+			detailJSON, _ = json.Marshal(map[string]interface{}{"schedule_id": scheduleIDStr})
+		} else {
+			detailJSON = []byte(`{}`)
+		}
+		_, txErr = tx.ExecContext(ctx, `
+			INSERT INTO public.report_execution_events (
+				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
+			) VALUES (
+				gen_random_uuid(), $1, $2, 'CREATED', NULL, 'pending', $3, $4
+			)
+		`, execID, tmpl.TenantID, actorID, detailJSON)
 		return txErr
 	})
 	if err != nil {
