@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -19,16 +19,18 @@ import (
 )
 
 type ReportHandler struct {
-	service  *reports.ReportService
-	executor reports.ReportExecutor
-	db       *sql.DB
+	service        *reports.ReportService
+	executor      reports.ReportExecutor
+	db            *sql.DB
+	executionRepo *reports.ExecutionRepository
 }
 
 func NewReportHandler(service *reports.ReportService, executor reports.ReportExecutor, dbConn *sql.DB) *ReportHandler {
 	return &ReportHandler{
-		service:  service,
-		executor: executor,
-		db:       dbConn,
+		service:        service,
+		executor:      executor,
+		db:            dbConn,
+		executionRepo: reports.NewExecutionRepository(dbConn),
 	}
 }
 
@@ -51,7 +53,9 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 
 		// Executions subroute registered in a separate Route block BEFORE /{id} to prevent Chi matching "executions" as {id}
 		r.Route("/executions", func(er chi.Router) {
+			er.Get("/", h.ListExecutions)
 			er.Get("/{id}", h.GetExecution)
+			er.Get("/{id}/events", h.ListExecutionEvents)
 		})
 
 		r.Get("/{id}", h.GetTemplate)
@@ -67,6 +71,7 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 			sr.Post("/", h.CreateScheduleForTemplate)
 			sr.Delete("/{sid}", h.DeleteSchedule)
 			sr.Post("/{sid}/run", h.TriggerScheduleRun)
+			sr.Get("/{sid}/executions", h.ListScheduleExecutions)
 		})
 	})
 }
@@ -802,61 +807,36 @@ func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	query := `
-		SELECT e.id, e.tenant_id, e.template_id, e.report_key, e.status, e.parameters,
-		       e.output_url, e.output_size_bytes, e.rows_processed, e.execution_time_ms,
-		       e.error_message, e.workflow_id, e.run_id, e.requested_by, e.triggered_by,
-		       e.metadata, e.created_at, e.completed_at,
-		       t.is_personal, t.created_by_id
-		FROM public.report_executions e
-		JOIN public.report_templates t ON t.id = e.template_id
-		WHERE e.id = $1
-		  AND (e.tenant_id = $2 OR e.triggered_by = $3)
-		  AND (
-		      t.is_personal = false
-		      OR (t.created_by_id IS NOT NULL AND t.created_by_id = $3)
-		      OR $4 = true
-		  )
-	`
-
-	var (
-		id              uuid.UUID
-		rowTenantID     uuid.UUID
-		templateID      uuid.UUID
-		reportKey       string
-		status          string
-		paramsBytes     []byte
-		outputURL       sql.NullString
-		outputSizeBytes sql.NullInt64
-		rowsProcessed   sql.NullInt64
-		executionTimeMS sql.NullInt64
-		errorMessage    sql.NullString
-		workflowID      sql.NullString
-		runID           sql.NullString
-		requestedBy     sql.NullString
-		triggeredBy     sql.NullString
-		metadataBytes   []byte
-		createdAt       time.Time
-		completedAt     *time.Time
-		isPersonal      bool
-		createdByID     sql.NullString
-	)
-
-	row := h.db.QueryRowContext(r.Context(), query, execID, tenantID, userID, isAdmin)
-	if err := row.Scan(
-		&id, &rowTenantID, &templateID, &reportKey, &status, &paramsBytes,
-		&outputURL, &outputSizeBytes, &rowsProcessed, &executionTimeMS,
-		&errorMessage, &workflowID, &runID, &requestedBy, &triggeredBy,
-		&metadataBytes, &createdAt, &completedAt,
-		&isPersonal, &createdByID,
-	); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			http.Error(w, "Execution not found", http.StatusNotFound)
-			return
-		}
+	e, err := h.executionRepo.GetExecution(r.Context(), execID, tenantID, userID, isAdmin)
+	if errors.Is(err, reports.ErrNotFound) {
+		http.Error(w, "Execution not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	id := e.ID
+	rowTenantID := e.TenantID
+	templateID := e.TemplateID
+	reportKey := e.ReportKey
+	status := e.Status
+	paramsBytes := e.Parameters
+	outputURL := e.OutputURL
+	outputSizeBytes := e.OutputSizeBytes
+	rowsProcessed := e.RowsProcessed
+	executionTimeMS := e.ExecutionTimeMS
+	errorMessage := e.ErrorMessage
+	workflowID := e.WorkflowID
+	runID := e.RunID
+	requestedBy := e.RequestedBy
+	triggeredBy := e.TriggeredBy
+	metadataBytes := e.Metadata
+	createdAt := e.CreatedAt
+	completedAt := e.CompletedAt
+	isPersonal := e.IsPersonal
+	createdByID := e.CreatedByID
 
 	var params map[string]interface{}
 	if len(paramsBytes) > 0 {
@@ -914,6 +894,207 @@ func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 	}
 	if createdByID.Valid && createdByID.String != "" {
 		resp["created_by_id"] = createdByID.String
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ReportHandler) ListExecutions(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	cursorStr := r.URL.Query().Get("cursor")
+	var cursor *reports.Cursor
+	if cursorStr != "" {
+		c, err := reports.DecodeCursor(cursorStr)
+		if err != nil {
+			http.Error(w, "Invalid cursor", http.StatusBadRequest)
+			return
+		}
+		cursor = &c
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if _, parseErr := strconv.Atoi(l); parseErr == nil {
+			limit, _ = strconv.Atoi(l)
+		}
+	}
+
+	execs, err := h.executionRepo.ListExecutions(r.Context(), tenantID, userID, isAdmin, cursor, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(execs))
+	for _, e := range execs {
+		item := map[string]interface{}{
+			"id": e.ID, "tenant_id": e.TenantID, "template_id": e.TemplateID,
+			"status": e.Status, "created_at": e.CreatedAt,
+		}
+		if e.ScheduleID != nil {
+			item["schedule_id"] = e.ScheduleID
+		}
+		if e.OutputURL.Valid && e.OutputURL.String != "" {
+			item["output_url"] = e.OutputURL.String
+		}
+		if e.ErrorMessage.Valid && e.ErrorMessage.String != "" {
+			item["error_message"] = e.ErrorMessage.String
+		}
+		items = append(items, item)
+	}
+
+	resp := map[string]interface{}{"items": items}
+	if len(execs) == limit {
+		lastExec := execs[len(execs)-1]
+		ec := reports.Cursor{CreatedAt: lastExec.CreatedAt, ID: lastExec.ID}
+		enc, _ := reports.EncodeCursor(ec)
+		resp["next_cursor"] = enc
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ReportHandler) ListExecutionEvents(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	execIDStr := chi.URLParam(r, "id")
+	execID, err := uuid.Parse(execIDStr)
+	if err != nil {
+		http.Error(w, "Invalid execution ID", http.StatusBadRequest)
+		return
+	}
+
+	cursorStr := r.URL.Query().Get("cursor")
+	var cursor *reports.Cursor
+	if cursorStr != "" {
+		c, err := reports.DecodeCursor(cursorStr)
+		if err != nil {
+			http.Error(w, "Invalid cursor", http.StatusBadRequest)
+			return
+		}
+		cursor = &c
+	}
+
+	limit := 100
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+
+	events, truncated, err := h.executionRepo.ListExecutionEvents(r.Context(), execID, tenantID, userID, isAdmin, cursor, limit)
+	if errors.Is(err, reports.ErrNotFound) {
+		http.Error(w, "Execution not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(events))
+	for _, ev := range events {
+		item := map[string]interface{}{
+			"id": ev.ID, "execution_id": ev.ExecutionID, "event": ev.Event,
+			"to_status": ev.ToStatus, "actor_id": ev.ActorID, "created_at": ev.CreatedAt,
+		}
+		if ev.FromStatus.Valid {
+			item["from_status"] = ev.FromStatus.String
+		}
+		if len(ev.Detail) > 0 {
+			item["detail"] = ev.Detail
+		}
+		items = append(items, item)
+	}
+
+	resp := map[string]interface{}{"items": items, "truncated": truncated}
+	if truncated && len(events) > 0 {
+		lastEv := events[len(events)-1]
+		ec := reports.Cursor{CreatedAt: lastEv.CreatedAt, ID: lastEv.ID}
+		enc, _ := reports.EncodeCursor(ec)
+		resp["next_cursor"] = enc
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ReportHandler) ListScheduleExecutions(w http.ResponseWriter, r *http.Request) {
+	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	scheduleIDStr := chi.URLParam(r, "sid")
+	scheduleID, err := uuid.Parse(scheduleIDStr)
+	if err != nil {
+		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
+		return
+	}
+
+	cursorStr := r.URL.Query().Get("cursor")
+	var cursor *reports.Cursor
+	if cursorStr != "" {
+		c, err := reports.DecodeCursor(cursorStr)
+		if err != nil {
+			http.Error(w, "Invalid cursor", http.StatusBadRequest)
+			return
+		}
+		cursor = &c
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if _, parseErr := strconv.Atoi(l); parseErr == nil {
+			limit, _ = strconv.Atoi(l)
+		}
+	}
+
+	execs, err := h.executionRepo.ListScheduleExecutions(r.Context(), scheduleID, tenantID, userID, isAdmin, cursor, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(execs))
+	for _, e := range execs {
+		item := map[string]interface{}{
+			"id": e.ID, "tenant_id": e.TenantID, "template_id": e.TemplateID,
+			"status": e.Status, "created_at": e.CreatedAt,
+		}
+		if e.ScheduleID != nil {
+			item["schedule_id"] = e.ScheduleID
+		}
+		if e.OutputURL.Valid && e.OutputURL.String != "" {
+			item["output_url"] = e.OutputURL.String
+		}
+		if e.ErrorMessage.Valid && e.ErrorMessage.String != "" {
+			item["error_message"] = e.ErrorMessage.String
+		}
+		items = append(items, item)
+	}
+
+	resp := map[string]interface{}{"items": items}
+	if len(execs) == limit {
+		lastExec := execs[len(execs)-1]
+		ec := reports.Cursor{CreatedAt: lastExec.CreatedAt, ID: lastExec.ID}
+		enc, _ := reports.EncodeCursor(ec)
+		resp["next_cursor"] = enc
 	}
 
 	w.Header().Set("Content-Type", "application/json")
