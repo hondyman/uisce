@@ -311,14 +311,11 @@ func (s *ValidationRuleService) ListSemanticFields(ctx context.Context, tenantID
 // appendCollectionFields adds relation-scoped collection keys for BOs that
 // have them in their loader context. Each entry is a PhysicalField with
 // Cardinality="array" — the autocomplete renders these with an array badge.
+// Keys are sourced from models.CollectionKeysForBO (the single source of truth),
+// ensuring the editor can only offer what the evaluator's context loaders deliver.
 func appendCollectionFields(boName string, fields []PhysicalField) []PhysicalField {
-	collectionKeys := map[string][]PhysicalField{
-		"order": {
-			{Name: "OrderAllocations", DataType: "object", Cardinality: "array", Entity: ""},
-		},
-	}
-	if keys, ok := collectionKeys[boName]; ok {
-		fields = append(fields, keys...)
+	for _, key := range models.CollectionKeysForBO(boName) {
+		fields = append(fields, PhysicalField{Name: key, DataType: "object", Cardinality: "array", Entity: ""})
 	}
 	return fields
 }
