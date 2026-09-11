@@ -35,7 +35,6 @@ func withAuthContext(req *http.Request, tenantID string) *http.Request {
 
 // TestDashboardComplianceMultiTenant verifies compliance data is tenant-isolated
 func TestDashboardComplianceMultiTenant(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	tests := []struct {
 		name       string
 		tenantID   string
@@ -93,7 +92,6 @@ func TestDashboardComplianceMultiTenant(t *testing.T) {
 
 // TestPortfolioOverviewMultiTenant tests portfolio isolation between tenants
 func TestPortfolioOverviewMultiTenant(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	tests := []struct {
 		name        string
 		tenantID    string
@@ -157,7 +155,6 @@ func TestPortfolioOverviewMultiTenant(t *testing.T) {
 
 // TestDashboardRiskMetricsContract verifies API contract compliance
 func TestDashboardRiskMetricsContract(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &DashboardHandler{}
 	router.Get("/api/dashboard/risk", handler.GetRiskMetrics)
@@ -212,7 +209,6 @@ func TestDashboardRiskMetricsContract(t *testing.T) {
 
 // TestPortfolioHoldingsContract verifies holdings endpoint contract
 func TestPortfolioHoldingsContract(t *testing.T) {
-	t.Skip("handler created with &PortfolioHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/holdings", handler.GetHoldings)
@@ -270,7 +266,6 @@ func TestPortfolioHoldingsContract(t *testing.T) {
 
 // TestComplianceResponseSchema verifies strict schema compliance
 func TestComplianceResponseSchema(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &DashboardHandler{}
 	router.Get("/api/dashboard/compliance", handler.GetComplianceMetrics)
@@ -304,7 +299,6 @@ func TestComplianceResponseSchema(t *testing.T) {
 
 // TestTriggerETLResponseStructure verifies ETL trigger response format
 func TestTriggerETLResponseStructure(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &DashboardHandler{}
 	router.Post("/api/dashboard/etl/trigger", handler.TriggerETL)
@@ -339,7 +333,6 @@ func TestTriggerETLResponseStructure(t *testing.T) {
 
 // TestPortfolioComplianceSchema verifies portfolio compliance response schema
 func TestPortfolioComplianceSchema(t *testing.T) {
-	t.Skip("handler created with &PortfolioHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/compliance", handler.GetPortfolioCompliance)
@@ -370,7 +363,6 @@ func TestPortfolioComplianceSchema(t *testing.T) {
 
 // TestScenariosResponseStructure verifies scenario response format
 func TestScenariosResponseStructure(t *testing.T) {
-	t.Skip("handler created with &PortfolioHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	router := chi.NewRouter()
 	handler := &PortfolioHandler{}
 	router.Get("/api/portfolios/{portfolioId}/scenarios", handler.GetScenarios)
@@ -440,7 +432,6 @@ func BenchmarkPortfolioOverviewEndpoint(b *testing.B) {
 
 // TestAllEndpointsRespond verifies all 11 endpoints are registered and respond
 func TestAllEndpointsRespond(t *testing.T) {
-	t.Skip("handler created with &DashboardHandler{} or &PortfolioHandler{} — securityDeps.SecurityContextDeps.Resolver is nil, causing SecurityContextFromRequest to return 401. Needs proper SecurityContextDeps initialization with a non-nil Resolver.")
 	tests := []struct {
 		name     string
 		method   string
