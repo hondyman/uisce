@@ -6,10 +6,8 @@ import (
 
 // CardRule defines a rule for showing a feed card
 type CardRule struct {
-	CardID         string
-	Conditions     []RuleCondition
-	CELEligibility string  // CEL expression for eligibility (if set, overrides Conditions)
-	CELRankScore   string  // CEL expression for calculating rank score
+	CardID     string
+	Conditions []RuleCondition
 }
 
 // RuleCondition defines a single condition within a rule
@@ -25,7 +23,7 @@ type EvaluationResult struct {
 	Eligible  bool
 	Reason    string
 	RankScore float64
-	Context   map[string]interface{} // CEL evaluation context for debugging
+	Context   map[string]interface{}
 }
 
 // RuleEvaluator evaluates rules against client context

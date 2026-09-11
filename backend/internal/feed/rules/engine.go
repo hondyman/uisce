@@ -5,82 +5,21 @@ import (
 	"fmt"
 
 	clientContext "github.com/hondyman/uisce/backend/internal/context"
-	"github.com/hondyman/uisce/backend/pkg/policy"
 )
 
 // RuleEngine evaluates card rules against client context
 type RuleEngine struct {
-	rules        []CardRule
-	celEvaluator *policy.CELEvaluator
+	rules []CardRule
 }
 
 func NewRuleEngine() (*RuleEngine, error) {
-	celEval, err := policy.NewCELEvaluator()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL evaluator: %w", err)
-	}
-
 	return &RuleEngine{
-		rules:        getHardcodedRulesWithCEL(),
-		celEvaluator: celEval,
+		rules: getHardcodedRules(),
 	}, nil
 }
 
 // EvaluateRule checks if a card rule is eligible
 func (e *RuleEngine) EvaluateRule(ctx context.Context, rule CardRule, clientCtx clientContext.ClientContext) (*EvaluationResult, error) {
-	// Build CEL evaluation context
-	vars := map[string]interface{}{
-		"client": map[string]interface{}{
-			"Profile": map[string]interface{}{
-				"TaxStatus": clientCtx.Profile.TaxStatus,
-			},
-			"Portfolio": map[string]interface{}{
-				"UnrealizedLossPct": clientCtx.Portfolio.UnrealizedLossPct,
-				"DriftPct":          clientCtx.Portfolio.DriftPct,
-			},
-			"Compliance": map[string]interface{}{
-				"IsRestricted": clientCtx.Compliance.IsRestricted,
-			},
-		},
-	}
-
-	// Use CEL evaluator if rule has CEL expression
-	if rule.CELEligibility != "" {
-		eligible, err := e.celEvaluator.EvalBool(ctx, rule.CELEligibility, vars)
-		if err != nil {
-			return &EvaluationResult{
-				CardID:   rule.CardID,
-				Eligible: false,
-				Reason:   fmt.Sprintf("CEL error: %v", err),
-			}, nil
-		}
-
-		if !eligible {
-			return &EvaluationResult{
-				CardID:   rule.CardID,
-				Eligible: false,
-				Reason:   "CEL check failed",
-			}, nil
-		}
-
-		// Calculate rank
-		rankScore := 1.0
-		if rule.CELRankScore != "" {
-			score, err := e.celEvaluator.EvalNumber(ctx, rule.CELRankScore, vars)
-			if err == nil {
-				rankScore = score
-			}
-		}
-
-		return &EvaluationResult{
-			CardID:    rule.CardID,
-			Eligible:  true,
-			RankScore: rankScore,
-			Context:   vars,
-		}, nil
-	}
-
-	// Fallback to hardcoded
 	return e.evaluateHardcoded(rule, clientCtx)
 }
 
@@ -173,23 +112,29 @@ func (e *RuleEngine) Evaluate(rule *CardRule, ctx *clientContext.ClientContext) 
 	return result
 }
 
-// CEL-enabled rules  
-func getHardcodedRulesWithCEL() []CardRule {
+// getHardcodedRules returns card rules using the Conditions field,
+// evaluated via evaluateHardcoded (no CEL dependency).
+func getHardcodedRules() []CardRule {
 	return []CardRule{
 		{
-			CardID:         "welcome_message",
-			CELEligibility: "true",
-			CELRankScore:   "1.0",
+			CardID: "welcome_message",
+			Conditions: []RuleCondition{
+				{Field: "Portfolio.UnrealizedLossPct", Operator: "gt", Value: -999999.0},
+			},
 		},
 		{
-			CardID:         "tax_loss_harvest",
-			CELEligibility: `client.Portfolio.UnrealizedLossPct < -0.01 && client.Profile.TaxStatus == "taxable" && !client.Compliance.IsRestricted`,
-			CELRankScore:   "abs(client.Portfolio.UnrealizedLossPct) * 100.0",
+			CardID: "tax_loss_harvest",
+			Conditions: []RuleCondition{
+				{Field: "Portfolio.UnrealizedLossPct", Operator: "lt", Value: -0.01},
+				{Field: "Profile.TaxStatus", Operator: "eq", Value: "taxable"},
+				{Field: "Compliance.IsRestricted", Operator: "eq", Value: false},
+			},
 		},
 		{
-			CardID:         "portfolio_drift",
-			CELEligibility: "client.Portfolio.DriftPct > 0.05",
-			CELRankScore:   "client.Portfolio.DriftPct * 100.0",
+			CardID: "portfolio_drift",
+			Conditions: []RuleCondition{
+				{Field: "Portfolio.DriftPct", Operator: "gt", Value: 0.05},
+			},
 		},
 	}
 }

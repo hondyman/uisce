@@ -118,15 +118,15 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 	err = db.WithTenantTransaction(ctx, e.db, tmpl.TenantID.String(), func(tx *sql.Tx) error {
 		insertQuery := `
 			INSERT INTO public.report_executions (
-				id, tenant_id, template_id, report_key, status, parameters,
+				id, tenant_id, template_id, schedule_id, report_key, status, parameters,
 				output_format, requested_by, triggered_by, metadata, created_at
 			) VALUES (
-				$1, $2, $3, $4, 'pending', $5,
-				'pdf', $6, $7, $8, NOW()
+				$1, $2, $3, NULLIF($4, '')::uuid, $5, 'pending', $6,
+				'pdf', $7, $8, $9, NOW()
 			)
 		`
 		_, txErr := tx.ExecContext(ctx, insertQuery,
-			execID, tmpl.TenantID, tmpl.ID, tmpl.TemplateName, paramsJSON,
+			execID, tmpl.TenantID, tmpl.ID, scheduleIDStr, tmpl.TemplateName, paramsJSON,
 			reqBy, triggeredBy, metaJSON,
 		)
 		if txErr != nil {
