@@ -5,7 +5,6 @@ import { getSelectedRegion } from '../lib/region';
 
 import { resolveApiUrl } from '../utils/resolveApiUrl';
 
-const VALIDATION_RULES_LIMIT = 100;
 import {
   Box,
   Grid,
@@ -82,20 +81,16 @@ import { FieldSelectionWizard } from '../components/BusinessObjectManager/FieldS
 import { semanticTermToField, EnhancedSemanticTerm, useEnhancedSemanticTerms } from '../hooks/useEnhancedSemanticTerms';
 
 import { BusinessObjectRelationshipWizard } from '../components/BusinessObjectManager/BusinessObjectRelationshipWizard';
-import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
 import { CalcFieldModal } from '../components/CalcFieldModal';
-import { ValidationRuleScopeSelector, type ValidationRuleScope } from '../components/ValidationRules/ValidationRuleScopeSelector';
 import { BOLineageGraphTab } from '../components/BusinessObjectManager/BOLineageGraphTab';
 import { BOPendingBanner } from '../components/BusinessObjectManager/BOPendingBanner';
 import { BOExportImportWizard } from '../components/BusinessObjectManager/BOExportImportWizard';
-import { fetchEntitySchema } from '../api/entitySchema';
-import { filterValidationRulesForEntity, type AnnotatedValidationRule } from '../utils/validationRules';
-import ValidationRulesPage from '../features/fabric/pages/ValidationRulesPage';
+import { type AnnotatedValidationRule } from '../utils/validationRules';
 import { devError, devDebug, devWarn } from '../utils/devLogger';
 import { normalizeName } from '../utils/nameFormatting';
 import { dedupeFields } from '../utils/dedupeFields';
 import apiClient from '../utils/apiClient';
-import type { Entity, Field, HierarchyNode } from '../types/entity-schema';
+import type { Field, HierarchyNode } from '../types/entity-schema';
 import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
 import {
   FieldDeleteConfirmDialog,
@@ -213,14 +208,8 @@ export default function BusinessObjectDetailsPage() {
   const [calcFieldModalOpen, setCalcFieldModalOpen] = useState(false);
   const [deleteObjectConfirmOpen, setDeleteObjectConfirmOpen] = useState(false);
   
-  // Validation Rule states
-  const [validationRuleCreatorOpen, setValidationRuleCreatorOpen] = useState(false);
-  const [validationRuleScopeSelectorOpen, setValidationRuleScopeSelectorOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<any>(null);
-  const [validationRuleScope, setValidationRuleScope] = useState<{ subtype?: string } | null>(null);
+  // Validation rules for BOPendingBanner (fetched below; tab-6 ValidationRulesPage retired)
   const [validationRules, setValidationRules] = useState<AnnotatedValidationRule[]>([]);
-  const [entitySchema, setEntitySchema] = useState<any>(null);
-  const [availableEntities, setAvailableEntities] = useState<any[]>([]);
 
   // Subtype editing states
   const [editingSubtypeId, setEditingSubtypeId] = useState<string | null>(null);
@@ -1124,178 +1113,6 @@ export default function BusinessObjectDetailsPage() {
     };
   }, [isNewObject, tenantId, datasourceId]);
 
-  const fetchValidationRules = useCallback(async () => {
-    if (!tenantId || !datasourceId || !id || isNewObject) {
-      devDebug('[fetchValidationRules] Skipping fetch:', { tenantId, datasourceId, id, isNewObject });
-      return;
-    }
-
-    const entityIdentifier = businessObject?.technicalName || businessObject?.key || id;
-    devDebug('[fetchValidationRules] Starting fetch for entity:', entityIdentifier);
-    devDebug('[fetchValidationRules] Parameters:', { tenantId, datasourceId, entityIdentifier });
-
-    try {
-      let allRules: any[] = [];
-      let pageNum = 1;
-      let hasMore = true;
-
-      while (hasMore) {
-        const params = new URLSearchParams({
-          tenant_id: tenantId,
-          tenant_instance_id: datasourceId,
-          page: String(pageNum),
-          limit: String(VALIDATION_RULES_LIMIT),
-        });
-        params.append('entities', entityIdentifier);
-        
-        const url = `/api/validation-rules?${params.toString()}`;
-        devDebug('[fetchValidationRules] Fetching URL:', url);
-        
-        // apiClient throws on non-OK, so the throw boilerplate goes away.
-        const data = await apiClient<any>(url, {
-          headers: getAuthHeaders(),
-        });
-        devDebug('[fetchValidationRules] API response:', data);
-        
-        const raw = Array.isArray(data) ? data : (data.rules || []);
-        devDebug('[fetchValidationRules] Extracted rules:', raw);
-        devDebug('[fetchValidationRules] Rules count:', raw.length);
-        
-        allRules = allRules.concat(raw);
-        hasMore = data.has_more;
-        pageNum++;
-      }
-      
-      devDebug('[fetchValidationRules] Total rules fetched:', allRules.length);
-      
-      // Transform BusinessObject to Entity-like for filtering
-      if (businessObject) {
-        const tempEntity: Entity = {
-          key: businessObject.key,
-          name: businessObject.displayName,
-          businessName: businessObject.displayName,
-          technicalName: businessObject.technicalName,
-          entity_fields: fields.map(f => ({
-            key: f.key,
-            name: f.name,
-            businessName: f.businessName || f.name,
-            technicalName: f.technicalName || f.name,
-            type: (f.type.toLowerCase() as any) || 'text'
-          })),
-          subtypes: {}
-        };
-        devDebug('[fetchValidationRules] Filtering for entity:', businessObject.name);
-        const filtered = filterValidationRulesForEntity(businessObject.name, tempEntity, allRules);
-        devDebug('[fetchValidationRules] Filtered rules count:', filtered.length);
-        
-        // Transform rules to ensure script_content is mapped to logic field for ValidationRulesPage
-        const transformedForDisplay = filtered.map((rule: any) => ({
-          ...rule,
-          logic: rule.script_content || rule.rule_definition || rule.logic || '',
-          name: rule.rule_name || rule.name,
-          type: (rule.rule_type || 'expression').toLowerCase(),
-          severity: (rule.severity || 'error').toLowerCase(),
-          status: rule.is_active === false ? 'inactive' : 'active',
-        }));
-        
-        devDebug('[fetchValidationRules] Transformed rules with logic field:', transformedForDisplay);
-        devDebug('[fetchValidationRules] Setting validation rules');
-        setValidationRules(transformedForDisplay);
-      }
-    } catch (err) { 
-      devError('[fetchValidationRules] Error:', err); 
-    }
-  }, [tenantId, datasourceId, id, isNewObject, businessObject, fields]);
-
-  useEffect(() => {
-    // First useEffect above already triggers fetchBusinessObject() when fetchBusinessObject changes,
-    // so this effect only needs to reset form state when entering the "new" route.
-    if (isNewObject) {
-      setLoading(false);
-      setBusinessObject(null);
-      setName('');
-      setDisplayName('');
-      setDescription('');
-      setIsActive(true);
-      setFields([]);
-      setHierarchyNodes([]);
-    }
-  }, [fetchBusinessObject, isNewObject]);
-
-  useEffect(() => {
-    devDebug('[useEffect-validations] activeTab:', activeTab, 'isNewObject:', isNewObject);
-    if (activeTab === 2 && !isNewObject) { // Validations is now tab 2 (after Bindings)
-      devDebug('[useEffect-validations] Triggering fetchValidationRules');
-      fetchValidationRules();
-    }
-  }, [activeTab, fetchValidationRules, isNewObject]);
-
-  // Fetch full schema for rule creator.
-  // Aborts in-flight requests when tenant/datasource change or when the
-  // component unmounts to avoid the React "setState on unmounted component"
-  // memory-leak warning.
-  useEffect(() => {
-    if (!tenantId || !datasourceId) return;
-    const abortController = new AbortController();
-    const loadSchema = async () => {
-      try {
-        const schema = await fetchEntitySchema(tenantId, datasourceId);
-        if (abortController.signal.aborted) return;
-        setEntitySchema(schema);
-        setAvailableEntities(Object.keys(schema).sort());
-      } catch (error) {
-        if (abortController.signal.aborted) return;
-        devError('Error fetching entity schema:', error);
-      }
-    };
-    loadSchema();
-    return () => {
-      abortController.abort();
-    };
-  }, [tenantId, datasourceId]);
-
-  const handleAddRule = () => {
-    setEditingRule(null);
-    setValidationRuleScope(null);
-    setValidationRuleScopeSelectorOpen(true);
-  };
-
-  const handleScopeSelected = (scope: ValidationRuleScope) => {
-    setValidationRuleScope(scope);
-    setValidationRuleScopeSelectorOpen(false);
-    setValidationRuleCreatorOpen(true);
-  };
-
-  const handleEditRule = (rule: any) => {
-    setEditingRule(rule);
-    setValidationRuleCreatorOpen(true);
-  };
-
-  const handleSaveRule = useCallback(async (rule: any) => {
-    try {
-      // Save the rule to the backend
-      const method = rule.id ? 'PATCH' : 'POST';
-      const endpoint = rule.id 
-        ? `/api/validation-rules/${rule.id}`
-        : '/api/validation-rules';
-
-      // apiClient throws on non-OK. Saves the rule and refreshes the list.
-      await apiClient<void>(endpoint, {
-        method,
-        headers: getAuthHeaders(),
-        body: JSON.stringify(rule),
-      });
-
-      // Refresh rules after successful save
-      await fetchValidationRules();
-      notification.success(rule.id ? 'Rule updated successfully' : 'Rule created successfully');
-      setValidationRuleCreatorOpen(false);
-      setEditingRule(null);
-    } catch (err) {
-      notification.error(err instanceof Error ? err.message : 'Failed to save rule');
-    }
-  }, [tenantId, datasourceId, fetchValidationRules, notification]);
-
   const handleAddSubtype = async () => {
     // Validate required context from operating scope
     if (!tenantId) {
@@ -1914,16 +1731,6 @@ export default function BusinessObjectDetailsPage() {
             <Tab label="Records & ORM CRUD" icon={<TableChartIcon />} iconPosition="start" />
             <Tab label="Workday Delta" icon={<CompareIcon />} iconPosition="start" />
             <Tab label="Governance & Workflows" icon={<WorkflowIcon />} iconPosition="start" />
-            <Tab
-              label={
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <span>Validations</span>
-                  {validationRules.length > 0 && (
-                    <Chip label={validationRules.length} size="small" variant="outlined" />
-                  )}
-                </Stack>
-              }
-            />
             <Tab label="Related Objects" />
             <Tab label="Graph" icon={<AccountTreeIcon />} iconPosition="start" />
             <Tab label="Semantic Model" />
@@ -2042,19 +1849,9 @@ export default function BusinessObjectDetailsPage() {
                 <WorkflowTab businessObject={businessObject} />
               )}
 
-              {/* Validations Tab */}
+              {/* Validations & Triggers Tab */}
               {activeTab === 6 && (
-                <ValidationRulesPage 
-                  businessObjectId={id}
-                  businessObjectName={businessObject?.name}
-                  selectedNodeType={selectedNode?.type}
-                  selectedNodeName={selectedNode?.type === 'subtype' ? selectedNode.subtypeKey : undefined}
-                  fields={selectedNode?.type === 'subtype' ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.fields || []) : fields}
-                  rules={validationRules as any}
-                  onRulesUpdate={setValidationRules as any}
-                  onAddRule={handleAddRule}
-                  onEditRule={handleEditRule}
-                />
+                <ValidationsAndTriggersTab businessObject={businessObject} />
               )}
 
               {/* Related Objects Tab */}
@@ -2113,16 +1910,6 @@ export default function BusinessObjectDetailsPage() {
                 </Box>
               )}
 
-              {/* Validations & Triggers Tab - the real node-based
-                  validation engine (backend/internal/metadata/shadow_evaluation.go),
-                  distinct from the "Validations" tab above (activeTab === 6),
-                  which is the older catalog_validation_rules-era
-                  ValidationRulesPage. Appended at the end rather than
-                  inserted earlier so every existing activeTab index above
-                  stays unchanged. */}
-              {activeTab === 11 && (
-                <ValidationsAndTriggersTab businessObject={businessObject} />
-              )}
             </Paper>
             </Box>
           </Paper>
@@ -2132,33 +1919,6 @@ export default function BusinessObjectDetailsPage() {
       </Container>
 
     </Box>
-    <ValidationRuleScopeSelector
-      isOpen={validationRuleScopeSelectorOpen}
-      onClose={() => setValidationRuleScopeSelectorOpen(false)}
-      onConfirm={handleScopeSelected}
-      businessObjectName={businessObject?.displayName || businessObject?.name || ''}
-      subtypes={businessObject?.subtypes}
-    />
-
-    <ValidationRuleCreator
-      isOpen={validationRuleCreatorOpen}
-      onClose={() => {
-        setValidationRuleCreatorOpen(false);
-        setEditingRule(null);
-        setValidationRuleScope(null);
-      }}
-      onSave={handleSaveRule}
-      tenantId={tenantId}
-      datasourceId={datasourceId}
-      availableEntities={availableEntities}
-      entitySchema={entitySchema}
-      editingRule={editingRule as any}
-      defaultTargetEntity={businessObject?.name}
-      initialScope={validationRuleScope ? { subtype: validationRuleScope.subtype } : undefined}
-      subtypes={businessObject?.subtypes}
-      coreFields={businessObject?.coreFields}
-      customFields={businessObject?.customFields}
-    />
 
     {/* Field Delete Confirmation Dialog */}
     <FieldDeleteConfirmDialog

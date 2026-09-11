@@ -39,6 +39,7 @@ import {
 import { useNotification } from '../../../../hooks/useNotification';
 import { useTenant } from '../../../../contexts/TenantContext';
 import apiClient from '../../../../utils/apiClient';
+import { AllocationValidatorPanel } from './AllocationValidatorPanel';
 
 interface RecordsCrudTabProps {
   businessObject: any;
@@ -59,6 +60,7 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
   const [search, setSearch] = useState('');
   const [execTimeMs, setExecTimeMs] = useState<number | null>(null);
   const [driverTable, setDriverTable] = useState('');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   // Time Travel
   const [isTimeTravelEnabled, setIsTimeTravelEnabled] = useState(false);
@@ -366,7 +368,12 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
                 </TableHead>
                 <TableBody>
                   {rows.map((row, rIdx) => (
-                    <TableRow key={row.id || rIdx} hover>
+                    <TableRow
+                      key={row.id || rIdx}
+                      hover
+                      onClick={() => setSelectedOrderId(row.id ? String(row.id) : null)}
+                      sx={{ cursor: 'pointer', bgcolor: selectedOrderId === String(row.id) ? 'action.selected' : undefined }}
+                    >
                       {columns.map((col) => (
                         <TableCell key={col} sx={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {row[col] === null || row[col] === undefined ? (
@@ -412,6 +419,19 @@ export function RecordsCrudTab({ businessObject }: RecordsCrudTabProps) {
           </>
         )}
       </Paper>
+
+      {/* Allocation Validator — shown only for the `order` BO when a row is selected */}
+      {businessObject?.key === 'order' && selectedOrderId && (
+        (() => {
+          const selectedRow = rows.find((r: any) => String(r.id) === String(selectedOrderId));
+          return selectedRow ? (
+            <AllocationValidatorPanel
+              order={selectedRow}
+              businessObjectKey={businessObject.key}
+            />
+          ) : null;
+        })()
+      )}
 
       {/* Create Modal */}
       <Dialog open={createModalOpen} onClose={() => setCreateModalOpen(false)} maxWidth="sm" fullWidth>
