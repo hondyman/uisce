@@ -2449,3 +2449,111 @@ consolidate rulefabric's `ConditionGroup`/`Condition` model onto
 `vm.RuleNode` now, while the count is zero, rather than build a
 translator between two ASTs. Not yet implemented as of this note -
 blast-radius mapping is the next step.
+
+### CEL retirement — interim decision reversal, recorded (2026-09-10)
+
+**What was decided**: The original plan for the editor unification was to fold
+`PolicyRuleBuilder.tsx`'s CEL textarea onto the Monaco surface and retire CEL —
+`PolicyRuleBuilder` would emit `vm.Expression` ASTs, `cel-go` would leave the
+repo, and the unified expression language would be the only language.
+
+**What happened**: The fold was executed, but CEL was **kept** as the execution
+backend. The textarea became a Monaco-wrapped CEL editor. New CEL-specific
+completion infrastructure was built (`setCelFields`, `celFields`, `isCelContext`
+detection in the completion provider) rather than CEL being replaced.
+
+**Why the reversal**: Discovery during the fold that `cel-go` is embedded across
+five packages, not just the policy evaluator:
+
+| Package | Role |
+|--------|------|
+| `internal/rules/engine.go:66` | CEL `*cel.Env` field — used alongside `vm` bytecode evaluation |
+| `internal/rulefabric/evaluator.go:625` | CEL `*cel.Env` — primary rule evaluation path for rulefabric |
+| `internal/rdl/service.go:130` | CEL `*cel.Env` — formula compilation |
+| `internal/boresolver/expression_builder.go:7,213` | CEL `*cel.Env` — wealth-eligibility variable schema |
+| `pkg/policy/cel_eval.go:16` | `cel.Env` — standalone policy evaluator |
+
+`internal/rules/engine.go` using cel-go alongside `vm` bytecode is the most
+surprising entry — worth investigating as a potential dead-code or convergence
+opportunity (the `vm` engine and the CEL engine may be doing the same work
+in the same package). This is the finding the coupling evidence exists to anchor.
+
+**Current state**: `PolicyRuleBuilder.tsx` uses a Monaco editor with
+`UISCE_EXPRESSION_LANGUAGE` and CEL as the execution backend. The CEL
+completion infrastructure (`setCelFields`, `celFields`) is **interim** — it
+exists to bridge the current state and should not be extended. When the CEL
+retirement project is scoped and executed, this infrastructure is removed
+along with `cel-go`.
+
+**CEL retirement project scope** (not yet scheduled):
+1. Audit the five-package coupling — confirm each use is live or dead code
+2. Design `vm.Expression` migration path for rulefabric rules
+3. Retire `cel-go` from `go.mod` when all five packages are migrated
+4. Remove `setCelFields` / `celFields` / `isCelContext` / `UISCE_EXPRESSION_LANGUAGE`
+   completion infrastructure from `aslMonacoRegistry.ts` once CEL is gone
+
+**Why this matters for the doc**: The editor unification now implies one
+language, but `PolicyRuleBuilder` still uses two (ASL for the Monaco surface,
+CEL for execution). The doc must not imply a false single-language state.
+The interim is fine; the doc just can't hide it.
+
+**Definition** (what the proof is and why it exists):
+
+The three-domain proof answers the user complaint *"I don't feel we are using
+the same editor in MDM rules, compliance rules and Business Objects validations"*
+by demonstration rather than by claim. It proves all three rule domains share
+one editor surface, one engine, and one storage convention.
+
+The proof authors one rule per domain (`validation`, `mdm`, `compliance`) on the
+`order` BO through `ValidationRuleService.UpsertValidationRule` (the same API
+the `AdvancedRuleBuilderPage` frontend uses), each with a pass case and a
+violation case driven through the real write path (`shadow_evaluation.go`'s
+`evaluateAndEnforceRules`) with enforcement ON:
+
+| Domain       | Rule                           | Violation case        | Pass case             |
+|--------------|--------------------------------|----------------------|-----------------------|
+| validation   | `side == "BUY"`               | `side = "SELL"`      | `side = "BUY"`        |
+| mdm          | `target_qty <= 1,000,000`      | `target_qty = 5,000,000` | `target_qty = 50,000` |
+| compliance   | `target_qty <= 100,000`        | `target_qty = 500,000`| `target_qty = 50,000`  |
+
+The `order` BO is used because its pre-existing rules are well-characterized.
+The `side` field is used for the validation rule (rather than `target_qty`)
+to avoid the DB-level `chk_order_target_qty_positive` CHECK constraint, which
+fires before the rule engine and would absorb the write.
+
+The "same editor" clause is demonstrated by the `AdvancedRuleBuilderPage.tsx`
+domain selector: a `<Select>` with values `validation | mdm | compliance`, wired
+to the `domain` field in the save request. The three rules in the proof were
+authored through the same `ValidationRuleService.UpsertValidationRule` API
+call that `AdvancedRuleBuilderPage` makes on save — the same *service* path,
+not a live browser session (see "Two-part proof bar" below).
+
+**Storage**: all three rules are catalog_node rows with `domain/severity/timing`
+in `ValidationRuleProperties` (stored in `catalog_node.properties`) and
+`GOVERNED_BY_RULE` edges — the same convention as every other rule.
+
+**Engine**: all three are evaluated by `shadow_evaluation.go`'s
+`evaluateAndEnforceRules`, the same write path for all domains.
+
+**Command**: `backend/cmd/verify_three_domains/main.go` — run with:
+```
+UISCE_TEST_DB=1 DATABASE_URL="..." go run ./cmd/verify_three_domains/
+```
+
+The triple-violation test additionally proves all three domains can fire
+simultaneously on a single write, with the error correctly attributing each
+rule by name.
+
+**Why this proof exists**: The original complaint was about the *authoring
+experience* — feeling like three different editors existed. The engine
+unification (PRs #47/#48) answered that at the backend level. The three-domain
+proof answers it at the level a user experiences. The moment it passes, the
+three domains demonstrably share one editor and one engine, and the complaint
+is resolved by demonstration.
+
+**Two-part proof bar**: The spec requires both the command (above) *and* a
+live browser session: at least one of the three rules authored in the actual
+`AdvancedRuleBuilderPage` with a real login — domain selector, autocomplete,
+save, round-trip verification. The command proves the machinery; the browser
+session proves the user-facing claim. The command has run. The browser session
+has not been conducted yet — plan to conduct it before closing this work item.
