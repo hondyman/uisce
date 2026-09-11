@@ -5,16 +5,19 @@ import (
 	"fmt"
 
 	clientContext "github.com/hondyman/uisce/backend/internal/context"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // RuleEngine evaluates card rules against client context
 type RuleEngine struct {
-	rules []CardRule
+	rules       []CardRule
+	vmEvaluator *vm.AdvancedEvaluator
 }
 
 func NewRuleEngine() (*RuleEngine, error) {
 	return &RuleEngine{
-		rules: getHardcodedRules(),
+		rules:       getHardcodedRules(),
+		vmEvaluator: vm.NewAdvancedEvaluator(),
 	}, nil
 }
 
@@ -34,10 +37,45 @@ func (e *RuleEngine) evaluateHardcoded(rule CardRule, clientCtx clientContext.Cl
 			}, err
 		}
 	}
+	rankScore := 1.0
+	if rule.RankScoreExpr != "" {
+		vars := map[string]interface{}{
+			"client": map[string]interface{}{
+				"Portfolio": map[string]interface{}{
+					"UnrealizedLossPct": clientCtx.Portfolio.UnrealizedLossPct,
+					"DriftPct":          clientCtx.Portfolio.DriftPct,
+				},
+				"Profile": map[string]interface{}{
+					"TaxStatus": clientCtx.Profile.TaxStatus,
+				},
+				"Compliance": map[string]interface{}{
+					"IsRestricted": clientCtx.Compliance.IsRestricted,
+				},
+			},
+		}
+		expr, err := vm.ParseExpression(rule.RankScoreExpr)
+		if err != nil {
+			return &EvaluationResult{
+				CardID:   rule.CardID,
+				Eligible: false,
+				Reason:   fmt.Sprintf("rank expression parse error: %v", err),
+			}, err
+		}
+		node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: expr}
+		score, err := e.vmEvaluator.EvaluateNumeric(node, vars)
+		if err != nil {
+			return &EvaluationResult{
+				CardID:   rule.CardID,
+				Eligible: false,
+				Reason:   fmt.Sprintf("rank expression eval error: %v", err),
+			}, err
+		}
+		rankScore = score
+	}
 	return &EvaluationResult{
 		CardID:    rule.CardID,
 		Eligible:  true,
-		RankScore: 1.0,
+		RankScore: rankScore,
 	}, nil
 }
 
@@ -113,17 +151,25 @@ func (e *RuleEngine) Evaluate(rule *CardRule, ctx *clientContext.ClientContext) 
 }
 
 // getHardcodedRules returns card rules using the Conditions field,
-// evaluated via evaluateHardcoded (no CEL dependency).
+// evaluated via evaluateHardcoded (no CEL dependency). RankScore is
+// computed via vm expression (see RankScoreExpr on CardRule).
 func getHardcodedRules() []CardRule {
 	return []CardRule{
 		{
-			CardID: "welcome_message",
+			CardID:        "welcome_message",
+			RankScoreExpr: "1.0",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.UnrealizedLossPct", Operator: "gt", Value: -999999.0},
 			},
 		},
 		{
-			CardID: "tax_loss_harvest",
+			// Rank expr uses unary minus instead of abs() because the
+			// eligibility condition requires UnrealizedLossPct < -0.01: loss is
+			// always negative, so negation gives abs(value). This equivalence
+			// holds only while the guard condition holds; changing the
+			// eligibility threshold would break this invariant.
+			CardID:        "tax_loss_harvest",
+			RankScoreExpr: "(-client.Portfolio.UnrealizedLossPct) * 100.0",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.UnrealizedLossPct", Operator: "lt", Value: -0.01},
 				{Field: "Profile.TaxStatus", Operator: "eq", Value: "taxable"},
@@ -131,7 +177,8 @@ func getHardcodedRules() []CardRule {
 			},
 		},
 		{
-			CardID: "portfolio_drift",
+			CardID:        "portfolio_drift",
+			RankScoreExpr: "client.Portfolio.DriftPct * 100.0",
 			Conditions: []RuleCondition{
 				{Field: "Portfolio.DriftPct", Operator: "gt", Value: 0.05},
 			},
