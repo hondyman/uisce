@@ -1,5 +1,34 @@
-import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, Globe, Split, Bell, ShieldCheck, Play } from 'lucide-react';
+/**
+ * ReportScheduleBurstingTab
+ *
+ * Phase 4 frontend: async 202 contract for report execution.
+ *
+ * Backend contract (Phase 3, commit 81ff74506f):
+ *   POST /api/v1/reports/{id}/schedules/{sid}/run
+ *     → 202 Accepted  { status: "pending", execution_id, workflow_id }
+ *     → 503 Service Unavailable { execution_id, error }
+ *   GET  /api/v1/reports/executions/{id}
+ *     → 200 { status, output_url, rows_processed, execution_time_ms, error_message, ... }
+ *
+ * Live-backend coverage: backend/internal/api/report_handlers_test.go
+ *   TriggerScheduleRun_-_Success_returns_202_with_pending_and_execution_id,
+ *   TriggerScheduleRun_-_DispatchError_returns_503_with_execution_id_and_error,
+ *   GetExecution_* (all variants)
+ *
+ * This file: UI layer only. Network contract verified by Go tests above.
+ */
+
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  Calendar,
+  Split,
+  Bell,
+  ShieldCheck,
+  Play,
+  ExternalLink,
+  AlertTriangle,
+  X,
+} from 'lucide-react';
 import {
   Box,
   Typography,
@@ -14,14 +43,15 @@ import {
   FormControlLabel,
   Paper,
   Chip,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  CircularProgress
+  CircularProgress,
+  Alert,
 } from '@mui/material';
-import ReportBurstTelemetryHUD from './ReportBurstTelemetryHUD';
+import { ReportExecutionStatusChip } from './ReportExecutionStatusChip';
+import {
+  triggerScheduleRun,
+  pollExecution,
+  type ExecutionRecord,
+} from '../../api/reportExecutionApi';
 import { apiFetch } from '../../lib/apiClient';
 
 interface ReportScheduleBurstingTabProps {
@@ -31,16 +61,33 @@ interface ReportScheduleBurstingTabProps {
   onScheduleSaved?: () => void;
 }
 
+type ExecutionPhase =
+  | 'idle'
+  | 'dispatched'
+  | 'polling'
+  | 'completed'
+  | 'failed'
+  | 'dispatch_failed';
+
+interface ExecutionSnapshot {
+  phase: ExecutionPhase;
+  executionId?: string;
+  workflowId?: string;
+  record?: ExecutionRecord;
+  errorMessage?: string;
+  dispatchError?: string;
+}
+
 export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps> = ({
   reportId,
   reportName,
-  tenantId,
+  tenantId: _tenantId,
   onScheduleSaved,
 }) => {
   const [scheduleName, setScheduleName] = useState(
     reportName ? `${reportName} Schedule` : 'Daily Valuation Schedule'
   );
-  const [cronExpression, setCronExpression] = useState('0 8 * * 1-5'); // Mon-Fri 08:00
+  const [cronExpression, setCronExpression] = useState('0 8 * * 1-5');
   const [region, setRegion] = useState('us-west');
   const [calendarCode, setCalendarCode] = useState('NYSE');
   const [unscheduledBehavior, setUnscheduledBehavior] = useState('RUN_PREVIOUS_BUS_DAY');
@@ -50,55 +97,44 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
   const [notifyEmail, setNotifyEmail] = useState(false);
 
   const [saving, setSaving] = useState(false);
-  const [triggering, setTriggering] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [schedulesList, setSchedulesList] = useState<any[]>([]);
-  const [batchesList, setBatchesList] = useState<any[]>([]);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
 
-  // Sync default scheduleName when reportName changes
+  const pollAbortRef = useRef<AbortController | null>(null);
+  const [execution, setExecution] = useState<ExecutionSnapshot>({ phase: 'idle' });
+
+  useEffect(() => {
+    return () => {
+      pollAbortRef.current?.abort();
+    };
+  }, []);
+
   useEffect(() => {
     if (reportName) {
       setScheduleName(`${reportName} Schedule`);
     }
   }, [reportName]);
 
-  // Load existing schedules
-  const loadSchedules = async () => {
+  const loadSchedules = useCallback(async () => {
     try {
       const endpoint = reportId
         ? `/api/v1/reports/${reportId}/schedules`
         : '/api/reports/schedules';
-
       const res = await apiFetch(endpoint);
       if (res.ok) {
         const data = await res.json();
-        setSchedulesList(Array.isArray(data) ? data : []);
-        if (data.length > 0 && !selectedScheduleId) {
+        if (Array.isArray(data) && data.length > 0 && !selectedScheduleId) {
           setSelectedScheduleId(data[0].id);
-          loadBatches(data[0].id);
         }
       }
     } catch (err) {
       console.error('Failed to load schedules:', err);
     }
-  };
-
-  const loadBatches = async (scheduleId: string) => {
-    try {
-      const res = await apiFetch(`/api/reports/schedules/${scheduleId}/batches`);
-      if (res.ok) {
-        const data = await res.json();
-        setBatchesList(Array.isArray(data) ? data : []);
-      }
-    } catch (err) {
-      console.error('Failed to load batches:', err);
-    }
-  };
+  }, [reportId, selectedScheduleId]);
 
   useEffect(() => {
     loadSchedules();
-  }, [reportId]);
+  }, [loadSchedules]);
 
   const handleSaveSchedule = async () => {
     setSaving(true);
@@ -107,7 +143,6 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
       const endpoint = reportId
         ? `/api/v1/reports/${reportId}/schedules`
         : '/api/reports/schedules';
-
       const res = await apiFetch(endpoint, {
         method: 'POST',
         body: JSON.stringify({
@@ -116,14 +151,18 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
           region,
           calendar_code: calendarCode,
           unscheduled_behavior: unscheduledBehavior,
-          business_day_offset: unscheduledBehavior === 'RUN_PREVIOUS_BUS_DAY' ? -1 : unscheduledBehavior === 'RUN_NEXT_BUS_DAY' ? 1 : 0,
+          business_day_offset:
+            unscheduledBehavior === 'RUN_PREVIOUS_BUS_DAY'
+              ? -1
+              : unscheduledBehavior === 'RUN_NEXT_BUS_DAY'
+              ? 1
+              : 0,
           burst_dimension: burstDimension,
           export_format: exportFormat,
           notify_in_app: notifyInApp,
           notify_email: notifyEmail,
         }),
       });
-
       if (res.ok) {
         const data = await res.json();
         setStatusMessage('Schedule registered and activated successfully!');
@@ -137,68 +176,297 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
       } else {
         setStatusMessage('Failed to save schedule.');
       }
-    } catch (err: any) {
-      setStatusMessage(`Error saving schedule: ${err.message}`);
+    } catch (err: unknown) {
+      setStatusMessage(`Error saving schedule: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleTriggerRun = async () => {
-    if (!selectedScheduleId) return;
-    setTriggering(true);
-    setStatusMessage(null);
-    try {
-      const endpoint = reportId
-        ? `/api/v1/reports/${reportId}/schedules/${selectedScheduleId}/run`
-        : `/api/reports/schedules/${selectedScheduleId}/run`;
+    if (!selectedScheduleId || !reportId) return;
 
-      const res = await apiFetch(endpoint, {
-        method: 'POST',
+    // Cancel any in-flight poll
+    pollAbortRef.current?.abort();
+    pollAbortRef.current = new AbortController();
+
+    setExecution({ phase: 'dispatched' });
+    setStatusMessage(null);
+
+    const result = await triggerScheduleRun(reportId, selectedScheduleId);
+
+    if (result.kind === 'dispatch_failed') {
+      setExecution({
+        phase: 'dispatch_failed',
+        executionId: result.execution_id,
+        dispatchError: result.error,
       });
-      if (res.ok) {
-        const data = await res.json();
-        setStatusMessage(`Run started successfully! Execution ID: ${data.execution_id || data.batch_id || data.id}`);
-        loadBatches(selectedScheduleId);
-        loadSchedules();
+      return;
+    }
+
+    if (result.kind === 'error') {
+      setExecution({
+        phase: 'failed',
+        errorMessage: result.message,
+      });
+      return;
+    }
+
+    // 202 Accepted — render pending immediately from the response body
+    setExecution({
+      phase: 'polling',
+      executionId: result.execution_id,
+      workflowId: result.workflow_id,
+      record: { status: 'pending' } as ExecutionRecord,
+    });
+
+    // Start polling; AbortController cancels on dialog unmount or re-trigger
+    pollAbortRef.current.signal.addEventListener('abort', () => {
+      setExecution((prev) =>
+        prev.executionId === result.execution_id ? { phase: 'idle' } : prev
+      );
+    });
+
+    try {
+      const terminal = await pollExecution(
+        result.execution_id,
+        pollAbortRef.current.signal,
+        (record) => {
+          setExecution((prev) =>
+            prev.executionId === result.execution_id
+              ? { ...prev, phase: 'polling', record }
+              : prev
+          );
+        }
+      );
+      const phase: ExecutionPhase =
+        terminal.status === 'completed'
+          ? 'completed'
+          : terminal.status === 'failed'
+          ? 'failed'
+          : 'idle';
+      setExecution({ phase, executionId: result.execution_id, workflowId: result.workflow_id, record: terminal });
+    } catch (err) {
+      if ((err as Error).name === 'AbortError' || (err as DOMException)?.name === 'AbortError') {
+        setExecution({ phase: 'idle' });
       } else {
-        setStatusMessage('Failed to trigger run.');
+        setExecution({
+          phase: 'failed',
+          executionId: result.execution_id,
+          errorMessage: (err as Error).message,
+        });
       }
-    } catch (err: any) {
-      setStatusMessage(`Error triggering run: ${err.message}`);
-    } finally {
-      setTriggering(false);
     }
   };
 
+  const isRunning =
+    execution.phase === 'dispatched' ||
+    execution.phase === 'polling';
+
+  const formatMs = (ms?: number) =>
+    ms == null ? null : `${(ms / 1000).toFixed(1)}s`;
+
   return (
-    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 3, bgcolor: '#071526', color: '#E2E8F0', borderRadius: 2, border: '1px solid rgba(255,255,255,0.08)' }}>
+    <Box
+      sx={{
+        p: 3,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3,
+        bgcolor: '#071526',
+        color: '#E2E8F0',
+        borderRadius: 2,
+        border: '1px solid rgba(255,255,255,0.08)',
+      }}
+    >
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.08)', pb: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          borderBottom: '1px solid rgba(255,255,255,0.08)',
+          pb: 2,
+        }}
+      >
         <Box>
-          <Typography variant="subtitle1" fontWeight="700" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#F8FAFC' }}>
+          <Typography
+            variant="subtitle1"
+            fontWeight="700"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#F8FAFC' }}
+          >
             <Calendar size={18} color="#F5A623" /> Batch Schedule &amp; Client Bursting
           </Typography>
           <Typography variant="caption" sx={{ color: '#94A3B8' }}>
-            Auto-generate and burst individual client PDF/Excel packages synchronized with exchange calendars.
+            Auto-generate and burst individual client PDF/Excel packages synchronized with
+            exchange calendars.
           </Typography>
         </Box>
         <Chip
           size="small"
           label="Tenant-Isolated Mesh"
-          sx={{ bgcolor: 'rgba(16, 185, 129, 0.12)', color: '#34D399', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 700, fontSize: '0.7rem' }}
+          sx={{
+            bgcolor: 'rgba(16, 185, 129, 0.12)',
+            color: '#34D399',
+            border: '1px solid rgba(16, 185, 129, 0.3)',
+            fontWeight: 700,
+            fontSize: '0.7rem',
+          }}
         />
       </Box>
 
+      {/* Status messages */}
       {statusMessage && (
-        <Paper sx={{ p: 1.5, bgcolor: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: 1.5 }}>
-          <Typography variant="caption" sx={{ color: '#A5B4FC', fontWeight: 600 }}>{statusMessage}</Typography>
+        <Paper
+          sx={{
+            p: 1.5,
+            bgcolor: 'rgba(99, 102, 241, 0.1)',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            borderRadius: 1.5,
+          }}
+        >
+          <Typography variant="caption" sx={{ color: '#A5B4FC', fontWeight: 600 }}>
+            {statusMessage}
+          </Typography>
         </Paper>
       )}
 
+      {/* Execution result banner */}
+      {execution.phase === 'dispatch_failed' && (
+        <Alert
+          severity="error"
+          icon={<AlertTriangle size={16} />}
+          action={
+            execution.executionId ? (
+              <Button
+                size="small"
+                href={`/executions/${execution.executionId}`}
+                sx={{ color: '#F87171', textTransform: 'none', fontSize: '0.7rem' }}
+              >
+                View
+              </Button>
+            ) : undefined
+          }
+          sx={{ bgcolor: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)' }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Dispatch failed
+          </Typography>
+          <Typography variant="caption" display="block" sx={{ color: '#FCA5A5' }}>
+            {execution.dispatchError}
+            {execution.executionId && ` — Execution ID: ${execution.executionId}`}
+          </Typography>
+        </Alert>
+      )}
+
+      {execution.phase === 'failed' && (execution.errorMessage || execution.record?.error_message) && (
+        <Alert
+          severity="error"
+          icon={<X size={16} />}
+          sx={{ bgcolor: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.3)' }}
+        >
+          <Typography variant="caption" sx={{ fontWeight: 600 }}>
+            Execution failed
+          </Typography>
+          <Typography variant="caption" display="block" sx={{ color: '#FCA5A5' }}>
+            {execution.errorMessage || execution.record?.error_message}
+          </Typography>
+        </Alert>
+      )}
+
+      {/* Execution result card (terminal state) */}
+      {(execution.phase === 'completed' || execution.phase === 'polling' || execution.phase === 'failed') &&
+        execution.record && (
+          <Paper
+            sx={{
+              p: 2,
+              bgcolor: 'rgba(15, 23, 42, 0.6)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 2,
+            }}
+          >
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}
+            >
+              <Typography variant="subtitle2" fontWeight="700" sx={{ color: '#F8FAFC' }}>
+                Execution Result
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {execution.executionId && (
+                  <Typography
+                    variant="caption"
+                    sx={{ color: '#94A3B8', fontFamily: 'monospace', fontSize: '0.65rem' }}
+                  >
+                    {execution.executionId}
+                  </Typography>
+                )}
+                <ReportExecutionStatusChip status={execution.record.status} />
+              </Box>
+            </Box>
+
+            <Grid container spacing={2}>
+              {execution.record.output_url && (
+                <Grid size={12}>
+                  <Button
+                    size="small"
+                    variant="text"
+                    href={execution.record.output_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    endIcon={<ExternalLink size={12} />}
+                    sx={{
+                      color: '#60A5FA',
+                      textTransform: 'none',
+                      fontSize: '0.72rem',
+                      p: 0,
+                    }}
+                  >
+                    Download output
+                  </Button>
+                  {execution.record.output_size_bytes != null && (
+                    <Typography
+                      variant="caption"
+                      sx={{ color: '#94A3B8', ml: 1, fontSize: '0.65rem' }}
+                    >
+                      ({(execution.record.output_size_bytes / 1024).toFixed(1)} KB)
+                    </Typography>
+                  )}
+                </Grid>
+              )}
+              {execution.record.rows_processed != null && (
+                <Grid size={6}>
+                  <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block' }}>
+                    Rows processed
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#E2E8F0', fontWeight: 600 }}>
+                    {execution.record.rows_processed.toLocaleString()}
+                  </Typography>
+                </Grid>
+              )}
+              {execution.record.execution_time_ms != null && (
+                <Grid size={6}>
+                  <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block' }}>
+                    Execution time
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#E2E8F0', fontWeight: 600 }}>
+                    {formatMs(execution.record.execution_time_ms)}
+                  </Typography>
+                </Grid>
+              )}
+              {execution.record.error_message && (
+                <Grid size={12}>
+                  <Typography variant="caption" sx={{ color: '#F87171', display: 'block' }}>
+                    {execution.record.error_message}
+                  </Typography>
+                </Grid>
+              )}
+            </Grid>
+          </Paper>
+        )}
+
       {/* Timing & Calendar Form */}
       <Grid container spacing={2}>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             fullWidth
             size="small"
@@ -208,7 +476,7 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
             sx={{ '& .MuiInputBase-input': { color: '#FFF', fontSize: '0.8rem' }, '& label': { color: '#94A3B8' } }}
           />
         </Grid>
-        <Grid item xs={12} sm={6}>
+        <Grid size={{ xs: 12, sm: 6 }}>
           <TextField
             fullWidth
             size="small"
@@ -216,10 +484,13 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
             value={cronExpression}
             onChange={(e) => setCronExpression(e.target.value)}
             helperText="e.g. 0 8 * * 1-5 (Mon-Fri 08:00 AM)"
-            sx={{ '& .MuiInputBase-input': { color: '#FFF', fontSize: '0.8rem', fontFamily: 'monospace' }, '& label': { color: '#94A3B8' } }}
+            sx={{
+              '& .MuiInputBase-input': { color: '#FFF', fontSize: '0.8rem', fontFamily: 'monospace' },
+              '& label': { color: '#94A3B8' },
+            }}
           />
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <FormControl fullWidth size="small">
             <InputLabel sx={{ color: '#94A3B8' }}>Execution Region</InputLabel>
             <Select
@@ -234,7 +505,7 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <FormControl fullWidth size="small">
             <InputLabel sx={{ color: '#94A3B8' }}>Exchange Master Calendar</InputLabel>
             <Select
@@ -249,7 +520,7 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12} sm={4}>
+        <Grid size={{ xs: 12, sm: 4 }}>
           <FormControl fullWidth size="small">
             <InputLabel sx={{ color: '#94A3B8' }}>Holiday / Non-Trading Action</InputLabel>
             <Select
@@ -268,12 +539,23 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
       </Grid>
 
       {/* Bursting & Slicing Dimension */}
-      <Paper sx={{ p: 2.5, bgcolor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 2 }}>
-        <Typography variant="subtitle2" fontWeight="700" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, color: '#C084FC' }}>
+      <Paper
+        sx={{
+          p: 2.5,
+          bgcolor: 'rgba(15, 23, 42, 0.6)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: 2,
+        }}
+      >
+        <Typography
+          variant="subtitle2"
+          fontWeight="700"
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, color: '#C084FC' }}
+        >
           <Split size={16} /> Client Partitioning &amp; File Export
         </Typography>
         <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
+          <Grid size={{ xs: 12, sm: 6 }}>
             <FormControl fullWidth size="small">
               <InputLabel sx={{ color: '#94A3B8' }}>Bursting Slicing Field</InputLabel>
               <Select
@@ -288,8 +570,11 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} sm={6}>
-            <Typography variant="caption" sx={{ color: '#94A3B8', display: 'block', mb: 0.5, fontWeight: 600 }}>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: '#94A3B8', display: 'block', mb: 0.5, fontWeight: 600 }}
+            >
               Export File Format
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
@@ -321,18 +606,51 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
       </Paper>
 
       {/* Notifications & Actions */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: 'rgba(15, 23, 42, 0.4)', borderRadius: 2, border: '1px solid rgba(255,255,255,0.06)' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          bgcolor: 'rgba(15, 23, 42, 0.4)',
+          borderRadius: 2,
+          border: '1px solid rgba(255,255,255,0.06)',
+        }}
+      >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="caption" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 600, color: '#FCD34D' }}>
+          <Typography
+            variant="caption"
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontWeight: 600, color: '#FCD34D' }}
+          >
             <Bell size={14} /> Notification Options:
           </Typography>
           <FormControlLabel
-            control={<Switch size="small" checked={notifyInApp} onChange={(e) => setNotifyInApp(e.target.checked)} />}
-            label={<Typography variant="caption" sx={{ color: '#E2E8F0' }}>In-App Notification Bell</Typography>}
+            control={
+              <Switch
+                size="small"
+                checked={notifyInApp}
+                onChange={(e) => setNotifyInApp(e.target.checked)}
+              />
+            }
+            label={
+              <Typography variant="caption" sx={{ color: '#E2E8F0' }}>
+                In-App Notification Bell
+              </Typography>
+            }
           />
           <FormControlLabel
-            control={<Switch size="small" checked={notifyEmail} onChange={(e) => setNotifyEmail(e.target.checked)} />}
-            label={<Typography variant="caption" sx={{ color: '#E2E8F0' }}>Email Pre-Signed Download URLs</Typography>}
+            control={
+              <Switch
+                size="small"
+                checked={notifyEmail}
+                onChange={(e) => setNotifyEmail(e.target.checked)}
+              />
+            }
+            label={
+              <Typography variant="caption" sx={{ color: '#E2E8F0' }}>
+                Email Pre-Signed Download URLs
+              </Typography>
+            }
           />
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -341,11 +659,23 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
               variant="outlined"
               size="small"
               onClick={handleTriggerRun}
-              disabled={triggering}
-              startIcon={triggering ? <CircularProgress size={14} /> : <Play size={14} />}
-              sx={{ borderColor: '#6366F1', color: '#A5B4FC', textTransform: 'none', fontSize: '0.75rem', fontWeight: 700 }}
+              disabled={isRunning}
+              startIcon={
+                isRunning ? (
+                  <CircularProgress size={14} sx={{ color: '#60A5FA' }} />
+                ) : (
+                  <Play size={14} />
+                )
+              }
+              sx={{
+                borderColor: '#6366F1',
+                color: '#A5B4FC',
+                textTransform: 'none',
+                fontSize: '0.75rem',
+                fontWeight: 700,
+              }}
             >
-              {triggering ? 'Bursting...' : 'Run Burst Now'}
+              {isRunning ? 'Running...' : 'Run Now'}
             </Button>
           )}
           <Button
@@ -353,58 +683,26 @@ export const ReportScheduleBurstingTab: React.FC<ReportScheduleBurstingTabProps>
             size="small"
             onClick={handleSaveSchedule}
             disabled={saving}
-            startIcon={saving ? <CircularProgress size={14} /> : <ShieldCheck size={16} />}
-            sx={{ bgcolor: '#F5A623', color: '#0F172A', textTransform: 'none', fontWeight: 800, fontSize: '0.75rem', '&:hover': { bgcolor: '#D97706' } }}
+            startIcon={
+              saving ? (
+                <CircularProgress size={14} sx={{ color: '#0F172A' }} />
+              ) : (
+                <ShieldCheck size={16} />
+              )
+            }
+            sx={{
+              bgcolor: '#F5A623',
+              color: '#0F172A',
+              textTransform: 'none',
+              fontWeight: 800,
+              fontSize: '0.75rem',
+              '&:hover': { bgcolor: '#D97706' },
+            }}
           >
             {saving ? 'Saving...' : 'Save Active Schedule'}
           </Button>
         </Box>
       </Box>
-
-      {/* Live Telemetry HUD */}
-      {selectedScheduleId && batchesList.length > 0 && (
-        <ReportBurstTelemetryHUD batchId={batchesList[0].id} tenantId={tenantId} />
-      )}
-
-      {/* Execution Batches Table */}
-      {batchesList.length > 0 && (
-        <Paper sx={{ p: 2, bgcolor: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 2 }}>
-          <Typography variant="subtitle2" fontWeight="700" sx={{ mb: 1.5, color: '#F8FAFC' }}>
-            Recent Burst Batches &amp; Artifact Ledger
-          </Typography>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Batch ID</TableCell>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Effective Date</TableCell>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Total Slices</TableCell>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Rendered</TableCell>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Status</TableCell>
-                <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem', fontWeight: 700 }}>Timestamp</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {batchesList.map((batch) => (
-                <TableRow key={batch.id}>
-                  <TableCell sx={{ color: '#E2E8F0', fontSize: '0.7rem', fontFamily: 'monospace' }}>{batch.id.slice(0, 8)}...</TableCell>
-                  <TableCell sx={{ color: '#E2E8F0', fontSize: '0.7rem' }}>{batch.effective_date}</TableCell>
-                  <TableCell sx={{ color: '#E2E8F0', fontSize: '0.7rem' }}>{batch.total_clients}</TableCell>
-                  <TableCell sx={{ color: '#34D399', fontSize: '0.7rem' }}>{batch.successful_renders} / {batch.total_clients}</TableCell>
-                  <TableCell>
-                    <Chip
-                      size="small"
-                      label={batch.status}
-                      color={batch.status === 'COMPLETED' ? 'success' : batch.status === 'PARTIAL' ? 'warning' : 'info'}
-                      sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700 }}
-                    />
-                  </TableCell>
-                  <TableCell sx={{ color: '#94A3B8', fontSize: '0.7rem' }}>{new Date(batch.started_at).toLocaleTimeString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
-      )}
     </Box>
   );
 };
