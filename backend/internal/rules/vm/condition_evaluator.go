@@ -156,6 +156,27 @@ func (ce *ConditionEvaluator) evaluateSimpleCondition(
 	value := condition["value"]
 
 	actualVal, found := ce.hierarchyResolver.ResolveFieldPath(data, fieldPath)
+
+	// is_null/is_not_null are special-cased ahead of the "field not
+	// found -> false" branch below: unlike every other operator, "no
+	// value" (a missing key) is exactly what is_null exists to detect,
+	// not a reason to bail out early - and ResolveFieldPath already
+	// reports "not found" for both a missing key and a present-but-null
+	// value (unlike vm's own evalFieldRef, which had to be taught to
+	// tell those apart for NOT_EMPTY's sake - is_null wants them treated
+	// the same, so no such fix is needed here). This closes the gap
+	// AdvancedConditionBuilder.tsx's operator dropdown opened: it has
+	// always offered "Is Null"/"Is Not Null" for number/date/boolean/enum
+	// fields, but compareValues had no case for either - selecting one
+	// produced "unknown operator" once a field resolved, or a silent
+	// false when it didn't, never the null-check the label promised.
+	switch operator {
+	case "is_null":
+		return !found || actualVal == nil, nil
+	case "is_not_null":
+		return found && actualVal != nil, nil
+	}
+
 	if !found {
 		// If the field doesn't exist, the condition cannot be met.
 		return false, nil

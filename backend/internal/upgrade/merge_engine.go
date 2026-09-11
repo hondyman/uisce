@@ -171,6 +171,14 @@ func (s *Service) ComputeTenantDelta(ctx context.Context, tenantID string) (*Ten
 		for rows.Next() {
 			item := make(map[string]interface{})
 			_ = rows.MapScan(item)
+			// MapScan can leave some Postgres text-like columns as raw
+			// []byte rather than string - see bo_crud_handler.go's
+			// cleanScanResult for the established fix.
+			for k, v := range item {
+				if b, ok := v.([]byte); ok {
+					item[k] = string(b)
+				}
+			}
 			customAttrs = append(customAttrs, item)
 		}
 	}

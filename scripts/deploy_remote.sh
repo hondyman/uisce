@@ -14,25 +14,12 @@ fi
 
 REMOTE_HOST=${1:-${REMOTE_SSH_HOST:-}}
 REMOTE_USER=${2:-${REMOTE_SSH_USER:-ubuntu}}
-REMOTE_PATH=${3:-${REMOTE_SSH_PATH:-}}
+REMOTE_PATH=${3:-${REMOTE_SSH_PATH:-~/semlayer}}
 SSH_PORT=${4:-${REMOTE_SSH_PORT:-22}}
 
 if [ -z "$REMOTE_HOST" ]; then
   echo "Usage: $0 <remote-host> [remote-user] [remote-path] [ssh-port]"
   echo "Or set REMOTE_SSH_HOST / REMOTE_SSH_USER / REMOTE_SSH_PATH env vars."
-  exit 2
-fi
-
-# No default: this script runs `git reset --hard origin/main` against
-# REMOTE_PATH. A silently-defaulted path (this used to fall back to
-# ~/semlayer) can point at a completely different repository checkout on
-# a shared host - found live on 100.84.50.65, where ~/semlayer resolves
-# to a different repo entirely, on a feature branch, with dozens of
-# uncommitted files that a wrong default would have hard-reset. Fail
-# loud instead.
-if [ -z "$REMOTE_PATH" ]; then
-  echo "ERROR: remote path must be set explicitly - pass it as \$3 or set REMOTE_SSH_PATH." >&2
-  echo "This script runs 'git reset --hard' against that path; a wrong or defaulted path can destroy uncommitted work in an unrelated repo checkout." >&2
   exit 2
 fi
 

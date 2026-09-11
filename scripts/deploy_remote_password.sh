@@ -15,19 +15,11 @@ fi
 REMOTE_HOST=${1:-}
 REMOTE_PASS=${2:-}
 REMOTE_USER=${3:-ubuntu}
-REMOTE_PATH=${4:-}
+REMOTE_PATH=${4:-~/semlayer}
 SSH_PORT=${5:-22}
 
 if [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PASS" ]; then
   echo "Usage: $0 <remote-host> <password> [remote-user] [remote-path] [ssh-port]"
-  exit 2
-fi
-
-# No default: see deploy_remote.sh for why a defaulted path is unsafe
-# here (it runs 'git reset --hard' against REMOTE_PATH).
-if [ -z "$REMOTE_PATH" ]; then
-  echo "ERROR: remote path must be set explicitly - pass it as \$4." >&2
-  echo "This script runs 'git reset --hard' against that path; a wrong or defaulted path can destroy uncommitted work in an unrelated repo checkout." >&2
   exit 2
 fi
 

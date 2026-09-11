@@ -33,6 +33,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -76,31 +77,14 @@ type ruleViolation struct {
 	RuleError bool
 }
 
-// relatedRowContext describes, per BO key, how to load the simple-shape
-// related-row aggregate context a rule needs: one parent row plus one
-// sibling-row sum. See loadOrderContext for the BO that needs more than
-// this shape provides.
-type relatedRowContext struct {
-	parentIDField   string
-	parentTable     string
-	parentIDColumn  string
-	parentFields    []string
-	siblingTable    string
-	siblingSumField string
-	siblingSumAs    string
-}
-
-var shadowRuleContexts = map[string]relatedRowContext{
-	"execution": {
-		parentIDField:   "placement_id",
-		parentTable:     "orm.placement",
-		parentIDColumn:  "id",
-		parentFields:    []string{"routed_qty", "executed_qty"},
-		siblingTable:    "orm.execution",
-		siblingSumField: "exec_qty",
-		siblingSumAs:    "sibling_qty_sum",
-	},
-}
+// Every OMS BO now has a dedicated loader (below) rather than the earlier
+// one-size-fits-all relatedRowContext shape: Placement/Execution need a
+// two-hop parent (Execution -> Placement -> Order) and duplicate-row
+// counts that a single parent-table + single-sibling-sum shape can't
+// express, and once Execution needed its own loader there was no BO left
+// for the generic shape to serve. See
+// docs/unified-rule-engine-handoff.md's OMS validation spec for the full
+// rule set each of these feeds.
 
 // writeAndEnforce runs doWrite inside a transaction, evaluates every
 // active validation rule for boKey against the row it produced (seeing
@@ -186,14 +170,7 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	}()
 
 	svc := analytics.NewValidationRuleService(s.db)
-	// domain="" - all domains enforce on the write path (validation,
-	// plus mdm/compliance rules that are per-record write-time
-	// constraints, per the rulefabric consolidation: those become
-	// domain values on this same rule set rather than a second write
-	// hook). Batch-shaped mdm/compliance rules (wash-trade over
-	// history, concentration over positions) are not BO-scoped the same
-	// way and are evaluated by the sweep harness, not here.
-	rules, err := svc.ListByBO(ctx, tenantID, boKey, "")
+	rules, err := svc.ListByBO(ctx, tenantID, boKey)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("rule evaluation: failed to list rules for BO %s: %v", boKey, err)
 		return nil, false
@@ -224,10 +201,14 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	switch boKey {
 	case "order":
 		s.loadOrderContext(ctx, exec, data)
-	default:
-		if rc, ok := shadowRuleContexts[boKey]; ok {
-			s.loadRelatedRowContext(ctx, exec, rc, record, data)
-		}
+	case "placement":
+		s.loadPlacementContext(ctx, exec, data)
+	case "execution":
+		s.loadExecutionContext(ctx, exec, data)
+	case "order_allocation":
+		s.loadOrderAllocationContext(ctx, exec, data)
+	case "execution_allocation":
+		s.loadExecutionAllocationContext(ctx, exec, data)
 	}
 
 	enforce := enforcementEnabled()
@@ -311,50 +292,231 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	return violations, blocked
 }
 
-// loadRelatedRowContext fills data with the parent row's fields and the
-// sibling-row aggregate described by rc, reading through exec so it sees
-// the write it's evaluating even before that write's transaction commits.
-func (s *BusinessObjectService) loadRelatedRowContext(ctx context.Context, exec dbExecutor, rc relatedRowContext, record map[string]interface{}, data map[string]interface{}) {
-	parentID, ok := record[rc.parentIDField]
-	if !ok || parentID == nil {
+// loadPlacementContext fills data for the Placement BO's rule set:
+//   - order_target_qty: the parent order's target_qty (over-placement
+//     check compares the sibling routed-qty sum against this).
+//   - sibling_routed_sum: SUM(routed_qty) across every placement under
+//     the same order, including the row this write just produced (same
+//     "sum includes the just-written row, because evaluation runs inside
+//     its own transaction" convention as Execution's sibling_qty_sum).
+//   - broker_status: orm.broker.status for this placement's broker_id -
+//     absent (not an error) if the broker isn't in the reference table,
+//     same as Order's account lookup.
+func (s *BusinessObjectService) loadPlacementContext(ctx context.Context, exec dbExecutor, data map[string]interface{}) {
+	orderID, ok := data["order_id"]
+	if !ok || orderID == nil {
 		return
 	}
 
-	if len(rc.parentFields) > 0 {
-		cols := ""
-		for i, f := range rc.parentFields {
-			if i > 0 {
-				cols += ", "
-			}
-			cols += f
-		}
-		row := make(map[string]interface{})
-		query := fmt.Sprintf("SELECT %s FROM %s WHERE %s = $1", cols, rc.parentTable, rc.parentIDColumn)
-		rows, err := exec.QueryxContext(ctx, query, parentID)
-		if err != nil {
-			logging.GetLogger().Sugar().Warnf("rule context: failed to load parent %s: %v", rc.parentTable, err)
-			return
-		}
-		if rows.Next() {
-			_ = rows.MapScan(row)
-			for k, v := range row {
-				data[k] = coerceNumeric(v)
-			}
-		}
-		rows.Close()
+	var targetQty float64
+	if err := exec.GetContext(ctx, &targetQty, `SELECT target_qty FROM orm."order" WHERE id = $1`, orderID); err != nil {
+		logging.GetLogger().Sugar().Warnf("placement rule context: failed to load parent order target_qty: %v", err)
+	} else {
+		data["order_target_qty"] = targetQty
 	}
 
-	if rc.siblingSumField != "" && rc.siblingTable != "" {
-		var sum float64
-		query := fmt.Sprintf(
-			"SELECT COALESCE(SUM(%s), 0) FROM %s WHERE %s = $1",
-			rc.siblingSumField, rc.siblingTable, rc.parentIDField,
-		)
-		if err := exec.GetContext(ctx, &sum, query, parentID); err != nil {
-			logging.GetLogger().Sugar().Warnf("rule context: failed to load sibling sum: %v", err)
-			return
+	var sum float64
+	if err := exec.GetContext(ctx, &sum, `SELECT COALESCE(SUM(routed_qty), 0) FROM orm.placement WHERE order_id = $1`, orderID); err != nil {
+		logging.GetLogger().Sugar().Warnf("placement rule context: failed to sum sibling routed_qty: %v", err)
+	} else {
+		data["sibling_routed_sum"] = sum
+	}
+
+	if brokerID, ok := data["broker_id"]; ok && brokerID != nil {
+		var status string
+		if err := exec.GetContext(ctx, &status, `SELECT status FROM orm.broker WHERE broker_id = $1`, brokerID); err == nil {
+			data["broker_status"] = status
 		}
-		data[rc.siblingSumAs] = sum
+	}
+}
+
+// loadExecutionContext fills data for the Execution BO's rule set. Parent
+// fields come from a two-hop join (Execution -> Placement -> Order), since
+// price-vs-limit and causality checks need the order's side/limit_price
+// and the placement's created_at, not just the placement's own routed/
+// executed quantities the earlier generic shape loaded.
+//   - routed_qty/executed_qty: the parent placement's own fields (same
+//     names/behavior as before this was split out of the generic shape).
+//   - placement_created_at: the parent placement's created_at, for the
+//     causality check (exec_time >= placement created_at).
+//   - order_side/order_limit_price: the grandparent order's side and
+//     limit_price, for the price-vs-limit check.
+//   - sibling_qty_sum: SUM(exec_qty) across every execution under the
+//     same placement, including this write - the overfill guard's
+//     existing, already-proven context key (cmd/verify_shadow_context).
+//   - duplicate_broker_exec_count: how many OTHER executions share this
+//     row's broker_id + broker_exec_id (excluding this row by id) - the
+//     duplicate-broker-exec WARN's context.
+func (s *BusinessObjectService) loadExecutionContext(ctx context.Context, exec dbExecutor, data map[string]interface{}) {
+	placementID, ok := data["placement_id"]
+	if !ok || placementID == nil {
+		return
+	}
+
+	row := make(map[string]interface{})
+	rows, err := exec.QueryxContext(ctx, `
+		SELECT p.routed_qty, p.executed_qty, p.created_at AS placement_created_at,
+		       o.side AS order_side, o.limit_price AS order_limit_price
+		FROM orm.placement p
+		JOIN orm."order" o ON o.id = p.order_id
+		WHERE p.id = $1`, placementID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("execution rule context: failed to load parent placement/order: %v", err)
+		return
+	}
+	if rows.Next() {
+		_ = rows.MapScan(row)
+		for k, v := range row {
+			data[k] = normalizeScanned(v)
+		}
+	}
+	rows.Close()
+
+	var sum float64
+	if err := exec.GetContext(ctx, &sum, `SELECT COALESCE(SUM(exec_qty), 0) FROM orm.execution WHERE placement_id = $1`, placementID); err != nil {
+		logging.GetLogger().Sugar().Warnf("execution rule context: failed to sum sibling exec_qty: %v", err)
+	} else {
+		data["sibling_qty_sum"] = sum
+	}
+
+	// causality_ok: a precomputed boolean, not a raw timestamp comparison
+	// left to the rule itself - ConditionEvaluator's greater_equal/
+	// less_equal and AdvancedEvaluator's BinaryExpr both delegate to
+	// numeric coercion (hierarchy_resolver.go's toNumber), which errors on
+	// an RFC3339 timestamp string. Rather than teach either shared
+	// comparator about timestamps (out of scope, and exactly the kind of
+	// change the standing "never mutate the shared ConditionEvaluator"
+	// rule exists to prevent), the comparison is done once here in Go and
+	// exposed as a plain boolean the rule can check with "equals" - the
+	// same "precompute it in the context provider" approach the sum/count
+	// keys already use for anything the engine's own operators can't
+	// express directly.
+	if execTime, ok := data["exec_time"]; ok {
+		if pt, pok := parseTimestamp(data["placement_created_at"]); pok {
+			if et, eok := parseTimestamp(execTime); eok {
+				data["causality_ok"] = !et.Before(pt)
+			}
+		}
+	}
+
+	brokerID, hasBroker := data["broker_id"]
+	brokerExecID, hasBrokerExecID := data["broker_exec_id"]
+	if hasBroker && hasBrokerExecID && brokerID != nil && brokerExecID != nil {
+		var count int
+		id := data["id"]
+		if err := exec.GetContext(ctx, &count, `
+			SELECT COUNT(*) FROM orm.execution
+			WHERE broker_id = $1 AND broker_exec_id = $2 AND id != $3`,
+			brokerID, brokerExecID, id); err != nil {
+			logging.GetLogger().Sugar().Warnf("execution rule context: failed to count duplicate broker execs: %v", err)
+		} else {
+			data["duplicate_broker_exec_count"] = float64(count)
+		}
+	}
+}
+
+// loadOrderAllocationContext fills data for the OrderAllocation BO's rule
+// set:
+//   - account_status/account_is_discretionary: this allocation's own
+//     account_id looked up directly in orm.account - simpler than
+//     Order's version (item 8/13 of the handoff), which has to find an
+//     account indirectly via the order's first allocation, because an
+//     OrderAllocation row already carries its own account_id.
+//   - alloc_fill_sum: SUM(alloc_exec_qty) across every execution_allocation
+//     row distributed against this order_allocation, for the
+//     allocation-reconcile rule (AllocatedQuantity == alloc_fill_sum).
+func (s *BusinessObjectService) loadOrderAllocationContext(ctx context.Context, exec dbExecutor, data map[string]interface{}) {
+	if accountID, ok := data["account_id"]; ok && accountID != nil {
+		row := make(map[string]interface{})
+		rows, err := exec.QueryxContext(ctx, `SELECT status, is_discretionary FROM orm.account WHERE account_id = $1`, accountID)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("order_allocation rule context: failed to load account: %v", err)
+		} else {
+			if rows.Next() {
+				_ = rows.MapScan(row)
+				if v, ok := row["status"]; ok {
+					data["account_status"] = normalizeScanned(v)
+				}
+				if v, ok := row["is_discretionary"]; ok {
+					data["account_is_discretionary"] = v
+				}
+			}
+			rows.Close()
+		}
+	}
+
+	if allocID, ok := data["id"]; ok && allocID != nil {
+		var sum float64
+		if err := exec.GetContext(ctx, &sum,
+			`SELECT COALESCE(SUM(alloc_exec_qty), 0) FROM orm.execution_allocation WHERE order_allocation_id = $1`, allocID); err != nil {
+			logging.GetLogger().Sugar().Warnf("order_allocation rule context: failed to sum alloc_fill: %v", err)
+		} else {
+			data["alloc_fill_sum"] = sum
+		}
+	}
+}
+
+// loadExecutionAllocationContext fills data for the ExecutionAllocation
+// BO's rule set - the one BO whose rules cross two different parents
+// (its execution and its order_allocation) that must agree with each
+// other:
+//   - parent_exec_qty/parent_exec_price: the parent execution's own qty/
+//     price, for the distribution-completeness and price-consistency
+//     rules.
+//   - parent_order_id: the parent execution's order_id (via
+//     execution_id), for the same-order-linkage rule.
+//   - alloc_order_id: the linked order_allocation's order_id (via
+//     order_allocation_id) - same-order-linkage compares this against
+//     parent_order_id.
+//   - sibling_alloc_sum: SUM(alloc_exec_qty) across every
+//     execution_allocation row distributed against the same execution,
+//     including this write.
+func (s *BusinessObjectService) loadExecutionAllocationContext(ctx context.Context, exec dbExecutor, data map[string]interface{}) {
+	if executionID, ok := data["execution_id"]; ok && executionID != nil {
+		row := make(map[string]interface{})
+		rows, err := exec.QueryxContext(ctx, `SELECT exec_qty AS parent_exec_qty, exec_price AS parent_exec_price, order_id AS parent_order_id FROM orm.execution WHERE id = $1`, executionID)
+		if err != nil {
+			logging.GetLogger().Sugar().Warnf("execution_allocation rule context: failed to load parent execution: %v", err)
+		} else {
+			if rows.Next() {
+				_ = rows.MapScan(row)
+				for k, v := range row {
+					data[k] = normalizeScanned(v)
+				}
+			}
+			rows.Close()
+		}
+
+		var sum float64
+		if err := exec.GetContext(ctx, &sum, `SELECT COALESCE(SUM(alloc_exec_qty), 0) FROM orm.execution_allocation WHERE execution_id = $1`, executionID); err != nil {
+			logging.GetLogger().Sugar().Warnf("execution_allocation rule context: failed to sum sibling allocations: %v", err)
+		} else {
+			data["sibling_alloc_sum"] = sum
+		}
+	}
+
+	if orderAllocID, ok := data["order_allocation_id"]; ok && orderAllocID != nil {
+		var orderID string
+		if err := exec.GetContext(ctx, &orderID, `SELECT order_id FROM orm.order_allocation WHERE id = $1`, orderAllocID); err != nil {
+			logging.GetLogger().Sugar().Warnf("execution_allocation rule context: failed to load order_allocation's order_id: %v", err)
+		} else {
+			data["alloc_order_id"] = orderID
+		}
+	}
+
+	// same_order_ok: a precomputed boolean, not a direct
+	// parent_order_id == alloc_order_id expression - AdvancedEvaluator's
+	// BinaryExpr calls toFloat64 unconditionally, even for "==" (see
+	// advanced_evaluator.go's evalBinaryExpr), so an Expression-type
+	// equality on two UUID strings errors ("operands not numeric") no
+	// matter what the values are. Same fix shape as causality_ok above:
+	// do the (string) comparison once here in Go, expose it as a plain
+	// boolean a Condition node can check - not a change to the shared
+	// evaluator.
+	if parentOrderID, ok := data["parent_order_id"]; ok {
+		if allocOrderID, ok2 := data["alloc_order_id"]; ok2 {
+			data["same_order_ok"] = fmt.Sprintf("%v", parentOrderID) == fmt.Sprintf("%v", allocOrderID)
+		}
 	}
 }
 
@@ -383,6 +545,37 @@ func (s *BusinessObjectService) loadOrderContext(ctx context.Context, exec dbExe
 		data["allocation_target_qty_sum"] = sum
 	}
 
+	// placement_routed_sum: SUM(routed_qty) across every placement under
+	// this order, including this write - the over-placement guard's
+	// context (mirrors Execution's sibling_qty_sum convention).
+	var routedSum float64
+	if err := exec.GetContext(ctx, &routedSum,
+		"SELECT COALESCE(SUM(routed_qty), 0) FROM orm.placement WHERE order_id = $1", orderID); err != nil {
+		logging.GetLogger().Sugar().Warnf("order rule context: failed to sum placement routed_qty: %v", err)
+	} else {
+		data["placement_routed_sum"] = routedSum
+	}
+
+	// duplicate_order_count: how many OTHER orders share this order's
+	// sec_id/side/target_qty/trade_date/manager_id (NULL manager_id
+	// treated as equal to NULL via IS NOT DISTINCT FROM, so two orders
+	// with no manager_id set can still be flagged as duplicates of each
+	// other) - the duplicate-order soft-check's context. Reads straight
+	// off data (already coerced/loaded from the record being written),
+	// not a second DB round trip for the order's own fields.
+	if secID, ok := data["sec_id"]; ok && secID != nil {
+		var dupCount int
+		if err := exec.GetContext(ctx, &dupCount, `
+			SELECT COUNT(*) FROM orm."order"
+			WHERE sec_id = $1 AND side = $2 AND target_qty = $3 AND trade_date = $4
+			  AND manager_id IS NOT DISTINCT FROM $5 AND id != $6`,
+			secID, data["side"], data["target_qty"], data["trade_date"], data["manager_id"], orderID); err != nil {
+			logging.GetLogger().Sugar().Warnf("order rule context: failed to count duplicate orders: %v", err)
+		} else {
+			data["duplicate_order_count"] = float64(dupCount)
+		}
+	}
+
 	rows, err := exec.QueryxContext(ctx,
 		`SELECT a.status, a.is_discretionary
 		 FROM orm.order_allocation oa
@@ -399,7 +592,7 @@ func (s *BusinessObjectService) loadOrderContext(ctx context.Context, exec dbExe
 		row := make(map[string]interface{})
 		_ = rows.MapScan(row)
 		if v, ok := row["status"]; ok {
-			data["account_status"] = coerceNumeric(v)
+			data["account_status"] = normalizeScanned(v)
 		}
 		if v, ok := row["is_discretionary"]; ok {
 			data["account_is_discretionary"] = v
@@ -419,12 +612,29 @@ func (s *BusinessObjectService) loadOrderContext(ctx context.Context, exec dbExe
 // automatically - keeping it a short, explicit, reviewable list here
 // beats a generic mechanism for the two BOs that need it today.
 var knownTransientContextFields = map[string]bool{
-	"sibling_qty_sum":           true,
-	"routed_qty":                true,
-	"executed_qty":              true,
-	"allocation_target_qty_sum": true,
-	"account_status":            true,
-	"account_is_discretionary":  true,
+	"sibling_qty_sum":             true,
+	"routed_qty":                  true,
+	"executed_qty":                true,
+	"allocation_target_qty_sum":   true,
+	"account_status":              true,
+	"account_is_discretionary":    true,
+	"placement_routed_sum":        true,
+	"duplicate_order_count":       true,
+	"order_target_qty":            true,
+	"sibling_routed_sum":          true,
+	"broker_status":               true,
+	"placement_created_at":        true,
+	"order_side":                  true,
+	"order_limit_price":           true,
+	"duplicate_broker_exec_count": true,
+	"alloc_fill_sum":              true,
+	"parent_exec_qty":             true,
+	"parent_exec_price":           true,
+	"parent_order_id":             true,
+	"alloc_order_id":              true,
+	"sibling_alloc_sum":           true,
+	"causality_ok":                true,
+	"same_order_ok":               true,
 }
 
 // unresolvedFieldRefs walks node's tree and returns every top-level
@@ -489,6 +699,55 @@ func collectExprFieldRefs(n vm.ExprNode, out map[string]bool) {
 			collectExprFieldRefs(a, out)
 		}
 	}
+}
+
+// normalizeScanned is coerceNumeric's counterpart for values that come
+// from rows.MapScan (used throughout this file's context loaders) rather
+// than a typed GetContext(&typedVar, ...) scan. MapScan's driver.Value
+// conversion leaves text-like Postgres types (uuid, varchar) as raw
+// []byte for some column type OIDs but not others - found empirically
+// while debugging the same-order-linkage rule: orm.execution.order_id
+// (uuid) came back as []byte, while a typed `var status string` scan of
+// the very same kind of column elsewhere in this file (broker_status,
+// via GetContext) came back as a clean Go string. coerceNumeric alone
+// doesn't fix this - it only converts a []byte to float64 when it
+// actually parses as a number, and returns non-numeric []byte
+// unchanged - so a MapScan'd UUID or status string was landing in `data`
+// still as []byte, which breaks both direct string comparisons
+// (Condition's compareValues does reflect.DeepEqual, and
+// DeepEqual([]byte("ACTIVE"), "ACTIVE") is false - different types,
+// never mind equal content) and this file's own fmt.Sprintf("%v", ...)
+// string-building (which renders []byte as its numeric byte values, not
+// its text). Convert []byte to string FIRST, then let coerceNumeric
+// still do its normal job of promoting a numeric string to float64 -
+// this fixes the string case without changing coerceNumeric's existing,
+// already-relied-upon behavior for record's own already-stringified
+// fields (see coerceNumeric's own doc comment) or for GetContext's
+// typed scans (which were never affected by this bug to begin with).
+func normalizeScanned(v interface{}) interface{} {
+	if b, ok := v.([]byte); ok {
+		return coerceNumeric(string(b))
+	}
+	return coerceNumeric(v)
+}
+
+// parseTimestamp handles the two shapes a timestamptz value reaches this
+// code as: a Go time.Time (the common case - lib/pq recognizes the
+// column type from both a QueryxContext scan and an INSERT ... RETURNING
+// scan) or a string (a defensive fallback, in case a caller ever supplies
+// one as a record field directly rather than a time.Time).
+func parseTimestamp(v interface{}) (time.Time, bool) {
+	switch t := v.(type) {
+	case time.Time:
+		return t, true
+	case string:
+		for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05.999999-07", "2006-01-02 15:04:05-07", "2006-01-02"} {
+			if parsed, err := time.Parse(layout, t); err == nil {
+				return parsed, true
+			}
+		}
+	}
+	return time.Time{}, false
 }
 
 // coerceNumeric converts values that are numeric but not typed as such

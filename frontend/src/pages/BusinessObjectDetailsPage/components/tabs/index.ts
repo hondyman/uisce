@@ -5,5 +5,6 @@ export { RecordsCrudTab } from './RecordsCrudTab';
 export { BODeltaTab } from './BODeltaTab';
 export { LiveQueryTab } from './LiveQueryTab';
 export { default as WorkflowTab } from './WorkflowTab';
+export { ValidationsAndTriggersTab } from './ValidationsAndTriggersTab';
 
 

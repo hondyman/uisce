@@ -18,16 +18,6 @@ type ValidationRuleProperties struct {
 	Timing           string `json:"timing"`   // "pre_write" | "reconcile"
 	Category         string `json:"category,omitempty"`
 	GovernanceStatus string `json:"governance_status,omitempty"` // "draft", "review", "published", "deprecated"
-	// Domain distinguishes which rule-authoring surface produced this
-	// rule - "validation" (the original BO-scoped surface), "mdm", or
-	// "compliance" (the domain values the rulefabric consolidation adds;
-	// see docs/unified-rule-engine-handoff.md, "Rulefabric consolidation").
-	// Empty/omitted (every rule written before this field existed) is
-	// read as ValidationRuleDomainDefault ("validation") by GetByID/
-	// ListByBO's descriptorFromNode - the service defaults new writes to
-	// it explicitly rather than leaving new rows blank too, so "domain"
-	// is unambiguous for anything written from this point forward.
-	Domain string `json:"domain,omitempty"`
 }
 
 const (
@@ -36,10 +26,6 @@ const (
 
 	ValidationRuleTimingPreWrite  = "pre_write"
 	ValidationRuleTimingReconcile = "reconcile"
-
-	ValidationRuleDomainDefault    = "validation"
-	ValidationRuleDomainMDM        = "mdm"
-	ValidationRuleDomainCompliance = "compliance"
 )
 
 // ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
@@ -61,11 +47,7 @@ type UpsertValidationRuleRequest struct {
 	Severity    string          `json:"severity"`
 	Timing      string          `json:"timing"`
 	Category    string          `json:"category,omitempty"`
-	// Domain: "mdm" or "compliance" for the rulefabric-consolidation
-	// domain values; empty defaults to ValidationRuleDomainDefault
-	// ("validation") in the service layer.
-	Domain  string          `json:"domain,omitempty"`
-	RuleAST json.RawMessage `json:"rule_ast"`
+	RuleAST     json.RawMessage `json:"rule_ast"`
 }
 
 // ValidationRuleDescriptor is the API response shape.
@@ -78,11 +60,11 @@ type ValidationRuleDescriptor struct {
 	Severity         string          `json:"severity"`
 	Timing           string          `json:"timing"`
 	Category         string          `json:"category,omitempty"`
-	Domain           string          `json:"domain"`
 	RuleAST          json.RawMessage `json:"rule_ast"`
 	GovernanceStatus string          `json:"governance_status"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
+	IsActive         bool            `json:"is_active"`
 }
 
 // ParseValidationRuleProperties unmarshals ValidationRuleProperties from

@@ -66,17 +66,12 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 		return nil, fmt.Errorf("BO %q not found: %w", req.BOName, err)
 	}
 
-	domain := req.Domain
-	if domain == "" {
-		domain = models.ValidationRuleDomainDefault
-	}
 	props := models.ValidationRuleProperties{
 		BOName:           req.BOName,
 		TenantID:         req.TenantID,
 		Severity:         req.Severity,
 		Timing:           req.Timing,
 		Category:         req.Category,
-		Domain:           domain,
 		GovernanceStatus: "draft",
 	}
 	propsJSON, err := json.Marshal(props)
@@ -146,6 +141,30 @@ func (s *ValidationRuleService) ensureGovernedByRuleEdge(ctx context.Context, ru
 	return err
 }
 
+// SetActive flips is_active on a validation-rule catalog node - the
+// reversible retire/reactivate toggle the BO Validations tab exposes,
+// same convention as every other rule retirement in this engagement
+// (the 233-rule corpus, stale probe rules): is_active = false, not a
+// delete.
+func (s *ValidationRuleService) SetActive(ctx context.Context, tenantID string, id uuid.UUID, active bool) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE catalog_node SET is_active = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3::uuid
+		  AND node_type_id = (SELECT id FROM catalog_node_type WHERE catalog_type_name = 'validation_rule' LIMIT 1)
+	`, active, id, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to set validation rule active state: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("validation rule %s not found for tenant %s", id, tenantID)
+	}
+	return nil
+}
+
 // GetByID loads a single validation rule by its catalog_node id.
 func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*models.ValidationRuleDescriptor, error) {
 	var node struct {
@@ -156,10 +175,11 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		Config      json.RawMessage `db:"config"`
 		CreatedAt   string          `db:"created_at"`
 		UpdatedAt   string          `db:"updated_at"`
+		IsActive    bool            `db:"is_active"`
 	}
 
 	err := s.db.GetContext(ctx, &node, `
-		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.created_at, n.updated_at
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.created_at, n.updated_at, n.is_active
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
@@ -169,17 +189,16 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		return nil, fmt.Errorf("validation rule not found: %w", err)
 	}
 
-	return descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config)
+	desc, err := descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config)
+	if err != nil {
+		return nil, err
+	}
+	desc.IsActive = node.IsActive
+	return desc, nil
 }
 
-// ListByBO returns all validation rules targeting the given BO. If domain
-// is non-empty, results are further filtered to that domain
-// ("mdm"/"compliance"/models.ValidationRuleDomainDefault) - rows written
-// before the domain field existed are treated as
-// models.ValidationRuleDomainDefault, matching descriptorFromNode's
-// read-side default, so an empty-string domain filter doesn't need a
-// separate "or properties->>'domain' is null" clause.
-func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, domain string) ([]models.ValidationRuleDescriptor, error) {
+// ListByBO returns all validation rules targeting the given BO.
+func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName string) ([]models.ValidationRuleDescriptor, error) {
 	var nodes []struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -195,10 +214,9 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.tenant_id = $1
 		  AND n.properties->>'bo_name' = $2
-		  AND ($3 = '' OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
 		  AND n.is_active = true
 		ORDER BY n.node_name
-	`, tenantID, boName, domain, models.ValidationRuleDomainDefault)
+	`, tenantID, boName)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +227,50 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 		if err != nil {
 			return nil, err
 		}
+		desc.IsActive = true // ListByBO's query already filters is_active = true
+		result = append(result, *desc)
+	}
+	return result, nil
+}
+
+// ListAll returns every validation rule for the tenant, across all BOs -
+// the system validations page's data source (the spec's "unfiltered
+// tenant-wide variant" of ListByBO, which is always scoped to one BO).
+// includeInactive=true also returns retired rules (is_active = false),
+// so the page can show history/the archived-corpus distinction rather
+// than only ever showing the live set.
+func (s *ValidationRuleService) ListAll(ctx context.Context, tenantID string, includeInactive bool) ([]models.ValidationRuleDescriptor, error) {
+	var nodes []struct {
+		ID          uuid.UUID       `db:"id"`
+		NodeName    string          `db:"node_name"`
+		Description string          `db:"description"`
+		Properties  json.RawMessage `db:"properties"`
+		Config      json.RawMessage `db:"config"`
+		IsActive    bool            `db:"is_active"`
+	}
+
+	query := `
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active
+		FROM catalog_node n
+		JOIN catalog_node_type nt ON n.node_type_id = nt.id
+		WHERE nt.catalog_type_name = 'validation_rule'
+		  AND n.tenant_id = $1`
+	if !includeInactive {
+		query += ` AND n.is_active = true`
+	}
+	query += ` ORDER BY n.properties->>'bo_name', n.node_name`
+
+	if err := s.db.SelectContext(ctx, &nodes, query, tenantID); err != nil {
+		return nil, err
+	}
+
+	result := make([]models.ValidationRuleDescriptor, 0, len(nodes))
+	for _, n := range nodes {
+		desc, err := descriptorFromNode(n.ID, n.NodeName, n.Description, n.Properties, n.Config)
+		if err != nil {
+			return nil, err
+		}
+		desc.IsActive = n.IsActive
 		result = append(result, *desc)
 	}
 	return result, nil
@@ -223,10 +285,6 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 	if err != nil {
 		return nil, err
 	}
-	domain := props.Domain
-	if domain == "" {
-		domain = models.ValidationRuleDomainDefault
-	}
 	return &models.ValidationRuleDescriptor{
 		ID:               id,
 		TenantID:         props.TenantID,
@@ -236,7 +294,6 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 		Severity:         props.Severity,
 		Timing:           props.Timing,
 		Category:         props.Category,
-		Domain:           domain,
 		RuleAST:          cfg.RuleAST,
 		GovernanceStatus: props.GovernanceStatus,
 	}, nil

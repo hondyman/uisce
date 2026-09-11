@@ -17,6 +17,7 @@
 -- reason and a pointer to the report that justified it. Fully reversible
 -- by flipping is_active back and reading the audit trail for why it was
 -- set false in the first place.
+BEGIN;
 
 INSERT INTO catalog_validation_rules_audit (rule_id, tenant_id, action, old_values, new_values, changed_by)
 SELECT
@@ -34,3 +35,4 @@ SET is_active = false,
     updated_at = now()
 WHERE is_active = true;
 
+COMMIT;

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLocale } from '../i18n/useLocale';
 import { GOLD_COPY } from '../config';
 import { getSelectedRegion } from '../lib/region';
 
@@ -115,6 +114,7 @@ import {
   BODeltaTab,
   LiveQueryTab,
   WorkflowTab,
+  ValidationsAndTriggersTab,
 } from './BusinessObjectDetailsPage/components/tabs';
 import { PageHeader } from './BusinessObjectDetailsPage/components/PageHeader';
 import { HierarchyTreePanel } from './BusinessObjectDetailsPage/components/HierarchyTreePanel';
@@ -168,7 +168,6 @@ export default function BusinessObjectDetailsPage() {
   const { id: _id } = useParams<{ id: string }>();
   const id = _id;
   const navigate = useNavigate();
-  const locale = useLocale();
   const { tenant, datasource } = useTenant();
   const { token } = useAuth();
   const notification = useNotification();
@@ -1273,34 +1272,29 @@ export default function BusinessObjectDetailsPage() {
   };
 
   const handleSaveRule = useCallback(async (rule: any) => {
-    // New-rule creation (POST /api/validation-rules) is retired - that
-    // intake now 410s (see validation_rules_routes.go). Editing existing
-    // rules via PATCH is unaffected: only the creation route was closed.
-    // New rules go through the unified-engine editor (/validation-rule-nodes),
-    // which authors a real rule_ast rather than the flat condition shape
-    // this dialog builds.
-    if (!rule.id) {
-      setValidationRuleCreatorOpen(false);
-      const boName = businessObject?.technicalName || businessObject?.key || _id;
-      navigate(`/${locale}/core/validation-rules/editor?bo_name=${encodeURIComponent(boName ?? '')}`);
-      return;
-    }
     try {
-      await apiClient<void>(`/api/validation-rules/${rule.id}`, {
-        method: 'PATCH',
+      // Save the rule to the backend
+      const method = rule.id ? 'PATCH' : 'POST';
+      const endpoint = rule.id 
+        ? `/api/validation-rules/${rule.id}`
+        : '/api/validation-rules';
+
+      // apiClient throws on non-OK. Saves the rule and refreshes the list.
+      await apiClient<void>(endpoint, {
+        method,
         headers: getAuthHeaders(),
         body: JSON.stringify(rule),
       });
 
       // Refresh rules after successful save
       await fetchValidationRules();
-      notification.success('Rule updated successfully');
+      notification.success(rule.id ? 'Rule updated successfully' : 'Rule created successfully');
       setValidationRuleCreatorOpen(false);
       setEditingRule(null);
     } catch (err) {
       notification.error(err instanceof Error ? err.message : 'Failed to save rule');
     }
-  }, [tenantId, datasourceId, fetchValidationRules, notification, navigate, locale, businessObject, _id]);
+  }, [tenantId, datasourceId, fetchValidationRules, notification]);
 
   const handleAddSubtype = async () => {
     // Validate required context from operating scope
@@ -1934,6 +1928,7 @@ export default function BusinessObjectDetailsPage() {
             <Tab label="Graph" icon={<AccountTreeIcon />} iconPosition="start" />
             <Tab label="Semantic Model" />
             <Tab label="Lineage" icon={<AccountTreeIcon />} iconPosition="start" />
+            <Tab label="Validations & Triggers" />
           </Tabs>
 
           {/* Main Content Area with Sidebar */}
@@ -2110,12 +2105,23 @@ export default function BusinessObjectDetailsPage() {
                      Visualize upstream dependencies and downstream impact using dynamic analysis.
                    </Typography>
                    
-                   <UnifiedLineageTab 
-                      nodeType="business_object" 
+                   <UnifiedLineageTab
+                      nodeType="business_object"
                       nodeId={businessObject?.id || id || ''}
                       initialDirection="both"
                    />
                 </Box>
+              )}
+
+              {/* Validations & Triggers Tab - the real node-based
+                  validation engine (backend/internal/metadata/shadow_evaluation.go),
+                  distinct from the "Validations" tab above (activeTab === 6),
+                  which is the older catalog_validation_rules-era
+                  ValidationRulesPage. Appended at the end rather than
+                  inserted earlier so every existing activeTab index above
+                  stays unchanged. */}
+              {activeTab === 11 && (
+                <ValidationsAndTriggersTab businessObject={businessObject} />
               )}
             </Paper>
             </Box>

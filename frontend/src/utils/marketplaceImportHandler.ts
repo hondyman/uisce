@@ -38,37 +38,72 @@ export interface ImportResult {
  * and creates them via API calls.
  */
 export async function importMarketplaceValidationRules(
-  _tenantId: string,
-  _datasourceId: string,
-  selectedRuleIds?: string[] // If undefined, all rules are reported skipped
+  tenantId: string,
+  datasourceId: string,
+  selectedRuleIds?: string[] // If undefined, import all
 ): Promise<ImportResult> {
-  // Import is retired: POST /api/validation-rules (rule creation) is
-  // 410 Gone, and the replacement endpoint (POST /validation-rule-nodes)
-  // needs a rule_ast, not the flat condition shape this fixture data is
-  // in. Unlike the facets create path, this isn't a translation that
-  // could be added later without content work: none of these templates
-  // carry a target_entity, and their `scope` values (ALL_ACCOUNTS,
-  // WEALTH_ACCOUNT, IRA_ACCOUNT, ...) don't match any of the 5 real BOs
-  // in the catalog (execution, execution_allocation, order,
-  // order_allocation, placement) - the same shape as the already-retired
-  // catalog_validation_rules corpus (0/233 field-resolvable). Each
-  // template would need a human to hand-author it against a real BO;
-  // report every rule as skipped with that reason rather than attempt a
-  // mechanical translation that can't exist.
+  const result: ImportResult = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    failed: [],
+  };
+
+  // Determine which rules to import
   const rulesToImport = selectedRuleIds
     ? MARKETPLACE_VALIDATION_RULES.filter((r) => selectedRuleIds.includes(r.id))
     : MARKETPLACE_VALIDATION_RULES;
 
-  const result: ImportResult = {
-    created: 0,
-    updated: 0,
-    skipped: rulesToImport.length,
-    failed: rulesToImport.map((marketplaceRule) => ({
-      ruleName: marketplaceRule.name,
-      error:
-        'Marketplace import is retired - these templates target account scopes that don\'t map to any real business object. Author rules directly in the Validation Rules editor instead.',
-    })),
-  };
+  // Import each rule
+  for (const marketplaceRule of rulesToImport) {
+    try {
+      // Convert marketplace rule to API payload format
+      const payload = {
+        id: marketplaceRule.id,
+        name: marketplaceRule.name,
+        description: marketplaceRule.description,
+        rule_type: marketplaceRule.rule_type,
+        scope: marketplaceRule.scope,
+        severity: marketplaceRule.severity,
+        isActive: marketplaceRule.isActive,
+        effectiveFrom: marketplaceRule.effectiveFrom,
+        frequency: marketplaceRule.frequency,
+        evaluationOrder: marketplaceRule.evaluationOrder,
+        condition_json: marketplaceRule.parameters,
+        tenantId: tenantId,
+        datasourceId: datasourceId,
+      };
+
+      // Call API to create or update rule
+      const response = await fetch('/api/validation-rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': tenantId,
+          'X-Tenant-Datasource-ID': datasourceId,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        result.failed.push({
+          ruleName: marketplaceRule.name,
+          error: `HTTP ${response.status}: ${error}`,
+        });
+        result.skipped++;
+      } else {
+        result.created++;
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      result.failed.push({
+        ruleName: marketplaceRule.name,
+        error: errorMsg,
+      });
+      result.skipped++;
+    }
+  }
 
   return result;
 }

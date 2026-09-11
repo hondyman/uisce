@@ -17,6 +17,7 @@
 -- semantic term against this binding must fail loud (rule_error), not
 -- silently fall back to the canonical binding's map - see
 -- ResolveSemanticFieldMapForBinding's doc comment.
+BEGIN;
 
 DO $$
 DECLARE
@@ -35,46 +36,32 @@ BEGIN
         SELECT id INTO v_driving_node FROM catalog_node WHERE qualified_path = '/orm/order/id' AND tenant_id = v_tenant_id LIMIT 1;
     END IF;
 
-    -- Idempotency guard: business_object_bindings.uq_tenant_bo_backend
-    -- doesn't catch a re-run (backend_id is gen_random_uuid() on every
-    -- run, so it's always unique). Guard explicitly on the semantic key
-    -- this migration actually cares about - one POSTGRES binding per
-    -- (tenant, bo, driving_node) - so a re-run (e.g. because this file
-    -- was hand-applied via psql before the migration ledger had a row
-    -- for it) is a no-op instead of a silent duplicate binding.
-    IF EXISTS (
-        SELECT 1 FROM business_object_bindings
-        WHERE tenant_id = v_tenant_id AND bo_id = v_bo_id
-          AND backend_type = 'POSTGRES' AND driving_node_id = v_driving_node
-    ) THEN
-        RAISE NOTICE 'Binding for BO % (driving_node %) already exists - skipping', v_bo_id, v_driving_node;
-    ELSE
-        INSERT INTO business_object_bindings (id, tenant_id, bo_id, backend_id, backend_type, driving_node_id, is_default)
-        VALUES (gen_random_uuid(), v_tenant_id, v_bo_id, gen_random_uuid(), 'POSTGRES', v_driving_node, false)
-        RETURNING id INTO v_binding_id;
+    INSERT INTO business_object_bindings (id, tenant_id, bo_id, backend_id, backend_type, driving_node_id, is_default)
+    VALUES (gen_random_uuid(), v_tenant_id, v_bo_id, gen_random_uuid(), 'POSTGRES', v_driving_node, false)
+    RETURNING id INTO v_binding_id;
 
-        -- No tenant_id filter on catalog_node here, deliberately: the
-        -- existing /oms/orders/* catalog_node scan turned out to belong to
-        -- tenant 840750a5-... ("Soul Trader"), not this BO's own tenant
-        -- (99e99e99-...) - a real, minor tenant-scoping wrinkle in how that
-        -- earlier scan was run, discovered while writing this migration and
-        -- left as-is rather than re-scanning. field_bindings.source_node_id
-        -- has no tenant-consistency constraint (a straight FK to
-        -- catalog_node.id), so this is legal, just cross-tenant - fine for
-        -- proving resolution portability, worth tidying if this binding ever
-        -- becomes more than a proof fixture.
-        INSERT INTO field_bindings (id, tenant_id, bo_id, binding_id, field_id, source_node_id, source_type, binding_status)
-        SELECT gen_random_uuid(), v_tenant_id, v_bo_id, v_binding_id, f.field_id, cn.id, 'COLUMN', 'RESOLVED'
-        FROM (VALUES
-            (v_target_qty_field, '/oms/orders/quantity'),
-            (v_limit_price_field, '/oms/orders/limit_price'),
-            (v_executed_qty_field, '/oms/orders/filled_qty'),
-            (v_leaves_qty_field, '/oms/orders/leaves_qty')
-        ) AS f(field_id, col_path)
-        JOIN catalog_node cn ON cn.qualified_path = f.col_path;
+    -- No tenant_id filter on catalog_node here, deliberately: the
+    -- existing /oms/orders/* catalog_node scan turned out to belong to
+    -- tenant 840750a5-... ("Soul Trader"), not this BO's own tenant
+    -- (99e99e99-...) - a real, minor tenant-scoping wrinkle in how that
+    -- earlier scan was run, discovered while writing this migration and
+    -- left as-is rather than re-scanning. field_bindings.source_node_id
+    -- has no tenant-consistency constraint (a straight FK to
+    -- catalog_node.id), so this is legal, just cross-tenant - fine for
+    -- proving resolution portability, worth tidying if this binding ever
+    -- becomes more than a proof fixture.
+    INSERT INTO field_bindings (id, tenant_id, bo_id, binding_id, field_id, source_node_id, source_type, binding_status)
+    SELECT gen_random_uuid(), v_tenant_id, v_bo_id, v_binding_id, f.field_id, cn.id, 'COLUMN', 'RESOLVED'
+    FROM (VALUES
+        (v_target_qty_field, '/oms/orders/quantity'),
+        (v_limit_price_field, '/oms/orders/limit_price'),
+        (v_executed_qty_field, '/oms/orders/filled_qty'),
+        (v_leaves_qty_field, '/oms/orders/leaves_qty')
+    ) AS f(field_id, col_path)
+    JOIN catalog_node cn ON cn.qualified_path = f.col_path;
 
-        RAISE NOTICE 'Created binding % for BO % with % field_bindings', v_binding_id, v_bo_id,
-            (SELECT count(*) FROM field_bindings WHERE binding_id = v_binding_id);
-    END IF;
+    RAISE NOTICE 'Created binding % for BO % with % field_bindings', v_binding_id, v_bo_id,
+        (SELECT count(*) FROM field_bindings WHERE binding_id = v_binding_id);
 END $$;
 
+COMMIT;

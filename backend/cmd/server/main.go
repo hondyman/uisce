@@ -49,6 +49,14 @@ func main() {
 	}
 	defer db.Close()
 
+	// Fail-closed startup assertion: unsafe dev-only flags must not be active
+	// in production. ENVIRONMENT must be explicitly "development", "local", or "test"
+	// to permit ALLOW_CLIENT_TENANT_HEADER_FALLBACK or API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK.
+	// An unset or unknown ENVIRONMENT is treated as production (fail-closed).
+	if err := api.AssertProductionConfig(); err != nil {
+		log.Fatalf("FATAL: production config assertion failed: %v", err)
+	}
+
 	if err := db.Ping(); err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}

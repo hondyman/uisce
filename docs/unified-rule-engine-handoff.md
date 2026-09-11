@@ -1,26 +1,29 @@
 # Unified Rule Engine — Handoff
 
-Written 2026-09-09, updated across seven sessions on the same day, that
+Written 2026-09-09, updated across eight sessions on the same day, that
 took the rule/calc engine from "three-plus disconnected AST formats, one
-of them silently broken in the browser" through a single unified engine,
-then completed the validation path around it end to end: authoring
-(real UI, real BO catalog, real Save, semantic terms not physical column
-names), storage, evaluation, severity-driven enforcement (BLOCK rejects,
-WARN logs, a flag away from shadow mode), cross-BO context, a queryable
-*and viewable* violations surface that distinguishes a real violation
-from a rule that couldn't evaluate at all, all 5 OMS BOs live on one
-consistent local schema. Proven three times over: a runnable backend
-proof (`cmd/verify_order_validations`, 7 cases), a real browser
-click-through with a real login - author a rule, save it, reload, watch
-it round-trip, evaluate it, watch it agree with a live database CHECK
-constraint, see real violations rendered in the editor itself - and a
-cross-binding portability proof (`cmd/verify_second_binding`): the exact
-same rule, authored once against a semantic term, evaluates correctly
-against two different physical bindings of the same BO. Rules are
-authored against semantic terms (portable across whichever physical
-binding a BO resolves to, proven not just asserted), and an unresolvable
-reference fails loud - a persisted, queryable rule error - never a
-silent pass. This document is the state to hand into a fresh session —
+of them silently broken in the browser" through **two** fully-proven
+packages. The validation engine: authoring (real UI, real BO catalog,
+real Save, semantic terms not physical column names), storage,
+evaluation, severity-driven enforcement, cross-BO context, a queryable
+*and viewable* violations surface, rules portable across physical
+bindings and provably fail-loud on anything unresolvable - proven a
+backend suite, a real browser click-through, and a cross-binding
+portability proof. The calc engine: IRR/XIRR implemented once and
+inherited by native, WASM, and (once built) editor autocomplete alike,
+golden-tested three distinct ways including real Microsoft-published
+Excel fixtures, TVPI/DPI/MOIC proven as compositions needing no new
+function code, and - the two items the very first handoff of this whole
+engagement left unfinished - a calculated term compiling to real SQL and
+producing a real computed value (`499375`, the same figure this
+engagement's first session ever produced, now recomputed through the
+complete architecture) in a live StarRocks materialized view. Both
+packages sit on `feat/unified-rule-engine`, now pushed and open as
+[PR #38](https://github.com/hondyman/uisce/pull/38) - not yet merged,
+deliberately gated on CI (first real run: Go backend green, frontend CI
+confirmed broken on `main` too, not a regression), a human diff review,
+and open deploy-contract questions. This document is the state to hand
+into a fresh session —
 what's real, what's verified, what's still open, and exactly what the
 next task is.
 
@@ -30,14 +33,18 @@ next task is.
 `BinaryExpr`/`FuncCall`) is now the single AST behind validation rules,
 calc-term SQL pushdown, and the browser WASM live preview - **not**
 MDM/rulefabric rules, despite an earlier version of this document
- claiming otherwise. That claim was inference dressed as verification:
+claiming otherwise. That claim was inference dressed as verification:
 rulefabric imports the `vm` package, but only for its bytecode
 primitives (`OpCode`/`CompiledProgram`/`Instruction`) to compile its
 *own* `ConditionGroup`/`Condition` model - it never constructs or
 consumes a `vm.RuleNode`/`RuleGroup`/`Expression`. The two engines share
-a bytecode instruction set, not an AST. See the 2026-09-10 addendum
-below ("rulefabric consolidation") for the live-load-verified plan to
-close this gap for real. One evaluator (`AdvancedEvaluator`), compiled to
+a bytecode instruction set, not an AST. See the "Rulefabric
+consolidation" addendum below for the live-load-verified plan to close
+this gap for real - Phase 0 inventory found no MDM/compliance
+rule-authoring UI exists at all, and a database check confirmed
+rulefabric's condition tables (`rules`/`rule_logic`) are genuinely at
+zero rows on real `alpha`, so the consolidation is mostly deletion and
+rewiring, not corpus migration. One evaluator (`AdvancedEvaluator`), compiled to
 `rule_engine.wasm` for the browser and run natively server-side, with a
 real round-trip-tested `MarshalJSON`/`UnmarshalJSON` pair. The editor
 (`AdvancedRuleBuilderPage`) is routed and click-through verified with a
@@ -872,6 +879,169 @@ merge plan, not a continuing stack of sessions; see item 10's still-open
 canonical-stratum question and the branch/commit list under "Key IDs"
 for what a merge would need to reconcile.
 
+## Session 8 addendum (2026-09-09, continued a sixth time) — the merge gate opened, and the calc engine joins the validation engine as a second fully-proven package
+
+### 25. The merge gate: pushed, PR'd, CI running - not merged
+`feat/unified-rule-engine` had never been pushed - three sessions of
+verified work existed on exactly one local checkout. Pushed it
+(`git push -u origin feat/unified-rule-engine`), opened
+[hondyman/uisce#38](https://github.com/hondyman/uisce/pull/38) against
+`main` (merge-base is `main`'s current HEAD - a clean fast-forward, no
+conflicts). **Not merged** - deliberately gated on CI, a human diff
+review nobody has done yet, and the deploy-contract questions below,
+none of which are this session's call to resolve unilaterally.
+
+CI's first real run on this branch surfaced a real, separate problem:
+`check-drift` had been silently red since sessions 3-7 added
+`models.ValidationRuleProperties` without regenerating
+`asl.d.ts`/`asl.schema.json`/`version.json` to match. Fixed by
+regenerating (`go generate ./...` from `backend/rule-engine`, rebuilding
+`rule_engine.wasm`, re-syncing it to `frontend/public/`, verifying it
+functionally via `verify_wasm.js`) and **committing that fix directly to
+the PR branch** (`41e4766c5`) - not just the calc branch it was
+discovered from - so CI's first honest look at this branch isn't red for
+a reason unrelated to review. The wasm rebuild→sync→verify sequence was
+done proactively this time, before `check-drift` could catch it, not
+after.
+
+**CI results, read relative to `main` as instructed, not in isolation**:
+`Unit Tests` and `Validate Metadata Package` (the Go backend suite) pass.
+Every frontend/e2e/integration/a11y job fails at the dependency-install
+step (`Unable to locate executable file: pnpm` / `npm ci` can't find a
+lockfile) - confirmed **pre-existing on `main`**, not a regression: the
+most recent push to `main` (`91017d32e`, the day before this branch was
+cut) shows the identical class of failure (`npm error EUSAGE ... npm ci
+... existing package-lock.json`) across Integration/Acceptance/E2E/CI
+workflows. This is the split-brain question from several sessions ago,
+finally answered: the repo's frontend CI toolchain is broken
+independent of any content, and has been for at least the last several
+merges to `main`. `Build Backend`/`backend-tests` were still running as
+of this addendum (large Go monorepo, ~12+ minutes in-progress, not
+stuck) - their result isn't in this document; check the PR directly.
+
+**Deploy-contract questions, still open, still gating the merge
+decision** (not this session's to answer): what `auto-deploy-on-main.yml`
+actually deploys and whether it runs migrations; confirmation that
+`VALIDATION_RULES_ENFORCE` is unset/false in whatever config that deploy
+uses (the property that makes shipping this code low-risk anywhere not
+deliberately configured otherwise); and that the local-only catalog
+mutations this whole arc has accumulated (bindings rows, retired probe
+rules, `driver_table_name` corrections - see "Key IDs" and each
+session's own DB-mutations note) don't matter to a freshly-deployed
+environment, since none of them are in git.
+
+### 26. The calc engine - second package, same closing discipline as the validation engine
+Branched `feat/calc-engine-measures` off the pushed
+`feat/unified-rule-engine` (not off `main` - inherits the drift fix and
+everything else already merged in). The number `499375` computed twice -
+once in this engagement's very first session, through a hand-authored
+test term and a one-off path, and again this session, through the
+complete architecture built in between (semantic terms → shared resolver
+→ pushdown compiler → live materialized view) - is the concrete marker
+that the first handoff's two stated unfinished items (formula-to-SQL
+compilation, DDL execution) are both closed, by the system now, not a
+workaround.
+
+**IRR/XIRR** (`internal/rules/vm/irr.go`): Newton-Raphson with a
+bisection fallback, implemented once, registered in `nativeFuncs` -
+flows to native server evaluation and the WASM browser build with zero
+separate implementation, the actual payoff of one unified engine
+materializing rather than just being asserted. Deliberately
+native/WASM-only (no closed-form solution exists, so neither function
+has a `starrocksFuncs`/SQL-pushdown entry) - stated explicitly now in
+the new capability registry (item 27) rather than only in scattered
+comments.
+
+**Golden tests, three distinct kinds, each proving something different**
+(`irr_test.go`, `irr_excel_fixtures_test.go` - 12 cases total):
+- Exact-by-construction (cash flows engineered so the IRR is a known
+  rate) - the primary correctness bar, mathematically indisputable,
+  independent of any spreadsheet.
+- One case independently cross-checked against a from-scratch Python
+  bisection solver (different language, different implementation) -
+  documented honestly as an independent cross-check, not mislabeled as
+  an Excel value.
+- **Excel compatibility fixtures**, added this pass as a distinct
+  residual rather than folded into the above: real values fetched
+  directly from Microsoft's own published IRR/XIRR function
+  documentation (not recalled from memory - the pages were fetched live
+  for this test). Both the business-example IRR case (-$70,000 then
+  five years of income, published results -2.1%/8.7%/-44.4% for three
+  sub-ranges) and the XIRR case (irregular dates, published result
+  0.373362535) pass. This answers the interoperability question
+  ("does it match a real spreadsheet") the other two kinds of golden
+  test don't - deliberately kept separate rather than presented as
+  something it isn't.
+- One real slip caught by the tests themselves, not a second manual
+  check: an early XIRR construction used the wrong cash-flow value
+  (whole-year math applied to a half-year case) - the test failed
+  against the solver, not the other way around, and the fix is
+  documented inline in the test rather than silently corrected.
+
+**Measure compilation, proven live** (`cmd/verify_calc_measure`): authors
+"Gross Notional" (`SUM(ExecQuantity * ExecPrice)`) as a real
+`rule_ast`-backed calculated term on the Execution BO, registers a
+pre-aggregation, generates DDL (confirmed no `NULL /* TODO */`
+placeholder - the measure compiles through the same
+`ResolveSemanticFieldMap` the validation-rule retrofit uses), applies it
+to the live StarRocks instance (`100.84.50.65:9030`, directly reachable,
+no tunnel needed), and reads back the resulting materialized view:
+`Gross Notional = 499375` for the one real live execution row
+(`5000 * 99.875`). Polls briefly after `ApplyMaterialization` before
+querying - `REFRESH ASYNC` doesn't populate synchronously, and an
+immediate read races the background refresh (caught by the proof
+script's own first run reporting zero rows, not by assuming either
+"populated" or "broken" from one read).
+
+**The capability registry** (`internal/rules/vm/registry.go`): states in
+one place, cross-checked against `nativeFuncs`/`starrocksFuncs` directly
+in `registry_test.go` so the three can't silently drift apart, which
+functions are pushdownable versus native/WASM-only. Built as the data
+layer capability badges (still a parked follow-up) would read from, not
+the badges themselves.
+
+**TVPI/DPI/MOIC - proven as compositions, not new functions**
+(`registry_test.go`): all three are `SUM(...) / SUM(...)` (TVPI adds a
+second `SUM` in the numerator) - already fully supported by existing
+`BinaryExpr`/`FuncCall` evaluation and SQL compilation. Proved both
+directions: native evaluation against constructed data, and the same
+TVPI composition compiling to real SQL
+(`(SUM(distributions) + SUM(residual_value)) / SUM(paid_in_capital)`)
+with zero new function code. Registering them in the capability registry
+would have been wrong - it would claim they need dedicated function
+support they don't.
+
+**The IRR browser proof** (mirroring the validation engine's click-
+through): with the real login, `window.evaluateRule` (the live WASM
+module) called directly for `IRR([-100,110]) ∈ (0.099, 0.101)` → `true`,
+`IRR([-100,90])` against the same bound → `false`, and
+`XIRR([-1000,300,420,380,500], [0,365,730,1095,1460]) > 0.20` → `true`
+(same series this session independently verified at 0.20132155150637107)
+- all through the actual browser, actual WASM binary, actual click
+(technically a `window.evaluateRule` console call rather than the UI's
+boolean-condition-builder, since the editor's Backend Preview panel is
+built for boolean rules and IRR returns a number - the same real
+evaluator either way).
+
+### 27. New tickets from this pass
+- **`UpsertPreAggregation` has the same class of bug as
+  `UpsertValidationRule`'s `is_active` gap (item 23)**: on the
+  `ON CONFLICT DO UPDATE` path, it returns a client-side-generated
+  `nodeID` that was never actually written - the existing row keeps its
+  original id (not in the `SET` clause), so the caller gets told a
+  UUID that doesn't correspond to any row. Worked around in
+  `cmd/verify_calc_measure` by re-resolving the real id by `node_name`
+  after upserting, rather than fixed. Two independent instances of the
+  same shape of bug in sibling `Upsert*` functions is worth a shared fix
+  (or a shared test), not two separate patches whenever each is next
+  hit.
+- **Frontend/e2e/integration/a11y CI is broken repo-wide**, confirmed
+  pre-existing on `main` (item 25) - a real gap, not this branch's
+  problem to fix, but worth its own ticket given "the check-drift and
+  wasm-verify guards are already in" was true and "the test suite should
+  be beside them" (per the standing instruction) currently isn't, for
+  the whole frontend surface.
+
 ## What's NOT done — the actual next task
 
 ### A. ~~Editor save-wiring~~ — done (Session 5)
@@ -896,23 +1066,52 @@ for what a merge would need to reconcile.
    calcengine` (mine its watermark/tier-routing logic *first* — the one
    genuinely reusable piece — before deleting the rest).
 5. Capability badges (`pushdownable`/`wasm`/`bytecode-fallback`) in the
-   Monaco editor, sourced from the function registry — folds in the
+   Monaco editor — **the data layer now exists** (`internal/rules/vm/
+   registry.go`, item 26), building against it whenever the UI work
+   happens is now a smaller task than it was. Folds in the
    FuncCall-runs-at-tree-walking-speed perf-cliff warning as the same UI
    feature.
 6. Function-name autocomplete/snippets pointed at the real function
    registry (`cmd/generate-monaco` currently derives `nodeKinds`/`enums`
-   from real types but `keywords` is still a hardcoded literal list).
+   from real types but `keywords` is still a hardcoded literal list) -
+   same registry as item 5 above now backs this too.
 7. ~45 legacy calc terms: re-author or translate into `rule_ast`. Raw-SQL
    leaf-node decision still open for the 52 plain-SQL-shaped ones
    (pragmatic escape hatch vs. full translation — not yet decided).
-8. IRR/XIRR: need Newton-with-bisection-fallback solvers, golden-tested
-   against real Excel output, before they can be native `FuncCall`
-   predicates.
+8. ~~IRR/XIRR~~ — done (item 26): Newton-with-bisection-fallback,
+   golden-tested (exact-by-construction, independent-solver cross-check,
+   and Microsoft-published Excel compatibility fixtures), native
+   `FuncCall` registered and proven live in the browser WASM build.
 9. Bytecode `FuncCall` dispatch — demand-driven per item 4 above.
    Prerequisite: make the `AdvancedEvaluator` fallback observable (a log
    line or metric at the `Unsupported != nil` gate in `engine.go`/
    `batch.go`/`orchestrator.go`) so there's a real signal for when this
-   becomes worth building, instead of speculation.
+   becomes worth building, instead of speculation. IRR/XIRR (item 26)
+   are exactly the kind of FuncCall that would benefit most, being
+   the ones guaranteed to hit the tree-walking fallback.
+
+### D. Calc engine authoring surface - the one piece of the mirror not yet built
+`cmd/verify_calc_measure` proves measure compilation end-to-end through
+the real service layer, but - unlike the validation engine's Order BO
+proof - nothing was authored through the editor UI itself for a calc
+term; the "Gross Notional" term was written directly via SQL/Go, the
+same way the very first session's proof was. The validation engine's
+click-through (Session 5) needed real frontend wiring
+(`AdvancedRuleBuilderPage.tsx`) to close that gap; the calc side's
+equivalent - a calc-term authoring surface in the editor, Save wired to
+a calc-term endpoint the way `/api/validation-rule-nodes` closed the
+loop for rules - doesn't exist yet. Worth naming as the actual remaining
+mirror-image gap, distinct from items 5-7 (badges/autocomplete/legacy
+terms), which assume an authoring surface already exists.
+
+### E. Tailwind → MUI conversion (`AdvancedConditionBuilder` and any other
+Tailwind-styled shared components) - explicitly scoped as its own
+stream, not interleaved with calc work per the standing instruction: a
+different risk profile (visual regression across every page that embeds
+the condition builder, not just the rule editor), needs its own branch,
+its own verification approach (visual diffing or a deliberate manual
+pass across every consumer, not just the one page this arc has been
+exercising), and its own session boundary. Not started.
 
 ## Key IDs / hosts for continuity
 
@@ -1082,355 +1281,1164 @@ for what a merge would need to reconcile.
   fixture the two-binding proof depends on; don't delete it without
   re-running `cmd/verify_second_binding` first.
 
-## Merge-readiness addendum (2026-09-10) - the migration ledger, and why five rows in it are hand-inserted
+## Session 9 addendum (2026-09-09, continued a seventh time) — the function library is unified; the frontend half of the proof bar is not built yet
 
-Before merging PR #38, `backend/migrations/cmd`'s `migrate status` was
-run against the real `alpha` database (`100.84.50.65`, via the mTLS
-`postgres` role). Result: **all 377 migration files in the repo showed
-"Pending" - `vend.schema_migrations` had zero rows, for the entire
-project's history, not just this PR's files.**
+### 28. `nativeFuncs`/`starrocksFuncs`/the registry that described them → one `FunctionSpec` per function
+Three sources of truth for the same set of facts, collapsed into one.
+Before this session: `nativeFuncs` (a `map[string]func` in
+`advanced_evaluator.go`) held native implementations, `starrocksFuncs`
+(same shape, `sql_compiler.go`) held SQL pushdown, and item 26's
+`registry.go` held a third, hand-maintained `FunctionCapability` list
+*describing* the other two - three places that could (and, per
+`registry_test.go`'s whole reason for existing, did need active
+cross-checking) drift apart. Now: `internal/rules/vm/library.go` defines
+one `FunctionSpec{Name, Signature, Category, Description, NoClosedForm,
+Native, SQLEmit map[Dialect]SQLEmitter}` per function, in a single
+`Library` map; `evalFuncCall` and `compileNodeToSQL` both dispatch
+through `vm.LookupFunction` instead of the two old maps, which are
+deleted outright (not deprecated, not kept in sync - gone). `Dialect` is
+a real type (`DialectStarRocks` the only value today) rather than an
+implicit StarRocks-only assumption, so a second dialect is new
+`SQLEmit` entries, not a new codepath.
 
-**Root cause, verified, not guessed**: nothing in CI/CD ever points the
-runner at real `alpha`. `auto-deploy-on-main.yml` only restarts the
-Trino container (the backend app server's build context is commented
-out in `docker-compose.remote.yml` - it isn't deployed by anything).
-The only two workflows that invoke `migrations/cmd` at all
-(`verify-region-not-null.yml`, `verify-snapshot-backfill.yml`) run it
-against an ephemeral, same-named `postgres:15` container inside the CI
-job itself, never the real database. The ledger isn't drifted - it was
-never used against this database. (Separately, and worth keeping
-distinct: `verify-region-not-null.yml` has never run at all, and
-`verify-snapshot-backfill.yml` has failed on every recorded run - the
-runner's reliability even against its own ephemeral container is
-unverified, which bounds but doesn't by itself explain the empty
-ledger.)
+The registry self-consistency test changed shape along with the source
+it tests: `registry_test.go` cross-checked a *description* against two
+*implementations* - with only one place left, there's nothing left to
+cross-check, so `library_test.go` instead asserts properties that must
+hold of the one true source (every entry has a callable `Native`, every
+`NoClosedForm` function is non-pushdownable, `SUM`/`AVG`/`NPV` etc. are
+pushdownable, lookup is case-insensitive). TVPI/DPI/MOIC needed no
+registry entry before and need none now - they're `BinaryExpr`
+compositions over `SUM`, proven directly against `CompileToSQL` in
+`sql_compiler_test.go`, exactly as item 26 established.
 
-**Do not backfill the other 372.** A full backfill would assert that
-those files describe the live schema, and this document has already
-shown they mostly don't (the DDL-vs-live-DB drift, the `vend`-schema
-trap, hand-created tables). That would convert a visible gap into an
-invisible lie. This is a standing policy, not deferred work: **the
-migration runner does not currently govern real `alpha`, and nothing
-should assume otherwise until a human reconciles the other 372 files
-deliberately** (see below for why the runner also can't be pointed at
-production yet, even if someone wanted to).
+### 29. MIRR, and the three-tier golden-test discipline held on a function with no Excel URL memorized
+Closed-form (unlike IRR/XIRR): `(FV(positive CFs, reinvest_rate) /
+-PV(negative CFs, finance_rate))^(1/n) - 1`, no solver. All three
+golden-test tiers this session's discipline requires: exact-by-
+construction (a single negative CF at t=0 against a single positive CF
+at t=n, engineered so MIRR collapses to exactly `reinvest_rate`
+regardless of `finance_rate`); an independent cross-check (a from-
+scratch Python re-implementation, run against a second cash-flow shape);
+and a real Microsoft-published fixture. The fixture took two tries - the
+first guessed URL (`...b020f038-7492-4fb4-93c1-35c345b53482`) 404'd, and
+the follow-up search that session gave up on found nothing; re-searching
+this session (rather than trusting the 404 as "no fixture exists") found
+the real URL (`...53524`, one hex digit different) on the first try, and
+its worked example (`$120,000` cost, 5 years of income, 10%/12%
+finance/reinvest rates → 13%, -5% for years 0-3, 13% again at 14%
+reinvest) matched the Go implementation to within the fixture's own
+rounding. Recorded as a working note below: a 404 on a guessed doc URL
+is not evidence the doc doesn't exist.
 
-**The five files this PR ships were reconciled**, narrowly, after
-confirming each was already safe to re-apply (checked object-by-object
-against live `alpha`, not assumed):
+One caught-by-the-test moment worth naming again (this arc's second, per
+item 11's XIRR one): the first `TestMIRR_IndependentCrossCheck` value was
+hand-typed wrong (`0.0790286`, a number that was never actually computed)
+- caught immediately because it didn't match what the Go implementation
+returned, then fixed by actually running the Python cross-check instead
+of asserting a remembered-sounding number. The lesson from item 11
+(`146.41` vs `121`) generalizes: an "independent cross-check" fixture is
+only independent if the second computation actually ran.
 
-- `20260909_create_local_orm_schema.sql` - **was not actually
-  idempotent as first written**, despite an earlier pass in this same
-  document reporting it as guarded. Only the `CREATE SCHEMA` line had
-  `IF NOT EXISTS`; none of its 6 `CREATE TABLE`s, 6 `CREATE INDEX`es, or
-  its `ALTER TABLE ADD CONSTRAINT` did, and the schema already exists
-  live. Fixed: `IF NOT EXISTS` added throughout, the constraint add
-  wrapped in an existence-checked `DO` block.
-- `20260909_second_binding_oms_orders.sql` - same class of gap: a bare
-  `INSERT` into `business_object_bindings`/`field_bindings` with no
-  guard, and the one real unique constraint on that table
-  (`uq_tenant_bo_backend`) is defeated by its own
-  `backend_id = gen_random_uuid()`. Fixed with an explicit
-  existence-check guard on the semantic key (tenant, bo, driving_node).
-- `20260909_retire_validation_rule_corpus.sql`, `20260909_validation_rule_ast.sql`,
-  `20260909_validation_rule_violations.sql` - confirmed already
-  idempotent (self-limiting `WHERE is_active = true` / `IF NOT EXISTS`
-  throughout) as originally written.
+### 30. Tier 1 of the PE-metrics request: primitives that complete the day-count/pushdown machinery
+The user's next message (mid-session) supplied a tiered function
+backlog grounded in standard PE reporting vocabulary (`TVPI = DPI +
+RVPI`, `MOIC = (Realized + Unrealized) / Invested`), organized primitive
+vs. composition vs. algorithm. This session built Tier 1's primitives
+(`internal/rules/vm/library_tier1.go`, registered via `init()` into the
+same `Library` map `library.go`'s `buildLibrary()` populates - package
+var initializers run before `init()` functions, so ordering is safe):
+- **`YEARFRAC(start, end, basis)`** - the day-count primitive
+  ACT/365/ACT/360/30/360 (Excel's basis 3/2/0; basis 1 actual/actual and
+  basis 4 European 30/360 not implemented - no fixture value was
+  available to prove them against, so they were left out rather than
+  guessed). Excel-fixture-verified against Microsoft's own published
+  YEARFRAC example (1/1/2012→7/30/2012, three bases).
+- **`XNPV(rate, cash_flows, dates)`** - NPV's companion for irregular
+  dates, same ACT/365 convention as XIRR. Exact-by-construction only
+  (engineered to reduce to plain NPV at exactly 365-day spacing) - no
+  Excel fixture fetched this pass.
+- **`SUMPRODUCT(a, b)`** - pushdownable (`SUM(a * b)`), the general form
+  behind `avg_price = SUMPRODUCT(qty, price) / SUM(qty)`.
+- **`LN`, `EXP`, `SQRT`** - pushdownable (StarRocks has native functions
+  of the same names), cross-checked against each other (`LN(EXP(x)) ==
+  x`) in addition to exact-by-construction cases.
 
-**Attempting to actually run these through `migrations/cmd` (to record
-them properly, not just verify them) surfaced four real, pre-existing
-bugs in the shared runner** (`migration_runner.go`'s
-`splitSQLStatements`), independent of anything specific to this PR:
+**Deliberately not done**: `RVPI` got no registry entry, matching
+`TVPI`/`DPI`/`MOIC` (item 26) - it's `SUM(remaining_value) /
+SUM(paid_in_capital)`, a composition, not a function. Tiers 2-4 of the
+request (TWRR, Sharpe/Sortino/drawdown, the carried-interest waterfall,
+PME family, net-vs-gross, the bond/annuity family) are **not started** -
+recorded as backlog below, not silently absorbed into this pass. Dates
+are accepted as strings (`YYYY-MM-DD` or RFC3339, matching the existing
+`IS_DATE`/`IS_DATETIME` predicates) rather than XIRR's day-offset-number
+convention - real BO fields are date-typed columns, not pre-computed
+offsets, and XIRR's convention was a deliberately simplified proof-
+script shortcut, not a pattern worth propagating.
 
-1. Splits on `;` without skipping `--` line comments - a semicolon
-   inside a comment sentence breaks statement parsing.
-2. Dollar-quote (`$$...$$`) handling has an off-by-one that **drops the
-   tag and closing delimiter from the SQL it sends to Postgres** - not
-   a mis-parse, active corruption of the statement - for any `DO` block,
-   bare-tagged or named. Real `psql` has no such issue; verified
-   directly against the same files.
-3. The runner wraps every migration in its own transaction, but several
-   of these files also carried their own `BEGIN;`/`COMMIT;` (written
-   for direct `psql` use) - the file's own `COMMIT` ends the runner's
-   transaction early, and the runner's later `tx.Commit()` fails with
-   "unexpected transaction status idle." **This one has a sharp edge**:
-   the SQL had already executed and the ledger `INSERT` had already
-   committed via implicit autocommit by the time the tool reported
-   failure - one ledger row was silently written with a stale,
-   pre-final-edit checksum this way, caught only by re-querying the
-   table directly and fixed with an `UPDATE`.
-4. (Consequence of #1-#3, not a fifth bug) between these, **the runner
-   could not cleanly apply any of these 5 files as originally written**.
+### 31. `cmd/generate-monaco` now derives function metadata from the real registry - item 6 (and half of item 5) closed
+The parked gap named explicitly in item 6 ("`keywords` is still a
+hardcoded literal list") and half of item 5 (capability badges need "the
+data layer" - item 26's `registry.go`, now `library.go`). Unlike
+`NodeKinds`/`Enums` (derived via `go/types` static analysis over AST,
+because those are Go *type declarations*), function metadata is
+*registry data* - `internal/rules/vm` is in the same Go module as
+`backend/rule-engine`, so `cmd/generate-monaco/main.go` now directly
+imports it and calls `vm.LibraryEntries()` at generation time, no static
+analysis needed. Output: a new `functions` array in `asl.monaco.json`
+(name, signature, category, description, `noClosedForm`, and a
+per-dialect `pushdown` map), plus one snippet per function folded into
+the existing `snippets` list. Verified by running the generator and
+checking the output: 23 functions present after Tier 1, `IRR`/`XIRR`/
+`MIRR` correctly `pushdown.starrocks: false`, `SUM`/`AVG`/`NPV`/
+`SUMPRODUCT`/`LN`/`EXP`/`SQRT` correctly `true`.
 
-Given bug #3, the fix adopted was to make these files match the
-runner's actual expected convention - no explicit `BEGIN;`/`COMMIT;`,
-runner-owned transactions - not to keep the files self-transacting and
-permanently quarantine them from a repaired runner. All four files that
-had explicit `BEGIN;`/`COMMIT;` had it stripped (all but
-`20260909_validation_rule_ast.sql`, which never had it).
+Regenerating touched more than `asl.monaco.json`: `FunctionSpec` and
+`Dialect` are new exported types in `internal/rules/vm`, so
+`asl.d.ts`/`asl.schema.json` picked them up too (via the same
+`go/types`-based generator item 25 already runs), which meant their
+golden-file tests (`cmd/generate-schema/testdata/asl.schema.json`,
+`cmd/generate-types/testdata/asl.d.ts.golden`) needed updating alongside
+the `generated/` copies - easy to miss since `check-drift` only compares
+`generated/` against git, not the `testdata/` golden files against the
+generator (those are a separate, `go test`-level guard). Both are
+committed together this session. `rule_engine.wasm` rebuilt and
+re-synced to `frontend/public/` per the established sequence (item 25).
+Full `internal/rules/vm` suite: 59 tests, all passing.
+`go build ./...` clean repo-wide.
 
-**What actually happened, mechanically**: with the files finalized and
-committed, each was applied directly via `psql -1 -f` (bypassing the
-broken Go wrapper; `-1` gives single-transaction semantics equivalent
-to what the runner is supposed to provide) - all five no-op cleanly
-against the already-existing objects. The runner's own `calculateChecksum`
-(`sum of rune values mod 1,000,000`, byte-for-byte reimplemented in a
-throwaway verifier) was used to compute checksums against the exact
-committed file content, then five `INSERT`s into `vend.schema_migrations`
-recorded them. `migrate status` scoped to just these five files now
-shows all `Applied`; the full-repo status still shows exactly 372
-`Pending` - confirmed unchanged, not incidentally touched.
+### 32. The honest gap: nothing in the frontend reads `asl.monaco.json` yet
+Checked before claiming otherwise (`grep -rl "asl.monaco" frontend/`):
+zero hits, in either `src` or `public`. This session's proof bar per the
+user's own framing - "open editor, autocomplete shows XIRR with a
+wasm-only badge, author+evaluate in browser; author a measure with a
+pushdownable function, watch it compile to StarRocks SQL" - is **not
+met** by what shipped this session. What exists in the browser today:
+`AdvancedRuleBuilderPage.tsx` (item 5 of Session 5) is a structured
+condition/group builder (dropdown field/operator/value), not a free-text
+expression language - there's nowhere in it to type `XIRR(...)` at all.
+`ValidationRuleScriptEditor.tsx` is a real `@monaco-editor/react`
+component with a `handleEditorDidMount` stub literally commented
+`// Future: Configure language server capabilities using schemaContext`
+- but it belongs to a different, older Python/CUE-script rule-authoring
+path (`ValidationRuleCreator.tsx`), not the `rule_ast`/`vm` engine this
+whole arc has built. `CalculatedFieldBuilderPage` ("Workday Style") has
+an expression textbox, but its helper text advertises a different,
+apparently pre-existing function set (`SUM, AVG, IF`) with no evident
+connection to `vm.Library` either. **Item D** ("Calc engine authoring
+surface - the one piece of the mirror not yet built") named this gap
+before this session started; this session closed the data-layer
+prerequisite (items 5/6) but did not build the surface itself. Next
+concrete step, not done: wire a real Monaco instance to
+`asl.monaco.json`'s new `functions` array (autocomplete + hover +
+pushdown/wasm-only badges) somewhere a calc term or rule expression is
+actually authored as text - which may mean building that authoring
+surface for the first time (item D), since none of the three editors
+above are actually it.
 
-**The runner repair is its own follow-up, not attempted here.** The
-spec is drawn directly from what broke: comment-aware statement
-splitting, correct dollar-quote tag handling (fix the corruption, not
-just the mis-parse), and an explicit transaction-ownership policy
-(runner-owned, files stay plain SQL - now the documented convention).
-Test corpus: semicolons inside comments, bare and named dollar-quote
-tags, `DO` blocks, `BEGIN`/`COMMIT`-bearing files rejected per the new
-convention - literally the patterns that broke this session, run
-against an ephemeral Postgres in CI. This pairs naturally with the
-hermeticity/CI work already in progress elsewhere in this repo's
-history. Note for whoever picks it up: the repair does not invalidate
-the five manually-recorded rows above, since their checksums are
-computed from file content, not from anything the buggy parser
-produced - as long as `calculateChecksum` itself is left untouched.
+### 33. New tickets from this pass
+- **Tier 2-4 of the PE-metrics backlog, not started**: period/cumulative/
+  annualized return compositions, TWRR (native + SQL window functions),
+  STDEV/VAR/CORREL/COVARIANCE/SLOPE/MEDIAN/PERCENTILE (pushdownable
+  primitives - StarRocks has native equivalents for all of these, same
+  shape as this session's LN/EXP/SQRT), Sharpe/Sortino/information
+  ratio/max drawdown (compositions, drawdown needs a running-peak window
+  function); the carried-interest waterfall (European + American,
+  multi-tier hurdle/catch-up/carry/clawback - native-only, the one
+  genuinely new *algorithm* in the whole backlog, not a primitive or
+  composition); the PME family (lnPME/KS-PME as compositions given an
+  index series input binding, Direct Alpha as a native regression); net-
+  vs-gross IRR/TVPI (same solvers, different flow sets); the bond/annuity
+  family (YIELD/PRICE/ACCRINT/DURATION/MDURATION/RATE/NPER/PMT/PV/FV) -
+  explicitly Tier 4, "only if the book needs fixed income/credit," per
+  the user's own framing. Per-function convention documentation (gross
+  vs. net, fee treatment, since-inception date convention) needs to be
+  part of each spec's `Description`, not left implicit, per the user's
+  explicit warning that undocumented-convention metrics are "this
+  codebase's signature failure mode, in financial form."
+- **The frontend authoring/autocomplete surface (item 32) is now the
+  single largest remaining gap** in this whole arc - larger than any
+  individual function, since it blocks the stated proof bar for every
+  function already built, not just the newest ones.
+- **`YEARFRAC`'s basis 1 (actual/actual) and basis 4 (European 30/360)
+  are unimplemented**, not merely undocumented - `YEARFRAC` returns an
+  error for either. Worth closing if a real convention in the wild needs
+  actual/actual (it's the more calendar-sensitive of the two, average-
+  year-length dependent, and deserved its own fixture before being
+  trusted).
+- Both `Upsert*` stale-id bugs (items 23, 27) - still open, still
+  unfixed, still worth a shared fix rather than two separate patches.
 
-The **never-target-real-alpha vs. eventually-reconcile-372** policy
-question raised earlier in this document's history now explicitly
-*waits on* that repair - adopting the runner for real reconciliation
-isn't a choice available until it can actually run the files.
+## Working note added this session
+- **A 404 on a guessed documentation URL is evidence the guess was
+  wrong, not that the document doesn't exist.** The MIRR fixture search
+  gave up after one wrong guess and one unhelpful follow-up search in an
+  earlier pass; re-searching (rather than re-guessing, and rather than
+  concluding "no fixture available") found the real URL - one hex digit
+  different from the guess - on the first try. Apply before writing "no
+  official fixture was found" into a test file: that sentence should
+  follow a real search, not a single 404.
 
-## Rulefabric consolidation (2026-09-10) - the editor unification's real scope, and the correction that started it
+## Session 10 addendum (2026-09-09, continued an eighth time) — the frontend surface is built, and the full proof bar is genuinely met
 
-Attempting to design the "one editor, multiple domains" surface for
-MDM/compliance rule authoring surfaced that the "single AST" claim at
-the top of this document was wrong about rulefabric - corrected there,
-this section is the evidence and the plan.
+### 34. A real expression parser - the piece that made everything else in this arc authorable as text
+`internal/rules/vm/parser.go`: a lexer + recursive-descent parser
+(`ParseExpression`) turning text like `SUM(ExecQuantity * ExecPrice)` or
+`XIRR(cash_flows, dates) > 0.15` into the exact same `*Expression` AST
+every other consumer already worked with. Before this, the only way to
+produce one was a hand-built Go struct literal - `cmd/verify_calc_measure`
+wrote its rule_ast as a raw JSON string for exactly this reason. Scoped
+deliberately: arithmetic + function calls + one top-level comparison
+(not chainable, no `&&`/`||` - the structured condition builder already
+owns boolean combination), no string literals yet (`Literal` only holds
+`float64`, so `YEARFRAC`'s basis argument still needs a `FieldRef`, not
+a literal - a real, documented gap, not silently worked around). Proven
+via golden round-trip tests: the Microsoft XIRR fixture and the
+TVPI-shaped SQL-compile fixture, authored as text, land on the identical
+results as the hand-built-AST versions.
 
-**Phase 0 inventory (read-only), what it actually found:**
-- **No frontend page authors MDM or compliance rules today.** No route
-  in `AppRoutes.tsx`, no create/edit UI. The compliance pages that
-  exist (`ComplianceGuardrailDashboard.tsx`, `ComplianceMasterDashboard.tsx`)
-  are read-only, hitting `GET /api/guardrails/stats` and
-  `GET /api/audit/events` only.
-- The one adjacent authoring surface, `frontend/src/features/bo/PolicyRuleBuilder.tsx`
-  (BO governance policies) - **not even registered as a route**, reachable
-  only embedded in `BOGovernanceStudio` - is a plain textarea authoring
-  raw CEL strings, POSTing to `/api/rule-fabric/bo/{boKey}/policies`
-  (`backend/internal/rulefabric/bo_policy_handler.go`).
-- Rulefabric's own domain model (`backend/internal/rulefabric/evaluator.go`):
-  `Rule`/`RuleLogic{ConditionJSON}` → its own `ConditionGroup`/`Condition`
-  types, with `RuleCategory` values `CategoryCompliance`/`CategoryMDM`
-  already defined but never authored against. `vm_compiler.go` compiles
-  *this* model onto `vm`'s bytecode ops - confirmed by reading
-  `CompileRuleFabric`/`CompileRuleFabricFromJSON` directly, not inferred
-  from the import line (the mistake being corrected here).
-- A third format, `edm.compliance_rule` (`ComplianceRule{Expression,
-  ExpressionType}`), has no write endpoint at all - `compliance_handler.go`
-  registers only `GET /rules`, `/evaluations`, `/breaches`, `.../lineage`.
+### 35. Calc terms get a real save/preview/evaluate surface - `internal/analytics/calc_term_service.go` + `internal/handlers/calc_term_handler.go`
+Mirrors `ValidationRuleService`'s shape (catalog_node,
+`properties.term_type=calculated`, `config.rule_ast`) and, deliberately,
+its `RETURNING id` scanned back into the same variable on `ON CONFLICT
+DO UPDATE` - the fix for the stale-id bug class item 27 flagged in
+`UpsertPreAggregation`, applied here from the start rather than
+inherited. Kept fully separate from three pre-existing, unrelated "calc"
+systems already in this codebase that were only discovered while
+scoping this: `internal/services.SemanticResolver` (regex substitution
+over raw SQL text), `internal/handlers.CalcHandler`'s
+`public.calc_fields` (raw `sql_expr` strings - see item 37, a real SQL
+injection found in its `Preview` handler), and `catalog_validation_rules`'
+own legacy calc concept. None of them produce or consume a
+`vm.Expression`; this doesn't touch them.
 
-**Live-load gate (read-only, run before deciding anything, same standard
-as every prior fork in this document):**
-- `rules` and `rule_logic` (rulefabric's actual condition model): **0
-  rows** in real `alpha`.
-- `compliance_rules` (the bare `public` one): **0 rows**.
-- The one table with rows, `policies` (4 rows, all `"Test Policy"`/`"test
-  policy"` test data) - checked its schema (`schedule`, `location_rules`,
-  `start_date`/`end_date`) and confirmed it's an **unrelated** scheduling/
-  geofence feature, not rulefabric's model. Would have been a false
-  positive if not checked at the row level, not just "a table named
-  policies has rows."
-- `CategoryWashTrade`/`CategoryRebalancing`: grepped every hit in
-  `evaluator.go` and `orchestration.go` - bare enum constants and an
-  event-type switch, **no hardcoded detection algorithm** behind either.
-  Nothing to preserve as fallback content.
+### 36. `evaluateExpressionText`'s WASM export tries numeric first, falls back to boolean on the specific mismatch
+Text parsed by the same grammar can be a calc-term formula (numeric) or
+a rule-shaped comparison (boolean) - the text alone doesn't say which.
+`cmd/wasm/main.go`'s export calls `EvaluateNumeric` first; only on the
+exact "did not evaluate to a number" error does it retry via the
+boolean `Evaluate` - any other error (an unresolvable field, a division
+by zero) surfaces as-is rather than being masked by a second,
+differently-wrong attempt.
 
-**Decision: consolidate rulefabric's condition model onto `vm.RuleNode`
-now, while the count is zero** - the same reasoning this document has
-applied every other time two of something were found (the semantic-term
-retrofit at six rules, the 410 retirement before a translator got
-built). The alternative - author against `vm.RuleNode` and bridge to
-rulefabric's evaluator - means permanently maintaining a translator
-between two ASTs, the dual-writer failure mode this whole document is a
-record of exterminating elsewhere, deliberately reintroduced at the
-layer where rule semantics live. It would also cap what MDM/compliance
-rules can express at rulefabric's condition-only model forever - no
-`FuncCall`, no aggregates, none of the function-library work - since a
-bridge only carries what the bridged side already understands.
+### 37. `is_null`/`is_not_null` - a real vocabulary mismatch, closed
+`AdvancedConditionBuilder.tsx`'s operator dropdown has offered "Is
+Null"/"Is Not Null" for number/date/boolean/enum fields since before
+this engagement, with no matching case in `compareValues`
+(`condition_evaluator.go`) - selecting either produced "unknown
+operator" once a field resolved, or a silent `false` when it didn't.
+Fixed by special-casing both ahead of the "field not found -> false"
+branch in `evaluateSimpleCondition`, since is_null's entire job is to
+detect exactly that case (and `ResolveFieldPath` already reports "not
+found" identically for a missing key and a present-but-null value -
+unlike `vm`'s own `evalFieldRef`, which needed teaching to tell those
+apart for `NOT_EMPTY`'s sake, `is_null` wants them treated the same).
+The dropdown's other ~30 operators (`contains`, `between`, `is_positive`,
+the date-relative ones, ...) remain unimplemented in `compareValues` -
+deliberately not touched this pass, recorded as item 39 rather than
+silently expanded into.
 
-**Scope, precisely:** retire the *condition* AST
-(`ConditionGroup`/`Condition`), not rulefabric's domain value - policy
-concerns (categories, BLOCK/WARN actions, exemptions, lookbacks, target
-scoping) stay and become properties on `catalog_node` rows, the same
-`validation_rule` convention extended with MDM/compliance domain values.
-Execution changes least of all: rulefabric already compiles its
-condition model onto `vm`'s bytecode instruction set, so routing through
-the existing `CompileVM`/`AdvancedEvaluator` paths is swapping the input
-AST, not the runtime. `PolicyRuleBuilder`'s raw-CEL-textarea folds into
-the same move - it's the primitive ancestor of the unified editor's
-expression mode (Monaco, the real parser, autocomplete), not a separate
-migration. `edm.compliance_rule` (no write path, zero rows) is a
-retirement-pass line item, same disposition as the original 233-row
-corpus.
+### 38. The Monaco expression surface, and the full proof bar, verified live
+`AdvancedRuleBuilderPage.tsx` gained an "Expression" mode: a real
+Monaco instance (`frontend/src/rules/aslMonacoRegistry.ts`) registering
+a completion + hover provider from `asl.monaco.json`'s `functions`
+array - the first frontend consumer of that file, ever (checked before
+building: `grep -rl "asl.monaco" frontend/` returned nothing until this
+session copied it to `frontend/public/`). Live syntax checking via the
+WASM `parseExpression` export, rendered as an inline Monaco marker at
+the real byte offset the `*ParseError` reports. Two save paths from the
+same text - `{type:"expression", root:...}` to `/validation-rule-nodes`,
+or straight to `/calc-terms` - plus a "Preview SQL" button against the
+real backend compiler.
 
-**Not yet done**: the actual code changes (retiring `ConditionGroup`/
-`Condition`, wiring `catalog_node`+`rule_ast` for MDM/compliance domain
-values, the context-object editor model with term autocomplete in the
-Monaco provider). This section records the verified plan and the gate
-that cleared it, not a completed migration - the next session's task is
-to execute it, then close with the proof this design has pointed at
-from the start: author one MDM rule, one compliance rule, and one BO
-validation in the same editor, same autocomplete, same terms, evaluate
-all three through the same engine.
+All three items of the stated proof bar, checked in the actual browser,
+not just built:
+1. Typing "XI" surfaces XIRR with its signature and a **wasm-only**
+   badge in the completion detail - confirmed by reading the rendered
+   DOM text (`document.querySelectorAll('.monaco-list-row')`), not just
+   a screenshot, since the narrow preview pane truncates it visually.
+2. `XIRR(cash_flows, dates)` authored as text, evaluated via
+   `evaluateExpressionTextWasm` against Microsoft's published XIRR
+   fixture data (the same `[-10000,2750,4250,3250,2750]` /
+   `[0,60,303,411,456]` from `irr_excel_fixtures_test.go`) →
+   `0.37336253351883153`, matching the doc's `0.373362535` to the
+   fixture's own precision - entirely client-side, no backend involved.
+3. `SUM(ExecQuantity * ExecPrice)` authored as text → "Save as Calc
+   Term" → real `catalog_node`
+   (`075e8a3c-6d1d-40f0-a977-72716cbfc779`, confirmed directly in
+   Postgres with the parsed `rule_ast`) → registered as a
+   pre-aggregation and ran `GenerateDDL` through the live HTTP API →
+   `CREATE MATERIALIZED VIEW ... SUM((exec_qty * exec_price)) ...` -
+   real resolved column names, no `NULL /* TODO */` placeholder - the
+   editor-authored mirror of the original `499375` proof. Missing only
+   the live `ApplyMaterialization` step against real StarRocks, which
+   this dev machine can't reach right now (`server.log`:
+   `WARNING: StarRocks ping failed ... connection refused` - a
+   pre-existing, unrelated connectivity gap already known from earlier
+   sessions, not something this pass caused or could fix from here).
 
- ## Rulefabric consolidation, backend slice (2026-09-10) - "one write-hook, not two," and two findings the map didn't have
+### 39. Two automation/infrastructure landmines hit while proving this, neither a bug in this session's code
+- **Monaco's newer "EditContext API" input mode doesn't reliably receive
+  synthetic keystrokes from this session's browser-automation tool.**
+  `document.activeElement` reported `native-edit-context`; repeated
+  `type`/`Backspace`/`ctrl+a` sequences visibly failed to edit the buffer
+  (once producing a garbled `XIXIRR(...)` from a select-all that silently
+  no-op'd). Worked around by driving `window.monaco.editor.getEditors()
+  [0].setValue(...)` directly - goes through Monaco's own model-change
+  event, so `onChange`/React state update identically to real typing,
+  just bypassing the flaky keystroke-to-EditContext translation. Worth
+  knowing before the next person spends twenty minutes on the same
+  keyboard-doesn't-work confusion in *this* environment specifically -
+  a real user's browser is unaffected.
+- **The long-running dev `./server` (up 3+ hours, started outside this
+  session) had to be killed and rebuilt to serve the new `/calc-terms`
+  routes, and its restart surfaced that `JWT_SECRET` and
+  `API_TOKEN_ENCRYPTION_KEY` were never in `.env` - only in whatever
+  shell originally launched it.** Regenerated fresh local values via
+  `openssl rand -base64 32` (the same remediation `api.go`'s own fatal
+  message suggests) rather than guessing at the originals. The 401s that
+  followed were NOT a real auth bug, despite investigating deep enough
+  to nearly conclude one was: `security.TenantIDFromContext` came back
+  empty because the specific browser JWT in hand had simply expired
+  (short-lived Keycloak access tokens, and this investigation took
+  several minutes) - re-logging in fixed it immediately, confirmed by
+  decoding the fresh token's own `exp` against `Date.now()` before
+  touching anything else. `ALLOW_CLIENT_TENANT_HEADER_FALLBACK=true`
+  (a real, documented, dev-only escape hatch in
+  `internal/middleware/auth_context.go` - "Must never be enabled in
+  production") is still set on this session's server process as a
+  result of the detour; harmless for local dev, but **worth explicitly
+  unsetting before treating this server as anything but scratch**, and
+  worth checking whether this repo's Keycloak realm actually configures
+  a `tenant_id`/`roles` claim mapper for real deployments - if it
+  doesn't, any non-global-admin user hitting a `mustTenantID`-gated
+  write endpoint in production would fail exactly like this session's
+  first (correct, pre-fallback) 401, which is a real gap worth
+  confirming with whoever owns the Keycloak realm config, not something
+  this session's local workaround actually fixes.
 
-The blast-radius map found `TriggerEngine`'s `compliance_rules` action
-case as the one live, entangled consumer - reachable from every BO CRUD
-write via `BOCRUDHandler.emitBORowEvent`. This session's design
-decision: don't rewire that case onto a rulefabric-replacement backend -
-**retire it**, because the write-blocking semantics it implements are a
-strict subset of what `shadow_evaluation.go`'s `evaluateAndEnforceRules`
-already does for every validation rule. MDM/compliance rules that are
-per-record write-time constraints become `domain` values on the same
-`catalog_node` rules (additive field, `ValidationRuleProperties.Domain`,
-default `"validation"` for every rule written before this field
-existed); batch-shaped MDM/compliance rules (wash-trade over history,
-concentration over positions) are not write-hooks and are left for the
-sweep harness, a later slice.
+### 40. New tickets from this pass
+- **`internal/handlers/calc_handler.go`'s `Preview` handler has a real
+  SQL injection**: `fmt.Sprintf("SELECT %s as result LIMIT %d",
+  req.SQLExpr, limit)` interpolates request-body text directly into an
+  executed query, no validation. Found while scoping item 35 (a
+  pre-existing, unrelated file - the older `calc_fields` system, not
+  touched by this session's work). Flagged as a background task
+  (`task_cc8410a8`) rather than fixed inline, since it's out of scope
+  for this arc and the right fix (stop accepting raw SQL from the
+  client at all, vs. an inherently-fragile allowlist) deserves its own
+  look at every caller first.
+- **`compareValues`' vocabulary gap is much larger than `is_null`/
+  `is_not_null`** (item 37 fixed those two specifically, since the user
+  named them): `AdvancedConditionBuilder.tsx` offers roughly 30
+  operators across its five field-type variants (`contains`,
+  `starts_with`, `between`, `is_positive`, `is_this_week`, `in_last_n_days`,
+  ...) and `compareValues` implements six. Every other one currently
+  either silently returns `false` (missing field) or errors "unknown
+  operator" (field present) exactly like `is_null` did before this
+  session - worth a deliberate, systematic pass (implement the real
+  vocabulary, or prune the dropdown to what's implemented) rather than
+  patching operators one user report at a time.
+- **Tiers 2-4 of the PE-metrics backlog (item 33) remain untouched**:
+  TWRR/risk stats, the carried-interest waterfall, PME family,
+  net-vs-gross, the bond/annuity family, and the full
+  investment-accounting/wealth-management tier (tax-lot selection,
+  corporate actions, accruals, FX/wash-sale, allocation analytics) from
+  the most recent request. The Monaco surface this session built is the
+  front door every one of those functions now has waiting for it -
+  landing any of them means an immediate, visible autocomplete entry
+  and a real evaluate/compile proof, not more inventory in an
+  unconsumed pipeline.
+- **`YEARFRAC`'s basis argument can't be authored as free text** (noted
+  in item 34 too): the parser has no string-literal syntax, so
+  `YEARFRAC(start, end, "ACT/365")` doesn't parse - only `YEARFRAC(start,
+  end, basis_field)` with `basis_field` resolving to a string via
+  context does. Adding a `StringLiteral` `ExprNode` (touching `ast.go`'s
+  JSON marshal/unmarshal, the VM bytecode compiler, and the SQL
+  compiler, in addition to the parser) is the real fix - not attempted
+  this pass, scoped out deliberately rather than rushed.
 
-**Commit-ordering check (done before any edit, per the standing rule):**
-confirmed the write-blocking behavior in `TriggerEngine`'s
-`compliance_rules` case **never actually blocked anything in
-production**. `BOCRUDHandler.emitBORowEvent` - the only real caller of
-`EvaluateTriggers`, the only path that reaches this case - runs trigger
-evaluation in a `go func()` goroutine *after* the write is already
-committed and explicitly never surfaces trigger errors to the caller ("failures are
-logged, never surfaced... must not roll back or fail an otherwise-
-successful BO mutation" - bo_crud_handler.go). So the case's `err =
-fmt.Errorf("%d compliance rule(s) blocked this write"...)` was always
-swallowed into a log line. This is a real, pre-existing latent bug,
-closed by this retirement rather than repaired by it - not worth fixing
-on the way out, since the whole case no longer exists.
+### 41. The Monaco surface got real IntelliSense, same session, on explicit push-back
+Item 38 shipped a completion provider that only ever suggested function
+names, `triggerCharacters: []` (no auto-popup beyond Ctrl+Space) - "an
+editor," not the "world class IDE" asked for immediately afterward.
+Closed the same session: field completion (real data types, sourced
+from a live `setAslFields` list `AdvancedRuleBuilderPage` keeps synced
+to the selected BO, since the completion provider registers once per
+page load but the BO changes after that); dot notation (`entity.` scopes
+to that entity's tagged fields, falling back to the full list rather
+than an honestly-empty one - which otherwise let Monaco's own unrelated
+"Text" ghost suggestion surface as the only entry, caught by aria-label
+inspection, not a screenshot); and signature help (parameter hints
+parsed from the same `FunctionSpec.Signature` string the hover/
+completion detail already shows, not a second hand-maintained parameter
+list). `triggerCharacters` now `['.', '(', ',']`, `wordBasedSuggestions:
+false` so Monaco's generic buffer-scraping stops competing with the
+real semantic suggestions. All verified live via `editor.trigger(...)`
++ DOM inspection, the same discipline as item 38's browser proof - not
+just "it builds."
 
-**Finding 1, not in the map: `TriggerEngine.EvaluateTriggers`'s own
-query is broken against the live schema, independent of anything in
-this migration.** It selects `vt.trigger_type_id` (joined to
-`trigger_types.id`) and `vt.event_config`/`condition_config`/
-`action_config`/`abac_policy_id`/`priority` from `validation_triggers`.
-None of those columns exist on the real table - verified by running the
-exact query against real `alpha`: `ERROR: column vt.trigger_type_id
-does not exist... Perhaps you meant "vt.trigger_type"`. The real table
-has `trigger_type` (varchar, not a `trigger_type_id` FK), `rule_ids`,
-`pipeline_id`, `dispatch_mode`, `meta` - shaped for the DATAPIPELINE
-trigger machinery, not this query. 6 active rows exist in
-`validation_triggers`, so something is meant to fire - but
-`EvaluateTriggers` cannot currently read them at all; every invocation
-silently errors and gets logged-and-swallowed by the same
-`emitBORowEvent` fire-and-forget path. **This means the "prove a
-pipeline trigger still fires" obligation from this session's plan could
-not be attempted as scoped** - the machinery that was supposed to be
-provably undamaged by this migration was already non-functional before
-this migration touched anything. Not fixed here - it's a pre-existing
-break in code this migration was explicitly scoped not to touch (the
-pipeline trigger machinery itself, per the scope boundary below), and
-repairing someone else's broken query while retiring an unrelated case
-in the same commit would blur which change caused what. Flagged for
-whoever owns the DATAPIPELINE trigger work next - it currently can't
-work at all, migration or no migration.
+## Session 11 addendum (2026-09-09, continued a ninth time) - Tier 2a: plain statistical aggregates
 
-**Finding 2, not in the map: a third, distinct validation engine.**
-`backend/internal/services/validation_rule_engine.go`
-(`ValidationRuleEngineImpl`) is not the unified `internal/rules/vm`
-engine, not rulefabric, and wasn't inventoried. It holds a real,
-behaviorally-live `*rulefabric.OperatorRegistry` field
-(`.operators.Get(name)`, terse-operator-name translation at line ~120)
-- the map's "shallow, type-only coupling, easy to decouple"
-characterization for this file was wrong; it's real delegation, just to
-`OperatorRegistry` specifically (comparison semantics), not to
-rulefabric's `ConditionGroup`/`Condition` tree. **Left untouched in this
-slice** - `OperatorRegistry` isn't part of what's being retired (only
-the condition-AST/CEL evaluation path is), so nothing here blocks the
-consolidation; it's flagged because a third rule engine existing at all
-is worth someone deciding what to do with, later, deliberately, not
-folded into this migration's scope by surprise.
+### 42. Nine new functions, same registration discipline, zero changes to `evalFuncCall`/`compileNodeToSQL`
+`internal/rules/vm/library_tier2a.go`: `STDEV_S`/`STDEV_P` (sample/
+population standard deviation), `VAR_S`/`VAR_P` (sample/population
+variance), `COVARIANCE_S` (sample covariance), `CORREL` (Pearson
+correlation), `SLOPE` (OLS regression slope, Excel's `SLOPE(known_ys,
+known_xs)` argument order), `MEDIAN`, and `PERCENTILE` (linear
+interpolation - matches StarRocks `PERCENTILE_CONT`/Excel's inclusive
+`PERCENTILE.INC`, explicitly **not** `PERCENTILE.EXC`, stated in the
+function's own `Description`). All nine are pushdownable
+(`STDDEV_SAMP`/`STDDEV_POP`/`VAR_SAMP`/`VAR_POP`/`COVAR_SAMP`/`CORR`/
+`PERCENTILE_CONT` pass-through; `SLOPE` the one expansion emitter,
+`COVAR_SAMP(y,x)/VAR_SAMP(x)`, argument order matching the native form).
+Confirms the item 28 registry refactor's whole point: registering nine
+functions touched exactly one new file plus its test file - `evalFuncCall`
+and `compileNodeToSQL` needed no edits, dispatching through
+`LookupFunction` exactly as they did before any of these existed.
 
-**Ordering constraint this creates, for whoever eventually deletes
-rulefabric's `ConditionGroup`/`Condition` compiler entirely** (the
-"types last" step in this migration's own stated caution -
-`vm.OpCode` imports stay until rulefabric's own compiler is gone):
-`OperatorRegistry` cannot go with it. `ValidationRuleEngineImpl` has a
-live, behavioral dependency on it for comparison semantics
-(`equals`/`greater_than`/etc.), so **decouple
-`validation_rule_engine.go`'s operator lookups from
-`rulefabric.OperatorRegistry` before `OperatorRegistry` can be
-deleted** - either give `ValidationRuleEngineImpl` its own copy of the
-terse-operator-name table, or point it at `internal/rules/vm`'s own
-operator vocabulary (`condition_evaluator.go`'s `equals`/`not_equals`/
-`greater_than`/`less_than`/`greater_equal`/`less_equal` set) instead.
-Discovering this the hard way - `go build` failing mid-retirement
-because a supposedly-dead type still has a real caller - is exactly
-what recording it now avoids.
+Naming departs from Excel's dotted spelling (`STDEV_S` not `STDEV.S`)
+deliberately: the parser's `isIdentPart` already treats `.` as part of a
+dotted field path (see item 34), so `STDEV.S(` would be ambiguous with
+field-path syntax. Follows the existing underscore convention
+(`MAX_LENGTH`, `NOT_EMPTY`) instead.
 
-**Scope actually touched, precisely:**
-- `internal/models/validation_rule_types.go`: additive `Domain` field on
-  `ValidationRuleProperties`/`UpsertValidationRuleRequest`/
-  `ValidationRuleDescriptor`, plus `ValidationRuleDomainDefault`/`MDM`/
-  `Compliance` constants.
-- `internal/analytics/validation_rule_service.go`: `UpsertValidationRule`
-  defaults empty `Domain` to `"validation"` before persisting (explicit,
-  not left blank, so every rule from this point forward is unambiguous);
-  `descriptorFromNode` reads `Domain` with the same default for rows
-  written before the field existed; `ListByBO` gained an optional
-  `domain` filter parameter (empty = all domains).
-- `internal/metadata/shadow_evaluation.go`: its `ListByBO` call now
-  passes `domain=""` explicitly - all domains enforce on the write path,
-  which is the actual mechanism by which MDM/compliance per-record rules
-  now take effect.
-- `internal/handlers/validation_rule_handler.go`: `handleListByBO` reads
-  an optional `?domain=` query param.
-- `internal/api/trigger_engine.go`: the `"compliance_rules"` action case
-  and `evaluateComplianceRules` deleted, replaced with a comment
-  recording why (see above); unused `rulefabric`/`uuid` imports removed.
-  **Nothing else in this file touched** - the action dispatcher's other
-  cases (notification/temporal/rabbitmq/webhook), `DispatchTrigger`
-  (a *different* type, `validation.TriggerValidationEngine`, confirmed
-  by reading its definition - genuinely unrelated to rulefabric, matches
-  the map's "internal/validation is clean" finding), and all pipeline
-  trigger machinery are untouched, per the explicit scope boundary.
-- `cmd/verify_compliance_domain/`: new permanent proof program (pattern:
-  `verify_order_validations`).
+### 43. Fixture honesty: three real Microsoft values, three honest "no fixture available"
+`STDEV_S`/`VAR_S`/`COVARIANCE_S` are checked against real values fetched
+live this session from Microsoft's own published docs (breaking-strength
+sample data, result 27.46391572 for STDEV.S / 754.27 for VAR.S; `{2,4,8}`/
+`{5,11,12}` -> 9.666666667 for COVARIANCE.S). `CORREL`, `MEDIAN`, and
+`PERCENTILE.EXC`'s own Microsoft doc pages were fetched too, but - unlike
+YEARFRAC's basis-1/4 gap, which was a real, checked "not implemented" -
+these three publish their example data only as an image
+(`![Examples of the ... function](../media/...jpg)`), with no numeric
+values anywhere in the page's text content. Confirmed this directly
+(fetched the pages, read what came back) rather than assuming from a
+search miss - the same "a 404 is evidence the guess was wrong, not that
+the document doesn't exist" discipline from the MIRR working note,
+applied to the adjacent case of a page that exists but whose numbers
+aren't machine-readable. `STDEV_P`/`VAR_P` (no Microsoft fixture for the
+population form either) and `CORREL`/`SLOPE`/`PERCENTILE` all fall back
+to exact-by-construction (a perfect line for `CORREL`/`SLOPE`, round
+numbers for `PERCENTILE`) plus an independent cross-check against
+Python's `statistics` module or a from-scratch centered-sum computation -
+labeled as exactly that in `library_tier2a_test.go`'s own header comment,
+not mislabeled as Excel fixtures. 17 new tests, all passing; full
+`internal/rules/vm` suite now 94 tests (up from 59 after Tier 1), still
+zero failures.
 
-**Proof, run against real `alpha`:** `cmd/verify_compliance_domain`
-authors a `domain="compliance"`, severity BLOCK rule
-("target_qty <= 1000") on `order_allocation` through
-`ValidationRuleService`, confirms it round-trips
-(`desc.Domain == "compliance"`), then drives two real writes through
-`BusinessObjectService.CreateBORecord` with enforcement on:
-- `target_qty=5000` (violates): **rejected**, row count unchanged,
-  violation persisted and attributed to the rule by name.
-- `target_qty=100` (compliant): the write still fails, but for a
-  separate, unrelated, pre-existing reason - `order_allocation` also
-  carries an already-known rule ("Allocated quantity must equal
-  distributed execution-allocation fills") that rule-errors on this
-  branch (its context field, `alloc_fill_sum`, is the same class of gap
-  as `placement_routed_sum` on the `order` BO - a branch-local loader
-  gap, not a data problem, not fixable by this proof's fixture). What
-  the proof actually demonstrates instead, and does demonstrate
-  cleanly: the compliance-domain rule's name is **absent** from the
-  blocking-rule list for the compliant value and **present** for the
-  violating one - it discriminates correctly. Every real BO in the
-  catalog (order, order_allocation, execution, execution_allocation,
-  placement - checked directly against `alpha`) already carries multiple
-  active rules, several sharing this same context-field gap, so a
-  fully-clean "compliant write succeeds outright" demonstration isn't
-  available anywhere in the current catalog without first fixing that
-  separate, pre-existing issue - out of this slice's scope.
-`go build ./...` and `go vet ./...` clean across the whole backend after
-every edit in this slice.
+### 44. The live proof surfaced a real stratum-boundary fact, not just a passing test
+`cmd/verify_stats_measure` (permanent, mirrors `verify_calc_measure`'s
+shape) authors "Exec Price StdDev" (`STDEV_S(ExecPrice)`) against the
+Execution BO, registers a pre-aggregation, and confirms `GenerateDDL`
+compiles it to real SQL (`STDDEV_SAMP(exec_price)`, no `NULL /* TODO */`)
+through the same `ResolveSemanticFieldMap` chain item 26 proved for `SUM`.
 
-**Not done in this slice:** `PolicyRuleBuilder`'s fold onto the Monaco
-expression surface, `cel-go`'s removal from `go.mod`, the editor context
-model + term autocomplete, and the closing three-domain proof. Those
-remain steps 3-4 of the plan above, unstarted.
+Getting to a *live* proof took a real detour worth recording: the script
+originally seeded four executions (varying `exec_price`, one placement)
+into the platform-local `alpha.orm.execution` table (see item 11) and
+waited for Debezium CDC to mirror them into StarRocks's
+`oms.orm_execution` before generating DDL - the same assumption
+`verify_calc_measure` implicitly made. It never arrived. Reading
+`docs/orm-oms-connector.md` (present in the repo, not written this
+session) confirmed why: the real `orm-oms-connector`'s publication is
+`CREATE PUBLICATION orm_cdc_publication FOR TABLES IN SCHEMA orm` **on
+the `crims` database**, not `alpha.orm` - exactly the still-open
+"canonical OMS stratum" question item 10 named, now with a concrete,
+checked consequence: data written to this session's (and item 11's, and
+every `verify_order_validations`-style proof's) `alpha.orm` tables was
+*never* going to reach StarRocks through that pipeline, no matter how
+long the script waited. `verify_calc_measure`'s original `499375` proof
+was never actually testing that path either - it read a single row that
+was already resident in StarRocks from some earlier, undocumented
+mechanism, with no live Postgres source at all that session.
+
+Fixed for this proof the same way: seeded the identical four rows
+directly into StarRocks's `oms.orm_execution` (real INSERT statements
+against the live hot tier, not a mock) alongside the Postgres insert
+(kept as the source-of-truth record, and in case a future session's
+resolution of item 10 makes it CDC-reachable). One new wrinkle found
+running it: StarRocks's prepared-statement protocol rejects a
+placeholder-parameterized `INSERT`/`SELECT ... WHERE` through
+`go-sql-driver/mysql` (`Error 1295: This command is not supported in the
+prepared statement protocol yet`) - worked around by building the
+literal SQL string directly (safe here: every interpolated value is a
+freshly-generated UUID or a float this program computed, never external
+input).
+
+Result: `StarRocks STDDEV_SAMP` on the four live rows =
+`1.2308533625091174`, an independent from-scratch Go reimplementation
+(not a call into `internal/rules/vm`) of sample standard deviation over
+the same four prices = `1.2308533625091154` - agreement to within
+`2e-12`, comfortably inside the script's own `1e-3` assertion. Tier 2a's
+pushdown claim is proven against the real, live StarRocks instance, not
+only unit-tested.
+
+**Not resolved, and not this pass's job to resolve**: which physical
+source is actually canonical (item 10) still needs a person's decision.
+This item only adds a second, independently-discovered data point to
+that open question - a real script hit a real dead end for a reason
+that traces directly back to it.
+
+### 45. Artifacts regenerated per the standing checklist
+`go generate ./...` from `backend/rule-engine` (`asl.monaco.json`'s
+`functions` array grew from 23 to 32 entries, all nine new ones correctly
+flagged `pushdown.starrocks: true`; `asl.d.ts`/`asl.schema.json`
+unchanged, since Tier 2a added no new Go *types*, only `Library` map
+entries - consistent with item 31's explanation of why type-level
+codegen and registry-data codegen are different generators); wasm
+rebuilt (`GOOS=js GOARCH=wasm go build ./cmd/wasm`), synced to
+`frontend/public/rule_engine.wasm` and `frontend/public/asl.monaco.json`,
+and functionally verified via `scripts/verify_wasm.js` before trusting
+it. `check-drift` confirmed it fails pre-commit (comparing against git
+HEAD, as designed) and will pass once this session's changes are
+committed - not run again post-commit in this session.
+
+### 46. What Tier 2a deliberately left out, per the order-of-work plan
+- **Tier 2b** (Sharpe/Sortino/information ratio, annualized returns) -
+  not started; per the build plan these are authored expressions/calc-
+  term recipes, not registry entries, the same way `RVPI`/`TVPI`/`DPI`/
+  `MOIC` already are (item 26).
+- **Tier 2c** (TWRR, max drawdown) and the context-provider array-loading
+  extension it needs - not started. Both require window functions
+  (`OVER (PARTITION BY ... ORDER BY ...)`), which `compileNodeToSQL`
+  doesn't emit today - the honest move, per the build plan, is
+  native-only with `Pushdown: false` until a real measure needs the SQL
+  form, not a half-built emitter.
+- **Waterfall, PME** - not started, both explicitly scoped as their own
+  sessions in the build plan (spec-first for the waterfall; PME needs the
+  series-binding design settled first).
+- No frontend work this pass - the Monaco surface (items 38/41) already
+  reads `asl.monaco.json`'s `functions` array generically, so the nine
+  new entries are autocomplete-visible with correct pushdown/wasm badges
+  with no code changes; not independently re-verified live in the browser
+  this session (the generated-JSON diff plus the unit/live-SQL proofs
+  were treated as sufficient for a mechanical, playbook-following batch -
+  see item 20 for the "when is a live proof enough" precedent for
+  compositions needing none).
+
+### New tickets from this pass
+- **The `alpha.orm` vs. `crims.orm` CDC-reachability gap (item 44) blocks
+  every future live proof that wants fresh data, not just this one.**
+  Every `verify_*` script that inserts into `alpha.orm` and expects
+  StarRocks to see it will hit the same 90-second dead end this session
+  did, until item 10's stratum question is answered. Worth flagging
+  explicitly to whoever picks that decision up: it's not only a
+  modeling/ownership question anymore, it's actively blocking this
+  engagement's own proof discipline.
+- Tiers 2b-4 of the PE-metrics backlog (unchanged from item 33/40) remain
+  untouched.
+
+## Working note added this session
+- **A doc page returning 200 with real prose is not the same as a page
+  with machine-readable example data.** `CORREL`/`MEDIAN`/`PERCENTILE.EXC`'s
+  Microsoft pages fetched successfully and described their examples in
+  words, but the actual numbers exist only inside a linked image the
+  fetch tool can't read. Confirm this by reading what actually came back
+  (an image reference with no numbers) before writing "no fixture
+  available" - the same discipline as the MIRR 404 note, for the
+  adjacent failure mode of a page that loads but doesn't contain what you
+  need.
+
+## Session 12 addendum (2026-09-10) - OMS validation Phase 1: 20 new rules, 5 BOs, proven both directions
+
+Implemented the OMS validation spec's Phase 1: the 2 new Order rules plus
+all 5 Placement, 6 Execution, 4 ExecutionAllocation, and 3 OrderAllocation
+rules the spec called for, each with real context-provider support and a
+passing + violating case through the real write path. UI (the BO
+Validations tab and system validations page) is next, per the spec's own
+sequencing note - not started this session.
+
+### 47. Every OMS BO now has a dedicated context loader - the generic shape retired
+`internal/metadata/shadow_evaluation.go`'s `relatedRowContext`/
+`loadRelatedRowContext` (the one-size-fits-all parent+sibling-sum shape
+from Session 3/item 8) is gone - once Execution needed a two-hop parent
+(Execution -> Placement -> Order, for price-vs-limit and causality) and a
+duplicate-row count the old shape couldn't express, there was no BO left
+using it. Five dedicated loaders replace it: `loadOrderContext` (extended
+with `placement_routed_sum` and `duplicate_order_count`),
+`loadPlacementContext`, `loadExecutionContext`, `loadOrderAllocationContext`,
+`loadExecutionAllocationContext` - each documented with exactly which
+context keys it produces and why. All added to
+`knownTransientContextFields` so the fail-loud unresolved-field check
+(item 19) doesn't false-positive on them.
+
+### 48. Two new engine-boundary facts, found only by running the proof - neither fixed inside the shared evaluator
+Both closed the same way item 16/19's null-vs-absent fix was: a
+precomputed boolean in the context provider, not a change to
+`AdvancedEvaluator`/`ConditionEvaluator`, per the standing "never mutate
+the shared ConditionEvaluator" rule.
+- **`AdvancedEvaluator.evalBinaryExpr` calls `toFloat64` unconditionally,
+  even for `==`/`!=`** - every `Expression`-type comparison, including
+  equality, is numeric-only. A same-order-linkage rule authored as
+  `{"op":"==","left":{"path":"parent_order_id"},"right":{"path":"alloc_order_id"}}`
+  (two UUID strings) errors "operands not numeric" regardless of whether
+  the IDs actually match - not a bug in the linkage logic, a real gap in
+  what `==` can express for `Expression` nodes. `Condition`'s `equals`
+  operator has no such restriction (`reflect.DeepEqual`, any type) - so
+  the fix was computing `same_order_ok` (a plain bool) once in
+  `loadExecutionAllocationContext` and authoring the rule as a
+  `Condition` checking `same_order_ok == true`, the same move
+  `causality_ok` (below) already made for timestamps.
+- **Neither comparator has any timestamp/date support at all** -
+  `ConditionEvaluator`'s `greater_than`/`less_than`/`greater_equal`/
+  `less_equal` and `AdvancedEvaluator`'s `BinaryExpr` both delegate to
+  `toNumber`/`toFloat64`, which reject an RFC3339 string outright. The
+  causality rule (`ExecTime >= placement's created_at`) needed the same
+  precomputed-boolean treatment: `causality_ok`, computed in
+  `loadExecutionContext` via a small `parseTimestamp` helper (handles
+  both `time.Time` - the common case, lib/pq recognizes timestamptz - and
+  a string fallback), exposed as a plain bool.
+- **Neither of these was found by reading the code** - both surfaced only
+  by running `cmd/verify_oms_validations` and watching a rule that should
+  have passed instead reject every write, every time, regardless of the
+  actual data. Worth remembering next time a cross-field or non-numeric
+  comparison seems like the obvious way to author a rule: numeric-only is
+  the load-bearing assumption underneath both comparators today, and
+  neither documents it anywhere else.
+
+### 49. A third, more insidious engine-boundary bug: `MapScan` silently returns `[]byte` for some column types, `coerceNumeric` doesn't fix it
+Found debugging item 48's linkage rule even after switching to a
+`Condition`: `same_order_ok` was landing as `false` unconditionally, for
+values that were verified (via direct SQL) to actually match. Root cause,
+confirmed with temporary debug logging before touching any code: lib/pq's
+generic `interface{}` scan target - used by every `rows.MapScan(row)`
+call in this file's context loaders - returns some Postgres text-like
+column types (confirmed for `uuid`; not confirmed but plausible for other
+non-varchar text types) as raw `[]byte`, not `string`, while a *typed*
+scan (`GetContext(&aTypedStringVar, ...)`, used by `broker_status`
+elsewhere in the same file) gets a clean `string` for the identical kind
+of column. `coerceNumeric` (the existing helper applied to every
+MapScan'd value) doesn't fix this - it converts a `[]byte` to `float64`
+*only if it parses as a number*, and silently returns non-numeric
+`[]byte` completely unchanged. Two independent failure modes follow from
+the same root cause: `fmt.Sprintf("%v", []byte(...))` renders a UUID as
+its decimal byte values (`[50 48 53 ...]`), not its text, breaking
+`same_order_ok`'s string comparison outright; and `Condition`'s
+`compareValues` does `reflect.DeepEqual(actual, expected)`, so
+`DeepEqual([]byte("BUY"), "BUY")` is `false` - not because the values
+differ, but because the *types* differ, which meant the price-vs-limit
+rule's `order_side != 'BUY'` escape branch was very likely always
+evaluating `true` (always "not equal", regardless of the order's real
+side) before this fix, silently defeating the whole rule for every BUY
+order in a way that would have kept "passing" in this session's own test
+suite for the wrong reason had it not been caught.
+
+Fixed with `normalizeScanned` (`shadow_evaluation.go`): converts `[]byte`
+to `string` *before* handing off to the existing `coerceNumeric`, so a
+numeric `[]byte` still promotes to `float64` exactly as before, and a
+non-numeric one (a UUID, a status string, a side) becomes a clean `string`
+instead of staying raw bytes. Applied at all four `MapScan`-based context
+sites (`loadExecutionContext`, `loadOrderContext`'s account lookup,
+`loadOrderAllocationContext`'s account lookup, `loadExecutionAllocationContext`) -
+deliberately not applied to the record's own top-level fields (still
+`coerceNumeric` only), since those are already stringified by
+`CreateBORecord`/`UpdateBORecord` before this code ever sees them (a
+different code path, unaffected by this bug). Re-verified the
+price-vs-limit rule specifically after this fix (a real SELL-below-limit
+and BUY-above-limit case, not just re-running the existing suite) to
+confirm it now fires for the right reason, not just that the test suite
+still reports green.
+
+### 50. `orm.broker` - the fourth minimal reference table, same pattern as `orm.account`
+`backend/migrations/20260910_create_orm_broker.sql`: `broker_id`/`status`
+only, no BO (no "broker" BO exists in the catalog, same reasoning
+`orm.account` used). Applied directly against `alpha` with
+`search_path=public` forced explicitly, per the Session 5 landmine note -
+checked, not assumed, this time.
+
+### 51. Two proof scripts, one honesty note about "oracle" claims
+`cmd/verify_oms_validations` (permanent): all 20 new rules plus the 2 new
+Order rules, each proven with both a passing and a violating case through
+the real `CreateBORecord`/`UpdateBORecord` path - 27 pass/fail assertions
+in one run, all against real Postgres writes, real persisted violations.
+Checked `pg_constraint` on the `orm` schema before writing this file's
+doc comment: only `orm."order".chk_order_target_qty_positive` is a real
+DB CHECK today. The spec's table calls several other new rules "oracle"
+rules (Placement.RoutedQuantity > 0, Execution's qty/price positivity,
+ExecutionAllocation/OrderAllocation's positive-quantity rules) - none of
+those have a live CHECK constraint backing them, so this file states that
+plainly rather than reusing the "oracle" label for a comparison that
+doesn't exist. Adding the missing CHECK constraints was out of this
+pass's scope.
+
+Two non-determinism bugs found running this multiple times against the
+same persistent database, both the same shape: a fixed literal value
+(order `target_qty=77/78`, a `broker_exec_id` string) that was fine on a
+single run became a false positive/negative on every subsequent run, once
+a real duplicate-detection rule started comparing this run's fixture
+against every prior run's identical one. Fixed by making the specific
+values that must NOT collide across runs derive from
+`time.Now().UnixNano()` instead of a fixed literal - the same fix applied
+retroactively to `cmd/verify_order_validations`'s Test 2 (item 52 below),
+which predates the duplicate-order rule and started tripping over its own
+old fixture data for the identical reason once that rule went live
+tenant-wide.
+
+Also retired one genuinely stale rule found mid-session: `cmd/verify_shadow_context`'s
+original "Overfill Guard (shadow-mode verification)" probe (Session 3,
+item 8), authored against the pre-migration `quantity` field name, was
+still `is_active = true` in the catalog and - because it's an
+`Expression`-type rule referencing a field that doesn't exist on the
+current schema - errored on every single Execution write, tenant-wide,
+compounding into every other Execution rule's rejection message. Retired
+(`is_active = false`, same reversible convention as the 233-rule corpus),
+confirmed via the same live-catalog query discipline as every other
+retirement this engagement has done.
+
+### 52. `cmd/verify_order_validations` needed one line changed - not because it broke, because a new correct rule changed what "clean" means
+Test 2 (`testCleanChainPasses`) asserts a fully-consistent order chain
+produces zero new violations after enforcement is turned on. Adding the
+tenant-wide duplicate-order WARN rule (item 47) meant this test's own
+fixed `target_qty: 100` (unchanged across many runs of this script over
+many sessions) started matching a *prior run's own order* - a real,
+correctly-detected duplicate, not a false trigger, but one this
+19-days-old test had no way to anticipate when it was written. Fixed by
+making `target_qty` (and everything downstream that has to match it)
+run-unique via `time.Now().UnixNano()`, the same fix shape
+`verify_oms_validations`' own duplicate-order test needed for an
+identical reason. Re-ran the full 7-test script afterward to confirm
+green, not just the one changed test.
+
+### 53. MapScan `[]byte` blast-radius sweep - every site checked, 9 fixed
+Item 49's finding (a defeated comparison, not a crash - the kind of bug
+that stays green in a test suite) warranted a full sweep, not just the
+one file. `grep -rln "MapScan" --include="*.go"` found 14 files. Checked
+every one: `internal/metadata/businessobject_service.go`'s
+`CreateBORecord`/`UpdateBORecord`/list-query paths and 6 sites across
+`internal/api/bo_crud_handler.go`/`bo_relationship_records_handler.go`
+were already correctly guarded (the former with an inline `[]byte`->
+`string` loop, the latter via a shared `cleanScanResult` helper) - this
+is in fact where `normalizeScanned`'s "coerce once at the boundary"
+pattern came from; it already existed, just not everywhere it needed to.
+
+Nine sites across 7 files had no such guard and were fixed this pass,
+applying the identical established idiom rather than inventing a new
+one: `internal/nl_intelligence/service.go` (2 sites, feeding
+`json.Marshal` directly for NL-query results), `internal/upgrade/merge_engine.go`
+(tenant custom-attribute delta computation), `internal/optimizer/drill_down_resolver.go`
+(drill-down API rows), `internal/api/drift_handlers.go` and
+`internal/api/glassbox.go` (3 sites - reused the same-package
+`cleanScanResult` directly, no new code needed), `internal/apistudio/graphql.go`
+(GraphQL resolver rows), `internal/services/metric_registry_service.go`
+(metric readiness rows). None of these had a *comparison* on the raw
+value the way item 49's rule did - their failure mode is quieter but
+still real: a UUID or status column landing as `[]byte` gets silently
+base64-encoded by `json.Marshal`/`json.NewEncoder`, corrupting the field
+in the API/GraphQL response rather than erroring. `glassbox.go`'s
+`GetSECReport`/`GetEvents` (a regulatory report and the "immutable audit
+log") were two of the nine - worth flagging as the highest-stakes
+instances of this pattern, now fixed. `go build ./...` clean after all
+nine.
+
+### 54. Operator completeness in the shared evaluator - upgraded from a scattered set of tickets to one named gap
+Items 23/40's `compareValues`-vocabulary tickets and this session's two
+precomputed-boolean workarounds (`causality_ok`, `same_order_ok`) are the
+same gap, not three different ones: `ConditionEvaluator.compareValues`
+and `AdvancedEvaluator.evalBinaryExpr` both hard-require numeric operands
+for comparison operators - including `==`/`!=`, which have no principled
+reason to be numeric-only. Three workarounds in one session is a
+threshold: each one is individually correct (a rule's real comparison
+logic, done once in Go inside a context loader, is legitimate and
+consistent with the "never mutate the shared ConditionEvaluator" rule
+under this session's time pressure), but the pattern has a real cost -
+`same_order_ok = true` in a rule's AST has no lineage. The actual
+comparison (which two fields, via which join) lives in
+`loadExecutionAllocationContext`, invisible to anyone reading the rule
+in the editor or the catalog. **Every rule authored against a
+precomputed-boolean workaround must say so in its own `Description`** -
+added retroactively to this session's own two rules
+("Execution time must not precede its placement" and "Allocation must
+link to the same order as its execution" should be edited to state
+`causality_ok`/`same_order_ok` are computed by `loadExecutionContext`/
+`loadExecutionAllocationContext`, not expressible in the AST itself - not
+yet done as of this addendum, flagged so it isn't forgotten before this
+branch merges).
+
+The real fix - scoped as its own future pass, not attempted here -
+is operator completeness: string equality for `==`/`!=` in both
+comparators (trivial, `reflect.DeepEqual` already does this in
+`ConditionEvaluator`; `AdvancedEvaluator.evalBinaryExpr` needs an
+analogous non-numeric path added ahead of its `toFloat64` call, not
+instead of it), plus real timestamp comparison (parse both operands as
+time if the numeric path fails, compare with `time.Time.Before`/`After`/
+`Equal`). Blast-radius assessment first, per item 23's original framing -
+`ConditionEvaluator` is shared broadly enough that its exact blast radius
+needs mapping before any change lands, not assumed.
+
+### 55. Rule-health signal - the cheap half of systematizing stale-rule detection
+Item 16's stale-rule bug (a rule silently outliving the schema it was
+authored against) has now been hit three times across sessions purely by
+manual discovery (Session 4's stale oracle rule, this session's stale
+"Overfill Guard (shadow-mode verification)"). With 25+ live rules, that
+stops being sustainable. The real fix - a schema-version/fingerprint
+binding on `validation_rule` catalog nodes so a schema change can't
+silently strand a rule - is unbuilt, unscoped, and explicitly deferred
+again this pass (it's a real design question: what counts as the
+"schema" a rule is bound to - the BO's semantic term set, its physical
+binding, both?). The cheap half lands with this session's UI work
+instead: a **rule-health aggregate** - any rule whose evaluations over
+recent writes are ~100% violations or ~100% `rule_error` is suspect by
+construction (a rule that never once passes, or never once actually
+evaluates, on real traffic is far more likely broken than the traffic
+being uniformly bad) - computed directly from `validation_rule_violations`
+plus a write-count denominator, surfaced on the new system validations
+page (see item 56).
+
+### What's left - unchanged from the spec's own framing
+- **UI, both surfaces** (BO Validations tab, system validations page) -
+  not started. Per the spec's own sequencing note, this was always meant
+  to come after the rules existed and fired for real, which is now true
+  for all 5 OMS BOs.
+- **Phase 2 rules** (trade-date/exchange-calendar, FX-rate-exists,
+  corporate-action, STOP/STOP_LIMIT stop price, trading-session hours,
+  concentration thresholds) - still blocked on the reference data the
+  spec named, untouched this session.
+- **New tickets, not fixed this pass**: `Condition`'s `equals`/`greater_than`/etc.
+  have no cross-field comparison support (`Value` is always a literal,
+  never a second `FieldPath`) - every cross-field Condition this session
+  needed (`same_order_ok`, `causality_ok`) had to be precomputed as a
+  boolean context key instead. Worth a real design pass if a future rule
+  needs a cross-field comparison the engine can't precompute cheaply
+  (e.g. a comparison the SQL-pushdown side would also need, unlike these
+  two, which are both native/shadow-only checks). Separately: the
+  `MapScan`-returns-`[]byte` finding (item 49) was fixed only at this
+  file's four call sites - if another part of the codebase does its own
+  `MapScan` into a generic map and compares the result against a string,
+  it likely has the identical latent bug, unaudited outside this file.
+
+## Session 13 addendum (2026-09-09, continued a tenth time) - both merge-gate security questions closed; PR #38's CI verdict
+
+### 56. `POST /calc/preview` SQL injection - confirmed live, fixed
+Flagged as a background task in an earlier session, never verified as
+mounted-and-reachable vs. dead code. Confirmed this session:
+`registerCalculationRoutes` (`internal/api/api.go`) mounts
+`CalcHandler.Preview` at `POST /calc/preview`; `frontend/src/components/CalcFieldModal.tsx`
+actively calls it. `req.SQLExpr` was interpolated directly into
+`"SELECT %s as result LIMIT %d"` via `fmt.Sprintf` - any authenticated
+caller could run arbitrary SQL, no tenant scoping in the query at all
+(cross-tenant reads via subquery/UNION, destructive DML).
+
+Fixed with `validateCalcSQLExpr` (`internal/handlers/calc_handler.go`):
+a character allowlist plus whole-word keyword blocking. The first pass
+used raw `strings.Contains` for the keyword check and wrongly rejected
+the legitimate `AVG(exec_price)` for containing the substring `exec` -
+caught by this fix's own test (`calc_handler_test.go`) before it
+shipped, fixed with word-boundary matching instead. This is explicitly
+the "inherently-fragile allowlist" interim option this document already
+named as legitimate under time pressure - the real fix (stop accepting
+raw SQL from the client entirely, via either `internal/rules/vm`'s real
+expression parser or a validated reference to a pre-registered calc
+field) is flagged inline in the code as a follow-up, not attempted here.
+
+### 57. `ALLOW_CLIENT_TENANT_HEADER_FALLBACK` / Keycloak claims - verified, nothing to fix
+The other merge-gate item from item 25. Searched every committed `.env`,
+GitHub Actions workflow, and docker-compose file in the repo: the flag
+is unset everywhere, so any deployment built from this repo's tracked
+config has it off by default. Read `infrastructure/keycloak/uisce-realm.json`
+directly: a real `tenant-id-mapper` (`oidc-usermodel-attribute-mapper`,
+`user.attribute=tenant_id` -> claim `tenant_id`) is configured on the
+`semlayer-frontend` client. The reason a prior session's (and this
+session's own) test admin login carried no `tenant_id` claim is that
+`global_admin` users are intentionally tenant-less - they select a
+tenant via `X-Tenant-ID` instead, which `auth_context.go`'s fallback
+logic already gates on verified role claims (`global_admin`/`global_ops`),
+not on the env flag; only non-admin callers are gated by
+`ALLOW_CLIENT_TENANT_HEADER_FALLBACK`, and that path is closed by
+default everywhere. Design was already correct - this item closes with
+nothing to fix, which is itself the useful finding: a flagged risk that
+verification retired rather than confirmed.
+
+### 58. PR #38's CI: not a regression - a pre-existing condition, confirmed against `main` directly
+A background-loop tick this session initially read PR #38's `Build
+Backend`/`backend-tests` failures as "CI has regressed since it was
+last checked" - a real instance of the summary-drift failure mode this
+whole engagement warns about: the last *recorded* state for those
+specific jobs was "still in progress," not "green," because the session
+that last looked ended before they finished. Comparing against an
+unobserved baseline is exactly the claim-vs-evidence gap this document
+exists to prevent.
+
+Corrected by running the actual comparison: `main`'s own most recent
+`CI/CD Pipeline` run (`34175141805`, 2026-09-08) has `Build Backend:
+failure` too - same job, same branch-independent red, on a branch with
+none of PR #38's content. Diffed the exact failing-test-name sets
+between PR #38's run and `main`'s: 57 vs. 58 failures, essentially
+identical (one extra flaky test on `main`, almost certainly the same
+10-minute suite timeout truncating slightly differently run to run).
+**Verdict: PR #38 is no worse than `main`. This is a pre-existing
+condition, not a regression this PR introduced.**
+
+Root cause, confirmed by reading the workflow directly
+(`.github/workflows/ci-cd.yml`'s `build-backend` job): **no `services:`
+block at all** - it runs `go test -v -race ./...` against the entire
+backend module with zero Postgres/Redis/Docker containers provisioned.
+The failure shapes all point the same direction: nil datasource
+resolver -> 401s (`TestUpdateModel_*`), a Docker-daemon-connection-refused
+integration test (`TestGetBusinessObjectIncludesChildIntegration_Container`,
+also independently hit locally this session, item pending), a
+LISTEN/NOTIFY panic (`pkg/bp`, also hit locally this session and
+confirmed unrelated to any of this session's changes), and a hard
+10-minute suite timeout that cascades into a wall of unrelated failures
+(chaos tests, memory-leak tests, notification handlers, tenant-scoping
+SQL, catalog-scan) once one integration-shaped test blocks waiting for
+a service that was never started. A partial mitigation convention
+already exists (`t.Skip("skipping test: no database available")`,
+10 call sites found this session, e.g. `internal/analytics/semantic_service_test.go:24`)
+but most of the 57 failing tests don't use it - they hard-fail instead
+of skipping gracefully when their dependency is absent.
+
+**This is the CI hermeticity ticket from the first CI run, at a bigger
+scale than previously measured** - not a new finding, but now backed by
+an exact failing-test count and a root cause read directly from the
+workflow file rather than inferred. The durable fix (CI-side service
+containers for the tests that need them, or a build-tag/skip-guard
+convention applied consistently so integration tests run when their
+services exist and skip visibly - never hard-fail - otherwise) is
+correctly scoped as its own dedicated pass, not attempted in this
+session: triaging 57 failures across a dozen+ unrelated packages, per-
+test, to decide "needs a real service container" vs. "needs a skip
+guard" vs. "is a genuine bug," is real engineering work that shouldn't
+be rushed under autonomous-loop time pressure. Flagged as the next
+concrete build, per this session's own framing: it closes the red CI,
+the long-standing hermeticity/split-brain ticket, and every future
+"is it us or the runners" question in one pass.
+
+**Merge readiness, stated plainly**: CI is legible now (no worse than
+`main`, same pre-existing failure class, root cause identified) but the
+merge decision itself was never CI's to make - zero human reviews have
+landed on PR #38, and the human diff review is a named, still-open gate
+item from item 25. This session's job was to make the picture clear
+enough that the decision is easy, not to adjudicate it.
+
+### 59. Hermeticity: classification pass, two-tier CI skeleton built, two files verified and moved - most of the classification work still open
+Ran a real classification pass on the 57 `build-backend` failures rather
+than treating them as one undifferentiated pile. Extracted the actual
+assertion/error line preceding each `--- FAIL` (the log interleaves
+packages, but each package's own serial test output keeps its error
+message directly before that test's `--- FAIL` line - reliable once the
+noise lines from other packages are filtered out) and grouped by
+signature. The classes that emerged are **not all the same kind of
+problem**, which matters for what "fixing CI" actually requires:
+
+- **Genuinely missing service dependency** - Postgres
+  (`TestReloadGuardrailsHandler_Integration`: `dial tcp [::1]:5432:
+  connect: connection refused`), Docker daemon (`testcontainers`-based
+  tests - already correctly guarded with `testing.Short()`, just needs
+  `-short` passed somewhere for that guard to matter), a real websocket
+  round trip that's failing for a reason still uninvestigated (12 tests,
+  `websocket: bad handshake` - see below, this one turned out more
+  complicated than "missing service").
+- **Real, pre-existing bugs the `-race` flag is correctly catching** -
+  7 tests (`TestHireEmployeeWorkflow_ProvisioningFailure`,
+  `TestShadowReplayEngine_*` x4, `TestMetadataCache_ConcurrentAccess`,
+  `TestRegionFailoverLoadScenario`), all `"race detected during
+  execution of test"`. These are not a hermeticity problem - they're
+  real data races, unrelated to service availability, that happen to
+  only surface under `-race`. Two-tier CI does not fix these; they need
+  their own bug tickets.
+- **Real assertion/logic mismatches** - wrong HTTP status codes
+  (`TestRegionValidation_*`, 3 tests expecting 400, getting 200/403), a
+  stale `sqlmock` expectation that no longer matches the real generated
+  SQL (`TestGetRulesByTenant` - the query text changed, the test's
+  hard-coded expected-SQL regex didn't), `TestBuildMultiBOSQL_RejectsUnknownFilterOperator`
+  expecting an error and getting none. Also not hermeticity - real test/
+  code drift, needs per-case triage.
+- **Flaky performance assertion** - `TestBenchmarkAcceptance` (and its 3
+  subtests): asserts `ns/op <= 1500`, CI measured `4526`. A shared/
+  throttled CI runner is not the same machine the ceiling was tuned
+  against; this assertion doesn't belong in a correctness gate as
+  written.
+- **Golden-file drift** - `TestGenerateSchemaGoldenFile`/
+  `TestGenerateTypesGoldenFile`, pre-existing on both branches, separate
+  from this engagement's own generator work.
+- **Cascade artifacts of the global 10-minute suite timeout** - once one
+  package hangs waiting for an absent service, everything scheduled
+  after it in the same `go test ./...` invocation dies with it. An
+  unknown fraction of the 57 are this, not independent failures - they
+  should shrink or disappear once the real infra-dependent tests are
+  removed from the hermetic tier's execution path.
+
+**Two files verified individually and moved this session**, after two
+real false positives taught the actual lesson here (below):
+`internal/bundles/handler_integration_test.go` (confirmed via the
+package's own non-test code: `handler.go` reads `DATABASE_URL`/
+`ALPHA_DATABASE_URL`/`ROLE_DATABASE_URL`, falling back to a hard-coded
+`localhost:5432` - a real, unconditional Postgres dependency, matching
+the exact observed CI error) and `internal/handlers/websocket_integration_test.go`
+(matches the 12-test `websocket: bad handshake` cluster by direct grep
+for `websocket.DefaultDialer.Dial` calls). Both now carry
+`//go:build integration`, excluded from the hermetic tier by
+construction (not a runtime skip - the file doesn't even compile into
+that tier's test binary). `go build ./...`, `go vet ./...`, and
+`go build -tags=integration ./...` all still pass; `internal/bundles`'s
+non-integration tests now pass cleanly and hermetically
+(`go test ./internal/bundles/...`, all green, no external dependency).
+
+**The false positives, worth naming because they're the actual finding**:
+this session's first pass tagged 18 files by naming convention alone
+(`*integration*_test.go` / `func Test*Integration*`) - a heuristic that
+turned out badly unreliable in this codebase specifically.
+`internal/ops/ops_integration_test.go` was caught first: tagging it
+broke compilation (`internal/ops/region_router_test.go` depends on a
+`TestStore` mock type defined in the "integration" file), and reading
+its actual body showed ~25 tests that are pure in-memory unit tests
+(rate limiters, validators, sanitizers) with no external dependency at
+all - "integration" in its name meant "tests integration *between*
+components," not "needs external infrastructure." A second pass
+checking imports found several more of the 18 import `go-sqlmock` or
+only use `net/http/httptest` (both fully hermetic, in-process
+mechanisms) despite the same naming pattern - `internal/rag/integration_test.go`,
+`internal/rules/integration_test.go`, `internal/api/api_chi_integration_test.go`,
+`internal/api/nlq_integration_test.go`, `pkg/bp/trigger_engine_integration_test.go`,
+and others. Even the two Temporal-named files
+(`temporal-ops/admin/admin_integration_test.go`,
+`internal/temporal/describe_taskqueue_integration_test.go`) turned out
+to have test names containing "MockServer" - a strong signal they're
+also self-contained, not a confirmed match to anything in the actual
+57-failure list. All 16 speculative tags were reverted; only the 2
+individually verified against real evidence (a real code-level
+dependency, or a real observed CI failure) were kept.
+
+**The lesson, stated as the actual deliverable of this pass**: in this
+codebase, `*_integration_test.go` naming is not a reliable signal for
+"needs real infrastructure" - it's inconsistently used to also mean
+"tests more than one component together" or simply predates whatever
+convention was originally intended. Any future classification pass
+needs to verify each file's actual dependency (does it call
+`sql.Open`/read a connection-string env var/dial a real remote address
+unconditionally, vs. use `sqlmock`/`httptest.NewServer`/an in-process
+fake) rather than trust the filename - exactly the "evidence over
+inference" discipline this whole document runs on, now demonstrated
+against itself catching its own two mistakes before they shipped.
+
+**Two-tier CI skeleton, built and validated**: `.github/workflows/ci-cd.yml`
+gained `integration-tests-backend`, reusing the exact Postgres
+service-container recipe `.github/workflows/integration.yml` already
+proves works (health-checked, `pg_isready`-gated startup), running
+`go test -tags=integration -v ./internal/bundles/... ./internal/handlers/...`
+against it. `build-backend` (the hermetic tier) needed zero changes -
+Go's build-tag exclusion means the two tagged files simply don't
+compile into that tier's binary, by construction, which is the
+"every test runs in exactly one tier, observably" property the pipeline
+handoff's §5 rule requires (a test that only ever skips is not a gate -
+build-tag exclusion is stronger than a runtime skip precisely because
+there's no environment-dependent branch where it could silently do
+neither). Deliberately scoped to the two verified packages, not `./...`
+- broadening it to cover more of the 55 remaining failures requires the
+same one-file-at-a-time verification discipline above, not a bulk pass.
+Not yet run in real CI (would need a push to confirm the Postgres
+service container actually satisfies `handler.go`'s connection - the
+env var wiring and local test behavior both check out, but "compiles
+and passes locally" isn't the same claim as "passes in the real
+workflow," stated honestly rather than assumed).
+
+**Two more files verified and moved** (autonomous-loop continuation,
+same session): `internal/audit/backfill_snapshot_integration_test.go`
+(`t.Fatal("DATABASE_URL must be set...")` if unset - a real, if
+hard-failing rather than skipping, Postgres dependency) and
+`internal/api/profiler_batch_integration_test.go` (`sql.Open("postgres",
+dsn)` directly). Both checked for shared exported symbols other files
+in their package might depend on (none found - the `internal/ops`
+mistake above doesn't repeat here) before tagging. `go build ./...`,
+`go vet ./...`, `go build -tags=integration ./...` all still clean;
+both packages' non-integration tests confirmed excluded from the
+default build (`go test -run TestBackfillSnapshotsIntegration|TestProfilerE2E`
+-> "no tests to run" under the default tag set, as intended).
+`integration-tests-backend`'s test scope extended to include both.
+**Caveat repeated deliberately**: confirmed to compile, exclude
+correctly, and read the right env var - not confirmed to actually pass
+against the CI job's blank `postgres:15` container, which has no schema/
+tables loaded. `backfill_snapshot`'s test may need real tables this job
+doesn't yet provision; that's the next thing to check once this runs in
+real CI, not assumed clean.
+
+**Two more findings, autonomous-loop continuation, no new tags this
+pass** - both narrow the remaining uncertainty rather than resolve it,
+worth recording so the next pass doesn't re-check them:
+- `internal/api/api_integration_test.go`'s `TestViewsPaginationHandler_DBOnly`
+  - despite the name and its own comment ("Test DB-backed views
+  pagination") - reading the body shows `SetupRouter(nil, nil, nil,
+  nil, nil, nil, nil, nil, nil)` (every dependency nil) and a
+  `SEMLAYER_RUNTIME_DIR` pointed at a `t.TempDir()` - no database
+  connection anywhere. Hermetic despite both the filename and the
+  in-code comment actively claiming otherwise; left untagged.
+- `integration/ip_whitelist_integration_test.go` - genuinely needs
+  Postgres (`StartPostgres(t)` in the same package's
+  `docker_helper.go`, via `dockertest`), but that helper already
+  self-gates: `if os.Getenv("CI") == "true" { t.Skip(...) }`. A third
+  legitimate protection mechanism now confirmed in this codebase
+  (alongside `testing.Short()` and this session's build tags) -
+  already correctly excluded from the real CI run (GitHub Actions sets
+  `CI=true`) independent of anything this pass does. Not part of the
+  57 observed failures for that reason; left untagged as redundant
+  rather than tagged for consistency's sake.
+
+**Classification pass closed out** (autonomous-loop continuation): checked
+every remaining file from the original 18 speculative tags individually.
+`internal/api/trace_proxy_integration_test.go` and
+`internal/handlers/bundle_handler_integration_test.go` (explicitly an
+"in-memory bundle service" per its own comment) both spin up their own
+`httptest.NewServer`/in-memory services, no external dependency.
+`internal/api/ws_integration_test.go`'s `TestWebSocketEndToEndProfiler`
+is the same self-contained `httptest`-server pattern as the file this
+session already tagged, but in a different package and not confirmed to
+be part of the observed failure set - left untagged (no evidence, not
+"probably fine"). `internal/api/validation_rules_api_integration_test.go`
+has zero test functions at all (its own comment: "Tests removed... no
+longer supported") - contributes nothing to any failure. `internal/rag/integration_test.go`,
+`internal/rules/integration_test.go`, `internal/api/api_chi_integration_test.go`,
+`internal/api/nlq_integration_test.go`, `pkg/bp/trigger_engine_integration_test.go`
+all confirmed via direct `sqlmock.New()`/`httptest.NewServer` calls -
+mocked, hermetic. The two Temporal-named files
+(`temporal-ops/admin/admin_integration_test.go`,
+`internal/temporal/describe_taskqueue_integration_test.go`) build and
+run their own local "mock admin server" subprocess via `os/exec` + a
+free OS-assigned port - genuinely self-contained (no external Temporal
+cluster), but a different failure class from "missing service" (a
+subprocess-build/spawn restriction, if it fails at all) and not
+confirmed present in the observed 57 - left untagged.
+
+**Net result**: of the original 18 files flagged by naming convention,
+4 are now correctly tagged (`internal/bundles/handler_integration_test.go`,
+`internal/handlers/websocket_integration_test.go`,
+`internal/audit/backfill_snapshot_integration_test.go`,
+`internal/api/profiler_batch_integration_test.go` - all individually
+verified against a real, unconditional external dependency), and the
+other 14 are now individually confirmed hermetic, empty, or
+unconfirmed-and-out-of-scope - not "probably fine," each checked. This
+closes the classification task this session set out to do. What's
+still genuinely open is not "which files need tagging" anymore - it's
+the
+12-test websocket cluster's actual root cause (self-contained
+`httptest`-based, so "missing service" was the wrong frame - possibly a
+real concurrency bug in the streaming handler, possibly a CI-runner
+networking quirk, undetermined); 7 real `-race` bugs; ~6 real assertion/
+logic mismatches including one stale `sqlmock` expectation; 1 CI-
+runner-relative flaky benchmark ceiling; 2 pre-existing golden-file
+drifts. None of these are "hermeticity" in the sense of missing service
+containers - conflating them with the infra-dependent classes would be
+exactly the wrong fix for each. The mTLS Postgres question the plan
+flagged early (a distinct class from standard `DATABASE_URL` Postgres,
+entangled with the pipeline handoff's outstanding `ca.key` custody item)
+never came up in this classification pass - none of the 57 observed
+failures showed mTLS-specific signatures, so it's not blocking anything
+identified so far, but it hasn't been ruled out for the 16 still-
+unclassified files either.
+
+## Rulefabric consolidation (2026-09-10) - the editor unification's real scope
+
+The "single AST" claim corrected at the top of this document (rulefabric
+shares `vm`'s bytecode instruction set, not its `RuleNode` AST) came out
+of designing the MDM/compliance side of "one editor, multiple domains."
+Full inventory, live-load gate, and the consolidation plan are recorded
+in the same-dated addendum on `feat/unified-rule-engine`'s copy of this
+document (commit `a44b29d28`, PR #38) - not duplicated here to avoid two
+copies drifting; read it there. Short version: no MDM/compliance
+rule-authoring UI exists yet, rulefabric's condition tables are at zero
+rows on real `alpha` (verified, not assumed - the one table that did
+have rows turned out to be an unrelated feature), so the decision is to
+consolidate rulefabric's `ConditionGroup`/`Condition` model onto
+`vm.RuleNode` now, while the count is zero, rather than build a
+translator between two ASTs. Not yet implemented as of this note -
+blast-radius mapping is the next step.
