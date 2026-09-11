@@ -219,32 +219,45 @@ func (ae *AdvancedEvaluator) evalFieldRef(fr *FieldRef, data map[string]interfac
 
 func (ae *AdvancedEvaluator) evalDottedFieldRef(path string, data map[string]interface{}) (any, error) {
 	segments := strings.Split(path, ".")
-	if arr, ok := data[segments[0]].([]any); ok {
-		parentArrayLen := len(arr)
-		// Empty collection: no rows to traverse, no field can be missing.
-		// SUM over zero items is 0. Return empty slice immediately so
-		// ResolveFieldPathArray (which returns nil,false when traversing
-		// an empty array) doesn't produce a false !pathResolved error.
-		if parentArrayLen == 0 {
-			return []any{}, nil
+	// loadOrderContext produces []map[string]interface{}; unit test data
+	// (from JSON) produces []any. Both satisfy []interface{} but the type
+	// assertion must match the concrete type.
+	var arrSlice []interface{}
+	switch v := data[segments[0]].(type) {
+	case []map[string]interface{}:
+		for _, m := range v {
+			arrSlice = append(arrSlice, m)
 		}
-		vals, pathResolved := ae.baseEvaluator.hierarchyResolver.ResolveFieldPathArray(data, path)
-		if !pathResolved {
+	case []any:
+		arrSlice = v
+	default:
+		// Not a collection: fall through to scalar GetFieldValue path.
+		val, found := ae.baseEvaluator.GetFieldValue(path, data)
+		if !found {
 			return nil, fmt.Errorf("field not found: %s", path)
 		}
-		if len(vals) < parentArrayLen {
-			return nil, fmt.Errorf("field not found in one or more rows: %s (got values for %d of %d rows)", path, len(vals), parentArrayLen)
+		if ae.baseEvaluator.hierarchyResolver.isArray(val) {
+			return nil, fmt.Errorf("collection %q used outside an aggregate function — did you mean SUM(%s.<field>)?", segments[0], segments[0])
 		}
-		return vals, nil
+		return val, nil
 	}
-	val, found := ae.baseEvaluator.GetFieldValue(path, data)
-	if !found {
+
+	parentArrayLen := len(arrSlice)
+	// Empty collection: no rows to traverse, no field can be missing.
+	// SUM over zero items is 0. Return empty slice immediately so
+	// ResolveFieldPathArray (which returns nil,false when traversing
+	// an empty array) doesn't produce a false !pathResolved error.
+	if parentArrayLen == 0 {
+		return []any{}, nil
+	}
+	vals, pathResolved := ae.baseEvaluator.hierarchyResolver.ResolveFieldPathArray(data, path)
+	if !pathResolved {
 		return nil, fmt.Errorf("field not found: %s", path)
 	}
-	if ae.baseEvaluator.hierarchyResolver.isArray(val) {
-		return nil, fmt.Errorf("collection %q used outside an aggregate function — did you mean SUM(%s.<field>)?", segments[0], segments[0])
+	if len(vals) < parentArrayLen {
+		return nil, fmt.Errorf("field not found in one or more rows: %s (got values for %d of %d rows)", path, len(vals), parentArrayLen)
 	}
-	return val, nil
+	return vals, nil
 }
 
 // Function implementations (SUM/AVG/.../MIRR/format predicates) live in
