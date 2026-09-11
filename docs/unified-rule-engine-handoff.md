@@ -2473,6 +2473,8 @@ five packages, not just the policy evaluator:
 | `internal/boresolver/expression_builder.go:7,213` | CEL `*cel.Env` — wealth-eligibility variable schema |
 | `pkg/policy/cel_eval.go:16` | `cel.Env` — standalone policy evaluator |
 
+> **Live CEL audit moved.** The five-package audit in this table is a pre-rescope snapshot. The live audit — including two dead-bridge findings (`internal/boresolver`, `internal/genui`), the three-package live topology, and the RDL spin-out — lives in `docs/cel-retirement-handoff.md` §1. This table is preserved for historical continuity.
+
 `internal/rules/engine.go` using cel-go alongside `vm` bytecode is the most
 surprising entry — worth investigating as a potential dead-code or convergence
 opportunity (the `vm` engine and the CEL engine may be doing the same work
