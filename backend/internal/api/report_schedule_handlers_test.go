@@ -27,7 +27,7 @@ func setupScheduleTestRouter(t *testing.T) (*sql.DB, sqlmock.Sqlmock, *chi.Mux) 
 	t.Cleanup(func() { db.Close() })
 
 	service := reports.NewReportService(db)
-	executor := reports.NewDefaultReportExecutor(db)
+	executor := reports.NewTestInProcessExecutor(db)
 	handler := httpapi.NewReportHandler(service, executor, db)
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
@@ -325,7 +325,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		// Mock execution insert via DefaultReportExecutor
+		// Mock execution insert via InProcessSyncExecutor
 		mock.ExpectQuery(`INSERT INTO public\.report_executions`).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "status", "output_url", "coalesce"}).
 				AddRow(uuid.New(), "synthetic", "s3://reports/snapshot.pdf", templateOwner))

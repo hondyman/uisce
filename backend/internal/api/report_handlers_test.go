@@ -830,8 +830,8 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 			false, ownerID,
 		)
 
-		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
-			WithArgs(execID, tenantID, ownerID).
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, tenantID, ownerID, false).
 			WillReturnRows(execRows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
@@ -883,8 +883,8 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		)
 
 		// Matched on e.triggered_by = $3
-		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
-			WithArgs(execID, callerTenant, triggerUser).
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, callerTenant, triggerUser, false).
 			WillReturnRows(execRows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
@@ -922,8 +922,8 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		intruderUser := "intruder-user"
 
 		// Query returns sql.ErrNoRows due to predicate mismatch
-		mock.ExpectQuery(`SELECT e\.id, e\.tenant_id, e\.template_id, e\.report_key, e\.status, e\.parameters.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\)`).
-			WithArgs(execID, intruderTenant, intruderUser).
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, intruderTenant, intruderUser, false).
 			WillReturnError(sql.ErrNoRows)
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
@@ -939,6 +939,141 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
 		assert.Contains(t, w.Body.String(), "Execution not found")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Personal template execution invisible to tenant-mate (404)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		otherUserID := "tenant-mate-user"
+
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, tenantID, otherUserID, false).
+			WillReturnError(sql.ErrNoRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    otherUserID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Contains(t, w.Body.String(), "Execution not found")
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Personal template execution visible to owner (200 OK)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		ownerID := "template-owner"
+
+		execRows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+			"metadata", "created_at", "completed_at",
+			"is_personal", "created_by_id",
+		}).AddRow(
+			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
+			nil, "wf-personal", "run-p", ownerID, ownerID,
+			[]byte(`{}`), time.Now(), time.Now(),
+			true, ownerID,
+		)
+
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, tenantID, ownerID, false).
+			WillReturnRows(execRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    ownerID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, execID.String(), res["id"])
+		assert.Equal(t, "completed", res["status"])
+		assert.Equal(t, true, res["is_personal"])
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("GetExecution - Personal template execution visible to admin (200 OK)", func(t *testing.T) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
+
+		service := reports.NewReportService(db)
+		handler := httpapi.NewReportHandler(service, nil, db)
+		r := chi.NewRouter()
+		handler.RegisterRoutes(r)
+
+		ownerID := "template-owner"
+		adminUserID := "tenant-admin"
+
+		execRows := sqlmock.NewRows([]string{
+			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+			"metadata", "created_at", "completed_at",
+			"is_personal", "created_by_id",
+		}).AddRow(
+			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
+			nil, "wf-personal", "run-p", ownerID, ownerID,
+			[]byte(`{}`), time.Now(), time.Now(),
+			true, ownerID,
+		)
+
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t ON t\.id = e\.template_id WHERE e\.id = \$1 AND \(e\.tenant_id = \$2 OR e\.triggered_by = \$3\) AND \(\s*t\.is_personal = false`).
+			WithArgs(execID, tenantID, adminUserID, true).
+			WillReturnRows(execRows)
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/executions/"+execID.String(), nil)
+		auth := security.AuthInfo{
+			UserID:    adminUserID,
+			TenantIDs: []string{tenantID.String()},
+			Roles:     []string{"admin"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		var res map[string]interface{}
+		err = json.NewDecoder(w.Body).Decode(&res)
+		require.NoError(t, err)
+		assert.Equal(t, execID.String(), res["id"])
+		assert.Equal(t, "completed", res["status"])
+		assert.Equal(t, true, res["is_personal"])
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
