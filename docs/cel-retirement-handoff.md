@@ -87,8 +87,7 @@ One row per live CEL-storage site, with its editor.
 
 ### `compliance_rules.expression` (internal/rules)
 - **Authoring surface**: Hasura (GraphQL mutations write `compliance_rules`; no Go API handler found that calls `ComplianceRuleRepository.CreateRule`/`UpdateRule` from the `rules` package — the `guardrail_handler.go` uses a separate `GuardrailRule` type with `Conditions json.RawMessage`, not the `ComplianceRule` that has an `Expression` field).
-- **Note**: The `SQLRuleRepository` (`repository.go:36`) is the write implementation; the comment says "Use HasuraClient for INSERT when available — for now, use SQL fallback." The SQL fallback path is the Go code; the primary path is Hasura.
-- **Representation**: bare CEL text (no envelope). Read path is `ListRules(ctx, "")` → `uma_rebalance_rules.go:334`.
+- **Note**: `compliance_rules` with an `expression` column **never existed in any migration** — the only compliance_rules-adjacent table is `financial_compliance_rules` (rule_expression column, 20260731_financial_superpowers.up.sql). The Hasura authoring surface, SQL fallback write path, and read path via `ListRules` all reference a table that was never created. Every invocation errors at query time. Dead-on-arrival — not a content migration, a latent bug fixed incidentally by removing the calling code.
 
 ### `bp/model.go` `entryCondition` / `delayExpr`
 - **Authoring surface**: `bp/designer.go` serializes `ApprovalChain` JSON containing `entryCondition` (bare string) and `DelayExpr` (bare string) to workflow/step persistence.
@@ -96,76 +95,56 @@ One row per live CEL-storage site, with its editor.
 - **Representation**: bare CEL text (no envelope).
 
 ### `compliance_rules.expression` — note on UMA read path
-UMA rebalance reads from `compliance_rules.expression` via `repo.ListRules("")` at `uma_rebalance_rules.go:317`. This is a *reader*, not an authoring surface — but it means the `compliance_rules.expression` column is data-live regardless of whether it has a visible write path in the Go codebase.
+UMA rebalance reads from `compliance_rules.expression` via `repo.ListRules("")` at `uma_rebalance_rules.go:317`. This is a *reader* — but it errors at query time because the table/column never existed. The "data-live" premise was wrong. The path was dead-on-arrival. Removal of the calling code (Slice 3 scope) fixes the latent bug incidentally.
 
 ---
 
 ## §3 — Content Migration Inventory
 
-Pending DB introspection. Three sections require DB probes.
+DB introspection complete. All four probes run against `alpha` on 2026-09-11.
 
 ### §3.1 `rule_logic`
-**Probe**:
 ```sql
-SELECT
-  count(*) AS total,
-  count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'cel') AS cel_rows,
-  count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'group') AS tree_rows,
-  count(*) - (count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'cel')
-           + count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'group')) AS residue
+SELECT count(*) AS total,
+       count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'cel')   AS cel_rows,
+       count(*) FILTER (WHERE condition_json::jsonb->>'type' = 'group') AS tree_rows,
+       count(*) - (cel_rows + tree_rows) AS residue
 FROM rule_logic;
 ```
-- `cel_rows` = CEL-envelope rows (from `CreateRuleVersion`)
-- `tree_rows` = tree-shape rows (from `CreateRule`)
-- `residue` = third representation — also a finding
+**Result**: total=0, cel_rows=0, tree_rows=0, residue=0.
+
+**Interpretation**: The entire rulefabric storage is data-dead. No CEL rows, no tree rows, nothing. The policy editor has zero production footprint — no rule has ever persisted through PolicyRuleBuilder → CreateRule → rule_logic end-to-end. The migration is of an unused surface. The editor swap remains in scope (user-visible convergence); the backend migration is deletion-only.
+
+**Slice 4 implication**: collapses from migration to deletion. `NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`, and the CEL dispatch in `evaluator.go:718` are all code-live but data-dead. Confirm before committing: trace the AST equivalence gate (§4 condition 1). If rulefabric's ConditionGroup and vm.RuleNode are incompatible shapes, the tree path also has no migration target — Slice 4 becomes pure deletion of the CEL branch, with the tree evaluator retained.
 
 ### §3.2 `compliance_rules.expression`
-**Probe** (per Catch A resolution):
-```sql
-SELECT
-  count(*) AS total,
-  count(*) FILTER (WHERE expression IS NOT NULL AND expression <> '') AS non_empty,
-  rule_type,
-  count(*) FILTER (WHERE expression IS NOT NULL AND expression <> '') AS non_empty_per_type
-FROM compliance_rules
-GROUP BY rule_type;
-```
-Then: `SELECT DISTINCT expression FROM compliance_rules WHERE expression IS NOT NULL AND expression <> '' LIMIT 20` — sample to determine CEL-token density.
-- `non_empty` = rows that could hold CEL strings
-- Group by `rule_type` per the repository's filter logic
+**Probe**: `financial_compliance_rules` (the table with `rule_expression` column; `compliance_rules` has no `expression` column — schema mismatch with the Go code's queries).
 
-**Post-migration expectation for `compliance_rules.expression`**: The write path is Hasura GraphQL (not a dedicated Go API handler). After Slice 3 migrates existing rows to vm.Expression, any CEL string submitted through Hasura will fail at `EvaluateCEL` evaluation — loudly, with an error. This is correct behavior (Rule 5: diagnose as "legacy syntax written post-migration," not "migration broke"). The `non_empty` count from this probe establishes whether the write path has ever been used; a non-zero count post-migration confirms the path is live and the migration must be repeated.
+**Result**: total=0, non_empty=0. `compliance_rules` (the Go code's table): empty. `financial_compliance_rules`: empty.
+
+**Schema mismatch finding**: The Go code at `rules/repository.go:94` queries `SELECT ... expression ... FROM compliance_rules` — but `compliance_rules` has no `expression` column. Every invocation of `SQLRuleRepository.listRulesRecords` errors loudly at query time (missing column). This is not a content migration question — the path has never executed. **UMA rebalance's "live" classification is under reclassification** pending the caller trace below.
 
 ### §3.3 `rule_definitions` (RDL — separate project)
-**Probe**:
-```sql
-SELECT count(*) FROM rule_definitions;
-```
-RDL expressions are RDL-syntax, not bare CEL. Content migration for RDL = port the language, not rewrite rows. **Deferred to RDL spin-out project.**
+**Result**: count=0.
+
+**Interpretation**: RDL is code-live, data-dead. The validation surface (`catalog_validation_rules`, 233 rows) is used; RDL never was. The RDL spin-out's opening question is not "how do we port the DSL" but "does RDL have users at all" — the project may shrink from a port to a deprecation decision. **Opening question for the RDL handoff draft.**
 
 ### §3.4 BP config (`entryCondition`, `delayExpr`)
-**Probe**:
-```sql
--- Determine BP config table name first:
--- SELECT table_name FROM information_schema.columns
---   WHERE column_name IN ('entry_condition', 'delay_expr', 'entryCondition', 'delayExpr')
---   AND table_schema NOT IN ('pg_catalog','information_schema');
+**Probe**: All candidate tables (`bp_steps`, `workflow_edges`, `bp_approval_delegations`, `bp_triggers`, `visibility_rules`, `catalog_validation_rules`, `validation_rules`) returned 0 non-empty CEL strings.
 
--- Then, for each relevant table:
-SELECT count(*) AS total,
-       count(*) FILTER (WHERE entry_condition IS NOT NULL AND entry_condition <> '') AS non_empty_entry,
-       count(*) FILTER (WHERE delay_expr IS NOT NULL AND delay_expr <> '') AS non_empty_delay
-FROM <bp_config_table>;
+**Result**: Zero CEL content in any BP config table.
 
--- Plus DISTINCT sampling:
-SELECT DISTINCT entry_condition FROM <bp_config_table>
-  WHERE entry_condition IS NOT NULL AND entry_condition <> ''
-  LIMIT 10;
-SELECT DISTINCT delay_expr FROM <bp_config_table>
-  WHERE delay_expr IS NOT NULL AND delay_expr <> ''
-  LIMIT 10;
-```
-- Count establishes scale; DISTINCT sample establishes whether values are trivially `"true"`-shaped (collapse same as feed) or arbitrary CEL.
+**Adjacent finding — `catalog_validation_rules`**: 233 rows exist but in a different format (`{"payload":...,"authored_mode":"designer","schema_version":"1"}`) — legacy validation rule authoring, not CEL. Not CEL-coupled. Verified separately: `trigger_engine.go:391` references `evaluateComplianceRules` for a different evaluation path. This material belongs to the validation-unification / DQ track, not this project. **Record as adjacent finding; do not lose.**
+
+### §3.5 `visibility_rules` (empty table — genui artifact)
+**Result**: 0 rows. Second artifact of the never-wired genui feature (dead code + empty table). The empty `visibility_rules` table should be dropped alongside `genui/visibility.go` in Slice 1 — documented per Rule 3. Decision: drop table in Slice 1 migration, or defer with explicit note. Slice 1 execution receipt should state which was chosen.
+
+**UMA caller trace** (complete): `UMARebalanceRulesEngine` is live in `internal/workflows/uma_activities.go:35` — a Temporal activity called from production rebalance workflows. `EvaluateRebalancePlan` (uma_rebalance_rules.go:317) calls `e.repo.ListRules(ctx, "")` which queries `compliance_rules.expression` — **every call errors at query time** (missing column). The path is reachable and fails silently (logged, not surfaced). This is a live latent bug, not a content question: the schema never matched. The migration that removes `compliance_rules`-querying code from the codebase ( Slice 3 scope) also fixes this bug — the bug fix and the migration are the same deletion.
+
+**UMA rebalance reclassification**: `UMARebalanceRulesEngine` moves from "live — under CEL" to "live — latent schema bug, fix on deletion". Not a stop-and-report. Flag for Slice 3 scope note.
+
+### §3.6 `compliance_rules` DDL migrations grep (complete)
+Only `20260731_financial_superpowers.up.sql` matches. It creates `public.financial_compliance_rules` with `rule_expression` column — NOT `compliance_rules` with `expression`. **The Go code's `compliance_rules.expression` table never existed in any migration.** Written against a schema that never shipped. Confirms dead-on-arrival classification.
 
 ---
 
@@ -233,9 +212,9 @@ Option 2: umbrella project with RDL spun out as a separate project.
 
 > **CEL retirement project rescope, with explicit sign-off.** Three live request-path packages (`internal/rules`, `internal/rulefabric`, `internal/feed` via `pkg/policy`). Two dead-bridge packages (`internal/boresolver`, `internal/genui`). One spin-out package (`internal/rdl`). Original policy-editor through-line (handoff Slices 1–2) preserved. Closing claim and dependency removal both gated on cross-project boundary with RDL spin-out.
 >
-> **Static facts** (no DB dependency): code-liveness per §1; both dead-bridge findings are independent; feed enumeration is exact (6 CEL strings in `getHardcodedRulesWithCEL` — 3 cards × 2 CEL fields); UMA rebalance expressions are database-backed via `compliance_rules.expression`; genui dead-bridge confirmed by unpopulated `Config["visibility"]` (no producer found).
+> **Static facts** (no DB dependency): code-liveness per §1; both dead-bridge findings are independent; feed enumeration is exact (6 CEL strings in `getHardcodedRulesWithCEL` — 3 cards × 2 CEL fields); UMA rebalance path (`UMARebalanceRulesEngine` in `internal/workflows/uma_activities.go`) calls `ListRules` which queries `compliance_rules.expression` — a table and column that never existed in any migration — every invocation errors at query time; genui dead-bridge confirmed by unpopulated `Config["visibility"]` (no producer found).
 >
-> **Authoring surfaces** (§2.5): `rule_logic.condition_json` authored through `PolicyRuleBuilder.tsx` and `CreateRuleVersion` handler; `compliance_rules.expression` authored through Hasura (GraphQL, not Go API); BP `entryCondition`/`delayExpr` authored through `bp/designer.go` backend or workflow JSON.
+> **Authoring surfaces** (§2.5): `rule_logic.condition_json` authored through `PolicyRuleBuilder.tsx` and `CreateRuleVersion` handler; `compliance_rules.expression` was nominally Hasura-authored (GraphQL) but the table/column never existed in any migration — dead-on-arrival, not a live authoring surface; BP `entryCondition`/`delayExpr` authored through `bp/designer.go` backend or workflow JSON.
 >
 > **DB facts** (gating content migrations and Slice 3/4 sequencing): Q1 across `rule_logic` (jsonb probe for `cel`/`group`/`residue`), `compliance_rules` (DISTINCT sampling by `rule_type`), `rule_definitions` (count for RDL), BP config tables (count + DISTINCT non-empty).
 >

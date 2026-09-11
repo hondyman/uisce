@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS visibility_rules;
