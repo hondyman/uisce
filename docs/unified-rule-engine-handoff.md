@@ -1350,6 +1350,23 @@ consolidation; it's flagged because a third rule engine existing at all
 is worth someone deciding what to do with, later, deliberately, not
 folded into this migration's scope by surprise.
 
+**Ordering constraint this creates, for whoever eventually deletes
+rulefabric's `ConditionGroup`/`Condition` compiler entirely** (the
+"types last" step in this migration's own stated caution -
+`vm.OpCode` imports stay until rulefabric's own compiler is gone):
+`OperatorRegistry` cannot go with it. `ValidationRuleEngineImpl` has a
+live, behavioral dependency on it for comparison semantics
+(`equals`/`greater_than`/etc.), so **decouple
+`validation_rule_engine.go`'s operator lookups from
+`rulefabric.OperatorRegistry` before `OperatorRegistry` can be
+deleted** - either give `ValidationRuleEngineImpl` its own copy of the
+terse-operator-name table, or point it at `internal/rules/vm`'s own
+operator vocabulary (`condition_evaluator.go`'s `equals`/`not_equals`/
+`greater_than`/`less_than`/`greater_equal`/`less_equal` set) instead.
+Discovering this the hard way - `go build` failing mid-retirement
+because a supposedly-dead type still has a real caller - is exactly
+what recording it now avoids.
+
 **Scope actually touched, precisely:**
 - `internal/models/validation_rule_types.go`: additive `Domain` field on
   `ValidationRuleProperties`/`UpsertValidationRuleRequest`/
