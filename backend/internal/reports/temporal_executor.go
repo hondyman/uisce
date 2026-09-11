@@ -20,6 +20,20 @@ import (
 // DefaultTaskQueue is the analytics worker queue where ReportGenerationWorkflow is registered.
 const DefaultTaskQueue = "analytics-worker"
 
+// DispatchError represents a workflow dispatch failure and preserves the execution row ID.
+type DispatchError struct {
+	ExecutionID uuid.UUID
+	Err         error
+}
+
+func (e *DispatchError) Error() string {
+	return fmt.Sprintf("temporal dispatch error for execution %s: %v", e.ExecutionID, e.Err)
+}
+
+func (e *DispatchError) Unwrap() error {
+	return e.Err
+}
+
 // TemporalReportExecutor implements ReportExecutor by dispatching ReportGenerationWorkflow
 // on a live Temporal cluster.
 //
@@ -159,7 +173,7 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 	if e.temporalClient == nil {
 		// Fail loud when Temporal is unconfigured or unavailable
 		e.markExecutionFailed(ctx, tmpl.TenantID.String(), execID, "Temporal client is nil / unavailable")
-		return nil, errors.New("temporal service unavailable")
+		return nil, &DispatchError{ExecutionID: execID, Err: errors.New("temporal service unavailable")}
 	}
 
 	run, err := e.temporalClient.ExecuteWorkflow(ctx, workflowOptions, workflows.ReportGenerationWorkflow, workflowParams)
@@ -168,7 +182,7 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		errMsg := fmt.Sprintf("temporal workflow dispatch failed: %v", err)
 		log.Printf("[ERROR] %s (execution_id=%s)", errMsg, execID)
 		e.markExecutionFailed(ctx, tmpl.TenantID.String(), execID, errMsg)
-		return nil, fmt.Errorf("workflow dispatch error: %w", err)
+		return nil, &DispatchError{ExecutionID: execID, Err: fmt.Errorf("workflow dispatch error: %w", err)}
 	}
 
 	runID := run.GetRunID()

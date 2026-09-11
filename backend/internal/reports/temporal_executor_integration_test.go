@@ -170,20 +170,26 @@ func TestTemporalExecutor_dispatchFailure(t *testing.T) {
 	require.Error(t, err, "Dispatch MUST fail loud when Temporal service is unavailable")
 	require.Nil(t, res)
 
-	// Query DB to verify that no row is stuck in 'pending'
-	var failedCount int
+	// Assert error is a typed DispatchError preserving the execution ID
+	var dispatchErr *reports.DispatchError
+	require.True(t, errors.As(err, &dispatchErr), "Error should be a *reports.DispatchError")
+	require.NotEqual(t, uuid.Nil, dispatchErr.ExecutionID)
+
+	// Query DB using the exact execution ID to verify it failed and error is populated
+	var status string
 	var errMsg sql.NullString
 	err = db.QueryRow(`
-		SELECT count(*), max(error_message)
+		SELECT status, error_message
 		FROM public.report_executions
-		WHERE template_id = $1 AND requested_by = $2 AND status = 'failed'
-	`, templateID, ownerID).Scan(&failedCount, &errMsg)
+		WHERE id = $1 AND tenant_id = $2
+	`, dispatchErr.ExecutionID, templateTenantID).Scan(&status, &errMsg)
 	require.NoError(t, err)
-	require.Greater(t, failedCount, 0, "Execution row must be explicitly marked as 'failed'")
+	require.Equal(t, "failed", status, "Execution row must be explicitly marked as 'failed'")
 	require.True(t, errMsg.Valid && errMsg.String != "")
+	require.Contains(t, errMsg.String, "Temporal client is nil")
 
-	// Clean up
-	_, _ = db.Exec("DELETE FROM public.report_executions WHERE template_id = $1 AND requested_by = $2", templateID, ownerID)
+	// Exact cleanup by ExecutionID
+	_, _ = db.Exec("DELETE FROM public.report_executions WHERE id = $1", dispatchErr.ExecutionID)
 }
 
 // TestTemporalExecutor_emptyViewsDegenerate ensures templates with zero semantic views complete properly.
@@ -346,25 +352,21 @@ func TestTemporalExecutor_visibilityGuards(t *testing.T) {
 		_, _ = db.Exec("DELETE FROM public.report_executions WHERE id = $1", exec1ID)
 	}()
 
-	// Visibility Query Shape (with the guarded non-leak predicate)
+	// Visibility Query Shape:
+	// Clean, un-redundant predicate: an execution is visible if and only if it belongs to
+	// the caller's tenant OR the caller personally triggered it (attributable cross-tenant run).
+	// Template-level access authorization is enforced upstream at schedule/trigger time.
 	visibilitySQL := `
 		SELECT e.id
 		FROM public.report_executions e
-		JOIN public.report_templates t ON t.id = e.template_id
 		WHERE (
 			e.tenant_id = $1
 			OR e.triggered_by = $2
-			OR (
-				t.tenant_id IN ($1, $3)
-				AND t.is_active = true
-				AND t.is_personal = false
-				AND (e.tenant_id = $1 OR e.triggered_by = $2)
-			)
 		)
 	`
 
 	// 1. User A (tenant A) checks executions: MUST see exec1ID via triggered_by
-	rowsA, err := db.Query(visibilitySQL, tenantA, userA, goldCopyTenantID)
+	rowsA, err := db.Query(visibilitySQL, tenantA, userA)
 	require.NoError(t, err)
 	var seenA []uuid.UUID
 	for rowsA.Next() {
@@ -376,7 +378,7 @@ func TestTemporalExecutor_visibilityGuards(t *testing.T) {
 	require.Contains(t, seenA, exec1ID, "User A MUST see their own execution of gold-copy template")
 
 	// 2. User B (tenant B) checks executions: MUST NOT see User A's execution
-	rowsB, err := db.Query(visibilitySQL, tenantB, userB, goldCopyTenantID)
+	rowsB, err := db.Query(visibilitySQL, tenantB, userB)
 	require.NoError(t, err)
 	var seenB []uuid.UUID
 	for rowsB.Next() {
