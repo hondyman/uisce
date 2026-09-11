@@ -1,6 +1,7 @@
 package workflows_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -191,7 +192,7 @@ func TestReportGenerationWorkflow_StorageFailureFails(t *testing.T) {
 		Return(activities.ArtifactResult{Engine: "temporal_workflow", CompletedAt: time.Now()}, nil)
 	// Simulate storage failure
 	env.OnActivity(reportActs.StoreExecutionResultActivity, mock.Anything, mock.Anything, mock.Anything).
-		Return(mock.AnythingOfType("*errors.errorString"))
+		Return(errors.New("simulated storage failure"))
 
 	env.ExecuteWorkflow(workflows.ReportGenerationWorkflow, params)
 

@@ -213,7 +213,8 @@ Every turn and checkpoint summary MUST contain a dedicated section:
   `UISCE_TEST_DB=1 DATABASE_URL="postgres://postgres@100.84.50.65:5432/alpha?sslmode=verify-full&sslcert=/Users/eganpj/.uisce/certs/postgres-client.crt&sslkey=/Users/eganpj/.uisce/certs/postgres-client.key&sslrootcert=/Users/eganpj/.uisce/certs/ca.crt"`
 
 ### 3. Git Operations & Destructive Actions
-- NEVER execute destructive git commands (`git checkout --`, `git reset`, `git stash`) without explicit, upfront user confirmation.
+- NEVER execute destructive git commands (`git checkout --`, `git reset`, `git stash`, `git clean`) without explicit, upfront user confirmation.
+- NEVER execute interactive rebase (`git rebase -i`), history rewriting, or force pushes on pushed or shared branches without explicit, upfront user confirmation. All branch synchronization must be transparent and non-destructive.
 - Keep commits atomic and isolated: UI/UX changes, bugfixes, and test infrastructure must be committed separately with accurate descriptions.
 
 ### 4. Test Attribution & Accuracy
