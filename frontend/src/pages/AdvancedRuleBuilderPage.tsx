@@ -171,6 +171,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
   const [severity, setSeverity] = useState('BLOCK');
   const [timing, setTiming] = useState('pre_write');
   const [category, setCategory] = useState('');
+  const [domain, setDomain] = useState('validation');
   const [saving, setSaving] = useState(false);
   const [saveResult, setSaveResult] = useState<{ id?: string; error?: string } | null>(null);
 
@@ -324,6 +325,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
           severity,
           timing,
           category,
+          domain,
           rule_ast: { type: 'expression', root: ast.root },
         }),
       });
@@ -561,6 +563,14 @@ const AdvancedRuleBuilderPage: React.FC = () => {
             <Select labelId="timing-label" label="Timing" value={timing} onChange={(e) => setTiming(e.target.value)}>
               <MenuItem value="pre_write">pre_write</MenuItem>
               <MenuItem value="reconcile">reconcile</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel id="domain-label">Domain</InputLabel>
+            <Select labelId="domain-label" label="Domain" value={domain} onChange={(e) => setDomain(e.target.value)}>
+              <MenuItem value="validation">validation</MenuItem>
+              <MenuItem value="mdm">mdm</MenuItem>
+              <MenuItem value="compliance">compliance</MenuItem>
             </Select>
           </FormControl>
           <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} disabled={mode === 'expression'} />
