@@ -27,13 +27,14 @@ interface AslMonacoMetadata {
   functions?: AslFunctionMeta[];
 }
 
-// A field this expression's data context can resolve - the BO's real
-// physical fields today (see AdvancedRuleBuilderPage's `fields` state,
-// sourced from GET /validation-rule-nodes/bo-fields), and any dotted
-// related-entity field a future cross-entity binding adds. `entity` is
-// the identifier that precedes the dot for a dotted field (e.g. "client"
-// in "client.risk_score") - present only for fields that are reached
-// that way; a flat field like "ExecQuantity" has none.
+// A semantic term this expression's data context can resolve — sourced from
+// GET /validation-rule-nodes/bo-fields (ListSemanticFields), which returns
+// the BO's semantic term names (business_object_fields.field_name,
+// e.g. "TargetQuantity") paired with their currently-bound physical
+// column's data type. These are the vocabulary a rule should be authored
+// against, since they're portable across physical binding changes. `entity`
+// is the identifier preceding the dot for a dotted field (e.g. "client"
+// in "client.risk_score"); absent for flat fields like "ExecQuantity".
 export interface AslFieldMeta {
   name: string;
   type: string;
@@ -160,12 +161,12 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
       };
 
       const toFieldItem = (f: AslFieldMeta): Monaco.languages.CompletionItem => ({
-        label: f.name,
+        label: { label: f.name, description: f.type },
         kind: monaco.languages.CompletionItemKind.Field,
-        detail: f.type,
+        detail: 'semantic term',
         documentation: f.description
-          ? { value: `**${f.name}**  \`${f.type}\`\n\n${f.description}` }
-          : { value: `**${f.name}**  \`${f.type}\`` },
+          ? { value: `**${f.name}**  \`${f.type}\`  semantic term\n\n${f.description}` }
+          : { value: `**${f.name}**  \`${f.type}\`  semantic term` },
         insertText: f.name,
         sortText: '0_' + f.name,
         range,
