@@ -40,6 +40,7 @@ export interface FieldDefinition {
   nullable?: boolean;
   entity?: string; // For cross-entity fields
   path?: string;   // Full path for nested fields
+  cardinality?: string; // e.g. "array" for collection keys like "OrderAllocations"
 }
 
 export interface EntityDefinition {

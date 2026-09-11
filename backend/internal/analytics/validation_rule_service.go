@@ -270,8 +270,10 @@ func (s *ValidationRuleService) Evaluate(ctx context.Context, id uuid.UUID, data
 // different physical column for it, the way one authored against
 // "target_qty" directly would not.
 type PhysicalField struct {
-	Name     string `json:"name" db:"field_name"`
-	DataType string `json:"dataType" db:"data_type"`
+	Name        string `json:"name" db:"field_name"`
+	DataType    string `json:"dataType" db:"data_type"`
+	Cardinality string `json:"cardinality,omitempty" db:"cardinality"`
+	Entity      string `json:"entity,omitempty" db:"entity"`
 }
 
 // ListSemanticFields returns the semantic terms a BO exposes for rule
@@ -298,7 +300,27 @@ func (s *ValidationRuleService) ListSemanticFields(ctx context.Context, tenantID
 	if err != nil {
 		return nil, fmt.Errorf("failed to list semantic fields for BO %q: %w", boName, err)
 	}
+	// Append collection keys from the loader registry — relation-scoped terms
+	// like "OrderAllocations" that the evaluator resolves via ResolveFieldPathArray.
+	// Registry-first: these must match exactly what loadOrderContext delivers,
+	// so the editor offers only what the evaluator can resolve.
+	fields = appendCollectionFields(boName, fields)
 	return fields, nil
+}
+
+// appendCollectionFields adds relation-scoped collection keys for BOs that
+// have them in their loader context. Each entry is a PhysicalField with
+// Cardinality="array" — the autocomplete renders these with an array badge.
+func appendCollectionFields(boName string, fields []PhysicalField) []PhysicalField {
+	collectionKeys := map[string][]PhysicalField{
+		"order": {
+			{Name: "OrderAllocations", DataType: "object", Cardinality: "array", Entity: ""},
+		},
+	}
+	if keys, ok := collectionKeys[boName]; ok {
+		fields = append(fields, keys...)
+	}
+	return fields
 }
 
 // ResolveSemanticFieldMap returns {semantic term -> currently-bound

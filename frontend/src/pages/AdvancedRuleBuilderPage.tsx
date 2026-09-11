@@ -95,7 +95,7 @@ const INITIAL_RULE: ConditionGroup = {
   ],
 };
 
-const SAMPLE_CONTEXT = { total: 150, status: 'pending', is_gift: false };
+const SAMPLE_CONTEXT = { total: 150, status: 'pending', is_gift: false, OrderAllocations: [{ target_qty: 30 }, { target_qty: 70 }], TargetQuantity: 100 };
 
 // Postgres data_type -> the editor's field-type vocabulary.
 function toFieldType(dataType: string): FieldDefinition['type'] {
@@ -208,7 +208,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
     if (!selectedBOKey) return;
     setLoadingFields(true);
     try {
-      const fieldsRes = await apiClient<{ fields: { name: string; dataType: string }[] }>(
+      const fieldsRes = await apiClient<{ fields: { name: string; dataType: string; cardinality?: string }[] }>(
         `/validation-rule-nodes/bo-fields?bo_name=${encodeURIComponent(selectedBOKey)}`
       );
       setFields(
@@ -216,6 +216,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
           name: f.name,
           label: f.name,
           type: toFieldType(f.dataType || ''),
+          cardinality: f.cardinality,
         }))
       );
       const rulesRes = await apiClient<{ validationRules: SavedRule[] }>(
@@ -244,7 +245,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
   // "no dotted fields offered yet for this BO," not a limitation of the
   // completion provider itself).
   useEffect(() => {
-    setAslFields(fields.map((f) => ({ name: f.name, type: f.type, entity: f.entity, description: f.description })));
+    setAslFields(fields.map((f) => ({ name: f.name, type: f.type, entity: f.entity, description: f.description, cardinality: f.cardinality })));
   }, [fields]);
 
   // Live syntax checking: reparse on every edit (debounced) and render
