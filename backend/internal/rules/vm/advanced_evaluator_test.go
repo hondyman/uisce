@@ -295,6 +295,21 @@ func TestAdvancedEvaluator_CollectionAggregation(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, got, "parent.quantity > 0 should pass for parent={quantity: 100}")
 	})
+
+	t.Run("empty collection evaluates to 0 — SUM over zero rows is 0, not an error", func(t *testing.T) {
+		// An order with no allocations yet: OrderAllocations = [].
+		// SUM(OrderAllocations.target_qty) = 0, and 0 != TargetQuantity(100)
+		// should produce a violation — not a rule error.
+		node := parseRuleNode(t, sumRule)
+		data := map[string]any{
+			"OrderAllocations": []any{},
+			"TargetQuantity":    100.0,
+		}
+		got, err := evaluator.Evaluate(node, data)
+		require.NoError(t, err)
+		assert.False(t, got, "empty collection should evaluate: SUM([]) = 0, and 0 != 100 is a correct violation")
+	})
+
 }
 
 func parseRuleNode(t *testing.T, nodeMap map[string]any) RuleNode {

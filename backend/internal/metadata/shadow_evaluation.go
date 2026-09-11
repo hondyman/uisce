@@ -545,6 +545,30 @@ func (s *BusinessObjectService) loadOrderContext(ctx context.Context, exec dbExe
 		data["allocation_target_qty_sum"] = sum
 	}
 
+	// OrderAllocations: deliver the allocation rows as a collection so
+	// SUM(OrderAllocations.target_qty) resolves via ResolveFieldPathArray.
+	// Each row's values pass through normalizeRow so numeric columns (NUMERIC
+	// via lib/pq → []byte → coerceNumeric → float64) land as float64 in
+	// the evaluation context, matching what requireFloatSlice expects.
+	// Always delivered: an empty array when there are no allocations.
+	var normalized []map[string]interface{}
+	allocRows, err := exec.QueryxContext(ctx,
+		`SELECT target_qty, allocated_qty, status, created_at
+		 FROM orm.order_allocation
+		 WHERE order_id = $1
+		 ORDER BY created_at ASC`, orderID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("order rule context: failed to load OrderAllocations: %v", err)
+	} else {
+		for allocRows.Next() {
+			row := make(map[string]interface{})
+			_ = allocRows.MapScan(row)
+			normalized = append(normalized, normalizeRow(row))
+		}
+		allocRows.Close()
+	}
+	data["OrderAllocations"] = normalized
+
 	// placement_routed_sum: SUM(routed_qty) across every placement under
 	// this order, including this write - the over-placement guard's
 	// context (mirrors Execution's sibling_qty_sum convention).
@@ -729,6 +753,14 @@ func normalizeScanned(v interface{}) interface{} {
 		return coerceNumeric(string(b))
 	}
 	return coerceNumeric(v)
+}
+
+func normalizeRow(m map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = normalizeScanned(v)
+	}
+	return out
 }
 
 // parseTimestamp handles the two shapes a timestamptz value reaches this

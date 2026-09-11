@@ -221,11 +221,18 @@ func (ae *AdvancedEvaluator) evalDottedFieldRef(path string, data map[string]int
 	segments := strings.Split(path, ".")
 	if arr, ok := data[segments[0]].([]any); ok {
 		parentArrayLen := len(arr)
-		vals, ok := ae.baseEvaluator.hierarchyResolver.ResolveFieldPathArray(data, path)
-		if !ok || len(vals) == 0 {
+		// Empty collection: no rows to traverse, no field can be missing.
+		// SUM over zero items is 0. Return empty slice immediately so
+		// ResolveFieldPathArray (which returns nil,false when traversing
+		// an empty array) doesn't produce a false !pathResolved error.
+		if parentArrayLen == 0 {
+			return []any{}, nil
+		}
+		vals, pathResolved := ae.baseEvaluator.hierarchyResolver.ResolveFieldPathArray(data, path)
+		if !pathResolved {
 			return nil, fmt.Errorf("field not found: %s", path)
 		}
-		if len(vals) != parentArrayLen {
+		if len(vals) < parentArrayLen {
 			return nil, fmt.Errorf("field not found in one or more rows: %s (got values for %d of %d rows)", path, len(vals), parentArrayLen)
 		}
 		return vals, nil
