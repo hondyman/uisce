@@ -13,8 +13,12 @@ api-gateway/api-gateway
 api-gateway/api-gateway-bin
 api-gateway/server
 backend/app./cmd/server
+backend/bin/
 backend/cmd/*/main
 backend/e2e_amqp
+backend/migrate
+backend/server
+backend/worker
 backend/rule-engine-service
 backend/semantic-rules-api
 backend/semantic-rules-api/semantic-rules-api
@@ -24,9 +28,9 @@ backend/websocket
 backend/websocket_server
 bp-backend/server
 calendar-service/bin/calendar-service
-migrate
-migration
-server
+/migrate
+/migration
+/server
 services/ai-builder/ai-builder
 services/compliance-engine/compliance-engine
 services/governance/governance
