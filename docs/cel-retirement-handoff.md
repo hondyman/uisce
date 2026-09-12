@@ -303,18 +303,23 @@ This amendment records a scope change. The signed rescope (§7) describes Slice 
 
 **Decision 2 — API retires, not vanishes**: `rulefabric.RegisterRoutes` is a live route registration in `api.go`. Deletion without route retirement leaves a 404-producing endpoint that was once functional — a silent server-side drop. Closure pattern: the route handler returns `410 Gone` with a message directing callers to the catalog-driven rule approach, per the original handoff's intake-closure principle. **Decided**: 410 or redirect, not silent deletion.
 
-**Decision 3 — Policy editor through-line**: `PolicyRuleBuilder` currently writes via the rulefabric HTTP API (`POST /api/rule-fabric/...` — one of the routes in `rulefabric.RegisterRoutes`). Those HTTP routes are closed by Decision 2 (410 Gone or redirect). The policy editor is rewired to write through the unified catalog-driven API, which calls the same internal `CreateRule` function that stores tree shape to `rule_logic.condition_json`. The storage path (tree shape → `condition_json`) is unchanged; the HTTP route is what changes. The CEL read/eval paths (`NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`) are deleted. **Decided**: HTTP route closed, editor rewired to unified surface, internal write function unchanged.
+**Decision 3 — Policy editor through-line**: `PolicyRuleBuilder` currently writes via the rulefabric HTTP API (`POST /api/rule-fabric/...` — one of the routes in `rulefabric.RegisterRoutes`). Those HTTP routes are closed by Decision 2 (410 Gone or redirect). The policy editor is rewired to write through the unified catalog-driven API.
+
+`handler.go:CreateRule` is an HTTP method (`func (h *Handler) CreateRule(...)`) that performs two DB writes: `INSERT INTO rules` and `INSERT INTO rule_logic (condition_json)`. The database schema (`rules`, `rule_logic` tables) survives deletion. The handler's DB-write logic — not the HTTP handler itself — must survive in a non-deleted package. Extraction target: `internal/services/rule_writer.go` (or similar), holding the DB-insert logic currently in `handler.go:298-338`. The unified API imports this and exposes the HTTP endpoint. The CEL read/eval paths (`NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`) are deleted. **Decided**: DB-write logic extracted, HTTP handler relocated, storage schema unchanged.
 
 **§4 condition 1 AST-equivalence gate dissolved**: The condition required deciding whether `rulefabric.ConditionGroup` and `vm.RuleNode` are convergent. If Slice 4 deletes the second AST entirely, the convergence question is moot — there is no second AST to converge. The closing claim's condition (a) resolves by deletion, not by decision. The gate is recorded as **mooted**, not deferred.
 
 **Updated Slice 4 scope**:
 1. Extract `OperatorRegistry` → `internal/rules/vm/operator_registry.go`; update `ValidationRuleEngineImpl` constructor
-2. Retire `rulefabric` routes (410 or redirect); remove `RegisterRoutes` call from `api.go`
-3. Delete `internal/rulefabric` package
-4. Delete interim CEL autocomplete from `frontend/src/rules/aslMonacoRegistry.ts` (`setCelFields`, `celFields`, `isCelContext`) and `PolicyRuleBuilder.tsx` (`setCelFields` call at line 86, `condition_expr` field)
-5. cel-go import count: 2 → 1 (RDL project sole remaining importer)
+2. Extract `CreateRule` DB-write logic → `internal/services/rule_writer.go` (DB inserts from `handler.go:298-338`); unified API imports and exposes HTTP endpoint
+3. Retire `rulefabric` routes (410 or redirect); remove `RegisterRoutes` call from `api.go`
+4. Delete `internal/rulefabric` package
+5. Delete interim CEL autocomplete from `frontend/src/rules/aslMonacoRegistry.ts` (`setCelFields`, `celFields`, `isCelContext`) and `PolicyRuleBuilder.tsx` (`setCelFields` call at line 86, `condition_expr` field)
+6. cel-go import count: 2 → 1 (RDL project sole remaining importer)
 
 **Signed**: Egan PJ  **Date**: 2026-09-11
+
+**Follow-up (this session, post-evaluation)**: Amendment E header records `2026-09-11` as the sign date (matching §7). The arc ran past that date — migration `20260915` was numbered during this work. Physical signing occurred in this session. No content change to decisions. Date recorded as-is for relative ordering; physical signing timestamp is this session's.
 
 ---
 
