@@ -1362,6 +1362,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	reportHandler := NewReportHandler(reportService, reportExecutor, db)
 	reportHandler.RegisterRoutes(r)
 
+	// Initialize admin monitoring handler (Phase 3 — dedicated app_admin_read connection)
+	adminReportHandler := NewAdminReportHandler(db, nil)
+	adminReportHandler.RegisterRoutes(r)
+
 	// Initialize report schedule & bursting handler
 	reportScheduleHandler := NewReportScheduleHandler(sqlxDB)
 	reportScheduleHandler.RegisterRoutes(r)
