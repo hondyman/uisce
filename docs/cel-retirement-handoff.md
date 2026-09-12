@@ -288,6 +288,36 @@ Current `evaluateHardcoded` returns `RankScore: 1.0` for all eligible cards. The
 
 ---
 
+### Amendment E — Slice 4 scope: deletion, not migration
+
+This amendment records a scope change. The signed rescope (§7) describes Slice 4 as removing CEL *from* a live package while preserving the package's non-CEL functionality. Deleting the entire `internal/rulefabric` package — including the tree evaluator, the rules API, and the OperatorRegistry that `ValidationRuleEngineImpl` depends on — is materially different from a CEL-extraction. The evidence chain supporting it is strong: zero rows ever written, code labels itself interim, the unified surface exists as replacement. But the scope decision requires acknowledgment, not absorption.
+
+**rulefabric importer enumeration** (confirmed before this amendment):
+
+| File | Usage |
+|------|-------|
+| `backend/internal/services/validation_rule_engine.go:101` | `operators *rulefabric.OperatorRegistry` — shared operator semantics, NOT CEL-coupled |
+| `backend/internal/api/api.go:1217` | `rulefabric.RegisterRoutes(r, sqlxDB)` — route registration |
+
+**Decision 1 — OperatorRegistry extraction is a prerequisite**: `ValidationRuleEngineImpl` holds `operators *rulefabric.OperatorRegistry`. Deleting `internal/rulefabric` before extracting `OperatorRegistry` breaks the build. Extraction target: `internal/rules/vm/operator_registry.go` — a new file in the already-trusted vm package, since `OperatorRegistry` is pure operator-evaluation logic with no CEL dependencies. `ValidationRuleEngineImpl` updated to instantiate `vm.NewOperatorRegistry()` directly. **Decided**: extract before deletion.
+
+**Decision 2 — API retires, not vanishes**: `rulefabric.RegisterRoutes` is a live route registration in `api.go`. Deletion without route retirement leaves a 404-producing endpoint that was once functional — a silent server-side drop. Closure pattern: the route handler returns `410 Gone` with a message directing callers to the catalog-driven rule approach, per the original handoff's intake-closure principle. **Decided**: 410 or redirect, not silent deletion.
+
+**Decision 3 — Policy editor through-line**: `PolicyRuleBuilder` writes to `rule_logic.condition_json` (tree shape). After rulefabric deletion, `CreateRule` (which calls the tree evaluator) remains the write path. The `CatalogNode`/`rule_ast` surface is the landing target — the five existing `GOVERNED_BY_RULE` instances are the precedent. Policy editor write path is unchanged; the CEL read path (`NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`) is what gets deleted. **Decided**: editor writes through existing `CreateRule` path, which stores tree shape; CEL read/eval paths deleted.
+
+**§4 condition 1 AST-equivalence gate dissolved**: The condition required deciding whether `rulefabric.ConditionGroup` and `vm.RuleNode` are convergent. If Slice 4 deletes the second AST entirely, the convergence question is moot — there is no second AST to converge. The closing claim's condition (a) resolves by deletion, not by decision. The gate is recorded as **mooted**, not deferred.
+
+**Updated Slice 4 scope**:
+1. Extract `OperatorRegistry` → `internal/rules/vm/operator_registry.go`; update `ValidationRuleEngineImpl` constructor
+2. Retire `rulefabric` routes (410 or redirect); remove `RegisterRoutes` call from `api.go`
+3. Delete `internal/rulefabric` package
+4. Delete interim CEL autocomplete from `frontend/src/rules/aslMonacoRegistry.ts` (`setCelFields`, `celFields`, `isCelContext`) and `PolicyRuleBuilder.tsx` (`setCelFields` call at line 86, `condition_expr` field)
+5. cel-go import count: 2 → 1 (RDL project sole remaining importer)
+
+**Signed**: Egan PJ  **Date**: 2026-09-11
+
+---
+
 ### Landing attribution
 
 CEL retirement Slices 1 & 2 reached `main` via commit `0a218e534` ("feat(reports): Phase 2 read paths — execution repository + handlers", PR #62). That merge commit was itself a mixed commit combining Phase 2 reports work with the full CEL retirement Slices 1 & 2 execution. The rank score regression (Amendment C) was not caught before merge — no tests existed for the feed engine. PR #64 fixes the regression and adds tests. Regression window on `main`: from `0a218e534` to PR #64 landing.
