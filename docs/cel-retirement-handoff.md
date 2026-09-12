@@ -429,6 +429,13 @@ That wording implied a write endpoint existed or would be created. In fact:
 
 `rule_writer.go` is committed as infrastructure held for a future write endpoint. The policy editor's HTTP call sites are retired (410 Gone). The `rules`/`rule_logic` table pair has no writer. This is a deliberate scope boundary, not a forgotten connection.
 
+**Decision fork — two named futures.** The deferral of `rule_writer.go` does not close either future; it holds the question open. Before any future session acts on either path, one of these must be chosen and recorded here:
+
+- **Fork 1 — wire to a new write endpoint:** Create `POST /api/rules` (or equivalent) that accepts `CreateRuleRequest` and calls `rule_writer.CreateRule`, writing `vm.RuleNode` format to `rules`/`rule_logic.condition_json`. The policy editor is rewired to this endpoint. The `rules`/`rule_logic` table pair becomes the active authoring surface for the policy editor domain. This path makes `rule_writer.go` live infrastructure.
+- **Fork 2 — delete and redirect to catalog-native path:** Delete `rule_writer.go` and the `rules`/`rule_logic` table pair entirely. Redirect policy editor writes to the catalog-driven `validation_rules_routes.go` path, which writes `vm.RuleNode` format to `catalog_validation_rules.rule_ast`. The `rules`/`rule_logic` table pair is dropped from the schema. This path treats the catalog-native authoring surface as the canonical design and closes the rulefabric-era tables.
+
+Neither fork is implied by the existing codebase. Both require a new surface decision. The deferral is not a shrug; it is an explicit hold on a binary choice that the current evidence does not resolve.
+
 **What the 410 Gone means for the frontend:** `PolicyRuleBuilder.tsx` calls `/api/rule-fabric/bo/${boKey}/policies` (list), `/api/rule-fabric/bo/${boKey}/policies/${policyId}` (get/update/delete), and `/api/rule-fabric/bo/${boKey}/policies/simulate`. All return 410 Gone. The `setCelFields` removal (Monaco autocomplete) is independent of the HTTP calls — both are retired. The component is not broken by the 410; it is retired by design.
 
 **Corrected ledger note:**
