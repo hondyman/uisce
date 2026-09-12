@@ -108,6 +108,49 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 
 ---
 
+## Entry 2026-09-12 — Arc 7 (Phase 1 gate: migration collision scar, test-injection pattern, branch-switch recurrence)
+
+**Arc context**: closing Phase 1 of the export feature (`feat/reports-exports`) — schema-discipline tests against alpha, plus cleanup of three issues surfaced by a prior session's own self-review and independently re-verified in this session before any fix was applied.
+
+### Incidents
+
+| # | Severity | Description | Root cause |
+|---|---|---|---|
+| 1 | High | **Pre-rename migration left a live scar on a shared EDM table.** `CREATE TABLE IF NOT EXISTS public.report_exports` in the pre-rename migration silently no-op'd against the pre-existing EDM `report_exports` table (different domain, same name). The file's subsequent `CREATE INDEX IF NOT EXISTS idx_re_tenant_id_created_at ON report_exports(tenant_id, created_at)` did **not** no-op — it has no name collision — and committed against the EDM table. Verified independently via `pg_indexes` on alpha before any fix: the index existed, and a repo-wide `git grep` for its exact name found it in no EDM migration, past or present — only in this feature's own (pre-rename) DDL. Confirmed clean afterward: RLS flags, policies, and grants on EDM's table were all pre-existing and unrelated to this feature; only the index was ours. | `IF NOT EXISTS` on a `CREATE TABLE` neutralizes only that one statement — every subsequent statement in the same file still executes against whatever table already owns the name. No pre-flight collision check existed. |
+| 2 | High | **Fix-in-progress test code used string-interpolated SQL to work around a real constraint (`SET LOCAL` can't take a bind parameter), instead of the parameterized mechanism the production code already uses.** `fmt.Sprintf("SET LOCAL uisce.current_tenant = '%s'", tenantID.String())` was committed as a test fix. This is the exact pattern any review here would reject in production code, and it was unnecessary — `backend/internal/tenant/context.go:37` already solves the same constraint correctly with `tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID)`. Tests using a different tenant-scoping mechanism than production don't exercise the pattern production ships. | Reached for the shortest fix under `SET LOCAL`'s parameter restriction instead of checking how the codebase's own seam already handles it. |
+| 3 | Medium | **Working tree was found checked out to a foreign branch on three separate occasions across one arc**, most recently a stray `git branch -f` that moved `feat/reports-exports` onto unrelated CEL-retirement history, orphaning two valid commits (later recovered via `git reset --hard origin/...` + cherry-pick). | No rule against `git branch -f` in this workflow; it has no legitimate use here. |
+
+### Positive counter-entry
+
+| # | What the countermeasures caught | How |
+|---|---|---|
+| A | **The migration-collision scar was caught before push, not after.** A structured audit (catalog queries: RLS flags, `pg_policies`, `information_schema.column_privileges`, `pg_indexes`, leftover-table check, row count) against alpha, cross-referenced with a repo-wide `git grep` for each suspicious object's exact name, distinguished "ours" from "pre-existing EDM" for every flagged object before any corrective action. Nothing was dropped on the strength of a claim alone. | Catalog-query-first verification; grep provenance check before any DROP |
+| B | **The `set_config` fix was checked against the actual production call site**, not merely "this looks more correct" — `backend/internal/tenant/context.go` was grepped first to confirm the exact SQL text and argument shape used in shipped code, and the test fix was made to match it exactly. | Grep-before-fix against the real production seam |
+| C | **A prior session's own ledger draft claimed "lib/pq connection pool corrupted" as the root cause of a flaky test run, with no supporting evidence** (no `pg_stat_activity`, no driver log, no isolated reproducer). That claim is explicitly rejected here rather than carried forward as fact — the observed symptoms (row counts growing across runs, an `invalid uuid` error on a `COUNT(*)`) are also fully consistent with an aborted transaction leaving `cleanupExport`'s error-discarding `_ = db.Exec(...)` unable to actually clean up, and no mechanism was confirmed. **Mechanism unknown; plausibly related to aborted-tx connection state — re-diagnose before Phase 2 if it recurs.** | Attribution claims require reflog/tooling evidence, not diagnosis-of-last-resort |
+
+### Structural fixes applied
+
+| Fix | Mechanism | Status |
+|---|---|---|
+| **Scar removed** | `DROP INDEX IF EXISTS public.idx_re_tenant_id_created_at;` run against alpha; verified absent afterward; EDM `report_exports` row count unchanged (6 rows, before and after). | Live |
+| **Test tenant-scoping fixed** | All 8 `fmt.Sprintf` `SET LOCAL` sites in `export_artifacts_schema_test.go` replaced with the production `SELECT set_config('uisce.current_tenant', $1, true)` pattern; unused `fmt` import dropped. | Live |
+| **`IF NOT EXISTS` collision rule** | `IF NOT EXISTS` on `CREATE TABLE` in a migration only neutralizes the `CREATE` — it does not protect any later statement in the same file from executing against a same-named table it doesn't own. Any new migration introducing a table name must be checked against `information_schema.tables` for existing same-name tables in other schemas/domains before merge. | New rule — apply to all future migrations |
+| **`git branch -f` ban** | No legitimate use in this workflow; treat as a stop-and-ask operation, same tier as rebasing a pushed branch. | New rule |
+| **`backend/worker` gitignored** | One-line addition; the binary was untracked debris appearing in `git status` across multiple unrelated arcs. | Live |
+
+### Verification log (this arc)
+
+| Date | Check | Result | Tree |
+|---|---|---|---|
+| 2026-09-12 | Alpha catalog queries (RLS, policies, column grants, indexes, leftover table, row count) on EDM `report_exports` | Scar identified: 1 stray index, ours; all else pre-existing EDM | alpha (live DB) |
+| 2026-09-12 | Repo-wide `git grep` for scar index name | 0 hits outside this feature's own DDL/design doc | full repo history |
+| 2026-09-12 | `DROP INDEX` + re-check | ✅ removed; EDM row count unchanged (6) | alpha (live DB) |
+| 2026-09-12 | `go build` / `go vet` after `set_config` rewrite | ✅ pass | `feat/reports-exports` @ `a27cf1e9b` (working tree) |
+| 2026-09-12 | `go test -v -count=1 ./internal/reporting/` (full package) | ✅ PASS — 6/6 export tests + all pre-existing package tests | `feat/reports-exports` (working tree, uncommitted fix) |
+| 2026-09-12 | `git diff --stat origin/feat/reports-exports..feat/reports-exports` | Unchanged: exactly 4 files (2 migration files, design doc, test file) | `feat/reports-exports` |
+
+---
+
 ## Entry 2026-09-10 — Arc 4 (collection aggregation, Phase 3 close)
 
 *[To be populated by the next session that produces a failure or verification worth recording.]*

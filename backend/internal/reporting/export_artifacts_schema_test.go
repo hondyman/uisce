@@ -3,7 +3,6 @@ package reporting_test
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"testing"
 
@@ -71,7 +70,7 @@ func setupExportArtifact(ctx context.Context, t *testing.T, db *sql.DB, tenantID
 	require.NoError(t, err, "failed to begin tx")
 	defer tx.Rollback()
 
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantID.String()))
+	_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID.String())
 	require.NoError(t, err, "failed to set tenant")
 
 	_, err = tx.ExecContext(ctx, `
@@ -113,7 +112,7 @@ func TestExportArtifacts_RLS_WITH_CHECK_rejectsWrongTenant(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+	_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 	require.NoError(t, err)
 
 	_, err = tx.ExecContext(ctx, `
@@ -126,7 +125,7 @@ func TestExportArtifacts_RLS_WITH_CHECK_rejectsWrongTenant(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+	_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 	require.NoError(t, err)
 
 	_, err = tx.ExecContext(ctx, `
@@ -156,7 +155,7 @@ func TestExportArtifactEvents_RLS_WITH_CHECK_rejectsWrongTenant(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+	_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 	require.NoError(t, err)
 
 	_, err = tx.ExecContext(ctx, `
@@ -185,7 +184,7 @@ func TestExportArtifacts_ColumnScopedUPDATE_blocksStorageKey(t *testing.T) {
 
 		_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 		require.NoError(t, err)
-		_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+		_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 		require.NoError(t, err)
 
 		_, err = tx.ExecContext(ctx, `
@@ -203,7 +202,7 @@ func TestExportArtifacts_ColumnScopedUPDATE_blocksStorageKey(t *testing.T) {
 
 		_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 		require.NoError(t, err)
-		_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+		_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 		require.NoError(t, err)
 
 		_, err = tx.ExecContext(ctx, `
@@ -288,7 +287,7 @@ func TestExportArtifacts_TTLSweeperCandidateQuery(t *testing.T) {
 		require.NoError(t, err)
 		_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 		require.NoError(t, err)
-		_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+		_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 		require.NoError(t, err)
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO export_artifact_events
@@ -353,7 +352,7 @@ func TestExportArtifactEvents_InsertOnly_noUPDATE_noDELETE(t *testing.T) {
 
 	_, err = tx.ExecContext(ctx, `SET ROLE app_user`)
 	require.NoError(t, err)
-	_, err = tx.ExecContext(ctx, fmt.Sprintf(`SET LOCAL uisce.current_tenant = '%s'`, tenantA.String()))
+	_, err = tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantA.String())
 	require.NoError(t, err)
 
 	_, err = tx.ExecContext(ctx, `

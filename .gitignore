@@ -20,6 +20,7 @@ backend/semantic-rules-api
 backend/semantic-rules-api/semantic-rules-api
 backend/temporal-worker
 backend/validation-service
+backend/worker
 backend/websocket
 backend/websocket_server
 bp-backend/server
