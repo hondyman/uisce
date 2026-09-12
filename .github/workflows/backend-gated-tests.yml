@@ -1,0 +1,238 @@
+name: Backend Gated Tests (Ephemeral DB)
+
+# Runs the UISCE_TEST_DB=1 integration suite against a fresh, ephemeral
+# Postgres 18 container on every PR touching backend/**. Until this workflow
+# existed, that suite only ran on a developer's own machine against the
+# shared dev/integration database (alpha) with mTLS certs — laptop-gated
+# discipline, not an enforced PR gate.
+#
+# Schema source: a pg_dump --schema-only snapshot of alpha
+# (backend/db/snapshots/schema-snapshot.sql), not "apply every migration
+# from scratch." That was the original design, until building this workflow
+# revealed 797 of alpha's 943 public-schema tables have no migration
+# anywhere in git history — the migrations directory is nowhere near a
+# complete source of truth, and never has been. The snapshot is the honest
+# baseline; backend/db/snapshots/migration-log-snapshot.sql (a data-only dump
+# of oms.migration_log as of the same point) tells `migrate up` which
+# migrations the snapshot already reflects, so only genuinely new migrations
+# apply on top. Both need periodic refresh from alpha as more of the schema
+# gets migrated properly or new tables get added by hand — there is no
+# automation for that refresh yet; treat staleness as expected, not a bug.
+#
+# Roles are cluster-wide in Postgres, not per-database, and the container
+# starts with none of alpha's 11 real roles. Every one except app_user and
+# app_admin_read is created here as a blank stub purely so the snapshot's
+# GRANT statements don't fail on "role does not exist" — app_user is created
+# for real (it's assumed to pre-exist by every migration that grants to it,
+# and no migration creates it) and app_admin_read is deliberately NOT
+# stubbed because its own migration (20260916_001_app_admin_read_role.up.sql)
+# creates it for real without an IF NOT EXISTS guard; stubbing it first was
+# tried and fails with "role already exists" (42710).
+#
+# Known gap: this container does not replicate alpha's full posture (mTLS,
+# pg_hba.conf, Debezium). Tests that depend on that config-level reality are
+# expected to keep skipping here — CI-green does not mean alpha-compatible
+# for those tests; it means the schema, migrations, and RLS/predicate logic
+# are self-consistent.
+#
+# Known pre-existing failure, found while dry-running this pipeline: six
+# TestTemporalExecutor_* tests in internal/reports insert into
+# report_executions with a template_id that must reference a pre-existing
+# report_templates row, but the test file never creates that row itself —
+# it has only ever run against alpha's already-populated data, never a
+# truly fresh schema. Not introduced by this workflow; flagged as a
+# follow-up rather than papered over with a guessed seed row here.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+
+jobs:
+  gated-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # pgvector/pgvector, not stock postgres — 000000_bootstrap_extensions
+        # creates the vector extension, which 4 migrations depend on
+        # (ai_semantic_cache, vendor_dictionaries_and_vector_mesh, and
+        # others). Stock postgres:18 doesn't have it compiled in; this image
+        # is built on the same postgres:18 base with pgvector added.
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_DB: alpha
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.25'
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres && break
+            sleep 1
+          done
+
+      - name: Create roles
+        # See the top-of-file comment: app_user is created for real (every
+        # migration that grants to it assumes it pre-exists); the other 8
+        # non-superuser roles alpha has are stubbed blank purely so the
+        # schema snapshot's GRANT statements resolve; app_admin_read is
+        # deliberately excluded because its own migration creates it for
+        # real.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
+            CREATE USER app_user WITH PASSWORD 'app_user_password';
+          "
+          for role in authenticated infisical keycloak nessie semlayer_lookups_replica temporal usice_app usice_ops; do
+            psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "CREATE ROLE $role;"
+          done
+
+      - name: Restore schema snapshot
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -f backend/db/snapshots/schema-snapshot.sql
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -f backend/db/snapshots/migration-log-snapshot.sql
+
+      - name: Build migrate CLI
+        working-directory: backend
+        run: go build -o bin/migrate ./cmd/migrate
+
+      - name: Apply migrations not yet covered by the snapshot
+        working-directory: backend
+        run: ./bin/migrate up
+
+      - name: Verify no drift
+        # Verified during development that this correctly surfaces
+        # pre-existing drift on alpha (three migration files whose on-disk
+        # content no longer matches what was recorded when applied) —
+        # informational for this workflow, not treated as fatal here since
+        # it wasn't introduced by the PR under test, but a real, separate
+        # finding worth fixing.
+        working-directory: backend
+        run: ./bin/migrate verify || true
+
+      - name: Seed gold-copy tenant
+        # Fixed UUID matched by backend/cmd/register_oms_preagg,
+        # verify_shadow_context, verify_second_binding, and test fixtures that
+        # assume a gold-copy tenant exists. Row values match the real
+        # gold-copy row on alpha (id, name, display_name, gold_copy).
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
+            INSERT INTO public.tenants (id, name, display_name, gold_copy)
+            VALUES ('99e99e99-99e9-49e9-89e9-99e99e99e999', 'northwind', 'Northwind Traders', true)
+            ON CONFLICT (id) DO NOTHING;
+          "
+
+      - name: Verify prerequisites
+        # Explicit, named checks so "tests skipped because a prerequisite is
+        # missing" can never be misread as "tests passed." Each check fails
+        # the job by itself with a clear message rather than falling through
+        # to confusing test-level skips.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -euo pipefail
+
+          check() {
+            local desc="$1" query="$2"
+            result=$(psql -h localhost -U postgres -d alpha -At -c "$query")
+            if ! [[ "$result" =~ ^[0-9]+$ ]] || [ "$result" -lt 1 ]; then
+              echo "PREREQUISITE FAILED: $desc (query returned: '$result')"
+              exit 1
+            fi
+            echo "OK: $desc"
+          }
+
+          check "pg_trgm extension present" \
+            "SELECT COUNT(*) FROM pg_extension WHERE extname = 'pg_trgm';"
+          check "app_user role exists" \
+            "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'app_user';"
+          check "app_admin_read role exists" \
+            "SELECT COUNT(*) FROM pg_roles WHERE rolname = 'app_admin_read';"
+          check "gold-copy tenant exists" \
+            "SELECT COUNT(*) FROM public.tenants WHERE gold_copy = true;"
+
+      - name: Run gated test suite
+        # Scoped to the packages that actually check a UISCE_TEST_DB* gate
+        # today (internal/db, internal/reports) rather than the whole backend
+        # tree. ./... includes ~220 test functions in internal/api alone,
+        # most with no DB dependency and at least one with a known
+        # pre-existing panic (see docs/FAILURES_LEDGER.md) — running the full
+        # tree here would make this new gate red on day one for reasons
+        # unrelated to migrations or the database. Widening scope is a
+        # separate, deliberate follow-up once this narrower slice is proven
+        # green, not a side effect of standing this workflow up.
+        #
+        # Two different, inconsistent gating conventions exist across these
+        # two packages: internal/reports checks UISCE_TEST_DB=1 + DATABASE_URL;
+        # internal/db checks UISCE_TEST_DB_DSN directly (a DSN string, no
+        # separate boolean). Both are set here so neither package's tests
+        # silently skip for want of the "wrong" variable name — that
+        # inconsistency itself is worth fixing in the two test files
+        # eventually, but is not this workflow's job to paper over further.
+        working-directory: backend
+        env:
+          UISCE_TEST_DB: '1'
+          UISCE_TEST_DB_DSN: postgres://postgres:postgres@localhost:5432/alpha?sslmode=disable
+        run: |
+          set -o pipefail
+          go test -v -count=1 ./internal/db/... ./internal/reports/... 2>&1 | tee /tmp/gated_test_output.log
+
+      - name: Summarize pass/fail/skip
+        if: always()
+        run: |
+          PASS=$(grep -c "^--- PASS" /tmp/gated_test_output.log || true)
+          FAIL=$(grep -c "^--- FAIL" /tmp/gated_test_output.log || true)
+          SKIP=$(grep -c "^--- SKIP" /tmp/gated_test_output.log || true)
+
+          {
+            echo "### Gated test summary"
+            echo ""
+            echo "| PASS | FAIL | SKIP |"
+            echo "|------|------|------|"
+            echo "| $PASS | $FAIL | $SKIP |"
+            echo ""
+            if [ "$SKIP" -gt 0 ]; then
+              echo "<details><summary>Skipped tests and their reasons</summary>"
+              echo ""
+              echo '```'
+              grep -B1 "^--- SKIP" /tmp/gated_test_output.log || true
+              echo '```'
+              echo "</details>"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gated-test-output
+          path: /tmp/gated_test_output.log
