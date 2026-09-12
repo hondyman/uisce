@@ -1,37 +1,19 @@
 -- Migration: Polyglot CRUD and Bi-Temporal Mapping Layer Schema
 -- Date: 2026-07-30
 -- Purpose: Extend Business Object bindings for dual OLTP CRUD (writeable) and Bi-Temporal OLAP (datalake analytical) modes.
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'binding_mode_enum') THEN
-        CREATE TYPE binding_mode_enum AS ENUM ('OLTP_CRUD', 'OLAP_READONLY', 'BI_TEMPORAL_OLAP');
-    END IF;
-END $$;
-
-CREATE TABLE IF NOT EXISTS public.business_object_bindings (
-    binding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id VARCHAR(64) NOT NULL,
-    bo_id VARCHAR(128) NOT NULL,
-    binding_name VARCHAR(100) NOT NULL,
-    binding_mode binding_mode_enum NOT NULL DEFAULT 'OLTP_CRUD',
-    datasource_id VARCHAR(128) NOT NULL,
-    physical_table_name VARCHAR(255) NOT NULL,
-    
-    -- Bi-Temporal Column Mappings (Null if binding_mode == OLTP_CRUD)
-    valid_time_start_col VARCHAR(100),       -- e.g., 'effective_from'
-    valid_time_end_col VARCHAR(100),         -- e.g., 'effective_to'
-    transaction_time_start_col VARCHAR(100), -- e.g., 'sys_start_time'
-    transaction_time_end_col VARCHAR(100),   -- e.g., 'sys_end_time'
-
-    is_primary BOOLEAN DEFAULT false,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-    
-    CONSTRAINT uk_bo_binding_name UNIQUE (tenant_id, bo_id, binding_name)
-);
-
--- Handle case where table already exists but is missing binding_mode column (e.g. from a previous partial migration run)
-ALTER TABLE public.business_object_bindings ADD COLUMN IF NOT EXISTS binding_mode binding_mode_enum NOT NULL DEFAULT 'OLTP_CRUD';
-
-CREATE INDEX IF NOT EXISTS idx_bo_bindings_lookup ON public.business_object_bindings(tenant_id, bo_id, binding_mode);
+--
+-- RETIRED 2026-09-12: this file's business_object_bindings definition (binding_id,
+-- binding_mode, physical_table_name, ...) never matches the table that actually
+-- exists in any environment. The real business_object_bindings table (id, tenant_id,
+-- bo_id, backend_id, backend_type, driving_node_id, ...) is defined in
+-- 20261002_business_object_studio_engine.up.sql, recovered from an unmerged branch
+-- (commit c9e9ac74a4) where the application code that queries this table
+-- (backend/internal/api/business_object_handlers.go, backend/internal/models/
+-- businessobjects.go, backend/internal/cbo/cbo_types.go) was already merged
+-- independently. On a fresh build, this file's earlier date prefix (20260730 <
+-- 20261002) meant it would run first and silently win the CREATE TABLE IF NOT
+-- EXISTS race, leaving the wrong schema in place — the same collision pattern
+-- documented in FAILURES_LEDGER.md Arc 7. binding_service.go still queries the
+-- old (this file's) column names and is confirmed broken against the real schema
+-- as of this date; that is a separate, pre-existing bug, not something retiring
+-- this DDL introduces.
