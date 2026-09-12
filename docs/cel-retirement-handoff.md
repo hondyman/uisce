@@ -192,7 +192,7 @@ Option 2: umbrella project with RDL spun out as a separate project.
 
 **Slices 1 and 2 are DB-independent** — land first, in either order.
 
-**Slice 3 parity harness** (complete): 10 subtests — 6 boolean entry conditions (CEL↔vm both directions), 4 pure arithmetic duration expressions (CEL↔vm both directions). One documented asymmetry: field-reference arithmetic in duration expressions (CEL fails with "no such overload" on `dyn` map; vm handles via runtime type resolution). BP authoring convention (pre-computed values) avoids the asymmetry.
+**Slice 3 parity harness** (complete): 10 named subtests — 6 boolean entry conditions, 4 pure arithmetic duration expressions. All match CEL↔vm both directions. Documented asymmetry: field-reference arithmetic in duration expressions fails CEL (dyn map, no such overload) — both engines' preserved-behavior contract excludes it; vm widens capability (see Amendment D).
 
 **Slice 4 collapses to deletion**: `rule_logic.condition_json` = 0 rows; `rulefabric` CEL code has zero production footprint. No migration work; no §4 condition 1 gate needed for deletion path.
 
@@ -252,10 +252,40 @@ Current `evaluateHardcoded` returns `RankScore: 1.0` for all eligible cards. The
 
 **Fix applied** (`cel-retire-rank-fix` branch, PR #64): `RankScoreExpr` field added to `CardRule`; `vm.AdvancedEvaluator` wired into `RuleEngine`; rank expressions evaluated via `vm.ParseExpression` + `EvaluateNumeric`. `tax_loss_harvest` rank: `(-client.Portfolio.UnrealizedLossPct) * 100.0`; `portfolio_drift` rank: `client.Portfolio.DriftPct * 100.0`. Tests verify rank values: `abs(-0.05)*100=5.0`, `abs(-0.15)*100=15.0`, `0.08*100=8.0`, `0.12*100=12.0`.
 
+### Amendment D — Slice 3 parity harness and §4 condition 2 resolved
+
+**Duration capability check result** (resolves §4 condition 2):
+- `EvaluateDurationExpr` (CEL) parity with `vm.ParseExpression` + `EvaluateNumeric` confirmed for pure arithmetic: `24 * 3600`, `(2 + 3) * 3600`, `0`, `3600 * 2` — all 4 cases match both directions.
+- **Known asymmetry**: field-reference arithmetic (e.g. `input.client.Portfolio.DelayHours * 3600`) fails CEL with "no such overload" — CEL's `dyn` map declaration prevents operator overload resolution at runtime. Critically, this is not a gap introduced by the migration: **CEL's own env cannot evaluate field-ref arithmetic**. Both engines' preserved-behavior contract excludes it. vm resolves types from runtime data and handles it correctly — a capability widening, not a parity gap.
+- **vm ⊇ CEL for this surface**: the feed rank fix proved vm handles field-ref arithmetic in numeric expressions. internal/rules' CEL env never could. Expressions that authored as field-ref arithmetic would have errored under CEL; they evaluate under vm. This is a one-way capability gain.
+- **No time-function additions required**: no `now()`, `daysSince`, or date arithmetic observed in BP authoring surface. Time-aware delays — if needed — are shared-with-RDL FunctionSpec additions, owned by this project.
+
+**Boolean entry condition parity** (resolves §4 condition 2, extended harness): `EvaluateExpr` (CEL) parity with `vm.ParseExpression` + `Evaluate` confirmed for comparison expressions — all 6 cases match both directions.
+
+**Expression-rooting convention decision**: The CEL env in `internal/rules` declares `input` as the root variable (`decls.NewVar("input", decls.NewMapType(decls.String, decls.Dyn))`); expressions must use `input.client.Portfolio.Value`. The vm path resolves bare paths (`client.Portfolio.Value`) from a flat map keyed by top-level entity name. **Convention decided: bare roots win** (`client.Portfolio.Value`). `input.` prefix dies with CEL. No translation of existing content is needed — BP config tables are empty; `rule_definitions` row count = 0. Frontend term registration must confirm bare-root convention at the editor layer; confirm before Slice 3 commit.
+
+**Slice 4 scope correction**: `rule_logic.condition_json` row count = 0; `rulefabric` CEL-coupled code has zero production footprint. Slice 4 collapses to deletion of `internal/rulefabric` package and its CEL dispatch paths — no content migration, no §4 condition 1 AST equivalence gate needed for deletion. The AST decision is documented but does not gate deletion work.
+
+**Harness completeness**: 10 named subtests — 6 boolean entry conditions, 4 pure arithmetic duration expressions. Completeness rests on: (a) authoring-surface inventory — `bp/designer.go` permits `delayExpr` as arithmetic expressions and `entryCondition`/`condition` as comparison expressions; (b) consumer read — `resolution_activities.go:151` consumes int (seconds) multiplied by `time.Second`. Time-aware expressions (`now()`, date arithmetic, `daysSince`-style) are **not covered** by this harness; if the BP designer surface permits those forms, shared-with-RDL FunctionSpec additions are required before Slice 3 commits.
+
+**Case list** (from `go test -v`):
+
+`TestEvaluateExpr_Parity_VM` — 6 subtests, all pass:
+- `client.Portfolio.Value > 100000`
+- `client.Portfolio.Value > 200000`
+- `client.Portfolio.DriftPct >= 0.05`
+- `client.Portfolio.DriftPct > 0.10`
+- `client.Portfolio.Value == 150000`
+- `client.Portfolio.Value != 150000`
+
+`TestEvaluateDurationExpr_Parity_VM` — 4 subtests, all pass:
+- `24 * 3600`
+- `(2 + 3) * 3600`
+- `0`
+- `3600 * 2`
+
 ---
 
 ### Landing attribution
 
 CEL retirement Slices 1 & 2 reached `main` via commit `0a218e534` ("feat(reports): Phase 2 read paths — execution repository + handlers", PR #62). That merge commit was itself a mixed commit combining Phase 2 reports work with the full CEL retirement Slices 1 & 2 execution. The rank score regression (Amendment C) was not caught before merge — no tests existed for the feed engine. PR #64 fixes the regression and adds tests. Regression window on `main`: from `0a218e534` to PR #64 landing.
-
-**Fix applied** (`cel-retire-rank-fix` branch, PR #64): `RankScoreExpr` field added to `CardRule`; `vm.AdvancedEvaluator` wired into `RuleEngine`; rank expressions evaluated via `vm.ParseExpression` + `EvaluateNumeric`. `tax_loss_harvest` rank: `(-client.Portfolio.UnrealizedLossPct) * 100.0`; `portfolio_drift` rank: `client.Portfolio.DriftPct * 100.0`. Tests verify rank values: `abs(-0.05)*100=5.0`, `abs(-0.15)*100=15.0`, `0.08*100=8.0`, `0.12*100=12.0`.
