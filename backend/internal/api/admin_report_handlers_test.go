@@ -17,13 +17,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type mockAuditLogger struct {
+	err error
+}
+
+func (m *mockAuditLogger) Log(ctx context.Context, tenantID, actorID, action, resourceType, resourceID string, filters map[string]interface{}) error {
+	return m.err
+}
+
 func TestAdminGetExecution_Redaction_PersonalExecution_KeysAbsent(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-	mock.MatchExpectationsInOrder(false)
 
-	handler := api.NewAdminReportHandler(db, db)
+	audit := &mockAuditLogger{}
+	handler := api.NewAdminReportHandlerWithAudit(db, db, audit)
 	execID := uuid.New()
 	tenantID := uuid.New()
 	templateID := uuid.New()
@@ -44,17 +52,8 @@ func TestAdminGetExecution_Redaction_PersonalExecution_KeysAbsent(t *testing.T) 
 	)
 
 	mock.ExpectQuery("SELECT e.id, e.tenant_id, e.template_id, e.schedule_id, e.report_key, e.status,").
-		WithArgs(sqlmock.AnyArg()).
+		WithArgs(execID).
 		WillReturnRows(rows)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SELECT set_config").
-		WithArgs(sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO public.admin_audit_logs").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
@@ -97,7 +96,8 @@ func TestAdminGetExecution_Redaction_NonPersonalExecution_KeysPresent(t *testing
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := api.NewAdminReportHandler(db, db)
+	audit := &mockAuditLogger{}
+	handler := api.NewAdminReportHandlerWithAudit(db, db, audit)
 	execID := uuid.New()
 	tenantID := uuid.New()
 	templateID := uuid.New()
@@ -118,17 +118,8 @@ func TestAdminGetExecution_Redaction_NonPersonalExecution_KeysPresent(t *testing
 	)
 
 	mock.ExpectQuery("SELECT e.id, e.tenant_id, e.template_id, e.schedule_id, e.report_key, e.status,").
-		WithArgs(sqlmock.AnyArg()).
+		WithArgs(execID).
 		WillReturnRows(rows)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SELECT set_config").
-		WithArgs(sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO public.admin_audit_logs").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
 
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
@@ -168,7 +159,8 @@ func TestAdminGetExecution_AuditWriteFails_Returns500(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := api.NewAdminReportHandler(db, db)
+	audit := &mockAuditLogger{err: context.DeadlineExceeded}
+	handler := api.NewAdminReportHandlerWithAudit(db, db, audit)
 	execID := uuid.New()
 	tenantID := uuid.New()
 	templateID := uuid.New()
@@ -188,17 +180,8 @@ func TestAdminGetExecution_AuditWriteFails_Returns500(t *testing.T) {
 	)
 
 	mock.ExpectQuery("SELECT e.id, e.tenant_id, e.template_id, e.schedule_id, e.report_key, e.status,").
-		WithArgs(sqlmock.AnyArg()).
+		WithArgs(execID).
 		WillReturnRows(rows)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SELECT set_config").
-		WithArgs(sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO public.admin_audit_logs").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnError(context.DeadlineExceeded)
-	mock.ExpectRollback()
 
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)
@@ -226,7 +209,8 @@ func TestAdminGetExecution_NotGlobalAdmin_Returns403(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := api.NewAdminReportHandler(db, db)
+	audit := &mockAuditLogger{}
+	handler := api.NewAdminReportHandlerWithAudit(db, db, audit)
 	execID := uuid.New()
 
 	r := chi.NewRouter()
@@ -252,7 +236,8 @@ func TestAdminListExecutions_Redaction_PersonalInList(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	handler := api.NewAdminReportHandler(db, db)
+	audit := &mockAuditLogger{}
+	handler := api.NewAdminReportHandlerWithAudit(db, db, audit)
 	tenantID := uuid.New()
 	templateID := uuid.New()
 	execID1 := uuid.New()
@@ -278,17 +263,8 @@ func TestAdminListExecutions_Redaction_PersonalInList(t *testing.T) {
 	)
 
 	mock.ExpectQuery("SELECT e.id, e.tenant_id, e.template_id, e.schedule_id, e.report_key, e.status,").
-		WithArgs(sqlmock.AnyArg()).
-		WillReturnRows(rows)
-
-	mock.ExpectBegin()
-	mock.ExpectExec("SELECT set_config").
-		WithArgs(sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec("INSERT INTO public.admin_audit_logs").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectCommit()
+		WillReturnRows(rows)
 
 	r := chi.NewRouter()
 	handler.RegisterRoutes(r)

@@ -21,6 +21,11 @@ type AdminReportHandler struct {
 	db            *sql.DB
 	adminDB       *sql.DB
 	adminRepo     *reports.AdminExecutionRepository
+	auditLog      AuditLogger
+}
+
+type AuditLogger interface {
+	Log(ctx context.Context, tenantID, actorID, action, resourceType, resourceID string, filters map[string]interface{}) error
 }
 
 func NewAdminReportHandler(db, adminDB *sql.DB) *AdminReportHandler {
@@ -32,7 +37,36 @@ func NewAdminReportHandler(db, adminDB *sql.DB) *AdminReportHandler {
 		db:        db,
 		adminDB:   adminDB,
 		adminRepo: repo,
+		auditLog:  &dbAuditLogger{db: db},
 	}
+}
+
+func NewAdminReportHandlerWithAudit(db, adminDB *sql.DB, audit AuditLogger) *AdminReportHandler {
+	if adminDB == nil {
+		adminDB = constructAdminDB()
+	}
+	repo := reports.NewAdminExecutionRepository(adminDB)
+	return &AdminReportHandler{
+		db:        db,
+		adminDB:   adminDB,
+		adminRepo: repo,
+		auditLog:  audit,
+	}
+}
+
+type dbAuditLogger struct {
+	db *sql.DB
+}
+
+func (l *dbAuditLogger) Log(ctx context.Context, tenantID, actorID, action, resourceType, resourceID string, filters map[string]interface{}) error {
+	return db.WithTenantTransaction(ctx, l.db, tenantID, func(tx *sql.Tx) error {
+		filtersJSON, _ := json.Marshal(filters)
+		_, err := tx.ExecContext(ctx, `
+			INSERT INTO public.admin_audit_logs (tenant_id, actor_id, action, workflow_id, input, status, created_at)
+			VALUES ($1, $2, $3, $4, $5, 'success', NOW())
+		`, tenantID, actorID, action, resourceID, filtersJSON)
+		return err
+	})
 }
 
 func constructAdminDB() *sql.DB {
@@ -88,7 +122,12 @@ func (h *AdminReportHandler) ListExecutions(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if err := h.writeAuditLog(r.Context(), userID, "monitoring.read.cross_tenant", "report_execution", "", map[string]interface{}{
+	auditTenantID := ""
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		auditTenantID = auth.TenantIDs[0]
+	}
+
+	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution", "", map[string]interface{}{
 		"tenant_id": r.URL.Query().Get("tenant_id"),
 		"status":    r.URL.Query().Get("status"),
 		"from":      r.URL.Query().Get("from"),
@@ -155,7 +194,7 @@ func (h *AdminReportHandler) ListExecutions(w http.ResponseWriter, r *http.Reque
 		if e.ScheduleID != nil {
 			item["schedule_id"] = e.ScheduleID
 		}
-		if e.OutputURL.Valid && e.OutputURL.String != "" {
+		if !e.IsPersonal && e.OutputURL.Valid && e.OutputURL.String != "" {
 			item["output_url"] = e.OutputURL.String
 		}
 		if e.OutputSizeBytes.Valid {
@@ -232,7 +271,12 @@ func (h *AdminReportHandler) GetExecution(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.writeAuditLog(r.Context(), userID, "monitoring.read.cross_tenant", "report_execution", execID.String(), nil); err != nil {
+	auditTenantID := ""
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		auditTenantID = auth.TenantIDs[0]
+	}
+
+	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution", execID.String(), nil); err != nil {
 		http.Error(w, "audit log write failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -245,7 +289,7 @@ func (h *AdminReportHandler) GetExecution(w http.ResponseWriter, r *http.Request
 	if exec.ScheduleID != nil {
 		item["schedule_id"] = exec.ScheduleID
 	}
-	if exec.OutputURL.Valid && exec.OutputURL.String != "" {
+	if !exec.IsPersonal && exec.OutputURL.Valid && exec.OutputURL.String != "" {
 		item["output_url"] = exec.OutputURL.String
 	}
 	if exec.OutputSizeBytes.Valid {
@@ -295,7 +339,12 @@ func (h *AdminReportHandler) ListEvents(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.writeAuditLog(r.Context(), userID, "monitoring.read.cross_tenant", "report_execution_event", "", map[string]interface{}{
+	auditTenantID := ""
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		auditTenantID = auth.TenantIDs[0]
+	}
+
+	if err := h.auditLog.Log(r.Context(), auditTenantID, userID, "monitoring.read.cross_tenant", "report_execution_event", "", map[string]interface{}{
 		"tenant_id": r.URL.Query().Get("tenant_id"),
 		"from":      r.URL.Query().Get("from"),
 		"to":        r.URL.Query().Get("to"),
@@ -362,22 +411,6 @@ func (h *AdminReportHandler) ListEvents(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
-}
-
-func (h *AdminReportHandler) writeAuditLog(ctx context.Context, actorID, action, resourceType, resourceID string, filters map[string]interface{}) error {
-	tenantID := ""
-	if auth, ok := security.AuthInfoFromContext(ctx); ok && len(auth.TenantIDs) > 0 {
-		tenantID = auth.TenantIDs[0]
-	}
-
-	return db.WithTenantTransaction(ctx, h.db, tenantID, func(tx *sql.Tx) error {
-		filtersJSON, _ := json.Marshal(filters)
-		_, err := tx.ExecContext(ctx, `
-			INSERT INTO public.admin_audit_logs (tenant_id, actor_id, action, workflow_id, input, status, created_at)
-			VALUES ($1, $2, $3, $4, $5, 'success', NOW())
-		`, tenantID, actorID, action, resourceID, filtersJSON)
-		return err
-	})
 }
 
 func adminHasRole(r *http.Request, role string) bool {
