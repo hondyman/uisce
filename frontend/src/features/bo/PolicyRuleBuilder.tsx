@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import type { BOField } from './BOGovernanceStudio';
-import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setCelFields } from '../../rules/aslMonacoRegistry';
+import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE } from '../../rules/aslMonacoRegistry';
 import './BOGovernanceStudio.css';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,16 +80,6 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
   const [simLoading, setSimLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Push BO fields into the CEL expression completion provider so that
-  // record.<field> suggestions appear when typing inside the Monaco editor.
-  useEffect(() => {
-    setCelFields(fields.map((f) => ({
-      name: f.key,
-      type: f.type,
-      entity: undefined,
-      description: f.display_name,
-    })));
-  }, [fields]);
   const headers = useCallback(() => ({
     'Content-Type': 'application/json',
     'X-Tenant-ID': tenantId,

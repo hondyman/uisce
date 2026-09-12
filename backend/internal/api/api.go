@@ -75,7 +75,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/rag"
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
-	"github.com/hondyman/uisce/backend/internal/rulefabric"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
@@ -1212,11 +1211,25 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	instanceCloneHandler := handlers.NewInstanceCloneHandler(sqlxDB)
 	instanceCloneHandler.RegisterRoutes(r)
 
-	// Initialize RuleFabric (rules/policies CRUD + evaluation, backs the
-	// visual ExpressionBuilder/AdvancedConditionBuilder frontend)
-	if err := rulefabric.RegisterRoutes(r, sqlxDB); err != nil {
-		log.Printf("failed to register rulefabric routes: %v", err)
-	}
+	// RuleFabric (rules/policies CRUD + evaluation, backs the
+	// visual ExpressionBuilder/AdvancedConditionBuilder frontend) is retired.
+	// All /api/rule-fabric/* routes return 410 Gone.
+	r.Route("/api/rule-fabric", func(r chi.Router) {
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeJSONError(w, http.StatusGone, "rulefabric is retired",
+					"endpoint_retired",
+					"All /api/rule-fabric/* routes are closed. New rule authoring uses the catalog-driven unified API (internal/rules/vm.RuleNode). See docs/cel-retirement-handoff.md.")
+			})
+		})
+		r.Route("/", func(r chi.Router) {
+			r.Get("/*", http.NotFoundHandler().ServeHTTP)
+			r.Post("/*", http.NotFoundHandler().ServeHTTP)
+			r.Put("/*", http.NotFoundHandler().ServeHTTP)
+			r.Patch("/*", http.NotFoundHandler().ServeHTTP)
+			r.Delete("/*", http.NotFoundHandler().ServeHTTP)
+		})
+	})
 
 	// Initialize Admin Handler
 	adminHandler := NewAdminHandler(qosManager)

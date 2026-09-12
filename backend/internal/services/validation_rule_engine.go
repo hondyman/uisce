@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/rules"
-	"github.com/hondyman/uisce/backend/internal/rulefabric"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -93,12 +93,12 @@ type ValidationRuleEngine interface {
 type ValidationRuleEngineImpl struct {
 	db       *sqlx.DB
 	resolver *rules.PathResolver
-	// operators delegates actual comparison semantics to RuleFabric's
-	// OperatorRegistry (backend/internal/rulefabric) so this engine and
+	// operators delegates actual comparison semantics to
+	// vm.OperatorRegistry (backend/internal/rules/vm) so this engine and
 	// RuleFabric's tree-based rules share one implementation of what "=",
 	// ">", "contains", etc. mean, instead of maintaining two independently
 	// bug-prone copies.
-	operators *rulefabric.OperatorRegistry
+	operators *vm.OperatorRegistry
 }
 
 // NewValidationRuleEngine creates a new rule engine
@@ -110,7 +110,7 @@ func NewValidationRuleEngine(db *sqlx.DB, instanceProvider rules.InstanceProvide
 	return &ValidationRuleEngineImpl{
 		db:        db,
 		resolver:  resolver,
-		operators: rulefabric.NewOperatorRegistry(),
+		operators: vm.NewOperatorRegistry(),
 	}
 }
 

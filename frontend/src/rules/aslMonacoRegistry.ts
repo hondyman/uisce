@@ -57,23 +57,6 @@ export function setAslFields(fields: AslFieldMeta[]): void {
   currentFields = fields;
 }
 
-// CEL expression completions (record.* / actor.* / changes.* contexts) for
-// PolicyRuleBuilder's expression editor. Same module-level pattern as
-// currentFields - the provider closure reads it at call time.
-//
-// INTERIM: This entire mechanism (setCelFields, celFields, isCelContext
-// detection, and the CEL completion branch) is transitional. CEL is the
-// execution backend for PolicyRuleBuilder today; it is not the target
-// architecture. When the CEL retirement project is executed (five-package
-// coupling audit + vm.Expression migration + cel-go removal), this whole
-// mechanism is removed. Do not extend it — extend the ASL/semantic-term
-// path (setAslFields, currentFields) instead.
-let celFields: AslFieldMeta[] = [];
-
-export function setCelFields(fields: AslFieldMeta[]): void {
-  celFields = fields;
-}
-
 // The language id every expression-mode Monaco instance in this app
 // should use - exported as a plain string constant (not returned from
 // the async registration below) so it's available synchronously for a
@@ -167,10 +150,8 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
       // Matches a trailing "<ident>." immediately before the cursor
       // (allowing the word already being typed after the dot, which
       // getWordUntilPosition below excludes from the replace range).
-      // Also handles CEL top-level variables: record.*, actor.*, changes.*
       const dotMatch = lineUpToCursor.match(/([A-Za-z_][A-Za-z0-9_]*)\.[A-Za-z0-9_]*$/);
       const entityScope = dotMatch ? dotMatch[1] : null;
-      const isCelContext = entityScope === 'record' || entityScope === 'actor' || entityScope === 'changes';
 
       const word = model.getWordUntilPosition(position);
       const range: Monaco.IRange = {
@@ -192,14 +173,13 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
         range,
       });
 
-      // For CEL contexts (record.*, actor.*, changes.*), use the CEL field
-      // list; for cross-entity contexts (client.*), use the main field
+      // For cross-entity contexts (client.*), use the main field
       // list filtered by that entity; for bare identifiers at top level
       // (unqualified by a dot), fall through to show both fields and fns.
-      const sourceFields = isCelContext ? celFields : currentFields;
-      const fieldDetail = isCelContext ? 'record field' : 'semantic term';
+      const sourceFields = currentFields;
+      const fieldDetail = 'semantic term';
       let fieldSuggestions: Monaco.languages.CompletionItem[] = sourceFields
-        .filter((f) => (entityScope && !isCelContext ? f.entity === entityScope : !f.entity))
+        .filter((f) => (entityScope ? f.entity === entityScope : !f.entity))
         .map((f) => {
           const detail = f.cardinality === 'array' ? `${fieldDetail}  []` : fieldDetail;
           return toFieldItem(f, detail);
@@ -212,7 +192,7 @@ export async function registerUisceExpressionLanguage(monaco: typeof Monaco): Pr
       // unrelated "Text" suggestion (from whatever last identifier was
       // typed) surface as the only entry, which reads as a wrong answer
       // rather than an honestly-empty one.
-      if (entityScope && !isCelContext && fieldSuggestions.length === 0) {
+      if (entityScope && fieldSuggestions.length === 0) {
         fieldSuggestions = sourceFields.map((f) => {
           const detail = f.cardinality === 'array' ? `${fieldDetail}  []` : fieldDetail;
           return toFieldItem(f, detail);
