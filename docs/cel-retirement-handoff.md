@@ -305,7 +305,9 @@ This amendment records a scope change. The signed rescope (§7) describes Slice 
 
 **Decision 3 — Policy editor through-line**: `PolicyRuleBuilder` currently writes via the rulefabric HTTP API (`POST /api/rule-fabric/...` — one of the routes in `rulefabric.RegisterRoutes`). Those HTTP routes are closed by Decision 2 (410 Gone or redirect). The policy editor is rewired to write through the unified catalog-driven API.
 
-`handler.go:CreateRule` is an HTTP method (`func (h *Handler) CreateRule(...)`) that performs two DB writes: `INSERT INTO rules` and `INSERT INTO rule_logic (condition_json)`. The database schema (`rules`, `rule_logic` tables) survives deletion. The handler's DB-write logic — not the HTTP handler itself — must survive in a non-deleted package. Extraction target: `internal/services/rule_writer.go` (or similar), holding the DB-insert logic currently in `handler.go:298-338`. The unified API imports this and exposes the HTTP endpoint. The CEL read/eval paths (`NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`) are deleted. **Decided**: DB-write logic extracted, HTTP handler relocated, storage schema unchanged.
+`handler.go:CreateRule` is an HTTP method (`func (h *Handler) CreateRule(...)`) that performs two DB writes: `INSERT INTO rules` and `INSERT INTO rule_logic (condition_json)`. The database schema (`rules`, `rule_logic` tables) survives deletion. The handler's DB-write logic — not the HTTP handler itself — must survive in a non-deleted package. Extraction target: `internal/services/rule_writer.go` (or similar), holding the DB-insert logic currently in `handler.go:298-338`. The unified API imports this and exposes the HTTP endpoint.
+
+**What `condition_json` holds after the rewire**: currently tree JSON (`{"type":"condition","field":...,"operator":...,"value":...}`). After the rewire, `rule_writer.go` writes `vm.RuleNode` format to `condition_json` — the same AST the unified engine evaluates directly. The evaluator is updated to detect `RuleNode` format and skip the CEL normalization path. Schema unchanged; representation becomes `vm.RuleNode`. The moot holds: tree JSON was never evaluated directly — it was always compiled to CEL first by `NormalizeConditionJSONToCEL`. Writing `vm.RuleNode` directly eliminates that compilation step; the second AST (tree) genuinely dies at write time. The CEL read/eval paths (`NormalizeConditionJSONToCEL`, `EvaluateCELBoolean`) are deleted. **Decided**: DB-write logic extracted, HTTP handler relocated, storage schema unchanged, representation becomes `vm.RuleNode`.
 
 **§4 condition 1 AST-equivalence gate dissolved**: The condition required deciding whether `rulefabric.ConditionGroup` and `vm.RuleNode` are convergent. If Slice 4 deletes the second AST entirely, the convergence question is moot — there is no second AST to converge. The closing claim's condition (a) resolves by deletion, not by decision. The gate is recorded as **mooted**, not deferred.
 
@@ -319,7 +321,7 @@ This amendment records a scope change. The signed rescope (§7) describes Slice 
 
 **Signed**: Egan PJ  **Date**: 2026-09-11
 
-**Follow-up (this session, post-evaluation)**: Amendment E header records `2026-09-11` as the sign date (matching §7). The arc ran past that date — migration `20260915` was numbered during this work. Physical signing occurred in this session. No content change to decisions. Date recorded as-is for relative ordering; physical signing timestamp is this session's.
+**Follow-up (2026-09-11, session closing Decision 3 fix and representation decision)**: Amendment E header records `2026-09-11` as the sign date (matching §7). The arc ran past that date — migration `20260915` was numbered during this work. Physical signing occurred in this session at commit `0a5e808859`. Date recorded as-is for relative ordering; git commit `0a5e808859` is the authoritative timestamp.
 
 ---
 
