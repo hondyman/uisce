@@ -5,6 +5,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 func smallRule(conditionID string, field string, op string, value any) *RuleNode {
@@ -630,6 +632,135 @@ func TestEngine_EvalTrace_HasTenantID(t *testing.T) {
 	_, trace, _ = eng.Evaluate(context.Background(), "tenantA", coreRule.ID(), 1, coreRule, input, false)
 	if trace.TenantID != "tenantA" {
 		t.Errorf("expected TenantID=tenantA, got %q", trace.TenantID)
+	}
+}
+
+func TestEvaluateExpr_Parity_VM(t *testing.T) {
+	eng := NewRuleEngine(nil)
+
+	boCtx := map[string]map[string]interface{}{
+		"client": {
+			"Portfolio": map[string]interface{}{
+				"Value":    150000.0,
+				"DriftPct": 0.08,
+			},
+		},
+	}
+	flatData := map[string]interface{}{
+		"client": map[string]interface{}{
+			"Portfolio": map[string]interface{}{
+				"Value":    150000.0,
+				"DriftPct": 0.08,
+			},
+		},
+	}
+
+	cases := []struct {
+		celExpr string
+		vmExpr  string
+		want    bool
+	}{
+		{"input.client.Portfolio.Value > 100000", "client.Portfolio.Value > 100000", true},
+		{"input.client.Portfolio.Value > 200000", "client.Portfolio.Value > 200000", false},
+		{"input.client.Portfolio.DriftPct >= 0.05", "client.Portfolio.DriftPct >= 0.05", true},
+		{"input.client.Portfolio.DriftPct > 0.10", "client.Portfolio.DriftPct > 0.10", false},
+		{"input.client.Portfolio.Value == 150000", "client.Portfolio.Value == 150000", true},
+		{"input.client.Portfolio.Value != 150000", "client.Portfolio.Value != 150000", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.vmExpr, func(t *testing.T) {
+			gotCEL, err := eng.EvaluateExpr(context.Background(), tc.celExpr, boCtx)
+			if err != nil {
+				t.Fatalf("EvaluateExpr(%q): %v", tc.celExpr, err)
+			}
+			if gotCEL != tc.want {
+				t.Errorf("EvaluateExpr(%q) CEL = %v, want %v", tc.celExpr, gotCEL, tc.want)
+			}
+
+			exprVM, err := vm.ParseExpression(tc.vmExpr)
+			if err != nil {
+				t.Fatalf("ParseExpression(%q): %v", tc.vmExpr, err)
+			}
+			node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: &vm.Expression{Root: exprVM.Root}}
+			gotVM, err := eng.recursive.Evaluate(node, flatData)
+			if err != nil {
+				t.Fatalf("vm.Evaluate(%q): %v", tc.vmExpr, err)
+			}
+			if gotVM != tc.want {
+				t.Errorf("vm.Evaluate(%q) = %v, want %v", tc.vmExpr, gotVM, tc.want)
+			}
+			if gotCEL != gotVM {
+				t.Errorf("parity mismatch: CEL=%v vm=%v", gotCEL, gotVM)
+			}
+		})
+	}
+}
+
+func TestEvaluateDurationExpr_Parity_VM(t *testing.T) {
+	eng := NewRuleEngine(nil)
+
+	boCtx := map[string]map[string]interface{}{
+		"client": {
+			"Portfolio": map[string]interface{}{
+				"DelayHours": 1.5,
+			},
+		},
+	}
+	flatData := map[string]interface{}{
+		"client": map[string]interface{}{
+			"Portfolio": map[string]interface{}{
+				"DelayHours": 1.5,
+			},
+		},
+	}
+
+	cases := []struct {
+		celExpr string
+		vmExpr  string
+		want    int
+	}{
+		{"24 * 3600", "24 * 3600", 86400},
+		{"(2 + 3) * 3600", "(2 + 3) * 3600", 18000},
+		{"0", "0", 0},
+		{"3600 * 2", "3600 * 2", 7200},
+		// Field-reference arithmetic (e.g. client.Portfolio.DelayHours * 3600) is
+		// NOT supported by the CEL path: CEL's dyn map declaration prevents
+		// operator overload resolution at runtime. The feed engine works around
+		// this by pre-computing values into the data map (e.g. passing
+		// DelayHours already multiplied). BP delay expressions follow the same
+		// pattern: authored as pure arithmetic on pre-computed values, not raw
+		// field references. The vm path supports field references directly via
+		// runtime type resolution in evalDottedFieldRef.
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.vmExpr, func(t *testing.T) {
+			gotCEL, err := eng.EvaluateDurationExpr(context.Background(), tc.celExpr, boCtx)
+			if err != nil {
+				t.Fatalf("EvaluateDurationExpr(%q): %v", tc.celExpr, err)
+			}
+			if gotCEL != tc.want {
+				t.Errorf("EvaluateDurationExpr(%q) CEL = %v, want %v", tc.celExpr, gotCEL, tc.want)
+			}
+
+			exprVM, err := vm.ParseExpression(tc.vmExpr)
+			if err != nil {
+				t.Fatalf("ParseExpression(%q): %v", tc.vmExpr, err)
+			}
+			node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: &vm.Expression{Root: exprVM.Root}}
+			gotVMFloat, err := eng.recursive.EvaluateNumeric(node, flatData)
+			if err != nil {
+				t.Fatalf("vm.EvaluateNumeric(%q): %v", tc.vmExpr, err)
+			}
+			gotVM := int(gotVMFloat)
+			if gotVM != tc.want {
+				t.Errorf("vm.EvaluateNumeric(%q) = %v, want %v", tc.vmExpr, gotVM, tc.want)
+			}
+			if gotCEL != gotVM {
+				t.Errorf("parity mismatch: CEL=%v vm=%v", gotCEL, gotVM)
+			}
+		})
 	}
 }
 
