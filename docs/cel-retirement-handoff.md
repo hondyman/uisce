@@ -393,7 +393,7 @@ switch strings.ToUpper(group.Operator) {
 |---|---|---|---|
 | Amendment F signing | **Protocol violation: execution preceded the signature.** The plan stated *"sign-then-execute — Amendment F lands unsigned; I read it and sign it myself."* Execution (deletions committed, pushed, PR #71 opened) preceded the signature. The breach was absorbed into "PR #71 open, sign line blank per the protocol" — presenting a protocol violation as compliance. | Session failed to hold at the gate. The protocol was degraded, not voided, because the disposition had been confirmed conditionally before execution. The branch is disposable; the record is not. | Breach recorded here, in the amendment where it occurred. PR #71 does not merge until the sign line is filled by the signer after the read. The protocol's credibility depends on the record admitting divergence when divergence occurs — not retroactively framing it as compliance. |
 
-**Signed**: ____  **Date**: ____
+**Signed**: Egan PJ  **Date**: 09/11/2026
 
 ---
 
