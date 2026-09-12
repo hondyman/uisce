@@ -499,8 +499,8 @@ WHERE e.id = $5
       OR $3 = true  -- global admin bypass, matches Predicate B/B' pattern
   )
   AND e.status = 'completed'  -- no in-flight artifact reads
-  AND (e.expires_at IS NULL OR e.expires_at > NOW())  -- TTL guard: sweeper sets expires_at;
-                                                     -- status stays 'completed'; row remains
+  AND (e.expires_at IS NULL OR e.expires_at > NOW())  -- TTL guard: INSERT sets expires_at by classification policy;
+                                                     -- sweeper does not modify expires_at; row stays
                                                      -- visible in listings but proxy rejects.
 ```
 
@@ -512,7 +512,7 @@ WHERE e.id = $5
 
 **Fail-closed asymmetry from caller-tenant stamping:** because `report_exports.tenant_id` is stamped from the caller's (exporter's) session tenant (not the template's tenant), RLS filters the export row before the predicate evaluates for cross-tenant gold-copy downloads. Specifically: a user in tenant B who can see tenant A's gold-copy template cannot re-download tenant A's existing export of it — RLS removes the row (tenant B session ≠ tenant A export row), Predicate C is never evaluated. The user can re-export from the gold-copy template and download their own export. This asymmetry is intentional and documented as fail-closed behavior in the DDL header.
 
-**Sweeper row-mutation rule:** the TTL sweeper (Writer 4 in §4) queries for rows where `expires_at < NOW()` **and** no prior `EXPIRED` event exists for that export (`NOT EXISTS (SELECT 1 FROM report_export_events ev WHERE ev.export_id = e.id AND ev.event = 'EXPIRED')`). For each match it: purges the MinIO artifact (idempotent delete-if-exists); emits one `EXPIRED` event; **leaves the row in place as a tombstone** (`status` stays `completed'`, `expires_at` stays in the past). The sweeper does not delete the export row and does not modify `expires_at`. Tombstoning is safe because Predicate C's `expires_at` guard (`expires_at IS NULL OR expires_at > NOW()`) blocks the proxy — the artifact bytes are gone from MinIO, the predicate refuses download, and the row remains as a visible, auditable record.
+**Sweeper row-mutation rule:** the TTL sweeper (Writer 4 in §4) queries for rows where `expires_at < NOW()` **and** no prior `EXPIRED` event exists for that export (`NOT EXISTS (SELECT 1 FROM report_export_events ev WHERE ev.export_id = e.id AND ev.event = 'EXPIRED')`). For each match it: purges the MinIO artifact (idempotent delete-if-exists); emits one `EXPIRED` event; **leaves the row in place as a tombstone** (`status` stays `completed`, `expires_at` stays in the past). The sweeper does not delete the export row and does not modify `expires_at`. Tombstoning is safe because Predicate C's `expires_at` guard (`expires_at IS NULL OR expires_at > NOW()`) blocks the proxy — the artifact bytes are gone from MinIO, the predicate refuses download, and the row remains as a visible, auditable record.
 
 **TTL policy (set at INSERT time, not by the sweeper):** `expires_at` is assigned when the export row is created, based on `export_classification`. The policy values are a Phase 1 implementation decision (example: `internal` → 90 days, `confidential` → 30 days, `restricted` → 7 days, `public` → NULL/no expiry). The workflow sets `expires_at = NOW() + classification_ttl_days` in the same INSERT statement as the export row. The sweeper only enforces rows where the TTL has already passed — it is judge of enforcement, not setter of policy. This is pinned here because the migration and the born-complete tests will need the policy values.
 

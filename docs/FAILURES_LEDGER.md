@@ -65,6 +65,49 @@ This ledger differs from `AGENTS.md` rules: rules are policy (what not to do); t
 
 ---
 
+## Entry 2026-09-11 — Arc 6 (Export with Watermarking & Data Classification design)
+
+**Arc context**: design doc for 8th engagement feature; seven-section doc assembled and approved through evidence gates; two required amendments (column-scoped UPDATE grant, TTL guard + sweeper tombstone); one contradiction caught pre-commit (hard-delete vs FK NO ACTION + revoked DELETE).
+
+### Incidents
+
+| # | Severity | Description | Root cause |
+|---|---|---|---|
+| 1 | High | **Secrets transit transcripts via command lines — three instances, same failure class**: `temppass123` exposed; fresh rotation value (`nvvxS1e0NBszgfZ2NMpQoLHo5i2kujMC`) exposed when passed as a shell argument; original password before that. Pattern: any secret through a command line is transcript-exposed. | No procedural rule against shell-passed secrets; rotation deferred three times |
+| 2 | Medium | **Post-rotation verification was a skip, claimed as a pass**: live test run reported `ADMIN_READ_DSN not set; skipping` — two SKIPs — and the status table carried "live tests still pass." A skip is not a pass. | No rule that a skipped gate is "not run" |
+| 3 | High | **Sweeper hard-delete self-contradicted**: §5.3 sweeper rule said "hard-deletes the row" but §4 FK is `ON DELETE NO ACTION` (every export row has ≥1 event from writer 1) and §4 grant is `REVOKE DELETE FROM app_user` (sweeper runs as app_user). Would fail on first purge attempt. | Rule written without checking FK + grant constraints in same doc |
+| 4 | Medium | **Stale comment leftover after model change**: after switching sweeper to tombstone model, line 502's inline comment still read "sweeper sets expires_at" — the old model's positive assertion, not a negation. The predicate's inline comment is the text that gets copied into implementation. | Model-change sweep missed positive assertions in inline predicate comments |
+| 5 | Medium | **Self-SSH confusion**: agent SSH'd to 100.90.97.15 (its own Tailscale IP) and concluded the "CA Mac" was unreachable. The CA Mac was this Mac. | No self-reachability check before assuming a remote target |
+
+### Positive counter-entry
+
+| # | What the countermeasures caught | How |
+|---|---|---|
+| A | **Edit-tool diff interleaving indicated possible file corruption**: Edit tool reported old/new text interleaved in diff output. Grep counts + file reads confirmed file was actually clean — diff was a display artifact. Lesson: for untracked files, grep counts are evidence; re-typed paste-backs are claims. | Grep phrase-count verification suite (hard-delete=0, tombstone=1, header sweep) |
+| B | **Column-scoped UPDATE grant caught in review**: unqualified `GRANT UPDATE ON public.report_exports TO app_user` would make all columns mutable including `storage_key` — enabling an attacker who can run SQL as app_user to rewrite row provenance and download another tenant's artifact through the authorized proxy. | Reviewer caught the gap between the COMMENT ("all other columns immutable") and the GRANT |
+| C | **TTL guard gap caught in review**: Predicate C had no `expires_at` guard — after sweeper purges an artifact, the row still says `completed` and the predicate still grants. | Reviewer identified that the events vocabulary included `EXPIRED` but the predicate never consulted `expires_at` |
+
+### Structural fixes applied
+
+| Fix | Mechanism | Status |
+|---|---|---|
+| **Cert-only DSN** | Secrets class retired: `ADMIN_READ_DSN` uses client-cert auth with no password. Cert-auth conversion pending on CA-key decision. | Pending: CA-key recovery exhausted; CA rotation is remaining path |
+| **Secrets class ledger entry** | "any secret through a command line is exposed" — fix is procedural (cert-only), not rotational | Live — applicable to all future secret handling |
+| **Untracked-file edit verification** | Grep counts + file reads are evidence; paste-backs are claims. Especially: `grep -n "^## "` for header uniqueness; phrase counts for key terms. | Live — apply to all future untracked doc edits |
+| **Rule vs FK + grant cross-check** | When a rule is written, check it against FK constraints AND grants in the same doc before committing | Live — added to design review checklist |
+| **Predicate inline comment sweep on model change** | When a rule model changes, search inline comments especially in predicates — positive assertions as well as negations. Predicates are the copy-paste artifact of design docs. | Live — Phase 1 implementation inherits this discipline |
+
+### Verification log (this arc)
+
+| Date | Check | Result | Tree |
+|---|---|---|---|
+| 2026-09-11 | Design doc §4/§5.3/§7 grep verification | ✅ all phrase counts correct | `feat/reports-exports` @ `8ed9fa05e` |
+| 2026-09-11 | Sweeper tombstone grep verification | ✅ hard-delete=0, tombstone=1 | `feat/reports-exports` @ `29ab5053f` |
+| 2026-09-11 | Header sweep (§1–§10 each once) | ✅ clean | `feat/reports-exports` @ `29ab5053f` |
+| 2026-09-11 | Stale comment grep (`sweeper sets`) | ✅ 0 matches after fix | `feat/reports-exports` |
+
+---
+
 ## Entry 2026-09-10 — Arc 4 (collection aggregation, Phase 3 close)
 
 *[To be populated by the next session that produces a failure or verification worth recording.]*
