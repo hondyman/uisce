@@ -39,7 +39,7 @@ Seven features/phases shipped through evidence gates: personal/custom reports, p
 
 1. **Watermark attribution** = the exporter, unconditionally. User A exports B's template → watermark shows A. Rationale: `requested_by` on the execution provenance already records the template owner's identity; watermark records the actor who initiated the export. These are intentionally distinct.
 
-2. **`report_export_events`** = dedicated table (not extending execution events). Full discipline: insert-only, FORCE RLS + WITH CHECK, scoped grants, actor vocabulary mirrored from `report_execution_events` with cross-reference comments in both DDLs. New actors: `exporter_user_id`, `system:export-workflow`, `system:download-proxy`.
+2. **`export_artifact_events`** = dedicated table (not extending execution events). Full discipline: insert-only, FORCE RLS + WITH CHECK, scoped grants, actor vocabulary mirrored from `report_execution_events` with cross-reference comments in both DDLs. New actors: `exporter_user_id`, `system:export-workflow`, `system:download-proxy`.
 
 3. **Storage path tenant_key**: look up `tenant.key` via `tenants` table; fail if not found (no slug → no export path).
 
@@ -100,154 +100,11 @@ The grep in pre-flight found `data_classification` in `internal/reporting/migrat
 
 **Naming decision for the new column**: use `export_classification` rather than `data_classification` to avoid ambiguity with the dead DDL column name. The classification is a property of the export artifact, not the underlying data.
 
-### DDL — `report_export_events`
+### DDL — `export_artifacts`
 
 ```sql
 -- =============================================================================
--- report_export_events — append-only audit trail for the export feature (Phase 1)
---
--- Design discipline mirrors report_execution_events (20260913_002_create_report_execution_events.up.sql):
---   - actor_id vocabulary: defined per writer in the column comment
---   - tenant_id denormalized: required for RLS + CDC partitioning
---   - FORCE ROW LEVEL SECURITY: matches report_executions posture
---   - WITH CHECK on inserts: catches writer bugs that set wrong tenant_id
---   - Insert-only enforcement: app role gets INSERT+SELECT; PUBLIC revoked
---   - ON DELETE NO ACTION: export row deletion requires explicit event-table handling;
---     CASCADE would bypass the insert-only audit trail via a single DELETE
---   - System-writer RLS: all writers use withTenantTx pattern (q.v. system-writer RLS story below)
---
--- Sibling table: public.report_execution_events (monitoring Phase 1)
---   Shared actor vocabulary: 'system:executor', 'system:activity', 'system:sweep'
---   New actors introduced here: 'system:export-workflow', 'system:download-proxy'
--- =============================================================================
-
-CREATE TABLE IF NOT EXISTS public.report_export_events (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    export_id      UUID NOT NULL REFERENCES public.report_exports(id) ON DELETE NO ACTION,
-    tenant_id      UUID NOT NULL,
-
-    -- Event vocabulary
-    event           TEXT NOT NULL,
-    --   'PENDING'       : export row inserted, render not started (writer 1)
-    --   'RUNNING'       : render in progress (writer 2 — system:export-workflow)
-    --   'COMPLETED'     : render succeeded, artifact stored (writer 2)
-    --   'FAILED'        : render failed (writer 2)
-    --   'DOWNLOADED'    : proxy download served (writer 3 — system:download-proxy)
-    --   'EXPIRED'       : TTL reached, artifact purged (writer 4 — background sweeper)
-
-    from_status     TEXT NULL,
-    to_status       TEXT NOT NULL,
-
-    -- actor_id vocabulary (by writer):
-    --   Writer 1 (PersistExportRowActivity):   user_id of the export API caller (from JWT / context)
-    --   Writer 2 (RenderArtifactActivity):    'system:export-workflow'
-    --   Writer 3 (download proxy handler):     'system:download-proxy'
-    --   Writer 4 (TTL sweeper):                'system:export-sweeper'
-    -- Cross-reference: report_execution_events actor vocabulary at report_execution_events.actor_id comments
-    actor_id        TEXT NOT NULL,
-
-    detail          JSONB NULL,
-    --   PENDING:    {}
-    --   RUNNING:    {}
-    --   COMPLETED:  {output_url, size_bytes, format, classification}
-    --   FAILED:     {error_message}
-    --   DOWNLOADED: {download_count, user_agent}
-    --   EXPIRED:   {}
-
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
--- Indexes for common query shapes
-CREATE INDEX IF NOT EXISTS idx_ree_export_id_created_at
-    ON public.report_export_events(export_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_ree_export_created_at
-    ON public.report_export_events(created_at);
-CREATE INDEX IF NOT EXISTS idx_ree_tenant_id_created_at
-    ON public.report_export_events(tenant_id, created_at);
-
--- RLS: FORCE to match report_executions posture
-ALTER TABLE public.report_export_events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.report_export_events FORCE ROW LEVEL SECURITY;
-
--- Tenant isolation: same policy shape as report_executions and report_execution_events
--- USING clause: governs SELECT (read filter)
--- WITH CHECK clause: governs INSERT (write filter — catches writer bugs setting wrong tenant_id)
-CREATE POLICY ree_tenant_isolation ON public.report_export_events
-    USING (tenant_id = current_setting('uisce.current_tenant', true)::UUID)
-    WITH CHECK (tenant_id = current_setting('uisce.current_tenant', true)::UUID);
-
--- Grant block
-GRANT INSERT, SELECT ON public.report_export_events TO app_user;
-REVOKE UPDATE, DELETE ON public.report_export_events FROM PUBLIC;
-REVOKE UPDATE, DELETE ON public.report_export_events FROM app_user;
-
-DO $$ BEGIN
-    RAISE NOTICE 'report_export_events table created';
-    RAISE NOTICE '  indexes: idx_ree_export_id_created_at, idx_ree_export_created_at, idx_ree_tenant_id_created_at';
-    RAISE NOTICE '  RLS: FORCE ROW LEVEL SECURITY with tenant isolation policy + WITH CHECK';
-    RAISE NOTICE '  grants: INSERT+SELECT to app_user; UPDATE+DELETE revoked from PUBLIC and app_user';
-    RAISE NOTICE 'Sibling: public.report_execution_events (monitoring Phase 1) — shared actor vocabulary';
-END $$;
-```
-
-### System-writer RLS story
-
-Every writer to `report_export_events` must set `uisce.current_tenant` to the export row's tenant_id inside the transaction, before any INSERT. This is the same pattern used by monitoring Phase 1's `system:executor` on `report_execution_events`. The verbatim pattern from `internal/temporal/activities/report_activities.go:149-152, 209-218` (monitoring Phase 1):
-
-```go
-// RLS INVARIANT: All writes are wrapped in db.WithTenantTransaction using
-// template.TenantID, so set_config('uisce.current_tenant', tenantID, true) is
-// set transaction-locally before any INSERT/UPDATE, satisfying the FORCE ROW
-// LEVEL SECURITY policy on report_executions.
-//
-// withTenantTx opens a transaction, sets the tenant GUC transaction-locally
-// via set_config (equivalent to SET LOCAL uisce.current_tenant = tenantID),
-// and executes fn within that transaction.
-//
-// This satisfies the FORCE ROW LEVEL SECURITY policy:
-//   policy: ((tenant_id)::text = current_setting('uisce.current_tenant', true))
-//   relforcerowsecurity: true
-//
-// NOTE: set_config with is_local=true reverts the GUC at transaction end.
-func withTenantTx(ctx context.Context, db *sql.DB, tenantID string, fn func(*sql.Tx) error) error {
-    if tenantID == "" {
-        return fmt.Errorf("withTenantTx: tenantID cannot be empty")
-    }
-    tx, err := db.BeginTx(ctx, nil)
-    if err != nil {
-        return fmt.Errorf("withTenantTx: BeginTx: %w", err)
-    }
-    defer func() {
-        if p := recover(); p != nil {
-            _ = tx.Rollback()
-            panic(p)
-        }
-    }()
-    if _, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID); err != nil {
-        _ = tx.Rollback()
-        return fmt.Errorf("withTenantTx: set_config failed: %w", err)
-    }
-    if err := fn(tx); err != nil {
-        _ = tx.Rollback()
-        return err
-    }
-    return tx.Commit()
-}```
-
-For this feature's writers:
-
-- **Writer 1** (`PersistExportRowActivity`): calls `withTenantTx(ctx, db, callerTenantID, ...)` — uses the exporter's (caller's) tenant ID, which is already resolved from the API caller's JWT context.
-- **Writer 2** (`RenderArtifactActivity`): calls `withTenantTx(ctx, db, callerTenantID, ...)` — same caller tenant as writer 1, because the export row is stamped with the caller's tenant. The workflow does not need a separate tenant context.
-- **Writer 3** (`download proxy`): calls `withTenantTx(ctx, db, exporterTenantID, ...)` — the exporter's tenant from the export row, resolved from the `report_exports` row before the event INSERT.
-- **Writer 4** (TTL sweeper): calls `withTenantTx(ctx, db, exportRowTenantID, ...)` — resolved from the export row before the event INSERT.
-
-All four writers set `uisce.current_tenant` inside the transaction before INSERT, satisfying the WITH CHECK policy.
-
-### DDL — `report_exports`
-
-```sql
--- =============================================================================
--- report_exports — export artifact registry for the export feature (Phase 1)
+-- export_artifacts — export artifact registry for the export feature (Phase 1)
 --
 -- tenant_id stamping rule: the API caller's (exporter's) tenant_id at export creation time.
 -- The watermark attribution rule (the exporter unconditionally) is implemented as: the export
@@ -269,7 +126,7 @@ All four writers set `uisce.current_tenant` inside the transaction before INSERT
 -- User-ID uniqueness: exporter_user_id must be globally unique (Keycloak mandate).
 -- =============================================================================
 
-CREATE TABLE IF NOT EXISTS public.report_exports (
+CREATE TABLE IF NOT EXISTS public.export_artifacts (
     id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id         UUID NOT NULL REFERENCES public.report_templates(id),
     exporter_user_id    TEXT NOT NULL,  -- Keycloak user ID; globally unique across tenants
@@ -315,21 +172,21 @@ CREATE TABLE IF NOT EXISTS public.report_exports (
 
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_re_tenant_id_created_at
-    ON public.report_exports(tenant_id, created_at);
+    ON public.export_artifacts(tenant_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_re_exporter_user_id
-    ON public.report_exports(exporter_user_id);
+    ON public.export_artifacts(exporter_user_id);
 CREATE INDEX IF NOT EXISTS idx_re_template_id
-    ON public.report_exports(template_id);
+    ON public.export_artifacts(template_id);
 CREATE INDEX IF NOT EXISTS idx_re_status
-    ON public.report_exports(status);
+    ON public.export_artifacts(status);
 
 -- RLS
-ALTER TABLE public.report_exports ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.report_exports FORCE ROW LEVEL SECURITY;
+ALTER TABLE public.export_artifacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.export_artifacts FORCE ROW LEVEL SECURITY;
 
 -- Tenant isolation: same policy as report_executions
 -- USING: SELECT filter; WITH CHECK: INSERT filter (catches wrong-tenant INSERT bugs)
-CREATE POLICY re_tenant_isolation ON public.report_exports
+CREATE POLICY re_tenant_isolation ON public.export_artifacts
     USING (tenant_id = current_setting('uisce.current_tenant', true)::UUID)
     WITH CHECK (tenant_id = current_setting('uisce.current_tenant', true)::UUID);
 
@@ -345,22 +202,165 @@ CREATE POLICY re_tenant_isolation ON public.report_exports
 --   never needs to mutate it. Including it in UPDATE would let an attacker who can run SQL as
 --   app_user rewrite row provenance (e.g. swap storage_key to another tenant's path on an own-tenant
 --   row, then download through the fully-authorized proxy); excluding it closes that path.
-GRANT INSERT, SELECT ON public.report_exports TO app_user;
+GRANT INSERT, SELECT ON public.export_artifacts TO app_user;
 GRANT UPDATE (status, size_bytes, rows_processed, execution_time_ms,
               completed_at, watermark_text, watermark_hash)
-    ON public.report_exports TO app_user;
-REVOKE DELETE ON public.report_exports FROM PUBLIC;
-REVOKE DELETE ON public.report_exports FROM app_user;  -- insert-only; soft-delete via expires_at
+    ON public.export_artifacts TO app_user;
+REVOKE DELETE ON public.export_artifacts FROM PUBLIC;
+REVOKE DELETE ON public.export_artifacts FROM app_user;  -- insert-only; soft-delete via expires_at
 
 -- Cross-reference comment
-COMMENT ON TABLE public.report_exports IS 'Export artifact registry. tenant_id stamped from exporter (caller) at creation. INSERT-then-mutate (status/size_bytes/completed_at updated by workflow). All other columns immutable after INSERT.';
-COMMENT ON COLUMN public.report_exports.tenant_id IS 'Exporter (caller) tenant_id at INSERT time; watermark attribution implemented as export belongs to initiator. NOT the template tenant (differs from report_executions stamping model).';
-COMMENT ON COLUMN public.report_exports.exporter_user_id IS 'Keycloak user ID; globally unique — cross-tenant safety for Predicate C Clause A depends on this.';
+COMMENT ON TABLE public.export_artifacts IS 'Export artifact registry. tenant_id stamped from exporter (caller) at creation. INSERT-then-mutate (status/size_bytes/completed_at updated by workflow). All other columns immutable after INSERT.';
+COMMENT ON COLUMN public.export_artifacts.tenant_id IS 'Exporter (caller) tenant_id at INSERT time; watermark attribution implemented as export belongs to initiator. NOT the template tenant (differs from report_executions stamping model).';
+COMMENT ON COLUMN public.export_artifacts.exporter_user_id IS 'Keycloak user ID; globally unique — cross-tenant safety for Predicate C Clause A depends on this.';
+```
+
+### System-writer RLS story
+
+Every writer to `export_artifact_events` must set `uisce.current_tenant` to the export row's tenant_id inside the transaction, before any INSERT. This is the same pattern used by monitoring Phase 1's `system:executor` on `report_execution_events`. The verbatim pattern from `internal/temporal/activities/report_activities.go:149-152, 209-218` (monitoring Phase 1):
+
+```go
+// RLS INVARIANT: All writes are wrapped in db.WithTenantTransaction using
+// template.TenantID, so set_config('uisce.current_tenant', tenantID, true) is
+// set transaction-locally before any INSERT/UPDATE, satisfying the FORCE ROW
+// LEVEL SECURITY policy on report_executions.
+//
+// withTenantTx opens a transaction, sets the tenant GUC transaction-locally
+// via set_config (equivalent to SET LOCAL uisce.current_tenant = tenantID),
+// and executes fn within that transaction.
+//
+// This satisfies the FORCE ROW LEVEL SECURITY policy:
+//   policy: ((tenant_id)::text = current_setting('uisce.current_tenant', true))
+//   relforcerowsecurity: true
+//
+// NOTE: set_config with is_local=true reverts the GUC at transaction end.
+func withTenantTx(ctx context.Context, db *sql.DB, tenantID string, fn func(*sql.Tx) error) error {
+    if tenantID == "" {
+        return fmt.Errorf("withTenantTx: tenantID cannot be empty")
+    }
+    tx, err := db.BeginTx(ctx, nil)
+    if err != nil {
+        return fmt.Errorf("withTenantTx: BeginTx: %w", err)
+    }
+    defer func() {
+        if p := recover(); p != nil {
+            _ = tx.Rollback()
+            panic(p)
+        }
+    }()
+    if _, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID); err != nil {
+        _ = tx.Rollback()
+        return fmt.Errorf("withTenantTx: set_config failed: %w", err)
+    }
+    if err := fn(tx); err != nil {
+        _ = tx.Rollback()
+        return err
+    }
+    return tx.Commit()
+}```
+
+For this feature's writers:
+
+- **Writer 1** (`PersistExportRowActivity`): calls `withTenantTx(ctx, db, callerTenantID, ...)` — uses the exporter's (caller's) tenant ID, which is already resolved from the API caller's JWT context.
+- **Writer 2** (`RenderArtifactActivity`): calls `withTenantTx(ctx, db, callerTenantID, ...)` — same caller tenant as writer 1, because the export row is stamped with the caller's tenant. The workflow does not need a separate tenant context.
+- **Writer 3** (`download proxy`): calls `withTenantTx(ctx, db, exporterTenantID, ...)` — the exporter's tenant from the export row, resolved from the `export_artifacts` row before the event INSERT.
+- **Writer 4** (TTL sweeper): calls `withTenantTx(ctx, db, exportRowTenantID, ...)` — resolved from the export row before the event INSERT.
+
+All four writers set `uisce.current_tenant` inside the transaction before INSERT, satisfying the WITH CHECK policy.
+
+### DDL — `export_artifact_events`
+
+```sql
+-- =============================================================================
+-- export_artifact_events — append-only audit trail for the export feature (Phase 1)
+--
+-- Design discipline mirrors report_execution_events (20260913_002_create_report_execution_events.up.sql):
+--   - actor_id vocabulary: defined per writer in the column comment
+--   - tenant_id denormalized: required for RLS + CDC partitioning
+--   - FORCE ROW LEVEL SECURITY: matches report_executions posture
+--   - WITH CHECK on inserts: catches writer bugs that set wrong tenant_id
+--   - Insert-only enforcement: app role gets INSERT+SELECT; PUBLIC revoked
+--   - ON DELETE NO ACTION: export row deletion requires explicit event-table handling;
+--     CASCADE would bypass the insert-only audit trail via a single DELETE
+--   - System-writer RLS: all writers use withTenantTx pattern (q.v. system-writer RLS story below)
+--
+-- Sibling table: public.report_execution_events (monitoring Phase 1)
+--   Shared actor vocabulary: 'system:executor', 'system:activity', 'system:sweep'
+--   New actors introduced here: 'system:export-workflow', 'system:download-proxy'
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.export_artifact_events (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    export_id      UUID NOT NULL REFERENCES public.export_artifacts(id) ON DELETE NO ACTION,
+    tenant_id      UUID NOT NULL,
+
+    -- Event vocabulary
+    event           TEXT NOT NULL,
+    --   'PENDING'       : export row inserted, render not started (writer 1)
+    --   'RUNNING'       : render in progress (writer 2 — system:export-workflow)
+    --   'COMPLETED'     : render succeeded, artifact stored (writer 2)
+    --   'FAILED'        : render failed (writer 2)
+    --   'DOWNLOADED'    : proxy download served (writer 3 — system:download-proxy)
+    --   'EXPIRED'       : TTL reached, artifact purged (writer 4 — background sweeper)
+
+    from_status     TEXT NULL,
+    to_status       TEXT NOT NULL,
+
+    -- actor_id vocabulary (by writer):
+    --   Writer 1 (PersistExportRowActivity):   user_id of the export API caller (from JWT / context)
+    --   Writer 2 (RenderArtifactActivity):    'system:export-workflow'
+    --   Writer 3 (download proxy handler):     'system:download-proxy'
+    --   Writer 4 (TTL sweeper):                'system:export-sweeper'
+    -- Cross-reference: report_execution_events actor vocabulary at report_execution_events.actor_id comments
+    actor_id        TEXT NOT NULL,
+
+    detail          JSONB NULL,
+    --   PENDING:    {}
+    --   RUNNING:    {}
+    --   COMPLETED:  {output_url, size_bytes, format, classification}
+    --   FAILED:     {error_message}
+    --   DOWNLOADED: {download_count, user_agent}
+    --   EXPIRED:   {}
+
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Indexes for common query shapes
+CREATE INDEX IF NOT EXISTS idx_ree_export_id_created_at
+    ON public.export_artifact_events(export_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_ree_export_created_at
+    ON public.export_artifact_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_ree_tenant_id_created_at
+    ON public.export_artifact_events(tenant_id, created_at);
+
+-- RLS: FORCE to match report_executions posture
+ALTER TABLE public.export_artifact_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.export_artifact_events FORCE ROW LEVEL SECURITY;
+
+-- Tenant isolation: same policy shape as report_executions and report_execution_events
+-- USING clause: governs SELECT (read filter)
+-- WITH CHECK clause: governs INSERT (write filter — catches writer bugs setting wrong tenant_id)
+CREATE POLICY ree_tenant_isolation ON public.export_artifact_events
+    USING (tenant_id = current_setting('uisce.current_tenant', true)::UUID)
+    WITH CHECK (tenant_id = current_setting('uisce.current_tenant', true)::UUID);
+
+-- Grant block
+GRANT INSERT, SELECT ON public.export_artifact_events TO app_user;
+REVOKE UPDATE, DELETE ON public.export_artifact_events FROM PUBLIC;
+REVOKE UPDATE, DELETE ON public.export_artifact_events FROM app_user;
+
+DO $$ BEGIN
+    RAISE NOTICE 'export_artifact_events table created';
+    RAISE NOTICE '  indexes: idx_ree_export_id_created_at, idx_ree_export_created_at, idx_ree_tenant_id_created_at';
+    RAISE NOTICE '  RLS: FORCE ROW LEVEL SECURITY with tenant isolation policy + WITH CHECK';
+    RAISE NOTICE '  grants: INSERT+SELECT to app_user; UPDATE+DELETE revoked from PUBLIC and app_user';
+    RAISE NOTICE 'Sibling: public.report_execution_events (monitoring Phase 1) — shared actor vocabulary';
+END $$;
 ```
 
 ### Rollback-atomicity test shape
 
-For each writer to `report_export_events`:
+For each writer to `export_artifact_events`:
 
 ```go
 // Example for writer 1 (PersistExportRowActivity)
@@ -375,13 +375,13 @@ func TestPersistExportRowActivity_RollbackAtomicity(t *testing.T) {
 
     // Insert export row and event in same transaction
     _, err = tx.ExecContext(ctx, `
-        INSERT INTO report_exports (id, template_id, exporter_user_id, tenant_id, status, format, storage_key, export_classification)
+        INSERT INTO export_artifacts (id, template_id, exporter_user_id, tenant_id, status, format, storage_key, export_classification)
         VALUES ($1, $2, $3, $4, 'pending', 'pdf', 'exports/test/t1/e1.pdf', 'internal')
     `, uuid.New(), templateID, userID, tenantID)
     require.NoError(t, err)
 
     _, err = tx.ExecContext(ctx, `
-        INSERT INTO report_export_events (export_id, tenant_id, event, from_status, to_status, actor_id, detail)
+        INSERT INTO export_artifact_events (export_id, tenant_id, event, from_status, to_status, actor_id, detail)
         VALUES ($1, $2, 'PENDING', NULL, 'pending', $3, '{}')
     `, exportID, tenantID, userID)
     require.NoError(t, err)
@@ -390,9 +390,9 @@ func TestPersistExportRowActivity_RollbackAtomicity(t *testing.T) {
 
     // Assert no rows in either table
     var exportCount, eventCount int
-    err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM report_exports WHERE id = $1", exportID).Scan(&exportCount)
+    err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM export_artifacts WHERE id = $1", exportID).Scan(&exportCount)
     require.NoError(t, err)
-    err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM report_export_events WHERE export_id = $1", exportID).Scan(&eventCount)
+    err = db.QueryRowContext(ctx, "SELECT COUNT(*) FROM export_artifact_events WHERE export_id = $1", exportID).Scan(&eventCount)
     require.NoError(t, err)
     require.Equal(t, 0, exportCount)
     require.Equal(t, 0, eventCount)
@@ -480,7 +480,7 @@ Bindings: `$1 = execID, $2 = callerTenantID, $3 = userID, $4 = isAdmin`.
 -- export_lookup_predicate (download proxy)
 -- $1 = callerUserID, $2 = callerTenantID, $3 = isAdmin, $4 = goldCopyID, $5 = exportID
 SELECT e.*
-FROM public.report_exports e
+FROM public.export_artifacts e
 JOIN public.report_templates t ON t.id = e.template_id
 WHERE e.id = $5
   AND (
@@ -505,14 +505,14 @@ WHERE e.id = $5
 ```
 
 **Composition notes:**
-- Clause A uses only `exporter_user_id` — no tenant guard. This is consistent with `triggered_by` in Predicate B, which also carries no tenant assumption. Cross-tenant safety for Clause A relies on Keycloak user-ID global uniqueness (stated in DDL comment on `report_exports.exporter_user_id`).
+- Clause A uses only `exporter_user_id` — no tenant guard. This is consistent with `triggered_by` in Predicate B, which also carries no tenant assumption. Cross-tenant safety for Clause A relies on Keycloak user-ID global uniqueness (stated in DDL comment on `export_artifacts.exporter_user_id`).
 - Clause B reuses Predicate A's visibility shape verbatim via the JOIN on `t.id = e.template_id`.
 - `$4 = goldCopyID` is the resolved gold-copy tenant ID; pass `uuid.Nil` if resolution fails (same fallback pattern as `repository.go:224-228`).
 - `e.status = 'completed'` is a new guard not present in B/B' — necessary because the proxy must not serve partial artifacts from an in-flight render.
 
-**Fail-closed asymmetry from caller-tenant stamping:** because `report_exports.tenant_id` is stamped from the caller's (exporter's) session tenant (not the template's tenant), RLS filters the export row before the predicate evaluates for cross-tenant gold-copy downloads. Specifically: a user in tenant B who can see tenant A's gold-copy template cannot re-download tenant A's existing export of it — RLS removes the row (tenant B session ≠ tenant A export row), Predicate C is never evaluated. The user can re-export from the gold-copy template and download their own export. This asymmetry is intentional and documented as fail-closed behavior in the DDL header.
+**Fail-closed asymmetry from caller-tenant stamping:** because `export_artifacts.tenant_id` is stamped from the caller's (exporter's) session tenant (not the template's tenant), RLS filters the export row before the predicate evaluates for cross-tenant gold-copy downloads. Specifically: a user in tenant B who can see tenant A's gold-copy template cannot re-download tenant A's existing export of it — RLS removes the row (tenant B session ≠ tenant A export row), Predicate C is never evaluated. The user can re-export from the gold-copy template and download their own export. This asymmetry is intentional and documented as fail-closed behavior in the DDL header.
 
-**Sweeper row-mutation rule:** the TTL sweeper (Writer 4 in §4) queries for rows where `expires_at < NOW()` **and** no prior `EXPIRED` event exists for that export (`NOT EXISTS (SELECT 1 FROM report_export_events ev WHERE ev.export_id = e.id AND ev.event = 'EXPIRED')`). For each match it: purges the MinIO artifact (idempotent delete-if-exists); emits one `EXPIRED` event; **leaves the row in place as a tombstone** (`status` stays `completed`, `expires_at` stays in the past). The sweeper does not delete the export row and does not modify `expires_at`. Tombstoning is safe because Predicate C's `expires_at` guard (`expires_at IS NULL OR expires_at > NOW()`) blocks the proxy — the artifact bytes are gone from MinIO, the predicate refuses download, and the row remains as a visible, auditable record.
+**Sweeper row-mutation rule:** the TTL sweeper (Writer 4 in §4) queries for rows where `expires_at < NOW()` **and** no prior `EXPIRED` event exists for that export (`NOT EXISTS (SELECT 1 FROM export_artifact_events ev WHERE ev.export_id = e.id AND ev.event = 'EXPIRED')`). For each match it: purges the MinIO artifact (idempotent delete-if-exists); emits one `EXPIRED` event; **leaves the row in place as a tombstone** (`status` stays `completed`, `expires_at` stays in the past). The sweeper does not delete the export row and does not modify `expires_at`. Tombstoning is safe because Predicate C's `expires_at` guard (`expires_at IS NULL OR expires_at > NOW()`) blocks the proxy — the artifact bytes are gone from MinIO, the predicate refuses download, and the row remains as a visible, auditable record.
 
 **TTL policy (set at INSERT time, not by the sweeper):** `expires_at` is assigned when the export row is created, based on `export_classification`. The policy values are a Phase 1 implementation decision (example: `internal` → 90 days, `confidential` → 30 days, `restricted` → 7 days, `public` → NULL/no expiry). The workflow sets `expires_at = NOW() + classification_ttl_days` in the same INSERT statement as the export row. The sweeper only enforces rows where the TTL has already passed — it is judge of enforcement, not setter of policy. This is pinned here because the migration and the born-complete tests will need the policy values.
 
@@ -668,7 +668,7 @@ func ComputeWatermarkHash(exportID, exporterUserID, classification string, creat
 **Handler file**: `backend/internal/api/export_download_proxy.go` (new)
 
 **Predicate**: Predicate C (§5.3)
-**Audit-write-before-serve**: before streaming the artifact, write a `DOWNLOADED` event to `report_export_events` (actor = `system:download-proxy`, detail = `{download_count, user_agent}`). If audit write fails → 500 with `"audit log write failed: ..."` (mirrors `admin_report_handlers.go:130-140`).
+**Audit-write-before-serve**: before streaming the artifact, write a `DOWNLOADED` event to `export_artifact_events` (actor = `system:download-proxy`, detail = `{download_count, user_agent}`). If audit write fails → 500 with `"audit log write failed: ..."` (mirrors `admin_report_handlers.go:130-140`).
 **Zero-existence leak**: predicate returns no rows → 404 (not 403). Matches existing `GetExecution` behavior (`report_handlers.go:812`).
 
 ### Legacy-retirement 4-step sequence
@@ -744,7 +744,7 @@ echo "lint-export-proxy-grep: clean"
 ```
 ReportExportWorkflow
   └─ RenderArtifactActivity       (excelize + fpdf, uploads to MinIO)
-       └─ PersistExportRowActivity (writes report_exports + report_export_events in same tx)
+       └─ PersistExportRowActivity (writes export_artifacts + export_artifact_events in same tx)
        └─ SignalExecutionActivity  (links export to originating execution row if template_id is set)
 ```
 
