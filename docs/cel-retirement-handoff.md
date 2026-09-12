@@ -251,3 +251,11 @@ Slice 2 execution dropped two numeric `CELRankScore` expressions rather than por
 Current `evaluateHardcoded` returns `RankScore: 1.0` for all eligible cards. The rank-based card ordering is a constant tie — the original dynamic ranking by loss magnitude and drift percentage is lost. **This is a functional regression introduced by Slice 2 execution.** Fix required before Slice 2 is considered complete.
 
 **Fix applied** (`cel-retire-rank-fix` branch, PR #64): `RankScoreExpr` field added to `CardRule`; `vm.AdvancedEvaluator` wired into `RuleEngine`; rank expressions evaluated via `vm.ParseExpression` + `EvaluateNumeric`. `tax_loss_harvest` rank: `(-client.Portfolio.UnrealizedLossPct) * 100.0`; `portfolio_drift` rank: `client.Portfolio.DriftPct * 100.0`. Tests verify rank values: `abs(-0.05)*100=5.0`, `abs(-0.15)*100=15.0`, `0.08*100=8.0`, `0.12*100=12.0`.
+
+---
+
+### Landing attribution
+
+CEL retirement Slices 1 & 2 reached `main` via commit `0a218e534` ("feat(reports): Phase 2 read paths — execution repository + handlers", PR #62). That merge commit was itself a mixed commit combining Phase 2 reports work with the full CEL retirement Slices 1 & 2 execution. The rank score regression (Amendment C) was not caught before merge — no tests existed for the feed engine. PR #64 fixes the regression and adds tests. Regression window on `main`: from `0a218e534` to PR #64 landing.
+
+**Fix applied** (`cel-retire-rank-fix` branch, PR #64): `RankScoreExpr` field added to `CardRule`; `vm.AdvancedEvaluator` wired into `RuleEngine`; rank expressions evaluated via `vm.ParseExpression` + `EvaluateNumeric`. `tax_loss_harvest` rank: `(-client.Portfolio.UnrealizedLossPct) * 100.0`; `portfolio_drift` rank: `client.Portfolio.DriftPct * 100.0`. Tests verify rank values: `abs(-0.05)*100=5.0`, `abs(-0.15)*100=15.0`, `0.08*100=8.0`, `0.12*100=12.0`.
