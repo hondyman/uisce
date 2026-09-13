@@ -19,6 +19,35 @@ import (
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 )
 
+// ensureGoldCopyTestFixtures seeds the fixed gold-copy tenant and report template
+// these tests key off of (715b3c96-f441-5c81-98ef-0b04cfe78ad1 / 99e99e99-99e9-49e9-89e9-99e99e99e999).
+// On alpha these rows already exist from real usage; against a freshly-restored schema they
+// don't, so report_executions inserts referencing template_id would violate
+// report_executions_template_id_fkey. Idempotent so every test in this file can call it safely
+// without stepping on rows created (and intentionally left in place) by another test.
+func ensureGoldCopyTestFixtures(t *testing.T, db *sql.DB, templateID, tenantID uuid.UUID) {
+	t.Helper()
+
+	_, err := db.Exec(`
+		INSERT INTO public.tenants (id, name, display_name, status, plan, is_active, is_deleted, created_at, updated_at)
+		VALUES ($1, 'gold-copy-test-tenant', 'Gold Copy Test Tenant', 'active', 'standard', true, false, NOW(), NOW())
+		ON CONFLICT DO NOTHING
+	`, tenantID)
+	require.NoError(t, err, "failed to seed gold copy tenant fixture")
+
+	repo := reports.NewRepository(db)
+	err = repo.CreateTemplate(context.Background(), &reports.ReportTemplate{
+		ID:           templateID,
+		TenantID:     tenantID,
+		TemplateName: "Gold Copy Integration Test Template",
+		Category:     "test",
+		IsActive:     true,
+	})
+	if err != nil && !errors.Is(err, reports.ErrConflict) {
+		require.NoError(t, err, "failed to seed gold copy template fixture")
+	}
+}
+
 func getTemporalClient(t *testing.T) client.Client {
 	t.Helper()
 	temporalHost := os.Getenv("TEMPORAL_HOST")
@@ -58,6 +87,7 @@ func TestTemporalExecutor_runsAsTemplateOwner(t *testing.T) {
 	// Gold copy tenant & active template on alpha
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
 	templateTenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	ensureGoldCopyTestFixtures(t, db, templateID, templateTenantID)
 	ownerID := "owner-user-alpha"
 	callerID := "caller-user-beta"
 
@@ -114,6 +144,7 @@ func TestTemporalExecutor_lifecycleTransitions(t *testing.T) {
 
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
 	templateTenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	ensureGoldCopyTestFixtures(t, db, templateID, templateTenantID)
 	ownerID := "lifecycle-owner"
 
 	tmpl := &reports.ReportTemplate{
@@ -152,6 +183,7 @@ func TestTemporalExecutor_dispatchFailure(t *testing.T) {
 
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
 	templateTenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	ensureGoldCopyTestFixtures(t, db, templateID, templateTenantID)
 	ownerID := "fail-test-owner"
 
 	tmpl := &reports.ReportTemplate{
@@ -210,6 +242,7 @@ func TestTemporalExecutor_emptyViewsDegenerate(t *testing.T) {
 
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
 	templateTenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	ensureGoldCopyTestFixtures(t, db, templateID, templateTenantID)
 	ownerID := "empty-views-owner"
 
 	tmpl := &reports.ReportTemplate{
@@ -255,6 +288,7 @@ func TestTemporalExecutor_rlsEnforcement(t *testing.T) {
 	tenantA := uuid.New()
 	tenantB := uuid.New()
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
+	ensureGoldCopyTestFixtures(t, db, templateID, uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 	execID := uuid.New()
 
 	_, err = db.Exec(`
@@ -300,6 +334,7 @@ func TestTemporalExecutor_staleReconciliation(t *testing.T) {
 
 	tenantID := uuid.New()
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1")
+	ensureGoldCopyTestFixtures(t, db, templateID, uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 	staleExecID := uuid.New()
 
 	// Seed execution row backdated by 20 minutes
@@ -336,6 +371,7 @@ func TestTemporalExecutor_visibilityGuards(t *testing.T) {
 	tenantA := uuid.New()
 	tenantB := uuid.New()
 	templateID := uuid.MustParse("715b3c96-f441-5c81-98ef-0b04cfe78ad1") // Gold copy core report
+	ensureGoldCopyTestFixtures(t, db, templateID, goldCopyTenantID)
 	userA := "user-alice"
 	userB := "user-bob"
 
