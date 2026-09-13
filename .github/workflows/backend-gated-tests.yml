@@ -63,6 +63,32 @@ name: Backend Gated Tests (Ephemeral DB)
 # for those tests; it means the schema, migrations, and RLS/predicate logic
 # are self-consistent.
 #
+# Known unresolved decision: DATABASE_URL / UISCE_TEST_DB_DSN below connect
+# as the postgres superuser, which bypasses RLS entirely — any RLS-dependent
+# assertion in ./internal/db/... or ./internal/reports/... that doesn't
+# explicitly SET ROLE inside its own transaction (TestTemporalExecutor_rls-
+# Enforcement in internal/reports does; most others don't) is silently
+# proving nothing rather than testing enforcement. This was NOT fixed here,
+# and not because it's low-priority: internal/db's TestWithTenantTransaction
+# queries public.tenant_product, which schema-snapshot.sql grants only to
+# the `temporal` role (app_user has no grant on it at all — confirmed by
+# grep), so naively switching this connection to app_user would break that
+# test outright with a permission error, not fix it. Worse, switching to
+# whichever role that test does need would surface a second, independent,
+# pre-existing issue: schema-snapshot.sql's actual live tenant_product_
+# isolation_policy on alpha (search that file for the name) is
+#   USING ((NULLIF(current_setting('uisce.current_tenant', true), '') IS NULL)
+#          OR (tenant_id = current_setting(...)::uuid))
+# which evaluates TRUE — rows visible, including for writes via WITH CHECK —
+# when no tenant GUC is set. That's fail-OPEN. TestWithTenantTransaction's
+# own subtest is named no_tenant_GUC_returns_zero_rows and logs "PASS: ...
+# (fail-closed)" on success — the test's stated expectation and the actual
+# live policy disagree, independent of which role is connecting. Whether
+# that's a real security gap on alpha or a deliberate fail-open exception
+# (e.g. for a background/admin path) isn't something a schema dump can
+# answer; it needs someone who owns that policy's intent. Flagged
+# separately rather than guessed at or quietly worked around here.
+#
 # Known pre-existing failure, found while dry-running this pipeline: six
 # TestTemporalExecutor_* tests in internal/reports insert into
 # report_executions with a template_id that must reference a pre-existing
