@@ -81,49 +81,32 @@ echo ""
 if [[ "${SKIP_MIGRATIONS:-}" == "1" ]]; then
   log_warn "SKIP_MIGRATIONS=1 — skipping migration execution."
 else
-  log_info "[2/4] Executing structural database migrations..."
+  log_info "[2/4] Executing structural database migrations via backend/cmd/migrate..."
 
-  # Detect whether migrations table exists
-  MIGRATIONS_TABLE_EXISTS=$(psql -d "$POSTGRES_DSN" -t -c "
-    SELECT COUNT(*) FROM pg_tables
-    WHERE schemaname = 'public' AND tablename = 'schema_migrations';
-  " 2>/dev/null | tr -d '[:space:]')
+  # This step previously ran its own psql -f loop against a schema_migrations
+  # table, entirely separate from the migration tracking (oms.migration_log)
+  # that backend/internal/migrations.ApplyMigrations uses at server boot
+  # (see step 3/4 below — cmd/server calls ApplyMigrations on every start).
+  # That meant every production bootstrap applied migrations twice, through
+  # two different mechanisms, with no transaction wrapping in this one and
+  # no checksum tracking at all. Replaced with the canonical runner via the
+  # standalone CLI so there is exactly one migration mechanism, one
+  # bookkeeping table, and one place that fails loudly on drift.
+  cd "$BACKEND_DIR"
+  log_info "  Building migrate CLI..."
+  if ! go build -o bin/migrate ./cmd/migrate 2>&1; then
+    log_fatal "go build ./cmd/migrate failed. Check compilation errors above."
+  fi
 
-  for migration in "$MIGRATIONS_DIR"/*.up.sql; do
-    [[ -e "$migration" ]] || continue
-    MIGRATION_NAME="$(basename "$migration")"
+  log_info "  Verifying no drift in already-applied migrations..."
+  if ! DATABASE_URL="$POSTGRES_DSN" ./bin/migrate verify; then
+    log_fatal "Migration drift detected — an applied migration file's content no longer matches what was recorded. Resolve before bootstrapping. See output above."
+  fi
 
-    # Skip if already applied (when tracking table exists)
-    if [[ "$MIGRATIONS_TABLE_EXISTS" == "1" ]]; then
-      APPLIED=$(psql -d "$POSTGRES_DSN" -t -c "
-        SELECT COUNT(*) FROM schema_migrations WHERE filename = '$MIGRATION_NAME';
-      " 2>/dev/null | tr -d '[:space:]')
-      if [[ "$APPLIED" == "1" ]]; then
-        log_info "  Skipping (already applied): $MIGRATION_NAME"
-        continue
-      fi
-    fi
-
-    log_info "  Applying: $MIGRATION_NAME"
-    if ! psql -d "$POSTGRES_DSN" -f "$migration" --set ON_ERROR_STOP=1 2>&1; then
-      log_fatal "Migration failed: $MIGRATION_NAME"
-    fi
-
-    # Record migration (best-effort — table may not exist yet)
-    psql -d "$POSTGRES_DSN" -c "
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        id          SERIAL PRIMARY KEY,
-        filename    TEXT NOT NULL UNIQUE,
-        applied_at  TIMESTAMPTZ DEFAULT NOW()
-      );
-    " 2>/dev/null || true
-
-    psql -d "$POSTGRES_DSN" -c "
-      INSERT INTO schema_migrations (filename)
-      VALUES ('$MIGRATION_NAME')
-      ON CONFLICT (filename) DO NOTHING;
-    " 2>/dev/null || true
-  done
+  log_info "  Applying pending migrations..."
+  if ! DATABASE_URL="$POSTGRES_DSN" ./bin/migrate up; then
+    log_fatal "Migration failed. See output above."
+  fi
   log_ok "Migrations complete."
 fi
 
