@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/jmoiron/sqlx"
 	"go.uber.org/zap"
@@ -117,10 +118,56 @@ func (a *GoldCopyActivities) PropagateConnectionActivity(ctx context.Context, ev
 // never a tenant's already-configured credentials or activation state, so a
 // gold-copy edit can never silently disable or reconfigure a live connection.
 func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantID string, event events.GoldCopyConnectionEvent) error {
+	// This writes into tenantID's connections row while the caller has no
+	// tenant session context of its own — propagating from gold-copy is
+	// structurally cross-tenant. uisce_gold_copy_sync must be assumed as
+	// the very first statement of an explicit transaction: SET LOCAL ROLE
+	// outside a transaction block is a silent no-op (Postgres emits a
+	// WARNING and the next statement runs under the original role) —
+	// verified directly, not assumed.
+	tx, err := a.DB.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("syncConnectionToTenant: begin tx: %w", err)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, uisce_db.SetGoldCopySyncRoleSQL); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("syncConnectionToTenant: assume gold-copy-sync role: %w", err)
+	}
+
+	if err := a.syncConnectionToTenantTx(ctx, tx, tenantID, event); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("syncConnectionToTenant: commit: %w", err)
+	}
+
+	// Log Audit Event for the Clone
+	if a.AuditService != nil {
+		cloneEvent := event
+		cloneEvent.TenantID = tenantID // Audit this for the specific tenant
+		cloneEvent.Action = "CLONE_" + event.Action
+		if err := a.AuditService.WriteEvent(ctx, cloneEvent); err != nil {
+			a.Logger.Warnf("Failed to audit clone event for tenant %s: %v", tenantID, err)
+		}
+	}
+
+	return nil
+}
+
+func (a *GoldCopyActivities) syncConnectionToTenantTx(ctx context.Context, tx *sqlx.Tx, tenantID string, event events.GoldCopyConnectionEvent) error {
 	switch event.Action {
 	case "INSERT":
 		var exists bool
-		err := a.DB.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM connections WHERE tenant_id = $1 AND core_id = $2)`, tenantID, event.ConnectionID)
+		err := tx.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM connections WHERE tenant_id = $1 AND core_id = $2)`, tenantID, event.ConnectionID)
 		if err != nil {
 			return err
 		}
@@ -133,7 +180,7 @@ func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantI
 			return fmt.Errorf("gold copy connection %s: %w", event.ConnectionID, err)
 		}
 
-		_, err = a.DB.ExecContext(ctx, `
+		_, err = tx.ExecContext(ctx, `
 			INSERT INTO connections (
 				tenant_id, core_id, name, type, host, port, database, schema, base_url, metadata, is_active
 			) VALUES (
@@ -152,7 +199,7 @@ func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantI
 			return fmt.Errorf("gold copy connection %s: %w", event.ConnectionID, err)
 		}
 
-		res, err := a.DB.ExecContext(ctx, `
+		res, err := tx.ExecContext(ctx, `
 			UPDATE connections
 			SET name = $3, type = $4, host = $5, port = $6, database = $7, schema = $8, base_url = $9, metadata = $10, updated_at = now()
 			WHERE tenant_id = $1 AND core_id = $2
@@ -166,19 +213,9 @@ func (a *GoldCopyActivities) syncConnectionToTenant(ctx context.Context, tenantI
 		}
 
 	case "DELETE":
-		_, err := a.DB.ExecContext(ctx, `DELETE FROM connections WHERE tenant_id = $1 AND core_id = $2`, tenantID, event.ConnectionID)
+		_, err := tx.ExecContext(ctx, `DELETE FROM connections WHERE tenant_id = $1 AND core_id = $2`, tenantID, event.ConnectionID)
 		if err != nil {
 			return err
-		}
-	}
-
-	// Log Audit Event for the Clone
-	if a.AuditService != nil {
-		cloneEvent := event
-		cloneEvent.TenantID = tenantID // Audit this for the specific tenant
-		cloneEvent.Action = "CLONE_" + event.Action
-		if err := a.AuditService.WriteEvent(ctx, cloneEvent); err != nil {
-			a.Logger.Warnf("Failed to audit clone event for tenant %s: %v", tenantID, err)
 		}
 	}
 

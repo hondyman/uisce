@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // TenantWorker handles cascading operations for tenants
@@ -57,6 +59,18 @@ func (w *TenantWorker) DeleteTenantResources(ctx context.Context, tenantID strin
 	}
 	defer tx.Rollback()
 
+	// Deletes this tenant's own rows, but with no tenant GUC set — under
+	// strict RLS this would otherwise silently delete zero rows (RLS
+	// filters the DELETE's target rows to nothing) while every RowsAffected
+	// below reports 0 and the function still returns success. Assumes
+	// uisce_gold_copy_sync as the very first statement so the deletes
+	// below actually take effect; SET LOCAL ROLE outside a transaction
+	// block is a silent no-op (verified directly), so it must be here,
+	// not before BeginTx.
+	if _, err := tx.ExecContext(ctx, uisce_db.SetGoldCopySyncRoleSQL); err != nil {
+		return fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
+
 	// 2. Delete Connections
 	res, err := tx.ExecContext(ctx, "DELETE FROM connections WHERE tenant_id = $1", tenantID)
 	if err != nil {
@@ -97,6 +111,13 @@ func (w *TenantWorker) InactivateTenantResources(ctx context.Context, tenantID s
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
+
+	// Same reasoning as DeleteTenantResources: assume uisce_gold_copy_sync
+	// as the very first statement so the updates below aren't silently
+	// filtered to zero rows by RLS.
+	if _, err := tx.ExecContext(ctx, uisce_db.SetGoldCopySyncRoleSQL); err != nil {
+		return fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
 
 	// 1. Update Connections
 	res, err := tx.ExecContext(ctx, "UPDATE connections SET is_active = false WHERE tenant_id = $1", tenantID)

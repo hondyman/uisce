@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 )
 
 type ConnectionSyncHandler struct {
@@ -22,7 +25,18 @@ type SyncConnectionsResponse struct {
 }
 
 // SyncConnectionsFromGoldCopy clones connections from the gold copy tenant
-// for all products registered to the target tenant
+// for all products registered to the target tenant.
+//
+// public.tenants has no RLS policy, so steps 1-2 (looking up the target
+// tenant and the gold-copy tenant) run as ordinary queries. Steps 3-5 read
+// and write tenant_product, tenant_instance, connections, and
+// tenant_product_datasource for the gold-copy tenant AND the target
+// tenant in the same operation — structurally cross-tenant, so they run
+// inside one transaction that has assumed uisce_gold_copy_sync. SET LOCAL
+// ROLE must be the very first statement of that explicit transaction:
+// issued outside a transaction block it is a silent no-op (a WARNING, not
+// an error — verified directly), so every read and write below runs on
+// the shared tx, never on h.DB directly.
 func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWriter, r *http.Request) {
 	tenantID := chi.URLParam(r, "tenantId")
 	if tenantID == "" {
@@ -56,68 +70,103 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 		return
 	}
 
+	resp, err := h.syncConnectionsTx(ctx, tenantID, goldCopyTenantID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (h *ConnectionSyncHandler) syncConnectionsTx(ctx context.Context, tenantID, goldCopyTenantID string) (*SyncConnectionsResponse, error) {
+	tx, err := h.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, uisce_db.SetGoldCopySyncRoleSQL); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("assume gold-copy-sync role: %w", err)
+	}
+
+	resp, err := syncConnectionsFromGoldCopy(ctx, tx, tenantID, goldCopyTenantID)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	return resp, nil
+}
+
+// syncConnectionsFromGoldCopy contains the original handler's read/write
+// logic verbatim, just parameterized on tx instead of reaching for h.DB,
+// and returning errors instead of writing HTTP responses directly (the
+// caller decides the status code once, in one place).
+func syncConnectionsFromGoldCopy(ctx context.Context, tx *sql.Tx, tenantID, goldCopyTenantID string) (*SyncConnectionsResponse, error) {
 	// 3. Get tenant's registered products (alpha_product_ids)
-	rows, err := h.DB.QueryContext(ctx, `
-		SELECT DISTINCT alpha_product_id 
-		FROM tenant_product 
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT alpha_product_id
+		FROM tenant_product
 		WHERE tenant_id = $1
 	`, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch tenant products: %v", err), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed to fetch tenant products: %w", err)
 	}
-	defer rows.Close()
 
 	var productIDs []string
 	for rows.Next() {
 		var productID string
 		if err := rows.Scan(&productID); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to scan product ID: %v", err), http.StatusInternalServerError)
-			return
+			rows.Close()
+			return nil, fmt.Errorf("failed to scan product ID: %w", err)
 		}
 		productIDs = append(productIDs, productID)
 	}
+	rows.Close()
 
 	if len(productIDs) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(SyncConnectionsResponse{
-			Success:          true,
-			Message:          "No products registered to tenant",
-			ConnectionsAdded: 0,
-			InstancesUpdated: 0,
-		})
-		return
+		return &SyncConnectionsResponse{
+			Success: true,
+			Message: "No products registered to tenant",
+		}, nil
 	}
 
 	// 4. Get tenant's instances
-	instanceRows, err := h.DB.QueryContext(ctx, `
+	instanceRows, err := tx.QueryContext(ctx, `
 		SELECT id FROM tenant_instance WHERE tenant_id = $1
 	`, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch tenant instances: %v", err), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed to fetch tenant instances: %w", err)
 	}
-	defer instanceRows.Close()
 
 	var instanceIDs []string
 	for instanceRows.Next() {
 		var instanceID string
 		if err := instanceRows.Scan(&instanceID); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to scan instance ID: %v", err), http.StatusInternalServerError)
-			return
+			instanceRows.Close()
+			return nil, fmt.Errorf("failed to scan instance ID: %w", err)
 		}
 		instanceIDs = append(instanceIDs, instanceID)
 	}
+	instanceRows.Close()
 
 	if len(instanceIDs) == 0 {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(SyncConnectionsResponse{
-			Success:          true,
-			Message:          "No instances found for tenant",
-			ConnectionsAdded: 0,
-			InstancesUpdated: 0,
-		})
-		return
+		return &SyncConnectionsResponse{
+			Success: true,
+			Message: "No instances found for tenant",
+		}, nil
 	}
 
 	// 5. For each product, find gold copy connections and clone them
@@ -126,20 +175,19 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 
 	for _, productID := range productIDs {
 		// Get gold copy connections for this product
-		connRows, err := h.DB.QueryContext(ctx, `
-			SELECT DISTINCT c.id, c.name, c.type, c.host, c.port, c.database, c.schema, 
+		connRows, err := tx.QueryContext(ctx, `
+			SELECT DISTINCT c.id, c.name, c.type, c.host, c.port, c.database, c.schema,
 			       c.username, c.password, c.base_url, c.api_key, c.metadata, c.is_active,
 			       tpd.alpha_datasource_id, tpd.source_name
 			FROM connections c
 			JOIN tenant_product_datasource tpd ON tpd.connection_id = c.id
 			JOIN tenant_product tp ON tp.id = tpd.tenant_product_id
-			WHERE c.tenant_id = $1 
+			WHERE c.tenant_id = $1
 			  AND tp.alpha_product_id = $2
 			  AND c.core_id IS NULL
 		`, goldCopyTenantID, productID)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to fetch gold copy connections: %v", err), http.StatusInternalServerError)
-			return
+			return nil, fmt.Errorf("failed to fetch gold copy connections: %w", err)
 		}
 
 		type GoldCopyConnection struct {
@@ -167,8 +215,7 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 				&gc.Schema, &gc.Username, &gc.Password, &gc.BaseURL, &gc.APIKey, &gc.Metadata,
 				&gc.IsActive, &gc.AlphaDatasourceID, &gc.SourceName); err != nil {
 				connRows.Close()
-				http.Error(w, fmt.Sprintf("Failed to scan gold copy connection: %v", err), http.StatusInternalServerError)
-				return
+				return nil, fmt.Errorf("failed to scan gold copy connection: %w", err)
 			}
 			goldConnections = append(goldConnections, gc)
 		}
@@ -179,10 +226,10 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 			for _, instanceID := range instanceIDs {
 				// Check if connection already exists (by core_id)
 				var existingConnID string
-				err := h.DB.QueryRowContext(ctx, `
-					SELECT c.id 
+				err := tx.QueryRowContext(ctx, `
+					SELECT c.id
 					FROM connections c
-					WHERE c.tenant_id = $1 
+					WHERE c.tenant_id = $1
 					  AND c.core_id = $2
 					LIMIT 1
 				`, tenantID, gc.ID).Scan(&existingConnID)
@@ -190,7 +237,7 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 				if err == sql.ErrNoRows {
 					// Connection doesn't exist, create it
 					newConnID := uuid.New().String()
-					_, err := h.DB.ExecContext(ctx, `
+					_, err := tx.ExecContext(ctx, `
 						INSERT INTO connections (
 							id, tenant_id, name, type, host, port, database, schema,
 							username, password, base_url, api_key, metadata, is_active, core_id
@@ -199,42 +246,39 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 						gc.Schema, gc.Username, gc.Password, gc.BaseURL, gc.APIKey, gc.Metadata,
 						gc.IsActive, gc.ID)
 					if err != nil {
-						http.Error(w, fmt.Sprintf("Failed to create connection: %v", err), http.StatusInternalServerError)
-						return
+						return nil, fmt.Errorf("failed to create connection: %w", err)
 					}
 
 					// Link connection to instance via tenant_product_datasource
 					// First, get the tenant_product_id for this instance and product
 					var tenantProductID string
-					err = h.DB.QueryRowContext(ctx, `
-						SELECT id FROM tenant_product 
+					err = tx.QueryRowContext(ctx, `
+						SELECT id FROM tenant_product
 						WHERE datasource_id = $1 AND alpha_product_id = $2
 						LIMIT 1
 					`, instanceID, productID).Scan(&tenantProductID)
 					if err != nil {
 						// If tenant_product doesn't exist, create it
 						tenantProductID = uuid.New().String()
-						_, err = h.DB.ExecContext(ctx, `
+						_, err = tx.ExecContext(ctx, `
 							INSERT INTO tenant_product (id, datasource_id, alpha_product_id, version, is_active)
 							VALUES ($1, $2, $3, 1.0, true)
 						`, tenantProductID, instanceID, productID)
 						if err != nil {
-							http.Error(w, fmt.Sprintf("Failed to create tenant_product: %v", err), http.StatusInternalServerError)
-							return
+							return nil, fmt.Errorf("failed to create tenant_product: %w", err)
 						}
 					}
 
 					// Create tenant_product_datasource link
-					_, err = h.DB.ExecContext(ctx, `
+					_, err = tx.ExecContext(ctx, `
 						INSERT INTO tenant_product_datasource (
-							tenant_product_id, datasource_id, alpha_datasource_id, 
+							tenant_product_id, datasource_id, alpha_datasource_id,
 							connection_id, source_name, is_active, config, core_id
 						) VALUES ($1, $2, $3, $4, $5, true, '{}', $6)
 						ON CONFLICT (tenant_product_id, connection_id) DO NOTHING
 					`, tenantProductID, instanceID, gc.AlphaDatasourceID, newConnID, gc.SourceName, gc.ID)
 					if err != nil {
-						http.Error(w, fmt.Sprintf("Failed to create tenant_product_datasource: %v", err), http.StatusInternalServerError)
-						return
+						return nil, fmt.Errorf("failed to create tenant_product_datasource: %w", err)
 					}
 
 					connectionsAdded++
@@ -244,11 +288,10 @@ func (h *ConnectionSyncHandler) SyncConnectionsFromGoldCopy(w http.ResponseWrite
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(SyncConnectionsResponse{
+	return &SyncConnectionsResponse{
 		Success:          true,
 		Message:          fmt.Sprintf("Successfully synced %d connections across %d instances", connectionsAdded, instancesUpdated),
 		ConnectionsAdded: connectionsAdded,
 		InstancesUpdated: instancesUpdated,
-	})
+	}, nil
 }
