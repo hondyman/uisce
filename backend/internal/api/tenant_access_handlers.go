@@ -42,9 +42,6 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Put("/v1/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
 	r.Get("/admin/tenants/{tenantId}/configuration", h.getTenantConfiguration)
 	r.Put("/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
-
-	// Connection sync handler moved to handlers.ConnectionSyncHandler
-	// r.Post("/tenants/{tenantId}/sync-connections", syncHandler.SyncConnectionsFromGoldCopy)
 }
 
 // TenantResponse represents a tenant in the API response
