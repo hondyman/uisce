@@ -20,14 +20,42 @@ name: Backend Gated Tests (Ephemeral DB)
 # automation for that refresh yet; treat staleness as expected, not a bug.
 #
 # Roles are cluster-wide in Postgres, not per-database, and the container
-# starts with none of alpha's 11 real roles. Every one except app_user and
-# app_admin_read is created here as a blank stub purely so the snapshot's
-# GRANT statements don't fail on "role does not exist" — app_user is created
-# for real (it's assumed to pre-exist by every migration that grants to it,
-# and no migration creates it) and app_admin_read is deliberately NOT
-# stubbed because its own migration (20260916_001_app_admin_read_role.up.sql)
-# creates it for real without an IF NOT EXISTS guard; stubbing it first was
-# tried and fails with "role already exists" (42710).
+# starts with none of alpha's real roles. The snapshot pair below is the
+# reason that matters more than it looks like it should — see the next
+# paragraph — so the role list is DERIVED from the schema snapshot itself
+# (every `GRANT ... TO`, `OWNER TO`, and `ALTER DEFAULT PRIVILEGES ... TO`)
+# rather than hand-maintained. A hand list previously stubbed three roles
+# the snapshot doesn't reference at all (infisical, keycloak, nessie — dead
+# stubs, harmless but pointless) and, in the same commit, omitted one it
+# does need (app_admin_read) by reasoning "its own migration creates it for
+# real" — see below for why that reasoning was wrong. Deriving the list
+# means the day some future migration adds a role and a grant (this
+# codebase does that routinely), CI has no hand list left to fall behind.
+#
+# app_admin_read is created for real here (LOGIN + BYPASSRLS, matching
+# 20260916_001_app_admin_read_role.up.sql exactly) rather than left to that
+# migration, because of a genuine circular dependency, not an ordering
+# mistake: schema-snapshot.sql is a pg_dump of alpha's *already-migrated*
+# live state, so it already bakes in the GRANTs that migration produces
+# (schema-snapshot.sql lines ~108426, ~113830, ~113840, ~113923) — those
+# must resolve during snapshot restore, before `migrate up` ever runs. But
+# `migrate up` can't run first either: 20260916_001's GRANTs target tables
+# (report_executions, admin_audit_logs, ...) that only exist once the
+# snapshot has restored them. Pre-stubbing the role blank was tried and
+# failed too — the migration's bare `CREATE ROLE app_admin_read` (no
+# IF NOT EXISTS) then collides with 42710. The only opening is to create the
+# role for real, with its final attributes, before restore, and record its
+# migration as already reflected in migration-log-snapshot.sql (see that
+# file's own header) so `migrate up` doesn't try to recreate it afterward.
+#
+# ADMIN_READ_DSN is deliberately NOT set in this workflow, so the
+# TestAdminExecutionRepository_LiveAlpha_* / ADMIN_READ_DSN-gated tests in
+# internal/reports continue to skip here — but now for a stated reason
+# (this workflow hasn't taken on wiring a real admin-role connection string
+# yet), not because the role silently doesn't exist. Widening this
+# workflow's responsibility to cover that path is a deliberate, separate
+# follow-up; the role is created with the right attributes now specifically
+# so that follow-up doesn't also have to fix role stubbing.
 #
 # Known gap: this container does not replicate alpha's full posture (mTLS,
 # pg_hba.conf, Debezium). Tests that depend on that config-level reality are
@@ -95,22 +123,52 @@ jobs:
             sleep 1
           done
 
-      - name: Create roles
-        # See the top-of-file comment: app_user is created for real (every
-        # migration that grants to it assumes it pre-exists); the other 8
-        # non-superuser roles alpha has are stubbed blank purely so the
-        # schema snapshot's GRANT statements resolve; app_admin_read is
-        # deliberately excluded because its own migration creates it for
-        # real.
+      - name: Derive and create roles referenced by the schema snapshot
+        # See the top-of-file comment for why this is derived rather than
+        # hand-listed, and why app_admin_read is created for real (with its
+        # final attributes) instead of stubbed blank like the rest.
         env:
           PGPASSWORD: postgres
         run: |
+          set -euo pipefail
+
+          # Every role named in a GRANT ... TO, OWNER TO, or
+          # ALTER DEFAULT PRIVILEGES ... TO in the dump is a role that must
+          # exist before the dump is restored. This is the authoritative
+          # list — it's the dump's own claim about what it needs, so it
+          # can't drift the way a hand-maintained list did (missed
+          # app_admin_read; carried three dead entries the dump never
+          # references at all).
+          grep -ohE '(GRANT[[:print:]]*TO|OWNER TO)[[:space:]]+"?[A-Za-z_][A-Za-z0-9_]*"?[[:space:];]' \
+              backend/db/snapshots/schema-snapshot.sql \
+            | sed -E 's/.*TO[[:space:]]+"?([A-Za-z_][A-Za-z0-9_]*)"?[[:space:];].*/\1/' \
+            | sort -u \
+            | grep -vx -e 'PUBLIC' -e 'postgres' -e 'app_user' -e 'app_admin_read' \
+            > /tmp/referenced_roles.txt || true
+
+          echo "Roles referenced by schema-snapshot.sql (excluding app_user/app_admin_read, handled below):"
+          cat /tmp/referenced_roles.txt
+
+          # app_user: created for real. Every migration that grants to it
+          # assumes it pre-exists; no migration creates it.
           psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
             CREATE USER app_user WITH PASSWORD 'app_user_password';
           "
-          for role in authenticated infisical keycloak nessie semlayer_lookups_replica temporal usice_app usice_ops; do
-            psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "CREATE ROLE $role;"
-          done
+
+          # app_admin_read: created for real, with the exact attributes
+          # 20260916_001_app_admin_read_role.up.sql gives it. See the
+          # top-of-file comment for the circular-dependency reasoning —
+          # this can't be a blank stub, and it can't wait for `migrate up`.
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
+            CREATE ROLE app_admin_read WITH LOGIN PASSWORD 'app_admin_read_password' NOCREATEDB NOCREATEROLE BYPASSRLS;
+          "
+
+          # Every other referenced role: a blank stub is sufficient — the
+          # snapshot's GRANTs to them just need the role to exist.
+          while IFS= read -r role; do
+            [ -z "$role" ] && continue
+            psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "CREATE ROLE \"$role\";"
+          done < /tmp/referenced_roles.txt
 
       - name: Restore schema snapshot
         env:

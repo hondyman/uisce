@@ -22,6 +22,28 @@ SET row_security = off;
 -- Data for Name: migration_log; Type: TABLE DATA; Schema: oms; Owner: postgres
 --
 
+-- NOTE (interim, hand-patched — not part of the original pg_dump above):
+-- This file and schema-snapshot.sql were captured from alpha at different
+-- moments, so they went out of sync: schema-snapshot.sql already reflects
+-- 20260915_001_report_executions_schedule_id.up.sql (the schedule_id column
+-- on public.report_executions) and 20260916_001_app_admin_read_role.up.sql
+-- (the app_admin_read role and its grants), but neither migration's row
+-- made it into this log dump. Left as-is, `migrate up` in CI would try to
+-- re-run both against a schema that already has their effects — harmless
+-- for 20260915_001 (its ADD COLUMN IF NOT EXISTS / CREATE INDEX IF NOT
+-- EXISTS are idempotent, so it would silently no-op) but fatal for
+-- 20260916_001 (CREATE ROLE app_admin_read has no IF NOT EXISTS guard,
+-- 42710 "role already exists" once the CI workflow creates that role for
+-- real before restore — see backend-gated-tests.yml's top-of-file comment).
+--
+-- The two rows below record both migrations as already reflected, computed
+-- from the real on-disk file content (sha256sum, matching the algorithm in
+-- internal/migrations/runner.go's fileSHA256), so `migrate verify` will not
+-- flag them as drifted. This is the immediate unblock, not the durable fix:
+-- the durable fix is generating schema-snapshot.sql and this file together,
+-- from the same pg_dump session against the same alpha state, so the pair
+-- cannot desynchronize again. That regeneration needs a live connection to
+-- alpha and hasn't been done here — tracked as a follow-up.
 COPY oms.migration_log (filename, sha256, applied_at) FROM stdin;
 000063_fix_identity_profile_mappings.up.sql	4bbb357e43dd916e6cf8dece5f966f747ba95b7b9445fc1192c03e58bb0ffc9d	2026-08-27 22:24:40.92438+00
 20260729_execution_telemetry.up.sql	19e286ab284b320a4e1f104c6ee0cd02c30a6fa084a1df42a1ac98ff5353d79d	2026-08-28 00:48:56.127466+00
@@ -216,6 +238,8 @@ manual_adopt/wealth_app_schema.sql.up.sql	328b09bfd61d0333ec64183e760ad6ad75c028
 20260912_001_report_library_fts.up.sql	e399c413e6e52bda964b81bf66497cc17efc1208e86da25c66600beb879d3e44	2026-09-10 23:04:19.914867+00
 20260913_001_report_executions_triggered_by.up.sql	ab6e7dd4c1ea8f53fc7e21e31ea076d071a21ded15bd7990b6ca017285ede865	2026-09-11 12:17:56.211298+00
 20260913_002_create_report_execution_events.up.sql	b621fb77aecf52770facf872da80f74082ddd81909a4cb72ad1f34f8f7c7f0c0	2026-09-11 19:54:52.902291+00
+20260915_001_report_executions_schedule_id.up.sql	c73a0bba79eee4d326ca7dfaf8eee087950b76f640e5a4bd696475c53dd78d43	2026-09-12 00:00:00+00
+20260916_001_app_admin_read_role.up.sql	a1d78b930bf9d84698679c85eb88e1e79de4939bbca1447d976f0556e0ee7e5d	2026-09-12 00:00:00+00
 \.
 
 
