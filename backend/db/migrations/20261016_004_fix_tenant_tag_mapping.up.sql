@@ -51,4 +51,17 @@ CREATE POLICY fix_tenant_tag_mapping_isolation_policy ON fix_tenant_tag_mapping
         tenant_id = uisce_get_current_tenant()
     );
 
+-- Grant INSERT/UPDATE/DELETE to the gold-copy sync role so the
+-- seed migration (010) can populate default mappings. Without this,
+-- the SET LOCAL ROLE in 010 bypasses RLS but the role still lacks
+-- the table-level privilege and the INSERT fails with "permission
+-- denied". The role itself was created in 002; this is the
+-- per-table grant that goes alongside.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'uisce_gold_copy_sync') THEN
+        GRANT SELECT, INSERT, UPDATE, DELETE ON fix_tenant_tag_mapping TO uisce_gold_copy_sync;
+    END IF;
+END $$;
+
 COMMIT;
