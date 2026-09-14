@@ -65,7 +65,7 @@ GSIFI (Gold Standard Institutional Financial Isolation) is this repo's non-negot
   ... WHERE tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
   ```
   See `backend/internal/compliance/dynamic_engine.go:140` and `:169` for canonical examples.
-- The Gold Copy tenant id is `00000000-0000-0000-0000-000000000001`. The `gold_copy = true` flag is the single source of truth — never hardcode the UUID.
+- The Gold Copy tenant id is `00000000-0000-0000-0000-000000000001`. The `gold_copy = true` flag is the *operational* source of truth — but the row at the well-known UUID is what every query in the codebase resolves to. The "never hardcode the UUID" rule applies to runtime lookups (always go through `tenants WHERE gold_copy = true`); the *establishment* of that row by migration 002a is a one-time bootstrap and is consistent with `AGENTS.md` "Gold Copy tenant id". Don't introduce a second gold-copy tenant in code; don't change the UUID without a migration that updates every consumer.
 - Use `backend/internal/tenant/goldcopy/resolver.go` (`Resolver.IsGoldCopy(id)`, `Resolver.ResolveGoldCopyTenantID()`) rather than re-implementing the lookup.
 - RLS: `20260906_001_force_rls_tenant_bearing.up.sql` forces tenant RLS on tenant-bearing tables. The new `fix_tenant_config`, `fix_tenant_tag_mapping`, `fix_session_log` tables must either be added **with RLS enabled in the migration** (preferred) or carry the `(tenant_id = $X OR gold_copy)` clause in every query.
 
@@ -194,7 +194,7 @@ Add these to `backend/internal/datapipeline/transforms.go` (transform/validator/
 
 ### `fix_decode` — transform
 
-Parses `raw_bytes` into a tag/value map. Use the canonical `crims_fix_schema.txt` (1059 lines, in repo root) as the default dictionary.
+Parses `raw_bytes` into a tag/value map. The canonical source for FIX 4.4 tag definitions is the FIX 4.4 spec shipped with `quickfixgo` at `quickfix@v0.9.0/spec/FIX44.xml` (3,808 fields across 93 message types) — NOT `crims_fix_schema.txt` in the repo root, which is the CRIMS operational Postgres schema dump (`fix_alert`, `fix_broker_condition`, etc.), not the FIX protocol tag dictionary. **This was a real error in earlier versions of this doc.**
 
 - **Config**: `{"fix_version": "FIX.4.4", "validate_required_tags": true}`
 - **Output**: record gains a `tags` field: `{"11": "ORD-001", "55": "AAPL", ...}`. `raw_bytes` retained for downstream tiles.
@@ -205,6 +205,7 @@ Parses `raw_bytes` into a tag/value map. Use the canonical `crims_fix_schema.txt
 Applies tenant-specific tag → semantic-field mapping from `fix_tenant_tag_mapping`. This is the per-tenant flexibility mechanism — one tenant may map `tag 11` (ClOrdID) to `field external_order_id`; another maps it to `field client_order_ref`. The tile does the join.
 
 - **Config**: `{"semantic_root": "trade", "drop_unmapped": false}`
+- **Coverage**: 9 NewOrderSingle + 12 ExecutionReport tags seeded under the gold-copy tenant by migration `20261016_010` — intentionally a starter subset, not the full FIX 4.4 dictionary. Tags not in the mapping pass through unchanged (`drop_unmapped: false`). Tenants needing additional tags add them as per-tenant overrides (which win via the precedence rule).
 - **Output**: record gains `semantic`: `{"external_order_id": "ORD-001", "symbol": "AAPL", "side": "BUY", "quantity": 100.0, "price": 178.50, ...}`.
 - **Lookup query** (must follow GSIFI pattern — note the **parenthesization**; without it, AND binds tighter than OR and tenant rows bypass the `fix_version`/`msg_type` filters):
   ```sql
@@ -341,7 +342,11 @@ CREATE TABLE IF NOT EXISTS fix_tenant_tag_mapping (
     transform_fn TEXT,                  -- e.g. 'upper', 'numeric', 'parse_iso_currency'
     UNIQUE (tenant_id, fix_version, msg_type, fix_tag)
 );
--- seed from crims_fix_schema.txt; GSIFI RLS as above
+-- (No seed in this migration; default tag mappings land via
+-- 20261016_010 which uses the FIX 4.4 spec shipped with quickfixgo,
+-- NOT crims_fix_schema.txt — see migration 010 header for the source
+-- distinction.)
+-- GSIFI RLS: same regime as 003. Tenant-scoped via uisce_get_current_tenant().
 
 -- 2026MMDD_HH_fix_session_log.up.sql (append-only audit, not a workflow source)
 CREATE TABLE IF NOT EXISTS fix_session_log (
@@ -556,3 +561,56 @@ If any of (1)–(7) fails, the build is not done.
 ### Admin-API network co-location
 
 The `127.0.0.1:8981` admin listener is host-local, **not** container-local. If the acceptor runs containerized (e.g. in `docker-compose.remote.yml`), the Temporal worker pod/process must share the acceptor's network namespace to reach it — `network_mode: "service:fix-acceptor"` in compose, or a sidecar pattern. Alternatively, parameterize the admin URL via env (`FIX_ADMIN_URL=http://fix-acceptor:8981`) and rely on the Docker network to route. **Do not** ship a config that assumes localhost from a container.
+
+## 20. Pre-merge checklist
+
+Before merging the FIX series into a target environment (alpha, staging, production), run these three checks. Each has a known-good outcome and a known-bad outcome; do not deploy on a known-bad without conscious override.
+
+### 20.1 Column-state check per environment
+
+The 002a migration establishes `public.tenants.gold_copy` and inserts a row at `00000000-0000-0000-0000-000000000001`. Three pre-merge states are possible; the migration's effect differs by state:
+
+```sql
+SELECT count(*) AS gold_copy_col
+  FROM information_schema.columns
+  WHERE table_schema='public' AND table_name='tenants' AND column_name='gold_copy';
+
+SELECT count(*) AS gold_copy_rows
+  FROM public.tenants WHERE gold_copy = true;
+```
+
+| `gold_copy_col` | `gold_copy_rows` | State | Migration effect |
+|---|---|---|---|
+| 0 | (n/a — query errors) | **broken** | 002a repairs — every GSIFI consumer goes from `column does not exist` errors to working-as-designed. Safe to ship. |
+| 1 | 0 | **partial** | 002a adds the gold-copy row — every GSIFI consumer expands visibility from "tenant only" to "tenant + gold copy inheritance". **Review the ~30 production consumers (§§ of commit 53874e586 blast radius) for any whose behavior you don't want expanded.** |
+| 1 | 1 | **no-op** | 002a is idempotent. Ship. |
+
+For state (1,0) — the expansion case — the consumers most worth eyeballing are `compliance/dynamic_engine.go:140,169` (compliance evaluations), `boresolver/bo_repository.go:570` (BO query join), and `db/catalog.go` (catalog queries). None of these have been observed to break in practice, but the review is cheap.
+
+### 20.2 Hash-checked runner verify
+
+After the branch is merged but before `migrate up` is run, dry-run a `verify`:
+
+```bash
+DATABASE_URL=... go run ./cmd/migrate verify
+```
+
+Expected output: `no drift: every applied migration's on-disk content matches its recorded checksum`.
+
+A non-empty result means either (a) a migration file was edited after apply (immutable-once-applied rule — see commit 53874e586 message), or (b) a migration was renamed (this is what happened locally with `009` → `002a`; if any environment had recorded the old filename, drift would surface here). The fix for (b) is to also rename the entry in `oms.migration_log` to match the new filename, or apply the new file under the new name and let it succeed.
+
+### 20.3 Full-chain runner apply
+
+Once 20.2 is clean, the actual apply:
+
+```bash
+DATABASE_URL=... go run ./cmd/migrate up
+```
+
+Expected: 001 → 002 → 002a → 003 → 004 → 005 → 006 → 007 → 008 → 010 apply in order. The pre-existing migration `20260730_maker_checker_governance.up.sql` blocks `go run ./cmd/migrate` (it has `BEGIN/COMMIT` inside, which the runner rejects — pre-existing bug, not from this series). On environments where that pre-existing bug is also fixed, the apply proceeds cleanly to the FIX migrations.
+
+If the apply succeeds end-to-end, every `fix_*` table exists with RLS, the gold-copy tenant row exists, and the 21 default tag mappings are seeded under it.
+
+### 20.4 Alpha is not a canary
+
+Alpha (the local dev DB) has 114 pending migrations — meaning none of the FIX series, none of the GSIFI-tagged tables, and none of the compliance/boresolver/agentic subsystems are deployed there. **The "verified on alpha" claim in this series applies only to the FIX migrations and their direct dependencies.** Anything that touches `catalog_node`, `catalog_edge`, `audit_logs`, `connections`, `tenant_instance`, etc. is not exercised against alpha — verified only against a scratch DB with the relevant tables created manually. If alpha is meant to catch pre-merge regressions, the migration runner needs to be part of whatever deploys to it; if it's a scratch environment, fine, but then "verified on alpha" should stop appearing in commit messages as if it means something.

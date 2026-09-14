@@ -21,9 +21,10 @@
 -- PIPELINE.md §9 fix_tag_map precedence rule).
 --
 -- Idempotency note: this migration depends on the gold-copy tenant
--- row existing. Migration 009 creates it. If 009 hasn't been applied,
--- the DO block below no-ops with a NOTICE — gold-copy inheritance
--- won't work but the migration won't fail.
+-- row existing. Migration 002a creates it. If 002a hasn't been applied
+-- (e.g. someone cherry-picked this migration), the DO block below
+-- no-ops with a NOTICE — gold-copy inheritance won't work but the
+-- migration won't fail.
 
 BEGIN;
 
@@ -37,9 +38,23 @@ BEGIN
     LIMIT 1;
 
     IF gold_id IS NULL THEN
-        RAISE NOTICE 'fix_tenant_tag_mapping seed skipped: no gold_copy tenant found. Apply migration 009 first.';
+        RAISE NOTICE 'fix_tenant_tag_mapping seed skipped: no gold_copy tenant found. Apply migration 002a first.';
         RETURN;
     END IF;
+
+    -- SET LOCAL ROLE so the INSERT bypasses the strict RLS WITH CHECK
+    -- on fix_tenant_tag_mapping. The uisce_gold_copy_sync role has
+    -- BYPASSRLS (migration 002) and was granted to app_user there;
+    -- SET LOCAL ROLE reverts on transaction end, same semantics as
+    -- SET LOCAL <parameter>. This matches the existing pattern in
+    -- internal/db/cross_tenant.go's WithGoldCopySync.
+    --
+    -- If the connecting role isn't a member of uisce_gold_copy_sync
+    -- (e.g. an operator running the migration as a role that wasn't
+    -- granted membership), this SET LOCAL ROLE will fail — that's
+    -- intentional; the operator should run the migration as app_user
+    -- (or another role granted membership) per migration 002.
+    SET LOCAL ROLE uisce_gold_copy_sync;
 
     -- ─── MsgType D: NewOrderSingle ────────────────────────────────────
     -- The canonical outbound order entry tags. Each is the FIX 4.4

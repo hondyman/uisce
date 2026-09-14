@@ -1,7 +1,24 @@
--- 20261016_009_seed_gold_copy_tenant.up.sql
+-- 20261016_002a_seed_gold_copy_tenant.up.sql
 -- Bridge migration: ensure the gold-copy tenant exists on `public.tenants`
 -- so the GSIFI read-inheritance policy on fix_tenant_tag_mapping (and
 -- every other GSIFI-tagged table) actually has something to inherit.
+--
+-- Numbering: lexicographically sorts AFTER 002_gold_copy_sync_role and
+-- BEFORE 003_fix_tenant_config — verified by running 003 directly
+-- against a fresh DB without this migration; 003's RLS policy fails
+-- with "column 'gold_copy' does not exist". So this migration is a
+-- hard prerequisite for every FIX migration that uses GSIFI.
+--
+-- Blast radius (this is NOT a FIX-scoped change despite landing in the
+-- same series): every production query that does
+-- `WHERE gold_copy = true LIMIT 1` (see `grep -rn 'gold_copy = true'
+-- backend/internal/`) silently returns NULL today on environments
+-- where this column doesn't exist. This migration makes those queries
+-- return the gold-copy row instead — fixing a pre-existing bug, but
+-- also changing the effective scope of compliance evaluations,
+-- boresolver reads, agentic subsystems, etc. Reviewers: this is the
+-- migration to look at hardest. The behavior change is intentional
+-- but should be a conscious decision, not a side effect.
 --
 -- Why this is here: pre-existing runner-applied migrations (003, 004,
 -- 005, 007) all reference `(SELECT id FROM public.tenants WHERE
