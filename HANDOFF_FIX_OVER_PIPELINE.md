@@ -564,7 +564,30 @@ The `127.0.0.1:8981` admin listener is host-local, **not** container-local. If t
 
 ## 20. Pre-merge checklist
 
-Before merging the FIX series into a target environment (alpha, staging, production), run these three checks. Each has a known-good outcome and a known-bad outcome; do not deploy on a known-bad without conscious override.
+Before merging the FIX series into a target environment (alpha, staging, production), run these checks. Each has a known-good outcome and a known-bad outcome; do not deploy on a known-bad without conscious override.
+
+### 20.0 (item zero) — Runner-acceptance of pre-existing migrations with stray `BEGIN`/`COMMIT`
+
+The runner (`backend/internal/migrations/runner.go`) rejects any migration file containing top-level `BEGIN`/`COMMIT`/`ROLLBACK` statements — it wraps each file in its own transaction, so a stray inner pair breaks the wrapping. As of this writing, **at least ten** pre-existing migrations in `backend/db/migrations/` carry this bug:
+
+```
+20260730_maker_checker_governance.up.sql
+20260812000003_promote_inline_calc_fields_to_catalog.up.sql
+20260812000004_add_binding_config.up.sql
+20260825_001_repopulate_business_objects_from_subtype_registry.up.sql
+20260827_001_fix_parent_bo_corefields.up.sql
+20260830_001_reassign_subtype_fields_to_child_bos.up.sql
+20260906_001_force_rls_tenant_bearing.up.sql
+20260930_001_fix_gold_copy_subtype_registry.up.sql
+20260930_002_seed_core_report_definitions.up.sql
+20260930_003_seed_parent_business_objects.up.sql
+```
+
+Each fix is a two-line change: remove the outer `BEGIN;` and `COMMIT;`. The DO-blocks inside that also contain `BEGIN`/`END` are PL/pgSQL syntax, not transaction-control — those stay.
+
+The first one (`20260730_maker_checker_governance.up.sql`) is the critical-path blocker because it sorts early in the apply order; the rest surface later as the runner progresses. **No fresh environment can bootstrap past the first one until that specific file is fixed.** The fix should be its own commit per file (not bundled), with verification that the runner accepts the file and the apply completes successfully.
+
+This is item zero in the checklist — verify it before 20.1 below. On environments where the runner's `up` is the bootstrap path (every fresh environment), item zero is a hard prerequisite.
 
 ### 20.1 Column-state check per environment
 
