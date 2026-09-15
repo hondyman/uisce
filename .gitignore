@@ -117,6 +117,7 @@ Thumbs.db
 *.rej
 *.before_fix.bak
 .env.before_fix.bak
+.env.infisical
 schema_backup_*.sql
 vite.config.ts.timestamp-*.mjs
 

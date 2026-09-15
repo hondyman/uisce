@@ -412,7 +412,24 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 	}
 
 	logging.GetLogger().Sugar().Infof("[DEBUG] Executing query: %s with args: %v", query, args)
-	err := s.alphaDB.Select(&datasources, query, args...)
+	// This scans across tenant boundaries by design (a specific datasource may
+	// belong to any tenant, and "scan all" spans every tenant), so it needs
+	// the elevated cross-tenant role rather than the caller's own tenant scope.
+	err := db.WithGoldCopySync(context.Background(), s.alphaDB.DB, func(tx *sql.Tx) error {
+		rows, qErr := tx.QueryContext(context.Background(), query, args...)
+		if qErr != nil {
+			return qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var ds DatasourceConfig
+			if scanErr := rows.Scan(&ds.ID, &ds.TenantID, &ds.Name, &ds.SourceSystem, &ds.ConnectionDetails, &ds.IsGoldCopy); scanErr != nil {
+				return scanErr
+			}
+			datasources = append(datasources, ds)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("[DEBUG] Query error: %v", err)
 		return nil, fmt.Errorf("failed to query tenant_product_datasource: %w", err)
@@ -422,15 +439,27 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 	return datasources, nil
 }
 
-// scanSingleDatasource scans a single datasource for metadata
+// updateScanStatus records scan progress on a datasource that may belong to
+// any tenant; the caller here is a system-level scan job, not a tenant-scoped
+// request, so this needs the elevated cross-tenant role.
+func (s *CatalogScanService) updateScanStatus(ctx context.Context, id uuid.UUID, status, message string) {
+	err := db.WithGoldCopySync(ctx, s.alphaDB.DB, func(tx *sql.Tx) error {
+		_, execErr := tx.ExecContext(ctx, `
+			UPDATE public.tenant_product_datasource
+			SET last_scan_status = $2, last_scan_at = NOW(), last_scan_message = $3
+			WHERE id = $1
+		`, id, status, message)
+		return execErr
+	})
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("Failed to update scan status for datasource %s: %v", id, err)
+	}
+}
+
 // scanSingleDatasource scans a single datasource for metadata
 func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds DatasourceConfig, goldCopyNodes map[string]db.GoldCopyNodeInfo, progress chan<- models.ScanProgress) (*ScanResult, error) {
 	// UPDATE STATUS: Running
-	_, _ = s.alphaDB.ExecContext(ctx, `
-		UPDATE public.tenant_product_datasource
-		SET last_scan_status = 'running', last_scan_at = NOW(), last_scan_message = ''
-		WHERE id = $1
-	`, ds.ID)
+	s.updateScanStatus(ctx, ds.ID, "running", "")
 
 	logging.GetLogger().Sugar().Infof("Starting scan for datasource: %s (ID: %s)", ds.Name, ds.ID)
 
@@ -454,11 +483,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	}
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to connect to target database %s: %w", ds.Name, err)
 	}
 	defer targetDB.Close()
@@ -477,11 +502,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	ansiScanner, err := newMetadataScanner(targetDB, ds.TenantID, ds.ID, ds.SourceSystem, goldCopyNodes, ds.IsGoldCopy, schemaWhitelist)
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to create scanner for %s: %w", ds.Name, err)
 	}
 
@@ -492,11 +513,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	nodes, edges, err := ansiScanner.ExtractMetadata()
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to extract metadata from %s: %w", ds.Name, err)
 	}
 
@@ -511,21 +528,13 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	if s.storeFunc != nil {
 		if added, updated, removed, err = s.storeFunc(ctx, ds.ID, nodes, edges, progress); err != nil {
 			// UPDATE STATUS: Failed
-			_, _ = s.alphaDB.ExecContext(ctx, `
-				UPDATE public.tenant_product_datasource
-				SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-				WHERE id = $1
-			`, ds.ID, err.Error())
+			s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 			return nil, fmt.Errorf("failed to store catalog data for %s: %w", ds.Name, err)
 		}
 	} else {
 		if added, updated, removed, err = s.storeCatalogData(ctx, ds.ID, nodes, edges, progress); err != nil {
 			// UPDATE STATUS: Failed
-			_, _ = s.alphaDB.ExecContext(ctx, `
-				UPDATE public.tenant_product_datasource
-				SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-				WHERE id = $1
-			`, ds.ID, err.Error())
+			s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 			return nil, fmt.Errorf("failed to store catalog data for %s: %w", ds.Name, err)
 		}
 	}
@@ -610,11 +619,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	}
 
 	// UPDATE STATUS: Success
-	_, _ = s.alphaDB.ExecContext(ctx, `
-		UPDATE public.tenant_product_datasource
-		SET last_scan_status = 'success', last_scan_at = NOW(), last_scan_message = 'Scan completed successfully'
-		WHERE id = $1
-	`, ds.ID)
+	s.updateScanStatus(ctx, ds.ID, "success", "Scan completed successfully")
 
 	logging.GetLogger().Sugar().Infof("Successfully completed scan for datasource: %s (charts_rebuilt=%v)", ds.Name, result.ChartsRebuilt)
 

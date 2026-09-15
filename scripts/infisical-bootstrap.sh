@@ -198,11 +198,17 @@ generate_composite_secrets() {
     if ! grep -q "^REDIS_URL=" "$output_path"; then
         echo "REDIS_URL=redis://${db_host}:6379" >> "$output_path"
     fi
-    if ! grep -q "^API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=" "$output_path"; then
-        echo "API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true" >> "$output_path"
-    fi
+    # API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK removed — the previous default value
+    # was committed to origin/main and represents a known credential leak. Bootstrap
+    # callers must now set API_TOKEN_ENCRYPTION_KEY explicitly via .env (gitignored)
+    # before invoking this script. Adding DEV_FALLBACK=true here would re-introduce
+    # the silent-leak path.
     if ! grep -q "^API_TOKEN_ENCRYPTION_KEY=" "$output_path"; then
-        echo "API_TOKEN_ENCRYPTION_KEY=D+1O956T8t9zZ+w/FqK1lS9b8jJ2vR7mX4kY0uP3oN8=" >> "$output_path"
+        # Fail-fast: bootstrap refuses to write a hardcoded fallback. Caller must
+        # set API_TOKEN_ENCRYPTION_KEY in their environment (e.g. via .env which is
+        # gitignored) before invoking this script.
+        echo "ERROR: API_TOKEN_ENCRYPTION_KEY not set in environment. Refusing to fall back to a value that was committed to origin/main (de336a41af)." >&2
+        return 1
     fi
 
     # Keycloak JWKS/issuer defaults. These are not currently stored as

@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 )
 
 // Config controls how tenant automation runs.
@@ -73,11 +75,45 @@ func Execute(ctx context.Context, cfg Config) (Result, error) {
 		return Result{}, fmt.Errorf("ping postgres: %w", err)
 	}
 
-	rows, err := db.QueryContext(ctx, tenantAutomationQuery)
+	// This batch scans across every tenant's datasources by design (it
+	// generates the tenant scope file for the whole fleet), so the read
+	// needs the elevated cross-tenant role rather than any single tenant's
+	// own scope.
+	var tenantRows []tenantRow
+	err = uisce_db.WithGoldCopySync(ctx, db, func(tx *sql.Tx) error {
+		rows, qErr := tx.QueryContext(ctx, tenantAutomationQuery)
+		if qErr != nil {
+			return qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var row tenantRow
+			if scanErr := rows.Scan(
+				&row.TenantID,
+				&row.TenantName,
+				&row.TenantDisplayName,
+				&row.TenantInstanceName,
+				&row.TenantIsGoldCopy,
+				&row.DatasourceID,
+				&row.AlphaDatasourceID,
+				&row.DatasourceName,
+				&row.DatasourceCode,
+				&row.DatasourceConfig,
+				&row.InstanceConfig,
+				&row.ResourceGroup,
+				&row.SchemaOverrideRepo,
+				&row.SchemaOverrideBranch,
+				&row.ConnectionString,
+			); scanErr != nil {
+				return scanErr
+			}
+			tenantRows = append(tenantRows, row)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return Result{}, fmt.Errorf("tenant datasource query failed: %w", err)
 	}
-	defer rows.Close()
 
 	tenantAllow := toSet(cfg.TenantFilter)
 	datasourceAllow := toSet(cfg.DatasourceFilter)
@@ -92,28 +128,7 @@ func Execute(ctx context.Context, cfg Config) (Result, error) {
 		result  Result
 	)
 
-	for rows.Next() {
-		var row tenantRow
-		if err := rows.Scan(
-			&row.TenantID,
-			&row.TenantName,
-			&row.TenantDisplayName,
-			&row.TenantInstanceName,
-			&row.TenantIsGoldCopy,
-			&row.DatasourceID,
-			&row.AlphaDatasourceID,
-			&row.DatasourceName,
-			&row.DatasourceCode,
-			&row.DatasourceConfig,
-			&row.InstanceConfig,
-			&row.ResourceGroup,
-			&row.SchemaOverrideRepo,
-			&row.SchemaOverrideBranch,
-			&row.ConnectionString,
-		); err != nil {
-			return result, fmt.Errorf("scan tenant datasource row: %w", err)
-		}
-
+	for _, row := range tenantRows {
 		result.TotalRows++
 
 		if len(tenantAllow) > 0 && !tenantAllow[strings.ToLower(row.TenantID)] {
@@ -139,10 +154,6 @@ func Execute(ctx context.Context, cfg Config) (Result, error) {
 		entries = append(entries, entry)
 		logger.Info("tenant provisioning complete", "tenant", row.TenantID, "datasource", row.DatasourceID, "files", len(summary))
 		result.Written++
-	}
-
-	if err := rows.Err(); err != nil {
-		return result, err
 	}
 
 	if result.Written == 0 && len(result.Failures) == 0 {
