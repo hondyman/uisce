@@ -1995,22 +1995,21 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	// Load physical source bindings for this Business Object
 	bo.Bindings = []map[string]interface{}{}
 	type bindingRow struct {
-		BoBindingId   string `db:"bo_binding_id"`
-		BindingName   string `db:"binding_name"`
-		BackendId     string `db:"backend_id"`
-		NodeName      string `db:"node_name"`
-		QualifiedPath string `db:"qualified_path"`
-		IsCore        bool   `db:"is_core"`
-		IsActive      bool   `db:"is_active"`
-		TemporalMode  string `db:"temporal_mode"`
+		BoBindingId      string `db:"bo_binding_id"`
+		BackendId        string `db:"backend_id"`
+		BackendType      string `db:"backend_type"`
+		NodeName         string `db:"node_name"`
+		QualifiedPath    string `db:"qualified_path"`
+		IsDefault        bool   `db:"is_default"`
+		TemporalOverride string `db:"temporal_override"`
 	}
 	var bRows []bindingRow
 	bindingQuery := `
-		SELECT bob.bo_binding_id, bob.binding_name, COALESCE(bob.backend_id::text, '') AS backend_id,
+		SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+		       bob.backend_type AS backend_type,
 		       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-		       COALESCE(bob.is_core, false) AS is_core, COALESCE(bob.is_active, true) AS is_active,
-		       COALESCE(bob.temporal_mode, 'NONE') AS temporal_mode
-		FROM business_object_binding bob
+		       bob.is_default AS is_default, bob.temporal_override AS temporal_override
+		FROM business_object_bindings bob
 		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 		WHERE bob.bo_id::text = $1 AND (bob.tenant_id::text = $2 OR bob.tenant_id::text = $3)
 	`
@@ -2019,11 +2018,11 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	if len(bRows) == 0 {
 		fallbackBindingQuery := `
-			SELECT bob.bo_binding_id, bob.binding_name, COALESCE(bob.backend_id::text, '') AS backend_id,
+			SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+			       bob.backend_type AS backend_type,
 			       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-			       COALESCE(bob.is_core, false) AS is_core, COALESCE(bob.is_active, true) AS is_active,
-			       COALESCE(bob.temporal_mode, 'NONE') AS temporal_mode
-			FROM business_object_binding bob
+			       bob.is_default AS is_default, bob.temporal_override AS temporal_override
+			FROM business_object_bindings bob
 			LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 			WHERE bob.bo_id::text = $1
 		`
@@ -2031,14 +2030,13 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	for _, b := range bRows {
 		bo.Bindings = append(bo.Bindings, map[string]interface{}{
-			"boBindingId":     b.BoBindingId,
-			"bindingName":     b.BindingName,
-			"backendId":       b.BackendId,
-			"drivingNodeName": b.QualifiedPath,
-			"nodeName":        b.NodeName,
-			"isCore":          b.IsCore,
-			"isActive":        b.IsActive,
-			"temporalMode":    b.TemporalMode,
+			"boBindingId":      b.BoBindingId,
+			"backendId":        b.BackendId,
+			"backendType":      b.BackendType,
+			"drivingNodeName":  b.QualifiedPath,
+			"nodeName":         b.NodeName,
+			"isDefault":        b.IsDefault,
+			"temporalOverride": b.TemporalOverride,
 		})
 	}
 
