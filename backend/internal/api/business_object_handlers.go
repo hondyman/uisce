@@ -782,12 +782,12 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	// Get bindings for this BO from business_object_bindings
 	var bindings []map[string]interface{}
 	bindingQuery := `
-		SELECT binding_id, binding_name, binding_mode, physical_table_name,
-		       valid_time_start_col, valid_time_end_col, transaction_time_start_col,
-		       transaction_time_end_col, is_primary, COALESCE(config, '{}'::jsonb) as config
-		FROM public.business_object_bindings
-		WHERE tenant_id = $1 AND bo_id = $2
-		ORDER BY is_primary DESC, binding_name
+		SELECT bob.id, bob.backend_id, bob.backend_type, bob.is_default, bob.temporal_override,
+		       COALESCE(cn.node_name, '') as node_name, COALESCE(cn.qualified_path, '') as qualified_path
+		FROM public.business_object_bindings bob
+		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
+		WHERE bob.tenant_id = $1 AND bob.bo_id = $2
+		ORDER BY bob.is_default DESC
 	`
 	if h.db != nil {
 		bindingRows, err := h.db.QueryContext(ctx, bindingQuery, secCtx.TenantID, id)
@@ -795,46 +795,25 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 			defer bindingRows.Close()
 			for bindingRows.Next() {
 				var b struct {
-					BindingID           string  `db:"binding_id"`
-					BindingName         string  `db:"binding_name"`
-					BindingMode         string  `db:"binding_mode"`
-					PhysicalTableName   string  `db:"physical_table_name"`
-					ValidTimeStartCol   *string `db:"valid_time_start_col"`
-					ValidTimeEndCol     *string `db:"valid_time_end_col"`
-					TransactionStartCol *string `db:"transaction_time_start_col"`
-					TransactionEndCol   *string `db:"transaction_time_end_col"`
-					IsPrimary           bool    `db:"is_primary"`
-					Config              []byte  `db:"config"`
+					ID               string `db:"id"`
+					BackendID        string `db:"backend_id"`
+					BackendType      string `db:"backend_type"`
+					IsDefault        bool   `db:"is_default"`
+					TemporalOverride string `db:"temporal_override"`
+					NodeName         string `db:"node_name"`
+					QualifiedPath    string `db:"qualified_path"`
 				}
-				if err := bindingRows.Scan(&b.BindingID, &b.BindingName, &b.BindingMode, &b.PhysicalTableName,
-					&b.ValidTimeStartCol, &b.ValidTimeEndCol, &b.TransactionStartCol, &b.TransactionEndCol,
-					&b.IsPrimary, &b.Config); err == nil {
-					binding := map[string]interface{}{
-						"binding_id":         b.BindingID,
-						"binding_name":       b.BindingName,
-						"binding_mode":       b.BindingMode,
-						"physical_table_name": b.PhysicalTableName,
-						"is_primary":         b.IsPrimary,
-					}
-					if b.ValidTimeStartCol != nil {
-						binding["valid_time_start_col"] = *b.ValidTimeStartCol
-					}
-					if b.ValidTimeEndCol != nil {
-						binding["valid_time_end_col"] = *b.ValidTimeEndCol
-					}
-					if b.TransactionStartCol != nil {
-						binding["transaction_time_start_col"] = *b.TransactionStartCol
-					}
-					if b.TransactionEndCol != nil {
-						binding["transaction_time_end_col"] = *b.TransactionEndCol
-					}
-					if b.Config != nil {
-						var cfg map[string]interface{}
-						if json.Unmarshal(b.Config, &cfg) == nil {
-							binding["config"] = cfg
-						}
-					}
-					bindings = append(bindings, binding)
+				if err := bindingRows.Scan(&b.ID, &b.BackendID, &b.BackendType, &b.IsDefault,
+					&b.TemporalOverride, &b.NodeName, &b.QualifiedPath); err == nil {
+					bindings = append(bindings, map[string]interface{}{
+						"binding_id":        b.ID,
+						"backend_id":        b.BackendID,
+						"backend_type":      b.BackendType,
+						"is_default":        b.IsDefault,
+						"temporal_override": b.TemporalOverride,
+						"driving_node_name": b.NodeName,
+						"driving_node_path": b.QualifiedPath,
+					})
 				}
 			}
 		}
