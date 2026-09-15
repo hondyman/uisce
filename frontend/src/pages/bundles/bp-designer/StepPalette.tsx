@@ -4,14 +4,47 @@
  */
 
 import type React from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { useStepTypes } from './useBPDesignerAPI';
 import styles from './BPDesigner.module.css';
 
 interface StepPaletteProps {
-  onDragStart: (e: React.DragEvent, stepType: any) => void;
+  onDragStart?: (e: React.DragEvent, stepType: any) => void;
 }
 
-export const StepPalette: React.FC<StepPaletteProps> = ({ onDragStart }) => {
+interface DraggableStepItemProps {
+  stepType: any;
+}
+
+const DraggableStepItem: React.FC<DraggableStepItemProps> = ({ stepType }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `step-palette-${stepType.id}`,
+    data: { stepType },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={styles.stepItem}
+      title={stepType.description}
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      {...attributes}
+      {...listeners}
+    >
+      {stepType.icon_svg ? (
+        <div
+          className={styles.stepIcon}
+          dangerouslySetInnerHTML={{ __html: stepType.icon_svg }}
+        />
+      ) : (
+        <span className={styles.stepIconPlaceholder}>📦</span>
+      )}
+      <p className={styles.stepLabel}>{stepType.label}</p>
+    </div>
+  );
+};
+
+export const StepPalette: React.FC<StepPaletteProps> = () => {
   const { data: stepTypes = [], isLoading, error } = useStepTypes();
 
   if (isLoading) {
@@ -40,23 +73,7 @@ export const StepPalette: React.FC<StepPaletteProps> = ({ onDragStart }) => {
 
         <div className={styles.stepList}>
           {stepTypes.map((stepType: any) => (
-            <div
-              key={stepType.id}
-              className={styles.stepItem}
-              draggable
-              onDragStart={(e) => onDragStart(e, stepType)}
-              title={stepType.description}
-            >
-              {stepType.icon_svg ? (
-                <div
-                  className={styles.stepIcon}
-                  dangerouslySetInnerHTML={{ __html: stepType.icon_svg }}
-                />
-              ) : (
-                <span className={styles.stepIconPlaceholder}>📦</span>
-              )}
-              <p className={styles.stepLabel}>{stepType.label}</p>
-            </div>
+            <DraggableStepItem key={stepType.id} stepType={stepType} />
           ))}
         </div>
       </div>

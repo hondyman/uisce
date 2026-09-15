@@ -22,6 +22,7 @@ import {
 import DomainTypeahead from '../../../components/DomainTypeahead'
 import { listPolicies } from '../../../services/policyService'
 import type { AccessControlPolicy } from '../../../types'
+import { apiFetch } from '../../../lib/apiClient'
 
 type Domain = {
   id?: string
@@ -75,11 +76,8 @@ export default function DomainDetailsPage() {
     }
     // load single domain
     setLoading(true)
-    fetch(`/api/data-domains/${id}`, { credentials: 'include' })
-      .then((r) => {
-        if (!r.ok) throw new Error('failed to load')
-        return r.json()
-      })
+    apiFetch(`/api/data-domains/${id}`, { credentials: 'include' })
+      .then((r) => r.json())
       .then((d) => {
         setDomain({
           id: d.id,
@@ -96,8 +94,7 @@ export default function DomainDetailsPage() {
 
   async function fetchAll() {
     try {
-      const res = await fetch('/api/data-domains', { credentials: 'include' })
-      if (!res.ok) throw new Error('Failed to fetch domains')
+      const res = await apiFetch('/api/data-domains', { credentials: 'include' })
       const json = await res.json()
       setDomains(Array.isArray(json) ? json.map((r: any) => ({
         id: r.id,
@@ -199,16 +196,12 @@ export default function DomainDetailsPage() {
     try {
       const url = domain.id ? `/api/data-domains/${domain.id}` : '/api/data-domains'
       const method = domain.id ? 'PUT' : 'POST'
-      const res = await fetch(url, {
+      await apiFetch(url, {
         method,
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      if (!res.ok) {
-        const text = await res.text()
-        throw new Error(text || 'Save failed')
-      }
       // go back to list
       navigate('/core/domains')
     } catch (e: any) {

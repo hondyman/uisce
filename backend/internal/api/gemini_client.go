@@ -31,7 +31,13 @@ func NewGeminiClient(apiKey string) (*GeminiClient, error) {
 
 	return &GeminiClient{
 		client: client,
-		model:  "gemini-pro",
+		// "gemini-pro" (and "gemini-1.5-flash") are retired on the current
+		// Gemini API version (v1beta) - every caller (NL-to-SQL
+		// planner/executor, AI page generation) silently fell back to its
+		// deterministic path with a 404 logged, since none of them treat a
+		// Gemini failure as fatal. Confirmed available via this project's
+		// key's own ListModels response.
+		model: "gemini-2.5-flash",
 	}, nil
 }
 
@@ -215,6 +221,212 @@ func extractSQL(text string) string {
 	}
 
 	return ""
+}
+
+// PageGenerationField is one BO field made available to the model as
+// grounding for page generation - just enough for it to judge the field mix
+// (how many measures vs dimensions) without letting it invent field names
+// the page could bind to, since actual data binding is resolved separately
+// at render time (PageComponentRenderer.tsx fetches live BO terms), not
+// from anything the model outputs here.
+type PageGenerationField struct {
+	Key         string
+	DisplayName string
+	DataType    string
+	Role        string // DIMENSION, MEASURE, or CALCULATED
+}
+
+// RelatedBOSummary is one Business Object related to the page's primary BO
+// (from the already-fixed catalog_edge relationship graph -
+// GetBusinessObjectRelationships), offered to the model as a candidate to
+// pull onto the page - e.g. an "Order" page might pull in "Order
+// Allocation" or "Execution" sections, not just its own fields.
+type RelatedBOSummary struct {
+	BOKey            string
+	DisplayName      string
+	RelationshipType string
+	Cardinality      string
+	Fields           []PageGenerationField
+}
+
+// PageGenerationSection is one widget the model wants placed on the
+// generated page, and which Business Object it should be bound to.
+// BOKey == "" means the page's own primary BO; any other value must match
+// one of the RelatedBOSummary.BOKey values offered in the prompt - the
+// model can't invent a BO to bind to, only choose among ones actually
+// related to the primary. Field binding within a BO is still auto-resolved
+// at render time (PageComponentRenderer.tsx), not chosen here.
+type PageGenerationSection struct {
+	BOKey string `json:"boKey"`
+	Type  string `json:"type"`
+	Title string `json:"title"`
+}
+
+// PageGenerationSpec is the JSON shape asked of the model.
+type PageGenerationSpec struct {
+	Title string `json:"title"`
+	// LayoutTemplate names one of allowedPageGenerationTemplates - the
+	// section-based body layout (frontend/src/pages/page-studio/
+	// layoutTemplates.ts) the generated sections are distributed into, in
+	// order, one per section. Restricted to plain section templates (no
+	// side panels) for this first pass - see PageStudioListPage.tsx's
+	// "Generate with AI" dialog comment.
+	LayoutTemplate string                  `json:"layoutTemplate"`
+	Sections       []PageGenerationSection `json:"sections"`
+}
+
+// allowedPageGenerationWidgetTypes are the only component types the page
+// designer's palette actually renders as data-bound widgets (see
+// COMPONENT_TO_WIDGET_TYPE and the Table/Form special cases in
+// PageComponentRenderer.tsx). Anything else the model returns is dropped
+// rather than trusted, since an unknown component type renders as an inert
+// "Component Preview" placeholder box.
+var allowedPageGenerationWidgetTypes = map[string]bool{
+	"KPIGroup":  true,
+	"LineChart": true,
+	"Table":     true,
+	"Slicer":    true,
+}
+
+// allowedPageGenerationTemplates mirrors the plain section-based ids in
+// layoutTemplates.ts (single-column, two-column, three-column,
+// dashboard-grid). master-detail and two-column-side-panel are deliberately
+// excluded - those bundle a side Panel as part of the template shape, and
+// AI-driven layout is scoped to body sections only for this first pass.
+var allowedPageGenerationTemplates = map[string]bool{
+	"single-column":  true,
+	"two-column":     true,
+	"three-column":   true,
+	"dashboard-grid": true,
+}
+
+// GeneratePageSpec asks Gemini to pick a small section mix and page title
+// for a Business Object, grounded in that BO's real fields AND its real
+// related Business Objects (relatedBOs, from the catalog relationship
+// graph) so the model can decide e.g. "this is an Order page, pull in
+// Order Allocation and Execution as their own sections" instead of only
+// ever describing the primary BO's own fields. It does not choose field
+// bindings itself - see PageGenerationSection - so a wrong or missing field
+// name in the model's reasoning can't corrupt the generated page, and it
+// can't bind to a BO that isn't actually related (validated against
+// relatedBOs below).
+func (gc *GeminiClient) GeneratePageSpec(ctx context.Context, boName, boKey, description string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) (*PageGenerationSpec, error) {
+	if gc.client == nil {
+		return nil, fmt.Errorf("gemini client not initialized")
+	}
+
+	prompt := buildPageGenerationPrompt(boName, boKey, description, fields, relatedBOs)
+
+	model := gc.client.GenerativeModel(gc.model)
+	model.SetTemperature(0.2)
+	// 500, then 1200, both still truncated real responses mid-JSON -
+	// gemini-2.5-flash spends part of MaxOutputTokens on internal
+	// "thinking" tokens before it ever writes the visible JSON, so the
+	// visible-text budget is smaller than the number itself suggests.
+	model.SetMaxOutputTokens(4000)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("gemini API call failed: %w", err)
+	}
+	if len(resp.Candidates) == 0 {
+		return nil, fmt.Errorf("no response from gemini")
+	}
+
+	var responseText string
+	for _, candidate := range resp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if text, ok := part.(genai.Text); ok {
+				responseText = string(text)
+				break
+			}
+		}
+		if responseText != "" {
+			break
+		}
+	}
+	if responseText == "" {
+		return nil, fmt.Errorf("empty response from gemini")
+	}
+
+	jsonStr := extractJSON(responseText)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("failed to extract JSON from response: %s", responseText)
+	}
+
+	var spec PageGenerationSpec
+	if err := json.Unmarshal([]byte(jsonStr), &spec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal page spec: %w", err)
+	}
+
+	// Every boKey the model is allowed to bind to: "" (primary) plus each
+	// offered related BO. Anything else - a hallucinated or misspelled key -
+	// gets remapped to the primary rather than trusted, since an unknown
+	// boKey would leave a section with no resolvable data source.
+	validBOKeys := map[string]bool{"": true}
+	for _, r := range relatedBOs {
+		validBOKeys[r.BOKey] = true
+	}
+
+	// Filter to section types the designer can actually render, and cap the
+	// count - a runaway or malformed response shouldn't be able to hand the
+	// caller an unbounded or unrenderable section list.
+	filtered := make([]PageGenerationSection, 0, len(spec.Sections))
+	for _, s := range spec.Sections {
+		if !allowedPageGenerationWidgetTypes[s.Type] {
+			continue
+		}
+		if !validBOKeys[s.BOKey] {
+			s.BOKey = ""
+		}
+		filtered = append(filtered, s)
+		if len(filtered) == 6 {
+			break
+		}
+	}
+	spec.Sections = filtered
+	if len(spec.Sections) == 0 {
+		return nil, fmt.Errorf("gemini returned no usable sections")
+	}
+	if spec.Title == "" {
+		spec.Title = boName
+	}
+	if !allowedPageGenerationTemplates[spec.LayoutTemplate] {
+		spec.LayoutTemplate = "single-column"
+	}
+
+	return &spec, nil
+}
+
+func buildPageGenerationPrompt(boName, boKey, description string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) string {
+	prompt := "You are designing a single dashboard page layout for a business application, in the same way an experienced investment-management software designer would.\n\n"
+	prompt += "You MUST output only valid JSON in a markdown code block: ```json {...}```\n"
+	prompt += "The JSON shape is exactly: {\"title\": string, \"layoutTemplate\": string, \"sections\": [{\"boKey\": string, \"type\": string, \"title\": string}]}\n"
+	prompt += "\"layoutTemplate\" MUST be one of exactly: \"single-column\", \"two-column\", \"three-column\", \"dashboard-grid\" - pick whichever best fits how many sections you choose (e.g. \"dashboard-grid\" for a KPI+chart+table mix, \"single-column\" for just a table).\n"
+	prompt += "\"type\" MUST be one of exactly: \"KPIGroup\", \"LineChart\", \"Table\", \"Slicer\".\n"
+	prompt += fmt.Sprintf("\"boKey\" MUST be either \"\" (meaning the page's own primary Business Object, %q) or one of the related Business Object keys listed below - never invent one.\n", boKey)
+	prompt += "Pick 2 to 6 sections total, in the order they should fill the template's sections. Always include exactly one \"Table\" section for the primary Business Object (boKey \"\"), placed last among the primary's own sections.\n"
+	prompt += "Only include \"KPIGroup\" or \"LineChart\" for a Business Object if its field list actually has MEASURE fields to summarize.\n"
+	prompt += "Use your judgment about which related Business Objects actually belong on this page given its real-world business use - e.g. an Order page's natural companions are things like its allocations or executions, not every related record that merely happens to reference it. Prefer 0-2 related Business Objects; it is completely fine to include none if the primary object's own data already tells the story, or if the user's request below doesn't call for more.\n"
+	prompt += "Never include any text before or after the JSON block.\n\n"
+	prompt += fmt.Sprintf("Primary Business Object: %s (key: %s)\n", boName, boKey)
+	if description != "" {
+		prompt += fmt.Sprintf("User's request: %s\n", description)
+	}
+	prompt += "\nPrimary Business Object's available fields:\n"
+	for _, f := range fields {
+		prompt += fmt.Sprintf("  - %s (%s, %s)\n", f.DisplayName, f.DataType, f.Role)
+	}
+	if len(relatedBOs) > 0 {
+		prompt += "\nRelated Business Objects you may optionally pull in as their own sections:\n"
+		for _, r := range relatedBOs {
+			prompt += fmt.Sprintf("  Business Object %q (key: %s) - relationship: %s, cardinality: %s\n", r.DisplayName, r.BOKey, r.RelationshipType, r.Cardinality)
+			for _, f := range r.Fields {
+				prompt += fmt.Sprintf("    - %s (%s, %s)\n", f.DisplayName, f.DataType, f.Role)
+			}
+		}
+	}
+	return prompt
 }
 
 // Close closes the Gemini client connection

@@ -1,14 +1,14 @@
-import { useDrop } from 'react-dnd';
+import { useDroppable } from '@dnd-kit/core';
 
 const usePaletteDrop = (activeWorkspaceTab: 'model'|'extension') => {
-  const [{ isOver }, drop] = useDrop(() => ({
-    accept: 'palette-item',
-    canDrop: () => activeWorkspaceTab === 'model',
-    drop: (_item: any) => {},
-    collect: (monitor: any) => ({ isOver: monitor.canDrop() && !!monitor.isOver() }),
-  }), [activeWorkspaceTab]);
+  const { isOver: dndIsOver, setNodeRef } = useDroppable({
+    id: 'palette-drop',
+    disabled: activeWorkspaceTab !== 'model',
+  });
 
-  return { isOver, drop } as const;
+  const isOver = activeWorkspaceTab === 'model' && dndIsOver;
+
+  return { isOver, drop: setNodeRef } as const;
 };
 
 export default usePaletteDrop;

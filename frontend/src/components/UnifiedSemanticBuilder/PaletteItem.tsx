@@ -1,5 +1,5 @@
 // React default import not required with new JSX transform
-import { useDrag } from 'react-dnd';
+import { useDraggable } from '@dnd-kit/core';
 
 interface Props {
   typeName: 'dimension' | 'measure' | 'filter' | 'join';
@@ -14,16 +14,17 @@ interface Props {
 }
 
 const PaletteItem: React.FC<Props> = ({ typeName, label, description, icon, onAdd, horizontal = false, enableDrag = false, onTooltipShow, onTooltipHide }) => {
-  const [{ isDragging }, drag] = useDrag(() => ({
-    type: 'palette-item',
-    canDrag: () => enableDrag,
-    item: { type: typeName, isCore: false },
-  collect: (m: any) => ({ isDragging: !!m.isDragging() })
-  }), [typeName, enableDrag]);
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `palette-item-${typeName}`,
+    data: { type: typeName, isCore: false },
+    disabled: !enableDrag,
+  });
 
   return (
     <button
-      ref={drag}
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       className={`palette-icon-btn colored ${typeName} ${isDragging ? 'dragging' : ''}`}
       type="button"
   onClick={(e) => { e.stopPropagation(); onAdd(typeName); }}

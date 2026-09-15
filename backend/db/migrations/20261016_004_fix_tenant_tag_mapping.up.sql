@@ -14,7 +14,6 @@
 -- RLS: same regime as 20261016_003. Tenant rows are scoped to the current
 -- tenant via the helper function; gold-copy rows are bypass-readable for admin.
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_tenant_tag_mapping (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,4 +63,3 @@ BEGIN
     END IF;
 END $$;
 
-COMMIT;

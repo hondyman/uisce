@@ -33,7 +33,6 @@
 -- counter table — neither is better than the split. quickfix's own SQL
 -- store in newer versions makes the same split.
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_session_state (
     session_id TEXT PRIMARY KEY,
@@ -43,4 +42,3 @@ CREATE TABLE IF NOT EXISTS fix_session_state (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-COMMIT;

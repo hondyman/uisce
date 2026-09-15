@@ -24,6 +24,7 @@ import {
 import { makeStyles } from '@mui/styles';
 import type { ValidationRule as SharedValidationRule } from './types';
 import SearchIcon from '@mui/icons-material/Search';
+import { apiFetch } from '../../lib/apiClient';
 
 const useStyles = makeStyles({
   root: {
@@ -172,16 +173,12 @@ const ValidationRulesList: React.FC = () => {
         setError(null);
 
           const queryStr = buildQueryParams(pageNum, scope.tenantId, scope.datasourceId).toString();
-          const response = await fetch(`/api/validation-rules?${queryStr}`, {
+          const response = await apiFetch(`/api/validation-rules?${queryStr}`, {
           headers: {
             'X-Tenant-ID': scope.tenantId,
             'X-Tenant-Datasource-ID': scope.datasourceId,
           },
         });
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.statusText}`);
-        }
 
         const data: ApiResponse = await response.json();
 

@@ -85,6 +85,7 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 		})
 
 		r.Get("/{id}/with_bindings", h.GetBusinessObjectWithBindings)
+		r.Get("/{id}/bindings", h.GetBusinessObjectBindings)
 		r.Get("/{id}", h.GetBusinessObject)
 		r.Get("/{id}/fields", h.GetBusinessObjectFields)
 		r.Get("/{id}/relationships", h.GetBusinessObjectRelationships)
@@ -715,6 +716,67 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.Response
 	})
 }
 
+// GetBusinessObjectBindings returns the physical backend bindings for a BO
+// as frontend/src/features/query-builder/services/queryBuilderApi.ts's
+// fetchBusinessObjectBindings expects them (bindingId/isDefault/etc.) -
+// that client called this exact path with no handler behind it at all
+// (GetBusinessObjectWithBindings below is a different path, "with_bindings",
+// and its own bindings query targets columns business_object_bindings
+// doesn't have, so it silently returns none either). Page Studio's
+// DataBindingsPanel depends on this to resolve a real bindingId; without
+// one, PageComponentRenderer never renders live data for a bound widget.
+func (h *BusinessObjectHandler) GetBusinessObjectBindings(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	boID := chi.URLParam(r, "id")
+
+	type bindingRow struct {
+		BindingID       string  `db:"binding_id"`
+		BackendID       string  `db:"backend_id"`
+		BackendType     string  `db:"backend_type"`
+		DrivingNodeID   string  `db:"driving_node_id"`
+		DrivingNodeName *string `db:"driving_node_name"`
+		IsDefault       bool    `db:"is_default"`
+	}
+	var rows []bindingRow
+	err = h.db.SelectContext(ctx, &rows, `
+		SELECT b.id AS binding_id, b.backend_id, b.backend_type, b.driving_node_id,
+		       cn.node_name AS driving_node_name, b.is_default
+		FROM public.business_object_bindings b
+		LEFT JOIN public.catalog_node cn ON cn.id = b.driving_node_id
+		WHERE b.tenant_id = $1 AND b.bo_id = $2
+		ORDER BY b.is_default DESC
+	`, secCtx.TenantID, boID)
+	if err != nil {
+		http.Error(w, "failed to list bindings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	out := make([]map[string]interface{}, 0, len(rows))
+	for _, b := range rows {
+		name := b.BackendType
+		if b.DrivingNodeName != nil {
+			name = *b.DrivingNodeName
+		}
+		out = append(out, map[string]interface{}{
+			"bindingId":        b.BindingID,
+			"bindingName":      name,
+			"backendId":        b.BackendID,
+			"backendName":      b.BackendType,
+			"drivingTableId":   b.DrivingNodeID,
+			"drivingTableName": name,
+			"isDefault":        b.IsDefault,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
 // GetBusinessObjectWithBindings returns the full BO view:
 // { bo, fields[], calc_fields[], bindings[], related_bos[] }
 func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWriter, r *http.Request) {
@@ -968,6 +1030,19 @@ func (h *BusinessObjectHandler) QueryBORecords(w http.ResponseWriter, r *http.Re
 	req.SortBy = r.URL.Query().Get("sortBy")
 	req.SortDir = r.URL.Query().Get("sortDir")
 	req.SubtypeKey = r.URL.Query().Get("subtypeKey")
+
+	// Master-detail child filtering: ?filterField=order_id&filterValue=<uuid>
+	// scopes this query to rows whose filterField equals filterValue - used by
+	// page-studio's detail tables/forms to show only the child records of the
+	// currently-selected master record. Single eq predicate only; the richer
+	// BORecordFilter.Operator set (gt/like/in/...) has no query-string form yet.
+	if field := r.URL.Query().Get("filterField"); field != "" {
+		req.Filters = append(req.Filters, models.BORecordFilter{
+			Field:    field,
+			Operator: "eq",
+			Value:    r.URL.Query().Get("filterValue"),
+		})
+	}
 
 	var page, limit int
 	if p := r.URL.Query().Get("page"); p != "" {

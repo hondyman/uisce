@@ -30,6 +30,7 @@ import {
   CloudSync,
   Pause,
 } from '@mui/icons-material';
+import { apiFetch } from '../../lib/apiClient';
 
 interface PreAggDescriptor {
   id: string;
@@ -81,11 +82,9 @@ export const PreAggregationsTab: React.FC<PreAggregationsTabProps> = ({
   const fetchPreAggs = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/pre-aggregations?bo_name=${encodeURIComponent(boName)}&tenant_id=${encodeURIComponent(tenantId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        setPreAggs(data || []);
-      }
+      const res = await apiFetch(`/api/pre-aggregations?bo_name=${encodeURIComponent(boName)}&tenant_id=${encodeURIComponent(tenantId)}`);
+      const data = await res.json();
+      setPreAggs(data || []);
     } catch (e) {
       console.error('Failed to fetch pre-aggregations', e);
     } finally {
@@ -95,7 +94,7 @@ export const PreAggregationsTab: React.FC<PreAggregationsTabProps> = ({
 
   const handleRefresh = async (id: string) => {
     try {
-      await fetch(`/api/pre-aggregations/${id}/refresh`, { method: 'POST' });
+      await apiFetch(`/api/pre-aggregations/${id}/refresh`, { method: 'POST' });
       fetchPreAggs();
     } catch (e) {
       console.error('Refresh failed', e);
@@ -104,7 +103,7 @@ export const PreAggregationsTab: React.FC<PreAggregationsTabProps> = ({
 
   const handleRebuild = async (id: string) => {
     try {
-      await fetch(`/api/pre-aggregations/${id}/materialize`, { method: 'POST' });
+      await apiFetch(`/api/pre-aggregations/${id}/materialize`, { method: 'POST' });
       fetchPreAggs();
     } catch (e) {
       console.error('Rebuild failed', e);

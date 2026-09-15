@@ -16,7 +16,7 @@ import { AppRoutes } from '../AppRoutes';
 import LoginPage from '../pages/AuthPage';
 import AuthCallbackPage from '../pages/AuthCallbackPage';
 import APIStudioPage from '../pages/api-studio/APIStudioPage';
-import PageStudioPage from '../pages/page-studio/PageStudioPage';
+import PageStudioListPage from '../pages/page-studio/PageStudioListPage';
 import { PageRuntimeRenderer as RuntimePage } from '../pages/PageRuntimeRenderer';
 import ChangeReviewPage from '../pages/ChangeReviewPage';
 
@@ -80,7 +80,7 @@ export function LocaleShell() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallbackPage />} />
       <Route path="/api-studio" element={<APIStudioPage />} />
-      <Route path="/page-studio" element={<PageStudioPage />} />
+      <Route path="/page-studio" element={<PageStudioListPage />} />
       <Route path="/app/:slug" element={<RuntimePage />} />
       <Route path="/change-review" element={<ChangeReviewPage />} />
       {/* Root redirect → preferred locale home */}

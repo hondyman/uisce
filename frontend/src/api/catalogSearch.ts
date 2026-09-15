@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { SearchResult } from '../types/search';
 import type { NodeType } from '../types/nodeTypes';
 import type { EdgeType } from '../types/edgeTypes';
+import { apiFetch } from '../lib/apiClient';
 
 // Combined search across node-types and edge-types. Returns SearchResult payloads
 
@@ -15,13 +16,13 @@ export function useCatalogSearch(tenantId: string, q: string) {
       if (q && q.trim() !== '') params.set('q', q);
 
       const [nodesRes, edgesRes] = await Promise.all([
-        fetch(`/api/node-types?${params.toString()}`, { credentials: 'include' }),
-        fetch(`/api/edge-types?${params.toString()}`, { credentials: 'include' }),
+        apiFetch(`/api/node-types?${params.toString()}`, { credentials: 'include' }).catch(() => null),
+        apiFetch(`/api/edge-types?${params.toString()}`, { credentials: 'include' }).catch(() => null),
       ]);
 
   const results: CatalogSearchResult[] = [];
 
-      if (nodesRes.ok) {
+      if (nodesRes) {
         const nodes = (await nodesRes.json()) as NodeType[];
         for (const n of nodes) {
           // NodeType has catalog_type_name in its shape
@@ -29,7 +30,7 @@ export function useCatalogSearch(tenantId: string, q: string) {
         }
       }
 
-      if (edgesRes.ok) {
+      if (edgesRes) {
         const edges = (await edgesRes.json()) as EdgeType[];
         for (const e of edges) {
           // EdgeType uses 'predicate' for the relationship name

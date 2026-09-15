@@ -82,7 +82,21 @@ func main() {
 		startFIXServer(ctx, db)
 	}
 
-	router := api.SetupRouter(db, nil, nil, nil, nil, nil, nil, nil, nil)
+	// GEMINI_API_KEY is optional: every caller of the Gemini gateway (NL-to-SQL
+	// query generation, AI page generation) already falls back to a
+	// deterministic path when this is nil, so a missing/invalid key degrades
+	// gracefully instead of failing startup.
+	var geminiClient *api.GeminiClient
+	if apiKey := os.Getenv("GEMINI_API_KEY"); apiKey != "" {
+		client, err := api.NewGeminiClient(apiKey)
+		if err != nil {
+			log.Printf("WARNING: failed to initialize Gemini client, AI features will use their deterministic fallback: %v", err)
+		} else {
+			geminiClient = client
+		}
+	}
+
+	router := api.SetupRouter(db, nil, nil, nil, nil, geminiClient, nil, nil, nil)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("Starting main Uisce Unified API server on %s...\n", addr)

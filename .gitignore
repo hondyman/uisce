@@ -160,3 +160,4 @@ backend/rule-engine/cmd/*/*
 !backend/rule-engine/cmd/*/*/
 !backend/rule-engine/cmd/*/Dockerfile
 keycloak-ssl/
+logs/heap-recovery-*/

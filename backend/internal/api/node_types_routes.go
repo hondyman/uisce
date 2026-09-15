@@ -3,7 +3,9 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -334,16 +336,51 @@ func (h *NodeTypesHandler) handleUpdateNodeType(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	query := `
-			UPDATE catalog_node_type
-			SET catalog_type_name = $1, description = $2, is_active = $3,
-				parent_type_id = $4, config = $5, updated_at = NOW()
-			WHERE id = $6 AND tenant_id = $7
-			RETURNING updated_at
-		`
+	// Partial update: only overwrite fields the caller actually sent. Callers
+	// like the properties-only save omit catalog_type_name/is_active/parent_type_id,
+	// and an unconditional SET would null/blank those columns out.
+	var updates []string
+	var args []interface{}
+	argCount := 1
 
-	err = h.db.QueryRow(query, nt.CatalogTypeName, nt.Description, nt.IsActive,
-		nt.ParentTypeID, configJSON, id, tenantID).Scan(&nt.UpdatedAt)
+	if nt.CatalogTypeName != "" {
+		updates = append(updates, fmt.Sprintf("catalog_type_name = $%d", argCount))
+		args = append(args, nt.CatalogTypeName)
+		argCount++
+	}
+
+	if nt.Description != nil || len(nt.Properties) > 0 {
+		updates = append(updates, fmt.Sprintf("description = $%d", argCount))
+		args = append(args, nt.Description)
+		argCount++
+	}
+
+	if nt.IsActive != nil {
+		updates = append(updates, fmt.Sprintf("is_active = $%d", argCount))
+		args = append(args, nt.IsActive)
+		argCount++
+	}
+
+	if nt.ParentTypeID != nil {
+		updates = append(updates, fmt.Sprintf("parent_type_id = $%d", argCount))
+		args = append(args, nt.ParentTypeID)
+		argCount++
+	}
+
+	updates = append(updates, fmt.Sprintf("config = $%d", argCount))
+	args = append(args, configJSON)
+	argCount++
+
+	updates = append(updates, "updated_at = NOW()")
+
+	args = append(args, id, tenantID)
+
+	query := fmt.Sprintf(
+		"UPDATE catalog_node_type SET %s WHERE id = $%d AND tenant_id = $%d RETURNING updated_at",
+		strings.Join(updates, ", "), argCount, argCount+1,
+	)
+
+	err = h.db.QueryRow(query, args...).Scan(&nt.UpdatedAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Node type not found", http.StatusNotFound)
 		return

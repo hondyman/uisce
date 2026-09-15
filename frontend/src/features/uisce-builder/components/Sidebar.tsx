@@ -1,4 +1,5 @@
-import React, { DragEvent, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { Paper, Typography, Box, Stack, useTheme, Collapse, IconButton, Divider, CircularProgress, Chip, Tabs, Tab } from '@mui/material';
 import BlockIcon from '@mui/icons-material/Block';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
@@ -176,77 +177,84 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
     setExpandedCategories(newExpanded);
   };
 
-  const onDragStart = (event: DragEvent<HTMLDivElement>, nodeType: string, label?: string) => {
-    event.dataTransfer.setData('application/reactflow', nodeType);
-    if (label) {
-      event.dataTransfer.setData('application/reactflow-label', label);
-    }
-    event.dataTransfer.effectAllowed = 'move';
-  };
-
-  const DraggableCard = ({ filter }: { filter: FilterDef }) => (
-    <Paper
-        elevation={0}
-        variant="outlined"
-        sx={{
-        p: 1.5,
-        cursor: 'grab',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        borderRadius: 2,
-        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        bgcolor: 'background.default',
-        '&:hover': { 
-            bgcolor: 'background.paper',
-            borderColor: filter.color,
-            boxShadow: `0 4px 12px ${filter.color}20`,
-            transform: 'translateX(4px)'
-        },
-        '&:active': {
-            cursor: 'grabbing',
-        }
-        }}
-        onDragStart={(event) => onDragStart(event, filter.type)}
-        draggable
-    >
-        <Box sx={{ color: 'text.disabled', display: 'flex' }}>
-            <DragIndicatorIcon sx={{ fontSize: 16 }} />
-        </Box>
-        <Box sx={{ 
-            p: 0.75, 
-            borderRadius: '50%', 
-            bgcolor: `${filter.color}15`,
-            color: filter.color,
-            display: 'flex'
-        }}>
-            <filter.icon sx={{ fontSize: 16 }} />
-        </Box>
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight="600" color="text.primary" noWrap>
-                {filter.label}
-            </Typography>
-            {filter.description && (
-                <Typography variant="caption" color="text.secondary" noWrap display="block">
-                    {filter.description}
-                </Typography>
-            )}
-        </Box>
-    </Paper>
-  );
-
-  const SemanticTermCard = ({ term }: { term: SemanticTerm }) => {
-    // Determine filter type based on data type
-    const filterType = term.data_type === 'date' ? 'Date_Validator' 
-      : term.data_type === 'number' ? 'Limit' 
-      : 'List_Lookup';
-    
-    const typeColor = term.data_type === 'date' ? '#ea580c' 
-      : term.data_type === 'number' ? '#16a34a' 
-      : '#0284c7';
+  const DraggableCard = ({ filter }: { filter: FilterDef }) => {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+      id: `filter_${filter.type}`,
+      data: { filterType: filter.type, label: filter.label },
+    });
 
     return (
       <Paper
+          ref={setNodeRef}
+          elevation={0}
+          variant="outlined"
+          sx={{
+          p: 1.5,
+          cursor: 'grab',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1.5,
+          borderRadius: 2,
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          bgcolor: 'background.default',
+          opacity: isDragging ? 0.4 : 1,
+          '&:hover': {
+              bgcolor: 'background.paper',
+              borderColor: filter.color,
+              boxShadow: `0 4px 12px ${filter.color}20`,
+              transform: 'translateX(4px)'
+          },
+          '&:active': {
+              cursor: 'grabbing',
+          }
+          }}
+          {...attributes}
+          {...listeners}
+      >
+          <Box sx={{ color: 'text.disabled', display: 'flex' }}>
+              <DragIndicatorIcon sx={{ fontSize: 16 }} />
+          </Box>
+          <Box sx={{
+              p: 0.75,
+              borderRadius: '50%',
+              bgcolor: `${filter.color}15`,
+              color: filter.color,
+              display: 'flex'
+          }}>
+              <filter.icon sx={{ fontSize: 16 }} />
+          </Box>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight="600" color="text.primary" noWrap>
+                  {filter.label}
+              </Typography>
+              {filter.description && (
+                  <Typography variant="caption" color="text.secondary" noWrap display="block">
+                      {filter.description}
+                  </Typography>
+              )}
+          </Box>
+      </Paper>
+    );
+  };
+
+  const SemanticTermCard = ({ term }: { term: SemanticTerm }) => {
+    // Determine filter type based on data type
+    const filterType = term.data_type === 'date' ? 'Date_Validator'
+      : term.data_type === 'number' ? 'Limit'
+      : 'List_Lookup';
+
+    const typeColor = term.data_type === 'date' ? '#ea580c'
+      : term.data_type === 'number' ? '#16a34a'
+      : '#0284c7';
+
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+      id: `term_${term.id}`,
+      data: { filterType, label: `Validate ${term.display_name}` },
+    });
+
+    return (
+      <Paper
+        ref={setNodeRef}
         elevation={0}
         variant="outlined"
         sx={{
@@ -258,14 +266,15 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
           borderRadius: 1.5,
           transition: 'all 0.2s',
           bgcolor: 'background.default',
-          '&:hover': { 
+          opacity: isDragging ? 0.4 : 1,
+          '&:hover': {
             bgcolor: 'background.paper',
             borderColor: 'primary.main',
             transform: 'translateX(4px)'
           },
         }}
-        onDragStart={(event) => onDragStart(event, filterType, `Validate ${term.display_name}`)}
-        draggable
+        {...attributes}
+        {...listeners}
       >
         <Box sx={{ color: 'text.disabled', display: 'flex' }}>
           <DragIndicatorIcon sx={{ fontSize: 14 }} />
@@ -276,16 +285,16 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
             {term.display_name}
           </Typography>
         </Box>
-        <Chip 
-          size="small" 
-          label={term.data_type || 'text'} 
-          sx={{ 
-            fontSize: '0.6rem', 
-            height: 16, 
-            bgcolor: `${typeColor}15`, 
+        <Chip
+          size="small"
+          label={term.data_type || 'text'}
+          sx={{
+            fontSize: '0.6rem',
+            height: 16,
+            bgcolor: `${typeColor}15`,
             color: typeColor,
             '& .MuiChip-label': { px: 0.75 }
-          }} 
+          }}
         />
       </Paper>
     );
@@ -318,11 +327,11 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
             <Stack spacing={1}>
                 {categories.map((category) => (
                 <Box key={category.name}>
-                    <Box 
+                    <Box
                     onClick={() => toggleCategory(category.name)}
-                    sx={{ 
-                        display: 'flex', 
-                        alignItems: 'center', 
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
                         justifyContent: 'space-between',
                         cursor: 'pointer',
                         py: 1,
@@ -379,5 +388,3 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
 };
 
 export default Sidebar;
-
-

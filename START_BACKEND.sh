@@ -65,6 +65,15 @@ if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     set +a
 fi
 
+# Declare environment explicitly. This script is local-dev only — production
+# deploys invoke the binary directly. Fail-closed production config assertion
+# (backend/internal/api/helpers.go::AssertProductionConfig) treats unset
+# ENVIRONMENT as production and rejects dev-only flags; defaulting to
+# "development" keeps the safe-set behavior aligned with the script's actual
+# use case. Operators can still override by setting ENVIRONMENT=local/test in
+# their shell.
+export ENVIRONMENT="${ENVIRONMENT:-development}"
+
 # Set defaults if not loaded
 export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
 export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
@@ -72,7 +81,15 @@ export JWT_SECRET="${JWT_SECRET:-test-secret}"
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
-export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-true}"
+# Defaulting DEV_FALLBACK to false — when a real API_TOKEN_ENCRYPTION_KEY is
+# present in backend/.env (the typical case post-rotation), the fallback path
+# inside buildApiDispatcherEncryptor is never reached and the flag is dead
+# weight. Defaulting to true re-introduces a latent foot-gun: anyone running
+# the binary outside this script with ENVIRONMENT unset would trip the
+# production assertion in a way that's hard to debug. Opt in explicitly by
+# setting API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK=true when you actually want
+# the random process-lifetime key behavior.
+export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-false}"
 : "${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY not set — refusing to fall back to a value that is in git history (origin/main:de336a41af)}"
 
 echo -e "${YELLOW}Starting server...${NC}"

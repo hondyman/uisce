@@ -44,7 +44,10 @@
 -- every GSIFI-tagged table in the repo, not just the FIX ones. Land
 -- it once and the inheritance pattern lights up everywhere.
 
-BEGIN;
+-- No explicit transaction wrapper: the migration runner (backend/internal/
+-- migrations/runner.go) already wraps every file in its own transaction
+-- and rejects files that wrap themselves again (see
+-- hasTransactionControl/stripTransactionStatements).
 
 ALTER TABLE public.tenants
     ADD COLUMN IF NOT EXISTS gold_copy BOOLEAN NOT NULL DEFAULT FALSE;
@@ -53,11 +56,20 @@ CREATE INDEX IF NOT EXISTS idx_tenants_gold_copy
     ON public.tenants (gold_copy)
     WHERE gold_copy = true;
 
--- Insert the well-known gold-copy tenant. ON CONFLICT (id) DO NOTHING
--- makes this idempotent across repeated apply runs.
-INSERT INTO public.tenants (id, name, gold_copy)
-VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 'Gold Copy', true)
-ON CONFLICT (id) DO NOTHING;
+-- Insert the well-known gold-copy tenant, but only when no gold-copy
+-- tenant exists yet under ANY id - this migration was written assuming
+-- a fresh install with none, but an environment can already have a real
+-- gold-copy tenant seeded under its own id (e.g. this platform's
+-- "northwind" tenant). idx_tenants_gold_copy_true is a partial unique
+-- index enforcing at most one gold_copy=true row; inserting a second
+-- one under the well-known UUID would violate that constraint (and the
+-- product's own single-gold-copy-tenant model), not just fail
+-- harmlessly, so the guard must be "does one already exist" rather than
+-- ON CONFLICT (id) DO NOTHING (which only protects against re-running
+-- against the *same* environment, not against a differently-seeded one).
+INSERT INTO public.tenants (id, name, display_name, gold_copy)
+SELECT '00000000-0000-0000-0000-000000000001'::uuid, 'Gold Copy', 'Gold Copy', true
+WHERE NOT EXISTS (SELECT 1 FROM public.tenants WHERE gold_copy = true);
 
 -- If a row with the gold-copy UUID already existed (from a previous
 -- install path) without the gold_copy column having been set, force
@@ -66,5 +78,3 @@ UPDATE public.tenants
 SET gold_copy = true
 WHERE id = '00000000-0000-0000-0000-000000000001'::uuid
   AND gold_copy = false;
-
-COMMIT;

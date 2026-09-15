@@ -106,11 +106,23 @@ function normalizeRole(role: unknown): SemanticTermView['role'] {
 }
 
 /**
- * Fetch the self-describing BO schema from the Meta-API.
+ * Fetch the self-describing BO schema. Served by
+ * backend/internal/api/bo_crud_handler.go::HandleGetBOSchema, which sits
+ * next to the other BO CRUD endpoints and uses the same tenant-resolution
+ * + catalog-graph resolution logic. The previous path
+ * /api/metadata/bo/{boId} was never implemented backend-wide.
+ *
+ * The `tenant_id` query parameter is accepted for backward compat with
+ * existing callers; the backend extracts the tenant from the JWT (or
+ * X-Tenant-ID header) via security.AuthInfo, so this query param is
+ * informational only. Tenant mismatch between JWT and query param still
+ * fails closed (the BO CRUD handler enforces tenant ownership).
  */
 export async function fetchBOSchema(boId: string, tenantId: string): Promise<BOSchema> {
   const params = new URLSearchParams({ tenant_id: tenantId });
-  const data = await fetchJSON<unknown>(`/api/metadata/bo/${encodeURIComponent(boId)}?${params.toString()}`);
+  const data = await fetchJSON<unknown>(
+    `/api/bo/${encodeURIComponent(boId)}/schema?${params.toString()}`
+  );
   return data as BOSchema;
 }
 

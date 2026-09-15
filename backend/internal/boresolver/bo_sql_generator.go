@@ -43,6 +43,14 @@ type SemanticSQLGenerationRequest struct {
 	Filters    []SemanticFilter `json:"filters"`    // Semantic filters
 	Limit      int              `json:"limit"`
 	TenantID   string           `json:"tenantId,omitempty"` // Optional tenant context
+	// BusinessObjectID, when set, resolves the BO directly by id instead
+	// of by name via Datasource+GetBOByTechnicalName. Callers that already
+	// have a resolved BODefinition (e.g. querybuilder.mapQueryDefToSemanticRequest,
+	// which otherwise had to feed BODefinition.DrivingTable - a physical
+	// table path like "/orm/order" - into Datasource, a field
+	// GetBOByTechnicalName matches against business_objects.bo_key, which
+	// is never a path) should set this instead of Datasource.
+	BusinessObjectID string `json:"businessObjectId,omitempty"`
 }
 
 // SemanticField represents a field selection with semantic term and optional label
@@ -143,6 +151,11 @@ type TelemetryRouter interface {
 type BORepository interface {
 	GetBODefinition(boID string) (*BODefinition, error)
 	GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*BODefinition, error)
+	// TableHasColumn reports whether drivingTable has a physical column
+	// named `column`, per the real catalog scan - see InjectTenantScopingToGraph,
+	// which uses this to skip the tenant_id predicate on tables that don't
+	// have one instead of generating SQL that references a nonexistent column.
+	TableHasColumn(drivingTable, column string) bool
 }
 
 // BODefinition represents the metadata needed for SQL generation
@@ -526,15 +539,27 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 		ctx.Args = make([]interface{}, 0)
 	}
 
-	// 1. Root table boundary.
-	ctx.ParamCounter++
-	rootParamToken := paramToken(g.Dialect, ctx.ParamCounter)
-	ctx.Args = append(ctx.Args, tenantID)
-	ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
+	// 1. Root table boundary - only when the driving table actually has a
+	// tenant_id column. Many ORM-schema tables (e.g. orm.order) don't:
+	// tenant isolation for them is enforced at the datasource/connection
+	// level (one physical database per tenant), not by a row-level column,
+	// so skipping the predicate here doesn't weaken isolation - it avoids a
+	// SQL error ("column t0.tenant_id does not exist") that a table lacking
+	// the column can never satisfy anyway.
+	if ctx.RootBODef == nil || g.BORepository.TableHasColumn(ctx.RootBODef.DrivingTable, "tenant_id") {
+		ctx.ParamCounter++
+		rootParamToken := paramToken(g.Dialect, ctx.ParamCounter)
+		ctx.Args = append(ctx.Args, tenantID)
+		ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
+	}
 
-	// 2. Relationship traversal boundaries.
+	// 2. Relationship traversal boundaries - same per-table check.
 	for i := range ctx.Joins {
 		step := &ctx.Joins[i]
+
+		if step.ToTable != "" && !g.BORepository.TableHasColumn(step.ToTable, "tenant_id") {
+			continue
+		}
 
 		stepAlias := step.Alias
 		if stepAlias == "" {
@@ -786,10 +811,22 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 
 // ResolveSemanticRequest converts a semantic query request to the internal UUID-based format
 func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerationRequest, tenantID, datasourceID string) (*SQLGenerationRequest, error) {
-	// Step 1: Look up the Business Object by technical name
-	boDef, err := g.BORepository.GetBOByTechnicalName(semanticReq.Datasource, tenantID, datasourceID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find business object '%s': %w", semanticReq.Datasource, err)
+	// Step 1: Resolve the Business Object - directly by id when the caller
+	// already has one (see BusinessObjectID's doc comment), otherwise by
+	// technical name (bo_key) for callers that only have a name, like the
+	// public semantic-SQL API in bo_sql_routes.go.
+	var boDef *BODefinition
+	var err error
+	if semanticReq.BusinessObjectID != "" {
+		boDef, err = g.BORepository.GetBODefinition(semanticReq.BusinessObjectID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load business object '%s': %w", semanticReq.BusinessObjectID, err)
+		}
+	} else {
+		boDef, err = g.BORepository.GetBOByTechnicalName(semanticReq.Datasource, tenantID, datasourceID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find business object '%s': %w", semanticReq.Datasource, err)
+		}
 	}
 
 	// Step 2: Resolve semantic field terms to field UUIDs

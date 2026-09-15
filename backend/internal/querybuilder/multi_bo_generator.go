@@ -93,9 +93,14 @@ type multiBOJoinClause struct {
 
 // buildMultiBOSQL assembles a tenant-scoped, parameterized SELECT that joins
 // the primary BO's driving table to one or more related BOs via
-// server-resolved join paths, and reports each selected column's
-// cardinality relative to the primary BO so callers can decide whether to
-// flatten (one) or nest/aggregate (many) it in the UI.
+// server-resolved join paths. Each selected column's cardinality relative
+// to the primary BO is reported on the result (QueryResultColumn.Cardinality)
+// and, when a query mixes "one"-side and "many"-side selections, is used
+// here to GROUP BY the one-side columns and auto-aggregate the many-side
+// ones - see the fan-out guard below - rather than leaving that decision
+// to callers, which previously left the flat LEFT JOIN free to fan out
+// rows whenever a "many" relationship was queried without hand-written
+// aggregation.
 func buildMultiBOSQL(
 	generator *boresolver.BOSQLGenerator,
 	primary *boresolver.BODefinition,
@@ -200,7 +205,21 @@ func buildMultiBOSQL(
 		return field, boAlias[boID], nil
 	}
 
-	var selectClauses []string
+	// selectedColumn carries one selected dimension/measure through to a
+	// second pass, deferred until every column is known, because whether
+	// a "many"-side column needs auto-aggregation depends on whether the
+	// query *also* selects any "one"-side column (see comment above
+	// groupByOneSideExprs below) - that can't be decided per-column as
+	// they're added.
+	type selectedColumn struct {
+		expr        string // "alias.column", unwrapped
+		outLabel    string
+		fieldType   string
+		boID        string
+		cardinality string
+		hasAgg      bool
+	}
+	var selected []selectedColumn
 	var columns []boresolver.QueryResultColumn
 
 	addSelect := func(boID, termNodeID, label, aggWrap string) error {
@@ -212,20 +231,21 @@ func buildMultiBOSQL(
 		if !identRe.MatchString(col) {
 			return fmt.Errorf("unsafe column identifier: %q", col)
 		}
-		expr := fmt.Sprintf("%s.%s", alias, col)
-		if aggWrap != "" {
-			expr = fmt.Sprintf("%s(%s)", aggWrap, expr)
-		}
 		outLabel := label
 		if outLabel == "" {
 			outLabel = field.Name
 		}
-		selectClauses = append(selectClauses, fmt.Sprintf("%s AS %q", expr, outLabel))
+		cardinality := cardinalityOrDefault(boCardinality, boID)
+		expr := fmt.Sprintf("%s.%s", alias, col)
+		if aggWrap != "" {
+			expr = fmt.Sprintf("%s(%s)", aggWrap, expr)
+		}
+		selected = append(selected, selectedColumn{
+			expr: expr, outLabel: outLabel, fieldType: field.Type,
+			boID: boID, cardinality: cardinality, hasAgg: aggWrap != "",
+		})
 		columns = append(columns, boresolver.QueryResultColumn{
-			Name:        outLabel,
-			Type:        field.Type,
-			BOID:        boID,
-			Cardinality: cardinalityOrDefault(boCardinality, boID),
+			Name: outLabel, Type: field.Type, BOID: boID, Cardinality: cardinality,
 		})
 		return nil
 	}
@@ -244,8 +264,50 @@ func buildMultiBOSQL(
 			return "", nil, nil, err
 		}
 	}
-	if len(selectClauses) == 0 {
+	if len(selected) == 0 {
 		return "", nil, nil, fmt.Errorf("query must select at least one dimension or measure")
+	}
+
+	// Fan-out guard: joining to a "many"-cardinality related BO (one order
+	// has many allocations, say) and then selecting a bare column from
+	// BOTH the "one" side and the "many" side repeats every one-side value
+	// once per many-side row - not a listing, just duplicated data. A
+	// query that selects ONLY many-side columns (e.g. "list this order's
+	// allocations") is a legitimate one-row-per-child listing and is left
+	// alone; the fan-out only exists once a one-side grain is mixed in.
+	// When that happens, GROUP BY the one-side columns and aggregate every
+	// unaggregated many-side column instead of leaving it as a bare
+	// column repeated across the group (SUM for numeric types, since
+	// that's almost always what "total allocated quantity per order"
+	// means; STRING_AGG of distinct values otherwise, since concatenating
+	// unrelated numbers is never useful but concatenating repeated text/
+	// id values into a de-duplicated list is a normal way to surface a
+	// many-side attribute at the one-side grain).
+	hasOneSide := false
+	hasManySide := false
+	for _, c := range selected {
+		if c.cardinality == "many" {
+			hasManySide = true
+		} else {
+			hasOneSide = true
+		}
+	}
+	needsAggregation := hasOneSide && hasManySide
+
+	var selectClauses []string
+	var groupByExprs []string
+	for _, c := range selected {
+		expr := c.expr
+		if needsAggregation && c.cardinality == "many" && !c.hasAgg {
+			if isNumericFieldType(c.fieldType) {
+				expr = fmt.Sprintf("SUM(%s)", expr)
+			} else {
+				expr = fmt.Sprintf("STRING_AGG(DISTINCT %s::text, ', ')", expr)
+			}
+		} else if needsAggregation && c.cardinality != "many" && !c.hasAgg {
+			groupByExprs = append(groupByExprs, expr)
+		}
+		selectClauses = append(selectClauses, fmt.Sprintf("%s AS %q", expr, c.outLabel))
 	}
 
 	// Filter predicates are compiled through the existing, hardened
@@ -303,6 +365,9 @@ func buildMultiBOSQL(
 	if len(whereClauses) > 0 {
 		fmt.Fprintf(&sb, "\nWHERE %s", strings.Join(whereClauses, " AND "))
 	}
+	if len(groupByExprs) > 0 {
+		fmt.Fprintf(&sb, "\nGROUP BY %s", strings.Join(groupByExprs, ", "))
+	}
 	if qd.Query.Limit > 0 {
 		fmt.Fprintf(&sb, "\nLIMIT %d", qd.Query.Limit)
 	}
@@ -315,4 +380,16 @@ func cardinalityOrDefault(m map[string]string, boID string) string {
 		return ""
 	}
 	return m[boID]
+}
+
+// isNumericFieldType reports whether a BOField.Type value denotes a
+// summable numeric column, per the business_object_fields.data_type
+// vocabulary ("number", "integer", "numeric", "decimal", "float", ...).
+func isNumericFieldType(fieldType string) bool {
+	switch strings.ToLower(fieldType) {
+	case "number", "integer", "numeric", "decimal", "float", "double", "int", "bigint":
+		return true
+	default:
+		return false
+	}
 }

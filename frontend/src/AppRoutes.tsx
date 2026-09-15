@@ -40,7 +40,6 @@ import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
-import DynamicUIGeneratorPage from "./pages/DynamicUIGeneratorPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
 import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
 import Marketplace from "./pages/marketplace/Marketplace";
@@ -177,7 +176,10 @@ import SLODashboard from "./pages/SLODashboard";
 import ChangeReviewPage from "./pages/ChangeReviewPage";
 import IncidentPage from "./pages/scheduler/IncidentPage";
 import APIStudioPage from './pages/api-studio/APIStudioPage';
-import PageStudioPage from './pages/page-studio/PageStudioPage';
+import PageStudioListPage from './pages/page-studio/PageStudioListPage';
+import PageStudioDetailsPage from './pages/page-studio/PageStudioDetailsPage';
+import MenuDesignerPage from './pages/menu-designer/MenuDesignerPage';
+import PageBrowser from './pages/PageBrowser';
 import RuntimePage from './pages/PageRuntimeRenderer';
 
 // Intelligence & Governance (New)
@@ -305,9 +307,12 @@ function ProtectedApp() {
             STUDIO - Low-code tools
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="api-studio" element={<ProtectedRoute><APIStudioPage /></ProtectedRoute>} />
-        <Route path="page-studio" element={<ProtectedRoute><PageStudioPage /></ProtectedRoute>} />
-        <Route path="dynamic-ui" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
-        <Route path="page-designer" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
+        <Route path="page-studio" element={<ProtectedRoute><PageStudioListPage /></ProtectedRoute>} />
+        <Route path="page-studio/:id" element={<ProtectedRoute><PageStudioDetailsPage /></ProtectedRoute>} />
+        <Route path="menu-designer" element={<ProtectedRoute><MenuDesignerPage /></ProtectedRoute>} />
+        <Route path="pages" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+        <Route path="pages/:slug" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+        <Route path="pages/:slug/:recordId" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
         <Route path="app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
         <Route path="client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
         <Route path="client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />

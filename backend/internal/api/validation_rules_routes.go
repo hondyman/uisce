@@ -1351,6 +1351,23 @@ func (s *sqlDBBORepository) GetBOByTechnicalName(technicalName, tenantID, dataso
 	return s.GetBODefinition(boID)
 }
 
+// TableHasColumn checks information_schema directly rather than the
+// catalog_node scan boresolver.PostgresBORepository uses - this repo is a
+// separate, narrower implementation (legacy bo_fields schema) for
+// validation-rule compilation only, with its own *sql.DB handle.
+func (s *sqlDBBORepository) TableHasColumn(drivingTable, column string) bool {
+	var exists bool
+	if err := s.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = $2
+		)
+	`, drivingTable, column).Scan(&exists); err != nil {
+		return false
+	}
+	return exists
+}
+
 func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)

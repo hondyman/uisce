@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
+import { DndContext, DragOverlay, pointerWithin, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
 import {
   Box,
   Drawer,
@@ -1098,7 +1098,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   };
 
   return (
-    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
+    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart} collisionDetection={pointerWithin}>
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: colors.bg }}>
 
         {/* ══════════════════════════════════════════════════════════════════

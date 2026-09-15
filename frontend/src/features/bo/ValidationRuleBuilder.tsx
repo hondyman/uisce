@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BOField } from './BOGovernanceStudio';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -66,13 +67,11 @@ const ValidationRuleBuilder: React.FC<ValidationRuleBuilderProps> = ({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/validation-rules`, { headers: headers() });
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-        setRules(list);
-        onCountChange?.(list.length);
-      }
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/validation-rules`, { headers: headers() });
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setRules(list);
+      onCountChange?.(list.length);
     } finally {
       setLoading(false);
     }
@@ -100,15 +99,13 @@ const ValidationRuleBuilder: React.FC<ValidationRuleBuilderProps> = ({
         ? `/api/v1/bo/${boKey}/governance/validation-rules`
         : `/api/v1/bo/${boKey}/governance/validation-rules/${editing.rule_id}`;
       const method = isNew ? 'POST' : 'PUT';
-      const res = await fetch(url, {
+      await apiFetch(url, {
         method,
         headers: headers(),
         body: JSON.stringify({ ...editing, bo_key: boKey }),
       });
-      if (res.ok) {
-        setEditing(null);
-        await load();
-      }
+      setEditing(null);
+      await load();
     } finally {
       setSaving(false);
     }
@@ -116,7 +113,7 @@ const ValidationRuleBuilder: React.FC<ValidationRuleBuilderProps> = ({
 
   const handleDelete = async (ruleId: string) => {
     if (!confirm('Delete this validation rule?')) return;
-    await fetch(`/api/v1/bo/${boKey}/governance/validation-rules/${ruleId}`, {
+    await apiFetch(`/api/v1/bo/${boKey}/governance/validation-rules/${ruleId}`, {
       method: 'DELETE', headers: headers(),
     });
     await load();
@@ -131,14 +128,12 @@ const ValidationRuleBuilder: React.FC<ValidationRuleBuilderProps> = ({
       try { sample = JSON.parse(testSample); }
       catch { setTestResult({ passed: false, output: '', error: 'Invalid JSON in sample record' }); return; }
 
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/validation-rules/test`, {
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/validation-rules/test`, {
         method: 'POST',
         headers: headers(),
         body: JSON.stringify({ expression: editing.expression, sample }),
       });
-      if (res.ok) {
-        setTestResult(await res.json());
-      }
+      setTestResult(await res.json());
     } finally {
       setTestLoading(false);
     }

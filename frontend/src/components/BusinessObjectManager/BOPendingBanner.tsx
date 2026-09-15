@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { apiClient } from '../../utils/apiClient';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Alert,
   Box,
@@ -233,20 +234,15 @@ export const BOPendingBanner: React.FC<BOPendingBannerProps> = ({
           onClick={async () => {
             setPublishing(true);
             try {
-              const response = await fetch(`/api/bo/${boId}/publish`, {
+              await apiFetch(`/api/bo/${boId}/publish`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
               });
-              
-              if (response.ok) {
-                // Refresh status
-                fetchStatus();
-                // Notify parent
-                onPublish?.();
-                onRefresh?.();
-              } else {
-                console.error('Failed to publish BO');
-              }
+
+              // Refresh status
+              fetchStatus();
+              // Notify parent
+              onPublish?.();
+              onRefresh?.();
             } catch (err) {
               console.error('Error publishing BO:', err);
             } finally {

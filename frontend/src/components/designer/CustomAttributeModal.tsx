@@ -23,13 +23,7 @@ import {
 } from '@mui/material';
 import ExtensionIcon from '@mui/icons-material/Extension';
 import AddIcon from '@mui/icons-material/Add';
-
-const getAuthHeaders = () => {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('auth_token');
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-};
+import { apiFetch } from '../../lib/apiClient';
 
 interface CustomAttributeModalProps {
   open: boolean;
@@ -70,7 +64,7 @@ export const CustomAttributeModal: React.FC<CustomAttributeModalProps> = ({
 
   const fetchAttributes = () => {
     setLoading(true);
-    fetch(`/api/tenants/custom-attributes?tenant_id=${tenantId}&bo_id=${boId}`, { headers: getAuthHeaders() })
+    apiFetch(`/api/tenants/custom-attributes?tenant_id=${tenantId}&bo_id=${boId}`)
       .then((res) => res.json())
       .then((data) => {
         setAttributes(data.attributes || []);
@@ -97,25 +91,22 @@ export const CustomAttributeModal: React.FC<CustomAttributeModalProps> = ({
         jsonb_path: form.jsonb_path || `config->custom->${form.attribute_name}`,
       };
 
-      const res = await fetch('/api/tenants/custom-attributes', {
+      await apiFetch('/api/tenants/custom-attributes', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(payload),
       });
 
-      if (res.ok) {
-        setStatusMessage(`Successfully registered custom field '${form.attribute_name}'!`);
-        setForm({
-          tenant_id: tenantId,
-          bo_id: boId,
-          attribute_name: '',
-          display_name: '',
-          data_type: 'STRING',
-          jsonb_path: '',
-          is_filterable: true,
-        });
-        fetchAttributes();
-      }
+      setStatusMessage(`Successfully registered custom field '${form.attribute_name}'!`);
+      setForm({
+        tenant_id: tenantId,
+        bo_id: boId,
+        attribute_name: '',
+        display_name: '',
+        data_type: 'STRING',
+        jsonb_path: '',
+        is_filterable: true,
+      });
+      fetchAttributes();
     } catch (err: any) {
       setStatusMessage(`Error: ${err.message}`);
     }

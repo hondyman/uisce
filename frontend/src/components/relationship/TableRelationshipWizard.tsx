@@ -42,6 +42,7 @@ import {
   AutoFixHigh,
 } from '@mui/icons-material';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 
 // Types
 interface RelationshipCandidate {
@@ -125,13 +126,12 @@ export const TableRelationshipWizard: React.FC<TableRelationshipWizardProps> = (
   const fetchTables = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/catalog/tables', {
+      const res = await apiFetch('/api/catalog/tables', {
         headers: {
           'X-Tenant-ID': tenantId,
           'X-Tenant-Datasource-ID': datasourceId,
         },
       });
-      if (!res.ok) throw new Error('Failed to fetch tables');
       const data = await res.json();
       setAvailableTables(Array.isArray(data) ? data : data.tables || []);
     } catch (err) {
@@ -148,7 +148,7 @@ export const TableRelationshipWizard: React.FC<TableRelationshipWizardProps> = (
       setLoading(true);
       setError(null);
 
-      const res = await fetch('/api/relationships/infer', {
+      const res = await apiFetch('/api/relationships/infer', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,8 +159,6 @@ export const TableRelationshipWizard: React.FC<TableRelationshipWizardProps> = (
           table_ids: Array.from(selectedTableIds),
         }),
       });
-
-      if (!res.ok) throw new Error('Failed to discover relationships');
 
       const data = await res.json();
       setCandidates(data.candidates || []);
@@ -182,26 +180,29 @@ export const TableRelationshipWizard: React.FC<TableRelationshipWizardProps> = (
       let created = 0;
 
       for (const candidate of toCreate) {
-        const res = await fetch('/api/relationships/physical', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Tenant-ID': tenantId,
-            'X-Tenant-Datasource-ID': datasourceId,
-          },
-          body: JSON.stringify({
-            source_table_id: candidate.left_table_id,
-            target_table_id: candidate.right_table_id,
-            join_condition: candidate.join_condition,
-            join_type: candidate.join_type,
-            cardinality: candidate.cardinality,
-            confidence: candidate.confidence,
-            origin: candidate.origin,
-            lookup_candidate: candidate.lookup_candidate,
-          }),
-        });
-
-        if (res.ok) created++;
+        try {
+          await apiFetch('/api/relationships/physical', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Tenant-ID': tenantId,
+              'X-Tenant-Datasource-ID': datasourceId,
+            },
+            body: JSON.stringify({
+              source_table_id: candidate.left_table_id,
+              target_table_id: candidate.right_table_id,
+              join_condition: candidate.join_condition,
+              join_type: candidate.join_type,
+              cardinality: candidate.cardinality,
+              confidence: candidate.confidence,
+              origin: candidate.origin,
+              lookup_candidate: candidate.lookup_candidate,
+            }),
+          });
+          created++;
+        } catch {
+          // Skip failed candidate, continue creating the rest
+        }
       }
 
       setCreatedCount(created);

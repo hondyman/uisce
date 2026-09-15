@@ -11,6 +11,7 @@ import {
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import SendIcon from '@mui/icons-material/Send';
 import { PageLayoutSpec } from '../../types/pageDesigner';
+import { apiFetch } from '../../lib/apiClient';
 
 interface AICopilotBarProps {
   onLayoutGenerated: (spec: PageLayoutSpec) => void;
@@ -33,15 +34,10 @@ export const AICopilotBar: React.FC<AICopilotBarProps> = ({
     setError(null);
 
     try {
-      const res = await fetch('/api/ai/generate-page', {
+      const res = await apiFetch('/api/ai/generate-page', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt, domain }),
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to generate AI page layout');
-      }
 
       const generatedSpec: PageLayoutSpec = await res.json();
       onLayoutGenerated(generatedSpec);

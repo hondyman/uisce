@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ReactFlowProvider } from 'reactflow';
+import { DndContext } from '@dnd-kit/core';
 import { Box, Paper, Typography, Toolbar, AppBar, Button, IconButton, CircularProgress, Alert, Snackbar, Divider } from '@mui/material';
 import Sidebar from './components/Sidebar';
 import StreamCanvas from './components/StreamCanvas';
@@ -112,31 +113,33 @@ const UisceBuilderContent = ({ filterCategories }: UisceBuilderProps) => {
       </AppBar>
       
       {/* Main Content */}
-      <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
-        {/* 1. The Reservoir (Sidebar) */}
-        <Paper square elevation={0} sx={{ width: 280, zIndex: 1, overflowY: 'auto', borderRight: '1px solid rgba(0,0,0,0.06)' }}>
-          <Sidebar categories={filterCategories} />
-        </Paper>
+      <DndContext>
+        <Box sx={{ display: 'flex', flexGrow: 1, overflow: 'hidden' }}>
+          {/* 1. The Reservoir (Sidebar) */}
+          <Paper square elevation={0} sx={{ width: 280, zIndex: 1, overflowY: 'auto', borderRight: '1px solid rgba(0,0,0,0.06)' }}>
+            <Sidebar categories={filterCategories} />
+          </Paper>
 
-        {/* ... Canvas & Config Panel ... */}
-        <Box sx={{ flexGrow: 1, position: 'relative' }}>
-          <StreamCanvas />
+          {/* ... Canvas & Config Panel ... */}
+          <Box sx={{ flexGrow: 1, position: 'relative' }}>
+            <StreamCanvas />
+          </Box>
+
+          <Paper
+              square
+              elevation={4}
+              sx={{
+                  width: selectedNodeId ? 380 : 0,
+                  zIndex: 2,
+                  borderLeft: '1px solid rgba(0,0,0,0.06)',
+                  overflowY: 'auto',
+                  transition: 'width 0.3s ease',
+              }}
+          >
+              <ConfigPanel />
+          </Paper>
         </Box>
-
-        <Paper 
-            square 
-            elevation={4} 
-            sx={{ 
-                width: selectedNodeId ? 380 : 0,
-                zIndex: 2, 
-                borderLeft: '1px solid rgba(0,0,0,0.06)',
-                overflowY: 'auto',
-                transition: 'width 0.3s ease',
-            }}
-        >
-            <ConfigPanel />
-        </Paper>
-      </Box>
+      </DndContext>
       
       {/* ... Debug Panel & Notifications ... */} 
       {(isDebugging || traceResult) && (

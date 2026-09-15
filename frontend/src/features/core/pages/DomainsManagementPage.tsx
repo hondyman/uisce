@@ -16,6 +16,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import AddIcon from '@mui/icons-material/Add'
 import AbbreviationManager from '../../../components/AbbreviationManager'
+import { apiFetch } from '../../../lib/apiClient'
 
 type Domain = {
   id?: string
@@ -67,10 +68,7 @@ export default function DomainsManagementPage() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/data-domains', { credentials: 'include' })
-      if (!res.ok) {
-        throw new Error('Failed to load domains')
-      }
+      const res = await apiFetch('/api/data-domains', { credentials: 'include' })
       const json = await res.json()
       const rows: Domain[] = Array.isArray(json) ? json.map(normalizeDomain) : []
       setDomains(rows)
@@ -96,10 +94,7 @@ export default function DomainsManagementPage() {
     if (!id) return
     if (!confirm('Delete domain?')) return
     try {
-      const res = await fetch(`/api/data-domains/${id}`, { method: 'DELETE', credentials: 'include' })
-      if (!res.ok) {
-        throw new Error('Delete failed')
-      }
+      await apiFetch(`/api/data-domains/${id}`, { method: 'DELETE', credentials: 'include' })
       setBanner({ severity: 'success', message: 'Domain deleted' })
       await fetchList()
     } catch (e: unknown) {

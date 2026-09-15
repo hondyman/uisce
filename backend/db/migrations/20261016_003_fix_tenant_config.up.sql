@@ -12,7 +12,6 @@
 -- connect as a role that bypasses. Application roles do not bypass; they see
 -- only their own tenant.
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_tenant_config (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -71,4 +70,3 @@ CREATE POLICY fix_tenant_config_isolation_policy ON fix_tenant_config
 -- sync role (20261016_002) bypasses via BYPASSRLS; this is a safety belt, not
 -- a bypass.
 
-COMMIT;

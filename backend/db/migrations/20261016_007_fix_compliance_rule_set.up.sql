@@ -10,7 +10,6 @@
 --
 -- RLS: same regime. Tenant-scoped via uisce_get_current_tenant().
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_compliance_rule_set (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -45,4 +44,3 @@ CREATE POLICY fix_compliance_rule_set_isolation_policy ON fix_compliance_rule_se
         tenant_id = uisce_get_current_tenant()
     );
 
-COMMIT;

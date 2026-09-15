@@ -28,6 +28,13 @@ func (m *MockBORepository) GetBOByTechnicalName(technicalName, tenantID, datasou
 	return nil, nil
 }
 
+// TableHasColumn defaults every table to having tenant_id, preserving this
+// mock's existing tests' behavior (all of which pre-date the tenant_id
+// column check and assume the predicate is always added).
+func (m *MockBORepository) TableHasColumn(drivingTable, column string) bool {
+	return true
+}
+
 func TestSimpleSQLGeneration(t *testing.T) {
 	// Setup Mock Repo
 	repo := &MockBORepository{

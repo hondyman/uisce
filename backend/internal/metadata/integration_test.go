@@ -122,6 +122,14 @@ func TestGetBusinessObjectIncludesChildIntegration_Container(t *testing.T) {
 
 	svc := NewBusinessObjectService(db, nil, nil, nil)
 	secCtx := &security.Context{TenantID: tenantID}
+	// GetBusinessObject's access check (resolveAccessDecision) reads the
+	// caller's roles from security.AuthInfoFromContext(ctx), not from the
+	// secCtx parameter above - a plain context.Background() has no AuthInfo,
+	// which resolves to AccessLevelNone and a "forbidden" error before this
+	// test ever reaches the actual assertions. Real HTTP callers get this
+	// from AuthContextMiddleware; this test has to inject the equivalent
+	// itself, same as any other caller outside that middleware chain.
+	ctx = security.WithAuthInfo(ctx, security.AuthInfo{UserID: "test-user", Roles: []string{"global_admin"}, IsGlobalAdmin: true})
 	bo, err := svc.GetBusinessObject(ctx, secCtx, parentID)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(bo.Subtypes), "expected 1 subtype")

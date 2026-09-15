@@ -3,14 +3,8 @@
 import React, { useState } from "react";
 import { useAPIKeys } from "../hooks/useAdmin";
 import { APIKey } from "../types";
+import { apiFetch, ApiError } from "../../lib/apiClient";
 import "./APIKeysPage.css";
-
-const getAdminHeaders = () => {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  const token = localStorage.getItem("auth_token");
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  return headers;
-};
 
 export const APIKeysPage: React.FC = () => {
   const [limit, setLimit] = useState(50);
@@ -56,21 +50,14 @@ export const APIKeysPage: React.FC = () => {
         .map((id) => id.trim())
         .filter((id) => id);
 
-      const response = await fetch("/api/admin/api-keys", {
+      const response = await apiFetch("/api/admin/api-keys", {
         method: "POST",
-        headers: getAdminHeaders(),
         body: JSON.stringify({
           name: formData.name,
           tenant_ids: tenantIds,
           roles: formData.roles,
         }),
       });
-
-      if (!response.ok) {
-        const error = await response.json();
-        alert(`Error: ${error.error || "Failed to create API key"}`);
-        return;
-      }
 
       const data = await response.json();
       alert(
@@ -85,6 +72,10 @@ export const APIKeysPage: React.FC = () => {
         roles: ["USER"],
       });
     } catch (err) {
+      if (err instanceof ApiError) {
+        alert(`Error: ${err.message || "Failed to create API key"}`);
+        return;
+      }
       alert(
         `Error: ${err instanceof Error ? err.message : "Unknown error"}`
       );

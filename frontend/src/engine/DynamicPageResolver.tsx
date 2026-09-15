@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DynamicBODataGrid, FieldMeta } from './DynamicBODataGrid';
 import { CircularProgress } from '@mui/material';
 import { Error as ErrorIcon } from '@mui/icons-material';
+import { apiFetch } from '../lib/apiClient';
 
 export interface PageLayoutBlueprint {
   page_key: string;
@@ -26,15 +27,14 @@ export const DynamicPageResolver: React.FC<{ pageKey: string; tenantId: string }
     setError(null);
     try {
       // 1. Fetch Dynamic Layout Schema for Page
-      const layoutRes = await fetch(`/api/v1/layout/resolve?pageKey=${pageKey}`, {
+      const layoutRes = await apiFetch(`/api/v1/layout/resolve?pageKey=${pageKey}`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (!layoutRes.ok) throw new Error('Failed to resolve page metadata');
       const layoutData: PageLayoutBlueprint = await layoutRes.json();
       setLayout(layoutData);
 
       // 2. Fetch Data Hydration Payload from BO Endpoint
-      const dataRes = await fetch(`/api/v1/bo/data/${layoutData.bo_key}`, {
+      const dataRes = await apiFetch(`/api/v1/bo/data/${layoutData.bo_key}`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
       const records = await dataRes.json();

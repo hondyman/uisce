@@ -12,7 +12,6 @@
 -- (FOR ALL covers it). The gold copy sync role bypasses via BYPASSRLS for
 -- admin queries.
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_session_log (
     id BIGSERIAL PRIMARY KEY,
@@ -53,4 +52,3 @@ CREATE POLICY fix_session_log_isolation_policy ON fix_session_log
         tenant_id = uisce_get_current_tenant()
     );
 
-COMMIT;

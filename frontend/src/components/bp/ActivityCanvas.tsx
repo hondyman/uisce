@@ -1,9 +1,9 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Activity as ActivityType, Transition } from './ProcessBuilder';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Trash2, Plus } from 'lucide-react';
-import { devDebug } from '../../utils/devLogger';
+import { useDraggable, useDroppable } from '@dnd-kit/core';
 
 interface ActivityCanvasProps {
   activities: ActivityType[];
@@ -15,6 +15,103 @@ interface ActivityCanvasProps {
   onAddTransition: (from: string, to: string) => void;
 }
 
+export const ACTIVITY_CANVAS_DROPPABLE_ID = 'activity-canvas';
+
+const getActivityColor = (type: string) => {
+  const colors: Record<string, string> = {
+    manual_task: 'bg-blue-100 border-blue-300',
+    automated_task: 'bg-green-100 border-green-300',
+    approval: 'bg-yellow-100 border-yellow-300',
+    notification: 'bg-purple-100 border-purple-300',
+    data_collection: 'bg-pink-100 border-pink-300',
+    integration: 'bg-orange-100 border-orange-300',
+    wait: 'bg-gray-100 border-gray-300',
+  };
+  return colors[type] || 'bg-gray-100 border-gray-300';
+};
+
+interface DraggableActivityCardProps {
+  activity: ActivityType;
+  isSelected: boolean;
+  isConnecting: boolean;
+  onSelect: () => void;
+  onStartConnection: () => void;
+  onDelete: () => void;
+}
+
+const DraggableActivityCard: React.FC<DraggableActivityCardProps> = ({
+  activity,
+  isSelected,
+  isConnecting,
+  onSelect,
+  onStartConnection,
+  onDelete,
+}) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `activity-${activity.id}`,
+    data: {
+      source: 'activity',
+      activityId: activity.id,
+    },
+  });
+
+  return (
+    <Card
+      ref={setNodeRef}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      className={`
+        absolute w-40 cursor-move select-none transition-shadow
+        ${getActivityColor(activity.type)}
+        ${isSelected ? 'ring-2 ring-blue-500 shadow-lg' : ''}
+        ${isConnecting ? 'ring-2 ring-green-500' : ''}
+      `}
+      style={{
+        left: activity.position.x,
+        top: activity.position.y,
+        zIndex: 10,
+        opacity: isDragging ? 0.4 : 1,
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="p-3">
+        <div className="font-medium text-sm mb-1">{activity.name}</div>
+        <div className="text-xs text-gray-600">{activity.type}</div>
+
+        <div className="flex gap-1 mt-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onStartConnection();
+            }}
+          >
+            <Plus size={12} />
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs text-red-600"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 size={12} />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
 export const ActivityCanvas: React.FC<ActivityCanvasProps> = ({
   activities,
   transitions,
@@ -24,79 +121,24 @@ export const ActivityCanvas: React.FC<ActivityCanvasProps> = ({
   onDeleteActivity,
   onAddTransition,
 }) => {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const [draggedActivity, setDraggedActivity] = useState<string | null>(null);
   const [connectingFrom, setConnectingFrom] = useState<string | null>(null);
+  const { setNodeRef } = useDroppable({
+    id: ACTIVITY_CANVAS_DROPPABLE_ID,
+  });
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    const activityType = e.dataTransfer.getData('activityType');
-    
-    if (activityType && canvasRef.current) {
-      const rect = canvasRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-
-      // This would be handled by parent component through onAddActivity
-      devDebug(`Add ${activityType} at (${x}, ${y})`);
-    }
+  const handleStartConnection = useCallback((activityId: string) => {
+    setConnectingFrom(prev => (prev === activityId ? null : activityId));
   }, []);
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
-
-  const handleActivityDragStart = (e: React.DragEvent, activityId: string) => {
-    setDraggedActivity(activityId);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleActivityDrag = useCallback((e: React.DragEvent, activityId: string) => {
-    if (!draggedActivity || !canvasRef.current) return;
-
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left - 75; // Half of card width
-    const y = e.clientY - rect.top - 50; // Half of card height
-
-    if (x > 0 && y > 0) {
-      onUpdateActivity(activityId, {
-        position: { x, y },
-      });
-    }
-  }, [draggedActivity, onUpdateActivity]);
-
-  const handleActivityDragEnd = () => {
-    setDraggedActivity(null);
-  };
-
-  const handleStartConnection = (activityId: string) => {
-    if (connectingFrom === activityId) {
-      setConnectingFrom(null);
-    } else {
-      setConnectingFrom(activityId);
-    }
-  };
-
-  const handleCompleteConnection = (toActivityId: string) => {
-    if (connectingFrom && connectingFrom !== toActivityId) {
-      onAddTransition(connectingFrom, toActivityId);
-      setConnectingFrom(null);
-    }
-  };
-
-  const getActivityColor = (type: string) => {
-    const colors: Record<string, string> = {
-      manual_task: 'bg-blue-100 border-blue-300',
-      automated_task: 'bg-green-100 border-green-300',
-      approval: 'bg-yellow-100 border-yellow-300',
-      notification: 'bg-purple-100 border-purple-300',
-      data_collection: 'bg-pink-100 border-pink-300',
-      integration: 'bg-orange-100 border-orange-300',
-      wait: 'bg-gray-100 border-gray-300',
-    };
-    return colors[type] || 'bg-gray-100 border-gray-300';
-  };
+  const handleCompleteConnection = useCallback((toActivityId: string) => {
+    setConnectingFrom(prev => {
+      if (prev && prev !== toActivityId) {
+        onAddTransition(prev, toActivityId);
+        return null;
+      }
+      return prev;
+    });
+  }, [onAddTransition]);
 
   // Calculate transition line coordinates
   const getTransitionPath = (transition: Transition) => {
@@ -115,10 +157,8 @@ export const ActivityCanvas: React.FC<ActivityCanvasProps> = ({
 
   return (
     <div
-      ref={canvasRef}
+      ref={setNodeRef}
       className="relative w-full h-full bg-gray-50 overflow-auto"
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
       onClick={() => onSelectActivity(null)}
     >
       {/* SVG Layer for Transitions */}
@@ -150,62 +190,21 @@ export const ActivityCanvas: React.FC<ActivityCanvasProps> = ({
 
       {/* Activity Nodes */}
       {activities.map(activity => (
-        <Card
+        <DraggableActivityCard
           key={activity.id}
-          draggable
-          onDragStart={(e) => handleActivityDragStart(e, activity.id)}
-          onDrag={(e) => handleActivityDrag(e, activity.id)}
-          onDragEnd={handleActivityDragEnd}
-          onClick={(e) => {
-            e.stopPropagation();
+          activity={activity}
+          isSelected={selectedActivity === activity.id}
+          isConnecting={connectingFrom === activity.id}
+          onSelect={() => {
             if (connectingFrom) {
               handleCompleteConnection(activity.id);
             } else {
               onSelectActivity(activity.id);
             }
           }}
-          className={`
-            absolute w-40 cursor-move select-none transition-shadow
-            ${getActivityColor(activity.type)}
-            ${selectedActivity === activity.id ? 'ring-2 ring-blue-500 shadow-lg' : ''}
-            ${connectingFrom === activity.id ? 'ring-2 ring-green-500' : ''}
-          `}
-          style={{
-            left: activity.position.x,
-            top: activity.position.y,
-            zIndex: 10,
-          }}
-        >
-          <div className="p-3">
-            <div className="font-medium text-sm mb-1">{activity.name}</div>
-            <div className="text-xs text-gray-600">{activity.type}</div>
-            
-            <div className="flex gap-1 mt-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-xs"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleStartConnection(activity.id);
-                }}
-              >
-                <Plus size={12} />
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-6 px-2 text-xs text-red-600"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteActivity(activity.id);
-                }}
-              >
-                <Trash2 size={12} />
-              </Button>
-            </div>
-          </div>
-        </Card>
+          onStartConnection={() => handleStartConnection(activity.id)}
+          onDelete={() => onDeleteActivity(activity.id)}
+        />
       ))}
 
       {/* Empty State */}

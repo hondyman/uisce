@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNotification } from './hooks/useNotification';
-import { useDrop } from 'react-dnd';
+import { DndContext, useDroppable, type DragEndEvent } from '@dnd-kit/core';
 import { listFolders, addItemToFolder } from './api';
 import type { FullFolder } from './types';
 import FolderAnalyticsPanel from './FolderAnalyticsPanel';
@@ -11,20 +11,17 @@ export const ItemTypes = {
 };
 
 function Folder({ folder, onDropItem }: { folder: FullFolder; onDropItem: (_folderId: string, _item: any) => void }) {
-  const [{ isOver, canDrop }, drop] = useDrop(() => ({
-    accept: ItemTypes.SAVED_ITEM,
-    drop: (item: { id: string; type: 'query' | 'workbook' }) => onDropItem(folder.id, item),
-    collect: (monitor: any) => ({
-      isOver: !!monitor.isOver(),
-      canDrop: !!monitor.canDrop(),
-    }),
-  }));
+  const { isOver, setNodeRef } = useDroppable({
+    id: folder.id,
+    data: { folderId: folder.id },
+  });
+  void onDropItem; // drop handling is wired centrally in FolderBrowser's DndContext
 
   const [isAnalyticsVisible, setIsAnalyticsVisible] = useState(false);
   const [isDiffVisible, setIsDiffVisible] = useState(false);
 
   return (
-    <div ref={drop} className={`folder ${isOver ? 'over' : ''} ${canDrop ? 'can-drop' : ''}`}>
+    <div ref={setNodeRef} className={`folder ${isOver ? 'over' : ''} ${isOver ? 'can-drop' : ''}`}>
       <div className="folder-header">
         <h4>📁 {folder.name}</h4>
         <div className="folder-actions">
@@ -63,14 +60,24 @@ export default function FolderBrowser() {
     }
   }, [fetchFolders]);
 
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+    const item = active.data.current as { id: string; type: 'query' | 'workbook' } | undefined;
+    if (!item) return;
+    handleDropItem(String(over.id), item);
+  }, [handleDropItem]);
+
   return (
-    <div className="folder-browser">
-      <h3>Folders</h3>
-      <button onClick={fetchFolders}>Refresh</button>
-      {folders.map(folder => (
-        <Folder key={folder.id} folder={folder} onDropItem={handleDropItem} />
-      ))}
-      {folders.length === 0 && <p className="text-placeholder">No folders found.</p>}
-    </div>
+    <DndContext onDragEnd={handleDragEnd}>
+      <div className="folder-browser">
+        <h3>Folders</h3>
+        <button onClick={fetchFolders}>Refresh</button>
+        {folders.map(folder => (
+          <Folder key={folder.id} folder={folder} onDropItem={handleDropItem} />
+        ))}
+        {folders.length === 0 && <p className="text-placeholder">No folders found.</p>}
+      </div>
+    </DndContext>
   );
 }

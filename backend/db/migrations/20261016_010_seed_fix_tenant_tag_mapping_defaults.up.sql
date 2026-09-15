@@ -25,8 +25,12 @@
 -- (e.g. someone cherry-picked this migration), the DO block below
 -- no-ops with a NOTICE — gold-copy inheritance won't work but the
 -- migration won't fail.
-
-BEGIN;
+--
+-- No explicit transaction wrapper: the migration runner (backend/internal/
+-- migrations/runner.go) already wraps every file in its own transaction
+-- and rejects files that wrap themselves again (see
+-- hasTransactionControl/stripTransactionStatements) - the SET LOCAL ROLE
+-- below still reverts correctly at the runner's transaction boundary.
 
 DO $$
 DECLARE
@@ -97,4 +101,10 @@ BEGIN
     ON CONFLICT (tenant_id, fix_version, msg_type, fix_tag) DO NOTHING;
 END $$;
 
-COMMIT;
+-- RESET ROLE undoes the SET LOCAL ROLE above before this transaction
+-- continues. SET LOCAL is scoped to the transaction, not the DO block,
+-- so without this the runner's own bookkeeping statement that follows
+-- this file (in the SAME transaction) would run as uisce_gold_copy_sync
+-- instead of the connecting role - which is exactly what broke here:
+-- that role lacks privileges on the oms schema the runner logs to.
+RESET ROLE;

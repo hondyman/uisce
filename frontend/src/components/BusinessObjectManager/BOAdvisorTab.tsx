@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Box,
   Typography,
@@ -98,8 +99,7 @@ export const BOAdvisorTab: React.FC<BOAdvisorTabProps> = ({ boName, tenantId, on
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/bo/${encodeURIComponent(boName)}/advisor?tenant_id=${encodeURIComponent(tenantId)}&window_days=7`);
-      if (!res.ok) throw new Error(await res.text());
+      const res = await apiFetch(`/api/bo/${encodeURIComponent(boName)}/advisor?tenant_id=${encodeURIComponent(tenantId)}&window_days=7`);
       setData(await res.json());
     } catch (e: any) {
       setError(e.message);

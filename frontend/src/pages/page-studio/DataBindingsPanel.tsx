@@ -13,12 +13,32 @@ import {
     Divider,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Business as BusinessIcon } from '@mui/icons-material';
+import { useDraggable } from '@dnd-kit/core';
 import { apiClient } from '../../utils/apiClient';
 import { CorePageDefinition, DataSourceDefinition, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
-import { fetchBusinessObjectBindings } from '../../features/query-builder/services/queryBuilderApi';
+import { fetchBusinessObjectBindings, fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
+import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
+
+/**
+ * Drag payload shape for dragging a field out of this panel onto a widget in
+ * the canvas - see LayoutCanvas.tsx's onDragEnd, which reads this back via
+ * @dnd-kit's `active.data.current` and patches the target widget's
+ * dimension/measure field selection accordingly. `kind: 'field'` (set on the
+ * useDraggable below) is how that handler tells "new widget from
+ * ComponentPalette" and "bind this field" apart, replacing the old
+ * dataTransfer custom-MIME-type trick.
+ */
+export interface FieldDragPayload {
+    boId: string;
+    termNodeId: string;
+    displayName: string;
+    role: string;
+}
 
 interface BusinessObjectOption {
     id: string;
+    /** bo_key - the technical name every bo-scoped endpoint (bo-fields, terms, etc.) actually expects, not the display name. */
+    key: string;
     name: string;
     display_name: string;
 }
@@ -32,6 +52,26 @@ interface RelatedBusinessObject {
     cardinality: string;
     joinCondition: string;
 }
+
+/** One draggable field chip - see FieldDragPayload doc comment above. */
+const FieldChip: React.FC<{ payload: FieldDragPayload; isMeasure: boolean }> = ({ payload, isMeasure }) => {
+    const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+        id: `field-${payload.boId}-${payload.termNodeId}`,
+        data: { kind: 'field', payload },
+    });
+    return (
+        <Chip
+            ref={setNodeRef}
+            {...listeners}
+            {...attributes}
+            size="small"
+            label={payload.displayName}
+            variant="outlined"
+            color={isMeasure ? 'secondary' : 'default'}
+            sx={{ cursor: 'grab', opacity: isDragging ? 0.4 : 1 }}
+        />
+    );
+};
 
 interface DataBindingsPanelProps {
     draft: CorePageDefinition;
@@ -47,6 +87,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
     const [businessObjects, setBusinessObjects] = useState<BusinessObjectOption[]>([]);
     const [selectedBOId, setSelectedBOId] = useState('');
     const [relatedByBO, setRelatedByBO] = useState<Record<string, RelatedBusinessObject[]>>({});
+    const [fieldsByBO, setFieldsByBO] = useState<Record<string, SemanticTermView[]>>({});
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -65,6 +106,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                     .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
                     .map((item) => ({
                         id: String(item.id ?? item.name),
+                        key: String(item.key ?? item.technicalName ?? item.technical_name ?? item.name ?? ''),
                         name: String(item.name ?? ''),
                         display_name: String(item.displayName ?? item.display_name ?? item.name ?? ''),
                     }));
@@ -102,6 +144,21 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [(draft.dataSources || []).length]);
 
+    // Field list per bound BO, for the drag-and-drop palette below each
+    // source - same term data every widget's own field pickers already use
+    // (fetchBOTerms), just surfaced here as drag sources instead of a
+    // per-widget dropdown.
+    useEffect(() => {
+        boDataSources.forEach((ds) => {
+            const cfg = ds.config as unknown as BusinessObjectDataSourceConfig;
+            if (!cfg?.boId || fieldsByBO[cfg.boId]) return;
+            fetchBOTerms(cfg.boId, cfg.bindingId || '')
+                .then((terms) => setFieldsByBO((prev) => ({ ...prev, [cfg.boId]: terms })))
+                .catch(() => setFieldsByBO((prev) => ({ ...prev, [cfg.boId]: [] })));
+        });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [(draft.dataSources || []).length]);
+
     const handleAddBO = async () => {
         if (!selectedBOId) return;
         const bo = businessObjects.find((b) => b.id === selectedBOId);
@@ -114,7 +171,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
             const defaultBinding = bindings.find((b) => b.isDefault) || bindings[0];
             const config: BusinessObjectDataSourceConfig = {
                 boId: bo.id,
-                boKey: bo.name,
+                boKey: bo.key,
                 bindingId: defaultBinding?.bindingId || '',
                 displayName: bo.display_name,
                 relatedBoIds: [],
@@ -192,6 +249,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                 {boDataSources.map((ds) => {
                     const cfg = ds.config as unknown as BusinessObjectDataSourceConfig;
                     const related = relatedByBO[cfg.boId] || [];
+                    const fields = fieldsByBO[cfg.boId] || [];
                     return (
                         <Box key={ds.id} sx={{ mb: 2 }}>
                             <ListItem
@@ -232,6 +290,31 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                                     </Box>
                                 </Box>
                             )}
+
+                            <Box sx={{ pl: 4, mt: 1.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                    Fields — drag onto a Slicer, Chart, or KPI widget to bind it
+                                </Typography>
+                                {fields.length === 0 ? (
+                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                                        Loading fields…
+                                    </Typography>
+                                ) : (
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+                                        {fields.map((field) => {
+                                            const isMeasure = field.role === 'MEASURE' || field.role === 'CALCULATED';
+                                            const payload: FieldDragPayload = {
+                                                boId: cfg.boId,
+                                                termNodeId: field.termNodeId,
+                                                displayName: field.displayName,
+                                                role: field.role,
+                                            };
+                                            return <FieldChip key={field.termNodeId} payload={payload} isMeasure={isMeasure} />;
+                                        })}
+                                    </Box>
+                                )}
+                            </Box>
+
                             <Divider sx={{ mt: 2 }} />
                         </Box>
                     );

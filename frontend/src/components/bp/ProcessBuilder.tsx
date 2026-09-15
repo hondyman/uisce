@@ -5,11 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ActivityPalette } from './ActivityPalette';
-import { ActivityCanvas } from './ActivityCanvas';
+import { ActivityCanvas, ACTIVITY_CANVAS_DROPPABLE_ID } from './ActivityCanvas';
 import { TransitionEditor } from './TransitionEditor';
 import { ProcessPreview } from './ProcessPreview';
 import { Save, Play, Download, Upload } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
+import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 
 export interface Activity {
   id: string;
@@ -143,6 +144,34 @@ export const ProcessBuilder: React.FC = () => {
     setIsDirty(true);
   }, []);
 
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 4 },
+    })
+  );
+
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over, delta } = event;
+    const data = active.data.current as { source?: string; activityType?: string; activityId?: string } | undefined;
+
+    if (!data) return;
+
+    if (data.source === 'palette' && data.activityType && over?.id === ACTIVITY_CANVAS_DROPPABLE_ID) {
+      handleAddActivity(data.activityType);
+      return;
+    }
+
+    if (data.source === 'activity' && data.activityId) {
+      const activity = process.activities.find(a => a.id === data.activityId);
+      if (!activity) return;
+      const x = activity.position.x + delta.x;
+      const y = activity.position.y + delta.y;
+      if (x > 0 && y > 0) {
+        handleUpdateActivity(data.activityId, { position: { x, y } });
+      }
+    }
+  }, [handleAddActivity, handleUpdateActivity, process.activities]);
+
   const handleSave = () => {
     saveProcess.mutate(process);
   };
@@ -251,46 +280,48 @@ export const ProcessBuilder: React.FC = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Activity Palette */}
-        <div className="w-64 border-r bg-gray-50 overflow-y-auto">
-          <ActivityPalette onAddActivity={handleAddActivity} />
-        </div>
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+          {/* Left Sidebar - Activity Palette */}
+          <div className="w-64 border-r bg-gray-50 overflow-y-auto">
+            <ActivityPalette onAddActivity={handleAddActivity} />
+          </div>
 
-        {/* Center - Canvas */}
-        <div className="flex-1 overflow-hidden">
-          <Tabs defaultValue="canvas" className="h-full flex flex-col">
-            <TabsList className="mx-4 mt-2">
-              <TabsTrigger value="canvas">Canvas</TabsTrigger>
-              <TabsTrigger value="transitions">Transitions</TabsTrigger>
-              <TabsTrigger value="preview">Preview</TabsTrigger>
-            </TabsList>
+          {/* Center - Canvas */}
+          <div className="flex-1 overflow-hidden">
+            <Tabs defaultValue="canvas" className="h-full flex flex-col">
+              <TabsList className="mx-4 mt-2">
+                <TabsTrigger value="canvas">Canvas</TabsTrigger>
+                <TabsTrigger value="transitions">Transitions</TabsTrigger>
+                <TabsTrigger value="preview">Preview</TabsTrigger>
+              </TabsList>
 
-            <TabsContent value="canvas" className="flex-1 overflow-hidden">
-              <ActivityCanvas
-                activities={process.activities}
-                transitions={process.transitions}
-                selectedActivity={selectedActivity}
-                onSelectActivity={setSelectedActivity}
-                onUpdateActivity={handleUpdateActivity}
-                onDeleteActivity={handleDeleteActivity}
-                onAddTransition={handleAddTransition}
-              />
-            </TabsContent>
+              <TabsContent value="canvas" className="flex-1 overflow-hidden">
+                <ActivityCanvas
+                  activities={process.activities}
+                  transitions={process.transitions}
+                  selectedActivity={selectedActivity}
+                  onSelectActivity={setSelectedActivity}
+                  onUpdateActivity={handleUpdateActivity}
+                  onDeleteActivity={handleDeleteActivity}
+                  onAddTransition={handleAddTransition}
+                />
+              </TabsContent>
 
-            <TabsContent value="transitions" className="flex-1 overflow-auto p-4">
-              <TransitionEditor
-                transitions={process.transitions}
-                activities={process.activities}
-                onUpdateTransition={handleUpdateTransition}
-                onDeleteTransition={handleDeleteTransition}
-              />
-            </TabsContent>
+              <TabsContent value="transitions" className="flex-1 overflow-auto p-4">
+                <TransitionEditor
+                  transitions={process.transitions}
+                  activities={process.activities}
+                  onUpdateTransition={handleUpdateTransition}
+                  onDeleteTransition={handleDeleteTransition}
+                />
+              </TabsContent>
 
-            <TabsContent value="preview" className="flex-1 overflow-auto p-4">
-              <ProcessPreview process={process} />
-            </TabsContent>
-          </Tabs>
-        </div>
+              <TabsContent value="preview" className="flex-1 overflow-auto p-4">
+                <ProcessPreview process={process} />
+              </TabsContent>
+            </Tabs>
+          </div>
+        </DndContext>
 
         {/* Right Sidebar - Property Editor */}
         {selectedActivity && (

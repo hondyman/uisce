@@ -17,7 +17,6 @@
 -- localhost-only with shared-secret auth. The gold-copy sync role bypasses
 -- for admin/audit queries.
 
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS fix_message_store (
     session_id TEXT NOT NULL,
@@ -30,4 +29,3 @@ CREATE TABLE IF NOT EXISTS fix_message_store (
 CREATE INDEX IF NOT EXISTS idx_fix_message_store_session_created
     ON fix_message_store (session_id, created_at DESC);
 
-COMMIT;

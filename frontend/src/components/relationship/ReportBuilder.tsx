@@ -24,6 +24,7 @@ import {
   DownloadOutlined,
 } from '@ant-design/icons';
 import './ReportBuilder.module.css';
+import { apiFetch } from '../../lib/apiClient';
 
 interface Metric {
   field: string;
@@ -79,7 +80,7 @@ const ReportBuilder: React.FC<ReportBuilderProps> = ({
     }
 
     try {
-      const response = await fetch('/api/reports/generate', {
+      const response = await apiFetch('/api/reports/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -88,10 +89,6 @@ const ReportBuilder: React.FC<ReportBuilderProps> = ({
         },
         body: JSON.stringify(config),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to generate query: ${response.statusText}`);
-      }
 
       const data = await response.json();
       setGeneratedSQL(data.query);
@@ -113,7 +110,7 @@ const ReportBuilder: React.FC<ReportBuilderProps> = ({
     setExecuting(true);
 
     try {
-      const response = await fetch('/api/reports/preview', {
+      const response = await apiFetch('/api/reports/preview', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -125,10 +122,6 @@ const ReportBuilder: React.FC<ReportBuilderProps> = ({
           limit: 100,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to execute report: ${response.statusText}`);
-      }
 
       const data = await response.json();
       setGeneratedSQL(data.query);

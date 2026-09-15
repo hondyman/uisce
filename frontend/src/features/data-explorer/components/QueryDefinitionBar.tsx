@@ -1,4 +1,5 @@
 import React from 'react';
+import { DndContext, useDroppable, DragEndEvent } from '@dnd-kit/core';
 import {
   Box,
   Paper,
@@ -111,64 +112,56 @@ export const QueryDefinitionBar: React.FC<QueryDefinitionBarProps> = ({
     return m;
   })();
 
-  const handleDrop = (e: React.DragEvent) => {
-    const rawData = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('bo-field-bundle');
-    const textPlain = e.dataTransfer.getData('text/plain');
-    if (rawData || textPlain) {
-      try {
-        let fields: any[] = [];
-        if (rawData) {
-          const parsed = JSON.parse(rawData);
-          if (Array.isArray(parsed)) {
-            fields = parsed;
-          } else if (parsed.type === 'bofield_batch' || parsed.type === 'bo-field-bundle') {
-            fields = parsed.fields || [];
-          } else if (parsed.type === 'bofield' && parsed.field) {
-            fields = [parsed.field];
-          } else if (parsed.fieldKey || parsed.name) {
-            fields = [parsed];
-          }
-        }
-        if (fields.length === 0 && textPlain) {
-          const keys = textPlain.split(',').map(s => s.trim()).filter(Boolean);
-          fields = keys.map(k => source.fields.find(f => f.name === k || f.id === k || f.technicalName === k) || { id: k, name: k, technicalName: k, displayName: k, type: 'string' });
-        }
+  const QUERY_DEFINITION_DROPZONE_ID = 'query-definition-bar-dropzone';
 
-        if (fields.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          fields.forEach((f) => {
-            const fieldName = f.technicalName || f.name || f.id;
-            const normType = (f.dataType || f.type || 'string').toLowerCase();
-            if (['number', 'int', 'float', 'double', 'decimal', 'numeric', 'currency', 'money'].some((k) => normType.includes(k))) {
-              if (onToggleMeasure) {
-                onToggleMeasure(fieldName, 'SUM');
-              } else {
-                onUpdateMeasureAgg(fieldName, 'SUM');
-              }
-            } else if (['date', 'time', 'timestamp', 'datetime'].some((k) => normType.includes(k))) {
-              if (onAddTimeDimension) {
-                onAddTimeDimension(fieldName);
-              } else if (onToggleDimension) {
-                onToggleDimension(fieldName);
-              }
-            } else {
-              if (onToggleDimension) {
-                onToggleDimension(fieldName);
-              }
-            }
-          });
+  const processDroppedFields = (fields: any[]) => {
+    if (!fields || fields.length === 0) return;
+    fields.forEach((f) => {
+      const fieldName = f.technicalName || f.name || f.id;
+      const normType = (f.dataType || f.type || 'string').toLowerCase();
+      if (['number', 'int', 'float', 'double', 'decimal', 'numeric', 'currency', 'money'].some((k) => normType.includes(k))) {
+        if (onToggleMeasure) {
+          onToggleMeasure(fieldName, 'SUM');
+        } else {
+          onUpdateMeasureAgg(fieldName, 'SUM');
         }
-      } catch {
-        // ignore
+      } else if (['date', 'time', 'timestamp', 'datetime'].some((k) => normType.includes(k))) {
+        if (onAddTimeDimension) {
+          onAddTimeDimension(fieldName);
+        } else if (onToggleDimension) {
+          onToggleDimension(fieldName);
+        }
+      } else {
+        if (onToggleDimension) {
+          onToggleDimension(fieldName);
+        }
       }
-    }
+    });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over?.id !== QUERY_DEFINITION_DROPZONE_ID) return;
+
+    const data = active.data.current as any;
+    if (!data) return;
+
+    let fields: any[] = [];
+    if (Array.isArray(data.fields)) {
+      fields = data.fields;
+    } else if (data.field) {
+      fields = [data.field];
+    } else if (data.fieldKey || data.name) {
+      fields = [data];
+    } else if (data.keys) {
+      const keys = String(data.keys).split(',').map((s: string) => s.trim()).filter(Boolean);
+      fields = keys.map((k: string) => source.fields.find(f => f.name === k || f.id === k || f.technicalName === k) || { id: k, name: k, technicalName: k, displayName: k, type: 'string' });
+    }
+
+    processDroppedFields(fields);
   };
+
+  const { setNodeRef, isOver } = useDroppable({ id: QUERY_DEFINITION_DROPZONE_ID });
 
   interface DimensionChip {
     itemFieldId: string;
@@ -286,16 +279,18 @@ export const QueryDefinitionBar: React.FC<QueryDefinitionBarProps> = ({
   };
 
   return (
+    <DndContext onDragEnd={handleDragEnd}>
     <Paper
+      ref={setNodeRef}
       elevation={0}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
       sx={{
         p: 1.5,
         borderBottom: `1px solid ${EXPLORER_BORDER}`,
         display: 'flex',
         flexDirection: 'column',
         gap: 1,
+        bgcolor: isOver ? 'rgba(99, 102, 241, 0.06)' : undefined,
+        transition: 'background-color 0.15s ease',
       }}
     >
       <Stack direction="row" flexWrap="wrap" alignItems="center" gap={1}>
@@ -539,6 +534,7 @@ export const QueryDefinitionBar: React.FC<QueryDefinitionBarProps> = ({
         />
       )}
     </Paper>
+    </DndContext>
   );
 };
 

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { readCachedSelection } from '../utils/tenantScope';
 
 type JsonRecord = Record<string, unknown>;
 
@@ -44,16 +45,23 @@ async function request<T>(path: string, { method = 'GET', body, headers, ...rest
     if (token && !finalHeaders.has('Authorization')) {
       finalHeaders.set('Authorization', `Bearer ${token}`);
     }
-    const tenantContext = localStorage.getItem('tenant_context');
-    if (tenantContext) {
-      try {
-        const parsed = JSON.parse(tenantContext);
-        if (parsed?.tenantId && !finalHeaders.has('X-Tenant-ID')) {
-          finalHeaders.set('X-Tenant-ID', parsed.tenantId);
-        }
-      } catch (_) {}
-    }
   }
+
+  // 'tenant_context' in localStorage is a dead key nothing writes anymore -
+  // the live tenant/datasource selection lives where the operating-scope
+  // picker and apiClient.ts both read it from (readCachedSelection), so
+  // reads from the old key silently sent every report save/load with no
+  // X-Tenant-ID at all, which the backend rejects as 401 unauthorized.
+  try {
+    const { tenant, datasource } = readCachedSelection();
+    if (tenant?.id && !finalHeaders.has('X-Tenant-ID')) {
+      finalHeaders.set('X-Tenant-ID', tenant.id);
+    }
+    const datasourceId = datasource?.id || (datasource as { alpha_tenant_instance_id?: string } | undefined)?.alpha_tenant_instance_id;
+    if (datasourceId && !finalHeaders.has('X-Tenant-Datasource-ID')) {
+      finalHeaders.set('X-Tenant-Datasource-ID', datasourceId);
+    }
+  } catch (_) {}
 
   if (body != null && !finalHeaders.has('Content-Type')) {
     finalHeaders.set('Content-Type', 'application/json');

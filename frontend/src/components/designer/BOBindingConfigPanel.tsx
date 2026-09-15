@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import StorageIcon from '@mui/icons-material/Storage';
 import SaveIcon from '@mui/icons-material/Save';
+import { apiFetch } from '../../lib/apiClient';
 
 export type BindingMode = 'OLTP_CRUD' | 'OLAP_READONLY' | 'BI_TEMPORAL_OLAP';
 
@@ -61,7 +62,7 @@ export const BOBindingConfigPanel: React.FC<BOBindingConfigPanelProps> = ({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const fetchBindings = () => {
-    fetch(`/api/business-objects/bindings?bo_id=${boId}&tenant_id=${tenantId}`)
+    apiFetch(`/api/business-objects/bindings?bo_id=${boId}&tenant_id=${tenantId}`)
       .then((res) => res.json())
       .then((data) => {
         if (data.bindings && data.bindings.length > 0) {
@@ -81,19 +82,13 @@ export const BOBindingConfigPanel: React.FC<BOBindingConfigPanelProps> = ({
     setStatusMessage(null);
 
     try {
-      const res = await fetch('/api/business-objects/bindings', {
+      await apiFetch('/api/business-objects/bindings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...binding, tenant_id: tenantId, bo_id: boId }),
       });
 
-      if (res.ok) {
-        setStatusMessage('Polyglot binding configuration saved successfully!');
-        if (onSaveSuccess) onSaveSuccess();
-      } else {
-        const errorData = await res.json();
-        setStatusMessage(`Error: ${errorData.message || 'Failed to save binding'}`);
-      }
+      setStatusMessage('Polyglot binding configuration saved successfully!');
+      if (onSaveSuccess) onSaveSuccess();
     } catch (err: any) {
       setStatusMessage(`Error: ${err.message}`);
     } finally {

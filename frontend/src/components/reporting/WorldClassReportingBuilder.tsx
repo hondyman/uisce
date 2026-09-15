@@ -21,8 +21,7 @@ import CircleIcon from '@mui/icons-material/Circle';
 import { Maximize2 } from 'lucide-react';
 
 // Drag and drop imports
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { DndContext } from '@dnd-kit/core';
 import { Rnd } from 'react-rnd';
 
 // Chart library imports
@@ -610,7 +609,7 @@ export default function WorldClassReportingBuilder() {
   }, [selectedElement]);
 
   const renderDesignerCanvas = () => (
-    <DndProvider backend={HTML5Backend}>
+    <DndContext>
       <Box sx={{ display: 'flex', height: '100%' }}>
         {/* Left Toolbox */}
         <Paper sx={{ width: 280, borderRadius: 0, borderRight: 1, borderColor: 'divider' }}>
@@ -723,7 +722,7 @@ export default function WorldClassReportingBuilder() {
           />
         </Paper>
       </Box>
-    </DndProvider>
+    </DndContext>
   );
 
   const renderActiveTab = () => {
