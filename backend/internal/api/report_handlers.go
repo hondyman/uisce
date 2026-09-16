@@ -19,7 +19,7 @@ import (
 )
 
 type ReportHandler struct {
-	service        *reports.ReportService
+	service       *reports.ReportService
 	executor      reports.ReportExecutor
 	db            *sql.DB
 	executionRepo *reports.ExecutionRepository
@@ -27,7 +27,7 @@ type ReportHandler struct {
 
 func NewReportHandler(service *reports.ReportService, executor reports.ReportExecutor, dbConn *sql.DB) *ReportHandler {
 	return &ReportHandler{
-		service:        service,
+		service:       service,
 		executor:      executor,
 		db:            dbConn,
 		executionRepo: reports.NewExecutionRepository(dbConn),
@@ -297,6 +297,12 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID, _, _, authErr := h.resolveAuthContext(r)
+	if authErr != nil {
+		http.Error(w, authErr.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -311,6 +317,23 @@ func (h *ReportHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Tenant isolation check - this handler previously had none at all
+	// (unlike UpdateTemplate/DeleteTemplate, which already did this),
+	// making report_templates.layout_config/parameter_schema/
+	// semantic_view_ids readable cross-tenant by anyone who could guess or
+	// enumerate a report id. report_templates' RLS policy does not backstop
+	// this: this package never sets uisce.current_tenant, so RLS is not
+	// the actual enforcement point for this table - this check is.
+	// Gold-copy core reports are readable by any tenant (that's the
+	// inheritance model - see isCoreTemplate/isReadOnlyCore in
+	// SSRSReportBuilder.tsx); anything else must belong to the caller.
+	goldCopyID, _ := h.service.ResolveGoldCopyTenantID(r.Context())
+	isCore := goldCopyID != uuid.Nil && template.TenantID == goldCopyID
+	if !isCore && template.TenantID != tenantID {
+		http.Error(w, "report template not found", http.StatusNotFound)
 		return
 	}
 
@@ -786,7 +809,9 @@ func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Reques
 
 // GetExecution handles GET /api/v1/reports/executions/{id}.
 // Enforces the pinned two-clause visibility predicate:
-//   (e.tenant_id = $2 OR e.triggered_by = $3)
+//
+//	(e.tenant_id = $2 OR e.triggered_by = $3)
+//
 // Returns 404 if execution is not found or inaccessible (zero existence leak).
 func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
@@ -1101,4 +1126,3 @@ func (h *ReportHandler) ListScheduleExecutions(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
-

@@ -256,18 +256,18 @@ func TestReportAPI(t *testing.T) {
 
 		mock.ExpectExec(`INSERT INTO report_templates`).
 			WithArgs(
-				sqlmock.AnyArg(), // 1: id
-				sqlmock.AnyArg(), // 2: tenant_id
+				sqlmock.AnyArg(),   // 1: id
+				sqlmock.AnyArg(),   // 2: tenant_id
 				"Non-Admin Report", // 3: template_name
-				"",               // 4: description
-				"",               // 5: category
-				sqlmock.AnyArg(), // 6: layout_config
-				sqlmock.AnyArg(), // 7: parameter_schema
-				true,             // 8: is_active
-				false,            // 9: is_public
-				true,             // 10: is_personal (forced to true for non-admin!)
-				sqlmock.AnyArg(), // 11: created_by_id
-				"",               // 12: created_by
+				"",                 // 4: description
+				"",                 // 5: category
+				sqlmock.AnyArg(),   // 6: layout_config
+				sqlmock.AnyArg(),   // 7: parameter_schema
+				true,               // 8: is_active
+				false,              // 9: is_public
+				true,               // 10: is_personal (forced to true for non-admin!)
+				sqlmock.AnyArg(),   // 11: created_by_id
+				"",                 // 12: created_by
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -407,6 +407,42 @@ func TestReportAPI(t *testing.T) {
 			UserID:    "tenant-a-admin",
 			TenantIDs: []string{tenantA},
 			Roles:     []string{"admin"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Get Template - 404 on Cross-Tenant Read (regression: GetTemplate previously had no tenant check at all)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+		tenantB := "22222222-2222-2222-2222-222222222222"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000031", tenantB,
+				"Tenant B Private Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		// A tenant-A user requesting tenant B's report by id must not see it.
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000031", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
 		}
 		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
 		w := httptest.NewRecorder()
@@ -1103,6 +1139,3 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 }
-
-
-
