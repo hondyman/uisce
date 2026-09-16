@@ -36,13 +36,25 @@ an exploitation-evidence check against the full retained log window
 and confirmed clean, a token-redaction queue item filed, and an incident
 report entry (`a1000ecd8`, `31d3a0869`) — all ahead of and separate from
 Phase 2 schema work.
-One real structural decision remains as an explicit 2.1 gate: real
-tenant-transaction/RLS enforcement for `internal/reports` vs. a
-documented app-level-only boundary.
+**The structural decision is now resolved, not still open** — and it
+resolved differently than first proposed. Checking the premise before
+implementing "adopt real tenant-transaction/RLS enforcement" found that
+every DB connection this app uses authenticates as the `postgres`
+superuser (`rolbypassrls = true`, confirmed directly) — RLS is inert
+platform-wide, not just for this table, including every table the
+just-merged strict-tenant-RLS migration fixed. Real RLS enforcement isn't
+achievable for `internal/reports` alone; it needs a non-superuser
+application role first, which is its own platform-wide initiative, now
+its own Standing Gate item (`INCIDENT_REPORT_20260906.md` item 6), not
+Phase 2 scope. **Decision: app-level `WHERE tenant_id` boundary,
+documented** — see 2.1/2.2's entries below for what that means concretely
+(the `Repository.GetTemplate` narrowing promoted to required 2.2 scope,
+`withTenantTx` adopted for new code only).
 
 Current sequence: **Phase 0 and Phase 1 are both closed, the RLS-read
-finding is fully closed out — the rest of Phase 2 (2.1's actual migration
-onward) has not been started.** Next up: write 2.1's migration
+finding is fully closed out including the platform-wide correction it
+surfaced — Phase 2's opening decision is made, 2.1's actual migration has
+not been started.** Next up: write 2.1's migration
 (`report_templates.layout_config`-to-typed-
 columns migration with a gated fallback, not a create. Everything from
 Phase 3 on is unchanged from the original ordering; 3.3 (the real Go
@@ -732,27 +744,47 @@ archaeology on. This doc's own sessions should follow that from here on.
           not a pattern in this file. `report_activities.go` (the other
           reader of report templates this doc's 0.2 ticket flagged)
           checked separately — it never calls the unscoped
-          `Repository.GetTemplate` and already uses real tenant-scoped
-          transactions (`withTenantTx`) for its own queries; not affected.
-          `Repository.GetTemplate` itself has exactly two callers
-          codebase-wide (both now correctly checked) — narrowing it to a
-          tenant-scoped query at the repository layer is a cheap
-          defense-in-depth follow-up, noted but not done (no vulnerable
-          caller exists to justify it today).
-        - **Incident report entry added** (`a1000ecd8`) — finding, fix,
-          the inert-RLS observation, the sweep, the replay, and an
-          incidental finding surfaced during verification: the backend's
-          request-trace log prints full bearer tokens in plaintext per
-          request (confirmed `logs/` is gitignored, so this doesn't reach
-          git history, but it's a real exposure surface on a shared or
-          checked-out dev machine — flagged as its own follow-up).
-        - **The structural decision stays an open 2.1 gate, not decided by
-          omission:** either (a) adopt real tenant-transaction/RLS
-          enforcement for `internal/reports` in 2.1's migration window, or
-          (b) explicitly document app-level `WHERE tenant_id` as this
-          table's real boundary, with this sweep as its compensating
-          control. 2.1 must not proceed without landing on one of these —
-          same discipline as 0.4's cube-vs-BO call.
+          `Repository.GetTemplate`, and calls `withTenantTx` (sets the
+          `uisce.current_tenant` GUC) for its own queries — **correction,
+          found while resolving the structural decision below: this GUC-set
+          is currently ceremony, not enforcement**, since the DB role this
+          app connects as is a superuser that bypasses RLS unconditionally
+          (see `INCIDENT_REPORT_20260906.md`'s "RLS is inert platform-wide"
+          entry). Not a bug in that code — correctly written for the day
+          the role changes — but it provides no actual tenant isolation
+          today, same as everywhere else. `Repository.GetTemplate` itself
+          has exactly two callers codebase-wide (both now correctly
+          checked) — narrowing it to a tenant-scoped query at the
+          repository layer is **promoted from optional to required scope,
+          folded into 2.2 below**, since app-level checks are now confirmed
+          the *only* boundary this table has, not one layer of several.
+        - **Incident report entry added** (`a1000ecd8`, plus a follow-up
+          platform-wide correction, `e40a55b3e`) — finding, fix, the sweep,
+          the replay, and an incidental finding surfaced during
+          verification: the backend's request-trace log prints full
+          bearer tokens in plaintext per request (confirmed `logs/` is
+          gitignored, so this doesn't reach git history, but it's a real
+          exposure surface on a shared or checked-out dev machine — filed
+          as a queue item, sequenced ahead of the pre-existing
+          access-logging queue item in the same future PR).
+        - **The structural decision — resolved, not left open.** Checking
+          the premise before implementing "adopt real tenant-transaction
+          enforcement" found it isn't achievable for `internal/reports`
+          alone: every DB connection this app uses authenticates as the
+          `postgres` superuser (`rolbypassrls = true`, confirmed directly
+          via `pg_roles`), so RLS is inert regardless of GUC-setting code —
+          platform-wide, not just here. **Decision: app-level `WHERE
+          tenant_id` boundary, explicitly documented**, with this sweep as
+          its compensating control and `Repository.GetTemplate`'s
+          narrowing promoted to required 2.2 scope as the load-bearing
+          part of that control. `withTenantTx` is adopted for *new*
+          `internal/reports` code going forward (T.3's execute endpoint)
+          so it inherits real enforcement automatically the day a
+          non-superuser role lands — that role is its own platform-wide
+          initiative, now `INCIDENT_REPORT_20260906.md` Standing Gate item
+          6, explicitly not Phase 2 scope. Existing repository methods are
+          not retrofitted with `withTenantTx` now, to avoid minting more
+          ceremony code that looks like enforcement and isn't.
         - **Telemetry tie-in, not built now:** cross-tenant read attempts
           are exactly the activity signal the Plane-2 ops telemetry (T.1)
           should be able to capture later — an `error_class` value for
@@ -765,6 +797,16 @@ archaeology on. This doc's own sessions should follow that from here on.
       `ParameterSchema` blobs. Update `report_handlers.go`'s
       `CreateTemplate`/`UpdateTemplate` accordingly — this is the handler
       0.1 confirmed is the actual live read/write path.
+      **Required in this ticket, not optional follow-up (per the RLS
+      finding above):** narrow `Repository.GetTemplate(ctx, id)` to
+      `Repository.GetTemplate(ctx, id, tenantID)` with `tenant_id = $2`
+      (or the gold-copy equivalent) in the SQL itself, and update both its
+      current callers (`ReportHandler.GetTemplate`, `DeleteTemplate`).
+      With app-level `WHERE tenant_id` confirmed as this table's only real
+      boundary, pushing the check into the query — not just the handler —
+      means a third future caller fails closed by construction instead of
+      needing to remember the same handler-level check `GetTemplate` once
+      forgot.
 - [ ] **2.3** Per-column round-trip test for every new column — write a
       value, reload, assert equality — **before** any UI feature touches
       that column. This directly targets the `filterBar`-class bug called
