@@ -432,55 +432,38 @@ main() {
         return 0  # signal "skip this file, continue"
     }
 
-    local prev_db_url prev_dsn tmp_path gen_rc
+    local prev_db_url prev_dsn tmp_path gen_rc=0 _bootstrap_tmp
+    _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
     prev_db_url=$(capture_env_value "$root_env" "DATABASE_URL")
     prev_dsn=$(capture_env_value "$root_env" "POSTGRES_DSN")
-    # Capture generate_env_file's stdout to a tempfile so its real exit code
-    # is preserved in $? (PIPESTATUS[0] in this bash captures the empty
-    # $(...) substitution's status, not the function's). Read tempfile
-    # into $tmp_path. This pattern correctly distinguishes rc=2 (empty pull,
-    # handle below) from rc=0 (success, normal write) from rc=1 (real error).
-    local _bootstrap_tmp
-    _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
-    generate_env_file "$all_secrets" "$root_env" "root" > "$_bootstrap_tmp" || rc=2
-    gen_rc=$rc
-    tmp_path=$(cat "$_bootstrap_tmp")
-    rm -f "$_bootstrap_tmp"
+    generate_env_file "$all_secrets" "$root_env" "root" > "$_bootstrap_tmp" || gen_rc=$?
     if [ "$gen_rc" -eq 2 ]; then
         handle_empty_pull "$root_env" "root" || exit 1
     elif [ "$gen_rc" -ne 0 ]; then
         echo "FATAL: generate_env_file failed for root (rc=$gen_rc)" >&2
         exit 1
     else
+        tmp_path=$(<"$_bootstrap_tmp")
         generate_composite_secrets "$root_env" "$tmp_path" "$prev_db_url" "$prev_dsn" || exit 1
     fi
 
     if [ -d "$ROOT_DIR/backend" ]; then
         prev_db_url=$(capture_env_value "$backend_env" "DATABASE_URL")
         prev_dsn=$(capture_env_value "$backend_env" "POSTGRES_DSN")
-        local _bootstrap_tmp
-        _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
-        generate_env_file "$all_secrets" "$backend_env" "backend" > "$_bootstrap_tmp" || rc=2
-        gen_rc=$rc
-        tmp_path=$(cat "$_bootstrap_tmp")
-        rm -f "$_bootstrap_tmp"
+        generate_env_file "$all_secrets" "$backend_env" "backend" > "$_bootstrap_tmp" || gen_rc=$?
         if [ "$gen_rc" -eq 2 ]; then
             handle_empty_pull "$backend_env" "backend" || exit 1
         elif [ "$gen_rc" -ne 0 ]; then
             echo "FATAL: generate_env_file failed for backend (rc=$gen_rc)" >&2
             exit 1
         else
+            tmp_path=$(<"$_bootstrap_tmp")
             generate_composite_secrets "$backend_env" "$tmp_path" "$prev_db_url" "$prev_dsn" || exit 1
         fi
     fi
 
     if [ -d "$ROOT_DIR/frontend" ]; then
-        local _bootstrap_tmp
-        _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
-        generate_env_file "$all_secrets" "$frontend_env" "frontend" > "$_bootstrap_tmp" || rc=2
-        gen_rc=$rc
-        tmp_path=$(cat "$_bootstrap_tmp")
-        rm -f "$_bootstrap_tmp"
+        generate_env_file "$all_secrets" "$frontend_env" "frontend" > "$_bootstrap_tmp" || gen_rc=$?
         if [ "$gen_rc" -eq 2 ]; then
             handle_empty_pull "$frontend_env" "frontend" || exit 1
         elif [ "$gen_rc" -ne 0 ]; then
@@ -492,18 +475,14 @@ main() {
     if [ -d "$ROOT_DIR/calendar-service" ]; then
         prev_db_url=$(capture_env_value "$calendar_env" "DATABASE_URL")
         prev_dsn=$(capture_env_value "$calendar_env" "POSTGRES_DSN")
-        local _bootstrap_tmp
-        _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
-        generate_env_file "$all_secrets" "$calendar_env" "calendar-service" > "$_bootstrap_tmp" || rc=2
-        gen_rc=$rc
-        tmp_path=$(cat "$_bootstrap_tmp")
-        rm -f "$_bootstrap_tmp"
+        generate_env_file "$all_secrets" "$calendar_env" "calendar-service" > "$_bootstrap_tmp" || gen_rc=$?
         if [ "$gen_rc" -eq 2 ]; then
             handle_empty_pull "$calendar_env" "calendar-service" || exit 1
         elif [ "$gen_rc" -ne 0 ]; then
             echo "FATAL: generate_env_file failed for calendar-service (rc=$gen_rc)" >&2
             exit 1
         else
+            tmp_path=$(<"$_bootstrap_tmp")
             generate_composite_secrets "$calendar_env" "$tmp_path" "$prev_db_url" "$prev_dsn" || exit 1
         fi
     fi
@@ -511,21 +490,18 @@ main() {
     if [ -d "$ROOT_DIR/rebalancing" ]; then
         prev_db_url=$(capture_env_value "$rebalancing_env" "DATABASE_URL")
         prev_dsn=$(capture_env_value "$rebalancing_env" "POSTGRES_DSN")
-        local _bootstrap_tmp
-        _bootstrap_tmp=$(mktemp) || { echo "FATAL: mktemp failed" >&2; exit 1; }
-        generate_env_file "$all_secrets" "$rebalancing_env" "rebalancing" > "$_bootstrap_tmp" || rc=2
-        gen_rc=$rc
-        tmp_path=$(cat "$_bootstrap_tmp")
-        rm -f "$_bootstrap_tmp"
+        generate_env_file "$all_secrets" "$rebalancing_env" "rebalancing" > "$_bootstrap_tmp" || gen_rc=$?
         if [ "$gen_rc" -eq 2 ]; then
             handle_empty_pull "$rebalancing_env" "rebalancing" || exit 1
         elif [ "$gen_rc" -ne 0 ]; then
             echo "FATAL: generate_env_file failed for rebalancing (rc=$gen_rc)" >&2
             exit 1
         else
+            tmp_path=$(<"$_bootstrap_tmp")
             generate_composite_secrets "$rebalancing_env" "$tmp_path" "$prev_db_url" "$prev_dsn" || exit 1
         fi
     fi
+
 
     log "Done. Generated .env files:"
     [ -f "$root_env" ] && echo "  - $root_env"
