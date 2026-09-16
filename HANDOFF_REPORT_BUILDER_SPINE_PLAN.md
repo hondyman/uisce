@@ -663,6 +663,21 @@ not a nice-to-have.
   commit the change, or `git stash` it with a message dated and specific
   enough that the next session (or the same one, later) can tell at a
   glance what it is and whether it's safe to pop.
+  **Applied to this session:** the ~154-line uncommitted `LayoutCanvas.tsx`
+  diff turned out to be one piece of a much larger already-staged
+  situation — the repo was mid-`git merge`
+  (`fix/strict-tenant-rls-migration-port` → `main`, recovery-hardening +
+  apiFetch security sweep), blocked on one conflicted file
+  (`BOBindingConfigPanel.tsx`, resolved by accepting `main`'s deletion —
+  that file was already confirmed dead code by `main`'s own most recent
+  commit before this merge started). Resolved and landed as merge commit
+  `076aa197f`, which also carries the full pre-existing Page Studio
+  rewrite and this session's Phase 1 work. The lesson generalizes past
+  "commit or stash": **check `git status` for merge/rebase-in-progress
+  markers before assuming a large staged diff is ordinary WIP** — a stuck
+  merge looks like abandoned WIP but has different, stricter git
+  mechanics (no partial commits) and usually higher stakes than a feature
+  branch's leftovers.
 
 ## Verification checklist (from the original proposal, kept verbatim)
 
