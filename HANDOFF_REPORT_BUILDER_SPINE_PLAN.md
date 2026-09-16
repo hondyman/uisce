@@ -1,23 +1,28 @@
 # Backlog: Report Builder as a sibling of Page Studio on a shared spine
 
-Status: **Phase 1 done. Phase 0 done except 0.3.** Phase 0 (0.1/0.2/0.4 —
-repo reads and the cube-vs-BO decision) is complete and turned up a
-**major correction**: the report table this whole plan should target is
-`report_templates`, not `report_definitions` — see the correction section
-immediately below; it replaces what used to be here. 0.3 (PDF library
-spike) is still open — it needs a running spike, not just a read. Phase 1
-is now **fully done**: 1.1 (spine extraction), 1.2 (`ParamSpec`), 1.3
-(widget registry discriminator), 1.4 (`suppress-repeat`), and 1.5
-(regression gate) all shipped and live-verified. A real, pre-existing
-Page Studio crash (unrelated to this plan's work, found while re-verifying
-1.3 live) was also found and fixed along the way — see "Order Detail
-crash fix" below. Everything from Phase 2 on is still backlog, now
-correctly re-targeted at `report_templates`.
+Status: **Phase 0 and Phase 1 both fully done.** Phase 0 (0.1/0.2/0.3/0.4)
+turned up a **major correction**: the report table this whole plan should
+target is `report_templates`, not `report_definitions` — see the
+correction section immediately below; it replaces what used to be here.
+0.3 (PDF rendering approach) is decided and spiked for real: a thin band
+engine over `go-pdf/fpdf`, not Maroto (Maroto owns pagination — a
+documented conflict with the band model, not a guessed one) — see 0.3's
+entry for the actual running spike and what it proved. Phase 1 is fully
+done: 1.1 (spine extraction), 1.2 (`ParamSpec`), 1.3 (widget registry
+discriminator), 1.4 (`suppress-repeat`), and 1.5 (regression gate) all
+shipped and live-verified. A real, pre-existing Page Studio crash
+(unrelated to this plan's work, found while re-verifying 1.3 live) was
+also found and fixed along the way, and a stuck `git merge` blocking the
+repo was resolved as part of the same cleanup — see "Order Detail crash
+fix" below. Everything from Phase 2 on is still backlog, now correctly
+re-targeted at `report_templates`.
 
-Current sequence: 0.3 (PDF spike, the last open item before Phase 2) →
-then 2.1 as a `report_templates.layout_config`-to-typed-columns migration
-with a gated fallback, not a create. Everything from Phase 3 on is
-unchanged from the original ordering.
+Current sequence: **Phase 0 and Phase 1 are both closed — Phase 2 is next
+up**, starting with 2.1 as a `report_templates.layout_config`-to-typed-
+columns migration with a gated fallback, not a create. Everything from
+Phase 3 on is unchanged from the original ordering; 3.3 (the real Go
+band-layout PDF renderer) now has a working spike to grow from
+(`backend/internal/reportprint/spike/main.go`) rather than starting cold.
 
 North star (verbatim from the design discussion): Oracle APEX's
 object-grounded report model + Salesforce report-types' relationship
@@ -148,19 +153,45 @@ Also already real and reusable (confirmed in this session, not aspirational):
       - `report_definitions`/`internal/reporting` — separate system, no
         frontend caller found; not a consumer of `report_templates` at all,
         so irrelevant to this risk set (see the correction above).
-- [ ] **0.3** Decide the PDF rendering approach concretely: the proposal
-      recommends a Go band-layout engine over `gofpdf`/`maroto` rather than
-      browser print-CSS. Confirm neither library is already a dependency
-      (`go.mod`) and get a one-page spike (band → PDF, no styling) working
-      before committing bands-in-schema to a print contract. **Addition (per
-      independent review):** the spike must also confirm maintenance status
-      — `gofpdf` (jung-kurt) is archived; the ecosystem moved to forks and
-      wrappers (maroto among them). Confirm: a maintained fork, Unicode font
-      support (invoices will carry € and non-ASCII customer names), and
-      whether the library's layout model fights band layout — maroto's grid
-      model is row/column oriented, *close* to bands but not identical, and
-      a thin custom band engine over a low-level PDF lib may be less work
-      than bending a grid lib to fit. One page of spike answers this.
+- [x] **0.3** Decide the PDF rendering approach concretely.
+      **Decided: a thin custom band engine over `github.com/go-pdf/fpdf`
+      (the maintained successor to the archived `jung-kurt/gofpdf`) — not
+      Maroto.** Research + a real running spike, not just a read:
+      - `jung-kurt/gofpdf` confirmed archived (Nov 2021). `go-pdf/fpdf` is
+        the community-maintained fork — UTF-8 exclusive, `AddUTF8Font`/
+        `AddUTF8FontFromBytes` native.
+      - Maroto v2 depends on `github.com/phpdave11/gofpdf` (checked its
+        actual `go.mod`, not assumed) — a different, apparently-maintained
+        gofpdf fork with its own UTF-8 font support, so Maroto isn't
+        sitting on dead code as originally worried. That wasn't the
+        disqualifying finding.
+      - **The disqualifying finding: Maroto owns pagination.** Its own
+        docs: "Maroto automatically adds a new page when a row will
+        extrapolate the useful area of a page" (row-overflow-driven page
+        breaks), and its manual `AddPages` escape hatch can still be
+        re-split by Maroto "if the page provided has more rows than the
+        maximum useful area." Maroto also has no group-level repeating
+        header/footer — only page-level — which the grouped/subtotaled
+        report kind (Phase 4) needs. This is exactly the "grid lib wants
+        to own pagination, and pagination is the report engine's job"
+        conflict the ticket predicted, confirmed by Maroto's own
+        documented behavior, not guessed.
+      - **Spike, actually run:** `backend/internal/reportprint/spike/main.go`
+        — a ~40-line `reportPrinter`/`band`/`placeBand` engine over
+        `go-pdf/fpdf`: a band is a height + a draw closure; `placeBand`
+        checks whether the current band fits what's left of the page and
+        starts a new page (re-emitting a sticky page-header band) if not.
+        Ran it: 45 detail rows forced a real 2-page PDF
+        (`/tmp/report_spine_band_spike.pdf`, sent to the user), proving
+        both the page-fit/re-page mechanics and `AddUTF8Font` rendering
+        (`Société Générale`, `€`) actually work, not just compile.
+        `gofmt`/`go vet`/`go build ./...` all clean with the new
+        `go-pdf/fpdf` dependency added to `go.mod`.
+      - This ~40-line engine is genuinely the shape 3.3's real Go
+        band-layout renderer should grow from — same `band`/`placeBand`
+        primitives, more field/style properties per band, group-header/
+        group-footer and suppress-repeat (1.4) as additional band-emission
+        rules layered on the same fit-check loop.
 - [x] **0.4** Decide cube-vs-BO grounding and write the decision into this
       doc (per independent review — this is a real gap the original backlog
       never closed). **Decided — corrected to the real column.** The
