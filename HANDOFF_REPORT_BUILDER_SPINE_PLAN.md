@@ -14,8 +14,17 @@ shipped and live-verified. A real, pre-existing Page Studio crash
 (unrelated to this plan's work, found while re-verifying 1.3 live) was
 also found and fixed along the way, and a stuck `git merge` blocking the
 repo was resolved as part of the same cleanup — see "Order Detail crash
-fix" below. Everything from Phase 2 on is still backlog, now correctly
-re-targeted at `report_templates`.
+fix" below (now fully root-caused and closed, including a second, distinct
+`filterBar` scope gap in the tenant-overlay save path — needs a product
+call, not fixed yet). **Two things stayed open across this session and
+must land before Phase 5 depends on them:** a small save-time shape
+validation ticket for `page_studio_handler.go`, and the placement-drop
+work's live drag checklist, which this session attempted and hit an
+automation tooling limit on (not a confirmed pass) — see "Verification
+debt" below. Everything from Phase 2 on is still backlog, now correctly
+re-targeted at `report_templates`, with 2.1's decisions (no `elements`
+backfill, `is_core` gets a real column, RLS check first) written down
+before any SQL gets written.
 
 Current sequence: **Phase 0 and Phase 1 are both closed — Phase 2 is next
 up**, starting with 2.1 as a `report_templates.layout_config`-to-typed-
@@ -444,25 +453,91 @@ of crashing the whole editor. One fix in the one component both
 `<LayoutCanvas>` instances (filter bar and active tab) share, so it
 protects either call site regardless of which one gets bad data next.
 
-**What's still open — deliberately not fixed here:** *how* `draft.filterBar`
-got into a malformed shape isn't root-caused. Plausible per the concurrent
-`types/pageStudio.ts` change seen this session ("`PageLayout` was
-previously mis-declared here as a bare `LayoutNode[]`, which never matched
-any real caller" — i.e., the type was JUST corrected to `{root, nodes}`):
-a page saved through an older code path may predate that correction. This
-needs live JSON inspection of the actual stored `filterBar` value to
-confirm, which wasn't done. **Follow-up ticket, not scoped here:**
-save-time validation rejecting a malformed `PageLayout` (same discipline
-as 1.3's `availableIn` palette guard) so a bad shape can't get saved again,
-plus root-causing how this one did. Not added speculatively — no evidence
-yet the *current* save path can produce this, only that *some* past path
-did.
+**Root-caused and fixed (updated — this was open, now closed):**
+`page_studio_handler.go`'s `normalizeUpsertDefaults` defaulted `FilterBar`
+to bare `{}` on every save with no explicit filter bar (the common case —
+most pages have none) — valid JSON, missing `root`/`nodes`, so it's the
+exact malformed shape above. Not legacy data drift, an **active bug in the
+current save path**: every page saved without a filter bar got a broken
+one written to disk. Fixed at the source (`emptyPageLayoutJSON`, a real
+empty `{root,nodes}` shape) plus `PageEditor.tsx`'s `safePageLayout`
+validating shape (not just truthiness) on read, so already-corrupted rows
+self-heal without a data migration. Full detail and the commit are in
+`feat(reportprint)`'s sibling commit `076aa197f`.
+
+**Ticket: save-time shape validation (scoped, not just "follow-up").**
+The fix above prevents *new* corruption from the empty-default path; it
+does not reject a malformed `PageLayout` arriving from anywhere else (a
+hand-edited draft, a future code path that forgets the same lesson). Add
+validation in `page_studio_handler.go`'s `create`/`update` (same file,
+same discipline as 1.3's `availableIn` palette guard): reject a `layout`/
+`tabs[].layout`/`filterBar` value that isn't `{root: string, nodes: {...}}`
+shaped, with a clear 400, before it reaches the database. Small, scoped,
+independent of Phase 2 — do it whenever `page_studio_handler.go` is next
+open rather than batching it into the migration.
+
+**A second, distinct filterBar gap found in follow-up (not the crash bug —
+a scope gap in the tenant-overlay save path):** traced (not live-tested —
+see below) whether non-empty `filterBar` content round-trips. `savePage`/
+`updatePage` (the direct full-page save path — what a gold-copy admin
+uses, and what this session's v13→v14 test exercised) pass `filterBar`
+through cleanly end to end: frontend sends it in the full draft,
+`pageStudioUpsertRequest.FilterBar` decodes by matching JSON key, both
+`INSERT`/`UPDATE` write it to the `filter_bar` column, `getOne` reads it
+back. That path is sound. **But `saveOverlay`/`mergeOverlay` (a tenant's
+customization of an inherited gold-copy page) is explicitly scoped to
+`components`/`layout`/`tabs` only — `filterBar` isn't part of the overlay
+request type or the merge logic at all.** A tenant editing through the
+overlay mechanism can never add or change a page-wide filter bar; only a
+gold-copy admin editing the core page directly can. Whether that's
+deliberate (filter bar is core-editorial by design) or an oversight isn't
+established from the code alone — **needs a product call, not a guess.**
+If it's a gap, the fix is adding `FilterBar` to `saveOverlay`'s request
+struct and to `mergeOverlay`'s merge (probably whole-value overlay, like
+`Tabs`, not the field-level merge `Components` does — a filter bar doesn't
+have natural per-key identity to merge on). Not fixed here: needs the
+product decision first.
 
 **Verified end to end after the fix:** Order Detail loads with no crash;
 BO fence intact (Order Allocation/Placement/Execution listed); Events tab
 renders; **Save Changes** round-tripped correctly (version bumped v13→v14,
 confirmed by a full reload after save, guard and content both held);
 `tsc --noEmit` clean on `LayoutCanvas.tsx`.
+
+## Verification debt: placement-drop work was never live drag-tested
+
+`ContainerSlot`/`handleRelatedBindExisting` (the drop-anywhere-onto-a-row
+and rebind-an-existing-widget work — see the crash-fix triage above) rode
+into `main` inside merge commit `076aa197f` with 1.5's fence-renders check
+as its only live verification. **The actual drop checklist has never been
+run:** drag Placement onto a populated row; drop a related-BO chip onto an
+unbound Table (should bind); drop onto an already-bound Table (should
+create a sibling); the Properties-panel BO picker path as an alternative
+to dragging. Attempted this session and **blocked by tooling, not
+confirmed either way**: the Browser pane's drag automation (three
+attempts — plain drag, adjusted coordinates, hover-then-drag) never
+registered with this app's dnd-kit `useDraggable`/`useDroppable` — no
+visible effect on any attempt, consistent with dnd-kit needing real
+intermediate `pointermove` events the tool's `left_click_drag` may not be
+emitting, not an application bug. **Still open — run this before Phase 5**
+(5.1 builds a related-BO-drop-onto-a-report-body feature directly on this
+same `ensureRelatedDataSource`/`ContainerSlot` code path): either drive it
+manually, or find/use a drag-capable automation path this tool doesn't
+currently offer.
+
+**Process note, extending this doc's own session-end rule:** that merge
+commit conflated three unrelated bodies of work — security/recovery
+hardening (its stated purpose), the pre-existing Page Studio rewrite, and
+this session's Phase 1 spine work — into one commit. It landed fine and
+nothing was lost, but a merge commit whose diff isn't resolvable to just
+its two parents' actual changes is exactly the kind of thing that makes
+future archaeology harder, not easier — the same failure mode "commit or
+stash with a note" exists to prevent. Restated for next time: **feature
+work doesn't ride inside a merge commit.** If a merge is stuck on an
+unrelated conflict while other real work is happening in the same tree,
+resolve and land the merge on its own first, then commit the other work
+separately — don't let an unrelated blocker become an excuse to bundle
+everything staged into one commit.
 
 **Process rule, adopted going forward (per this session's second
 find-uncommitted-WIP-in-a-live-file incident):** *a session ends either
@@ -501,6 +576,39 @@ archaeology on. This doc's own sessions should follow that from here on.
       `SemanticViewIDs` directly, the Go struct's field names/JSON tags for
       those two must stay stable through the transition, not just the DB
       column.
+
+      **Decisions to write down before writing SQL, not during (sharpened
+      in follow-up review, same discipline as 0.4):**
+      - **Do not backfill `bands` from `layout_config.elements`.** 0.1's
+        gap table established `elements` has no server-side reader at all
+        today — backfilling it into a band shape Phase 3 (2.4) hasn't
+        defined yet means inventing `CoreReportDefinition`'s band
+        structure under migration pressure instead of design pressure.
+        Sequence: 2.1 adds `bands` with a safe empty default only; 2.4
+        defines the real shape; a transformation tool from `elements` (if
+        existing reports turn out to need one) is optional follow-up
+        tooling, not part of this migration.
+      - **Backfill only what has both a reader and a defined target
+        today:** `parameters` from `parameter_schema` (`ParamSpec` is
+        additive-compatible with what `ParametersDialog.tsx` already
+        round-trips — see 1.2). `presentation_events` defaults to `'[]'`.
+        `grouping` defaults to `null`. Nothing else gets backfilled.
+      - **`is_core`: add the column, don't drop the field.** Page Studio
+        already has the gold-copy `isCore` + clone pattern working
+        (`page_definitions.is_core`, `canEditCore`, the clone flow). The
+        report side should mirror that mechanism, not fork a second one by
+        relying solely on the `tenant_id === goldCopyId` fallback — and
+        this closes the confirmed bug where `handleCloneReport`'s
+        `is_core = false` is silently discarded today (0.1's gap table).
+      - **Check `report_templates` against the RLS standard the
+        just-merged `fix/strict-tenant-rls-migration-port` work set.**
+        That branch landed (`076aa197f`) hours before this phase opens.
+        Confirm `report_templates` has `tenant_id` and a fail-closed RLS
+        policy consistent with what that branch established elsewhere
+        before adding `primary_business_object_id` to it — a new column on
+        a table with weak tenant isolation extends exactly the attack
+        surface that branch just closed. This is 2.1's **first read**,
+        before any `ALTER TABLE`.
 - [ ] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
       and `repository.go` to read/write the new typed columns instead of
       (or alongside, during migration) the opaque `LayoutConfig`/
@@ -649,6 +757,12 @@ trigger type.
 - [ ] **T.2** Add the `ops_event_outbox` table + Debezium capture config —
       same migration window as Phase 2's `report_templates` typed-column
       work (2.1), since both are schema changes to the same subsystem.
+      **Add the retention story in this same ticket, not later:** Debezium
+      reads the outbox, it doesn't delete from it — without a sweeper,
+      `ops_event_outbox` grows unbounded forever. One line of scope: a
+      periodic delete of rows already confirmed sunk to Iceberg (or a
+      documented TTL job), landed alongside the table itself, so it isn't
+      the next operational surprise this plan has to backfill later.
 - [ ] **T.3** Wire emission into the execute endpoint, landing with Phase
       3's acceptance case (the Order invoice) — that run produces the first
       real telemetry row.
