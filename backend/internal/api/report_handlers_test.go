@@ -71,12 +71,16 @@ func TestReportAPI(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Report 1", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)
@@ -142,12 +146,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000001", goldCopyTenant,
 				"Core Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -180,12 +187,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000002", clientTenant,
 				"Personal Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, true, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -218,12 +228,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000003", clientTenant,
 				"Tenant Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -268,6 +281,12 @@ func TestReportAPI(t *testing.T) {
 				true,               // 10: is_personal (forced to true for non-admin!)
 				sqlmock.AnyArg(),   // 11: created_by_id
 				"",                 // 12: created_by
+				sqlmock.AnyArg(),   // 13: bands
+				sqlmock.AnyArg(),   // 14: parameters
+				sqlmock.AnyArg(),   // 15: presentation_events
+				sqlmock.AnyArg(),   // 16: grouping
+				sqlmock.AnyArg(),   // 17: primary_business_object_id
+				sqlmock.AnyArg(),   // 18: is_core
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -321,12 +340,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000010", goldCopyTenant,
 				"Core Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -357,12 +379,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000020", clientTenant,
 				"Personal Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, true, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -388,12 +413,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000030", tenantB,
 				"Tenant B Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -424,12 +452,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000031", tenantB,
 				"Tenant B Private Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -459,12 +490,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000032", tenantA,
 				"Tenant A Own Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -494,12 +528,15 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000033", goldCopyTenant,
 				"Core Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
@@ -573,6 +610,12 @@ func TestReportAPI(t *testing.T) {
 				true, // Forced to personal!
 				sqlmock.AnyArg(),
 				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -622,6 +665,12 @@ func TestReportAPI(t *testing.T) {
 				true,
 				"real-user-id", // Real user inserted!
 				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -670,12 +719,16 @@ func TestReportAPI(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Portfolio Summary", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)
@@ -720,12 +773,16 @@ func TestReportAPI(t *testing.T) {
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Standard Listing Report", "Desc", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)

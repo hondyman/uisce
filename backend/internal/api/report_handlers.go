@@ -461,6 +461,30 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	if schema, ok := raw["parameter_schema"].(map[string]interface{}); ok {
 		template.ParameterSchema = schema
 	}
+	if bands, ok := raw["bands"].([]interface{}); ok {
+		template.Bands = bands
+	}
+	if params, ok := raw["parameters"].([]interface{}); ok {
+		template.Parameters = params
+	}
+	if events, ok := raw["presentation_events"].([]interface{}); ok {
+		template.PresentationEvents = events
+	}
+	if grouping, ok := raw["grouping"].(map[string]interface{}); ok {
+		template.Grouping = grouping
+	}
+	if boIDStr, ok := raw["primary_business_object_id"].(string); ok {
+		if boID, err := uuid.Parse(boIDStr); err == nil {
+			template.PrimaryBusinessObjectID = &boID
+		}
+	}
+	// is_core is deliberately NOT settable from this handler: it is only
+	// ever true for gold-copy-tenant rows, and this handler already
+	// forbids gold-copy tenants from being edited by non-gold-copy
+	// callers above (see the core-report check), so exposing it here
+	// would let a gold-copy-tenant admin flip is_core on tenant-owned
+	// rows it doesn't apply to. Setting is_core is a data-authoring
+	// concern, not a report-edit concern.
 	if active, ok := raw["is_active"].(bool); ok {
 		template.IsActive = active
 	}

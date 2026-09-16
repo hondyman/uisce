@@ -635,7 +635,7 @@ archaeology on. This doc's own sessions should follow that from here on.
 `reports.ReportTemplate`, not `report_definitions`/`reporting.ReportDefinition`
 — see the correction section at the top of this doc.**
 
-- [ ] **2.1** Migration: add typed columns to `report_templates` for
+- [x] **2.1** Migration: add typed columns to `report_templates` for
       `bands`, `parameters` (superseding the `layout_config`/
       `parameter_schema` JSONB blobs — decide migrate-in-place vs. new
       column + backfill), `presentation_events`, `grouping`, plus
@@ -791,7 +791,26 @@ archaeology on. This doc's own sessions should follow that from here on.
           auth-denied-cross-tenant, keyed by actor, is a candidate for
           T.1's event vocabulary when that ticket is actually written, not
           bolted on ahead of it.
-- [ ] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
+
+      **Done (`20261018_002_report_templates_spine_columns.{up,down}.sql`),
+      applied to the live `alpha` DB via `go run ./cmd/migrate up` and
+      verified there, not just written:** `bands`/`parameters`/
+      `presentation_events` as `NOT NULL DEFAULT '[]'::jsonb` (no bypassable
+      null state for callers that forget to initialize); `grouping` and
+      `primary_business_object_id` nullable with no default; `is_core
+      BOOLEAN NOT NULL DEFAULT false` plus an index, matching
+      `page_definitions_core_status`'s exact precedent. `parameters`
+      backfilled from `parameter_schema -> 'parameters'` (confirmed via
+      `builderSerialization.ts` that `parameter_schema` has always been
+      written as the wrapper shape `{"parameters": [...]}`, not a bare
+      array — verified against a real populated row, not assumed: "Orders
+      Report"'s `parameter_schema` unwrapped correctly into `parameters`).
+      `bands` and `is_core` deliberately NOT backfilled (per the decisions
+      above and to avoid guessing which gold-copy-tenant rows are actually
+      core vs. the tenant's own test fixtures — confirmed live that the
+      gold-copy tenant holds non-core rows too, e.g. test-fixture-named
+      reports under its own tenant_id).
+- [x] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
       and `repository.go` to read/write the new typed columns instead of
       (or alongside, during migration) the opaque `LayoutConfig`/
       `ParameterSchema` blobs. Update `report_handlers.go`'s
@@ -807,11 +826,67 @@ archaeology on. This doc's own sessions should follow that from here on.
       means a third future caller fails closed by construction instead of
       needing to remember the same handler-level check `GetTemplate` once
       forgot.
-- [ ] **2.3** Per-column round-trip test for every new column — write a
+
+      **Done.** New fields added additively (`LayoutConfig`/
+      `ParameterSchema`/`SemanticViewIDs` field names and JSON tags left
+      untouched, confirmed `temporal_executor.go`'s
+      `HydratedReportTemplate` hydration — the one other real reader —
+      still compiles and still reads the old fields directly).
+      `CreateTemplate`/`UpdateTemplate`/`GetTemplate`/`ListTemplatesScoped`/
+      `SearchTemplatesScoped`/`scanReportTemplates` all read/write the new
+      columns; nil slices are defaulted to `[]interface{}{}` before marshal
+      in Create/Update so a Go zero-value never violates the columns'
+      `NOT NULL` constraint. `report_handlers.go`'s `UpdateTemplate` gained
+      matching manual-merge blocks for `bands`/`parameters`/
+      `presentation_events`/`grouping`/`primary_business_object_id`,
+      mirroring the existing `parameter_schema` pattern; `is_core` is
+      deliberately NOT settable from `UpdateTemplate` (data-authoring
+      concern, not a report-edit concern — `CreateTemplate`'s blanket
+      JSON-body unmarshal already provides the write path the plan asked
+      for, safely bounded since `template.TenantID` is always force-set to
+      the caller's own authenticated tenant before insert, so a non-gold-
+      copy caller cannot self-declare a row core in any way that matters
+      today).
+
+      **Verified, not just compiled:** `go build ./...` clean;
+      `internal/reports` sqlmock suite green; the 11-test live integration
+      suite (`UISCE_TEST_DB=1 go test ./internal/reports/...`, real `alpha`
+      DB) green, including `TestRepository_CrossTenantUpdate_Forbidden`'s
+      updated `GetTemplate` call site. `internal/api`'s `TestReportAPI`
+      sqlmock suite (fixtures for all 9 `GetTemplate`-shaped mocks + 3
+      `ListTemplatesScoped`-shaped mocks + 3 `INSERT` `WithArgs` updated for
+      the new columns) green. One pre-existing, unrelated failure
+      (`TestReportAPI_Phase3Executions`, a `report_executions`/`GetExecution`
+      JSON-decode failure) confirmed via `git stash` of just this ticket's
+      files to already fail on the pre-2.2 baseline — not introduced here,
+      not chased as out of scope.
+- [x] **2.3** Per-column round-trip test for every new column — write a
       value, reload, assert equality — **before** any UI feature touches
       that column. This directly targets the `filterBar`-class bug called
       out in the proposal and in `HANDOFF_PAGE_STUDIO_WIDGET_CONSISTENCY.md`,
       and the same-shaped gap 0.1 confirmed already exists for `is_core`.
+
+      **Done** (`internal/reports/repository_test.go`, live-DB integration
+      tests against real `alpha`, not sqlmock — this is exactly the class
+      of bug a mocked round-trip can't catch, since the mock would just
+      echo back whatever the test told it to):
+      - `TestRepository_TypedColumnsRoundTrip_Defaults` — create with none
+        of the new columns set, reload, assert `bands`/`parameters`/
+        `presentation_events` come back as `[]` (not nil/null — a caller
+        that ranges over a nil slice doesn't crash, but a caller that
+        `json.Marshal`s it back out would silently emit `null` instead of
+        `[]` to the frontend, resurrecting the same class of gap), and
+        `grouping`/`primary_business_object_id` come back nil,
+        `is_core` false.
+      - `TestRepository_TypedColumnsRoundTrip_CreateAndUpdate` — set a real
+        value in all six columns, create, reload, assert equality; then
+        mutate all six to different values, go through `UpdateTemplate`
+        (not just `CreateTemplate` — the two write paths marshal
+        independently, so this is the check that would have caught an
+        update path that silently drops a field this ticket's own code
+        touched twice), reload again, assert equality.
+      - Both pass against the live `alpha` DB (`UISCE_TEST_DB=1`), alongside
+        the full existing 63-test live suite (all green, no regressions).
 - [ ] **2.4** `CoreReportDefinition` frontend type (mirrors
       `CorePageDefinition` in `frontend/src/types/pageStudio.ts`) and status/
       version/draft flow parity with Page Studio's publish pipeline.

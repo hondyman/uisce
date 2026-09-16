@@ -63,6 +63,36 @@ func (r *Repository) CreateTemplate(ctx context.Context, template *ReportTemplat
 		return fmt.Errorf("failed to marshal parameter schema: %w", err)
 	}
 
+	// bands/parameters/presentation_events are NOT NULL jsonb columns
+	// (default '[]'::jsonb) - a nil Go slice marshals to JSON null, which
+	// would violate that constraint, so default to an empty array first.
+	if template.Bands == nil {
+		template.Bands = []interface{}{}
+	}
+	if template.Parameters == nil {
+		template.Parameters = []interface{}{}
+	}
+	if template.PresentationEvents == nil {
+		template.PresentationEvents = []interface{}{}
+	}
+
+	bandsJSON, err := json.Marshal(template.Bands)
+	if err != nil {
+		return fmt.Errorf("failed to marshal bands: %w", err)
+	}
+	parametersJSON, err := json.Marshal(template.Parameters)
+	if err != nil {
+		return fmt.Errorf("failed to marshal parameters: %w", err)
+	}
+	presentationEventsJSON, err := json.Marshal(template.PresentationEvents)
+	if err != nil {
+		return fmt.Errorf("failed to marshal presentation events: %w", err)
+	}
+	groupingJSON, err := json.Marshal(template.Grouping)
+	if err != nil {
+		return fmt.Errorf("failed to marshal grouping: %w", err)
+	}
+
 	_, err = r.db.ExecContext(ctx, queries.InsertReportTemplate,
 		template.ID,
 		template.TenantID,
@@ -76,6 +106,12 @@ func (r *Repository) CreateTemplate(ctx context.Context, template *ReportTemplat
 		template.IsPersonal,
 		template.CreatedByID,
 		template.CreatedBy,
+		bandsJSON,
+		parametersJSON,
+		presentationEventsJSON,
+		groupingJSON,
+		template.PrimaryBusinessObjectID,
+		template.IsCore,
 	)
 	if err != nil {
 		var pqErr *pq.Error
@@ -104,6 +140,33 @@ func (r *Repository) UpdateTemplate(ctx context.Context, template *ReportTemplat
 		return fmt.Errorf("failed to marshal parameter schema: %w", err)
 	}
 
+	if template.Bands == nil {
+		template.Bands = []interface{}{}
+	}
+	if template.Parameters == nil {
+		template.Parameters = []interface{}{}
+	}
+	if template.PresentationEvents == nil {
+		template.PresentationEvents = []interface{}{}
+	}
+
+	bandsJSON, err := json.Marshal(template.Bands)
+	if err != nil {
+		return fmt.Errorf("failed to marshal bands: %w", err)
+	}
+	parametersJSON, err := json.Marshal(template.Parameters)
+	if err != nil {
+		return fmt.Errorf("failed to marshal parameters: %w", err)
+	}
+	presentationEventsJSON, err := json.Marshal(template.PresentationEvents)
+	if err != nil {
+		return fmt.Errorf("failed to marshal presentation events: %w", err)
+	}
+	groupingJSON, err := json.Marshal(template.Grouping)
+	if err != nil {
+		return fmt.Errorf("failed to marshal grouping: %w", err)
+	}
+
 	res, err := r.db.ExecContext(ctx, queries.UpdateReportTemplate,
 		template.TemplateName,
 		template.Description,
@@ -112,6 +175,12 @@ func (r *Repository) UpdateTemplate(ctx context.Context, template *ReportTemplat
 		paramSchemaJSON,
 		template.IsActive,
 		template.IsPersonal,
+		bandsJSON,
+		parametersJSON,
+		presentationEventsJSON,
+		groupingJSON,
+		template.PrimaryBusinessObjectID,
+		template.IsCore,
 		template.ID,
 		template.TenantID,
 	)
@@ -149,6 +218,8 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 	query := `
 		SELECT id, tenant_id, template_name, description, category,
 		       semantic_view_ids, layout_config, parameter_schema,
+		       bands, parameters, presentation_events, grouping,
+		       primary_business_object_id, is_core,
 		       is_active, is_public, is_personal, created_by_id, created_by,
 		       created_at, updated_at, version
 		FROM report_templates
@@ -158,6 +229,8 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 
 	var tmpl ReportTemplate
 	var layoutJSON, paramJSON, viewsJSON []byte
+	var bandsJSON, parametersJSON, presentationEventsJSON, groupingJSON []byte
+	var primaryBOID uuid.NullUUID
 	var createdByID sql.NullString
 	var createdBy sql.NullString
 
@@ -170,6 +243,12 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 		&viewsJSON,
 		&layoutJSON,
 		&paramJSON,
+		&bandsJSON,
+		&parametersJSON,
+		&presentationEventsJSON,
+		&groupingJSON,
+		&primaryBOID,
+		&tmpl.IsCore,
 		&tmpl.IsActive,
 		&tmpl.IsPublic,
 		&tmpl.IsPersonal,
@@ -192,6 +271,9 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 	if createdBy.Valid {
 		tmpl.CreatedBy = createdBy.String
 	}
+	if primaryBOID.Valid {
+		tmpl.PrimaryBusinessObjectID = &primaryBOID.UUID
+	}
 
 	if len(layoutJSON) > 0 {
 		if err := json.Unmarshal(layoutJSON, &tmpl.LayoutConfig); err != nil {
@@ -201,6 +283,26 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 	if len(paramJSON) > 0 {
 		if err := json.Unmarshal(paramJSON, &tmpl.ParameterSchema); err != nil {
 			return nil, fmt.Errorf("failed to parse parameter schema: %w", err)
+		}
+	}
+	if len(bandsJSON) > 0 {
+		if err := json.Unmarshal(bandsJSON, &tmpl.Bands); err != nil {
+			return nil, fmt.Errorf("failed to parse bands: %w", err)
+		}
+	}
+	if len(parametersJSON) > 0 {
+		if err := json.Unmarshal(parametersJSON, &tmpl.Parameters); err != nil {
+			return nil, fmt.Errorf("failed to parse parameters: %w", err)
+		}
+	}
+	if len(presentationEventsJSON) > 0 {
+		if err := json.Unmarshal(presentationEventsJSON, &tmpl.PresentationEvents); err != nil {
+			return nil, fmt.Errorf("failed to parse presentation events: %w", err)
+		}
+	}
+	if len(groupingJSON) > 0 && string(groupingJSON) != "null" {
+		if err := json.Unmarshal(groupingJSON, &tmpl.Grouping); err != nil {
+			return nil, fmt.Errorf("failed to parse grouping: %w", err)
 		}
 	}
 	if len(viewsJSON) > 0 {
@@ -241,12 +343,14 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 	query := `
 		SELECT t.id, t.tenant_id, t.template_name, t.description, t.category,
 		       t.layout_config, t.parameter_schema,
+		       t.bands, t.parameters, t.presentation_events, t.grouping,
+		       t.primary_business_object_id, t.is_core,
 		       t.is_active, t.is_public, t.is_personal, t.created_by_id, t.created_by,
 		       t.created_at, t.updated_at, t.version,
 		       (f.template_id IS NOT NULL) AS is_favorite
 		FROM report_templates t
-		LEFT JOIN report_favorites f 
-		       ON f.template_id = t.id 
+		LEFT JOIN report_favorites f
+		       ON f.template_id = t.id
 		      AND f.tenant_id = $2
 		      AND f.user_id = $1
 		WHERE t.tenant_id IN ($2, $3)
@@ -294,6 +398,8 @@ func (r *Repository) SearchTemplatesScoped(ctx context.Context, tenantID uuid.UU
 	searchQuery := `
 		SELECT t.id, t.tenant_id, t.template_name, t.description, t.category,
 		       t.layout_config, t.parameter_schema,
+		       t.bands, t.parameters, t.presentation_events, t.grouping,
+		       t.primary_business_object_id, t.is_core,
 		       t.is_active, t.is_public, t.is_personal, t.created_by_id, t.created_by,
 		       t.created_at, t.updated_at, t.version,
 		       (f.template_id IS NOT NULL) AS is_favorite
@@ -332,6 +438,8 @@ func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 	for rows.Next() {
 		var tmpl ReportTemplate
 		var layoutJSON, paramJSON []byte
+		var bandsJSON, parametersJSON, presentationEventsJSON, groupingJSON []byte
+		var primaryBOID uuid.NullUUID
 		var createdByID sql.NullString
 		var createdBy sql.NullString
 
@@ -343,6 +451,12 @@ func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 			&tmpl.Category,
 			&layoutJSON,
 			&paramJSON,
+			&bandsJSON,
+			&parametersJSON,
+			&presentationEventsJSON,
+			&groupingJSON,
+			&primaryBOID,
+			&tmpl.IsCore,
 			&tmpl.IsActive,
 			&tmpl.IsPublic,
 			&tmpl.IsPersonal,
@@ -362,11 +476,26 @@ func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 		if createdBy.Valid {
 			tmpl.CreatedBy = createdBy.String
 		}
+		if primaryBOID.Valid {
+			tmpl.PrimaryBusinessObjectID = &primaryBOID.UUID
+		}
 		if len(layoutJSON) > 0 {
 			_ = json.Unmarshal(layoutJSON, &tmpl.LayoutConfig)
 		}
 		if len(paramJSON) > 0 {
 			_ = json.Unmarshal(paramJSON, &tmpl.ParameterSchema)
+		}
+		if len(bandsJSON) > 0 {
+			_ = json.Unmarshal(bandsJSON, &tmpl.Bands)
+		}
+		if len(parametersJSON) > 0 {
+			_ = json.Unmarshal(parametersJSON, &tmpl.Parameters)
+		}
+		if len(presentationEventsJSON) > 0 {
+			_ = json.Unmarshal(presentationEventsJSON, &tmpl.PresentationEvents)
+		}
+		if len(groupingJSON) > 0 && string(groupingJSON) != "null" {
+			_ = json.Unmarshal(groupingJSON, &tmpl.Grouping)
 		}
 		templates = append(templates, tmpl)
 	}
