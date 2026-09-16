@@ -515,15 +515,20 @@ creating an orphaned data source nothing else references.
 against ("`filterBar` is not round-tripped by `page_studio_handler.go` …
 slicers will silently drop on save") is **disproven for the direct-save
 path** by the trace above — `savePage`/`updatePage` round-trip it cleanly.
-The overlay gap just described is its real remainder. Searched this repo
-for the doc that carries that claim (`grep -rl filterBar *.md` and a
-repo-wide `.md` search) and **could not find it** — it isn't
-`HANDOFF_PAGE_STUDIO_WIDGET_CONSISTENCY.md`, `HANDOFF_BI_WORK.md`, or
-anything else checked into this tree today. If it exists somewhere else
-(another session's notes, an external doc), it needs its item #1 updated
-to point at the overlay gap specifically, not the general claim — but
-that update has to happen wherever that doc actually lives, which this
-session couldn't locate.
+The overlay gap just described is its real remainder. **Correction: this
+was never a repo file to search for.** It was a document pasted directly
+into the conversation that produced this plan (a "Page Studio: world-class
+gaps, AI generator, MCP" message, preceding the report-builder ask) — not
+something on disk. The repo-wide grep that failed to find it was always
+going to fail; there is no file for a future session to locate either.
+The still-open, non-`filterBar` content from that pasted document
+(undo/redo/copy-paste, page kinds, command-bar region, publish-as-a-flow,
+widget loading/empty/error states, its suggested sequence, a comparable-
+products table) has no home in the repo and evaporates when this
+conversation does unless captured — see `HANDOFF_PAGE_STUDIO_GAPS.md`,
+created alongside this note specifically so that doesn't happen. Its
+`filterBar` item is corrected there to point at this doc's finding rather
+than repeating the original (now superseded) claim.
 
 **Verified end to end after the fix:** Order Detail loads with no crash;
 BO fence intact (Order Allocation/Placement/Execution listed); Events tab
