@@ -28,11 +28,14 @@ before any SQL gets written. **The RLS read that 2.1 called for as its
 first action has been run — see 2.1's entry** — and it surfaced a live
 cross-tenant data exposure (`GetTemplate` had no tenant check at all).
 **This is now a fully closed incident, not just a patched symptom:**
-fixed (`f11b158cd`), live-replayed against the rebuilt server per this
-repo's own mandatory three-replay protocol, regression test made
-bidirectional (`590e5bd2a`), the rest of the handler family and the
-Temporal path swept and confirmed clean, and an incident report entry
-filed (`a1000ecd8`) — all ahead of and separate from Phase 2 schema work.
+fixed (`f11b158cd`), four-replayed live against the rebuilt server (the
+protocol's three cases plus the second `allow` path this fix touches),
+an exploitation-evidence check against the full retained log window
+(weak negative, not skipped), regression test made bidirectional
+(`590e5bd2a`), the rest of the handler family and the Temporal path swept
+and confirmed clean, a token-redaction queue item filed, and an incident
+report entry (`a1000ecd8`, `31d3a0869`) — all ahead of and separate from
+Phase 2 schema work.
 One real structural decision remains as an explicit 2.1 gate: real
 tenant-transaction/RLS enforcement for `internal/reports` vs. a
 documented app-level-only boundary.
@@ -702,13 +705,23 @@ archaeology on. This doc's own sessions should follow that from here on.
 
         **Closed out, not just patched — per this repo's own standing
         process (`INCIDENT_REPORT_20260906.md`'s mandatory three-replay
-        protocol for auth/tenant-path changes):**
+        protocol for auth/tenant-path changes, extended to four here since
+        this fix touches two `allow` paths, not one):**
         - **Live-replayed against the rebuilt, restarted server** (the
           sqlmock suite alone isn't sufficient evidence for this class of
           change, per that same standing rule): no-auth → 401; real
           authenticated session against two different foreign tenants'
           private reports (found via direct DB read, not guessed) → 404,
-          404; same session against its own gold-copy report → 200.
+          404; same session against its own gold-copy report → 200; a
+          *different*, non-gold-copy tenant against the gold-copy report
+          → 200 (the discriminating case for the inheritance path — an
+          inverted condition there would pass every deny-case replay and
+          silently break tenant inheritance instead).
+        - **Exploitation-evidence check, not skipped:** grepped the full
+          retained log window (70 files, ~16 days) for direct
+          `GetTemplate`-by-id requests — 5 pre-existing (non-session)
+          hits, all against test-fixture-named reports. Weak negative,
+          recorded as such, not claimed as a clean bill of health.
         - **Regression test made bidirectional** (`590e5bd2a`): the
           original deny-case test plus same-tenant-200 and
           gold-copy-cross-tenant-200, so the suite can't pass a future
