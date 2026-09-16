@@ -10,31 +10,13 @@ import ExpressionEditorField from '../../components/ExpressionBuilder/Expression
 import { fetchBOTerms, fetchBOSchema } from '../../features/query-builder/services/queryBuilderApi';
 import type { SemanticTermView, BOSchemaField } from '../../features/query-builder/types/queryDef';
 import type { FieldLayoutEntry, FieldOverrideEntry, FieldStyleEntry } from './FormFieldsDesigner';
-import { iconForField } from './FormFieldsDesigner';
+import { iconForField, isFormLikeWidget } from './FormFieldsDesigner';
+import type { BORelationship } from './boRelationships';
+import { fkColumnFromJoinCondition } from './boRelationships';
 import { PageStudioApi, PageStudioPage } from '../../api/pageStudio';
 import { listSavedQueries } from '../../features/query-builder/services/savedQueryApi';
 import type { SavedQuery } from '../../features/query-builder/types/queryDef';
 import { apiClient } from '../../utils/apiClient';
-
-/** Mirrors backend/internal/metadata/businessobject_service.go's RelationshipResult - the
- * single centralized source of BO-to-BO structural relationships (real FK column,
- * cardinality, driving tables), also used by DataBindingsPanel.tsx and NewPageWizard.tsx. */
-interface BORelationship {
-  relatedObjectName: string;
-  targetObjectId: string;
-  relationshipType: string;
-  cardinality: string;
-  joinCondition: string;
-  sourceDriverTable: string;
-  targetDriverTable: string;
-}
-
-/** Pulls the child-side column out of a resolved "child.col = parent.col" joinCondition. */
-const fkColumnFromJoinCondition = (joinCondition: string): string => {
-  const left = joinCondition.split('=')[0]?.trim() || '';
-  const dot = left.lastIndexOf('.');
-  return dot >= 0 ? left.slice(dot + 1) : left;
-};
 
 interface PropertiesPanelProps {
   selectedId: string | null;
@@ -96,7 +78,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
   // Field-bound widget types: each resolves its Business Object data source
   // the same way PageComponentRenderer.tsx does, so this panel can offer a
   // real field picker for every one of them instead of just Table's columns.
-  const FIELD_BOUND_TYPES = ['Table', 'Slicer', 'LineChart', 'KPIGroup', 'Form'];
+  const FIELD_BOUND_TYPES = ['Table', 'Slicer', 'LineChart', 'KPIGroup', 'Form', 'DetailPanel'];
   const tableSource = selectedComponent && FIELD_BOUND_TYPES.includes(selectedComponent.type)
     ? (selectedComponent.props?.dataSourceId ? boSources.find((d) => d.id === selectedComponent.props!.dataSourceId) : boSources[0])
     : undefined;
@@ -289,7 +271,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
   // matching what dragging the tile's resize handle already does), required,
   // and visibility, mirroring how Salesforce/PeopleSoft field-level
   // properties work (separate from the page-layout-level properties).
-  if (fieldSelection && component?.type === 'Form') {
+  if (fieldSelection && component && isFormLikeWidget(component.type)) {
     const fieldName = fieldSelection.fieldName;
     const fieldMeta = fieldSchema.find((f) => f.name === fieldName);
     const fieldLayout = (component.props?.fieldLayout as Record<string, FieldLayoutEntry> | undefined)?.[fieldName];

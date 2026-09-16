@@ -48,7 +48,7 @@ const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, comp
     const component = components[nodeId];
     if (!component) return null;
     return (
-      <Box key={component.id} sx={{ mb: 2 }}>
+      <Box key={component.id} sx={{ flex: 1, minWidth: 0 }}>
         <PageComponentRenderer component={component as any} dataSources={dataSources as any} tenantId={tenantId} />
       </Box>
     );

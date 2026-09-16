@@ -18,6 +18,8 @@ import { apiClient } from '../../utils/apiClient';
 import { CorePageDefinition, DataSourceDefinition, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
 import { fetchBusinessObjectBindings, fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
 import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
+import { buildBODataSource } from './generatePageDraft';
+import { fkColumnFromJoinCondition } from './boRelationships';
 
 /**
  * Drag payload shape for dragging a field out of this panel onto a widget in
@@ -31,6 +33,7 @@ import type { SemanticTermView } from '../../features/query-builder/types/queryD
 export interface FieldDragPayload {
     boId: string;
     termNodeId: string;
+    termKey: string;
     displayName: string;
     role: string;
 }
@@ -54,7 +57,7 @@ interface RelatedBusinessObject {
 }
 
 /** One draggable field chip - see FieldDragPayload doc comment above. */
-const FieldChip: React.FC<{ payload: FieldDragPayload; isMeasure: boolean }> = ({ payload, isMeasure }) => {
+export const FieldChip: React.FC<{ payload: FieldDragPayload; isMeasure: boolean }> = ({ payload, isMeasure }) => {
     const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
         id: `field-${payload.boId}-${payload.termNodeId}`,
         data: { kind: 'field', payload },
@@ -196,24 +199,44 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
         setDraft((prev) => ({ ...prev, dataSources: (prev.dataSources || []).filter((d) => d.id !== id) }));
     };
 
-    const toggleRelated = (source: DataSourceDefinition, relatedId: string) => {
+    const toggleRelated = async (source: DataSourceDefinition, rel: RelatedBusinessObject) => {
         const cfg = source.config as unknown as BusinessObjectDataSourceConfig;
         const current = cfg.relatedBoIds || [];
-        const next = current.includes(relatedId)
-            ? current.filter((id) => id !== relatedId)
-            : [...current, relatedId];
-        setDraft((prev) => ({
-            ...prev,
-            dataSources: (prev.dataSources || []).map((d) =>
+        const including = current.includes(rel.targetObjectId);
+        const next = including
+            ? current.filter((id) => id !== rel.targetObjectId)
+            : [...current, rel.targetObjectId];
+        let extra: DataSourceDefinition | null = null;
+        if (!including) {
+            const fkField = fkColumnFromJoinCondition(rel.joinCondition);
+            extra = await buildBODataSource(rel.targetObjectId, rel.relatedObjectName, rel.relatedObjectName, rel.relatedObjectName, []);
+            extra = {
+                ...extra,
+                config: {
+                    ...(extra.config as object),
+                    ...(fkField ? { masterFilter: { fkField } } : {}),
+                } as unknown as Record<string, unknown>,
+            };
+        }
+        setDraft((prev) => {
+            const sources = (prev.dataSources || []).map((d) =>
                 d.id === source.id ? { ...d, config: { ...cfg, relatedBoIds: next } as unknown as Record<string, unknown> } : d
-            ),
-        }));
+            );
+            if (including) {
+                return { ...prev, dataSources: sources.filter((d) => d.id !== `bo_${rel.targetObjectId}`) };
+            }
+            const withoutDup = sources.filter((d) => d.id !== extra!.id);
+            return { ...prev, dataSources: [...withoutDup, extra!] };
+        });
     };
 
     return (
         <Box sx={{ p: 2 }}>
             <Typography variant="overline" color="text.secondary">
-                Business Object Data Sources
+                Primary Business Object
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                First source is the page&apos;s main Business Object. Related objects come from the relationship graph — click to add them (and their terms) to this page.
             </Typography>
 
             <Box sx={{ display: 'flex', gap: 1, mt: 1, mb: 2 }}>
@@ -241,15 +264,16 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
 
             {boDataSources.length === 0 && (
                 <Typography variant="caption" color="text.secondary">
-                    No Business Object data sources yet. Add one above to bind page widgets to it.
+                    Bind a Business Object first. Widgets on this page can only use that object&apos;s terms (and related objects you include).
                 </Typography>
             )}
 
             <List dense disablePadding>
-                {boDataSources.map((ds) => {
+                {boDataSources.map((ds, index) => {
                     const cfg = ds.config as unknown as BusinessObjectDataSourceConfig;
                     const related = relatedByBO[cfg.boId] || [];
                     const fields = fieldsByBO[cfg.boId] || [];
+                    const isPrimary = index === 0;
                     return (
                         <Box key={ds.id} sx={{ mb: 2 }}>
                             <ListItem
@@ -261,7 +285,10 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                                 }
                             >
                                 <BusinessIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
-                                <ListItemText primary={cfg.displayName} secondary={cfg.boKey} />
+                                <ListItemText
+                                    primary={<>{cfg.displayName}{isPrimary ? ' (primary)' : ''}</>}
+                                    secondary={cfg.boKey}
+                                />
                             </ListItem>
 
                             {related.length > 0 && (
@@ -282,7 +309,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                                                         label={rel.relatedObjectName}
                                                         color={active ? 'primary' : 'default'}
                                                         variant={active ? 'filled' : 'outlined'}
-                                                        onClick={() => toggleRelated(ds, rel.targetObjectId)}
+                                                        onClick={() => { void toggleRelated(ds, rel); }}
                                                     />
                                                 </Tooltip>
                                             );
@@ -293,7 +320,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
 
                             <Box sx={{ pl: 4, mt: 1.5 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                    Fields — drag onto a Slicer, Chart, or KPI widget to bind it
+                                    Fields — drag onto a Table, Form, Slicer, Chart, or KPI
                                 </Typography>
                                 {fields.length === 0 ? (
                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -306,6 +333,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                                             const payload: FieldDragPayload = {
                                                 boId: cfg.boId,
                                                 termNodeId: field.termNodeId,
+                                                termKey: field.termKey,
                                                 displayName: field.displayName,
                                                 role: field.role,
                                             };

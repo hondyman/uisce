@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
-import { Box, Tabs, Tab, Typography, Alert } from '@mui/material';
+import { Box, Tabs, Tab, Alert } from '@mui/material';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import RenderLayoutTree from './RenderLayoutTree';
 import { SelectionProvider } from './SelectionContext';
+import PageBody from './PageBody';
 
 interface DraftPreviewProps {
   draft: CorePageDefinition;
   tenantId: string;
+  /** When true, parent (PageArtboard) already supplies page padding. */
+  framed?: boolean;
 }
 
 /**
@@ -17,7 +20,7 @@ interface DraftPreviewProps {
  * save-then-reload round trip. This is the Preview button's content;
  * previously that button had no onClick handler at all.
  */
-const DraftPreview: React.FC<DraftPreviewProps> = ({ draft, tenantId }) => {
+const DraftPreview: React.FC<DraftPreviewProps> = ({ draft, tenantId, framed }) => {
   const tabs = draft.tabs && draft.tabs.length > 0
     ? draft.tabs
     : [{ id: '__default__', label: draft.name || 'Page 1', layout: draft.layout }];
@@ -26,9 +29,8 @@ const DraftPreview: React.FC<DraftPreviewProps> = ({ draft, tenantId }) => {
 
   return (
     <SelectionProvider key={draft.id || 'new'}>
-    <Box sx={{ p: 3, height: '100%', overflowY: 'auto', bgcolor: 'background.default' }}>
-      <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>{draft.name}</Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: tabs.length > 1 ? 2 : 3 }}>/{draft.slug}</Typography>
+    <Box sx={{ p: framed ? 0 : 3, height: framed ? 'auto' : '100%', overflowY: framed ? 'visible' : 'auto', bgcolor: framed ? 'transparent' : 'background.default' }}>
+      <PageBody name={draft.name} slug={draft.slug}>
       {draft.filterBar?.root && (
         <Box sx={{ mb: 2 }}>
           <RenderLayoutTree
@@ -56,6 +58,7 @@ const DraftPreview: React.FC<DraftPreviewProps> = ({ draft, tenantId }) => {
       ) : (
         <Alert severity="info">This page has no components yet.</Alert>
       )}
+      </PageBody>
     </Box>
     </SelectionProvider>
   );

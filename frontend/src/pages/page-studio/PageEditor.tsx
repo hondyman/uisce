@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Box, Typography, Paper, Tabs, Tab, Button, Grid, IconButton, Tooltip, Divider, TextField, Snackbar, Alert } from '@mui/material';
-import { DndContext, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import React, { useEffect, useState } from 'react';
+import { Box, Typography, Paper, Tabs, Tab, Button, Grid, IconButton, Tooltip, Divider, TextField, Snackbar, Alert, ToggleButton, ToggleButtonGroup, FormControlLabel, Switch } from '@mui/material';
+import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, pointerWithin, rectIntersection, type CollisionDetection } from '@dnd-kit/core';
 import {
     Save as SaveIcon,
     PlayArrow as PreviewIcon,
@@ -18,6 +18,7 @@ import {
 import { CorePageDefinition, PageLayout, PageTab } from '../../types/pageStudio';
 import { PageStudioApi } from '../../api/pageStudio';
 import ComponentPalette from './ComponentPalette';
+import ObjectPalette from './ObjectPalette';
 import LayoutCanvas from './LayoutCanvas';
 import PropertiesPanel from './PropertiesPanel';
 import DataBindingsPanel from './DataBindingsPanel';
@@ -28,6 +29,9 @@ import { Description as DocIcon, BugReport as TestIcon, Edit as EditIcon } from 
 import DraftPreview from './DraftPreview';
 import TemplatePickerDialog from './TemplatePickerDialog';
 import { SelectionProvider } from './SelectionContext';
+import PageArtboard from './PageArtboard';
+import PageBody from './PageBody';
+import { CANVAS_SIZES, canvasWidthPx, type CanvasSizeId } from './canvasSizes';
 
 interface PageEditorProps {
     page: CorePageDefinition;
@@ -35,6 +39,19 @@ interface PageEditorProps {
 }
 
 const DEFAULT_TAB_ID = '__default__';
+
+/** Palette/slot drops use pointer/rect intersection; form-field reorder
+ * (FormFieldsDesigner) uses closestCenter among form-field ids only so a
+ * grip-drag does not snap to a neighboring widget slot. */
+const collisionDetection: CollisionDetection = (args) => {
+    const pointerHits = pointerWithin(args);
+    const formFieldHits = pointerHits.filter((c) => String(c.id).startsWith('form-field:'));
+    if (formFieldHits.length > 0) {
+        const formFieldContainers = args.droppableContainers.filter((d) => String(d.id).startsWith('form-field:'));
+        return closestCenter({ ...args, droppableContainers: formFieldContainers });
+    }
+    return pointerHits.length > 0 ? pointerHits : rectIntersection(args);
+};
 
 const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const [draft, setDraft] = useState<CorePageDefinition>(page);
@@ -48,6 +65,16 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
     const [saveNotice, setSaveNotice] = useState<{ severity: 'success' | 'error'; message: string } | null>(null);
     const [propertiesPanelOpen, setPropertiesPanelOpen] = useState(true);
+    const [paletteOpen, setPaletteOpen] = useState(true);
+    const [canvasSize, setCanvasSize] = useState<CanvasSizeId>('page');
+    const [fitToWorkspace, setFitToWorkspace] = useState(false);
+    const [viewportWidth, setViewportWidth] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth));
+    useEffect(() => {
+        const onResize = () => setViewportWidth(window.innerWidth);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
+    const artboardWidth = canvasWidthPx(canvasSize, viewportWidth);
     // A single DndContext for the whole design surface (ComponentPalette,
     // DataBindingsPanel, and both LayoutCanvas instances below) - each
     // LayoutCanvas registers its own onDragEnd via useDndMonitor and only
@@ -93,6 +120,10 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
 
     const handleComponentsChange = (updater: (components: CorePageDefinition['components']) => CorePageDefinition['components']) => {
         setDraft((prev) => ({ ...prev, components: updater(prev.components) }));
+    };
+
+    const handleDataSourcesChange = (updater: (dataSources: CorePageDefinition['dataSources']) => CorePageDefinition['dataSources']) => {
+        setDraft((prev) => ({ ...prev, dataSources: updater(prev.dataSources || []) }));
     };
 
     const handleAddTab = () => setTemplatePickerOpen(true);
@@ -159,7 +190,36 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                     <Typography variant="subtitle1" fontWeight="bold">{draft.name}</Typography>
                     <Typography variant="caption" color="textSecondary">{draft.slug} • v{draft.version}</Typography>
                 </Box>
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <ToggleButtonGroup
+                        exclusive
+                        size="small"
+                        value={canvasSize}
+                        onChange={(_, v: CanvasSizeId | null) => { if (v) setCanvasSize(v); }}
+                    >
+                        {CANVAS_SIZES.map((s) => (
+                            <ToggleButton key={s.id} value={s.id} sx={{ px: 1, textTransform: 'none', fontSize: 12 }}>
+                                <Tooltip title={s.hint}><span>{s.label}</span></Tooltip>
+                            </ToggleButton>
+                        ))}
+                    </ToggleButtonGroup>
+                    <FormControlLabel
+                        sx={{ mr: 0, ml: 0.5 }}
+                        control={<Switch size="small" checked={fitToWorkspace} onChange={(e) => setFitToWorkspace(e.target.checked)} />}
+                        label={<Typography variant="caption">Fit</Typography>}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ minWidth: 44 }}>{artboardWidth}px</Typography>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                            const next = !(paletteOpen && propertiesPanelOpen);
+                            setPaletteOpen(next);
+                            setPropertiesPanelOpen(next);
+                        }}
+                    >
+                        {paletteOpen && propertiesPanelOpen ? 'Hide panels' : 'Show panels'}
+                    </Button>
                     {viewMode === 'design' ? (
                         <Button variant="outlined" startIcon={<PreviewIcon />} size="small" onClick={() => setViewMode('preview')}>Preview</Button>
                     ) : (
@@ -171,12 +231,16 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
             </Paper>
 
             {viewMode === 'preview' ? (
-                <DraftPreview draft={draft} tenantId={draft.tenantId || 'default'} />
+                <PageArtboard width={artboardWidth} fit={fitToWorkspace}>
+                    <DraftPreview draft={draft} tenantId={draft.tenantId || 'default'} framed />
+                </PageArtboard>
             ) : (
-            <DndContext sensors={dndSensors}>
+            <DndContext sensors={dndSensors} collisionDetection={collisionDetection}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 {/* Left Panel: Palette */}
-                <Paper elevation={0} sx={{ width: 250, borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ display: 'flex', flexShrink: 0 }}>
+                <Paper elevation={0} sx={{ width: paletteOpen ? 250 : 0, overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease' }}>
+                    <Box sx={{ width: 250, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 48 }}>
                             <Tab label="Design" icon={<DesignIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
@@ -188,7 +252,10 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                     </Box>
                     <Box sx={{ flex: 1, overflowY: 'auto' }}>
                         {tab === 0 && (
-                            <ComponentPalette />
+                            <>
+                                <ObjectPalette draft={draft} tenantId={draft.tenantId || 'default'} />
+                                <ComponentPalette />
+                            </>
                         )}
                         {tab === 1 && (
                             <DataBindingsPanel
@@ -207,27 +274,24 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             <AITestGenerator page={draft} />
                         )}
                     </Box>
+                    </Box>
                 </Paper>
+                <Box
+                    sx={{
+                        display: 'flex', alignItems: 'flex-start', pt: 1.5,
+                        borderRight: '1px solid rgba(0,0,0,0.05)', bgcolor: 'background.paper',
+                    }}
+                >
+                    <Tooltip title={paletteOpen ? 'Collapse palette' : 'Expand palette'}>
+                        <IconButton size="small" onClick={() => setPaletteOpen((v) => !v)}>
+                            {paletteOpen ? <ChevronLeftIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+                        </IconButton>
+                    </Tooltip>
+                </Box>
+                </Box>
 
                 {/* Main: Page tabs + Layout Canvas */}
                 <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <Box sx={{ borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover', px: 2, py: 1 }}>
-                        <Typography variant="caption" color="text.secondary" fontWeight="bold" sx={{ display: 'block', mb: 0.5 }}>
-                            PAGE FILTERS <Typography component="span" variant="caption" color="text.secondary" fontWeight="normal">(shown above every tab, applies to all of them)</Typography>
-                        </Typography>
-                        <Box sx={{ maxHeight: 220, overflowY: 'auto', '& > div': { pb: 0 } }}>
-                            <LayoutCanvas
-                                layout={filterBarLayout}
-                                onLayoutChange={handleFilterBarLayoutChange}
-                                components={draft.components}
-                                onComponentsChange={handleComponentsChange}
-                                dataSources={draft.dataSources}
-                                tenantId={draft.tenantId || 'default'}
-                                selectedId={selectedId}
-                                onSelect={setSelectedId}
-                            />
-                        </Box>
-                    </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', borderBottom: 1, borderColor: 'divider', bgcolor: 'background.paper', px: 1 }}>
                         <Tabs
                             value={activeTabId}
@@ -266,18 +330,34 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             <IconButton size="small" onClick={handleAddTab}><AddTabIcon fontSize="small" /></IconButton>
                         </Tooltip>
                     </Box>
-                    <Box sx={{ flex: 1, p: 3, bgcolor: '#f1f5f9', overflowY: 'auto' }}>
+                    <PageArtboard width={artboardWidth} fit={fitToWorkspace}>
+                        <PageBody name={draft.name} slug={draft.slug}>
+                        <Box sx={{ mb: 2 }}>
+                            <LayoutCanvas
+                                layout={filterBarLayout}
+                                onLayoutChange={handleFilterBarLayoutChange}
+                                components={draft.components}
+                                onComponentsChange={handleComponentsChange}
+                                dataSources={draft.dataSources}
+                                onDataSourcesChange={handleDataSourcesChange}
+                                tenantId={draft.tenantId || 'default'}
+                                selectedId={selectedId}
+                                onSelect={setSelectedId}
+                            />
+                        </Box>
                         <LayoutCanvas
                             layout={activeTab.layout}
                             onLayoutChange={handleLayoutChange}
                             components={draft.components}
                             onComponentsChange={handleComponentsChange}
                             dataSources={draft.dataSources}
+                            onDataSourcesChange={handleDataSourcesChange}
                             tenantId={draft.tenantId || 'default'}
                             selectedId={selectedId}
                             onSelect={setSelectedId}
                         />
-                    </Box>
+                        </PageBody>
+                    </PageArtboard>
                 </Box>
 
                 {/* Right Panel: Properties - collapsible so it doesn't permanently

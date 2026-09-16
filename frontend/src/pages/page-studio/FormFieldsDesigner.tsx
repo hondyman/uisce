@@ -8,10 +8,7 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
-import {
-  DndContext, PointerSensor, useSensor, useSensors, closestCenter,
-  type DragEndEvent,
-} from '@dnd-kit/core';
+import { useDndMonitor, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { fetchBOSchema } from '../../features/query-builder/services/queryBuilderApi';
@@ -30,6 +27,9 @@ export interface FormFieldsProps {
 }
 
 interface FormFieldsDesignerProps extends FormFieldsProps {
+  /** The placing Form/DetailPanel widget id - prefixes sortable ids so two
+   * forms on the same page don't collide inside PageEditor's shared DndContext. */
+  componentId: string;
   boId: string;
   tenantId: string;
   selectedFieldName: string | null;
@@ -39,6 +39,12 @@ interface FormFieldsDesignerProps extends FormFieldsProps {
   /** Brings a deleted (hidden) field back onto the form - see PropertiesPanel.tsx's field delete button. */
   onUnhideField: (fieldName: string) => void;
 }
+
+/** Form is the editable record widget; DetailPanel was a palette duplicate of
+ * the same selected-record view, so renderer/properties treat them as one. */
+export const isFormLikeWidget = (type: string): boolean => type === 'Form' || type === 'DetailPanel';
+
+const fieldSortableId = (componentId: string, fieldName: string) => `form-field:${componentId}:${fieldName}`;
 
 const FONT_SIZE_PX: Record<NonNullable<FieldStyleEntry['fontSize']>, number> = { small: 11, medium: 13, large: 16 };
 
@@ -70,6 +76,8 @@ export const iconForField = (field: Pick<BOSchemaField, 'type' | 'referenceBoId'
 
 const FieldTile: React.FC<{
   field: BOSchemaField;
+  sortableId: string;
+  componentId: string;
   colSpan: number;
   order: number;
   selected: boolean;
@@ -78,8 +86,11 @@ const FieldTile: React.FC<{
   style?: FieldStyleEntry;
   onSelect: () => void;
   onResize: (deltaCols: number) => void;
-}> = ({ field, colSpan, order, selected, label, required, style, onSelect, onResize }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({ id: field.id });
+}> = ({ field, sortableId, componentId, colSpan, order, selected, label, required, style, onSelect, onResize }) => {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useSortable({
+    id: sortableId,
+    data: { kind: 'form-field', componentId, fieldName: field.name },
+  });
   const tileRef = useRef<HTMLDivElement | null>(null);
   const [resizing, setResizing] = useState(false);
   const TypeIcon = iconForField(field);
@@ -185,7 +196,7 @@ const FieldTile: React.FC<{
  * fieldOverrides but with real data, only reachable from Preview mode.
  */
 const FormFieldsDesigner: React.FC<FormFieldsDesignerProps> = ({
-  boId, tenantId, fieldLayout, fieldOverrides, selectedFieldName, onSelectField, onLayoutChange, onReorder, onUnhideField,
+  componentId, boId, tenantId, fieldLayout, fieldOverrides, selectedFieldName, onSelectField, onLayoutChange, onReorder, onUnhideField,
 }) => {
   const [schema, setSchema] = useState<{ fields: BOSchemaField[] } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -199,8 +210,6 @@ const FormFieldsDesigner: React.FC<FormFieldsDesignerProps> = ({
       .finally(() => setLoading(false));
   }, [boId, tenantId]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
-
   const orderedFields = useMemo(() => {
     if (!schema) return [];
     return [...schema.fields].sort((a, b) => {
@@ -210,25 +219,36 @@ const FormFieldsDesigner: React.FC<FormFieldsDesignerProps> = ({
     });
   }, [schema, fieldLayout]);
 
+  const visibleFields = useMemo(
+    () => orderedFields.filter((f) => !fieldOverrides?.[f.name]?.hidden),
+    [orderedFields, fieldOverrides],
+  );
+
+  // Reorder uses PageEditor's single DndContext (palette + canvas). A nested
+  // DndContext here fought that parent and made grip-drags unreliable.
+  useDndMonitor({
+    onDragEnd(event: DragEndEvent) {
+      const { active, over } = event;
+      if (!over || active.id === over.id) return;
+      const data = active.data.current as { kind?: string; componentId?: string } | undefined;
+      if (data?.kind !== 'form-field' || data.componentId !== componentId) return;
+      const ids = visibleFields.map((f) => fieldSortableId(componentId, f.name));
+      const oldIndex = ids.indexOf(String(active.id));
+      const newIndex = ids.indexOf(String(over.id));
+      if (oldIndex < 0 || newIndex < 0) return;
+      const reordered = [...visibleFields];
+      const [moved] = reordered.splice(oldIndex, 1);
+      reordered.splice(newIndex, 0, moved);
+      onReorder(reordered.map((f) => f.name));
+    },
+  });
+
   if (loading) {
     return <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}><CircularProgress size={20} /></Box>;
   }
   if (!schema || schema.fields.length === 0) {
     return <Typography variant="caption" color="text.secondary" sx={{ p: 1, display: 'block' }}>No fields on this Business Object.</Typography>;
   }
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-    const ids = orderedFields.map((f) => f.id);
-    const oldIndex = ids.indexOf(String(active.id));
-    const newIndex = ids.indexOf(String(over.id));
-    if (oldIndex < 0 || newIndex < 0) return;
-    const reordered = [...orderedFields];
-    const [moved] = reordered.splice(oldIndex, 1);
-    reordered.splice(newIndex, 0, moved);
-    onReorder(reordered.map((f) => f.name));
-  };
 
   return (
     <Box onClick={() => onSelectField(null)}>
@@ -238,31 +258,30 @@ const FormFieldsDesigner: React.FC<FormFieldsDesignerProps> = ({
         label="Design view - drag ⠿ to reorder, drag the right edge to resize, click a field to edit it"
         sx={{ mb: 1, fontSize: 11, height: 22 }}
       />
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={orderedFields.map((f) => f.id)} strategy={rectSortingStrategy}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 1 }}>
-            {orderedFields.map((field, i) => {
-              if (fieldOverrides?.[field.name]?.hidden) return null;
-              const layout = fieldLayout?.[field.name];
-              const colSpan = Math.min(GRID_COLS, Math.max(1, layout?.colSpan ?? GRID_COLS));
-              return (
-                <FieldTile
-                  key={field.id}
-                  field={field}
-                  colSpan={colSpan}
-                  order={layout?.order ?? i}
-                  selected={selectedFieldName === field.name}
-                  label={fieldOverrides?.[field.name]?.label || field.displayName || field.name}
-                  required={fieldOverrides?.[field.name]?.required ?? !!field.required}
-                  style={fieldOverrides?.[field.name]?.style}
-                  onSelect={() => onSelectField(field.name)}
-                  onResize={(deltaCols) => onLayoutChange(field.name, { colSpan: Math.min(GRID_COLS, Math.max(1, colSpan + deltaCols)) })}
-                />
-              );
-            })}
-          </Box>
-        </SortableContext>
-      </DndContext>
+      <SortableContext items={visibleFields.map((f) => fieldSortableId(componentId, f.name))} strategy={rectSortingStrategy}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 1 }}>
+          {visibleFields.map((field, i) => {
+            const layout = fieldLayout?.[field.name];
+            const colSpan = Math.min(GRID_COLS, Math.max(1, layout?.colSpan ?? GRID_COLS));
+            return (
+              <FieldTile
+                key={field.id || field.name}
+                field={field}
+                sortableId={fieldSortableId(componentId, field.name)}
+                componentId={componentId}
+                colSpan={colSpan}
+                order={layout?.order ?? i}
+                selected={selectedFieldName === field.name}
+                label={fieldOverrides?.[field.name]?.label || field.displayName || field.name}
+                required={fieldOverrides?.[field.name]?.required ?? !!field.required}
+                style={fieldOverrides?.[field.name]?.style}
+                onSelect={() => onSelectField(field.name)}
+                onResize={(deltaCols) => onLayoutChange(field.name, { colSpan: Math.min(GRID_COLS, Math.max(1, colSpan + deltaCols)) })}
+              />
+            );
+          })}
+        </Box>
+      </SortableContext>
       {(() => {
         const hiddenFields = orderedFields.filter((f) => fieldOverrides?.[f.name]?.hidden);
         if (hiddenFields.length === 0) return null;

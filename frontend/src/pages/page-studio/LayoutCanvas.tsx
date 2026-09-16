@@ -7,6 +7,9 @@ import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
 import type { FieldDragPayload } from './DataBindingsPanel';
 import type { FieldLayoutEntry } from './FormFieldsDesigner';
+import type { RelatedObjectDragPayload } from './boRelationships';
+import { fkColumnFromJoinCondition, widgetTypeForCardinality } from './boRelationships';
+import { buildBODataSource } from './generatePageDraft';
 
 /** Selecting one field of a Form (Design mode) reuses the same `selectedId`
  * string LayoutCanvas already tracks for nodes/components, as
@@ -16,7 +19,7 @@ import type { FieldLayoutEntry } from './FormFieldsDesigner';
 const FIELD_SELECTION_SEP = '::field::';
 
 const DEFAULT_PANEL_PROPS: PanelNodeProps = { side: 'right', collapsible: true, defaultOpen: true, widthPx: 320, label: 'Panel' };
-const FIELD_DROP_TYPES = ['Slicer', 'LineChart', 'KPIGroup'];
+const FIELD_DROP_TYPES = ['Slicer', 'LineChart', 'KPIGroup', 'Table', 'Form'];
 
 interface LayoutCanvasProps {
     layout: PageLayout;
@@ -24,6 +27,7 @@ interface LayoutCanvasProps {
     components: Record<string, ComponentDefinition>;
     onComponentsChange: (updater: (components: Record<string, ComponentDefinition>) => Record<string, ComponentDefinition>) => void;
     dataSources: DataSourceDefinition[];
+    onDataSourcesChange: (updater: (dataSources: DataSourceDefinition[]) => DataSourceDefinition[]) => void;
     tenantId: string;
     selectedId: string | null;
     onSelect: (id: string | null) => void;
@@ -36,7 +40,7 @@ const EmptySlot: React.FC<{ nodeId: string }> = ({ nodeId }) => {
         <Box
             ref={setNodeRef}
             sx={{
-                p: 4, textAlign: 'center', flex: 1, borderRadius: 2,
+                p: 0.5, textAlign: 'center', flex: 1, borderRadius: 1, minHeight: 32, width: '100%',
                 border: isOver ? '2px dashed' : '1px dashed rgba(0,0,0,0.1)',
                 borderColor: isOver ? 'primary.main' : undefined,
                 bgcolor: isOver ? 'rgba(25, 118, 210, 0.04)' : undefined,
@@ -76,41 +80,48 @@ const ComponentBlock: React.FC<{
             onClick={(e) => { e.stopPropagation(); onSelect(comp.id); }}
             elevation={0}
             sx={{
-                p: 2,
+                p: 0,
+                position: 'relative',
                 border: isOver ? '2px dashed' : '1px solid',
-                borderColor: isOver ? 'secondary.main' : selected ? 'primary.main' : 'rgba(0,0,0,0.05)',
-                borderRadius: 2,
+                borderColor: isOver ? 'secondary.main' : selected ? 'primary.main' : 'transparent',
+                borderRadius: 1,
                 // A resizable widget (comp.style.resize set via the Properties
                 // panel's Layout section) needs `flex: 0 0 auto` so its own
                 // width/height style takes effect and the resize handle has
                 // room to shrink/grow it independently of the row/column -
                 // `flex: 1` would just snap it back to fill its container.
                 flex: comp.style?.resize ? '0 0 auto' : 1,
-                bgcolor: isOver ? 'rgba(156, 39, 176, 0.06)' : 'white',
-                '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }
+                minWidth: 0,
+                bgcolor: 'transparent',
+                '&:hover .widget-chrome': { opacity: 1 },
             }}
         >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                <Typography variant="subtitle2" fontWeight="bold" color="primary">{comp.id} ({comp.type})</Typography>
-                <Box>
-                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); onDelete(comp.id); }}>
-                        <DeleteIcon fontSize="small" />
-                    </IconButton>
-                </Box>
+            <Box
+                className="widget-chrome"
+                sx={{
+                    position: 'absolute', top: 4, right: 4, zIndex: 2,
+                    display: 'flex', alignItems: 'center', gap: 0.5,
+                    opacity: selected ? 1 : 0,
+                    bgcolor: 'background.paper', borderRadius: 1, px: 0.5,
+                    boxShadow: 1,
+                }}
+            >
+                <Typography variant="caption" color="text.secondary">{comp.type}</Typography>
+                <IconButton size="small" onClick={(e) => { e.stopPropagation(); onDelete(comp.id); }}>
+                    <DeleteIcon fontSize="small" />
+                </IconButton>
             </Box>
-            <Box sx={{ minHeight: 60, bgcolor: 'rgba(0,0,0,0.02)', borderRadius: 1, overflow: 'hidden' }}>
-                <PageComponentRenderer
-                    component={comp}
-                    dataSources={dataSources || []}
-                    tenantId={tenantId || 'default'}
-                    mode="design"
-                    selectedFieldName={selectedFieldName}
-                    onSelectField={(name) => onSelect(name ? `${fieldPrefix}${name}` : comp.id)}
-                    onUpdateFieldLayout={(name, entry) => onUpdateFieldLayout(comp.id, name, entry)}
-                    onReorderFields={(names) => onReorderFields(comp.id, names)}
-                    onUnhideField={(name) => onUnhideField(comp.id, name)}
-                />
-            </Box>
+            <PageComponentRenderer
+                component={comp}
+                dataSources={dataSources || []}
+                tenantId={tenantId || 'default'}
+                mode="design"
+                selectedFieldName={selectedFieldName}
+                onSelectField={(name) => onSelect(name ? `${fieldPrefix}${name}` : comp.id)}
+                onUpdateFieldLayout={(name, entry) => onUpdateFieldLayout(comp.id, name, entry)}
+                onReorderFields={(names) => onReorderFields(comp.id, names)}
+                onUnhideField={(name) => onUnhideField(comp.id, name)}
+            />
         </Paper>
     );
 };
@@ -129,7 +140,7 @@ const ComponentBlock: React.FC<{
  * ITS OWN layout tree, so the two canvases never step on each other's drops.
  */
 const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
-    layout, onLayoutChange, components, onComponentsChange, dataSources, tenantId, selectedId, onSelect,
+    layout, onLayoutChange, components, onComponentsChange, dataSources, onDataSourcesChange, tenantId, selectedId, onSelect,
 }) => {
     const handleFieldDrop = (payload: FieldDragPayload, comp: ComponentDefinition) => {
         const isMeasure = payload.role === 'MEASURE' || payload.role === 'CALCULATED';
@@ -152,6 +163,12 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             } else if (existing.type === 'LineChart') {
                 if (isMeasure) patch.measureTermIds = [payload.termNodeId];
                 else patch.dimensionTermIds = [payload.termNodeId];
+            } else if (existing.type === 'Table') {
+                const key = payload.termKey || payload.displayName;
+                const cols = existing.props?.visibleColumns as string[] | undefined;
+                if (cols && cols.length > 0 && key && !cols.includes(key)) patch.visibleColumns = [...cols, key];
+            } else if (existing.type === 'Form') {
+                // Form shows the BO schema; drop just rebinds the source.
             } else {
                 return prev;
             }
@@ -184,6 +201,56 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
         onSelect(newId);
     };
 
+    // Graph-driven related-object drop: cardinality picks Table vs Form;
+    // joinCondition supplies the child FK for masterFilter. The related BO
+    // is added as its own data source if this page does not already have one.
+    const handleRelatedObjectDrop = async (payload: RelatedObjectDragPayload, parentId: string) => {
+        if (!(parentId in layout.nodes)) return;
+        const widgetType = widgetTypeForCardinality(payload.cardinality);
+        const fkField = fkColumnFromJoinCondition(payload.joinCondition);
+        const existing = dataSources.find((d) => {
+            if (d.type !== 'business_object') return false;
+            const cfg = d.config as unknown as BusinessObjectDataSourceConfig;
+            return cfg.boId === payload.targetObjectId || d.id === `bo_${payload.targetObjectId}`;
+        });
+        let source = existing;
+        if (!source) {
+            source = await buildBODataSource(
+                payload.targetObjectId,
+                payload.relatedObjectName,
+                payload.relatedObjectName,
+                payload.relatedObjectName,
+                [],
+            );
+        }
+        const nextConfig = {
+            ...(source.config as unknown as BusinessObjectDataSourceConfig),
+            ...(fkField ? { masterFilter: { fkField } } : {}),
+        };
+        const boundSource: DataSourceDefinition = { ...source, config: nextConfig as unknown as Record<string, unknown> };
+        onDataSourcesChange((prev) => {
+            const without = prev.filter((d) => d.id !== boundSource.id);
+            const parent = without.map((d) => {
+                if (d.id !== payload.parentSourceId) return d;
+                const cfg = d.config as unknown as BusinessObjectDataSourceConfig;
+                const relatedBoIds = Array.from(new Set([...(cfg.relatedBoIds || []), payload.targetObjectId]));
+                return { ...d, config: { ...cfg, relatedBoIds } as unknown as Record<string, unknown> };
+            });
+            return [...parent, boundSource];
+        });
+        const newId = `${widgetType.toLowerCase()}_${Math.random().toString(36).substr(2, 5)}`;
+        onComponentsChange((prev) => ({
+            ...prev,
+            [newId]: { id: newId, type: widgetType, label: payload.relatedObjectName, props: { dataSourceId: boundSource.id } },
+        }));
+        onLayoutChange((prev) => {
+            const parent = prev.nodes[parentId];
+            if (!parent) return prev;
+            return { ...prev, nodes: { ...prev.nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
+        });
+        onSelect(newId);
+    };
+
     // Design-mode field resize/reorder for a Form widget (FormFieldsDesigner.tsx) -
     // stored on that component's own props, keyed by field name, same shape
     // BOFormWidget.tsx reads at Preview/runtime.
@@ -203,7 +270,9 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             const existing = prev[compId];
             if (!existing) return prev;
             const prevLayout = (existing.props?.fieldLayout as Record<string, FieldLayoutEntry> | undefined) || {};
-            const fieldLayout: Record<string, FieldLayoutEntry> = {};
+            // Keep hidden-field colSpan/order entries; the designer only
+            // passes the currently visible names.
+            const fieldLayout: Record<string, FieldLayoutEntry> = { ...prevLayout };
             orderedFieldNames.forEach((name, i) => {
                 fieldLayout[name] = { colSpan: prevLayout[name]?.colSpan ?? 12, order: i };
             });
@@ -251,9 +320,17 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
             const { active, over } = event;
             if (!over) return;
             const overId = String(over.id);
-            const data = active.data.current as { kind?: string; componentType?: string; payload?: FieldDragPayload } | undefined;
+            const data = active.data.current as { kind?: string; componentType?: string; payload?: FieldDragPayload | RelatedObjectDragPayload } | undefined;
             if (!data) return;
+            // Form field reorder is handled by FormFieldsDesigner.tsx's own
+            // useDndMonitor against this same DndContext.
+            if (data.kind === 'form-field') return;
 
+            if (overId.startsWith('slot:') && data.kind === 'related-object' && data.payload) {
+                const nodeId = overId.slice(5);
+                void handleRelatedObjectDrop(data.payload as RelatedObjectDragPayload, nodeId);
+                return;
+            }
             if (overId.startsWith('slot:') && data.kind === 'component' && data.componentType) {
                 const nodeId = overId.slice(5);
                 if (nodeId in layout.nodes) handleDrop(data.componentType, nodeId);
@@ -266,7 +343,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                 // is reachable from this layout's root (see isReachable below) -
                 // components are shared across the filter-bar and tab trees,
                 // so this is what keeps the two canvases from double-handling.
-                if (comp && isReachable(layout, compId)) handleFieldDrop(data.payload, comp);
+                if (comp && isReachable(layout, compId)) handleFieldDrop(data.payload as FieldDragPayload, comp);
             }
         },
     });
@@ -299,18 +376,20 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                 key={node.type === 'Panel' ? undefined : nodeId}
                 onClick={(e) => { e.stopPropagation(); onSelect(nodeId); }}
                 sx={{
-                    border: '1px dashed',
-                    borderColor: selectedId === nodeId ? 'primary.main' : 'rgba(0,0,0,0.1)',
-                    p: 1.5,
-                    mb: 2,
-                    borderRadius: 2,
-                    bgcolor: selectedId === nodeId ? 'rgba(25, 118, 210, 0.04)' : 'transparent',
+                    outline: selectedId === nodeId ? '2px solid' : '1px dashed',
+                    outlineColor: selectedId === nodeId ? 'primary.main' : 'rgba(0,0,0,0.12)',
+                    outlineOffset: 2,
+                    p: 0,
+                    mb: 0,
+                    borderRadius: 0,
+                    bgcolor: 'transparent',
                     position: 'relative',
-                    '&:hover': { borderColor: 'primary.light' }
+                    minWidth: 0,
+                    flex: 1,
                 }}
             >
-                <Typography variant="caption" sx={{ position: 'absolute', top: -10, left: 10, bgcolor: '#f1f5f9', px: 0.5, color: 'text.secondary' }}>
-                    {node.type} ({node.id})
+                <Typography variant="caption" sx={{ position: 'absolute', top: -14, left: 0, px: 0.5, color: 'text.secondary', pointerEvents: 'none', fontSize: 10 }}>
+                    {node.type}
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', flexDirection: node.type === 'Row' ? 'row' : 'column', gap: 2, ...(node.style as React.CSSProperties | undefined) }}>
                     {(node.children || []).map(childId => renderNode(childId))}
@@ -327,7 +406,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
     };
 
     return (
-        <Box sx={{ minHeight: '100%', pb: 20 }}>
+        <Box sx={{ minHeight: '100%' }}>
             {renderNode(layout.root)}
         </Box>
     );

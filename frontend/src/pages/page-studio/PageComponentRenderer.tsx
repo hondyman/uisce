@@ -16,7 +16,7 @@ import EmbeddedPageContent from './EmbeddedPageContent';
 import { useSelection } from './SelectionContext';
 import { useCrossFilterStore, crossFilterKey } from '../../store/useCrossFilterStore';
 import SavedQueryWidget, { SavedQueryParamBinding } from './SavedQueryWidget';
-import FormFieldsDesigner, { type FieldLayoutEntry, type FieldOverrideEntry } from './FormFieldsDesigner';
+import FormFieldsDesigner, { type FieldLayoutEntry, type FieldOverrideEntry, isFormLikeWidget } from './FormFieldsDesigner';
 import { TableDesignPlaceholder, ChartDesignPlaceholder } from './WidgetDesignPlaceholder';
 
 /** Table widget's configurable row-click behavior (component.props.rowClickAction), set via PropertiesPanel. */
@@ -120,7 +120,7 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
     return styled(<TileWidget component={component} />);
   }
 
-  if (component.type === 'Form') {
+  if (isFormLikeWidget(component.type)) {
     if (!cfg?.boId) {
       return styled(
         <Box sx={{ p: 2, textAlign: 'center' }}>
@@ -131,9 +131,12 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
     // Design mode: structure only, never real record values (matching how
     // Salesforce/PeopleSoft page layout editors work) - a resizable,
     // reorderable, click-to-select field grid instead of a live-bound form.
+    // DetailPanel is a leftover palette alias of Form (same selected-record
+    // editor); keep rendering it so already-placed instances still work.
     if (mode === 'design') {
       return styled(
         <FormFieldsDesigner
+          componentId={component.id}
           boId={cfg.boId}
           tenantId={tenantId}
           fieldLayout={component.props?.fieldLayout as Record<string, FieldLayoutEntry> | undefined}
