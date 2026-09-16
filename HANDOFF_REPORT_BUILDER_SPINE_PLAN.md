@@ -26,14 +26,21 @@ re-targeted at `report_templates`, with 2.1's decisions (no `elements`
 backfill, `is_core` gets a real column, RLS check first) written down
 before any SQL gets written. **The RLS read that 2.1 called for as its
 first action has been run — see 2.1's entry** — and it surfaced a live
-cross-tenant data exposure (`GetTemplate` had no tenant check at all),
-fixed immediately and out of band in `f11b158cd`, ahead of and separate
-from any Phase 2 schema work.
+cross-tenant data exposure (`GetTemplate` had no tenant check at all).
+**This is now a fully closed incident, not just a patched symptom:**
+fixed (`f11b158cd`), live-replayed against the rebuilt server per this
+repo's own mandatory three-replay protocol, regression test made
+bidirectional (`590e5bd2a`), the rest of the handler family and the
+Temporal path swept and confirmed clean, and an incident report entry
+filed (`a1000ecd8`) — all ahead of and separate from Phase 2 schema work.
+One real structural decision remains as an explicit 2.1 gate: real
+tenant-transaction/RLS enforcement for `internal/reports` vs. a
+documented app-level-only boundary.
 
-Current sequence: **Phase 0 and Phase 1 are both closed, Phase 2's RLS
-read is done and its one urgent finding is fixed — the rest of Phase 2
-(2.1's actual migration onward) has not been started.** Next up: write
-2.1's migration (`report_templates.layout_config`-to-typed-
+Current sequence: **Phase 0 and Phase 1 are both closed, the RLS-read
+finding is fully closed out — the rest of Phase 2 (2.1's actual migration
+onward) has not been started.** Next up: write 2.1's migration
+(`report_templates.layout_config`-to-typed-
 columns migration with a gated fallback, not a create. Everything from
 Phase 3 on is unchanged from the original ordering; 3.3 (the real Go
 band-layout PDF renderer) now has a working spike to grow from
@@ -692,6 +699,53 @@ archaeology on. This doc's own sessions should follow that from here on.
         cross-tenant, matching the existing inheritance model), plus a
         regression test. This shipped as its own commit ahead of any
         Phase 2 schema work, given the severity — not batched into 2.1.
+
+        **Closed out, not just patched — per this repo's own standing
+        process (`INCIDENT_REPORT_20260906.md`'s mandatory three-replay
+        protocol for auth/tenant-path changes):**
+        - **Live-replayed against the rebuilt, restarted server** (the
+          sqlmock suite alone isn't sufficient evidence for this class of
+          change, per that same standing rule): no-auth → 401; real
+          authenticated session against two different foreign tenants'
+          private reports (found via direct DB read, not guessed) → 404,
+          404; same session against its own gold-copy report → 200.
+        - **Regression test made bidirectional** (`590e5bd2a`): the
+          original deny-case test plus same-tenant-200 and
+          gold-copy-cross-tenant-200, so the suite can't pass a future
+          deny-everything regression.
+        - **Swept the class, not just the instance.** Every other
+          `ReportHandler` fetch-by-id method checked directly — all
+          correctly thread `tenantID` through; `GetTemplate` was isolated,
+          not a pattern in this file. `report_activities.go` (the other
+          reader of report templates this doc's 0.2 ticket flagged)
+          checked separately — it never calls the unscoped
+          `Repository.GetTemplate` and already uses real tenant-scoped
+          transactions (`withTenantTx`) for its own queries; not affected.
+          `Repository.GetTemplate` itself has exactly two callers
+          codebase-wide (both now correctly checked) — narrowing it to a
+          tenant-scoped query at the repository layer is a cheap
+          defense-in-depth follow-up, noted but not done (no vulnerable
+          caller exists to justify it today).
+        - **Incident report entry added** (`a1000ecd8`) — finding, fix,
+          the inert-RLS observation, the sweep, the replay, and an
+          incidental finding surfaced during verification: the backend's
+          request-trace log prints full bearer tokens in plaintext per
+          request (confirmed `logs/` is gitignored, so this doesn't reach
+          git history, but it's a real exposure surface on a shared or
+          checked-out dev machine — flagged as its own follow-up).
+        - **The structural decision stays an open 2.1 gate, not decided by
+          omission:** either (a) adopt real tenant-transaction/RLS
+          enforcement for `internal/reports` in 2.1's migration window, or
+          (b) explicitly document app-level `WHERE tenant_id` as this
+          table's real boundary, with this sweep as its compensating
+          control. 2.1 must not proceed without landing on one of these —
+          same discipline as 0.4's cube-vs-BO call.
+        - **Telemetry tie-in, not built now:** cross-tenant read attempts
+          are exactly the activity signal the Plane-2 ops telemetry (T.1)
+          should be able to capture later — an `error_class` value for
+          auth-denied-cross-tenant, keyed by actor, is a candidate for
+          T.1's event vocabulary when that ticket is actually written, not
+          bolted on ahead of it.
 - [ ] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
       and `repository.go` to read/write the new typed columns instead of
       (or alongside, during migration) the opaque `LayoutConfig`/
