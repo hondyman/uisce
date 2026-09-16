@@ -76,6 +76,112 @@ func TestBuildMultiBOSQL_JoinsAndTenantScoping(t *testing.T) {
 	}
 }
 
+// TestBuildMultiBOSQL_AggregatesManySideToPreventFanOut covers the bug
+// this generator used to have: selecting a bare column from BOTH the
+// primary ("one") side and a "many"-cardinality related BO (order -> its
+// many allocations) produced a flat LEFT JOIN, repeating every order
+// column once per allocation row instead of aggregating. The fix must
+// GROUP BY the one-side column and auto-aggregate the many-side one.
+func TestBuildMultiBOSQL_AggregatesManySideToPreventFanOut(t *testing.T) {
+	primary := &boresolver.BODefinition{
+		ID:           "bo-order",
+		DrivingTable: "order",
+		Fields: []boresolver.BOField{
+			{ID: "f1", Name: "order_id", Type: "string", PhysicalColumn: "order.id"},
+		},
+	}
+	related := &boresolver.BODefinition{
+		ID:           "bo-allocation",
+		DrivingTable: "allocation",
+		Fields: []boresolver.BOField{
+			{ID: "f2", Name: "allocated_qty", Type: "number", PhysicalColumn: "allocation.qty"},
+		},
+	}
+
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{
+			BOID:         "bo-order",
+			RelatedBOIDs: []string{"bo-allocation"},
+		},
+		Query: boresolver.QueryRequest{
+			Dimensions: []boresolver.DimensionDef{
+				{TermNodeID: "order_id", Alias: "OrderID", BOID: "bo-order"},
+			},
+			Measures: []boresolver.MeasureDef{
+				{TermNodeID: "allocated_qty", Alias: "AllocatedQty", BOID: "bo-allocation"},
+			},
+		},
+	}
+
+	path := &analytics.JoinPath{
+		Steps: []analytics.JoinPathStep{
+			{
+				LeftTable: "order", LeftAlias: "t0", LeftColumn: "id",
+				RightTable: "allocation", RightAlias: "t1", RightColumn: "order_id",
+				JoinType: "LEFT", Cardinality: "1:M",
+			},
+		},
+	}
+
+	gen, _ := boresolver.NewBOSQLGenerator(nil, "postgres")
+	sql, _, columns, err := buildMultiBOSQL(gen, primary, []joinedBO{
+		{BOID: "bo-allocation", BODef: related, Path: path, Cardinality: path.TraversalCardinality()},
+	}, qd, "tenant-123")
+	if err != nil {
+		t.Fatalf("buildMultiBOSQL failed: %v", err)
+	}
+
+	if !strings.Contains(sql, "SUM(t1.qty) AS \"AllocatedQty\"") {
+		t.Errorf("expected the many-side measure to be auto-wrapped in SUM, got: %s", sql)
+	}
+	if !strings.Contains(sql, "GROUP BY t0.id") {
+		t.Errorf("expected GROUP BY on the one-side column, got: %s", sql)
+	}
+	if columns[1].Cardinality != "many" {
+		t.Fatalf("expected allocated_qty column cardinality 'many', got: %+v", columns[1])
+	}
+}
+
+// TestBuildMultiBOSQL_ManySideOnlyNoGroupBy confirms a query that selects
+// ONLY many-side columns (a legitimate "list this order's allocations")
+// is left as a plain join with no GROUP BY - there's nothing to
+// deduplicate since no one-side value is being repeated.
+func TestBuildMultiBOSQL_ManySideOnlyNoGroupBy(t *testing.T) {
+	primary := &boresolver.BODefinition{
+		ID:           "bo-order",
+		DrivingTable: "order",
+		Fields:       []boresolver.BOField{{ID: "f1", Name: "order_id", Type: "string", PhysicalColumn: "order.id"}},
+	}
+	related := &boresolver.BODefinition{
+		ID:           "bo-allocation",
+		DrivingTable: "allocation",
+		Fields:       []boresolver.BOField{{ID: "f2", Name: "allocated_qty", Type: "number", PhysicalColumn: "allocation.qty"}},
+	}
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{BOID: "bo-order", RelatedBOIDs: []string{"bo-allocation"}},
+		Query: boresolver.QueryRequest{
+			Dimensions: []boresolver.DimensionDef{{TermNodeID: "allocated_qty", Alias: "Qty", BOID: "bo-allocation"}},
+		},
+	}
+	path := &analytics.JoinPath{Steps: []analytics.JoinPathStep{
+		{LeftTable: "order", LeftAlias: "t0", LeftColumn: "id", RightTable: "allocation", RightAlias: "t1", RightColumn: "order_id", JoinType: "LEFT", Cardinality: "1:M"},
+	}}
+
+	gen, _ := boresolver.NewBOSQLGenerator(nil, "postgres")
+	sql, _, _, err := buildMultiBOSQL(gen, primary, []joinedBO{
+		{BOID: "bo-allocation", BODef: related, Path: path, Cardinality: path.TraversalCardinality()},
+	}, qd, "tenant-123")
+	if err != nil {
+		t.Fatalf("buildMultiBOSQL failed: %v", err)
+	}
+	if strings.Contains(sql, "GROUP BY") {
+		t.Errorf("expected no GROUP BY for a many-side-only listing query, got: %s", sql)
+	}
+	if strings.Contains(sql, "SUM(") {
+		t.Errorf("expected no auto-aggregation for a many-side-only listing query, got: %s", sql)
+	}
+}
+
 func TestBuildMultiBOSQL_RejectsUnsafeIdentifier(t *testing.T) {
 	primary := &boresolver.BODefinition{
 		ID:           "bo-account",

@@ -21,6 +21,7 @@ import {
 } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface QuotaDef {
   Limit: number;
@@ -46,23 +47,21 @@ export const CapacityManagementPage: React.FC = () => {
   const fetchQuotas = async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/admin/quotas');
-      if (res.ok) {
-        const data: QuotasMap = await res.json();
-        // Flatten
-        const flat: FlatQuota[] = [];
-        Object.entries(data).forEach(([tenantID, resources]) => {
-          Object.entries(resources).forEach(([resource, def]) => {
-            flat.push({
-              tenantID,
-              resource,
-              limit: def.Limit,
-              window: def.Window
-            });
+      const res = await apiFetch('/api/admin/quotas');
+      const data: QuotasMap = await res.json();
+      // Flatten
+      const flat: FlatQuota[] = [];
+      Object.entries(data).forEach(([tenantID, resources]) => {
+        Object.entries(resources).forEach(([resource, def]) => {
+          flat.push({
+            tenantID,
+            resource,
+            limit: def.Limit,
+            window: def.Window
           });
         });
-        setQuotas(flat);
-      }
+      });
+      setQuotas(flat);
     } catch (err) {
       console.error(err);
     } finally {
@@ -82,7 +81,7 @@ export const CapacityManagementPage: React.FC = () => {
   const handleSave = async () => {
     if (!currentQuota) return;
     try {
-      const res = await fetch('/api/admin/quotas', {
+      await apiFetch('/api/admin/quotas', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -92,12 +91,8 @@ export const CapacityManagementPage: React.FC = () => {
           window_seconds: Number(currentQuota.window)
         })
       });
-      if (res.ok) {
-        setEditOpen(false);
-        fetchQuotas();
-      } else {
-        alert('Failed to update quota');
-      }
+      setEditOpen(false);
+      fetchQuotas();
     } catch (err) {
       console.error(err);
     }

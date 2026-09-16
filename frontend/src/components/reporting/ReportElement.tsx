@@ -62,9 +62,11 @@ const ReportElement: FC<ReportElementProps> = ({
           fontSize: Number(properties.fontSize) || 12,
           textAlign: properties.textAlign || 'left',
           fontWeight: properties.fontWeight || 500,
+          fontFamily: properties.fontFamily || 'inherit',
           color: properties.textColor || '#111827',
+          bgcolor: properties.backgroundColor || 'transparent',
           border: `${properties.borderWidth || 0}px solid ${properties.borderColor || 'transparent'}`,
-          padding: properties.borderWidth ? '4px' : '0',
+          padding: properties.padding ? `${properties.padding}px` : (properties.borderWidth ? '4px' : '0'),
         }}
       >
         {String(properties.text ?? 'Sample Text')}

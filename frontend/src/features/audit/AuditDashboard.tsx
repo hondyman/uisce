@@ -33,6 +33,7 @@ import ModalHeader from '../../components/ModalHeader';
 // DatePicker intentionally not used in current UI, removed to satisfy noUnusedLocals
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { apiFetch } from '../../lib/apiClient';
 
 interface AuditEvent {
   id: string;
@@ -88,10 +89,7 @@ export const AuditDashboard: React.FC = () => {
       setError(null);
 
       // Load summary
-      const summaryResponse = await fetch('/api/audit/summary');
-      if (!summaryResponse.ok) {
-        throw { message: 'Failed to load audit summary' };
-      }
+      const summaryResponse = await apiFetch('/api/audit/summary');
       const summaryData = await summaryResponse.json();
       setSummary(summaryData);
 
@@ -107,10 +105,7 @@ export const AuditDashboard: React.FC = () => {
         }
       });
 
-      const eventsResponse = await fetch(`/api/audit/events?${queryParams}`);
-      if (!eventsResponse.ok) {
-        throw { message: 'Failed to load audit events' };
-      }
+      const eventsResponse = await apiFetch(`/api/audit/events?${queryParams}`);
       const eventsData = await eventsResponse.json();
       setEvents(eventsData.events || []);
 
@@ -143,7 +138,7 @@ export const AuditDashboard: React.FC = () => {
 
   const handleExportEvents = async () => {
     try {
-      const response = await fetch('/api/audit/export', {
+      const response = await apiFetch('/api/audit/export', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,10 +149,6 @@ export const AuditDashboard: React.FC = () => {
           report_name: `audit_export_${new Date().toISOString().split('T')[0]}`,
         }),
       });
-
-      if (!response.ok) {
-        throw { message: 'Export failed' };
-      }
 
       // Trigger download
       const blob = await response.blob();

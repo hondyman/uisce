@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 
 export interface RuleLineageEntry {
   valuation_date: string;
@@ -14,8 +15,7 @@ export function useRuleLineage(ruleId: string, params: Record<string, any> = {})
   return useQuery({
     queryKey: ['rule-lineage', ruleId, params],
     queryFn: async () => {
-      const res = await fetch(`/api/rules/${ruleId}/lineage?${query}`);
-      if (!res.ok) throw new Error('Failed to load lineage');
+      const res = await apiFetch(`/api/rules/${ruleId}/lineage?${query}`);
       const json = await res.json();
       return (json.evaluations ?? []) as RuleLineageEntry[];
     },

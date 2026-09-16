@@ -32,6 +32,7 @@ import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import { getSelectedRegion } from '../../lib/region';
+import { apiFetch } from '../../lib/apiClient';
 
 interface RelationshipResult {
   relatedObjectName: string;
@@ -132,13 +133,9 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
     setError(null);
     
     try {
-      const response = await fetch(`/api/business-objects/${businessObject.id}/relationships`, {
+      const response = await apiFetch(`/api/business-objects/${businessObject.id}/relationships`, {
         headers: getAuthHeaders(),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch relationships');
-      }
 
       const data = await response.json();
       setRelatedObjects(data.relatedObjects || []);
@@ -153,17 +150,15 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
 
   const fetchAvailableBOs = async () => {
     try {
-      const response = await fetch('/api/business-objects', {
+      const response = await apiFetch('/api/business-objects', {
         headers: getAuthHeaders(),
       });
-      if (response.ok) {
-        const data = await response.json();
-        const list = Array.isArray(data)
-          ? data
-          : Object.entries(data || {}).map(([id, obj]: [string, any]) => ({ ...obj, id }));
-        // Filter out current BO
-        setAvailableBOs(list.filter((b: any) => b.id !== businessObject?.id));
-      }
+      const data = await response.json();
+      const list = Array.isArray(data)
+        ? data
+        : Object.entries(data || {}).map(([id, obj]: [string, any]) => ({ ...obj, id }));
+      // Filter out current BO
+      setAvailableBOs(list.filter((b: any) => b.id !== businessObject?.id));
     } catch (err) {
       console.error('Failed to fetch business objects:', err);
     }
@@ -180,7 +175,7 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
     setSuccessMsg(null);
 
     try {
-      const response = await fetch(`/api/business-objects/${businessObject.id}/relationships`, {
+      await apiFetch(`/api/business-objects/${businessObject.id}/relationships`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({
@@ -190,11 +185,6 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
           description,
         }),
       });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || 'Failed to save relationship');
-      }
 
       setSuccessMsg(`Successfully related to ${selectedTargetBO.displayName || selectedTargetBO.name}`);
       setSelectedTargetBO(null);
@@ -288,7 +278,7 @@ export const BusinessObjectRelationshipWizard: React.FC<BusinessObjectRelationsh
                                 if (window.confirm(`Are you sure you want to remove relationship with ${row.relatedObjectName || 'this object'}?`)) {
                                   try {
                                     const relId = row.id || row.targetObjectId;
-                                    await fetch(`/api/business-objects/${businessObject.id}/relationships/${relId}`, {
+                                    await apiFetch(`/api/business-objects/${businessObject.id}/relationships/${relId}`, {
                                       method: 'DELETE',
                                       headers: getAuthHeaders(),
                                     });

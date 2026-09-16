@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 
 export interface ETLRun {
   etl_run_id: string;
@@ -31,8 +32,7 @@ export function useETLRuns(params: ETLRunParams) {
   return useQuery({
     queryKey: ['etl-runs', params],
     queryFn: async () => {
-      const res = await fetch(`/api/etl-runs?${query.toString()}`);
-      if (!res.ok) throw new Error('Failed to load ETL runs');
+      const res = await apiFetch(`/api/etl-runs?${query.toString()}`);
       const json = await res.json();
       return (json.runs ?? []) as ETLRun[];
     },
@@ -43,8 +43,7 @@ export function useETLRun(id: string) {
   return useQuery({
     queryKey: ['etl-run', id],
     queryFn: async () => {
-      const res = await fetch(`/api/etl-runs/${id}`);
-      if (!res.ok) throw new Error('Failed to load ETL run');
+      const res = await apiFetch(`/api/etl-runs/${id}`);
       return (await res.json()) as ETLRun;
     },
     enabled: !!id,

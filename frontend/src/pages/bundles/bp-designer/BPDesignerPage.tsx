@@ -6,7 +6,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import type { FC, DragEvent } from 'react';
+import type { FC, MutableRefObject } from 'react';
 import { useParams } from 'react-router-dom';
 import { useNotification } from '../../../hooks/useNotification';
 import { StepPalette } from './StepPalette';
@@ -22,11 +22,9 @@ import {
 import { ProcessNode, ProcessEdge } from './types';
 import styles from './BPDesigner.module.css';
 import { v4 as uuidv4 } from 'uuid';
+import { DndContext, useDroppable, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 
-interface DraggingState {
-  isActive: boolean;
-  stepType?: unknown;
-}
+const CANVAS_DROPPABLE_ID = 'bp-designer-canvas';
 
 export const BPDesignerPage: FC = () => {
   const { id } = useParams<{ id?: string }>();
@@ -38,9 +36,12 @@ export const BPDesignerPage: FC = () => {
   const [edges, setEdges] = useState<ProcessEdge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [processName, setProcessName] = useState('New Process');
-  const [dragging, setDragging] = useState<DraggingState>({ isActive: false });
   const [showRuleModal, setShowRuleModal] = useState(false);
   const [isUnsaved, setIsUnsaved] = useState(false);
+  const { setNodeRef: setCanvasDroppableRef } = useDroppable({ id: CANVAS_DROPPABLE_ID });
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  );
 
   // Queries
   useStepTypes();
@@ -60,28 +61,22 @@ export const BPDesignerPage: FC = () => {
   }, [process]);
 
   // Handlers
-  const handleDragStart = (e: DragEvent<Element>, stepType: any) => {
-    setDragging({ isActive: true, stepType });
-    e.dataTransfer.effectAllowed = 'copy';
-  };
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over, delta } = event;
+    if (!over || over.id !== CANVAS_DROPPABLE_ID || !canvasRef.current) return;
 
-  const handleDragOver = (e: DragEvent<Element>) => {
-    if (dragging.isActive) {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'copy';
-    }
-  };
-
-  const handleDrop = (e: DragEvent<Element>) => {
-    e.preventDefault();
-    if (!dragging.stepType || !canvasRef.current) return;
+    const stepType = (active.data.current as { stepType?: unknown } | undefined)?.stepType;
+    if (!stepType) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const activatorEvent = event.activatorEvent as PointerEvent | MouseEvent | undefined;
+    const startX = activatorEvent && 'clientX' in activatorEvent ? activatorEvent.clientX : rect.left;
+    const startY = activatorEvent && 'clientY' in activatorEvent ? activatorEvent.clientY : rect.top;
+    const x = startX + delta.x - rect.left;
+    const y = startY + delta.y - rect.top;
 
     // Narrow the unknown stepType into a local typed shape before reading fields
-    const st = dragging.stepType as { label?: string; key?: string; default_data?: unknown } | undefined;
+    const st = stepType as { label?: string; key?: string; default_data?: unknown } | undefined;
     const newNode: ProcessNode = {
       id: `node-${uuidv4()}`,
       type: 'default',
@@ -95,7 +90,6 @@ export const BPDesignerPage: FC = () => {
 
     setNodes([...nodes, newNode]);
     setIsUnsaved(true);
-    setDragging({ isActive: false });
   };
 
   const handleNodeClick = (nodeId: string) => {
@@ -165,16 +159,18 @@ export const BPDesignerPage: FC = () => {
       </header>
 
       {/* Main Content */}
-      <main className={styles.main}>
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <main className={styles.main}>
         {/* Left Sidebar - Step Palette */}
-        <StepPalette onDragStart={handleDragStart} />
+        <StepPalette />
 
         {/* Canvas */}
         <div
           className={styles.canvas}
-          ref={canvasRef}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
+          ref={(node) => {
+            (canvasRef as MutableRefObject<HTMLDivElement | null>).current = node;
+            setCanvasDroppableRef(node);
+          }}
         >
           {/* Canvas Toolbar */}
           <div className={styles.canvasToolbar}>
@@ -412,7 +408,8 @@ export const BPDesignerPage: FC = () => {
             )}
           </div>
         </aside>
-      </main>
+        </main>
+      </DndContext>
 
       {/* Footer - Event Triggers & Global Rules */}
       <footer className={styles.footer}>

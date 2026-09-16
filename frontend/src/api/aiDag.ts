@@ -1,5 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { useTenant } from '../contexts/TenantContext';
+import { apiFetch } from '../lib/apiClient';
 
 export interface GenerateDAGRequest {
     prompt: string;
@@ -16,7 +17,7 @@ export function useGenerateDAG() {
 
     return useMutation({
         mutationFn: async (request: GenerateDAGRequest): Promise<GenerateDAGResponse> => {
-            const res = await fetch('/api/ai/generate-dag', {
+            const res = await apiFetch('/api/ai/generate-dag', {
                 method: 'POST',
                 credentials: 'include',
                 headers: {
@@ -25,11 +26,6 @@ export function useGenerateDAG() {
                 },
                 body: JSON.stringify(request),
             });
-
-            if (!res.ok) {
-                const error = await res.text();
-                throw new Error(error || 'Failed to generate DAG');
-            }
 
             return res.json();
         },

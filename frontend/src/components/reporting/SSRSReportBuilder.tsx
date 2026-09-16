@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
+import { DndContext, DragOverlay, pointerWithin, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
 import {
   Box,
   Drawer,
@@ -54,13 +54,11 @@ import {
   sanitizeInput,
   exportFormatLabels,
   exportOptionDescriptions,
-  EventScripts,
   ExportOptions
 } from './reportingUtils';
 import GroupsEditor from './GroupsEditor';
 import CalculatedFieldsEditor, { CalculatedFieldItem } from './CalculatedFieldsEditor';
 import ExpressionsEditor from './ExpressionsEditor';
-import EventScriptsEditor from './EventScriptsEditor';
 import { FilterGroup, buildSQL } from './FilterBuilderPanel';
 import CodeIcon from '@mui/icons-material/Code';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -103,16 +101,9 @@ import { dedupeFields } from '../../utils/dedupeFields';
 import { useCreateReportTemplate, useUpdateReportTemplate, useReportTemplate } from '../../api/reporting';
 import { buildSavePayload, BOBinding } from './builderSerialization';
 import { deserializeFromBackend, needsMigration, migrateV1ToV2 } from './tableSerialization';
+import type { ParamSpec } from '../../studio-core/params/ParamSpec';
 
-type ReportParameter = {
-  id: string;
-  name: string;
-  type: 'string' | 'number' | 'date' | 'boolean';
-  prompt: string;
-  defaultValue?: string;
-  allowBlank?: boolean;
-  allowMultiple?: boolean;
-};
+type ReportParameter = ParamSpec;
 
 const SSRSReportBuilderContent: React.FC = () => {
   const { tenant, datasource } = useTenant();
@@ -239,13 +230,6 @@ const SSRSReportBuilderContent: React.FC = () => {
     `=IIF(Fields!Growth.Value < 0, "${colors.negative}", "${colors.positive}")`,
     '=Sum(Fields!Sales.Value, "SalesGroup")',
   ]);
-
-  const [eventScripts, setEventScripts] = useState<EventScripts>(() => ({
-    onRowRender: `// Theme-aware conditional formatting\nconst isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;\n\nif (row.Fields.Growth < 0) {\n  row.Style.Background = isDark ? "rgba(239, 68, 68, 0.2)" : "rgba(239, 68, 68, 0.1)";\n  row.Style.Color = isDark ? "#F87171" : "#B91C1C";\n} else {\n  row.Style.Background = isDark ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.1)";\n  row.Style.Color = isDark ? "#34D399" : "#15803D";\n}`,
-    onCellRender: '// add tooltip\ncell.Tooltip = "{Field}: {Value}";',
-    onPageRender: '// watermark\npage.Watermark = "Internal";',
-    onExport: '// append metadata\nexportContext.Metadata.author = user.name;',
-  }));
 
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     includePrintFriendly: true,
@@ -1067,7 +1051,6 @@ const SSRSReportBuilderContent: React.FC = () => {
   const handleExpressionChange = (index: number, value: string) => setExpressionLibrary(prev => { const next = [...prev]; next[index] = value; return next; });
   const handleAddExpression = () => setExpressionLibrary(prev => [...prev, '=Fields!Amount.Value * 1.1']);
   const handleRemoveExpression = (index: number) => setExpressionLibrary(prev => prev.filter((_, i) => i !== index));
-  const handleEventScriptChange = (key: keyof EventScripts, value: string) => setEventScripts(prev => ({ ...prev, [key]: value }));
   const handleExportOptionToggle = (key: keyof ExportOptions, checked: boolean) => setExportOptions(prev => ({ ...prev, [key]: checked }));
   const handleExport = (key: string) => setSnackbar({ open: true, message: `Exporting report as ${exportFormatLabels[key as keyof ExportOptions]}...`, severity: 'info' });
 
@@ -1098,7 +1081,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   };
 
   return (
-    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
+    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart} collisionDetection={pointerWithin}>
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: colors.bg }}>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -1867,7 +1850,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                         onAddCalculatedField={handleAddCalculatedField}
                         onCalculatedFieldChange={handleCalculatedFieldChange}
                         onRemoveCalculatedField={(fieldId) => setCalculatedFields((prev) => prev.filter((c) => c.id !== fieldId))}
-                        boName={selectedBO?.name || 'BusinessObject'}
+                        boName={selectedBO?.key || selectedBO?.technicalName || selectedBO?.name}
                       />
                       <Divider sx={{ my: 2, borderColor: colors.border }} />
                       <ExpressionsEditor
@@ -1875,16 +1858,15 @@ const SSRSReportBuilderContent: React.FC = () => {
                         onExpressionChange={handleExpressionChange}
                         onAddExpression={handleAddExpression}
                         onRemoveExpression={handleRemoveExpression}
+                        boName={selectedBO?.key || selectedBO?.technicalName || selectedBO?.name}
                       />
                     </Paper>
                   </Grid>
 
-                  {/* Event Scripts + Export */}
+                  {/* Export */}
                   <Grid size={12}>
                     <Paper sx={{ p: 2.5, bgcolor: colors.cardBg, border: `1px solid ${colors.border}`, borderRadius: 2 }}>
-                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text, mb: 2 }}>Event Scripts</Typography>
-                      <EventScriptsEditor eventScripts={eventScripts} onEventScriptChange={handleEventScriptChange} />
-                      <Divider sx={{ my: 2, borderColor: colors.border }}>Export Options</Divider>
+                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text, mb: 2 }}>Export Options</Typography>
                       <Grid container spacing={1.5}>
                         {(Object.keys(exportOptions) as Array<keyof ExportOptions>).map((key) => (
                           <Grid size={{ xs: 12, sm: 6, md: 4 }} key={String(key)}>

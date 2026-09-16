@@ -13,6 +13,7 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -54,6 +55,13 @@ type RelationshipResult struct {
 	JoinCondition     string `json:"joinCondition" db:"join_condition"`
 	SourceDriverTable string `json:"sourceDriverTable" db:"source_driver_table"`
 	TargetDriverTable string `json:"targetDriverTable" db:"target_driver_table"`
+	// Not serialized - internal-only, used to resolve the real FK column
+	// from information_schema below when the catalog graph's own
+	// join_condition/cardinality properties are unpopulated (the common
+	// case: most foreign_key/belongs_to edges here only record that a
+	// relationship exists, not its column-level detail).
+	SourceQualifiedPath string `json:"-" db:"source_qualified_path"`
+	TargetQualifiedPath string `json:"-" db:"target_qualified_path"`
 }
 
 // SemanticFieldResult represents a field mapped to a semantic term
@@ -2589,7 +2597,9 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 			COALESCE(e.properties->>'description', t.qualified_path, src.qualified_path, '') as description,
 			COALESCE(e.properties->>'join_condition', e.properties->>'description', '') as join_condition,
 			COALESCE(src.node_name, '') as source_driver_table,
-			COALESCE(t.node_name, '') as target_driver_table
+			COALESCE(t.node_name, '') as target_driver_table,
+			COALESCE(src.qualified_path, '') as source_qualified_path,
+			COALESCE(t.qualified_path, '') as target_qualified_path
 		FROM catalog_edge e
 		LEFT JOIN catalog_node src ON e.source_node_id = src.id
 		LEFT JOIN catalog_node t ON e.target_node_id = t.id
@@ -2597,6 +2607,27 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 			e.source_node_id = $1::uuid OR e.target_node_id = $1::uuid
 			OR e.source_node_id = $2::uuid OR e.target_node_id = $2::uuid
 			OR (e.properties->>'source_bo_id') = $2 OR (e.properties->>'target_bo_id') = $2
+		)
+		-- Every edge touching a BO's node was returned regardless of what
+		-- KIND of edge it is, which meant GOVERNED_BY_RULE edges (this BO's
+		-- validation rules - see analytics.ensureGovernedByRuleEdge, which
+		-- never sets relationship_type, so it silently defaults to
+		-- 'related_to') and semantic/field-graph edges (MAPS_TO,
+		-- USES_SEMANTIC_TERM, HAS_FIELD, etc.) flooded the "related
+		-- business objects" list the Page Designer's data-binding UI shows,
+		-- burying the small number of genuine BO-to-BO structural
+		-- relationships (foreign_key, belongs_to, ...) under noise. This
+		-- excludes the known non-relationship categories rather than an
+		-- allowlist, since real relationship_type values are
+		-- domain-specific and open-ended (foreign_key/belongs_to today,
+		-- but also e.g. BELONGS_TO_ACCOUNT/HOLDS_SECURITY elsewhere in this
+		-- graph) - only 'related_to' (the column's own default, meaning
+		-- "never classified") and the semantic/field-graph kinds are
+		-- excluded.
+		AND e.relationship_type NOT IN (
+			'related_to', 'MAPS_TO', 'USES_SEMANTIC_TERM', 'BACKED_BY_TERM',
+			'HAS_FIELD', 'has_context', 'member_of', 'depends_on',
+			'contains_field', 'contains_endpoint', 'contains_resource'
 		)
 	`
 
@@ -2608,6 +2639,37 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 	err = s.db.SelectContext(ctx, &response.RelatedObjects, relatedQuery, driverTableIDVal, boID)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Failed to fetch related objects for BO %s: %v", boID, err)
+	}
+
+	// The catalog graph records THAT a foreign_key/belongs_to relationship
+	// exists between two tables, but its join_condition/cardinality
+	// properties are almost never populated (see the WHERE clause above's
+	// comment on this same noisy edge data) - so for exactly those two
+	// relationship kinds, resolve the real column-level FK from Postgres's
+	// own constraint catalog (the one ground truth every other approach
+	// here duplicates or approximates) rather than leaving callers
+	// (DataBindingsPanel, NewPageWizard, Page Studio's master-detail
+	// tables) to guess a foreign key column name from the user.
+	for i := range response.RelatedObjects {
+		rel := &response.RelatedObjects[i]
+		if rel.JoinCondition != "" {
+			continue
+		}
+		lowerType := strings.ToLower(rel.RelationshipType)
+		if lowerType != "foreign_key" && lowerType != "belongs_to" {
+			continue
+		}
+		srcSchema, srcTable := qualifiedPathToSchemaTable(rel.SourceQualifiedPath)
+		tgtSchema, tgtTable := qualifiedPathToSchemaTable(rel.TargetQualifiedPath)
+		if srcTable == "" || tgtTable == "" {
+			continue
+		}
+		if fk, ok := s.resolveRealForeignKey(ctx, srcSchema, srcTable, tgtSchema, tgtTable); ok {
+			rel.JoinCondition = fk
+			if rel.Cardinality == "" {
+				rel.Cardinality = "1:N"
+			}
+		}
 	}
 
 	// 3. Find semantic field mappings
@@ -2663,6 +2725,50 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 	}
 
 	return response, nil
+}
+
+// qualifiedPathToSchemaTable splits a catalog_node table path ("/orm/order")
+// into its schema and table parts. Empty on anything else (a column path
+// like "/orm/order/avg_price", or an unqualified/empty path).
+func qualifiedPathToSchemaTable(qualifiedPath string) (schema, table string) {
+	parts := strings.Split(strings.Trim(qualifiedPath, "/"), "/")
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return parts[0], parts[1]
+}
+
+// resolveRealForeignKey looks up the actual foreign key column between two
+// tables from Postgres's own constraint catalog - the one ground truth this
+// relationship's column-level detail should come from, since the semantic
+// catalog graph (catalog_edge) only records that a foreign_key/belongs_to
+// relationship exists, not which column implements it (see the call site's
+// comment). Tries both directions since callers don't always know which
+// side holds the FK. Returns e.g. "execution.order_id = order.id".
+func (s *BusinessObjectService) resolveRealForeignKey(ctx context.Context, schemaA, tableA, schemaB, tableB string) (string, bool) {
+	const query = `
+		SELECT kcu.table_name AS child_table, kcu.column_name AS child_column,
+		       ccu.table_name AS parent_table, ccu.column_name AS parent_column
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.key_column_usage kcu
+		  ON kcu.constraint_name = tc.constraint_name AND kcu.constraint_schema = tc.constraint_schema
+		JOIN information_schema.constraint_column_usage ccu
+		  ON ccu.constraint_name = tc.constraint_name AND ccu.constraint_schema = tc.constraint_schema
+		WHERE tc.constraint_type = 'FOREIGN KEY'
+		  AND ((tc.table_schema = $1 AND tc.table_name = $2 AND ccu.table_schema = $3 AND ccu.table_name = $4)
+		    OR (tc.table_schema = $3 AND tc.table_name = $4 AND ccu.table_schema = $1 AND ccu.table_name = $2))
+		LIMIT 1
+	`
+	var row struct {
+		ChildTable   string `db:"child_table"`
+		ChildColumn  string `db:"child_column"`
+		ParentTable  string `db:"parent_table"`
+		ParentColumn string `db:"parent_column"`
+	}
+	if err := s.db.GetContext(ctx, &row, query, schemaA, tableA, schemaB, tableB); err != nil {
+		return "", false
+	}
+	return fmt.Sprintf("%s.%s = %s.%s", row.ChildTable, row.ChildColumn, row.ParentTable, row.ParentColumn), true
 }
 
 // ============================================================================
@@ -3470,6 +3576,33 @@ func (s *BusinessObjectService) QueryBORecords(
 		}
 	}
 
+	// Cardinal Rule: Graph-First. BO field metadata uses PascalCase semantic
+	// term names (e.g. "AccountID") but the underlying datasource columns are
+	// snake_case ("account_id"). Resolve through the semantic graph
+	// (business_object_fields -> catalog_edge MAPS_TO -> catalog_node) before
+	// falling back to literal name match. Any field that doesn't resolve either
+	// way is dropped by the column-existence guard below - that's intentional:
+	// a field with no backing column anywhere is the same data-quality problem
+	// regardless of why it doesn't resolve, and the defensive filter's warning
+	// surfaces it for cleanup.
+	semanticMap, semErr := analytics.ResolveSemanticFieldMap(ctx, s.db, bo.ID, drivingTable)
+	if semErr != nil {
+		// Graph resolution is best-effort here: literal name-match still works
+		// for BOs whose metadata happens to be in snake_case, and we'd rather
+		// degrade to that path than 500 a read.
+		logging.GetLogger().Sugar().Warnf("ResolveSemanticFieldMap failed for BO %s (%s); falling back to literal column-name match: %v", bo.ID, drivingTable, semErr)
+	} else if len(semanticMap) > 0 {
+		resolved := make([]string, 0, len(columnNames))
+		for _, c := range columnNames {
+			if physical, ok := semanticMap[c]; ok {
+				resolved = append(resolved, physical)
+			} else {
+				resolved = append(resolved, c)
+			}
+		}
+		columnNames = resolved
+	}
+
 	// Guard against BO field metadata that doesn't match the driving table's
 	// actual physical columns (e.g. seeded from a pre-migration schema) - drop
 	// any declared field that isn't a real column instead of erroring the whole
@@ -3495,7 +3628,7 @@ func (s *BusinessObjectService) QueryBORecords(
 				}
 			}
 			if len(dropped) > 0 {
-				logging.GetLogger().Sugar().Warnf("BO %s field metadata references columns not present on %s.%s (likely stale seed data): %v", bo.ID, schemaName, tableName, dropped)
+				logging.GetLogger().Sugar().Warnf("BO %s field metadata references columns not present on %s.%s (likely stale seed data or unresolved semantic graph edge): %v", bo.ID, schemaName, tableName, dropped)
 			}
 			columnNames = filtered
 		}
@@ -3654,6 +3787,18 @@ func (s *BusinessObjectService) QueryBORecords(
 	}, nil
 }
 
+// normalizeEmptyStringsToNull converts blank string values (as submitted by an
+// optional form field with nothing entered) to nil so they bind as SQL NULL
+// instead of "", which the driver cannot cast into a non-text column type
+// (e.g. numeric, date, uuid).
+func normalizeEmptyStringsToNull(rec map[string]interface{}) {
+	for k, v := range rec {
+		if s, ok := v.(string); ok && s == "" {
+			rec[k] = nil
+		}
+	}
+}
+
 // CreateBORecord creates a new physical database record via the Business Object definition.
 func (s *BusinessObjectService) CreateBORecord(
 	ctx context.Context,
@@ -3680,6 +3825,7 @@ func (s *BusinessObjectService) CreateBORecord(
 	if rec == nil {
 		return nil, fmt.Errorf("record data is required")
 	}
+	normalizeEmptyStringsToNull(rec)
 
 	// Auto-generate UUID id if missing
 	if _, ok := rec["id"]; !ok {
@@ -3758,6 +3904,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 	if rec == nil || len(rec) == 0 {
 		return nil, fmt.Errorf("record update data is required")
 	}
+	normalizeEmptyStringsToNull(rec)
 
 	var setClauses []string
 	var vals []interface{}

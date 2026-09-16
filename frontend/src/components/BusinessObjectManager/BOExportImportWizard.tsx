@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 import { Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, IconButton, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Paper, Radio, RadioGroup, Step, StepLabel, Stepper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material';
 import { Close, Download, Upload, CheckCircle, Warning, Error as ErrorIcon } from '@mui/icons-material';
 
@@ -114,16 +115,10 @@ export const BOExportImportWizard: React.FC<{ open: boolean; onClose: () => void
             bundle: bundle
         };
 
-        const res = await fetch('/api/bo/import', {
+        const res = await apiFetch('/api/bo/import', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                // Auth headers assumed handled by proxy/interceptor
-            },
             body: JSON.stringify(payload)
         });
-
-        if (!res.ok) throw new Error(await res.text());
 
         const result: ImportResult = await res.json();
         setImportResult(result);
@@ -137,13 +132,10 @@ export const BOExportImportWizard: React.FC<{ open: boolean; onClose: () => void
   const executeExport = async () => {
     setLoading(true);
     try {
-        const res = await fetch('/api/bo/export/multiple', {
+        const res = await apiFetch('/api/bo/export/multiple', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ bo_ids: selectedBOs })
         });
-        
-        if (!res.ok) throw new Error(await res.text());
 
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -336,7 +328,7 @@ const Step2Export: React.FC<{
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/bo') // Assumption: endpoint exists to list BOs
+    apiFetch('/api/bo') // Assumption: endpoint exists to list BOs
       .then(res => res.json())
       .then(data => {
           // Normalize data

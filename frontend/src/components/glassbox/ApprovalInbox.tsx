@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 
 interface ApprovalTask {
   workflow_id: string;
@@ -22,9 +23,8 @@ export const ApprovalInbox: React.FC = () => {
 
   const handleSignal = async (workflowId: string, action: string) => {
     try {
-      await fetch(`/api/approvals/${workflowId}/signal`, {
+      await apiFetch(`/api/approvals/${workflowId}/signal`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action,
           comment: action === 'approve' ? 'Approved by advisor' : 'Rejected due to violation',

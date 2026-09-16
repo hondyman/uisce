@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -50,7 +51,20 @@ func (r *DBDatasourceResolver) Resolve(ctx context.Context, datasourceID string)
 		LIMIT 1
 	`
 
-	if err := r.db.GetContext(ctx, &row, query, datasourceID); err != nil {
+	// This is a security-boundary function used to resolve WHICH tenant a
+	// caller-supplied datasource ID belongs to, before the caller's own
+	// tenant membership is checked against that answer (see security.go's
+	// ResolveContext: resolver.Resolve, then tenantAllowed). The resolution
+	// itself is inherently cross-tenant — it doesn't know the tenant until
+	// this query answers that — so it needs uisce_gold_copy_sync. The actual
+	// access-control decision still happens in the caller, after this
+	// returns, unaffected by the elevated role used only for this lookup.
+	err := uisce_db.WithGoldCopySync(ctx, r.db.DB, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, query, datasourceID).Scan(
+			&row.TenantID, &row.InstanceID, &row.ProductID, &row.DatasourceID, &row.AllowedRegions,
+		)
+	})
+	if err != nil {
 		return nil, fmt.Errorf("datasource not found: %w", err)
 	}
 

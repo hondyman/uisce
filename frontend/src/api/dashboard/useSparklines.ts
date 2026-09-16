@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 
 export interface SparklineData {
   timestamp: string;
@@ -17,8 +18,7 @@ export function useSparklines() {
   return useQuery({
     queryKey: ['dashboard-sparklines'],
     queryFn: async () => {
-      const res = await fetch('/api/dashboard/sparklines');
-      if (!res.ok) throw new Error('Failed to load sparklines');
+      const res = await apiFetch('/api/dashboard/sparklines');
       const data = await res.json();
       return data as Sparklines;
     },

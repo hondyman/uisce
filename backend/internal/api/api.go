@@ -216,7 +216,7 @@ type Server struct {
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
 	DrillDownResolver       *optimizer.DrillDownResolver
-	SavedQueryHandler       *handlers.SavedQueryHandler
+	SavedQueryHandler       *querybuilder.SavedQueryHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -1073,8 +1073,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	queryService := analytics.NewQueryService(sqlxDB, optService, analyticsModelProvider)
 	queryHandler := handlers.NewQueryHandler(queryService, securityDeps)
 	srv.QueryHandler = queryHandler
-	savedQueryHandler := handlers.NewSavedQueryHandler(queryService, securityDeps)
-	srv.SavedQueryHandler = savedQueryHandler
 
 	// Initialize Query Builder (QueryDef compiler gateway)
 	boResolver := boresolver.NewPostgresBORepository(sqlxDB)
@@ -1090,11 +1088,23 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		qbRelationships := analytics.NewRelationshipInferenceService(sqlxDB)
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver, qbRelationships)
+		// srv.SQLXDB isn't assigned until later in NewServer (line ~1464) -
+		// using it here captured a permanent nil, so QueryBuilderHandler.Execute
+		// always failed its "no database connection" check regardless of which
+		// datasource resolved correctly. sqlxDB is the same connection, already
+		// initialized at this point.
 		qbExecutor := &queryBuilderExecutor{
-			defaultDB:    srv.SQLXDB,
+			defaultDB:    sqlxDB,
 			aggregatesDB: sqlx.NewDb(srv.AggregatesDB, "postgres"),
 		}
 		srv.QueryBuilderHandler = querybuilder.NewQueryBuilderHandler(qbService, qbExecutor, securityDeps)
+		// SavedQueryHandler reuses this same qbService/qbExecutor pair so a
+		// saved query executes through the identical SQL-generation and
+		// tenant-scoping path as an ad-hoc /api/query/execute call - see
+		// saved_query_handler.go's doc comment for why it isn't constructed
+		// alongside QueryHandler above (qbService/qbExecutor don't exist yet
+		// at that point in NewServer).
+		srv.SavedQueryHandler = querybuilder.NewSavedQueryHandler(sqlxDB, qbService, qbExecutor, securityDeps)
 	}
 
 	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
@@ -1320,6 +1330,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	validationRuleSvc := analytics.NewValidationRuleService(sqlxDB)
 	validationRuleHandler := handlers.NewValidationRuleHandler(validationRuleSvc, sqlxDB)
 
+	// Page Studio pages (page_definitions): constructed further below, once
+	// boService (needed for related-BO-aware "Generate with AI") exists -
+	// see the block right after catalogmeta.NewBusinessObjectService.
+
+	// Navigation menu (navigation_menu_nodes) - the table, FK self-reference,
+	// and a seeded row or two already existed; nothing served or wrote it.
+	navigationMenuHandler := handlers.NewNavigationMenuHandler(sqlxDB)
+
 	// Calc terms as catalog nodes - calculated semantic terms with a real
 	// vm.Expression rule_ast (parsed server-side via vm.ParseExpression),
 	// the calc side's mirror of validation rules above. Consumed by
@@ -1403,6 +1421,44 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
 
+	// Page Studio pages (page_definitions) - the drag-and-drop page builder
+	// UI and its api/pageStudio.ts client existed with no backend at all;
+	// every save 404'd. CRUD-only, same pattern as the handlers above.
+	// "Generate with AI" calls out through geminiClient when configured
+	// (adapter closure here, not a shared type, because handlers can't
+	// import internal/api - see handlers.PageAIGenerateFunc); it falls back
+	// to a deterministic template inside the handler when geminiClient is
+	// nil (no GEMINI_API_KEY configured for this deployment). boService
+	// (constructed just above) grounds generation in the BO's real related
+	// Business Objects, not just its own fields.
+	var pageAIGenerate handlers.PageAIGenerateFunc
+	if geminiClient != nil {
+		pageAIGenerate = func(ctx context.Context, boName, boKey, description string, fields []handlers.PageAIField, relatedBOs []handlers.PageAIRelatedBO) (*handlers.PageAISpec, error) {
+			apiFields := make([]PageGenerationField, len(fields))
+			for i, f := range fields {
+				apiFields[i] = PageGenerationField{Key: f.Key, DisplayName: f.DisplayName, DataType: f.DataType, Role: f.Role}
+			}
+			apiRelated := make([]RelatedBOSummary, len(relatedBOs))
+			for i, rel := range relatedBOs {
+				relFields := make([]PageGenerationField, len(rel.Fields))
+				for j, f := range rel.Fields {
+					relFields[j] = PageGenerationField{Key: f.Key, DisplayName: f.DisplayName, DataType: f.DataType, Role: f.Role}
+				}
+				apiRelated[i] = RelatedBOSummary{BOKey: rel.BOKey, DisplayName: rel.DisplayName, RelationshipType: rel.RelationshipType, Cardinality: rel.Cardinality, Fields: relFields}
+			}
+			spec, err := geminiClient.GeneratePageSpec(ctx, boName, boKey, description, apiFields, apiRelated)
+			if err != nil {
+				return nil, err
+			}
+			sections := make([]handlers.PageAISection, len(spec.Sections))
+			for i, s := range spec.Sections {
+				sections[i] = handlers.PageAISection{BOKey: s.BOKey, Type: s.Type, Title: s.Title}
+			}
+			return &handlers.PageAISpec{Title: spec.Title, LayoutTemplate: spec.LayoutTemplate, Sections: sections}, nil
+		}
+	}
+	pageStudioHandler := handlers.NewPageStudioHandler(sqlxDB, boResolver, boService, pageAIGenerate)
+
 	// Initialize Catalog Handler (Phase 18)
 	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
 	// Registration moved to /api group below
@@ -1410,7 +1466,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Semantic Terms handler for catalog_node queries
 	semanticTermsHandler := NewSemanticTermsHandler(db, schedulerSecurityDeps)
 	// Registration moved to /api group
-
 
 	// Initialize Graph-Native Lineage Service (Phase 12)
 	// sqlRepo already created above
@@ -1506,6 +1561,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Validation rules as catalog nodes (unified rule engine)
 		validationRuleHandler.RegisterRoutes(r)
+
+		// Page Studio pages
+		pageStudioHandler.RegisterRoutes(r)
+
+		// Navigation menu
+		navigationMenuHandler.RegisterRoutes(r)
 
 		// Calc terms as catalog nodes (unified rule engine, calc side)
 		calcTermHandler.RegisterRoutes(r)

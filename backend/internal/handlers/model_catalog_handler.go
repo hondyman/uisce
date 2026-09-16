@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	uisce_db "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/scanner"
@@ -907,13 +908,23 @@ func (h *ModelCatalogHandler) CreateGeneratedModel(w http.ResponseWriter, r *htt
 		if strings.Contains(err.Error(), "fk_fabric_defn_tenant") || strings.Contains(err.Error(), "23503") {
 			logger.Warnf("Persist failed due to missing tenant FK; attempting to resolve tenant for datasource %s", datasourceID.String())
 			var resolvedTenant string
-			// Attempt to find the tenant via tenant_product_datasource -> tenant_product -> tenant_instance
+			// Attempt to find the tenant via tenant_product_datasource -> tenant_product -> tenant_instance.
+			// This lookup is inherently cross-tenant by design — the whole point is
+			// resolving which tenant owns a datasource ID we don't yet know the
+			// tenant for — so it can't be scoped to a single tenant's session GUC
+			// the way an ordinary query could be. Assumes uisce_gold_copy_sync for
+			// this one read; SET LOCAL ROLE outside a transaction is a silent no-op
+			// (verified directly elsewhere in this arc), hence the explicit
+			// transaction here even for a single query.
 			tenantLookup := `SELECT ti.tenant_id
 				FROM public.tenant_product_datasource tpd
 				JOIN public.tenant_product tp ON tpd.tenant_product_id = tp.id
 				JOIN public.tenant_instance ti ON tp.datasource_id = ti.id
 				WHERE tpd.id = $1 LIMIT 1`
-			if lerr := h.db.QueryRow(tenantLookup, datasourceID.String()).Scan(&resolvedTenant); lerr == nil && resolvedTenant != "" {
+			lerr := uisce_db.WithGoldCopySync(r.Context(), h.db, func(tx *sql.Tx) error {
+				return tx.QueryRowContext(r.Context(), tenantLookup, datasourceID.String()).Scan(&resolvedTenant)
+			})
+			if lerr == nil && resolvedTenant != "" {
 				if rt, perr := uuid.Parse(resolvedTenant); perr == nil {
 					// Retry the insert with the resolved tenant
 					logger.Infof("Retrying fabric_defn insert with resolved tenant %s", rt.String())

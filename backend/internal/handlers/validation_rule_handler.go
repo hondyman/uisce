@@ -39,6 +39,8 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{id}/evaluate", h.handleEvaluate)
 		r.Get("/violations", h.handleListViolations)
 		r.Get("/bo-fields", h.handleListSemanticFields)
+		r.Get("/health", h.handleGetHealth)
+		r.Patch("/{id}/active", h.handleSetActive)
 	})
 }
 
@@ -93,6 +95,63 @@ func (h *ValidationRuleHandler) handleListViolations(w http.ResponseWriter, r *h
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{"violations": violations})
+}
+
+// handleGetHealth exposes analytics.GetRuleHealthSummary - a fully built
+// per-rule violation/error aggregate that had no route wired to it at all
+// (the BO-scoped Validations & Triggers tab called GET .../health, which
+// with no literal route registered fell through to the /{id} handler and
+// 400'd trying to uuid.Parse("health")).
+func (h *ValidationRuleHandler) handleGetHealth(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	health, err := analytics.GetRuleHealthSummary(r.Context(), h.db, tenantID.String())
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/health: aggregate failed: %v", err)
+		http.Error(w, "failed to compute rule health", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"health": health})
+}
+
+// handleSetActive toggles a validation rule's catalog_node.is_active - the
+// Validations & Triggers tab's per-rule Switch called PATCH .../{id}/active
+// with no handler behind it at all.
+func (h *ValidationRuleHandler) handleSetActive(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req struct {
+		Active bool `json:"active"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	res, err := h.db.ExecContext(r.Context(), `
+		UPDATE catalog_node SET is_active = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+	`, req.Active, id, tenantID)
+	if err != nil {
+		http.Error(w, "failed to update rule: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		http.Error(w, "validation rule not found", http.StatusNotFound)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *ValidationRuleHandler) handleUpsert(w http.ResponseWriter, r *http.Request) {

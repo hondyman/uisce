@@ -78,13 +78,6 @@ export interface LayoutSettings {
   includeUserName: boolean;
 }
 
-export interface EventScripts {
-  onRowRender: string;
-  onCellRender: string;
-  onPageRender: string;
-  onExport: string;
-}
-
 export interface ExportOptions {
   includePrintFriendly: boolean;
   includeDrillThrough: boolean;
@@ -246,11 +239,37 @@ export const exportOptionDescriptions: Record<keyof ExportOptions, string> = {
   includeComments: 'Include comment threads for collaborative document review.',
 };
 
-export const eventScriptLabels: Record<keyof EventScripts, string> = {
-  onRowRender: 'On Row Render',
-  onCellRender: 'On Cell Render',
-  onPageRender: 'On Page Render',
-  onExport: 'On Export',
+/**
+ * Dropping a BO field onto the canvas used to always produce the same
+ * plain text box regardless of the field's actual type - a date and a
+ * dollar amount landed identically formatted. This maps a field's
+ * data_type (business_object_fields.data_type: 'datetime'/'date',
+ * 'number'/'integer'/'numeric', 'boolean', everything else 'text') to a
+ * sensible default presentation: a Format label (shown in Properties and
+ * meant to drive value formatting once live evaluation reads it), a
+ * natural alignment (numbers/dates right-aligned, like every spreadsheet
+ * and report tool does), a wider default box for numbers/dates, and a
+ * placeholder sample so the canvas isn't just "[FieldName]" for every type.
+ */
+export interface FieldWidgetPreset {
+  format: 'Date' | 'Number' | 'Boolean' | 'Text';
+  textAlign: 'left' | 'right' | 'center';
+  width: number;
+  sampleText: (label: string) => string;
+}
+
+export const defaultFieldWidgetPreset = (dataType?: string): FieldWidgetPreset => {
+  const t = (dataType || '').toLowerCase();
+  if (t.includes('date') || t.includes('time')) {
+    return { format: 'Date', textAlign: 'right', width: 160, sampleText: (l) => `[${l}: MM/DD/YYYY]` };
+  }
+  if (t.includes('number') || t.includes('numeric') || t.includes('integer') || t.includes('decimal') || t.includes('float')) {
+    return { format: 'Number', textAlign: 'right', width: 140, sampleText: (l) => `[${l}: #,##0.00]` };
+  }
+  if (t.includes('bool')) {
+    return { format: 'Boolean', textAlign: 'center', width: 100, sampleText: (l) => `[${l}: Yes/No]` };
+  }
+  return { format: 'Text', textAlign: 'left', width: 220, sampleText: (l) => `[${l}]` };
 };
 
 // Sanitization function

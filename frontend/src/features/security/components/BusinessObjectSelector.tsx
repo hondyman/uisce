@@ -10,6 +10,7 @@ import {
   Stack,
 } from '@mui/material';
 import { Business as BusinessIcon } from '@mui/icons-material';
+import { apiFetch } from '../../../lib/apiClient';
 
 export interface BusinessObject {
   id: string;
@@ -50,22 +51,9 @@ export const BusinessObjectSelector: React.FC<BusinessObjectSelectorProps> = ({
       setLoading(true);
       try {
         // TODO: Replace with actual API call
-        const response = await fetch('/api/business-objects');
-        if (response.ok) {
-          const data = await response.json();
-          setBusinessObjects(data);
-        } else {
-          // Fallback to mock data
-          setBusinessObjects([
-            { id: 'bo:portfolio', displayName: 'Portfolio', description: 'Investment portfolios', category: 'Investments' },
-            { id: 'bo:client', displayName: 'Client', description: 'Client information', category: 'CRM' },
-            { id: 'bo:account', displayName: 'Account', description: 'Financial accounts', category: 'Finance' },
-            { id: 'bo:transaction', displayName: 'Transaction', description: 'Financial transactions', category: 'Finance' },
-            { id: 'bo:holding', displayName: 'Holding', description: 'Investment holdings', category: 'Investments' },
-            { id: 'bo:security', displayName: 'Security', description: 'Financial securities', category: 'Investments' },
-            { id: 'bo:advisor', displayName: 'Advisor', description: 'Financial advisors', category: 'CRM' },
-          ]);
-        }
+        const response = await apiFetch('/api/business-objects');
+        const data = await response.json();
+        setBusinessObjects(data);
       } catch (error) {
         console.error('Failed to fetch business objects:', error);
         // Use mock data on error

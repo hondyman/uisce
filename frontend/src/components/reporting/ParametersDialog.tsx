@@ -3,16 +3,9 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TableCo
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DeleteIcon from '@mui/icons-material/Delete';
+import type { ParamSpec } from '../../studio-core/params/ParamSpec';
 
-type ReportParameter = {
-  id: string;
-  name: string;
-  type: 'string' | 'number' | 'date' | 'boolean';
-  prompt: string;
-  defaultValue?: string;
-  allowBlank?: boolean;
-  allowMultiple?: boolean;
-};
+type ReportParameter = ParamSpec;
 
 type Props = {
   open: boolean;

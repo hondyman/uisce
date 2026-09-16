@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type BOCRUDHandler struct {
@@ -53,6 +54,35 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 	return set, nil
 }
 
+// tableHasColumn reports whether drivingTable has a physical column named
+// exactly `column`. Many ORM-schema tables (e.g. orm.order) have no
+// tenant_id column - tenant isolation for them is enforced at the
+// datasource/connection level (one physical database per tenant), not by a
+// row-level column - so every raw CRUD query below must check this before
+// adding a "tenant_id = $N" predicate; blindly adding one is a SQL error
+// ("column tenant_id does not exist"), not a security gap closed. Mirrors
+// boresolver.PostgresBORepository.TableHasColumn's reasoning, via a plain
+// information_schema lookup since this handler has no BORepository.
+func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, drivingTable, column string) bool {
+	schema := "public"
+	table := drivingTable
+	if idx := strings.Index(drivingTable, "."); idx >= 0 {
+		schema = drivingTable[:idx]
+		table = drivingTable[idx+1:]
+	}
+	var exists bool
+	err := h.db.GetContext(ctx, &exists, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
+		);
+	`, schema, table, column)
+	if err != nil {
+		return false
+	}
+	return exists
+}
+
 // emitBORowEvent fires a best-effort trigger evaluation after a committed write.
 // Failures are logged, never surfaced to the caller — trigger evaluation must not
 // roll back or fail an otherwise-successful BO mutation.
@@ -82,6 +112,7 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{boKey}/records/{recordId}", h.HandleGetBORecord)
 		r.Put("/{boKey}/records/{recordId}", h.HandleUpdateBORecord)
 		r.Delete("/{boKey}/records/{recordId}", h.HandleDeleteBORecord)
+		r.Get("/{boKey}/schema", h.HandleGetBOSchema)
 		r.Get("/{boKey}/topology-summary", h.HandleGetBOTopologySummary)
 		r.Get("/{boKey}/records/{recordId}/relationships/{relKey}", h.HandleListRelatedRecords)
 		r.Post("/{boKey}/records/{recordId}/relationships/{relKey}", h.HandleCreateRelatedRecord)
@@ -98,18 +129,43 @@ type boBindingMetadata struct {
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
 	var boMeta boBindingMetadata
 
-	// 1. Try public.business_objects + business_object_bindings
+	// 1. Try public.business_objects + business_object_bindings.
+	// business_object_bindings has no driving_table/key_column columns (it
+	// tracks the driving physical table only indirectly, via
+	// driving_node_id -> catalog_node) - this query used to reference both
+	// as bob.driving_table/bob.key_column, which don't exist, so this whole
+	// branch has always errored (not sql.ErrNoRows) and fallen through to
+	// steps 2-4 below for every single call, for every BO. Since
+	// business_objects.driver_table_name is already the confirmed-correct
+	// source for this (see boresolver's catalogPathPrefix), and no column
+	// here has ever tracked a per-binding key column, key_column keeps its
+	// effective always-'id' behavior explicitly instead of via a broken
+	// COALESCE.
+	// business_objects has no "key" or "is_gold_copy" column either (the
+	// real column is bo_key; gold-copy-ness is a property of the owning
+	// tenant, tenants.is_gold_copy, not the BO row) - same class of bug as
+	// the driving_table/key_column columns above, so this step has never
+	// successfully matched anything, gold-copy or not, by key or by id.
 	metaQuery := `
-		SELECT COALESCE(bob.driving_table, bo.driver_table_name, '') AS driving_table,
-		       COALESCE(bob.key_column, 'id') AS key_column
+		SELECT COALESCE(bo.driver_table_name, '') AS driving_table,
+		       'id' AS key_column
 		FROM public.business_objects bo
-		LEFT JOIN public.business_object_bindings bob ON bob.bo_id = bo.id AND bob.is_default = TRUE
-		WHERE (bo.key = $1 OR bo.id::text = $1) AND (bo.tenant_id = $2 OR bo.is_gold_copy = TRUE)
+		LEFT JOIN public.tenants t ON t.id = bo.tenant_id
+		WHERE (bo.bo_key = $1 OR bo.id::text = $1) AND (bo.tenant_id = $2 OR t.is_gold_copy = TRUE)
 		ORDER BY CASE WHEN bo.tenant_id = $2 THEN 0 ELSE 1 END
 		LIMIT 1;
 	`
 	err := h.db.GetContext(ctx, &boMeta, metaQuery, boKey, tenantID)
 	if err == nil && boMeta.DrivingTable != "" {
+		// driver_table_name can be path-style ("/orm/order", scanned-catalog
+		// convention) or already "schema.table" - every direct-interpolation
+		// caller below (UPDATE/INSERT/DELETE building raw SQL from
+		// boMeta.DrivingTable) needs the dotted form, same as step 2's
+		// catalog_node fallback already normalizes via qualified_path.
+		schema, table := splitQualifiedTable(boMeta.DrivingTable)
+		if schema != "" && table != "" {
+			boMeta.DrivingTable = schema + "." + table
+		}
 		return &boMeta, nil
 	}
 
@@ -273,9 +329,19 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
 	setClauses := make([]string, 0)
-	args := []interface{}{tenantID, recordID}
+	var args []interface{}
+	var whereClause string
 	argIdx := 3
+	if tenantScoped {
+		args = []interface{}{tenantID, recordID}
+		whereClause = fmt.Sprintf("tenant_id = $1 AND %s = $2", boMeta.KeyColumn)
+	} else {
+		args = []interface{}{recordID}
+		whereClause = fmt.Sprintf("%s = $1", boMeta.KeyColumn)
+		argIdx = 2
+	}
 
 	for fieldKey, val := range payload {
 		// Rule 7 Defense: Protect tenant, surrogate primary keys, and audit timestamps from mutation
@@ -297,11 +363,10 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	extraWhere := ""
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
 		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
 			// Defends against updating a record that doesn't belong to this subtype.
-			extraWhere = fmt.Sprintf(" AND %s = $%d", col, argIdx)
+			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
 			argIdx++
 		}
@@ -310,9 +375,9 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	updateSQL := fmt.Sprintf(`
 		UPDATE %s
 		SET %s, updated_at = NOW()
-		WHERE tenant_id = $1 AND %s = $2%s
+		WHERE %s
 		RETURNING *;
-	`, boMeta.DrivingTable, strings.Join(setClauses, ", "), boMeta.KeyColumn, extraWhere)
+	`, boMeta.DrivingTable, strings.Join(setClauses, ", "), whereClause)
 
 	rows, err := h.db.QueryxContext(r.Context(), updateSQL, args...)
 	if err != nil {
@@ -380,10 +445,16 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	columns := []string{"tenant_id"}
-	placeholders := []string{"$1"}
-	args := []interface{}{tenantID}
-	argIdx := 2
+	var columns []string
+	var placeholders []string
+	var args []interface{}
+	argIdx := 1
+	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+		columns = []string{"tenant_id"}
+		placeholders = []string{"$1"}
+		args = []interface{}{tenantID}
+		argIdx = 2
+	}
 
 	for fieldKey, val := range payload {
 		lower := strings.ToLower(fieldKey)
@@ -451,20 +522,32 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	args := []interface{}{tenantID, recordID}
-	extraWhere := ""
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	var args []interface{}
+	var whereClause string
+	argIdx := 2
+	if tenantScoped {
+		args = []interface{}{tenantID, recordID}
+		whereClause = fmt.Sprintf("tenant_id = $1 AND %s = $2", boMeta.KeyColumn)
+		argIdx = 3
+	} else {
+		args = []interface{}{recordID}
+		whereClause = fmt.Sprintf("%s = $1", boMeta.KeyColumn)
+		argIdx = 2
+	}
+
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
 		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
-			extraWhere = fmt.Sprintf(" AND %s = $3", col)
+			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
 		}
 	}
 
 	selectSQL := fmt.Sprintf(`
 		SELECT * FROM %s
-		WHERE tenant_id = $1 AND %s = $2%s
+		WHERE %s
 		LIMIT 1;
-	`, boMeta.DrivingTable, boMeta.KeyColumn, extraWhere)
+	`, boMeta.DrivingTable, whereClause)
 
 	rows, err := h.db.QueryxContext(r.Context(), selectSQL, args...)
 	if err != nil {
@@ -488,6 +571,278 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+// boSchemaResponse is the shape BOFormWidget (and any other UI that wants to
+// render an editable form for a Business Object) expects from
+// GET /api/bo/{boKey}/schema. Field name comes from business_object_fields
+// (PascalCase semantic-term convention); physicalColumn is resolved through
+// the catalog graph (MAPS_TO edges) when available, falling back to the
+// field_name as-is so a BO without semantic wiring still renders. type is
+// mapped from the physical column's information_schema data_type so the form
+// can pick the right input widget (number vs text vs date).
+//
+// `Relationships` is always present (possibly empty) to keep the response
+// shape a structural match for the frontend BOSchema type, even though the
+// Form widget itself only reads Fields. The Report Builder widget reads
+// Relationships to construct joins.
+type boSchemaResponse struct {
+	ID           string          `json:"id"`
+	BoKey        string          `json:"boKey"`
+	DrivingTable string          `json:"drivingTable"`
+	Fields       []boSchemaField `json:"fields"`
+	Relationships []boSchemaRel  `json:"relationships"`
+}
+
+type boSchemaRel struct {
+	TargetBOID string   `json:"targetBoId"`
+	JoinType   string   `json:"joinType"`
+	Conditions []string `json:"conditions"`
+}
+
+type boSchemaField struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	DisplayName    string `json:"displayName,omitempty"`
+	Type           string `json:"type"`
+	Required       bool   `json:"required,omitempty"`
+	PhysicalColumn string `json:"physicalColumn,omitempty"`
+}
+
+// HandleGetBOSchema returns the self-describing field shape of a Business
+// Object, in the form BOFormWidget and any other "give me fields to render
+// against" consumer needs. Cardinal Rule: Graph-First - field names come from
+// business_object_fields (the semantic vocabulary), physical columns come from
+// walking MAPS_TO edges through catalog_node. No hardcoded per-tenant or
+// per-BO name translation lives in this handler.
+//
+// The previous frontend path called /api/metadata/bo/{boId}, an endpoint that
+// was never implemented backend-wide - which broke every Form widget bound to
+// a Business Object, not just orders. /bo/{boKey}/schema is the same shape
+// served from the same handler package as the rest of the BO CRUD surface,
+// so the resolution logic (business_objects -> business_object_bindings ->
+// catalog_node) is one place, not three.
+func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := extractTenantUUIDFromRequest(r)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if te, ok := err.(*tenantResolutionError); ok {
+			status = te.status
+		}
+		http.Error(w, err.Error(), status)
+		return
+	}
+	boKey := chi.URLParam(r, "boKey")
+	if boKey == "" {
+		http.Error(w, "boKey is required", http.StatusBadRequest)
+		return
+	}
+
+	// resolveBOMetadata handles both UUID and BO key (the live catalog has both
+	// shapes; the frontend passes whichever it has on hand).
+	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		return
+	}
+
+	// 1. Load the BO's UUID - the schema endpoint returns it as `id` so the
+	//    frontend can use it for follow-up calls (data endpoint, etc.) without
+	//    re-resolving the key.
+	var boID uuid.UUID
+	if err := h.db.GetContext(r.Context(), &boID, `
+		SELECT id FROM public.business_objects
+		WHERE (bo_key = $1 OR id::text = $1) AND tenant_id = $2
+		ORDER BY CASE WHEN tenant_id = $2 THEN 0 ELSE 1 END
+		LIMIT 1
+	`, boKey, tenantID); err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving BO id: %v", err), http.StatusNotFound)
+		return
+	}
+
+	// 2. Load BO field metadata. field_name carries the PascalCase semantic term
+	//    name (e.g. "AccountID") which is what the form renders as the input
+	//    key and label. term_node_id is the FK to catalog_node that anchors
+	//    resolution to physical columns through MAPS_TO edges.
+	type fieldRow struct {
+		ID           string `db:"id"`
+		FieldName    string `db:"field_name"`
+		TermNodeID   string `db:"term_node_id"`
+		DisplayName  string `db:"display_name"`
+		FieldRole    string `db:"field_role"`
+		IsRequired   bool   `db:"is_required"`
+		DataType     string `db:"data_type"`
+		BindingReq   string `db:"binding_requirement"`
+	}
+	var fields []fieldRow
+	if err := h.db.SelectContext(r.Context(), &fields, `
+		SELECT id::text AS id,
+		       field_name,
+		       COALESCE(term_node_id::text, '') AS term_node_id,
+		       COALESCE(display_name, '') AS display_name,
+		       COALESCE(field_role, 'DIMENSION') AS field_role,
+		       COALESCE(is_required, false) AS is_required,
+		       COALESCE(data_type, 'text') AS data_type,
+		       COALESCE(binding_requirement, 'OPTIONAL') AS binding_requirement
+		FROM public.business_object_fields
+		WHERE bo_id = $1 AND tenant_id = $2
+		ORDER BY display_order NULLS LAST, created_at NULLS LAST, field_name
+	`, boID, tenantID); err != nil {
+		http.Error(w, fmt.Sprintf("failed loading BO fields: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// 3. Resolve physical columns through the semantic graph: walk
+	//    business_object_fields -> catalog_edge MAPS_TO -> catalog_node. Same
+	//    query ResolveSemanticFieldMap runs, inlined here so this handler is
+	//    self-contained (no cross-package call to keep the BO CRUD surface
+	//    dependency-light).
+	semMap := map[string]string{}
+	if len(fields) > 0 {
+		termIDs := make([]string, 0, len(fields))
+		for _, f := range fields {
+			if f.TermNodeID != "" {
+				termIDs = append(termIDs, f.TermNodeID)
+			}
+		}
+		if len(termIDs) > 0 {
+			type semRow struct {
+				FieldName  string `db:"field_name"`
+				ColumnName string `db:"node_name"`
+			}
+			var semRows []semRow
+			// catalog_node.qualified_path is path-style ("/orm/order/avg_price"),
+			// not the dotted "schema.table" form boMeta.DrivingTable carries -
+			// the LIKE below needs the same "/schema/table" prefix conversion
+			// bo_repository.go's catalogPathPrefix already does for the same
+			// reason (this handler is a different Go package, so it can't
+			// call that helper directly).
+			schemaPart, tablePart := splitQualifiedTable(boMeta.DrivingTable)
+			pathPrefix := "/" + schemaPart + "/" + tablePart
+			// pq.Array wraps the slice in a postgres array literal and escapes
+			// the contents, so termNodeID values can never become SQL.
+			if err := h.db.SelectContext(r.Context(), &semRows, `
+				SELECT bf.field_name, col.node_name
+				FROM business_object_fields bf
+				JOIN catalog_edge ce ON ce.source_node_id = bf.term_node_id
+				JOIN catalog_edge_type et ON et.id = ce.edge_type_id
+				JOIN catalog_node col ON col.id = ce.target_node_id
+				WHERE bf.bo_id = $1
+				  AND et.edge_type_name = 'MAPS_TO'
+				  AND col.qualified_path LIKE $2 || '/%'
+				  AND bf.term_node_id = ANY($3::uuid[])
+			`, boID, pathPrefix, pq.Array(termIDs)); err == nil {
+				for _, r := range semRows {
+					semMap[r.FieldName] = r.ColumnName
+				}
+			}
+			// Best-effort: graph resolution failing just means fields fall
+			// through to the literal-name fallback below.
+		}
+	}
+
+	// 4. Resolve physical column data types. The form widget uses these to
+	//    pick the right input (text/number/date/checkbox).
+	schemaName, tableName := splitQualifiedTable(boMeta.DrivingTable)
+	type colTypeRow struct {
+		ColumnName string `db:"column_name"`
+		DataType   string `db:"data_type"`
+	}
+	colTypes := map[string]string{}
+	if schemaName != "" && tableName != "" {
+		var ctRows []colTypeRow
+		if err := h.db.SelectContext(r.Context(), &ctRows, `
+			SELECT column_name, data_type FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2
+		`, schemaName, tableName); err == nil {
+			for _, r := range ctRows {
+				colTypes[r.ColumnName] = r.DataType
+			}
+		}
+	}
+
+	// 5. Assemble response. physicalColumn falls through to the literal field
+	//    name when the graph didn't resolve (matches the QueryBORecords
+	//    fallback so the form's submit payload uses the same keys the CRUD
+	//    handler will accept).
+	out := boSchemaResponse{
+		ID:           boID.String(),
+		BoKey:        boKey,
+		DrivingTable: boMeta.DrivingTable,
+		Fields:       make([]boSchemaField, 0, len(fields)),
+		Relationships: []boSchemaRel{},
+	}
+	for _, f := range fields {
+		physical := semMap[f.FieldName]
+		if physical == "" {
+			physical = f.FieldName
+		}
+		colType := colTypes[physical]
+		if colType == "" {
+			colType = f.DataType
+		}
+		display := f.DisplayName
+		if display == "" {
+			display = f.FieldName
+		}
+		out.Fields = append(out.Fields, boSchemaField{
+			ID:             f.ID,
+			Name:           f.FieldName,
+			DisplayName:    display,
+			Type:           normalizeFormType(colType),
+			Required:       f.IsRequired || f.BindingReq == "REQUIRED",
+			PhysicalColumn: physical,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out)
+}
+
+// normalizeFormType maps postgres information_schema.data_type strings to the
+// four widget input types BOFormWidget.inputTypeFor recognizes. Anything that
+// isn't number/date/boolean falls through to "text" rather than fabricating a
+// type the form doesn't handle.
+func normalizeFormType(pgType string) string {
+	t := strings.ToLower(pgType)
+	switch {
+	case strings.Contains(t, "numeric"), strings.Contains(t, "decimal"),
+		strings.Contains(t, "integer"), strings.Contains(t, "int"),
+		strings.Contains(t, "bigint"), strings.Contains(t, "smallint"),
+		strings.Contains(t, "real"), strings.Contains(t, "double"),
+		strings.Contains(t, "money"):
+		return "number"
+	case strings.Contains(t, "timestamp"), strings.Contains(t, "date"):
+		return "date"
+	case strings.Contains(t, "bool"):
+		return "checkbox"
+	default:
+		return "text"
+	}
+}
+
+// splitQualifiedTable accepts "schema.table" or "/schema/table" or
+// "/qualified/path/ending/with/table" and returns (schema, table). Returns
+// ("", "") if the input has no "." or "/" to split on - same defensive
+// contract as the rest of the BO CRUD handler.
+func splitQualifiedTable(qt string) (string, string) {
+	qt = strings.Trim(qt, "/")
+	// Strip a leading "/schema/table/..." path: only the leading two
+	// segments are the table's qualified name. Anything after the table is
+	// a column path.
+	if idx := strings.Index(qt, "/"); idx >= 0 {
+		first := qt[:idx]
+		rest := qt[idx+1:]
+		schema, table := first, rest
+		if idx2 := strings.Index(rest, "/"); idx2 >= 0 {
+			table = rest[:idx2]
+		}
+		return schema, table
+	}
+	if idx := strings.Index(qt, "."); idx >= 0 {
+		return qt[:idx], qt[idx+1:]
+	}
+	return "", ""
 }
 
 // HandleListBORecords provides paginated / infinite-scroll chunk loading
@@ -523,9 +878,14 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	}
 
 	parentId := r.URL.Query().Get("parentId")
-	whereClauses := []string{"tenant_id = $1"}
-	args := []interface{}{tenantID}
-	argIdx := 2
+	whereClauses := []string{}
+	args := []interface{}{}
+	argIdx := 1
+	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+		whereClauses = append(whereClauses, fmt.Sprintf("tenant_id = $%d", argIdx))
+		args = append(args, tenantID)
+		argIdx++
+	}
 
 	if parentId != "" {
 		// Common foreign key columns
@@ -542,12 +902,16 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
+	whereSQL := "TRUE"
+	if len(whereClauses) > 0 {
+		whereSQL = strings.Join(whereClauses, " AND ")
+	}
 	query := fmt.Sprintf(`
 		SELECT * FROM %s
 		WHERE %s
 		ORDER BY %s DESC
 		LIMIT $%d OFFSET $%d;
-	`, boMeta.DrivingTable, strings.Join(whereClauses, " AND "), boMeta.KeyColumn, argIdx, argIdx+1)
+	`, boMeta.DrivingTable, whereSQL, boMeta.KeyColumn, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
 	rows, err := h.db.QueryxContext(r.Context(), query, args...)
@@ -595,8 +959,16 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2`, boMeta.DrivingTable, boMeta.KeyColumn)
-	res, err := h.db.ExecContext(r.Context(), deleteSQL, tenantID, recordID)
+	var deleteSQL string
+	var execArgs []interface{}
+	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2`, boMeta.DrivingTable, boMeta.KeyColumn)
+		execArgs = []interface{}{tenantID, recordID}
+	} else {
+		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, boMeta.DrivingTable, boMeta.KeyColumn)
+		execArgs = []interface{}{recordID}
+	}
+	res, err := h.db.ExecContext(r.Context(), deleteSQL, execArgs...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed deleting record: %v", err), http.StatusInternalServerError)
 		return

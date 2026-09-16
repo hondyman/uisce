@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useDrag } from 'react-dnd';
+import { useDraggable } from '@dnd-kit/core';
 import './Palette.css';
 import * as Icons from './icons';
 import styles from './Palette.module.css';
@@ -66,11 +66,12 @@ export default function Palette({
         <div className="palette-section-title">Core Objects</div>
         <div className="palette-tiles">
           {TILES.map((t) => (
-            <PaletteTile key={`core-${t.kind}`} spec={t} origin="core" generatedClass={`palette-tile-${t.kind}`} />
+            <PaletteTile key={`core-${t.kind}`} dragId={`core-${t.kind}`} spec={t} origin="core" generatedClass={`palette-tile-${t.kind}`} />
           ))}
           {coreItems.slice(0, 6).map((it: any) => (
             <PaletteTile
               key={`core-item-${it.id || it.name}`}
+              dragId={`core-item-${it.id || it.name}`}
               spec={{ kind: 'blank' as TileKind, title: it.name || it.id || 'Core', color: '#cbd5e0', icon: Icons.IconDatabase }}
               origin="core"
               meta={it}
@@ -84,12 +85,13 @@ export default function Palette({
         <div className="palette-section-title">Custom Objects</div>
         <div className="palette-tiles">
           {TILES.map((t) => (
-            <PaletteTile key={`custom-${t.kind}`} spec={t} origin="custom" generatedClass={`palette-tile-${t.kind}`} />
+            <PaletteTile key={`custom-${t.kind}`} dragId={`custom-${t.kind}`} spec={t} origin="custom" generatedClass={`palette-tile-${t.kind}`} />
           ))}
-          <PaletteTile spec={{ kind: 'blank', title: 'New Object', color: '#60a5fa', icon: Icons.IconPlus }} origin="custom" />
+          <PaletteTile dragId="custom-new-object" spec={{ kind: 'blank', title: 'New Object', color: '#60a5fa', icon: Icons.IconPlus }} origin="custom" />
           {customItems.slice(0, 6).map((it: any) => (
             <PaletteTile
               key={`custom-item-${it.id || it.name}`}
+              dragId={`custom-item-${it.id || it.name}`}
               spec={{ kind: 'blank' as TileKind, title: it.name || it.id || 'Custom', color: '#60a5fa', icon: Icons.IconDatabase }}
               origin="custom"
               meta={it}
@@ -102,21 +104,19 @@ export default function Palette({
   );
 }
 
-function PaletteTile({ spec, origin, meta, generatedClass }: { spec: TileSpec; origin: 'core' | 'custom'; meta?: any; generatedClass?: string }) {
-  const [{ isDragging }, drag] = useDrag(
-    () => ({
-      type: 'TILE',
-      item: { kind: spec.kind, origin, meta },
-      collect: (m: any) => ({ isDragging: !!m.isDragging() }),
-    }),
-    [spec, origin, meta]
-  );
+function PaletteTile({ spec, origin, meta, generatedClass, dragId }: { spec: TileSpec; origin: 'core' | 'custom'; meta?: any; generatedClass?: string; dragId: string }) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `tile-${dragId}`,
+    data: { kind: spec.kind, origin, meta },
+  });
 
   const Icon = spec.icon as any;
 
   return (
     <div
-      ref={drag}
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       className={`palette-tile ${origin === 'core' ? 'core' : 'custom'} ${isDragging ? 'dragging' : ''} ${styles.paletteTile} ${generatedClass || ''}`}
       title={`${spec.title} (${origin})`}
     >

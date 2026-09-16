@@ -10,6 +10,7 @@ import InventoryIcon from '@mui/icons-material/Inventory';
 import PeopleIcon from '@mui/icons-material/People';
 
 import { useTenant } from '../contexts/TenantContext';
+import { apiFetch } from '../lib/apiClient';
 
 interface MenuNode {
   id: string;
@@ -37,7 +38,7 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
   useEffect(() => {
     // Dynamic menu layout loading based on current tenant state boundaries
     const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
-    fetch(`/api/v1/layout/navigation-menu?tenant_id=${tenantId}`)
+    apiFetch(`/api/v1/layout/navigation-menu?tenant_id=${tenantId}`)
       .then(res => res.json())
       .then(data => {
         setMenuTree(data || []);

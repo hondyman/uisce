@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 
 export interface ScenarioLineageEntry {
   valuation_date: string;
@@ -12,8 +13,7 @@ export function useScenarioLineage(scenarioId: string, params: Record<string, an
   return useQuery({
     queryKey: ['scenario-lineage', scenarioId, params],
     queryFn: async () => {
-      const res = await fetch(`/api/scenarios/${scenarioId}/lineage?${query}`);
-      if (!res.ok) throw new Error('Failed to load lineage');
+      const res = await apiFetch(`/api/scenarios/${scenarioId}/lineage?${query}`);
       const json = await res.json();
       return (json.results ?? []) as ScenarioLineageEntry[];
     },

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { apiFetch } from '../../lib/apiClient';
 
 interface AuditEvent {
   event_id: string;
@@ -15,7 +16,7 @@ export const AuditLogViewer: React.FC = () => {
   const [events, setEvents] = useState<AuditEvent[]>([]);
 
   useEffect(() => {
-    fetch('/api/audit/events')
+    apiFetch('/api/audit/events')
       .then(res => res.json())
       .then(data => setEvents(data))
       .catch(err => console.error(err));

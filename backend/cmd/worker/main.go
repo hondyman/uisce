@@ -26,7 +26,9 @@ import (
 	"github.com/hondyman/uisce/backend/internal/tenant"
 	temporalactivities "github.com/hondyman/uisce/backend/internal/temporal/activities"
 	provisioningworkflows "github.com/hondyman/uisce/backend/internal/temporal/workflows"
+	uiscetemporal "github.com/hondyman/uisce/backend/internal/temporal"
 	"github.com/hondyman/uisce/backend/internal/tests"
+	"github.com/hondyman/uisce/backend/internal/trading"
 	"github.com/hondyman/uisce/backend/internal/wealth"
 	"github.com/hondyman/uisce/backend/internal/wealth/risk"
 	wealthworkflows "github.com/hondyman/uisce/backend/internal/wealth/workflows"
@@ -79,6 +81,21 @@ func main() {
 	w.RegisterWorkflow(pkgworkflows.RunStoredWorkflow)
 
 	log.Println("✅ Registered workflows: DynamicBPWorkflow, RebalanceWorkflow, PortfolioLifecycleWorkflow, InterpreterWorkflow")
+
+	// FIX-over-pipeline workflows (HANDOFF_FIX_OVER_PIPELINE.md §10).
+	// Registered on bp_queue — the same queue as the rest of the worker.
+	w.RegisterWorkflow(uiscetemporal.FIXSessionLifecycleWorkflow)
+	w.RegisterWorkflow(trading.FIXOrderEntryWorkflow)
+	w.RegisterWorkflow(uiscetemporal.FIXReconciliationWorkflow)
+	w.RegisterActivity(uiscetemporal.LogonActivity)
+	w.RegisterActivity(uiscetemporal.LogoutActivity)
+	w.RegisterActivity(uiscetemporal.SessionLivenessCheckActivity)
+	w.RegisterActivity(uiscetemporal.ReconnectActivity)
+	w.RegisterActivity(uiscetemporal.LoadExecutionsActivity)
+	w.RegisterActivity(uiscetemporal.MatchExecutionsActivity)
+	w.RegisterActivity(uiscetemporal.PersistReconciliationReportActivity)
+	w.RegisterActivity(trading.SendFixOrderActivity)
+	log.Println("✅ Registered FIX workflows: FIXSessionLifecycleWorkflow, FIXOrderEntryWorkflow, FIXReconciliationWorkflow")
 
 	// Register activities with Activities struct
 	activities := workflows.NewActivities(db)

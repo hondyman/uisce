@@ -11,6 +11,7 @@ import { devError, devLog, devWarn } from '../../utils/devLogger';
 import WaterDropIcon from '@mui/icons-material/WaterDrop';
 import BuildIcon from '@mui/icons-material/Build';
 import type { ValidationRule as SharedValidationRule } from '../../components/validation/types';
+import { apiFetch } from '../../lib/apiClient';
 
 interface FacetOption {
   value: string;
@@ -239,17 +240,13 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
 
       try {
         const queryStr = buildFilterQuery(pageNum);
-        const response = await fetch(`/api/validation-rules?${queryStr}`, {
+        const response = await apiFetch(`/api/validation-rules?${queryStr}`, {
           headers: {
             'X-Tenant-ID': tenantId,
             'X-Tenant-Datasource-ID': datasourceId,
           },
           signal,
         });
-
-        if (!response.ok) {
-          throw new Error(`Failed to fetch rules: ${response.statusText}`);
-        }
 
         const dataJson = await response.json();
         const dataObj = dataJson && typeof dataJson === 'object' ? (dataJson as Record<string, unknown>) : {};
@@ -404,19 +401,14 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
 
   const handleToggleRuleActive = async (ruleId: string, isActive: boolean) => {
     try {
-      const response = await fetch(`/api/validation-rules/${ruleId}`, {
+      await apiFetch(`/api/validation-rules/${ruleId}`, {
         method: 'PATCH',
         headers: {
           'X-Tenant-ID': tenantId,
           'X-Tenant-Datasource-ID': datasourceId,
-          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ is_active: isActive }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to update rule: ${response.statusText}`);
-      }
 
       // The optimistic update already happened in the checkbox onChange
       devLog('Rule active status updated:', ruleId, isActive);
@@ -434,17 +426,13 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
       }
 
       try {
-        const response = await fetch(`/api/validation-rules/${ruleId}?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`, {
+        await apiFetch(`/api/validation-rules/${ruleId}?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}`, {
           method: 'DELETE',
           headers: {
             'X-Tenant-ID': tenantId,
             'X-Tenant-Datasource-ID': datasourceId,
           },
         });
-
-        if (!response.ok) {
-          throw new Error(`Failed to delete rule: ${response.statusText}`);
-        }
 
         setRules((prev) => prev.filter((r) => r.id !== ruleId));
         setTotalCount((prev) => prev - 1);
@@ -506,7 +494,7 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
         // Pre-flight check: search for existing rule by name to decide create vs update
         let existingRuleId: string | undefined;
         try {
-          const searchResp = await fetch(
+          const searchResp = await apiFetch(
             `/api/validation-rules?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}&search=${encodeURIComponent(r.name)}`,
             {
               headers: {
@@ -627,7 +615,7 @@ export const ValidationRulesWithFacets: React.FC<ValidationRulesProps> = ({
         // Use existing upsert logic from handleImportRules
         let existingRuleId: string | undefined;
         try {
-          const searchResp = await fetch(
+          const searchResp = await apiFetch(
             `/api/validation-rules?tenant_id=${tenantId}&tenant_instance_id=${datasourceId}&search=${encodeURIComponent(r.name)}`,
             {
               headers: {

@@ -81,6 +81,7 @@ type ValidationRuleDescriptor struct {
 	Domain           string          `json:"domain"`
 	RuleAST          json.RawMessage `json:"rule_ast"`
 	GovernanceStatus string          `json:"governance_status"`
+	IsActive         bool            `json:"is_active"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
 }

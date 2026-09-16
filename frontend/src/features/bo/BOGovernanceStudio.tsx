@@ -5,6 +5,7 @@ import AccessControlMatrix from './AccessControlMatrix';
 import FieldSecurityConfigurator from './FieldSecurityConfigurator';
 import BOAuditTimeline from './BOAuditTimeline';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,19 +71,17 @@ const BOGovernanceStudio: React.FC<BOGovernanceStudioProps> = ({ tenantId, boKey
       setLoading(true);
       try {
         const [boRes, rulesRes, policiesRes] = await Promise.all([
-          fetch(`/api/v1/bo/${boKey}`, { headers: headers() }),
-          fetch(`/api/v1/bo/${boKey}/governance/validation-rules`, { headers: headers() }),
-          fetch(`/api/v1/bo/${boKey}/governance/policies`, { headers: headers() }),
+          apiFetch(`/api/v1/bo/${boKey}`, { headers: headers() }),
+          apiFetch(`/api/v1/bo/${boKey}/governance/validation-rules`, { headers: headers() }),
+          apiFetch(`/api/v1/bo/${boKey}/governance/policies`, { headers: headers() }),
         ]);
-        if (boRes.ok) setBo(await boRes.json());
-        if (rulesRes.ok) {
-          const rules = await rulesRes.json();
-          setValidationCount(Array.isArray(rules) ? rules.length : 0);
-        }
-        if (policiesRes.ok) {
-          const pols = await policiesRes.json();
-          setPolicyCount(Array.isArray(pols) ? pols.length : 0);
-        }
+        setBo(await boRes.json());
+        const rules = await rulesRes.json();
+        setValidationCount(Array.isArray(rules) ? rules.length : 0);
+        const pols = await policiesRes.json();
+        setPolicyCount(Array.isArray(pols) ? pols.length : 0);
+      } catch (error) {
+        console.error('[BOGovernanceStudio] Failed to load BO summary/counts:', error);
       } finally {
         setLoading(false);
       }

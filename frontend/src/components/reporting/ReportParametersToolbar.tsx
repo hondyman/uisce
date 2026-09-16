@@ -1,16 +1,9 @@
 import React from 'react';
 import { Box, Button, CircularProgress, TextField, MenuItem, Select, Typography, Paper } from '@mui/material';
 import { Play, RefreshCw } from 'lucide-react';
+import type { ParamSpec } from '../../studio-core/params/ParamSpec';
 
-type ReportParameter = {
-  id: string;
-  name: string;
-  type: 'string' | 'number' | 'date' | 'boolean';
-  prompt: string;
-  defaultValue?: string;
-  allowBlank?: boolean;
-  allowMultiple?: boolean;
-};
+type ReportParameter = ParamSpec;
 
 interface ReportParametersToolbarProps {
   parameters: ReportParameter[];

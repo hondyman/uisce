@@ -54,6 +54,16 @@ func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr s
 		op = ">="
 	case "LTE":
 		op = "<="
+	// "NOT_IN"/"NOT_BETWEEN" (underscore form, as sent by e.g. FilterOperator
+	// values on the frontend) previously fell through every case below
+	// looking for the space form ("NOT IN"/"NOT BETWEEN") and silently
+	// emitted invalid SQL (`col NOT_IN $1` with a whole array bound as one
+	// scalar param) instead of erroring or working - normalize here once
+	// instead of teaching every downstream case both spellings.
+	case "NOT_IN":
+		op = "NOT IN"
+	case "NOT_BETWEEN":
+		op = "NOT BETWEEN"
 	}
 
 	switch op {
@@ -109,6 +119,9 @@ func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr s
 		case "IN", "NOT IN":
 			return compileInList(g, ctx, sqlExpr, op, splitCSV(v))
 		default:
+			if !isComparisonOperator(op) {
+				return "", fmt.Errorf("unsupported filter operator %q", filter.Operator)
+			}
 			token := nextParam(g, ctx, v)
 			return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil
 		}
@@ -124,8 +137,28 @@ func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr s
 		}
 		return compileInList(g, ctx, sqlExpr, op, items)
 	default:
+		if !isComparisonOperator(op) {
+			return "", fmt.Errorf("unsupported filter operator %q", filter.Operator)
+		}
 		token := nextParam(g, ctx, v)
 		return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil
+	}
+}
+
+// isComparisonOperator reports whether op (already normalized/uppercased by
+// CompileFilterPredicate) is one of the plain comparison operators that
+// reach the two default branches above. Every other recognized operator
+// (IS NULL, BETWEEN, CONTAINS, IN, ...) is handled by its own explicit case
+// earlier in CompileFilterPredicate and never reaches here - so anything
+// that isn't one of these six is not a real operator this compiler knows,
+// and letting it through would interpolate the caller-supplied operator
+// string directly into the SQL text (e.g. filter.Operator = "1=1; --").
+func isComparisonOperator(op string) bool {
+	switch op {
+	case "=", "!=", ">", "<", ">=", "<=":
+		return true
+	default:
+		return false
 	}
 }
 

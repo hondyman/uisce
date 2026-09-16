@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import { apiFetch } from '../../lib/apiClient';
 
 interface PreAggSQL {
   iceberg_sql: string;
@@ -44,11 +45,8 @@ export const PreAggSQLModal: React.FC<PreAggSQLModalProps> = ({
     setLoading(true);
     setError(null);
     
-    fetch(`/api/preaggs/${preAggId}/sql`)
-      .then((r) => {
-        if (!r.ok) throw new Error('Failed to fetch SQL');
-        return r.json();
-      })
+    apiFetch(`/api/preaggs/${preAggId}/sql`)
+      .then((r) => r.json())
       .then((data: PreAggSQL) => {
         setSql(data);
         setLoading(false);

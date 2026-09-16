@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -87,11 +88,9 @@ const BOAuditTimeline: React.FC<BOAuditTimelineProps> = ({ tenantId, boKey }) =>
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/audit`, { headers: headers() });
-      if (res.ok) {
-        const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
-      }
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/audit`, { headers: headers() });
+      const data = await res.json();
+      setEvents(Array.isArray(data) ? data : []);
     } finally {
       setLoading(false);
     }

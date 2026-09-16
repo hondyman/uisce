@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -163,6 +164,15 @@ func CloneGoldCopyInstance(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Reads the gold-copy tenant's rows and writes into targetTenantID's —
+	// structurally cross-tenant, so this transaction assumes
+	// uisce_gold_copy_sync as its very first statement. SET LOCAL ROLE
+	// outside a transaction block is a silent no-op (verified directly),
+	// so this must run before any other statement on tx.
+	if _, err := tx.ExecContext(ctx, SetGoldCopySyncRoleSQL); err != nil {
+		return nil, fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
+
 	// Step 1: Find Gold Copy instance
 	goldInstance, err := findGoldCopyInstance(ctx, tx)
 	if err != nil {
@@ -300,6 +310,14 @@ func SyncGoldCopyConnectionToAllInstances(
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// Writes into every non-gold-copy tenant's connections in this one
+	// transaction — structurally cross-tenant, so it assumes
+	// uisce_gold_copy_sync first. See CloneGoldCopyInstance for why this
+	// must be the very first statement.
+	if _, err := tx.ExecContext(ctx, SetGoldCopySyncRoleSQL); err != nil {
+		return nil, fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
+
 	// Get the Gold Copy connection details
 	var gc goldCopyConnection
 	err = tx.GetContext(ctx, &gc, `
@@ -411,6 +429,14 @@ func SyncAllConnectionsForInstance(
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Reads the gold-copy tenant's connections and writes into
+	// targetTenantID's — structurally cross-tenant, so it assumes
+	// uisce_gold_copy_sync first. See CloneGoldCopyInstance for why this
+	// must be the very first statement.
+	if _, err := tx.ExecContext(ctx, SetGoldCopySyncRoleSQL); err != nil {
+		return nil, fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
 
 	// Find Gold Copy tenant
 	goldInstance, err := findGoldCopyInstance(ctx, tx)
@@ -706,16 +732,40 @@ func SyncGoldCopyInstanceDeletion(
 	logger := logging.GetLogger().Sugar()
 	logger.Infof("Syncing Gold Copy instance deletion: %s", goldInstanceID)
 
-	// Find all instances that were cloned from this Gold Copy instance
+	// Finding every clone across every tenant (WHERE core_id = $1, no
+	// tenant_id filter) is structurally cross-tenant, same as deleting
+	// each one below — both need uisce_gold_copy_sync assumed first (SET
+	// LOCAL ROLE is a silent no-op outside a transaction block, verified
+	// directly, so each of these needs its own transaction to scope to).
 	var clonedInstances []struct {
 		ID       uuid.UUID `db:"id"`
 		TenantID uuid.UUID `db:"tenant_id"`
 	}
-	err := db.SelectContext(ctx, &clonedInstances, `
-		SELECT id, tenant_id
-		FROM public.tenant_instance
-		WHERE core_id = $1
-	`, goldInstanceID)
+	err := WithGoldCopySync(ctx, db.DB, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, tenant_id
+			FROM public.tenant_instance
+			WHERE core_id = $1
+		`, goldInstanceID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var row struct {
+				ID       uuid.UUID
+				TenantID uuid.UUID
+			}
+			if err := rows.Scan(&row.ID, &row.TenantID); err != nil {
+				return err
+			}
+			clonedInstances = append(clonedInstances, struct {
+				ID       uuid.UUID `db:"id"`
+				TenantID uuid.UUID `db:"tenant_id"`
+			}{ID: row.ID, TenantID: row.TenantID})
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find cloned instances: %w", err)
 	}
@@ -725,15 +775,21 @@ func SyncGoldCopyInstanceDeletion(
 		return &EntitySyncResult{EntitiesDeleted: 0, AffectedTenants: []uuid.UUID{}}, nil
 	}
 
-	// Delete cloned instances (cascading FK constraints will handle related data)
+	// Delete cloned instances (cascading FK constraints will handle related data).
+	// Each instance gets its own transaction (rather than one shared
+	// transaction across the loop) so that one instance's delete failure
+	// can't poison another's — matching the original per-item
+	// continue-on-error behavior exactly, without needing a SAVEPOINT per
+	// iteration.
 	result := &EntitySyncResult{
 		AffectedTenants: []uuid.UUID{},
 	}
 
 	for _, inst := range clonedInstances {
-		_, err := db.ExecContext(ctx, `
-			DELETE FROM public.tenant_instance WHERE id = $1
-		`, inst.ID)
+		err := WithGoldCopySync(ctx, db.DB, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `DELETE FROM public.tenant_instance WHERE id = $1`, inst.ID)
+			return err
+		})
 		if err != nil {
 			logger.Warnf("Failed to delete cloned instance %s: %v", inst.ID, err)
 			continue
@@ -762,7 +818,23 @@ func DeleteClonedProducts(ctx context.Context, db *sqlx.DB, tenantID, instanceID
 	logger := logging.GetLogger().Sugar()
 	logger.Infof("Deleting cloned products for tenant %s, instance %s", tenantID, instanceID)
 
-	_, err := db.ExecContext(ctx, `
+	// This ran as three separate autocommit statements directly on the
+	// pool with no shared transaction — meaning there was nothing for a
+	// SET LOCAL ROLE to scope to (it's a silent no-op outside a
+	// transaction block, verified directly). Wrapped in one transaction
+	// so the role assumption actually takes effect for every statement
+	// below.
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, SetGoldCopySyncRoleSQL); err != nil {
+		return fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
 		DELETE FROM public.tenant_product_datasource
 		WHERE tenant_product_id IN (
 			SELECT id FROM public.tenant_product
@@ -773,20 +845,36 @@ func DeleteClonedProducts(ctx context.Context, db *sqlx.DB, tenantID, instanceID
 		return fmt.Errorf("failed to delete cloned datasources: %w", err)
 	}
 
-	_, err = db.ExecContext(ctx, `
+	// This delete is best-effort (a failure here only warns, it doesn't
+	// stop the function) — that only works inside a shared transaction if
+	// it's wrapped in its own SAVEPOINT: a real SQL error here would
+	// otherwise poison the whole transaction (verified directly — even
+	// the already-successful delete above would then roll back on
+	// COMMIT), which is not what the original per-statement, no-shared-
+	// transaction version of this function did.
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT delete_connections"); err != nil {
+		return fmt.Errorf("failed to create savepoint: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM public.connections
 		WHERE tenant_id = $1 AND datasource_id = $2
-	`, tenantID, instanceID)
-	if err != nil {
+	`, tenantID, instanceID); err != nil {
 		logger.Warnf("Failed to delete cloned connections: %v", err)
+		if _, rbErr := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT delete_connections"); rbErr != nil {
+			return fmt.Errorf("failed to roll back to savepoint after connections delete failed: %w", rbErr)
+		}
 	}
 
-	_, err = db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		DELETE FROM public.tenant_product
 		WHERE tenant_id = $1 AND datasource_id = $2
 	`, tenantID, instanceID)
 	if err != nil {
 		return fmt.Errorf("failed to delete cloned products: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	logger.Infof("Successfully deleted cloned products for tenant %s", tenantID)
@@ -804,6 +892,15 @@ func DeleteClonedProductsFull(ctx context.Context, db *sqlx.DB, tenantID string)
 	}
 	defer tx.Rollback()
 
+	// Part of the same provisioning/deprovisioning subsystem as the rest
+	// of this file — assumes uisce_gold_copy_sync as the very first
+	// statement so the deletes below aren't silently filtered to zero
+	// rows by RLS. See CloneGoldCopyInstance for why this must come
+	// first.
+	if _, err := tx.ExecContext(ctx, SetGoldCopySyncRoleSQL); err != nil {
+		return fmt.Errorf("failed to assume gold-copy-sync role: %w", err)
+	}
+
 	_, err = tx.ExecContext(ctx, `
 		DELETE FROM public.tenant_product_datasource
 		WHERE tenant_product_id IN (
@@ -814,12 +911,23 @@ func DeleteClonedProductsFull(ctx context.Context, db *sqlx.DB, tenantID string)
 		return fmt.Errorf("failed to delete cloned datasources: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	// Best-effort delete (a failure here only warns) needs its own
+	// SAVEPOINT to avoid poisoning the rest of this transaction — a
+	// pre-existing bug found while wiring this function, not introduced
+	// by it: a real SQL error here, without the savepoint, would have
+	// aborted the transaction and silently rolled back the datasources
+	// delete above too, on COMMIT (verified directly).
+	if _, err := tx.ExecContext(ctx, "SAVEPOINT delete_connections"); err != nil {
+		return fmt.Errorf("failed to create savepoint: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM public.connections
 		WHERE tenant_id = $1
-	`, tenantID)
-	if err != nil {
+	`, tenantID); err != nil {
 		logger.Warnf("Failed to delete cloned connections: %v", err)
+		if _, rbErr := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT delete_connections"); rbErr != nil {
+			return fmt.Errorf("failed to roll back to savepoint after connections delete failed: %w", rbErr)
+		}
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -840,18 +948,25 @@ func DeleteClonedProductsFull(ctx context.Context, db *sqlx.DB, tenantID string)
 
 // GetGoldCopyInfo resolves the gold copy tenant, instance, and database name
 func GetGoldCopyInfo(ctx context.Context, db *sqlx.DB) (tenantID, instanceID, database string, err error) {
-	err = db.QueryRowContext(ctx, `
-		SELECT t.id, ti.id, COALESCE(t.database_name, 'alpha')
-		FROM public.tenants t
-		JOIN public.tenant_instance ti ON ti.tenant_id = t.id
-		WHERE t.gold_copy = true
-		LIMIT 1
-	`).Scan(&tenantID, &instanceID, &database)
-	if err != nil {
-		if err == sql.ErrNoRows {
+	// tenant_instance is FORCE RLS: reading the gold-copy tenant's own row
+	// requires either being scoped as that tenant or the elevated
+	// gold-copy-sync role — this is a standalone entry point (a
+	// registered Temporal activity), not nested inside another
+	// already-elevated call, so it needs its own.
+	txErr := WithGoldCopySync(ctx, db.DB, func(tx *sql.Tx) error {
+		return tx.QueryRowContext(ctx, `
+			SELECT t.id, ti.id, COALESCE(t.database_name, 'alpha')
+			FROM public.tenants t
+			JOIN public.tenant_instance ti ON ti.tenant_id = t.id
+			WHERE t.gold_copy = true
+			LIMIT 1
+		`).Scan(&tenantID, &instanceID, &database)
+	})
+	if txErr != nil {
+		if errors.Is(txErr, sql.ErrNoRows) {
 			return "", "", "", fmt.Errorf("no gold copy tenant found")
 		}
-		return "", "", "", fmt.Errorf("failed to query gold copy: %w", err)
+		return "", "", "", fmt.Errorf("failed to query gold copy: %w", txErr)
 	}
 	return tenantID, instanceID, database, nil
 }
@@ -866,16 +981,40 @@ func SyncGoldCopyProductDeletion(
 	logger := logging.GetLogger().Sugar()
 	logger.Infof("Syncing Gold Copy product deletion: %s", goldProductID)
 
-	// Find all products that were cloned from this Gold Copy product
+	// Finding every clone across every tenant (WHERE core_id = $1, no
+	// tenant_id filter) is structurally cross-tenant, same as deleting
+	// each one below — both need uisce_gold_copy_sync assumed first (SET
+	// LOCAL ROLE is a silent no-op outside a transaction block, verified
+	// directly, so each of these needs its own transaction to scope to).
 	var clonedProducts []struct {
 		ID       uuid.UUID `db:"id"`
 		TenantID uuid.UUID `db:"tenant_id"`
 	}
-	err := db.SelectContext(ctx, &clonedProducts, `
-		SELECT id, tenant_id
-		FROM public.tenant_product
-		WHERE core_id = $1
-	`, goldProductID)
+	err := WithGoldCopySync(ctx, db.DB, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `
+			SELECT id, tenant_id
+			FROM public.tenant_product
+			WHERE core_id = $1
+		`, goldProductID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var row struct {
+				ID       uuid.UUID
+				TenantID uuid.UUID
+			}
+			if err := rows.Scan(&row.ID, &row.TenantID); err != nil {
+				return err
+			}
+			clonedProducts = append(clonedProducts, struct {
+				ID       uuid.UUID `db:"id"`
+				TenantID uuid.UUID `db:"tenant_id"`
+			}{ID: row.ID, TenantID: row.TenantID})
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to find cloned products: %w", err)
 	}
@@ -885,15 +1024,19 @@ func SyncGoldCopyProductDeletion(
 		return &EntitySyncResult{EntitiesDeleted: 0, AffectedTenants: []uuid.UUID{}}, nil
 	}
 
-	// Delete cloned products (cascading FK constraints will handle related datasources)
+	// Delete cloned products (cascading FK constraints will handle related
+	// datasources). Each product gets its own transaction so one
+	// product's delete failure can't poison another's — matching the
+	// original per-item continue-on-error behavior exactly.
 	result := &EntitySyncResult{
 		AffectedTenants: []uuid.UUID{},
 	}
 
 	for _, prod := range clonedProducts {
-		_, err := db.ExecContext(ctx, `
-			DELETE FROM public.tenant_product WHERE id = $1
-		`, prod.ID)
+		err := WithGoldCopySync(ctx, db.DB, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, `DELETE FROM public.tenant_product WHERE id = $1`, prod.ID)
+			return err
+		})
 		if err != nil {
 			logger.Warnf("Failed to delete cloned product %s: %v", prod.ID, err)
 			continue

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import type { BOField } from './BOGovernanceStudio';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,8 +65,8 @@ const FieldSecurityConfigurator: React.FC<FieldSecurityConfiguratorProps> = ({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/field-security`, { headers: headers() });
-      if (res.ok) setConfigs(await res.json() ?? []);
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/field-security`, { headers: headers() });
+      setConfigs(await res.json() ?? []);
     } finally {
       setLoading(false);
     }
@@ -100,10 +101,11 @@ const FieldSecurityConfigurator: React.FC<FieldSecurityConfiguratorProps> = ({
     if (!editing) return;
     setSaving(true);
     try {
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/field-security`, {
+      await apiFetch(`/api/v1/bo/${boKey}/governance/field-security`, {
         method: 'POST', headers: headers(), body: JSON.stringify({ ...editing, bo_key: boKey }),
       });
-      if (res.ok) { setEditing(null); await load(); }
+      setEditing(null);
+      await load();
     } finally {
       setSaving(false);
     }
@@ -117,11 +119,11 @@ const FieldSecurityConfigurator: React.FC<FieldSecurityConfiguratorProps> = ({
       try { record = JSON.parse(previewRecord); }
       catch { return; }
       const roles = previewRoles.split(',').map(r => r.trim()).filter(Boolean);
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/field-security/preview`, {
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/field-security/preview`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ record, roles }),
       });
-      if (res.ok) setPreviewResult(await res.json());
+      setPreviewResult(await res.json());
     } finally {
       setPreviewLoading(false);
     }

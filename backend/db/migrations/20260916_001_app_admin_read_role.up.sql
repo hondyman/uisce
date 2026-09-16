@@ -2,7 +2,13 @@
 -- app_admin_read: SELECT on monitoring tables, INSERT on admin_audit_logs, ROLBYPASSRLS (scoped to 4 tables only)
 
 -- Create role with login so it can authenticate to a connection pool
-CREATE ROLE app_admin_read WITH LOGIN NOCREATEDB NOCREATEROLE;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_admin_read') THEN
+    CREATE ROLE app_admin_read WITH LOGIN NOCREATEDB NOCREATEROLE;
+  END IF;
+END
+$$;
 
 -- Grant SELECT on the four monitoring read tables (RLS bypass is scoped to these)
 GRANT SELECT ON public.report_executions TO app_admin_read;
