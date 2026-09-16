@@ -489,14 +489,41 @@ customization of an inherited gold-copy page) is explicitly scoped to
 `components`/`layout`/`tabs` only — `filterBar` isn't part of the overlay
 request type or the merge logic at all.** A tenant editing through the
 overlay mechanism can never add or change a page-wide filter bar; only a
-gold-copy admin editing the core page directly can. Whether that's
-deliberate (filter bar is core-editorial by design) or an oversight isn't
-established from the code alone — **needs a product call, not a guess.**
-If it's a gap, the fix is adding `FilterBar` to `saveOverlay`'s request
-struct and to `mergeOverlay`'s merge (probably whole-value overlay, like
-`Tabs`, not the field-level merge `Components` does — a filter bar doesn't
-have natural per-key identity to merge on). Not fixed here: needs the
-product decision first.
+gold-copy admin editing the core page directly can.
+
+**Called, not just flagged (per follow-up review): this is a gap, extend
+the overlay.** The overlay mechanism's own purpose is letting tenants
+customize *presentation* without touching core logic — a filter bar is
+exactly that: slicers, their layout, their styles, no CRUD, no data-source
+creation. A tenant's slicer references a data source that already lives on
+the core page. Leaving `filterBar` core-only means every tenant inherits
+the gold-copy admin's slicers frozen in place, which isn't consistent with
+what the overlay mechanism exists to do. **Fix, as its own ticket (not
+folded into Phase 2 — different subsystem):** add `FilterBar` to
+`saveOverlay`'s request struct and to `mergeOverlay`'s merge as a
+whole-value replace when present, inherited (fall through to the core
+page's) when absent — like `Tabs`, not the field-level merge `Components`
+does; a filter bar has no natural per-key identity to merge on.
+**Implementation caveat to verify, not assume:** a slicer in a tenant's
+overlay `filterBar` references a `dataSourceId` by id — that id must
+resolve against the *core* page's `dataSources` (overlays don't add data
+sources of their own today), and `ensureRelatedDataSource` invoked from
+the overlay editing path should refuse or no-op rather than silently
+creating an orphaned data source nothing else references.
+
+**Reconciling the "gaps doc" claim:** the claim this session traced
+against ("`filterBar` is not round-tripped by `page_studio_handler.go` …
+slicers will silently drop on save") is **disproven for the direct-save
+path** by the trace above — `savePage`/`updatePage` round-trip it cleanly.
+The overlay gap just described is its real remainder. Searched this repo
+for the doc that carries that claim (`grep -rl filterBar *.md` and a
+repo-wide `.md` search) and **could not find it** — it isn't
+`HANDOFF_PAGE_STUDIO_WIDGET_CONSISTENCY.md`, `HANDOFF_BI_WORK.md`, or
+anything else checked into this tree today. If it exists somewhere else
+(another session's notes, an external doc), it needs its item #1 updated
+to point at the overlay gap specifically, not the general claim — but
+that update has to happen wherever that doc actually lives, which this
+session couldn't locate.
 
 **Verified end to end after the fix:** Order Detail loads with no crash;
 BO fence intact (Order Allocation/Placement/Execution listed); Events tab
@@ -517,13 +544,37 @@ to dragging. Attempted this session and **blocked by tooling, not
 confirmed either way**: the Browser pane's drag automation (three
 attempts — plain drag, adjusted coordinates, hover-then-drag) never
 registered with this app's dnd-kit `useDraggable`/`useDroppable` — no
-visible effect on any attempt, consistent with dnd-kit needing real
-intermediate `pointermove` events the tool's `left_click_drag` may not be
-emitting, not an application bug. **Still open — run this before Phase 5**
-(5.1 builds a related-BO-drop-onto-a-report-body feature directly on this
-same `ensureRelatedDataSource`/`ContainerSlot` code path): either drive it
-manually, or find/use a drag-capable automation path this tool doesn't
-currently offer.
+visible effect on any attempt.
+
+**Mechanism, not just symptom (per follow-up review — this changes what
+actually unblocks it):** dnd-kit's `PointerSensor` only starts a drag once
+cumulative pointer movement crosses an activation-distance threshold
+(commonly 4px), and it tracks that distance across *intermediate*
+`pointermove` events between down and up — a real drag gesture, not two
+endpoints. Browser automation "drags" (this tool's `left_click_drag`
+included) typically dispatch pointerdown and pointerup at the two
+coordinates with no, or very few, intervening move events — which never
+satisfies the activation constraint, so dnd-kit never starts a drag and
+nothing happens: no error, no visible effect, exactly the three-for-three
+null result observed. This rules out a class of fix, not just explains one
+failure: **more browser-automation drag variants will not work, regardless
+of coordinates or timing** — there's no `left_click_drag` variant that
+synthesizes intermediate pointermoves, so don't spend a future session
+retrying that path.
+
+**What actually unblocks it — two viable paths:**
+1. **Manual human pass (the real gate, ~10 minutes)**: the four drop
+   scenarios above, driven by a person, before Phase 5 depends on this
+   code path (5.1 builds a related-BO-drop-onto-a-report-body feature
+   directly on `ensureRelatedDataSource`/`ContainerSlot`).
+2. **A scripted vitest test using dnd-kit's own testing pattern**:
+   pointerdown → several pointermoves stepping ≥4px each → pointerup,
+   dispatched directly in the test rather than through browser automation.
+   Worth a ticket on its own merits, not just as an unblock: it becomes
+   durable regression coverage for `ContainerSlot`/`handleRelatedBindExisting`'s
+   collision-detection scoping (the "which of the two mounted `LayoutCanvas`
+   instances owns this drop" logic), which is exactly the kind of thing
+   that regresses silently without a test watching it.
 
 **Process note, extending this doc's own session-end rule:** that merge
 commit conflated three unrelated bodies of work — security/recovery
