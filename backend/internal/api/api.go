@@ -1732,8 +1732,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		routes.RegisterMCP(r, srv.MCPHandler)
 
-		// MCP JSON-RPC server (tools/list, tools/call) — tenant-scoped via JWT, not body
-		// Registered AFTER RegisterMCP so it takes precedence at /api/mcp
+		// MCP JSON-RPC server (tools/list, tools/call). Tenant is read from
+		// security.AuthInfo (populated globally by AuthContextMiddleware at api.go:847)
+		// — not from request body. tools/list is public; tools/call requires auth.
 		mcp.NewMCPToolHandler(sqlxDB).RegisterRoutes(r)
 
 		// Register handlers that were previously orphaned

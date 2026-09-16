@@ -83,17 +83,21 @@ func (h *MCPToolHandler) HandleRPC(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Body tenant_id: optional. Must be a member of the authenticated set.
-		var body struct {
-			TenantID string `json:"tenant_id"`
+		// The tenant_id lives inside params.arguments per MCP tool call convention.
+		var params struct {
+			Arguments struct {
+				TenantID string `json:"tenant_id"`
+			} `json:"arguments"`
 		}
-		_ = json.Unmarshal(req.Params, &body)
+		_ = json.Unmarshal(req.Params, &params)
+		bodyTenantID := params.Arguments.TenantID
 
 		dispatchTenant := auth.TenantIDs[0]
-		if body.TenantID != "" {
+		if bodyTenantID != "" {
 			found := false
 			for _, tid := range auth.TenantIDs {
-				if tid == body.TenantID {
-					dispatchTenant = body.TenantID
+				if tid == bodyTenantID {
+					dispatchTenant = bodyTenantID
 					found = true
 					break
 				}
