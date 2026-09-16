@@ -468,3 +468,95 @@ the current tree).
 Universal Auth machine-identity into `INFISICAL_TOKEN`).
 - After CLI auth is restored, run bootstrap once to confirm
 the live pull produces the same value already in `.env`.
+
+**10. Recovery postmortem (2026-09-15)** — final lessons from the
+Infisical clobber-and-recovery cascade. This entry is the single point
+of record for the incident; future operators reading this doc cold
+should understand both what broke and why without re-running the
+debugging session.
+
+- **Root-cause chain.** The `uisce-infisical` container was wipe-
+initialized during this session, leaving an empty vault. Because
+`bootstrap` reads whatever Infisical returns and writes the entire
+output (composites + pulled secrets + env-from-shell) into the
+target `.env`, an empty pull + an existing rich file = a clobbered
+file. The recovered `.env` files were the only surviving secret copy
+between the wipe and re-population. **Structural lesson:** after any
+vault wipe, the vault is a single point of failure until re-populated;
+"bootstrap is safe to run" depends on that pre-condition, not just on
+the script's own correctness.
+
+- **Bootstrap script bug tally** (each fixed in `scripts/infisical-bootstrap.sh`):
+  - (a) **Pre-pull truncation** — `generate_env_file` opened the target
+    with `>` *before* confirming the pull produced anything usable, so a
+    failed pull left the file as just the header. Fixed with temp-file
+    redirect + atomic `mv`.
+  - (b) **`set -e` exit-code capture** — assigning a variable via
+    `var=$(...)` doesn't inherit `set -e` propagation correctly across
+    all bash versions; using `|| var=$?` short-circuits `set -e` and
+    makes `var` capture the function's real rc. Fixed by initializing
+    `gen_rc=0` BEFORE the compound.
+  - (c) **`|| true` and `PIPESTATUS` confusion** — using `|| true`
+    makes `$?` capture 0 (the `true`'s rc) rather than the function's.
+    `PIPESTATUS[0]` in this bash captures the substitution's last
+    command status, not the function's. Fixed by routing the function's
+    stdout through a tempfile, then reading the path string back into
+    `tmp_path`.
+  - (d) **KEYCLOAK_ISSUER typo** — initial composite-gen refactor
+    produced `https://.../realms/uisc` (missing the trailing 'e');
+    fixed by removing the six `KEYCLOAK_*` keys from Infisical so the
+    composites regenerate correctly.
+  - (e) **Restart launched without sourcing env** — `bash -c 'source
+    ...' && ./server` does NOT propagate the sourced vars to the
+    `./server` invocation; `set -a; source ...; set +a; exec ./server`
+    inside one bash invocation is the correct pattern. **This was the
+    agent's own launch-procedure bug; it killed a working end-to-end
+    proof (PID 24533, booted at 19:55) and then fumbled the relaunch.
+    The 19:55 boot had already validated the recovered files end-to-
+    end before the unnecessary kill.**
+
+- **Known limitation — partial-pull guard gap.** The empty-pull guard
+added in this session fires only when `generate_env_file` returns zero
+secrets. A **partial** pull (returns fewer secrets than the existing
+file has keys) is not detected — the bootstrap regenerates with the
+fewer secrets + composites and silently shrinks the file. The fix is
+in the guard's real condition: "pull returned fewer secrets than the
+existing file has keys AND existing file is substantial → warn-and-
+abort." **Not implemented in this commit; flagged as known limitation.**
+Will matter less once Infisical is fully populated, but the vault must
+be the complete source of truth before bootstrap is trusted again.
+
+- **Recovery method (for the record).** When a heap-resident env is the
+  only secret copy, the recovery chain that worked was: (1) `vmmap`
+  enumeration of writable memory regions, (2) `lldb` memory dump of
+  each region with stdout redirected to a tempfile (`region_*.bin`),
+  (3) `cat region_*.bin | strings -a -n 6 | grep -aE '^[A-Z][A-Z0-9_]{2,}='`
+  to extract uppercase env-like pairs, (4) per-key regex cleanup with
+  `PLACEHOLDER_PATTERNS` to drop `<...>`, `your-*-here`, `changeme`,
+  etc., (5) cross-check against `.env.example` for keys whose recovered
+  value matches the example placeholder (this dropped 26 keys), (6) bucket
+  the result into "recovered clean" + "placeholder contamination" +
+  "corrupted/uncertain" + "never in dump" + "recovered as empty (verify
+  intentional)", and (7) verify **the four bucket sums plus the empty
+  bucket equals exactly 111** (the A.5 baseline). Sum-integrity is the
+  load-bearing test — if the buckets don't sum to the baseline, a key
+  was silently lost.
+
+- **Human factors.**
+  - (a) **Abandoned Create Secret dialog never submitted** — the
+    initial Infisical save silently failed (the form was closed without
+    the Create button being clicked). The user thought the secret was
+    saved; the empty vault persisted. **Mitigation:** always
+    `infisical secrets --projectId=... --env=... --path=...` after a
+    Web UI save to verify the round-trip.
+  - (b) **"Verify the save actually happened" before downstream
+    automation** — the heap dump only existed because PID 82334 was
+    still running with the pre-clobber env. The 81-key recovered file
+    was a lucky snapshot. If the backend had been restarted between the
+    clobber and the recovery attempt, the heap would have been empty and
+    the file would be unrecoverable. **The lesson: after any vault
+    mutation, verify by reading the vault back through CLI before
+    declaring success.**
+  - (c) **Bootstrap's launch procedure is the most error-prone part.**
+    Source-and-launch must be one bash invocation, not separate blocks;
+    this gotcha burned the agent during the restart verification.
