@@ -1,18 +1,13 @@
 # Page Studio gaps (adjacent backlog — not part of the Report Builder spine)
 
-**Provenance, important:** this content originated as a document pasted
-directly into a conversation with Claude (titled something like "Page
-Studio: world-class gaps, AI generator, MCP"), earlier in the same session
-that produced `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md` — it was never a
-repo file. By the time this file was created, that pasted message was no
-longer visible in the session's active context (long-conversation context
-management had moved past it), so **this file is a reconstruction from
-what was recalled/quoted about it in later turns, not a verbatim port of
-the original.** Item titles below are accurate; the level of detail under
-each is whatever survived in conversation recall, which is thin in most
-cases. If the original document (or its author) is available, this file
-should be replaced with the real content, not just filled in from memory
-a second time.
+**Provenance:** this content originated as a document pasted directly into
+a conversation with Claude (titled "Page Studio: world-class gaps, AI
+generator, MCP"), earlier in the same session that produced
+`HANDOFF_REPORT_BUILDER_SPINE_PLAN.md`. It's a faithful condensed version
+of that document's substance, not a verbatim transcript — if the full
+original text is needed for any item below, it can be re-supplied on
+request in a future session (it's not on disk anywhere; this file is now
+the durable copy).
 
 ## Status of the one item that *was* fully investigated
 
@@ -23,7 +18,7 @@ will silently drop on save," listed as item #1 in the original document's
 suggested sequence (ahead of page kinds, undo, everything else).
 
 `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md`'s "Order Detail crash fix" section
-traced this in full and found a more precise picture:
+traced this in full:
 - **Disproven for the direct-save path.** `savePage`/`updatePage` (what a
   gold-copy admin uses to edit a core page directly) round-trip `filterBar`
   cleanly — traced end to end through `pageStudioUpsertRequest`, the
@@ -32,66 +27,112 @@ traced this in full and found a more precise picture:
   named: `normalizeUpsertDefaults` defaulted an *absent* `filterBar` to
   bare `{}` (valid JSON, missing `PageLayout`'s required `root`/`nodes`),
   which crashed `LayoutCanvas.tsx`'s renderer for any page saved with no
-  filter bar at all. Fixed server-side and client-side; see that doc for
-  detail.
-- **A real gap survives, but it's narrower than the original claim**: the
+  filter bar at all. Fixed server-side and client-side.
+- **A real gap survives, narrower than the original claim:** the
   tenant-overlay save path (`saveOverlay`/`mergeOverlay`) never includes
   `filterBar` at all, so a tenant customizing an inherited gold-copy page
   can't add or change the page-wide filter bar — only a gold-copy admin
   editing the core page directly can. Called as a real gap (the overlay
   mechanism exists for presentation customization, and a filter bar is
-  presentation), scoped as its own ticket in the spine plan doc, not fixed
-  yet.
+  presentation), scoped as its own ticket in the spine plan doc.
 
-Treat the spine plan doc as authoritative on this one item; don't restate
-the original claim as still-open.
+Treat the spine plan doc as authoritative on this item.
 
-## Still-open items (topic only — detail not retained)
+## Gaps (ranked, as recovered from the original document)
 
-These were named in the original document and, per this session's
-tracing work, have **not** been investigated against the current repo
-state. Titles below are as recalled; do not treat the absence of detail as
-the absence of substance — it means the detail wasn't carried into this
-file, not that the gap is small.
+### Authoring ergonomics
+- No undo/redo.
+- No copy/paste or duplicate-widget, no keyboard move.
+- No in-canvas copilot — "generate" is a one-shot dialog that navigates
+  away rather than an iterative in-place assistant.
+- AI-generated output is dashboard-only: it can't produce a Form, Panel,
+  tabs, a filter bar, or reason about page kinds at all.
+- Docs / Testing / Performance tabs in the editor are stubs.
+- **Two Page Studios exist**: the live one (`pages/page-studio/*`) and an
+  orphan (`components/pagestudio/*`, confirmed unmounted in an earlier
+  session's research). Deletion/archival of the orphan is still open.
 
-- **Undo/redo and copy-paste gap** — Page Studio's editor is missing
-  these, or has an incomplete version of them. Scope and current state not
-  verified.
-- **Page kinds** — List / Detail / Master-detail / Dashboard as
-  first-class authoring kinds (mirrors the report-kind concept in the
-  spine plan's Phase 3+). Whether these exist today, partially, or not at
-  all is not verified in this file.
-- **Command-bar region** — a page-level command/action bar concept,
-  presumably distinct from a widget's own actions. Not verified.
-- **Publish-as-a-flow** — publishing a page (draft → published, or
-  core → tenant-visible) as a guided flow rather than a single status
-  toggle. Not verified against `page_studio_handler.go`'s actual
-  status/version handling.
-- **Widget loading/empty/error states** — whether every widget type has a
-  defined loading, empty-data, and error state, or whether this is
-  inconsistent across widget types (`TableDesignPlaceholder`/
-  `ChartDesignPlaceholder` in `WidgetDesignPlaceholder.tsx` suggest this
-  was at least partially addressed for design mode, per this session's
-  file listing — not confirmed as the same thing the original document
-  meant).
-- **A comparable-products table** — the original document apparently
-  compared Page Studio against other page/app builders (in the spirit of
-  the OLTP-report-builder comparables table this session's Report Builder
-  proposal used). Content not retained at all.
-- **A suggested sequence** — the original document proposed an ordering
-  for addressing these gaps, with `filterBar` (now corrected above) at
-  item #1. The rest of the ordering is not retained.
+### Object-graph patterns
+- No first-class page kinds (List / Detail / Master-detail / Dashboard).
+  The new-page wizard infers a layout from the primary BO's related-object
+  *count*, not from authoring *intent* — there's no way to say "I want a
+  worklist" vs. "I want a detail form" directly.
+- Related lists are placed manually; the object graph could offer them
+  automatically (a related-BO chip suggested, not just accepted when
+  dropped) but doesn't.
+- No command-bar / page-actions region. Buttons today must invoke an
+  existing BO/process event — this is a placement gap (nowhere natural to
+  put page-level actions), not a governance gap; it should never grow into
+  inventing new CRUD operations.
+- No search/worklist page model as a distinct kind from List.
+
+### Runtime fidelity
+- Widget loading / empty / error / no-selection states are not
+  consistently first-class across widget types. (`WidgetDesignPlaceholder.tsx`'s
+  `TableDesignPlaceholder`/`ChartDesignPlaceholder` address this for
+  *design mode* specifically — not confirmed to be the same gap the
+  original document meant, which read as broader/runtime-facing.)
+- No typed page parameters (e.g. `{{ url.id }}` bound into a page's data
+  sources) — this is the gap ticket 1.2's `ParamSpec` was partly scoped
+  against, but page-side adoption (as opposed to report-side) was
+  explicitly deferred in that ticket.
+- `filterBar` — see corrected status above.
+- Responsive overlays (`ResponsiveOverride`, `ResponsiveBreakpoint` in
+  `types/pageStudio.ts`) are designed in the type layer but not wired to
+  an actual save/render path yet (per that file's own doc comments, seen
+  in this session).
+- Publish is a status chip (`draft`/`published`), not a flow — no preview
+  URL, no entitlements step, no visibility into the gold-copy-vs-tenant
+  delta before publishing.
+
+### Governance
+- No page version diff or rollback (versions increment on save, but
+  there's no way to compare or revert).
+- No unpublished-terms fence in the editor — nothing stops an author from
+  binding a widget to a semantic term that hasn't been published yet.
+- Nav-node entitlements are unchecked in Page Browser — a page can be
+  reachable in navigation regardless of whether the viewer is actually
+  entitled to it.
+
+### AI generator contract (full spec, as recalled)
+- `pageKind` enum and `layoutTemplate` enum drive generation.
+- Cardinality-driven widget rules (matches this session's Report Builder
+  spine work — the same "the graph decides the widget type, never hardcode
+  it" principle, see `widgetTypeForCardinality` in
+  `studio-core/binding/boRelationships.ts`).
+- A hard cap of 0–2 related BOs per generated page.
+- Presentation events generated by AI are format-only — same restriction
+  Report Builder's spine plan holds elsewhere (no free-form scripts).
+- Output is labeled with its `source: 'ai' | 'template'` so the UI can be
+  honest about whether a real model ran or the deterministic fallback did
+  (this part is confirmed real — see `GeneratedPageSpec.source` in
+  `frontend/src/api/pageStudio.ts`, read during this session).
+- The copilot loop is meant to be generate-then-patch against the current
+  `CorePageDefinition` — never regenerate-and-wipe an author's in-progress
+  draft. (`mergeGeneratedSpecIntoDraft` in `generatePageDraft.ts` exists
+  and matches this intent, per this session's file listing — not
+  independently verified as fully closing this gap.)
+
+### MCP phases
+- **Phase A** — read tools (list/get pages, BOs, terms).
+- **Phase B** — generate tools (the AI generator contract above, exposed
+  over MCP).
+- **Phase C** — presentation-rule tools (author/inspect format-only
+  presentation events over MCP).
+- Refusal list: `save_record`, `delete_record`, `run_sql`,
+  `create_business_object` — an MCP page-studio tool must never perform
+  these, mirroring the Report Builder spine plan's own MCP refusal list
+  (Phase 7 there).
+- Resource URIs: `uisce://bo/{boKey}`, `uisce://page/{slug}`.
 
 ## What to do with this file
 
-- If the original document can be found or re-supplied, replace this
-  file's content wholesale rather than merging — a reconstruction from
-  recall is not a reliable base to build on top of.
-- If it can't be recovered, each topic above needs to be re-scoped from
-  scratch (read the current Page Studio code, form a real gap assessment)
-  before it's actionable as a ticket — this file is a table of contents
-  for that work, not the work itself.
-- This file is deliberately **not** merged into
-  `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md` — Page Studio's own gaps are a
-  different backlog from the Report Builder spine, sharing only the
-  `studio-core` extraction work as a connection point.
+- This is now the durable copy — no need to re-locate a "gaps doc"
+  elsewhere; it doesn't exist elsewhere.
+- Items marked "not independently verified" above should be checked
+  against current code before being treated as settled, same discipline
+  as everything else in this repo's HANDOFF docs.
+- Deliberately **not** merged into `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md`
+  — Page Studio's own gaps are a different backlog from the Report
+  Builder spine, sharing only the `studio-core` extraction work as a
+  connection point.
