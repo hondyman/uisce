@@ -452,6 +452,76 @@ func TestReportAPI(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, w.Code)
 	})
 
+	t.Run("Get Template - 200 on Same-Tenant Read (the deny case above must not have become deny-everything)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000032", tenantA,
+				"Tenant A Own Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000032", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Get Template - 200 on Gold-Copy Core Read from a Different Tenant (the inheritance model must survive the fix)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+		goldCopyTenant := "99e99e99-99e9-49e9-89e9-99e99e99e999"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000033", goldCopyTenant,
+				"Core Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
+
+		// A tenant-A user (not gold-copy) reading a core report must still succeed - read-only inheritance.
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000033", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
 	t.Run("Create Template - Rejects Top-Level is_public", func(t *testing.T) {
 		payload := map[string]interface{}{
 			"template_name": "Public From Birth",
