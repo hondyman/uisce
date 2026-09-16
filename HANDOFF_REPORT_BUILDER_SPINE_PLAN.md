@@ -24,10 +24,16 @@ automation tooling limit on (not a confirmed pass) — see "Verification
 debt" below. Everything from Phase 2 on is still backlog, now correctly
 re-targeted at `report_templates`, with 2.1's decisions (no `elements`
 backfill, `is_core` gets a real column, RLS check first) written down
-before any SQL gets written.
+before any SQL gets written. **The RLS read that 2.1 called for as its
+first action has been run — see 2.1's entry** — and it surfaced a live
+cross-tenant data exposure (`GetTemplate` had no tenant check at all),
+fixed immediately and out of band in `f11b158cd`, ahead of and separate
+from any Phase 2 schema work.
 
-Current sequence: **Phase 0 and Phase 1 are both closed — Phase 2 is next
-up**, starting with 2.1 as a `report_templates.layout_config`-to-typed-
+Current sequence: **Phase 0 and Phase 1 are both closed, Phase 2's RLS
+read is done and its one urgent finding is fixed — the rest of Phase 2
+(2.1's actual migration onward) has not been started.** Next up: write
+2.1's migration (`report_templates.layout_config`-to-typed-
 columns migration with a gated fallback, not a create. Everything from
 Phase 3 on is unchanged from the original ordering; 3.3 (the real Go
 band-layout PDF renderer) now has a working spike to grow from
@@ -656,15 +662,36 @@ archaeology on. This doc's own sessions should follow that from here on.
         relying solely on the `tenant_id === goldCopyId` fallback — and
         this closes the confirmed bug where `handleCloneReport`'s
         `is_core = false` is silently discarded today (0.1's gap table).
-      - **Check `report_templates` against the RLS standard the
-        just-merged `fix/strict-tenant-rls-migration-port` work set.**
-        That branch landed (`076aa197f`) hours before this phase opens.
-        Confirm `report_templates` has `tenant_id` and a fail-closed RLS
-        policy consistent with what that branch established elsewhere
-        before adding `primary_business_object_id` to it — a new column on
-        a table with weak tenant isolation extends exactly the attack
-        surface that branch just closed. This is 2.1's **first read**,
-        before any `ALTER TABLE`.
+      - **RLS read — done.** `report_templates` has `tenant_id` and RLS
+        `ENABLE`+`FORCE`'d, policy `tenant_id::text =
+        current_setting('uisce.current_tenant', true)`. Structurally
+        close to fail-closed (no explicit `OR ... IS NULL` bypass clause
+        like the ones the strict-tenant migration replaced elsewhere), but
+        **currently inert in practice**: nothing in `internal/reports` or
+        `internal/api/report_handlers.go` ever sets
+        `uisce.current_tenant`, so the DB role this package connects as
+        must bypass RLS for the app to function at all — meaning RLS is
+        not the real enforcement point for this table today; hand-written
+        `WHERE tenant_id = $1` in each query is. Not part of 2.1's scope
+        to fix (wiring `uisce_get_current_tenant()` into this package
+        properly is its own, larger change — connection-per-request
+        tenant context, not a column migration) — flagged here so it
+        isn't mistaken for closed.
+
+        **This read surfaced something more urgent than the RLS policy
+        itself and it was fixed immediately, out of band:**
+        `GetTemplate`'s HTTP handler had **no tenant check of any kind** —
+        unlike every sibling handler in the file, it never called
+        `resolveAuthContext`, and its repository query
+        (`SELECT ... WHERE id = $1`) has no `tenant_id` filter either. Any
+        authenticated user, from any tenant, could read any other
+        tenant's full report definition by guessing or enumerating a
+        report id — and RLS didn't catch it, per the inert-RLS finding
+        above. Fixed in `f11b158cd`, mirroring `DeleteTemplate`'s existing
+        tenant-ownership check (with gold-copy core reports still readable
+        cross-tenant, matching the existing inheritance model), plus a
+        regression test. This shipped as its own commit ahead of any
+        Phase 2 schema work, given the severity — not batched into 2.1.
 - [ ] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
       and `repository.go` to read/write the new typed columns instead of
       (or alongside, during migration) the opaque `LayoutConfig`/
