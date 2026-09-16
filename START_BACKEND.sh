@@ -81,6 +81,11 @@ export JWT_SECRET="${JWT_SECRET:-test-secret}"
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
+export FIX_ENABLE="${FIX_ENABLE:-true}"
+export FIX_DEMO_AGENT="${FIX_DEMO_AGENT:-true}"
+export FIX_ADMIN_ADDR="${FIX_ADMIN_ADDR:-127.0.0.1:8981}"
+export FIX_ADMIN_TOKEN="${FIX_ADMIN_TOKEN:-dev-fix-admin}"
+export FIX_ACCEPTOR_PORT="${FIX_ACCEPTOR_PORT:-8980}"
 # Defaulting DEV_FALLBACK to false — when a real API_TOKEN_ENCRYPTION_KEY is
 # present in backend/.env (the typical case post-rotation), the fallback path
 # inside buildApiDispatcherEncryptor is never reached and the flag is dead
