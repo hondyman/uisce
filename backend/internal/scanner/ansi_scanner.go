@@ -413,6 +413,14 @@ func (s *AnsiScanner) processForeignKeys() error {
 			"source_schema":  rel.sourceSchema,
 			"target_schema":  rel.targetSchema,
 		}
+		if len(rel.columns) > 0 {
+			if src, ok := rel.columns[0]["source_column"].(string); ok && src != "" {
+				props["fk_column"] = src
+			}
+			if tgt, ok := rel.columns[0]["target_column"].(string); ok && tgt != "" {
+				props["ref_column"] = tgt
+			}
+		}
 
 		propsJSON, err := json.Marshal(props)
 		if err != nil {

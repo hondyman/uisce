@@ -3,14 +3,15 @@ package trading
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/quickfixgo/quickfix"
-	"github.com/quickfixgo/tag"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -19,22 +20,25 @@ import (
 
 // Order represents a trading order
 type Order struct {
-	OrderID   string  `json:"order_id"`
-	Symbol    string  `json:"symbol"`
-	Quantity  float64 `json:"quantity"`
-	Side      string  `json:"side"` // Buy/Sell
-	Price     float64 `json:"price"`
-	Status    string  `json:"status"`
+	OrderID  string  `json:"order_id"`
+	Symbol   string  `json:"symbol"`
+	Quantity float64 `json:"quantity"`
+	Side     string  `json:"side"` // Buy/Sell
+	Price    float64 `json:"price"`
+	Status   string  `json:"status"`
 }
 
 // ExecutionReportSignal is the inbound ExecutionReport delivered as a
 // Temporal signal when the data-pipeline's fix_execution_writer tile
 // fires (see HANDOFF_FIX_OVER_PIPELINE.md §10 step 4).
 type ExecutionReportSignal struct {
-	ClOrdID string `json:"cl_ord_id"`
-	ExecID  string `json:"exec_id"`
-	Status  string `json:"status"` // Filled, PartialFill, Canceled, Rejected
-	Text    string `json:"text,omitempty"`
+	ClOrdID   string  `json:"cl_ord_id"`
+	ExecID    string  `json:"exec_id"`
+	Status    string  `json:"status"` // Filled, PartialFill, Canceled, Rejected
+	Text      string  `json:"text,omitempty"`
+	LastQty   float64 `json:"last_qty,omitempty"`
+	LastPx    float64 `json:"last_px,omitempty"`
+	OrdStatus string  `json:"ord_status,omitempty"`
 }
 
 // FIXOrderInput extends Order with FIX routing info. Passed when the
@@ -43,10 +47,14 @@ type FIXOrderInput struct {
 	Order
 	TenantID    uuid.UUID `json:"tenant_id"`
 	BrokerID    uuid.UUID `json:"broker_id"`
-	AdminURL    string    `json:"admin_url"`     // see HANDOFF §19 admin co-location
+	BrokerCode  string    `json:"broker_code,omitempty"`
+	AdminURL    string    `json:"admin_url"` // see HANDOFF §19 admin co-location
 	AdminToken  string    `json:"admin_token"`
-	SessionID   string    `json:"session_id"`    // FIX.4.4:BUYER->SELLER
+	SessionID   string    `json:"session_id"` // FIX.4.4:BUYER->SELLER
 	ClOrdID     string    `json:"cl_ord_id"`
+	Command     string    `json:"command"` // NewOrderSingle | CancelReplace | Cancel
+	PlacementID string    `json:"placement_id,omitempty"`
+	OrigClOrdID string    `json:"orig_cl_ord_id,omitempty"`
 }
 
 // FIXOrderEntryWorkflow handles the lifecycle of an order routed
@@ -75,10 +83,21 @@ func FIXOrderEntryWorkflow(ctx workflow.Context, input FIXOrderInput) (*Order, e
 	}
 	actx := workflow.WithActivityOptions(ctx, ao)
 
-	// Step 3: Send the FIX NewOrderSingle via SendFixOrderActivity.
-	// The activity constructs the FIX message from the typed order via
-	// the reverse fix_tenant_tag_mapping (HANDOFF §9 fix_order_emit) and
-	// dispatches via quickfix SendToTarget.
+	if input.Command == "" {
+		input.Command = "NewOrderSingle"
+	}
+
+	// Persist the route onto crims.orm.placement before the wire send so
+	// a blotter refresh sees ROUTED even if the broker is slow.
+	if input.Command == "NewOrderSingle" {
+		if err := workflow.ExecuteActivity(actx, PersistFIXRouteActivity, input).Get(actx, nil); err != nil {
+			logger.Error("persist route failed", "err", err)
+			return nil, err
+		}
+	}
+
+	// Step 3: Send via the acceptor admin API (socket owner). Never
+	// quickfix.SendToTarget from this workflow.
 	if err := workflow.ExecuteActivity(actx, SendFixOrderActivity, input).Get(actx, nil); err != nil {
 		return nil, err
 	}
@@ -108,6 +127,26 @@ func FIXOrderEntryWorkflow(ctx workflow.Context, input FIXOrderInput) (*Order, e
 		input.Status = "TimedOut"
 	})
 	selector.Select(ctx)
+
+	if report.ClOrdID != "" {
+		fill := FIXFillPersist{
+			FIXOrderInput: input,
+			LastQty:       report.LastQty,
+			LastPx:        report.LastPx,
+			ExecID:        report.ExecID,
+			OrdStatus:     report.OrdStatus,
+		}
+		if fill.LastQty == 0 {
+			fill.LastQty = input.Quantity
+		}
+		if fill.LastPx == 0 {
+			fill.LastPx = input.Price
+		}
+		if err := workflow.ExecuteActivity(actx, PersistFIXFillActivity, fill).Get(actx, nil); err != nil {
+			logger.Error("persist fill failed", "err", err)
+			return nil, err
+		}
+	}
 
 	return &input.Order, nil
 }
@@ -171,31 +210,57 @@ func SendFixNewOrderSingle(ctx context.Context, order Order) error {
 // double-send.
 func SendFixOrderActivity(ctx context.Context, input FIXOrderInput) error {
 	logger := activityLoggerEntry(ctx)
-	logger.Info("SendFixOrderActivity", "OrderID", input.OrderID, "ClOrdID", input.ClOrdID)
+	logger.Info("SendFixOrderActivity", "OrderID", input.OrderID, "ClOrdID", input.ClOrdID, "Command", input.Command)
 
-	// Build the FIX message directly (reverse-direction tag map).
-	// Production: this would call the fix_order_emit tile via the
-	// data-pipeline engine; here we inline the minimum needed to
-	// dispatch. The TagMappingLoader is a stub for now — full
-	// tenant-aware mapping requires the data-pipeline engine to be
-	// wired in (HANDOFF §13 build step 11).
-	msg := quickfix.NewMessage()
-	msg.Header.SetString(tag.BeginString, "FIX.4.4")
-	msg.Header.SetInt(tag.BodyLength, 0)
-	msg.Header.SetString(tag.MsgType, "D")
-	msg.Header.SetString(tag.ClOrdID, input.ClOrdID)
-	msg.Body.SetString(tag.Symbol, input.Symbol)
-	msg.Body.SetString(tag.Side, sideCode(input.Side))
-	msg.Body.SetString(tag.OrderQty, fmt.Sprintf("%v", input.Quantity))
-	msg.Body.SetString(tag.Price, fmt.Sprintf("%v", input.Price))
-
-	// Parse the SessionID back into quickfix.SessionID for SendToTarget.
-	sessionID, err := parseSessionID(input.SessionID)
-	if err != nil {
-		return fmt.Errorf("parse session id %q: %w", input.SessionID, err)
+	if strings.TrimSpace(input.AdminURL) == "" {
+		return fmt.Errorf("admin_url is required; FIX TCP is owned by the acceptor, not this activity")
+	}
+	msgType := "D"
+	switch input.Command {
+	case "Cancel", "fix.Cancel":
+		msgType = "F"
+	case "CancelReplace", "fix.CancelReplace":
+		msgType = "G"
 	}
 
-	return quickfix.SendToTarget(msg, sessionID)
+	fields := map[string]string{
+		"11": input.ClOrdID,
+		"55": input.Symbol,
+		"54": sideCode(input.Side),
+		"38": fmt.Sprintf("%v", input.Quantity),
+		"44": fmt.Sprintf("%v", input.Price),
+		"21": "1",
+		"40": "2",
+	}
+	if input.Price == 0 {
+		fields["40"] = "1" // Market
+		delete(fields, "44")
+	}
+	if input.OrigClOrdID != "" {
+		fields["41"] = input.OrigClOrdID
+	}
+
+	body, err := json.Marshal(map[string]interface{}{"msgType": msgType, "fields": fields})
+	if err != nil {
+		return err
+	}
+	url := strings.TrimRight(input.AdminURL, "/") + "/sessions/" + input.SessionID + "/send"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Fix-Admin-Token", input.AdminToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("admin send: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("admin send HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+	}
+	return nil
 }
 
 // sideCode converts "BUY"/"SELL" to FIX side codes (1/2).

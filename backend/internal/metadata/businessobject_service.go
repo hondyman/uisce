@@ -45,16 +45,24 @@ type AccessDecision struct {
 }
 
 // RelationshipResult represents a related entity found via catalog edges
+type JoinColumn struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+}
+
 type RelationshipResult struct {
-	ID                string `json:"id" db:"id"`
-	RelatedObjectName string `json:"relatedObjectName" db:"related_object_name"`
-	TargetObjectID    string `json:"targetObjectId" db:"target_object_id"`
-	RelationshipType  string `json:"relationshipType" db:"relationship_type"`
-	Cardinality       string `json:"cardinality" db:"cardinality"`
-	Description       string `json:"description" db:"description"`
-	JoinCondition     string `json:"joinCondition" db:"join_condition"`
-	SourceDriverTable string `json:"sourceDriverTable" db:"source_driver_table"`
-	TargetDriverTable string `json:"targetDriverTable" db:"target_driver_table"`
+	ID                string        `json:"id" db:"id"`
+	RelatedObjectName string        `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID    string        `json:"targetObjectId" db:"target_object_id"`
+	RelationshipType  string        `json:"relationshipType" db:"relationship_type"`
+	Cardinality       string        `json:"cardinality" db:"cardinality"`
+	Description       string        `json:"description" db:"description"`
+	JoinCondition     string        `json:"joinCondition" db:"join_condition"`
+	JoinColumns       []JoinColumn  `json:"joinColumns,omitempty"`
+	SourceDriverTable string        `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable string        `json:"targetDriverTable" db:"target_driver_table"`
+	Kind              string        `json:"kind"`
+	LinkTable         string        `json:"linkTable,omitempty"`
 	// Not serialized - internal-only, used to resolve the real FK column
 	// from information_schema below when the catalog graph's own
 	// join_condition/cardinality properties are unpopulated (the common
@@ -2575,101 +2583,30 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 		SemanticFields: []SemanticFieldResult{},
 	}
 
-	if !driverTableID.Valid || driverTableID.String == "" {
+	drivingNode, driveErr := s.resolveDrivingTableNode(ctx, tenantID, boID)
+	if driveErr != nil {
+		return nil, fmt.Errorf("failed to get driver table for BO %s: %w", boID, driveErr)
+	}
+	if drivingNode == "" && driverTableID.Valid {
+		drivingNode = driverTableID.String
+	}
+
+	if drivingNode != "" {
+		related, touching, relErr := s.relatedObjectsFromFKGraph(ctx, tenantID, boID, drivingNode)
+		if relErr != nil {
+			logging.GetLogger().Sugar().Warnf("FK graph relationships for BO %s: %v", boID, relErr)
+		} else {
+			response.RelatedObjects = related
+		}
+		// Request-time information_schema only if the catalog has no FK edges
+		// on this driving node (pre-backfill tenants).
+		if touching == 0 {
+			s.legacyCatalogRelationships(ctx, tenantID, boID, drivingNode, response)
+		}
+	}
+
+	if drivingNode == "" {
 		return response, nil
-	}
-
-	// 2. Find related objects via catalog edges
-	// Query edges where the driver table OR the BO itself is source or target
-	relatedQuery := `
-		SELECT DISTINCT
-			e.id::text as id,
-			CASE 
-				WHEN e.source_node_id = $1::uuid OR (e.properties->>'source_bo_id') = $2 THEN COALESCE(t.node_name, t.qualified_path, e.properties->>'target_bo_id', 'Related BO')
-				ELSE COALESCE(src.node_name, src.qualified_path, e.properties->>'source_bo_id', 'Related BO')
-			END as related_object_name,
-			CASE
-				WHEN e.source_node_id = $1::uuid OR (e.properties->>'source_bo_id') = $2 THEN COALESCE(e.properties->>'target_bo_id', e.target_node_id::text, '')
-				ELSE COALESCE(e.properties->>'source_bo_id', e.source_node_id::text, '')
-			END as target_object_id,
-			COALESCE(e.relationship_type, 'RELATED_TO') as relationship_type,
-			COALESCE(e.properties->>'cardinality', '1:N') as cardinality,
-			COALESCE(e.properties->>'description', t.qualified_path, src.qualified_path, '') as description,
-			COALESCE(e.properties->>'join_condition', e.properties->>'description', '') as join_condition,
-			COALESCE(src.node_name, '') as source_driver_table,
-			COALESCE(t.node_name, '') as target_driver_table,
-			COALESCE(src.qualified_path, '') as source_qualified_path,
-			COALESCE(t.qualified_path, '') as target_qualified_path
-		FROM catalog_edge e
-		LEFT JOIN catalog_node src ON e.source_node_id = src.id
-		LEFT JOIN catalog_node t ON e.target_node_id = t.id
-		WHERE (
-			e.source_node_id = $1::uuid OR e.target_node_id = $1::uuid
-			OR e.source_node_id = $2::uuid OR e.target_node_id = $2::uuid
-			OR (e.properties->>'source_bo_id') = $2 OR (e.properties->>'target_bo_id') = $2
-		)
-		-- Every edge touching a BO's node was returned regardless of what
-		-- KIND of edge it is, which meant GOVERNED_BY_RULE edges (this BO's
-		-- validation rules - see analytics.ensureGovernedByRuleEdge, which
-		-- never sets relationship_type, so it silently defaults to
-		-- 'related_to') and semantic/field-graph edges (MAPS_TO,
-		-- USES_SEMANTIC_TERM, HAS_FIELD, etc.) flooded the "related
-		-- business objects" list the Page Designer's data-binding UI shows,
-		-- burying the small number of genuine BO-to-BO structural
-		-- relationships (foreign_key, belongs_to, ...) under noise. This
-		-- excludes the known non-relationship categories rather than an
-		-- allowlist, since real relationship_type values are
-		-- domain-specific and open-ended (foreign_key/belongs_to today,
-		-- but also e.g. BELONGS_TO_ACCOUNT/HOLDS_SECURITY elsewhere in this
-		-- graph) - only 'related_to' (the column's own default, meaning
-		-- "never classified") and the semantic/field-graph kinds are
-		-- excluded.
-		AND e.relationship_type NOT IN (
-			'related_to', 'MAPS_TO', 'USES_SEMANTIC_TERM', 'BACKED_BY_TERM',
-			'HAS_FIELD', 'has_context', 'member_of', 'depends_on',
-			'contains_field', 'contains_endpoint', 'contains_resource'
-		)
-	`
-
-	driverTableIDVal := boID
-	if driverTableID.Valid && driverTableID.String != "" {
-		driverTableIDVal = driverTableID.String
-	}
-
-	err = s.db.SelectContext(ctx, &response.RelatedObjects, relatedQuery, driverTableIDVal, boID)
-	if err != nil {
-		logging.GetLogger().Sugar().Warnf("Failed to fetch related objects for BO %s: %v", boID, err)
-	}
-
-	// The catalog graph records THAT a foreign_key/belongs_to relationship
-	// exists between two tables, but its join_condition/cardinality
-	// properties are almost never populated (see the WHERE clause above's
-	// comment on this same noisy edge data) - so for exactly those two
-	// relationship kinds, resolve the real column-level FK from Postgres's
-	// own constraint catalog (the one ground truth every other approach
-	// here duplicates or approximates) rather than leaving callers
-	// (DataBindingsPanel, NewPageWizard, Page Studio's master-detail
-	// tables) to guess a foreign key column name from the user.
-	for i := range response.RelatedObjects {
-		rel := &response.RelatedObjects[i]
-		if rel.JoinCondition != "" {
-			continue
-		}
-		lowerType := strings.ToLower(rel.RelationshipType)
-		if lowerType != "foreign_key" && lowerType != "belongs_to" {
-			continue
-		}
-		srcSchema, srcTable := qualifiedPathToSchemaTable(rel.SourceQualifiedPath)
-		tgtSchema, tgtTable := qualifiedPathToSchemaTable(rel.TargetQualifiedPath)
-		if srcTable == "" || tgtTable == "" {
-			continue
-		}
-		if fk, ok := s.resolveRealForeignKey(ctx, srcSchema, srcTable, tgtSchema, tgtTable); ok {
-			rel.JoinCondition = fk
-			if rel.Cardinality == "" {
-				rel.Cardinality = "1:N"
-			}
-		}
 	}
 
 	// 3. Find semantic field mappings
@@ -2690,7 +2627,7 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 		  AND term.kind NOT IN ('table', 'view', 'column') -- Exclude structural nodes
 	`
 
-	err = s.db.SelectContext(ctx, &response.SemanticFields, semanticQueryv2, driverTableID.String)
+	err = s.db.SelectContext(ctx, &response.SemanticFields, semanticQueryv2, drivingNode)
 	if err != nil {
 		logging.GetLogger().Sugar().Warnf("Failed to fetch semantic fields for BO %s: %v", boID, err)
 	}
@@ -2713,7 +2650,7 @@ func (s *BusinessObjectService) GetBusinessObjectRelationships(ctx context.Conte
 	`
 	// Note: The node_type_id should ideally be fetched from a constant or lookup
 
-	rows, err := s.db.QueryxContext(ctx, availableQuery, driverTableID.String)
+	rows, err := s.db.QueryxContext(ctx, availableQuery, drivingNode)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

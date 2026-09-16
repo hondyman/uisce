@@ -264,7 +264,9 @@ type PageGenerationSection struct {
 
 // PageGenerationSpec is the JSON shape asked of the model.
 type PageGenerationSpec struct {
-	Title string `json:"title"`
+	Title    string `json:"title"`
+	PageKind string `json:"pageKind"`
+	FilterBar []PageGenerationSection `json:"filterBar,omitempty"`
 	// LayoutTemplate names one of allowedPageGenerationTemplates - the
 	// section-based body layout (frontend/src/pages/page-studio/
 	// layoutTemplates.ts) the generated sections are distributed into, in
@@ -286,6 +288,7 @@ var allowedPageGenerationWidgetTypes = map[string]bool{
 	"LineChart": true,
 	"Table":     true,
 	"Slicer":    true,
+	"Form":      true,
 }
 
 // allowedPageGenerationTemplates mirrors the plain section-based ids in
@@ -298,6 +301,14 @@ var allowedPageGenerationTemplates = map[string]bool{
 	"two-column":     true,
 	"three-column":   true,
 	"dashboard-grid": true,
+	"master-detail":  true,
+}
+
+var allowedPageKinds = map[string]bool{
+	"list":          true,
+	"detail":        true,
+	"master-detail": true,
+	"dashboard":     true,
 }
 
 // GeneratePageSpec asks Gemini to pick a small section mix and page title
@@ -310,12 +321,12 @@ var allowedPageGenerationTemplates = map[string]bool{
 // name in the model's reasoning can't corrupt the generated page, and it
 // can't bind to a BO that isn't actually related (validated against
 // relatedBOs below).
-func (gc *GeminiClient) GeneratePageSpec(ctx context.Context, boName, boKey, description string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) (*PageGenerationSpec, error) {
+func (gc *GeminiClient) GeneratePageSpec(ctx context.Context, boName, boKey, description, pageKind string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) (*PageGenerationSpec, error) {
 	if gc.client == nil {
 		return nil, fmt.Errorf("gemini client not initialized")
 	}
 
-	prompt := buildPageGenerationPrompt(boName, boKey, description, fields, relatedBOs)
+	prompt := buildPageGenerationPrompt(boName, boKey, description, pageKind, fields, relatedBOs)
 
 	model := gc.client.GenerativeModel(gc.model)
 	model.SetTemperature(0.2)
@@ -391,24 +402,51 @@ func (gc *GeminiClient) GeneratePageSpec(ctx context.Context, boName, boKey, des
 	if spec.Title == "" {
 		spec.Title = boName
 	}
+	if !allowedPageKinds[spec.PageKind] {
+		if allowedPageKinds[pageKind] {
+			spec.PageKind = pageKind
+		} else {
+			spec.PageKind = "dashboard"
+		}
+	}
 	if !allowedPageGenerationTemplates[spec.LayoutTemplate] {
 		spec.LayoutTemplate = "single-column"
 	}
+	filteredBar := make([]PageGenerationSection, 0, len(spec.FilterBar))
+	for _, s := range spec.FilterBar {
+		if s.Type != "Slicer" {
+			continue
+		}
+		if !validBOKeys[s.BOKey] {
+			s.BOKey = ""
+		}
+		filteredBar = append(filteredBar, s)
+		if len(filteredBar) == 4 {
+			break
+		}
+	}
+	spec.FilterBar = filteredBar
 
 	return &spec, nil
 }
 
-func buildPageGenerationPrompt(boName, boKey, description string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) string {
-	prompt := "You are designing a single dashboard page layout for a business application, in the same way an experienced investment-management software designer would.\n\n"
+func buildPageGenerationPrompt(boName, boKey, description, pageKind string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) string {
+	if pageKind == "" {
+		pageKind = "dashboard"
+	}
+	prompt := "You are designing one page for a governed Business Object application (Salesforce Lightning / PeopleSoft analog), not a marketing site.\n\n"
 	prompt += "You MUST output only valid JSON in a markdown code block: ```json {...}```\n"
-	prompt += "The JSON shape is exactly: {\"title\": string, \"layoutTemplate\": string, \"sections\": [{\"boKey\": string, \"type\": string, \"title\": string}]}\n"
-	prompt += "\"layoutTemplate\" MUST be one of exactly: \"single-column\", \"two-column\", \"three-column\", \"dashboard-grid\" - pick whichever best fits how many sections you choose (e.g. \"dashboard-grid\" for a KPI+chart+table mix, \"single-column\" for just a table).\n"
-	prompt += "\"type\" MUST be one of exactly: \"KPIGroup\", \"LineChart\", \"Table\", \"Slicer\".\n"
-	prompt += fmt.Sprintf("\"boKey\" MUST be either \"\" (meaning the page's own primary Business Object, %q) or one of the related Business Object keys listed below - never invent one.\n", boKey)
-	prompt += "Pick 2 to 6 sections total, in the order they should fill the template's sections. Always include exactly one \"Table\" section for the primary Business Object (boKey \"\"), placed last among the primary's own sections.\n"
-	prompt += "Only include \"KPIGroup\" or \"LineChart\" for a Business Object if its field list actually has MEASURE fields to summarize.\n"
-	prompt += "Use your judgment about which related Business Objects actually belong on this page given its real-world business use - e.g. an Order page's natural companions are things like its allocations or executions, not every related record that merely happens to reference it. Prefer 0-2 related Business Objects; it is completely fine to include none if the primary object's own data already tells the story, or if the user's request below doesn't call for more.\n"
+	prompt += "The JSON shape is exactly: {\"title\": string, \"pageKind\": string, \"layoutTemplate\": string, \"filterBar\": [{\"boKey\": string, \"type\": \"Slicer\", \"title\": string}], \"sections\": [{\"boKey\": string, \"type\": string, \"title\": string}]}\n"
+	prompt += "\"pageKind\" MUST be one of: \"list\", \"detail\", \"master-detail\", \"dashboard\".\n"
+	prompt += "\"layoutTemplate\" MUST be one of: \"single-column\", \"two-column\", \"three-column\", \"dashboard-grid\", \"master-detail\".\n"
+	prompt += "\"type\" MUST be one of: \"KPIGroup\", \"LineChart\", \"Table\", \"Slicer\", \"Form\".\n"
+	prompt += fmt.Sprintf("\"boKey\" MUST be either \"\" (the primary Business Object %q) or one of the related keys listed below — never invent a Business Object or field name.\n", boKey)
+	prompt += "Cardinality rules: a one-valued object uses Form (or Table on a list page); a 1:N related object uses Table. KPIGroup/LineChart only if that object has MEASURE or CALCULATED fields.\n"
+	prompt += "list: one primary Table, optional Slicers in filterBar, no Form. detail: one primary Form plus 0-2 related Tables. master-detail: primary Table then Form (and optional child Tables), layoutTemplate master-detail. dashboard: KPI/Chart/Table mix.\n"
+	prompt += "Pick 1 to 6 body sections. Prefer 0-2 related Business Objects (children like allocations/executions, not every inbound FK). filterBar is optional and Slicer-only.\n"
+	prompt += "Do not emit Save/Delete/Create widgets. Formatting-only; CRUD lives on the Business Object.\n"
 	prompt += "Never include any text before or after the JSON block.\n\n"
+	prompt += fmt.Sprintf("Requested pageKind: %s\n", pageKind)
 	prompt += fmt.Sprintf("Primary Business Object: %s (key: %s)\n", boName, boKey)
 	if description != "" {
 		prompt += fmt.Sprintf("User's request: %s\n", description)

@@ -14,15 +14,21 @@ export interface GeneratedRelatedBO {
   boId: string;
   boKey: string;
   displayName: string;
+  cardinality?: string;
+  joinCondition?: string;
 }
+
+export type GeneratedPageKind = 'list' | 'detail' | 'master-detail' | 'dashboard';
 
 export interface GeneratedPageSpec {
   title: string;
-  /** One of layoutTemplates.ts's plain section-template ids (single-column/two-column/three-column/dashboard-grid). */
+  pageKind?: GeneratedPageKind;
+  /** One of layoutTemplates.ts's section-template ids. */
   layoutTemplate: string;
   /** Related Business Objects actually used by one or more sections below - enough for generatePageDraft.ts to build a data source per BO without a second round trip. */
   relatedBusinessObjects: GeneratedRelatedBO[];
   sections: GeneratedPageSection[];
+  filterBar?: GeneratedPageSection[];
   /** Which path produced this spec - lets the UI be honest about whether Gemini actually ran or the deterministic template did. */
   source: 'ai' | 'template';
 }
@@ -70,6 +76,14 @@ export const PageStudioApi = {
     return apiClient<void>(`${PAGE_STUDIO_BASE}/pages/${id}`, { method: 'DELETE' });
   },
 
+  saveOverlay: async (id: string, overlay: { components?: unknown; layout?: unknown; tabs?: unknown }): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/overlay`, {
+      method: 'PUT',
+      body: JSON.stringify(overlay),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
   /**
    * Clones a page: fetches its full content and re-POSTs it under a new
    * name/slug. Always creates a tenant-authored (isCore: false) copy,
@@ -90,6 +104,8 @@ export const PageStudioApi = {
         tabs: source.tabs,
         components: source.components,
         dataSources: source.dataSources,
+        presentationEvents: source.presentationEvents,
+        filterBar: source.filterBar,
         isCore: false,
         status: 'draft',
       }),
@@ -106,10 +122,10 @@ export const PageStudioApi = {
    * that expansion needs the BO's binding id and other client-side context
    * this endpoint doesn't have.
    */
-  generateSpec: async (boId: string, boKey: string, boName: string, description: string): Promise<GeneratedPageSpec> => {
+  generateSpec: async (boId: string, boKey: string, boName: string, description: string, pageKind?: GeneratedPageKind): Promise<GeneratedPageSpec> => {
     return apiClient<GeneratedPageSpec>(`${PAGE_STUDIO_BASE}/generate`, {
       method: 'POST',
-      body: JSON.stringify({ boId, boKey, boName, description }),
+      body: JSON.stringify({ boId, boKey, boName, description, pageKind }),
       headers: { 'Content-Type': 'application/json' },
     });
   },

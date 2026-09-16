@@ -271,6 +271,18 @@ rows regardless of what any Go handler believes, which is the only fix
 that survives the next handler someone writes without reading this
 document.
 
+> **CORRECTED 2026-09-16 — this sentence is false under the connection
+> role this platform actually uses.** Every connection string this app
+> uses (`POSTGRES_DSN`/`DATABASE_URL`/`UISCE_DATABASE_URL`) authenticates
+> as `postgres`, a superuser with `rolbypassrls = true`, which makes RLS
+> inert regardless of policy correctness — confirmed directly via
+> `pg_roles`, not inferred. RLS does not fix the class today; hand-written
+> `WHERE tenant_id` in each query does, everywhere in this codebase, not
+> just here. See "New Entry (2026-09-16, continued): RLS is inert
+> platform-wide" below for the full finding, and Standing Gates item 6 for
+> what closing this actually requires. The consolidated function fix
+> above stands — only the claim that RLS backstops it is retracted.
+
 ## New Entry (2026-09-07): Tier 0 Write-Path Fix — A Replay Caught The Fix's Own Bug
 
 `bo_crud_handler.go`'s `extractTenantUUIDFromRequest` was the sweep's only

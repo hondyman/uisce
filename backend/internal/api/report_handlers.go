@@ -182,6 +182,20 @@ func (h *ReportHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(templates)
 }
 
+// deriveParametersFromSchema extracts the wrapped array from
+// parameter_schema's {"parameters": [...]} shape - the only shape
+// buildSavePayload has ever written, per
+// frontend/src/components/reporting/builderSerialization.ts - so the
+// typed `parameters` column stays in sync with `parameter_schema` during
+// the Phase 2 dual-write window, before ticket 2.4's frontend cutover to
+// sending `parameters` directly.
+func deriveParametersFromSchema(schema map[string]interface{}) []interface{} {
+	if params, ok := schema["parameters"].([]interface{}); ok {
+		return params
+	}
+	return []interface{}{}
+}
+
 func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
 	if err != nil {
@@ -277,6 +291,15 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 
 	if template.ParameterSchema == nil {
 		template.ParameterSchema = make(map[string]interface{})
+	}
+	if template.Parameters == nil {
+		// Dual-write window (Phase 2, pre-2.4 frontend cutover):
+		// buildSavePayload only ever sends parameter_schema
+		// ({"parameters": [...]}), never a top-level `parameters` key -
+		// derive it so the typed column isn't silently empty while
+		// parameter_schema carries the real data. Same divergence class
+		// as the filterBar bug this plan exists to fix.
+		template.Parameters = deriveParametersFromSchema(template.ParameterSchema)
 	}
 	if !template.IsActive {
 		template.IsActive = true
@@ -466,6 +489,17 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	if params, ok := raw["parameters"].([]interface{}); ok {
 		template.Parameters = params
+	} else if _, ok := raw["parameter_schema"]; ok {
+		// Dual-write window (Phase 2, pre-2.4 frontend cutover): the
+		// current frontend only ever sends parameter_schema, never a
+		// top-level `parameters` key - derive it so `parameters` doesn't
+		// silently freeze at whatever the 2.1 backfill (or the last
+		// direct write) set it to while parameter_schema keeps moving.
+		// Same divergence class as the filterBar bug this plan exists to
+		// fix; caught by review, not by the 2.3 round-trip test, since
+		// that test exercises the backend in isolation and sets both
+		// fields directly rather than simulating the real payload shape.
+		template.Parameters = deriveParametersFromSchema(template.ParameterSchema)
 	}
 	if events, ok := raw["presentation_events"].([]interface{}); ok {
 		template.PresentationEvents = events

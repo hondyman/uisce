@@ -13,6 +13,7 @@ const (
 	MethodNotFound = -32601
 	InvalidParams  = -32602
 	InternalError  = -32603
+	Unauthorized   = -32001 // uisce extension: auth required
 )
 
 type JSONRPCRequest struct {

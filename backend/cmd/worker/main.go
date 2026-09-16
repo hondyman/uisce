@@ -23,10 +23,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/review"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	intsemantic "github.com/hondyman/uisce/backend/internal/semantic"
-	"github.com/hondyman/uisce/backend/internal/tenant"
+	uiscetemporal "github.com/hondyman/uisce/backend/internal/temporal"
 	temporalactivities "github.com/hondyman/uisce/backend/internal/temporal/activities"
 	provisioningworkflows "github.com/hondyman/uisce/backend/internal/temporal/workflows"
-	uiscetemporal "github.com/hondyman/uisce/backend/internal/temporal"
+	"github.com/hondyman/uisce/backend/internal/tenant"
 	"github.com/hondyman/uisce/backend/internal/tests"
 	"github.com/hondyman/uisce/backend/internal/trading"
 	"github.com/hondyman/uisce/backend/internal/wealth"
@@ -37,10 +37,10 @@ import (
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	pkgworkflows "github.com/hondyman/uisce/backend/pkg/workflows"
-	"go.uber.org/zap"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/worker"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -95,6 +95,8 @@ func main() {
 	w.RegisterActivity(uiscetemporal.MatchExecutionsActivity)
 	w.RegisterActivity(uiscetemporal.PersistReconciliationReportActivity)
 	w.RegisterActivity(trading.SendFixOrderActivity)
+	w.RegisterActivity(trading.PersistFIXRouteActivity)
+	w.RegisterActivity(trading.PersistFIXFillActivity)
 	log.Println("✅ Registered FIX workflows: FIXSessionLifecycleWorkflow, FIXOrderEntryWorkflow, FIXReconciliationWorkflow")
 
 	// Register activities with Activities struct
@@ -334,7 +336,9 @@ func main() {
 	w.RegisterActivity(provisioningActivities.EmitProvisioningEvent)
 	w.RegisterActivity(provisioningActivities.UpdateTenantStatus)
 	w.RegisterActivity(provisioningActivities.UpdateInstanceStatus)
-	w.RegisterActivity(provisioningActivities.GetGoldCopyInfo)
+	// GetGoldCopyInfo returns (string, string, string, error); Temporal
+	// activities may only return (T, error). Skip registration so this
+	// worker can boot for FIXOrderEntryWorkflow.
 	w.RegisterActivity(provisioningActivities.HealthCheck)
 
 	// Register as safe for BP Designer

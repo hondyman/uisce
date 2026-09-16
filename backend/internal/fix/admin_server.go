@@ -18,29 +18,30 @@ import (
 // on 127.0.0.1:8981 per HANDOFF_FIX_OVER_PIPELINE.md §6 (Amendment 1).
 //
 // Endpoints (all require X-Fix-Admin-Token header):
-//   GET  /sessions                          — list active sessions + tenant/broker tags
-//   GET  /sessions/{id}                     — single session detail
-//   GET  /sessions/{id}/health              — health probe (used by SessionLivenessCheckActivity)
-//   POST /sessions/{id}/logon               — initiate logon for the session
-//   POST /sessions/{id}/logout              — initiate logout
-//   POST /sessions/{id}/reset               — reset sequence numbers + message log
-//                                             (Amendment 3 escape hatch)
+//
+//	GET  /sessions                          — list active sessions + tenant/broker tags
+//	GET  /sessions/{id}                     — single session detail
+//	GET  /sessions/{id}/health              — health probe (used by SessionLivenessCheckActivity)
+//	POST /sessions/{id}/logon               — initiate logon for the session
+//	POST /sessions/{id}/logout              — initiate logout
+//	POST /sessions/{id}/reset               — reset sequence numbers + message log
+//	                                          (Amendment 3 escape hatch)
 //
 // Why this exists: Temporal workflows must not own TCP sockets, but they
 // DO need to control session lifecycle (logon/logout/reconnect) and
 // observe session state. The admin API is the bridge — workflow code
 // calls into it via activities; the acceptor process owns the sockets.
 type AdminServer struct {
-	addr   string
-	token  string
+	addr    string
+	token   string
 	adapter *Adapter
-	server *http.Server
+	server  *http.Server
 
 	// mu protects sessionOverrides — per-session overrides set via
 	// POST /sessions/{id}/logon or /logout. The acceptor may be
 	// holding the actual session; this is a thin policy layer over
 	// quickfix's session callbacks.
-	mu                sync.RWMutex
+	mu               sync.RWMutex
 	sessionOverrides map[string]SessionState
 }
 
@@ -63,10 +64,10 @@ func NewAdminServer(addr, token string, adapter *Adapter) (*AdminServer, error) 
 	}
 
 	s := &AdminServer{
-		addr:              addr,
-		token:             token,
-		adapter:           adapter,
-		sessionOverrides:  make(map[string]SessionState),
+		addr:             addr,
+		token:            token,
+		adapter:          adapter,
+		sessionOverrides: make(map[string]SessionState),
 	}
 
 	mux := http.NewServeMux()
@@ -215,9 +216,60 @@ func (s *AdminServer) handleSessionByID(w http.ResponseWriter, r *http.Request) 
 		s.serveLogout(w, r, sessionID)
 	case "reset":
 		s.serveReset(w, r, sessionID)
+	case "send":
+		s.serveSend(w, r, sessionID)
 	default:
 		http.Error(w, "unknown action: "+action, http.StatusBadRequest)
 	}
+}
+
+type adminSendRequest struct {
+	MsgType string            `json:"msgType"`
+	Fields  map[string]string `json:"fields"`
+}
+
+// serveSend is the activity-facing outbound path. Temporal
+// SendFixOrderActivity POSTs a NewOrderSingle (or cancel/replace)
+// here; the acceptor is the only process allowed to call
+// quickfix.SendToTarget.
+func (s *AdminServer) serveSend(w http.ResponseWriter, r *http.Request, sessionID quickfix.SessionID) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req adminSendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.MsgType == "" {
+		http.Error(w, "msgType is required", http.StatusBadRequest)
+		return
+	}
+	msg := quickfix.NewMessage()
+	begin := sessionID.BeginString
+	if begin == "" {
+		begin = "FIX.4.4"
+	}
+	msg.Header.SetString(tag.BeginString, begin)
+	msg.Header.SetInt(tag.BodyLength, 0)
+	msg.Header.SetString(tag.MsgType, req.MsgType)
+	for k, v := range req.Fields {
+		if k == "" {
+			continue
+		}
+		var n int
+		if _, err := fmt.Sscanf(k, "%d", &n); err != nil || n <= 0 {
+			continue
+		}
+		msg.Body.SetString(quickfix.Tag(n), v)
+	}
+	if err := s.adapter.SendMessage(msg, sessionID); err != nil {
+		http.Error(w, "send failed: "+err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "sent", "session_id": sessionID.String(), "msg_type": req.MsgType})
 }
 
 func (s *AdminServer) serveSessionDetail(w http.ResponseWriter, r *http.Request, sessionID quickfix.SessionID) {
@@ -350,9 +402,9 @@ func parseSessionIDString(s string, out *quickfix.SessionID) error {
 		return errors.New("expected format FIX.x.y:SENDER->TARGET")
 	}
 	*out = quickfix.SessionID{
-		BeginString:   s[:i1],
-		SenderCompID:  s[i1+1 : i2],
-		TargetCompID:  s[i2+2:],
+		BeginString:  s[:i1],
+		SenderCompID: s[i1+1 : i2],
+		TargetCompID: s[i2+2:],
 	}
 	return nil
 }

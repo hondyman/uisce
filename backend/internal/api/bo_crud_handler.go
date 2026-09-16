@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -600,13 +601,22 @@ type boSchemaRel struct {
 	Conditions []string `json:"conditions"`
 }
 
+type boSchemaEnum struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
+}
+
 type boSchemaField struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	DisplayName    string `json:"displayName,omitempty"`
-	Type           string `json:"type"`
-	Required       bool   `json:"required,omitempty"`
-	PhysicalColumn string `json:"physicalColumn,omitempty"`
+	ID                  string          `json:"id"`
+	Name                string          `json:"name"`
+	DisplayName         string          `json:"displayName,omitempty"`
+	Type                string          `json:"type"`
+	Required            bool            `json:"required,omitempty"`
+	PhysicalColumn      string          `json:"physicalColumn,omitempty"`
+	ReferenceBoId       string          `json:"referenceBoId,omitempty"`
+	ReferenceValueField string          `json:"referenceValueField,omitempty"`
+	EnumValues          []boSchemaEnum  `json:"enumValues,omitempty"`
+	DefaultValue        string          `json:"defaultValue,omitempty"`
 }
 
 // HandleGetBOSchema returns the self-describing field shape of a Business
@@ -782,8 +792,8 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 			colType = f.DataType
 		}
 		display := f.DisplayName
-		if display == "" {
-			display = f.FieldName
+		if display == "" || display == f.FieldName {
+			display = humanizeIdent(f.FieldName)
 		}
 		out.Fields = append(out.Fields, boSchemaField{
 			ID:             f.ID,
@@ -794,6 +804,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 			PhysicalColumn: physical,
 		})
 	}
+	h.enrichSchemaFields(r.Context(), tenantID, &out)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
@@ -818,6 +829,101 @@ func normalizeFormType(pgType string) string {
 		return "checkbox"
 	default:
 		return "text"
+	}
+}
+
+func humanizeIdent(s string) string {
+	s = strings.ReplaceAll(strings.TrimSpace(s), "_", " ")
+	if s == "" {
+		return s
+	}
+	var b strings.Builder
+	prevSpace := true
+	var prev rune
+	for i, r := range s {
+		if r == ' ' {
+			if !prevSpace {
+				b.WriteByte(' ')
+				prevSpace = true
+			}
+			prev = r
+			continue
+		}
+		if i > 0 && !prevSpace && unicode.IsUpper(r) && unicode.IsLower(prev) {
+			b.WriteByte(' ')
+			prevSpace = true
+		}
+		if prevSpace {
+			b.WriteRune(unicode.ToUpper(r))
+		} else {
+			b.WriteRune(r)
+		}
+		prevSpace = false
+		prev = r
+	}
+	return b.String()
+}
+
+func physicalKey(f boSchemaField) string {
+	p := strings.ToLower(strings.TrimSpace(f.PhysicalColumn))
+	if p == "" {
+		p = strings.ToLower(strings.TrimSpace(f.Name))
+	}
+	return p
+}
+
+func (h *BOCRUDHandler) enrichSchemaFields(ctx context.Context, tenantID uuid.UUID, out *boSchemaResponse) {
+	if out == nil || h.db == nil {
+		return
+	}
+	boIDs := map[string]string{}
+	type boRow struct {
+		ID    string `db:"id"`
+		BoKey string `db:"bo_key"`
+	}
+	var rows []boRow
+	_ = h.db.SelectContext(ctx, &rows, `
+		SELECT id::text AS id, bo_key FROM public.business_objects
+		WHERE tenant_id = $1 AND bo_key IN ('security','broker','account')
+	`, tenantID)
+	for _, r := range rows {
+		boIDs[r.BoKey] = r.ID
+	}
+
+	for i := range out.Fields {
+		f := &out.Fields[i]
+		key := physicalKey(*f)
+		switch {
+		case key == "sec_id" || key == "security_id" || key == "securitiesid":
+			f.ReferenceBoId = boIDs["security"]
+			f.ReferenceValueField = "sec_id"
+		case key == "broker_id" || key == "bkr_cd":
+			f.ReferenceBoId = boIDs["broker"]
+			f.ReferenceValueField = "bkr_cd"
+		case key == "account_id" || key == "acct_cd":
+			f.ReferenceBoId = boIDs["account"]
+			f.ReferenceValueField = "acct_cd"
+		}
+
+		switch {
+		case key == "side":
+			f.EnumValues = []boSchemaEnum{{"BUY", "Buy"}, {"SELL", "Sell"}, {"SELL_SHORT", "Sell Short"}}
+		case key == "order_type" || key == "ordertype":
+			f.EnumValues = []boSchemaEnum{{"MARKET", "Market"}, {"LIMIT", "Limit"}, {"STOP", "Stop"}, {"STOP_LIMIT", "Stop Limit"}}
+		case key == "status":
+			f.EnumValues = []boSchemaEnum{
+				{"NEW", "New"}, {"DRAFT", "Draft"}, {"ROUTED", "Routed"},
+				{"PARTIAL", "Partial"}, {"PARTIALLY_ALLOCATED", "Partially allocated"},
+				{"FILLED", "Filled"}, {"CANCELED", "Canceled"}, {"CANCELLED", "Cancelled"},
+				{"REJECTED", "Rejected"}, {"ALLOCATED", "Allocated"},
+			}
+		case key == "time_in_force" || key == "tif" || key == "timeinforce":
+			f.EnumValues = []boSchemaEnum{{"DAY", "Day"}, {"GTC", "GTC"}, {"IOC", "IOC"}, {"FOK", "FOK"}}
+		}
+
+		if f.Type == "date" && key != "created_at" && key != "updated_at" {
+			f.DefaultValue = "today"
+		}
 	}
 }
 

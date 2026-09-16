@@ -5,6 +5,7 @@ import type { BOSchema, BOSchemaField } from '../../features/query-builder/types
 import { apiFetch } from '../../lib/apiClient';
 import type { FieldLayoutEntry, FieldOverrideEntry } from '../../pages/page-studio/FormFieldsDesigner';
 import { labelSxFromStyle } from '../../pages/page-studio/FormFieldsDesigner';
+import { usePresentationRuntime } from '../../pages/page-studio/PresentationRuntime';
 
 const GRID_COLS = 12;
 
@@ -25,6 +26,12 @@ export interface BOFormWidgetProps {
    * the real, data-bound form's layout in sync with what was designed. */
   fieldLayout?: Record<string, FieldLayoutEntry>;
   fieldOverrides?: Record<string, FieldOverrideEntry>;
+  /** Display-only lock from presentation events — does not change BO write policy. */
+  readOnly?: boolean;
+  componentId?: string;
+  onRecordLoaded?: (values: Record<string, unknown>) => void;
+  onFieldEdit?: (fieldName: string, value: unknown, values: Record<string, unknown>) => void;
+  onFieldChange?: (fieldName: string, value: unknown, values: Record<string, unknown>) => void;
 }
 
 const inputTypeFor = (field: BOSchemaField): 'text' | 'number' | 'date' | 'checkbox' | 'select' => {
@@ -63,7 +70,10 @@ const labelForRecord = (record: Record<string, unknown>): string => {
  * The earlier `/api/v1/bo/...` paths 404'd because the real router is
  * mounted at `/bo/...` inside the `/api` group, not `/v1/bo/...`.
  */
-const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, onSaved, fieldLayout, fieldOverrides }) => {
+const BOFormWidget: React.FC<BOFormWidgetProps> = ({
+  boId, tenantId, recordId, onSaved, fieldLayout, fieldOverrides,
+  readOnly, componentId, onRecordLoaded, onFieldEdit, onFieldChange,
+}) => {
   const [schema, setSchema] = useState<BOSchema | null>(null);
   const [values, setValues] = useState<Record<string, unknown>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -72,6 +82,7 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [refOptions, setRefOptions] = useState<Record<string, ReferenceOption[]>>({});
+  const { overlayFor } = usePresentationRuntime();
 
   useEffect(() => {
     if (!boId || !tenantId) return;
@@ -133,6 +144,7 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
           }
         }
         setValues(mapped);
+        onRecordLoaded?.(mapped);
       })
       .catch(() => undefined);
   }, [recordId, boId, tenantId, schema]);
@@ -189,13 +201,19 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
   const handleChange = (field: BOSchemaField, raw: string | boolean) => {
     const t = inputTypeFor(field);
     const value = t === 'number' ? (raw === '' ? '' : Number(raw)) : raw;
-    setValues((prev) => ({ ...prev, [field.name]: value }));
+    const next = { ...values, [field.name]: value };
+    setValues(next);
+    onFieldEdit?.(field.name, value, next);
     setErrors((prev) => {
       if (!prev[field.name]) return prev;
       const next = { ...prev };
       delete next[field.name];
       return next;
     });
+  };
+
+  const handleBlur = (field: BOSchemaField) => {
+    onFieldChange?.(field.name, values[field.name], values);
   };
 
   const handleSubmit = async () => {
@@ -241,12 +259,18 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
       {saved && <Alert severity="success" sx={{ mb: 1, fontSize: '0.7rem' }}>Saved</Alert>}
       <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 1.25 }}>
         {orderedFields.map((field) => {
-          if (fieldOverrides?.[field.name]?.hidden) return null;
+          const pres = componentId ? overlayFor(componentId, field.name) : undefined;
+          if (fieldOverrides?.[field.name]?.hidden || pres?.hidden) return null;
           const t = inputTypeFor(field);
-          const label = fieldOverrides?.[field.name]?.label || field.displayName || field.name;
+          const label = pres?.label || fieldOverrides?.[field.name]?.label || field.displayName || field.name;
           const colSpan = Math.min(GRID_COLS, Math.max(1, fieldLayout?.[field.name]?.colSpan ?? GRID_COLS));
           const gridColumn = `span ${colSpan}`;
-          const labelSx = labelSxFromStyle(fieldOverrides?.[field.name]?.style);
+          const labelSx = labelSxFromStyle({
+            ...fieldOverrides?.[field.name]?.style,
+            ...(pres?.style?.color ? { color: pres.style.color } : {}),
+            ...(pres?.style?.fontWeight ? { bold: pres.style.fontWeight === '700' || pres.style.fontWeight === 'bold' } : {}),
+          });
+          const locked = readOnly || pres?.readOnly;
           if (t === 'checkbox') {
             return (
               <FormControlLabel
@@ -256,7 +280,9 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
                   <Checkbox
                     size="small"
                     checked={Boolean(values[field.name])}
+                    disabled={locked}
                     onChange={(e) => handleChange(field, e.target.checked)}
+                    onBlur={() => handleBlur(field)}
                   />
                 }
                 label={<Typography component="span" sx={labelSx}>{label}</Typography>}
@@ -275,6 +301,8 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
                 InputLabelProps={{ sx: labelSx }}
                 value={values[field.name] ?? ''}
                 onChange={(e) => handleChange(field, e.target.value)}
+                onBlur={() => handleBlur(field)}
+                disabled={locked}
                 error={!!errors[field.name]}
                 helperText={errors[field.name] || (options.length === 0 ? 'Loading options…' : undefined)}
                 fullWidth
@@ -293,13 +321,15 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({ boId, tenantId, recordId, o
               InputLabelProps={{ sx: labelSx, ...(t === 'date' ? { shrink: true } : undefined) }}
               value={values[field.name] ?? ''}
               onChange={(e) => handleChange(field, e.target.value)}
+              onBlur={() => handleBlur(field)}
+              disabled={locked}
               error={!!errors[field.name]}
               helperText={errors[field.name]}
               fullWidth
             />
           );
         })}
-        <Button variant="contained" size="small" onClick={handleSubmit} disabled={saving} sx={{ gridColumn: `span ${GRID_COLS}`, justifySelf: 'start' }}>
+        <Button variant="contained" size="small" onClick={handleSubmit} disabled={saving || readOnly} sx={{ gridColumn: `span ${GRID_COLS}`, justifySelf: 'start' }}>
           {saving ? 'Saving…' : recordId ? 'Update' : 'Create'}
         </Button>
       </Box>

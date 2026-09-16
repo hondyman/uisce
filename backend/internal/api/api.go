@@ -57,6 +57,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
 	"github.com/hondyman/uisce/backend/internal/mdm"
+	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
@@ -1433,7 +1434,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Business Objects, not just its own fields.
 	var pageAIGenerate handlers.PageAIGenerateFunc
 	if geminiClient != nil {
-		pageAIGenerate = func(ctx context.Context, boName, boKey, description string, fields []handlers.PageAIField, relatedBOs []handlers.PageAIRelatedBO) (*handlers.PageAISpec, error) {
+		pageAIGenerate = func(ctx context.Context, boName, boKey, description, pageKind string, fields []handlers.PageAIField, relatedBOs []handlers.PageAIRelatedBO) (*handlers.PageAISpec, error) {
 			apiFields := make([]PageGenerationField, len(fields))
 			for i, f := range fields {
 				apiFields[i] = PageGenerationField{Key: f.Key, DisplayName: f.DisplayName, DataType: f.DataType, Role: f.Role}
@@ -1446,7 +1447,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				}
 				apiRelated[i] = RelatedBOSummary{BOKey: rel.BOKey, DisplayName: rel.DisplayName, RelationshipType: rel.RelationshipType, Cardinality: rel.Cardinality, Fields: relFields}
 			}
-			spec, err := geminiClient.GeneratePageSpec(ctx, boName, boKey, description, apiFields, apiRelated)
+			spec, err := geminiClient.GeneratePageSpec(ctx, boName, boKey, description, pageKind, apiFields, apiRelated)
 			if err != nil {
 				return nil, err
 			}
@@ -1454,7 +1455,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 			for i, s := range spec.Sections {
 				sections[i] = handlers.PageAISection{BOKey: s.BOKey, Type: s.Type, Title: s.Title}
 			}
-			return &handlers.PageAISpec{Title: spec.Title, LayoutTemplate: spec.LayoutTemplate, Sections: sections}, nil
+			filterBar := make([]handlers.PageAISection, len(spec.FilterBar))
+			for i, s := range spec.FilterBar {
+				filterBar[i] = handlers.PageAISection{BOKey: s.BOKey, Type: s.Type, Title: s.Title}
+			}
+			return &handlers.PageAISpec{Title: spec.Title, LayoutTemplate: spec.LayoutTemplate, PageKind: spec.PageKind, Sections: sections, FilterBar: filterBar}, nil
 		}
 	}
 	pageStudioHandler := handlers.NewPageStudioHandler(sqlxDB, boResolver, boService, pageAIGenerate)
@@ -1564,6 +1569,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Page Studio pages
 		pageStudioHandler.RegisterRoutes(r)
+
+		handlers.NewOMSFIXCommandHandler(sqlxDB, temporalClient).RegisterRoutes(r)
+		handlers.NewBOWizardHandler(sqlxDB).RegisterRoutes(r)
 
 		// Navigation menu
 		navigationMenuHandler.RegisterRoutes(r)
@@ -1723,6 +1731,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		routes.RegisterMetadataWrite(r, srv.WriteHandler)
 
 		routes.RegisterMCP(r, srv.MCPHandler)
+
+		// MCP JSON-RPC server (tools/list, tools/call) — tenant-scoped via JWT, not body
+		// Registered AFTER RegisterMCP so it takes precedence at /api/mcp
+		mcp.NewMCPToolHandler(sqlxDB).RegisterRoutes(r)
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)

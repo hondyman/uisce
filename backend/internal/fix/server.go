@@ -18,8 +18,8 @@ import (
 // never instantiate quickfix sessions; they talk to the acceptor via
 // the internal admin API on 127.0.0.1:8981.
 type Server struct {
-	acceptor   *quickfix.Acceptor
-	adapter    *Adapter
+	acceptor    *quickfix.Acceptor
+	adapter     *Adapter
 	adminServer *AdminServer
 }
 
@@ -68,6 +68,16 @@ func NewServer(adapter *Adapter, configPath string, db *sql.DB, adminAddr string
 		}
 		settings.GlobalSettings().Set(config.SocketAcceptHost, "0.0.0.0")
 		settings.GlobalSettings().Set(config.SocketAcceptPort, port)
+	}
+
+	if os.Getenv("FIX_DEMO_AGENT") == "true" {
+		acceptPort := os.Getenv("FIX_ACCEPTOR_PORT")
+		if acceptPort == "" {
+			acceptPort = "8980"
+		}
+		if err := ApplyDemoAcceptorSession(settings, acceptPort); err != nil {
+			return nil, fmt.Errorf("demo session: %w", err)
+		}
 	}
 
 	var acceptor *quickfix.Acceptor

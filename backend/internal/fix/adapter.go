@@ -26,9 +26,9 @@ type ComplianceEvaluator interface {
 
 type EvaluateResult struct {
 	Approved        bool
-	CanOverride    bool
+	CanOverride     bool
 	HighestSeverity string
-	Violations     []Violation
+	Violations      []Violation
 }
 
 type Violation struct {
@@ -39,13 +39,13 @@ type Violation struct {
 
 type ExternalTradeItem struct {
 	ExternalOrderID string
-	PortfolioID    string
-	ISIN          string
-	Symbol        string
-	Quantity      float64
-	Price         float64
-	Side          string
-	Account       string
+	PortfolioID     string
+	ISIN            string
+	Symbol          string
+	Quantity        float64
+	Price           float64
+	Side            string
+	Account         string
 }
 
 // TenantResolver maps a quickfix SessionID to its owning tenant and broker.
@@ -65,17 +65,47 @@ type InboundSink interface {
 	Emit(ctx context.Context, rec InboundRecord) error
 }
 
+// InboundSinkFunc adapts a function to InboundSink.
+type InboundSinkFunc func(ctx context.Context, rec InboundRecord) error
+
+func (f InboundSinkFunc) Emit(ctx context.Context, rec InboundRecord) error {
+	if f == nil {
+		return nil
+	}
+	return f(ctx, rec)
+}
+
 // InboundRecord is the shape handed off from adapter → fix_listener.
 // Mirrors the JSON shape documented in HANDOFF_FIX_OVER_PIPELINE.md §9.
 type InboundRecord struct {
-	RawBytes    []byte    `json:"raw_bytes"`
-	TenantID    uuid.UUID `json:"tenant_id"`
-	BrokerID    uuid.UUID `json:"broker_id"`
-	SessionID   string    `json:"session_id"`
-	MsgType     string    `json:"msg_type"`
-	ReceivedAt  time.Time `json:"received_at"`
-	MsgSeqNum   int       `json:"msg_seq_num"`
-	ClOrdID     string    `json:"cl_ord_id,omitempty"`  // when available from message header
+	RawBytes   []byte    `json:"raw_bytes"`
+	TenantID   uuid.UUID `json:"tenant_id"`
+	BrokerID   uuid.UUID `json:"broker_id"`
+	SessionID  string    `json:"session_id"`
+	MsgType    string    `json:"msg_type"`
+	ReceivedAt time.Time `json:"received_at"`
+	MsgSeqNum  int       `json:"msg_seq_num"`
+	ClOrdID    string    `json:"cl_ord_id,omitempty"` // when available from message header
+	ExecType   string    `json:"exec_type,omitempty"`
+	OrdStatus  string    `json:"ord_status,omitempty"`
+	LastQty    string    `json:"last_qty,omitempty"`
+	LastPx     string    `json:"last_px,omitempty"`
+	ExecID     string    `json:"exec_id,omitempty"`
+}
+
+// StaticTenantResolver maps every session to a fixed tenant/broker.
+// Used by the demo/sample FIX agent so inbound ExecutionReports are
+// tagged without a full fix_tenant_config lookup.
+type StaticTenantResolver struct {
+	TenantID uuid.UUID
+	BrokerID uuid.UUID
+}
+
+func (s StaticTenantResolver) Resolve(sessionID quickfix.SessionID) (uuid.UUID, uuid.UUID, bool) {
+	if s.TenantID == uuid.Nil {
+		return uuid.Nil, uuid.Nil, false
+	}
+	return s.TenantID, s.BrokerID, true
 }
 
 // Adapter is the FIX acceptor's application callbacks layer.
@@ -147,9 +177,9 @@ type LatencyTimer interface {
 }
 
 type fixApplication struct {
-	onLogon  func(sessionID quickfix.SessionID)
-	onLogout func(sessionID quickfix.SessionID)
-	onMsg    func(sessionID quickfix.SessionID, msg *quickfix.Message) error
+	onLogon   func(sessionID quickfix.SessionID)
+	onLogout  func(sessionID quickfix.SessionID)
+	onMsg     func(sessionID quickfix.SessionID, msg *quickfix.Message) error
 	sessionMu sync.RWMutex
 }
 
@@ -324,6 +354,11 @@ func (a *Adapter) dispatchInbound(sessionID quickfix.SessionID, msg *quickfix.Me
 	}
 
 	clOrdID, _ := msg.Body.GetString(tagClOrdID)
+	execType, _ := msg.Body.GetString(tagExecType)
+	ordStatus, _ := msg.Body.GetString(tagOrdStatus)
+	lastQty, _ := msg.Body.GetString(tag.LastQty)
+	lastPx, _ := msg.Body.GetString(tag.LastPx)
+	execID, _ := msg.Body.GetString(tag.ExecID)
 
 	rec := InboundRecord{
 		RawBytes:   rawBytes,
@@ -334,6 +369,11 @@ func (a *Adapter) dispatchInbound(sessionID quickfix.SessionID, msg *quickfix.Me
 		ReceivedAt: time.Now().UTC(),
 		MsgSeqNum:  seqNum,
 		ClOrdID:    clOrdID,
+		ExecType:   execType,
+		OrdStatus:  ordStatus,
+		LastQty:    lastQty,
+		LastPx:     lastPx,
+		ExecID:     execID,
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -547,6 +587,20 @@ func (a *Adapter) resolveForLog(sessionID quickfix.SessionID) (uuid.UUID, uuid.U
 // the acceptor process. Passing nil for db falls back to the in-memory
 // store — only acceptable for tests / dev with `allow_seq_reset=true`
 // per HANDOFF_FIX_OVER_PIPELINE.md §8.
+// SendMessage dispatches an application message on a session the
+// acceptor already owns. Temporal activities must call this via the
+// admin API — never quickfix.SendToTarget from a workflow/activity
+// that does not hold the socket.
+func (a *Adapter) SendMessage(msg *quickfix.Message, sessionID quickfix.SessionID) error {
+	if a == nil {
+		return fmt.Errorf("adapter is nil")
+	}
+	if a.sender != nil {
+		return a.sender.Send(msg, sessionID)
+	}
+	return quickfix.SendToTarget(msg, sessionID)
+}
+
 func (a *Adapter) CreateAcceptor(settings *quickfix.Settings, db *sql.DB) (*quickfix.Acceptor, error) {
 	var store quickfix.MessageStoreFactory
 	if db != nil {

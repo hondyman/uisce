@@ -12,9 +12,11 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import { NavigationMenuApi, NavigationMenuNode } from '../api/navigationMenu';
 import { PageStudioApi, PageStudioPage } from '../api/pageStudio';
+import type { PresentationRule } from '../types/pageStudio';
 import { useTenant } from '../contexts/TenantContext';
 import RenderLayoutTree from './page-studio/RenderLayoutTree';
 import { SelectionProvider } from './page-studio/SelectionContext';
+import { PresentationProvider } from './page-studio/PresentationRuntime';
 
 // The consumer-facing side of the Menu Designer: a persistent nav tree
 // (same data the designer edits) next to whichever page is selected,
@@ -143,6 +145,7 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
 
   return (
     <SelectionProvider key={`${page.id || slug}:${recordId || ''}`} initialSelection={initialSelection}>
+    <PresentationProvider rules={(page as PageStudioPage).presentationEvents || [] as PresentationRule[]}>
     <Box sx={{ p: 3 }}>
       {recordId && (
         <Box
@@ -182,6 +185,7 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
         <Alert severity="info">This page has no components yet.</Alert>
       )}
     </Box>
+    </PresentationProvider>
     </SelectionProvider>
   );
 };
