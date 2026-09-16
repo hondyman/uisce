@@ -418,6 +418,97 @@ the global gate is proven — one gate, one tenant rule, zero per-handler
 dialects — the same consolidation shape that just finished for tenant
 resolution, one layer up.
 
+## New Entry (2026-09-16): GetTemplate cross-tenant read (report_templates), and RLS confirmed inert on this table
+
+Found during a routine RLS-policy check ahead of a schema migration on
+`report_templates` (not a triage sweep) — `ReportHandler.GetTemplate`
+(`GET /api/v1/reports/{id}`) was the one handler in
+`internal/api/report_handlers.go` with no tenant check at all: no call to
+`resolveAuthContext`, and its repository query
+(`SELECT ... FROM report_templates WHERE id = $1`) has no `tenant_id`
+filter either. Any authenticated user, from any tenant, could read
+another tenant's full report definition (`layout_config`,
+`parameter_schema`, `semantic_view_ids`) by guessing or enumerating a
+report id — the same IDOR shape this document's earlier entries describe,
+one more handler that "nobody happened to add the check" to (2026-09-08's
+own phrase, recurring).
+
+**RLS did not backstop this, and the reason generalizes beyond this one
+table.** `report_templates` has RLS `ENABLE`+`FORCE`'d with a policy keyed
+on `current_setting('uisce.current_tenant', true)` — but nothing in
+`internal/reports` (the package backing this table) ever sets that GUC.
+The application works today, so the DB role this package connects as must
+bypass RLS; the policy is enabled in the schema but not the actual
+enforcement boundary for any query this package runs. Hand-written
+`WHERE tenant_id = $1` per query is the real boundary — exactly the
+per-handler-dialect pattern the 2026-09-08 entry above already flagged as
+the platform's standing failure mode, now confirmed present at the RLS
+layer too, not just the handler layer. `internal/temporal/activities/report_activities.go`
+was checked separately and does **not** share this gap: it uses
+`withTenantTx` (`set_config('uisce.current_tenant', $1, true)` per
+transaction) for its own queries, and never calls the unscoped
+`Repository.GetTemplate` at all.
+
+**Sweep, not just the one fix.** Every other `ReportHandler` method that
+fetches by id (`UpdateTemplate`, `DeleteTemplate`, `SetFavorite`,
+`RemoveFavorite`, `ListSchedulesForTemplate`, `CreateScheduleForTemplate`,
+`GetExecution`, `ListExecutionEvents`) was checked directly and correctly
+threads `tenantID` from `resolveAuthContext` into its service/repository
+call. `GetTemplate` was an isolated omission in this file, not a pattern
+repeated across it. The unscoped `Repository.GetTemplate`/
+`ReportService.GetTemplate` method itself has exactly two callers
+codebase-wide (`GetTemplate`, now fixed, and `DeleteTemplate`, which
+already checked ownership after the fetch) — worth narrowing to a
+tenant-scoped query at the repository layer as a defense-in-depth
+follow-up so a third future caller can't reintroduce this by omission, but
+not done here as no such caller exists today.
+
+**Fix:** `internal/api/report_handlers.go`'s `GetTemplate` now mirrors
+`DeleteTemplate`'s existing tenant-ownership check, with gold-copy core
+reports still readable cross-tenant (the existing, intentional
+inheritance model). Commit `f11b158cd`.
+
+**Three-replay protocol, run against the running server after a full
+rebuild** (not the sqlmock suite alone — this document's own standing rule
+above):
+1. No `Authorization` header → **401**.
+2. Authenticated (real JWT, this platform's JWTs carry no singular tenant
+   claim so tenant resolution runs through `AuthContextMiddleware`'s
+   `X-Tenant-ID`-header fallback — the actual request shape the app's own
+   frontend sends, replicated exactly), requesting another tenant's
+   private report, **two different foreign tenants** (queried directly
+   from `report_templates` via the DB, not guessed) → **404, 404**.
+3. Same authenticated caller, own (gold-copy) tenant's report → **200**.
+
+Scripted regression coverage added to match: the original deny-case test
+plus two new cases (`Get Template - 200 on Same-Tenant Read`,
+`Get Template - 200 on Gold-Copy Core Read from a Different Tenant`) so
+the suite can't pass a future deny-everything regression the way a
+deny-only test could. Commit `590e5bd2a`.
+
+**Incidental credential exposure during verification, noted for the
+record:** diagnosing why an early replay attempt returned a false 401
+required reading the running server's request-trace log, which
+prints full request headers including `Authorization: Bearer <token>` in
+plaintext for every request. That put a live, valid bearer token into the
+verifying agent's context for one turn. Local dev instance, short-lived
+Keycloak token, not repeated or persisted anywhere past that point;
+checked and `/logs/` is gitignored, so this doesn't reach git history.
+The log's own behavior (full bearer tokens in plaintext, on every
+request) is still worth a follow-up look independent of this entry's main
+finding — a checked-out or shared dev machine's `logs/` directory is a
+real exposure surface this pattern creates.
+
+**Standing-gate implication:** the 2.1 migration this finding was found
+ahead of (`report_templates` typed-column work, Report Builder spine plan)
+was about to add a new tenant-sensitive column
+(`primary_business_object_id`) to this exact table. That work is gated on
+an explicit decision — real tenant-transaction/RLS enforcement for
+`internal/reports`, or a documented app-level-only boundary with this
+sweep as its compensating control — written into the migration ticket
+rather than decided by omission, per the same discipline this document's
+2026-09-08 entry already established for the handler layer generally.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:
