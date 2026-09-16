@@ -310,7 +310,7 @@ func (h *ReportHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	template, err := h.service.GetTemplate(r.Context(), id)
+	template, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -361,7 +361,7 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.service.GetTemplate(r.Context(), id)
+	existing, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -496,7 +496,7 @@ func (h *ReportHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.service.GetTemplate(r.Context(), id)
+	existing, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)

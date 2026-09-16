@@ -134,8 +134,18 @@ func (r *Repository) UpdateTemplate(ctx context.Context, template *ReportTemplat
 	return nil
 }
 
-// GetTemplate retrieves a single template by ID
-func (r *Repository) GetTemplate(ctx context.Context, id uuid.UUID) (*ReportTemplate, error) {
+// GetTemplate retrieves a single template by ID, scoped to the caller's
+// tenant or the gold-copy tenant (read-only cross-tenant inheritance - see
+// isCoreTemplate/isReadOnlyCore in SSRSReportBuilder.tsx). Tenant-scoped
+// in the query itself, not left to callers to check after the fact: this
+// is report_templates' one real tenant boundary today (RLS is enabled on
+// this table but inert - the app connects as a superuser that bypasses
+// it unconditionally, see INCIDENT_REPORT_20260906.md's "RLS is inert
+// platform-wide" entry), so a caller that forgets to check afterward now
+// fails closed by construction instead of needing to remember the same
+// check GetTemplate's HTTP handler once forgot (same doc, 2026-09-16
+// entry).
+func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*ReportTemplate, error) {
 	query := `
 		SELECT id, tenant_id, template_name, description, category,
 		       semantic_view_ids, layout_config, parameter_schema,
@@ -143,6 +153,7 @@ func (r *Repository) GetTemplate(ctx context.Context, id uuid.UUID) (*ReportTemp
 		       created_at, updated_at, version
 		FROM report_templates
 		WHERE id = $1
+		  AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
 	`
 
 	var tmpl ReportTemplate
@@ -150,7 +161,7 @@ func (r *Repository) GetTemplate(ctx context.Context, id uuid.UUID) (*ReportTemp
 	var createdByID sql.NullString
 	var createdBy sql.NullString
 
-	err := r.db.QueryRowContext(ctx, query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, id, tenantID).Scan(
 		&tmpl.ID,
 		&tmpl.TenantID,
 		&tmpl.TemplateName,
@@ -257,8 +268,9 @@ func (r *Repository) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID
 // exact/prefix ILIKE, and pg_trgm word_similarity for typo tolerance.
 // It strictly composes with the exact visibility predicate from ListTemplatesScoped:
 // WHERE t.tenant_id IN ($2, $3)
-//   AND t.is_active = true
-//   AND (t.is_personal = false OR t.created_by_id = $1)
+//
+//	AND t.is_active = true
+//	AND (t.is_personal = false OR t.created_by_id = $1)
 //
 // Calibration & Threshold Note:
 // pg_trgm word_similarity($4, t.template_name) threshold is set to 0.3.
@@ -316,8 +328,6 @@ func (r *Repository) SearchTemplatesScoped(ctx context.Context, tenantID uuid.UU
 
 func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 
-
-
 	var templates []ReportTemplate
 	for rows.Next() {
 		var tmpl ReportTemplate
@@ -364,7 +374,6 @@ func scanReportTemplates(rows *sql.Rows) ([]ReportTemplate, error) {
 	return templates, nil
 }
 
-
 // SetFavorite idempotently favorites a report template for a user within their tenant.
 // Uses INSERT ... SELECT FROM report_templates with the exact visibility predicate matching ListTemplatesScoped:
 // caller can only favorite a visible report (their tenant or gold-copy core, and not someone else's personal report).
@@ -410,7 +419,6 @@ func (r *Repository) SetFavorite(ctx context.Context, tenantID uuid.UUID, userID
 
 	return nil
 }
-
 
 // RemoveFavorite idempotently removes a report template favorite for a user within their tenant.
 func (r *Repository) RemoveFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {

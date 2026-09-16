@@ -23,14 +23,13 @@ func (s *ReportService) CreateTemplate(ctx context.Context, template *ReportTemp
 	return s.repo.CreateTemplate(ctx, template)
 }
 
-func (s *ReportService) GetTemplate(ctx context.Context, id uuid.UUID) (*ReportTemplate, error) {
-	return s.repo.GetTemplate(ctx, id)
+func (s *ReportService) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*ReportTemplate, error) {
+	return s.repo.GetTemplate(ctx, id, tenantID)
 }
 
 func (s *ReportService) ResolveGoldCopyTenantID(ctx context.Context) (uuid.UUID, error) {
 	return s.repo.ResolveGoldCopyTenantID(ctx)
 }
-
 
 func (s *ReportService) ListTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string) ([]ReportTemplate, error) {
 	return s.repo.ListTemplatesScoped(ctx, tenantID, callerUserID)
@@ -39,7 +38,6 @@ func (s *ReportService) ListTemplatesScoped(ctx context.Context, tenantID uuid.U
 func (s *ReportService) SearchTemplatesScoped(ctx context.Context, tenantID uuid.UUID, callerUserID string, query string) ([]ReportTemplate, error) {
 	return s.repo.SearchTemplatesScoped(ctx, tenantID, callerUserID, query)
 }
-
 
 func (s *ReportService) SetFavorite(ctx context.Context, tenantID uuid.UUID, userID string, templateID uuid.UUID) error {
 	return s.repo.SetFavorite(ctx, tenantID, userID, templateID)
@@ -116,5 +114,3 @@ func (s *ReportService) DeleteSchedule(ctx context.Context, tenantID uuid.UUID, 
 func (s *ReportService) TriggerScheduleRun(ctx context.Context, tenantID uuid.UUID, callerUserID string, isAdmin bool, scheduleID uuid.UUID, executor ReportExecutor) (*ScheduleExecutionResult, error) {
 	return s.repo.TriggerScheduleRun(ctx, tenantID, callerUserID, isAdmin, scheduleID, executor)
 }
-
-

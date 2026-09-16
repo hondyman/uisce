@@ -375,7 +375,7 @@ func TestRepository_CrossTenantUpdate_Forbidden(t *testing.T) {
 	assert.True(t, errors.Is(err, reports.ErrNotFound), "expected ErrNotFound, got: %v", err)
 
 	// Verify original template is untouched
-	unmodified, err := repo.GetTemplate(ctx, tmpl.ID)
+	unmodified, err := repo.GetTemplate(ctx, tmpl.ID, tmpl.TenantID)
 	require.NoError(t, err)
 	assert.Equal(t, tmpl.TemplateName, unmodified.TemplateName)
 	assert.Equal(t, tmpl.Description, unmodified.Description)
