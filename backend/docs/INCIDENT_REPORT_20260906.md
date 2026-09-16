@@ -468,9 +468,12 @@ not done here as no such caller exists today.
 reports still readable cross-tenant (the existing, intentional
 inheritance model). Commit `f11b158cd`.
 
-**Three-replay protocol, run against the running server after a full
-rebuild** (not the sqlmock suite alone — this document's own standing rule
-above):
+**Four-replay, run against the running server after a full rebuild** (not
+the sqlmock suite alone — this document's own standing rule above; extended
+to four cases here because this fix touches two `allow` paths, not one —
+"a fix that rejects everyone looks identical to a correct fix on the
+attacker-rejected cases alone" applies just as much to a fix that *only*
+protects one of two legitimate paths and silently breaks the other):
 1. No `Authorization` header → **401**.
 2. Authenticated (real JWT, this platform's JWTs carry no singular tenant
    claim so tenant resolution runs through `AuthContextMiddleware`'s
@@ -479,12 +482,57 @@ above):
    private report, **two different foreign tenants** (queried directly
    from `report_templates` via the DB, not guessed) → **404, 404**.
 3. Same authenticated caller, own (gold-copy) tenant's report → **200**.
+4. **A different, non-gold-copy tenant** requesting the **gold-copy core**
+   report → **200**. This is the discriminating case for the inheritance
+   path specifically: an inverted condition on the `is_core`/gold-copy
+   branch would pass replays 1-3 unchanged (all three exercise only the
+   "deny foreign, allow own" logic) and silently break tenant inheritance
+   of core reports — the fix would ship a live regression that reads as a
+   successful security patch to every check that doesn't include this
+   case.
 
 Scripted regression coverage added to match: the original deny-case test
 plus two new cases (`Get Template - 200 on Same-Tenant Read`,
 `Get Template - 200 on Gold-Copy Core Read from a Different Tenant`) so
 the suite can't pass a future deny-everything regression the way a
 deny-only test could. Commit `590e5bd2a`.
+
+**Exploitation-evidence check** (per this document's own methodology —
+verification methodology note above: the database and its logs are the
+witnesses that don't misrepresent state, not narrative). Grepped every
+retained backend log (`logs/backend_*.log`, 70 files, full available
+window Aug 31 – Sep 16 — no earlier retention exists) for direct
+`GET /api/v1/reports/{uuid}` requests, extracting only the requested path
+and the `X-Tenant-ID` header value (never the `Authorization` value, to
+avoid repeating this entry's own credential-exposure finding). 16 total
+matches; **11 are this session's own verification traffic** (the four-replay
+above, run today). The remaining **5 are pre-existing**, spanning Sep 8–14:
+- 2× `f48a510c-1fa3-5054-85ac-10e067480625` ("AUM & Fee Revenue Summary",
+  owned by the gold-copy tenant), Sep 8, no `X-Tenant-ID` header sent.
+- 1× `053d1fc1-28f1-4e4e-a7c9-c55e1a8bf3dd` ("AlicePersonal_05006595",
+  owned by a non-gold-copy tenant), Sep 11, no `X-Tenant-ID` header.
+- 1× `66817b7a-dcd1-4bd9-8d6a-a09a61b5719c` ("User B Personal Report
+  dc3520e8", owned by a different non-gold-copy tenant), Sep 11, no
+  `X-Tenant-ID` header.
+- 1× `f48a510c-...` again, Sep 14, this time **with** `X-Tenant-ID` set to
+  the gold-copy tenant — i.e., the gold-copy tenant reading its own report,
+  a legitimate access even under the fixed logic.
+
+**Weak negative, not a clean bill of health.** All 5 target reports carry
+test-fixture-style names ("AlicePersonal_*", "User B Personal Report *",
+matching the same `TwoSidedReport_*`/`DeleteTestReport_*` naming
+convention seen broadly across `report_templates` in this alpha database),
+consistent with this repo's own integration-test or manual dev-curl
+traffic rather than an external actor probing for real tenant data. Four
+of five carried no `X-Tenant-ID` at all — under the *old* vulnerable code
+this didn't matter (no tenant check existed either way), so these
+requests plausibly succeeded regardless, but the absence of any tenant
+self-identification also means the requester's actual identity/intent
+can't be reconstructed from this log alone. No request in the retained
+window shows a *different* tenant's context paired with a *foreign*
+report id in a way distinguishable from same-project test activity. Log
+retention covers only ~16 days; anything before Aug 31 is unknown and
+unrecoverable from this evidence.
 
 **Incidental credential exposure during verification, noted for the
 record:** diagnosing why an early replay attempt returned a false 401
@@ -509,6 +557,29 @@ sweep as its compensating control — written into the migration ticket
 rather than decided by omission, per the same discipline this document's
 2026-09-08 entry already established for the handler layer generally.
 
+### Queue Addition Earned By This Entry
+
+Same shape as the two queue items the 2026-09-07 incident added
+(per-request access logging, `pg_stat_statements`) — a control-surface gap
+this entry's own verification work exposed, not speculative hardening:
+
+3. **Redact `Authorization` (and any other bearer/secret headers) in the
+   request-trace middleware.** The middleware that logs `[REQ] GET ...
+   Headers:...` currently writes the full `Authorization: Bearer <token>`
+   value, in plaintext, for every request, to a file under `logs/` on
+   every developer's machine. This entry's own exploitation-evidence check
+   (above) depended on reading that log — and had to work around printing
+   a live token into an agent's context while doing it. A one-line change
+   (replace the `Authorization` header's value with a fixed redaction
+   marker before the log line is built) closes this without losing the
+   method/path/status/tenant fields the log — and this entry's own
+   forensics — actually needed. **Sequence this with queue item #1
+   (per-request access logging) when that item is picked up, not after
+   it**: shipping more per-request logging before this redaction lands
+   multiplies the exposure the access-logging item is trying to close
+   instead of fixing it — the same file, one PR, token redaction first in
+   that PR's own commit order.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:
@@ -517,3 +588,4 @@ These require human decisions before any further feature work:
 2. **Infisical token + exposed password** — flagged in first exchange; rotation unconfirmed. Treat as compromised until confirmed rotated.
 3. **CA key custody** — `ca.key` exists only in a scratch directory on one Mac. DR gap for issuing new per-role certs. Recommend password manager or ops vault.
 4. **Replication `trust` rule** — `pg_hba.conf` has `host replication all 172.16.0.0/12 trust` — any host in that range can connect as any replication role without auth. Tailscale-scoped acceptable risk vs. real hole requires owner judgment.
+5. **`internal/reports` tenant-enforcement model** (2026-09-16 entry) — adopt real tenant-scoped transactions (`withTenantTx`, matching `internal/temporal/activities/report_activities.go`'s existing pattern) so `report_templates`' already-enabled RLS policy becomes the actual enforcement boundary, or explicitly document per-handler `WHERE tenant_id` as this table's real boundary with the 2026-09-16 handler sweep as its compensating control. Gates the Report Builder spine plan's Phase 2 migration (`report_templates.primary_business_object_id`) — see `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md` ticket 2.1.
