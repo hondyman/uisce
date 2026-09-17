@@ -72,6 +72,7 @@ func NewServer(db *sqlx.DB) *Server {
 	}
 	s.registerDefaultTools()
 	s.registerOMSTools()
+	s.registerGovernanceTools()
 	return s
 }
 
