@@ -1,17 +1,16 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/gorilla/mux"
 	"github.com/hondyman/uisce/backend/internal/agentic"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/internal/security"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // MCPHandler handles Model Context Protocol requests (JSON-RPC 2.0)
@@ -47,6 +46,24 @@ type JSONRPCError struct {
 }
 
 // HandleMCPRequest processes generic MCP JSON-RPC requests
+// dispatchTenant reads JWT-derived AuthInfo and returns the dispatch tenant
+// UUID. Writes -32001 / -32602 error envelope on failure and returns ok=false.
+// Mirrors internal/mcp/tool_handler.go:78-110. Closes the impersonation gap
+// where these handlers previously hardcoded tenantID := "default" / "core".
+func (h *MCPHandler) dispatchTenant(w http.ResponseWriter, r *http.Request, id interface{}) (uuid.UUID, bool) {
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || len(auth.TenantIDs) == 0 {
+		h.writeError(w, id, -32001, "auth required: JWT missing tenant_id claim")
+		return uuid.Nil, false
+	}
+	tenantID, err := uuid.Parse(auth.TenantIDs[0])
+	if err != nil {
+		h.writeError(w, id, -32602, "invalid tenant_id format")
+		return uuid.Nil, false
+	}
+	return tenantID, true
+}
+
 func (h *MCPHandler) HandleMCPRequest(w http.ResponseWriter, r *http.Request) {
 	var req JSONRPCRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -54,11 +71,18 @@ func (h *MCPHandler) HandleMCPRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Gate: every method requires a JWT-derived AuthInfo. tools/list (Path 1)
+	// is intentionally public; this surface (mcp.list_tools / mcp.call_tool /
+	// mcp.list_resources) is auth-required.
+	if _, ok := h.dispatchTenant(w, r, req.ID); !ok {
+		return
+	}
+
 	switch req.Method {
 	case "mcp.list_tools":
 		h.handleListTools(w, req.ID)
 	case "mcp.call_tool":
-		h.handleCallTool(w, req.Params, req.ID)
+		h.handleCallTool(w, r, req.Params, req.ID)
 	case "mcp.list_resources":
 		h.handleListResources(w, req.ID)
 	default:
@@ -145,7 +169,7 @@ func (h *MCPHandler) handleListResources(w http.ResponseWriter, id interface{}) 
 	h.writeResult(w, id, map[string]interface{}{"resources": resources})
 }
 
-func (h *MCPHandler) handleCallTool(w http.ResponseWriter, paramsRaw json.RawMessage, id interface{}) {
+func (h *MCPHandler) handleCallTool(w http.ResponseWriter, r *http.Request, paramsRaw json.RawMessage, id interface{}) {
 	var params struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
@@ -155,8 +179,12 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, paramsRaw json.RawMes
 		return
 	}
 
-	ctx := context.Background()
-	tenantID := "default" // Simplified for MVP
+	tenantID, ok := h.dispatchTenant(w, r, id)
+	if !ok {
+		return
+	}
+
+	ctx := r.Context()
 
 	switch params.Name {
 	case "get_node_schema":
@@ -167,7 +195,7 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, paramsRaw json.RawMes
 			h.writeError(w, id, -32602, "Invalid arguments")
 			return
 		}
-		node, err := h.GraphService.GetNodeByName(ctx, tenantID, args.NodeName)
+		node, err := h.GraphService.GetNodeByName(ctx, tenantID.String(), args.NodeName)
 		if err != nil {
 			h.writeError(w, id, -32000, fmt.Sprintf("Error fetching node: %v", err))
 			return
@@ -194,12 +222,12 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, paramsRaw json.RawMes
 			return
 		}
 
-		startNode, err := h.GraphService.GetNodeByName(ctx, tenantID, args.StartNode)
+		startNode, err := h.GraphService.GetNodeByName(ctx, tenantID.String(), args.StartNode)
 		if err != nil || startNode == nil {
 			h.writeError(w, id, -32000, "Start node not found")
 			return
 		}
-		endNode, err := h.GraphService.GetNodeByName(ctx, tenantID, args.EndNode)
+		endNode, err := h.GraphService.GetNodeByName(ctx, tenantID.String(), args.EndNode)
 		if err != nil || endNode == nil {
 			h.writeError(w, id, -32000, "End node not found")
 			return
@@ -314,22 +342,22 @@ func NewMCPToolsHandler(registry *agentic.MCPRegistryService) *MCPToolsHandler {
 
 // ListTools handles GET /api/v1/mcp/tools
 func (h *MCPToolsHandler) ListTools(w http.ResponseWriter, r *http.Request) {
-	tenantID := "core"
-	functionalRole := ""
-
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
-		if claims.TenantID != "" {
-			tenantID = claims.TenantID
-		}
+	// Gate: require JWT-derived AuthInfo. The previous implementation
+	// hardcoded `tenantID := "core"` and trusted the X-Functional-Role
+	// header — both impersonation vectors. This gate closes both.
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || len(auth.TenantIDs) == 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "auth required: JWT missing tenant_id claim",
+		})
+		return
 	}
-	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok {
-		functionalRole = authInfo.FunctionalRole
-	}
-
-	roleHeader := r.Header.Get("X-Functional-Role")
-	if roleHeader != "" && functionalRole == "" {
-		functionalRole = roleHeader
-	}
+	tenantID := auth.TenantIDs[0]
+	functionalRole := auth.FunctionalRole
+	// Note: X-Functional-Role header trust removed. Role comes only from
+	// the JWT-derived AuthInfo, set by AuthContextMiddleware at api.go:862.
 
 	entries, err := h.registry.ListToolsForRole(r.Context(), tenantID, functionalRole)
 	if err != nil {
