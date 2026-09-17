@@ -317,7 +317,41 @@ async function runSmokeTest() {
       throw new Error(`Expected active channel 'orange', got '${selectedChannel}'`);
     }
 
-    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (10/10)! ---');
+    // 11. STEP 11: Real Chromium Canvas Rasterization Benchmark (CI Regression Baseline)
+    console.log('\n11. Testing real Chromium Canvas 2D rasterization loop (CI regression baseline)...');
+    const canvasBenchResult = await pageWorkspace.evaluate(() => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1200;
+      canvas.height = 800;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return { success: false, reason: 'Failed to obtain 2d context' };
+
+      // Paint 60 rows x 9 columns with real fillText and fillRect
+      const t0 = performance.now();
+      ctx.fillStyle = '#040d1a';
+      ctx.fillRect(0, 0, 1200, 800);
+      ctx.font = '11px monospace';
+      ctx.textBaseline = 'middle';
+
+      for (let i = 0; i < 60; i++) {
+        const y = i * 24;
+        ctx.fillStyle = i % 2 === 0 ? '#040d1a' : '#071224';
+        ctx.fillRect(0, y, 1200, 24);
+        ctx.fillStyle = '#cbd5e1';
+        for (let j = 0; j < 9; j++) {
+          ctx.fillText('BENCH_VAL_123.45', j * 120 + 8, y + 12);
+        }
+      }
+      const t1 = performance.now();
+      return { success: true, paintDurationMs: t1 - t0 };
+    });
+
+    console.log(`Real Chromium Canvas Paint Duration (60 rows x 9 cols): ${canvasBenchResult.paintDurationMs.toFixed(3)} ms`);
+    if (!canvasBenchResult.success || canvasBenchResult.paintDurationMs >= 16.67) {
+      throw new Error(`Canvas rasterization exceeded 16.67ms frame budget: ${canvasBenchResult.paintDurationMs} ms`);
+    }
+
+    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (11/11)! ---');
   } catch (err) {
     console.error('Smoke test failure:', err);
     process.exitCode = 1;

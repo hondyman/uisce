@@ -38,19 +38,19 @@ describe('High-Density Streaming Spike Benchmark', () => {
         'Value': result.p99LatencyMs,
       },
       {
-        'Metric': 'p50 Frame Paint Duration (ms)',
+        'Metric': 'p50 Frame Paint Duration (JSDOM-relative loop cost)',
         'Value': `${result.p50FrameTimeMs} ms`,
       },
       {
-        'Metric': 'p95 Frame Paint Duration (ms)',
+        'Metric': 'p95 Frame Paint Duration (JSDOM-relative loop cost)',
         'Value': `${result.p95FrameTimeMs} ms`,
       },
       {
-        'Metric': 'p99 Frame Paint Duration (ms)',
+        'Metric': 'p99 Frame Paint Duration (JSDOM-relative loop cost)',
         'Value': `${result.p99FrameTimeMs} ms`,
       },
       {
-        'Metric': 'Frames Rendered to Canvas',
+        'Metric': 'Frames Rendered to Canvas (Stub Loop)',
         'Value': result.framesRendered,
       },
       {
@@ -67,10 +67,12 @@ describe('High-Density Streaming Spike Benchmark', () => {
       }
     ]);
 
-    expect(result.totalTicks).toBeGreaterThan(4000);
-    expect(result.sustainedRate).toBeGreaterThan(2000);
+    expect(result.totalTicks).toBeGreaterThan(9000);
+    // Bounded throughput assertion: target is 5000 msg/s, bounds [4800, 5200]
+    expect(result.sustainedRate).toBeGreaterThanOrEqual(4800);
+    expect(result.sustainedRate).toBeLessThanOrEqual(5200);
     expect(result.framesRendered).toBeGreaterThan(30);
-    expect(result.p95FrameTimeMs).toBeLessThan(16.67); // Proven under 16.67ms 60fps budget!
+    expect(result.p95FrameTimeMs).toBeLessThan(16.67); // JSDOM JS execution overhead under 16.67ms 60fps budget
     expect(result.reactRenderCount).toBe(0); // Strict acceptance criterion: 0 React re-renders!
     expect(result.degradedTriggered).toBe(true);
     expect(result.coalescedTicks).toBeGreaterThan(0);

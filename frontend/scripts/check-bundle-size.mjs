@@ -59,6 +59,56 @@ try {
     process.exit(1);
   }
 
+  // Assertion 1: Shell Baseline Drift Alarm (< 5% growth beyond recorded calibration of 1,496.3 KB)
+  const BASELINE_SHELL_GZIP_KB = 1496.3;
+  const MAX_PERMISSIBLE_SHELL_GZIP_KB = +(BASELINE_SHELL_GZIP_KB * 1.05).toFixed(1); // +5% threshold = 1,571.1 KB
+  if (mainGzKb > MAX_PERMISSIBLE_SHELL_GZIP_KB) {
+    console.error(`❌ FAIL: Shell bundle size regression! Current: ${mainGzKb} KB gzip exceeds maximum allowed drift threshold of ${MAX_PERMISSIBLE_SHELL_GZIP_KB} KB gzip (+5% over ${BASELINE_SHELL_GZIP_KB} KB baseline)`);
+    process.exit(1);
+  }
+  console.log(`✓ Shell baseline drift check passed: ${mainGzKb} KB <= ${MAX_PERMISSIBLE_SHELL_GZIP_KB} KB limit`);
+
+  // Assertion 2: Workstation heavy views must exist as split chunks and be < 50 KB gzip each
+  const requiredViewChunks = [
+    'FixedIncomeDashboard',
+    'AIPortfolioRebalancer',
+    'ScenarioAnalysisPro',
+    'PageBrowser',
+  ];
+
+  for (const viewName of requiredViewChunks) {
+    const chunkFile = jsFiles.find((f) => f.startsWith(`${viewName}-`));
+    if (!chunkFile) {
+      console.error(`❌ FAIL: Expected dedicated split chunk for ${viewName}, but none was found!`);
+      process.exit(1);
+    }
+    const raw = readFileSync(path.join(DIST_ASSETS, chunkFile));
+    const gz = zlib.gzipSync(raw);
+    const gzKb = +(gz.length / 1024).toFixed(1);
+    if (gzKb > 50.0) {
+      console.error(`❌ FAIL: View chunk ${chunkFile} size ${gzKb} KB gzip exceeds the 50 KB gzip limit!`);
+      process.exit(1);
+    }
+    console.log(`✓ Workstation split view chunk verified: ${chunkFile} (${gzKb} KB gzip < 50 KB limit)`);
+  }
+
+  // Assertion 3: Verify no workstation view component code is statically bundled into the main shell
+  const mainCode = mainRaw.toString('utf8');
+  const forbiddenShellMarkers = [
+    'FixedIncomeDashboard',
+    'AIPortfolioRebalancer',
+    'ScenarioAnalysisPro',
+  ];
+  // Verify that component function signatures are not embedded in main shell
+  for (const marker of forbiddenShellMarkers) {
+    // Check for component exports or module definitions
+    if (mainCode.includes(`export{${marker}`) || mainCode.includes(`function ${marker}(`)) {
+      console.error(`❌ FAIL: Workstation view marker ${marker} detected inside main shell! View is not properly lazy-loaded.`);
+      process.exit(1);
+    }
+  }
+  console.log(`✓ Main shell verified free of static workstation component definitions.`);
+
   console.log('\n✅ BUNDLE SIZE & CODE-SPLITTING CHECK PASSED!');
   process.exit(0);
 } catch (err) {

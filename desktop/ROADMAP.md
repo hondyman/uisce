@@ -156,20 +156,30 @@ flowchart TD
     - Live macOS Desktop Verification Suite: `GOWORK=off go build -tags verify -o uisce-desk . && ./uisce-desk --verify` -> **11 / 11 steps passed (0 failures)**.
   - **Tracked Backlog Items**:
     - [TODO] Connect Command Bar instrument search to backend `/api/catalog/search` or search index endpoint once instrument service is available (currently using verified stub catalogue).
+    - [TODO] Opportunistically convert 133 enterprise route imports in `AppRoutes.tsx` to `React.lazy()` (demonstrated to reduce shell bundle to ~76 KB gzip) without monolithic manualChunks circularities.
 
-### Sprint 4: Multi-Monitor Hardware Lab, Mixed-DPI & Windows WebView2 Protocol
-- **Focus**: Physical display testing, DPI scaling, and Windows verification.
+### Sprint 4: Institutional macOS Packaging & Local-First Observability
+- **Focus**: Enterprise packaging, zero-entitlement auditing, ad-hoc signing, and local-first workstation diagnostics.
 - **Scope**:
-  - **Physical Multi-Monitor Validation**: Verify window clamping, menu positioning, and DPI scaling across 1x, 2x, and mixed-DPI multi-monitor desks.
-  - **Windows WebView2 6-Point Verification**:
-    - Execute [`WINDOWS_VERIFICATION_CHECKLIST.md`](file:///Users/eganpj/GitHub/uisce/desktop/WINDOWS_VERIFICATION_CHECKLIST.md) on Windows 11 under WebView2 runtime.
-    - Verify origin behavior (`http://wails.localhost`).
-    - Verify `BroadcastChannel` cross-window delivery under shared user data folder.
-    - Verify Go `WailsRelayTransport` fallback if `BroadcastChannel` is partitioned.
+  - **Institutional macOS Packaging (`package-macos.sh`)**:
+    - Self-contained `.app` bundle with embedded frontend distribution (`frontend/dist`), Info.plist (`LSApplicationCategoryType=public.app-category.finance`, `NSHighResolutionCapable=true`), and ad-hoc code signing (`codesign --sign -`) mandatory for Apple Silicon arm64 execution.
+    - Scripted DMG creation (`UisceTradingDesk.dmg`) and documented Developer ID signing & `xcrun notarytool` submission workflows.
+    - Zero-entitlement hardened runtime: `Entitlements.plist` restricted to zero camera, microphone, or keystroke permissions.
+  - **Local-First Observability & Telemetry**:
+    - Size-capped rotating log writer to `~/Library/Logs/Uisce/workstation.log` with strict no-secret discipline (zero JWTs, tokens, or auth headers logged).
+    - Status heartbeat in `UniversalWorkspaceHub` status bar (window count, screen count, token vault lease status, tick throughput).
+    - Secret-scrubbed crash diagnostic dump mechanism.
+  - **Hardware-Gated Checklist (Pre-Written)**:
+    - Dedicated checklist in `desktop/HARDWARE_VERIFICATION.md` ready for immediate 30-minute execution once an external display (USB-C/HDMI) is plugged in:
+      1. Physical display enumeration (`GetMonitors`).
+      2. Multi-screen window distribution.
+      3. Mixed-DPI rendering (Retina 2x + External 1x seam check).
+      4. Physical cable disconnect mid-session (`ApplicationDidChangeScreenParameters` triggering `ReclampOrphanedWindows`).
+      5. Multi-display layout save and clean restore.
 
-### Sprint 5: Enterprise Packaging, Installer Signing & Distribution
+### Sprint 5: Multi-Platform Enterprise Distribution (Windows MSIX & macOS Notarization)
 - **HARD GATE**: **Sprint 5 Windows packaging is blocked until Sprint 4 Windows WebView2 verification passes.**
 - **Scope**:
-  - **macOS Build**: Notarized, codesigned `.app` bundle and drag-and-drop DMG with zero camera/mic entitlements.
   - **Windows Build**: Signed **MSIX** enterprise installer with code-signing certificate (ready for Intune and Group Policy deployment).
+  - **macOS Production Release**: Automated signing and Apple notarization via CI secrets.
   - **Automated Release Workflow**: Pinned Wails v3 packaging automation in GitHub Actions.

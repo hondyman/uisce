@@ -44,15 +44,24 @@ export class SyntheticTickGenerator implements TickSource {
     if (this.running) return;
     this.running = true;
 
-    // Dispatch batches every 10ms to achieve targetRatePerSec
+    // Dispatch batches every 10ms with drift compensation to achieve targetRatePerSec accurately
     const batchIntervalMs = 10;
-    const ticksPerBatch = Math.max(1, Math.round((this.targetRate * batchIntervalMs) / 1000));
+    const startTime = performance.now();
+    let totalTicksEmitted = 0;
+    let nextExpectedTime = startTime + batchIntervalMs;
 
     const emitBatch = () => {
       if (!this.running) return;
-      const now = Date.now();
+      const now = performance.now();
+      const elapsedSec = (now - startTime) / 1000;
+      
+      // Calculate target tick count based on elapsed time to eliminate timer jitter drift
+      const targetTotal = Math.round(this.targetRate * elapsedSec);
+      const toEmit = Math.max(0, targetTotal - totalTicksEmitted);
+      totalTicksEmitted += toEmit;
 
-      for (let i = 0; i < ticksPerBatch; i++) {
+      const nowTimestamp = Date.now();
+      for (let i = 0; i < toEmit; i++) {
         const sym = this.symbols[Math.floor(Math.random() * this.symbols.length)];
         const curPrice = this.prices.get(sym) || 150.0;
         const delta = (Math.random() - 0.49) * 0.5;
@@ -66,13 +75,15 @@ export class SyntheticTickGenerator implements TickSource {
           size: Math.floor(Math.random() * 50) * 10 + 10,
           bid: +(newPrice - spread / 2).toFixed(2),
           ask: +(newPrice + spread / 2).toFixed(2),
-          timestamp: now,
+          timestamp: nowTimestamp,
         };
 
         this.listeners.forEach((cb) => cb(tick));
       }
 
-      this.timerId = setTimeout(emitBatch, batchIntervalMs);
+      nextExpectedTime += batchIntervalMs;
+      const delay = Math.max(1, Math.round(nextExpectedTime - performance.now()));
+      this.timerId = setTimeout(emitBatch, delay);
     };
 
     emitBatch();
