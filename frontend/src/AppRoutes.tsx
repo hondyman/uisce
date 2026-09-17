@@ -7,7 +7,6 @@ import { JITRequestPanelExample } from "./JITRequestPanelExample";
 import { AccessExplanationExample } from "./AccessExplanationExample";
 import ConversationalQueryPage from "./pages/ConversationalQueryPage";
 import ManagementPage from "./features/fabric/pages/preaggregations/ManagementPage";
-import FixedIncomeDashboard from "./components/FixedIncomeDashboard";
 import BundleExplorer from "./components/BundleExplorer";
 import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -64,8 +63,6 @@ import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
 import BusinessObjectQueryBuilder from "./features/query-builder/pages/BusinessObjectQueryBuilder";
-import ScenarioAnalysisPro from "./components/ScenarioAnalysisPro";
-import AIPortfolioRebalancer from "./components/AIPortfolioRebalancer";
 // Metrics Console imports
 import MetricsConsolePage from "./pages/MetricsConsolePage";
 import MetricDetailPage from "./pages/MetricDetailPage";
@@ -179,10 +176,18 @@ import APIStudioPage from './pages/api-studio/APIStudioPage';
 import PageStudioListPage from './pages/page-studio/PageStudioListPage';
 import PageStudioDetailsPage from './pages/page-studio/PageStudioDetailsPage';
 import MenuDesignerPage from './pages/menu-designer/MenuDesignerPage';
-import PageBrowser, { StandalonePageRenderer } from './pages/PageBrowser';
 import { StandaloneWindowWrapper } from './components/desktop';
 import { UniversalWorkspaceHub } from './components/docking/UniversalWorkspaceHub';
 import RuntimePage from './pages/PageRuntimeRenderer';
+
+// Code-split workstation components for standalone / detached popout routes
+const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
+const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
+  import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
+);
+const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
+const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
+const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
 // Intelligence & Governance (New)
 import IntelligenceDashboard from "./pages/intelligence/IntelligenceDashboard";
@@ -227,8 +232,8 @@ function ProtectedApp() {
 
   return (
     <>
-
-      <Routes>
+      <React.Suspense fallback={<div style={{ padding: '32px', color: '#94a3b8', background: '#050d1a', height: '100%' }}>Loading view...</div>}>
+        <Routes>
         {/* ═══════════════════════════════════════════════════════════════════
             PLATFORM - Organization, security, and setup
             ═══════════════════════════════════════════════════════════════════ */}
@@ -495,6 +500,7 @@ function ProtectedApp() {
         <Route path="admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
         <Route path="admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
       </Routes>
+      </React.Suspense>
     </>
   );
 }

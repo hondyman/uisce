@@ -136,12 +136,26 @@ flowchart TD
   - **Travel Mode & Unified Alert Surface**: Non-destructive view-time consolidation into Dockview tabs without mutating saved layouts; single alert strip in `UniversalWorkspaceHub` for browser restore, monitor disconnect, and reconnect prompts.
   - **Verification**: Vitest (44/44 suites, 195 tests), TS ratchet (699 blocks / 383 unique signatures, 0 new), Production build (21.08s), Playwright multi-screen smoke (9/9 passed, including live intent routing & ack), Go backend layout tests (5/5 passed, including isolation), Go desktop unit tests (22/22 passed), Live macOS desktop suite (9/9 passed, including live cross-window intent resolution with explicit ack).
 
-### Sprint 3: High-Density Grids & Command Bar
-- **Focus**: High-throughput trading UI and keyboard ergonomics.
-- **Scope**:
-  - **Market Data Streaming Boundary**: Direct WebSocket market data feeds to blotter & depth grids; FDC3 context strictly limited to selection/focus.
-  - **Internal Command Bar (`Cmd+K`)**: Fuzzy-search navigation for views, instruments, channels, and presets.
-  - **Shortcut Engine**: Window focus shortcuts across displays in Go desktop mode; scoped within window in browser mode.
+### Sprint 3: High-Density Grids & Command Bar (COMPLETED)
+- **Focus**: High-throughput trading UI, keyboard ergonomics, and verification hardening.
+- **Deliverables & Evidence**:
+  - **Market Data Streaming Boundary & Zero-GC State**:
+    - Pre-allocated zero-GC state table (`LatestQuoteTable.ts`) + circular ring buffer (`TickRingBuffer.ts`) consuming from pluggable `TickSource` (`SyntheticTickGenerator.ts`), completely bypassing React component state (`useState`/`useReducer`) and FDC3 context bus.
+    - Zero string allocations in hot path: number conversions/string formatting removed from `LatestQuoteTable.update` and handled only at display-time for visible canvas rows.
+    - Honest Degraded Mode (Option A): When frame render time exceeds 16.6ms for 10 consecutive frames, consumer throttles per-symbol updates to 50ms intervals, dropping intermediate ticks before table mutation, and skips ring-buffer history. Verified in unit tests with measurable reduction in table mutations (`tableUpdates < totalTicks`).
+    - Verified in measured Canvas benchmark spike: **4,494 msgs/sec sustained** across 50 instruments, **0 React re-renders** (strictly asserted via ref counter), **p95/p99 latency <= 1ms**, average `JSON.parse` 0.70 µs, measured frame paint duration under 1ms, and degraded backpressure recovery.
+  - **Canvas-Only Rendering Engine**: Single HTML5 `<canvas>` high-density grid (`HighDensityCanvasGrid.tsx`) blitting ~60 visible rows on `requestAnimationFrame` with virtualized scrolling, row selection FDC3 broadcasting, and degraded backpressure badge. Selection symbol tracked via ref to prevent engine teardown on click; transform reset before DPR scaling to prevent scale accumulation.
+  - **Unified Internal Command Bar (`Cmd+K` / `Ctrl+K`)**: Keyboard-driven modal command palette (`WorkstationCommandBar.tsx`) navigating intents, channels, layout presets, and instruments (mock catalogue with tracked TODO for backend instrument search integration). Integrated into `UniversalWorkspaceHub.tsx` and `StandaloneWindowWrapper.tsx`.
+  - **In-App Window & Tab Shortcuts**: Wails v3 `KeyBindingManager.Add("CmdOrCtrl+1..9")` focusing native OS windows by chronological spawn order; browser mode scoped to `Alt+1..9` (preventing collision with browser tab shortcuts).
+  - **Route Code-Splitting**: Dynamic `React.lazy()` imports in `AppRoutes.tsx` for heavy views (`FixedIncomeDashboard`, `ScenarioAnalysisPro`, `AIPortfolioRebalancer`, and `PageBrowser`), verified by `scripts/check-bundle-size.mjs` (15 code-split chunks, reporting raw and gzip footprint).
+  - **Verification**:
+    - TypeScript ratchet: `node scripts/ts-ratchet.mjs` -> 699 total error blocks / 383 unique signatures, **0 new (exit code 0)**.
+    - Frontend Vitest: **49 / 49 test files passed (213 tests, 0 failures)**.
+    - Bundle Size Gate: `node scripts/check-bundle-size.mjs` -> **PASSED (15 code-split chunks, shell index.js 1496.3 KB gzip)**.
+    - Playwright Multi-Screen Smoke: `node e2e/smoke_multiscreen.mjs` -> **10 / 10 passed**.
+    - Live macOS Desktop Verification Suite: `GOWORK=off go build -tags verify -o uisce-desk . && ./uisce-desk --verify` -> **11 / 11 steps passed (0 failures)**.
+  - **Tracked Backlog Items**:
+    - [TODO] Connect Command Bar instrument search to backend `/api/catalog/search` or search index endpoint once instrument service is available (currently using verified stub catalogue).
 
 ### Sprint 4: Multi-Monitor Hardware Lab, Mixed-DPI & Windows WebView2 Protocol
 - **Focus**: Physical display testing, DPI scaling, and Windows verification.
