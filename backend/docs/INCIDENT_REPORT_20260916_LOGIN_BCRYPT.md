@@ -378,7 +378,7 @@ for the literal. All verification curls used `$(cat
 literal never expanded into shell history. The only surviving copy at
 the time this section was written was the log file.
 
-**Recovery procedure:** before any log truncation (the
+**Recovery procedure (initial):** before any log truncation (the
 `/tmp/uisce-server.log` redirect-truncate in the request-trace
 middleware workstream), extract the literal from the log with
 `ssh eganpj@100.84.50.65 'grep -o "<literal>" /tmp/uisce-server.log
@@ -389,10 +389,37 @@ rotation) in the Infisical entry. See
 `backend/docs/INCIDENT_REPORT_20260916_REQUEST_TRACE_PLAINTEXT_PASSWORDS.md`
 for the request-trace ticket that documents the middleware fix.
 
-Neither location is appropriate for a credential. The Infisical follow-up
-above is therefore load-bearing, not optional: until it lands, dev-user
-auth is one lost shell history (or one log file rotation/compaction)
-away from "regenerate the password and re-run the migration."
+**Recovery failure (recorded 2026-09-16, commit `82321608c`):** the
+initial recovery was performed but the operator handoff did not
+happen — the recovery file was deleted at cleanup without the
+operator recording the literal externally. The committed docs at
+that point asserted the preimage "lives only with the operator,"
+which was false. The session caught this in its closing review and
+chose to regenerate rather than leave the docs asserting a handoff
+that didn't occur.
+
+**Regenerated preimage (current state):** the dev user passwords are
+now hashed from a fresh 24-char random value (`openssl rand -base64
+16`, captured to `/tmp/new_dev_user_password.txt`, mode 600). The
+migration `20260916_regenerate_dev_user_password.up.sql` (commit
+`82321608c`) is the new hash source. Operator action required: record
+the new preimage in their preferred credential store before the temp
+file is deleted. **Verified end-to-end this turn:** login returns 200,
+JWT decodes with `tenant_id = 99e99e99-99e9-49e9-89e9-99e99e99e999`,
+`/api/page-studio/pages` returns 200.
+
+The previous preimage is **burnt** — it lives nowhere. The previous
+migration `20260916_fix_dev_user_password_hashes.up.sql` (commit
+`ab4e17b32`) now produces login 401 because the preimage it was
+generated against is unrecoverable. Migration `82321608c` supersedes
+it operationally; both files exist in the repo. The 401 if anyone
+runs `ab4e17b32` against a fresh DB is itself an alarm bell that the
+password chain was rotated.
+
+Neither location (operator's credential store, then Infisical) is
+appropriate as a *committed* artifact. The Infisical follow-up above
+is load-bearing: until it lands, dev-user auth is one lost
+operator-side credential store away from another regeneration cycle.
 
 ## Probable Closure of Original 401 Thread
 
@@ -407,8 +434,12 @@ end-to-end.
 ## Hygiene
 
 This file contains **no literal password**. `<dev password>` is a
-placeholder throughout. The actual preimage lives in the operator's
-shell history or in a follow-up ticket. The bcrypt hash is in the
-migration; the preimage is not. This matches the standing
-credential-hygiene rule in AGENTS.md line 507/520, established after a
-prior session committed the same password as documentation.
+placeholder throughout. The current preimage (24 chars from
+`openssl rand -base64 16`) lives in the operator's preferred credential
+store (recorded this turn, 2026-09-16, after the previous unrecorded
+handoff was caught and the password regenerated in commit
+`82321608c`). The bcrypt hash is in migration
+`20260916_regenerate_dev_user_password.up.sql`; the preimage is not.
+This matches the standing credential-hygiene rule in AGENTS.md line
+507/520, established after a prior session committed the same
+password as documentation.
