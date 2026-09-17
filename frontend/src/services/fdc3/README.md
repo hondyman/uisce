@@ -96,11 +96,12 @@ const unsubscribe = fdc3Agent.addContextListener<Fdc3InstrumentContext>(
 For automated end-to-end multi-window test verification (e.g. Playwright smoke tests, Wails live verification suites), the agent instance is conditionally exposed on `window.__fdc3Agent`.
 
 - **Security & Foot-gun Gating**:
-  To protect institutional trading environments and reduce malicious script exposure, this global is strictly gated. It is instantiated only when:
-  - Running under development (`import.meta.env.DEV`)
-  - Running on `localhost` or `127.0.0.1`
-  - URL explicitly contains `?verify=1` or `?test=1`
-  - Explicitly opted in via `window.__ENABLE_FDC3_AUTOMATION_HOOK__ = true`
-- **Production Staging/Live**: On non-localhost enterprise production hostnames, `window.__fdc3Agent` is omitted by default.
+  To protect institutional trading environments and prevent arbitrary script tampering in production desktop binaries, this global is strictly gated by explicit dev/test signals only (never by origin hostname):
+  - Development mode (`import.meta.env.DEV`)
+  - Automated unit test runner mode (`import.meta.env.MODE === 'test'`)
+  - Explicit test URL query parameter (`?verify=1` or `?test=1`)
+  - Explicit runtime opt-in flag (`window.__ENABLE_FDC3_AUTOMATION_HOOK__ = true`)
+- **Zero Origin Trust**: Gating never trusts `localhost` or `127.0.0.1` origins, because native Wails desktop WebViews run on `wails://localhost` (macOS) and `http://wails.localhost` (Windows) where origin hostname checks would inadvertently match production desktop builds.
+- **Production Desktop & Web**: In standard production builds on any scheme or domain without explicit test flags, `window.__fdc3Agent` is strictly `undefined`.
 
 

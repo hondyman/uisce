@@ -8,6 +8,7 @@ import {
   Fdc3PortfolioContext,
   ChannelMessageEnvelope,
   IFdc3Transport,
+  isFdc3AutomationHookAllowed,
 } from '../../services/fdc3';
 
 // Mock BroadcastChannel for deterministic cross-channel simulation in Node/Vitest
@@ -350,6 +351,90 @@ describe('FDC3 Interoperability Bus & Desktop Agent', () => {
 
       agentA.destroy();
       agentB.destroy();
+    });
+  });
+
+  describe('window.__fdc3Agent Test Hook Security Gating', () => {
+    const originalImportMeta = { ...import.meta.env };
+
+    afterEach(() => {
+      // Restore import.meta.env
+      (import.meta as any).env = { ...originalImportMeta };
+    });
+
+    it('DENIES access in production mode without explicit test flags, EVEN ON localhost or wails origins', () => {
+      const prodEnv = { DEV: false, MODE: 'production' };
+
+      // Test localhost hostname (standard dev port or wails://localhost)
+      const mockWinLocalhost = {
+        location: { hostname: 'localhost', search: '', origin: 'wails://localhost' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinLocalhost, prodEnv)).toBe(false);
+
+      // Test wails.localhost hostname (Windows WebView2)
+      const mockWinWindows = {
+        location: { hostname: 'wails.localhost', search: '', origin: 'http://wails.localhost' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinWindows, prodEnv)).toBe(false);
+
+      // Test 127.0.0.1
+      const mockWinIp = {
+        location: { hostname: '127.0.0.1', search: '', origin: 'http://127.0.0.1:4173' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinIp, prodEnv)).toBe(false);
+
+      // Test production corporate domain
+      const mockWinProd = {
+        location: { hostname: 'trade.bank.internal', search: '', origin: 'https://trade.bank.internal' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinProd, prodEnv)).toBe(false);
+    });
+
+    it('ALLOWS access when DEV is true', () => {
+      const devEnv = { DEV: true, MODE: 'development' };
+      const mockWin = {
+        location: { search: '' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWin, devEnv)).toBe(true);
+    });
+
+    it('ALLOWS access when MODE is test', () => {
+      const testEnv = { DEV: false, MODE: 'test' };
+      const mockWin = {
+        location: { search: '' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWin, testEnv)).toBe(true);
+    });
+
+    it('ALLOWS access when URL search contains verify=1 or test=1', () => {
+      const prodEnv = { DEV: false, MODE: 'production' };
+
+      const mockWinVerify = {
+        location: { search: '?verify=1' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinVerify, prodEnv)).toBe(true);
+
+      const mockWinTest = {
+        location: { search: '?foo=bar&test=1' },
+        navigator: { webdriver: false },
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWinTest, prodEnv)).toBe(true);
+    });
+
+    it('ALLOWS access when __ENABLE_FDC3_AUTOMATION_HOOK__ is explicitly set', () => {
+      const prodEnv = { DEV: false, MODE: 'production' };
+      const mockWin = {
+        location: { search: '' },
+        __ENABLE_FDC3_AUTOMATION_HOOK__: true,
+      } as unknown as Window;
+      expect(isFdc3AutomationHookAllowed(mockWin, prodEnv)).toBe(true);
     });
   });
 });

@@ -303,20 +303,38 @@ export const fdc3Agent = new Fdc3DesktopAgent();
  * Deliberate automation & test hook: window.__fdc3Agent
  * 
  * To reduce attack surface and prevent accidental script tampering in institutional
- * production deployments, this global is gated to development, test runners,
- * desktop verification harnesses, and localhost origins.
+ * production deployments, this global is gated STRICTLY to explicit test/dev signals.
+ * 
+ * NEVER gate on origin hostname (`localhost` or `127.0.0.1`)! In Wails v3 desktop,
+ * production WebViews run on custom schemes (`wails://localhost` on macOS,
+ * `http://wails.localhost` on Windows), which matches `localhost` hostnames and would
+ * unintentionally expose this automation hook in production desktop binaries.
  */
-if (typeof window !== 'undefined') {
-  const isDevOrTest =
-    Boolean(import.meta.env?.DEV) ||
-    Boolean((window as any).__ENABLE_FDC3_AUTOMATION_HOOK__) ||
-    window.location.search.includes('verify=1') ||
-    window.location.search.includes('test=1') ||
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1';
+export function isFdc3AutomationHookAllowed(
+  win: Window = window,
+  env: { DEV?: boolean; MODE?: string } = import.meta.env
+): boolean {
+  try {
+    const isDev = Boolean(env?.DEV);
+    const isTestMode = Boolean(env?.MODE === 'test');
+    const isExplicitFlag = Boolean((win as any).__ENABLE_FDC3_AUTOMATION_HOOK__);
+    const search = win.location?.search || '';
+    const hasTestQuery = search.includes('verify=1') || search.includes('test=1');
 
-  if (isDevOrTest) {
-    (window as any).__fdc3Agent = fdc3Agent;
+    return isDev || isTestMode || isExplicitFlag || hasTestQuery;
+  } catch {
+    return false;
   }
+}
+
+export function initFdc3AutomationHook(win: Window = window): void {
+  if (typeof win !== 'undefined' && isFdc3AutomationHookAllowed(win)) {
+    (win as any).__fdc3Agent = fdc3Agent;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  (window as any).__initFdc3AutomationHook = () => initFdc3AutomationHook(window);
+  initFdc3AutomationHook(window);
 }
 

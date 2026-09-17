@@ -126,6 +126,12 @@ func RunDesktopVerificationSuite(
 
 	primaryProbeJS := `(function() {
 		try {
+			// Explicit opt-in for verification suite automation hook
+			window.__ENABLE_FDC3_AUTOMATION_HOOK__ = true;
+			if (window.__initFdc3AutomationHook) {
+				window.__initFdc3AutomationHook();
+			}
+
 			fetch('/api/desk-verify/report', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },

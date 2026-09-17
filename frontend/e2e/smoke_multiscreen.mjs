@@ -123,10 +123,10 @@ async function runSmokeTest() {
     const tokenInUrl = currentUrl.includes('init_token');
     console.log('init_token successfully stripped from URL:', !tokenInUrl);
 
-    // 5. Test Universal Workspace Hub (/workspace)
+    // 5. Test Universal Workspace Hub (/workspace?test=1)
     console.log('5. Testing Dockview Universal Workspace Hub (/workspace)...');
     const pageWorkspace = await context.newPage();
-    await pageWorkspace.goto('http://localhost:4173/workspace');
+    await pageWorkspace.goto('http://localhost:4173/workspace?test=1');
     await pageWorkspace.waitForLoadState('networkidle');
 
     const workspaceHeader = await pageWorkspace.locator('text=UNIVERSAL WORKSPACE').first();
