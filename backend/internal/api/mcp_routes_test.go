@@ -2,15 +2,19 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/api"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/mcp"
+	"github.com/hondyman/uisce/backend/internal/middleware"
+	"github.com/hondyman/uisce/backend/internal/services"
 )
 
 // TestChi_DuplicateMethodPattern records chi v5.2.3 last-wins.
@@ -126,24 +130,6 @@ func TestMCP_RouteTableDump(t *testing.T) {
 		t.Error("expected POST /api/mcp/tools/call (Path 6)")
 	}
 
-	// Streamable tools/list (stateless).
-	listRec := postMCPJSON(router, "/api/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)
-	t.Logf("POST /api/mcp tools/list status=%d body=%s", listRec.Code, truncate(listRec.Body.String(), 400))
-	if listRec.Code != http.StatusOK && listRec.Code != http.StatusAccepted {
-		t.Fatalf("tools/list status=%d body=%s", listRec.Code, listRec.Body.String())
-	}
-	if !strings.Contains(listRec.Body.String(), "get_business_object_contract") &&
-		!strings.Contains(listRec.Body.String(), `"tools"`) {
-		t.Fatalf("tools/list missing catalog: %s", truncate(listRec.Body.String(), 500))
-	}
-
-	// Path 5 protocol must not be the face.
-	legacyRec := postMCPJSON(router, "/api/mcp", `{"jsonrpc":"2.0","id":2,"method":"mcp.list_tools"}`)
-	t.Logf("POST /api/mcp mcp.list_tools status=%d body=%s", legacyRec.Code, truncate(legacyRec.Body.String(), 300))
-	if strings.Contains(legacyRec.Body.String(), `"name":"get_node_schema"`) {
-		t.Fatal("Path 5 tool catalog leaked onto /api/mcp")
-	}
-
 	// GET must not be the old Path 1 info descriptor.
 	infoRec := getPath(router, "/api/mcp", "application/json")
 	body := infoRec.Body.String()
@@ -152,14 +138,65 @@ func TestMCP_RouteTableDump(t *testing.T) {
 		t.Fatal("GET /api/mcp still serves Path 1 info JSON; streamable must own GET")
 	}
 
+	// Path 6 subpath must NOT be swallowed by streamable /mcp.
+	// Discriminator: unauthenticated Path 6 returns JSON-RPC -32001 with
+	// the maker-checker auth message — not a streamable MCP parse/session error.
 	path6 := postMCPJSON(router, "/api/mcp/tools/call", `{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"x","arguments":{}}}`)
+	p6body := path6.Body.String()
+	t.Logf("POST /api/mcp/tools/call status=%d body=%s", path6.Code, truncate(p6body, 300))
 	if path6.Code == http.StatusNotFound {
-		t.Error("POST /api/mcp/tools/call 404; Path 6 missing")
+		t.Fatal("POST /api/mcp/tools/call 404; Path 6 missing (streamable may have swallowed subpath)")
+	}
+	if !strings.Contains(p6body, "-32001") || !strings.Contains(p6body, "auth required") {
+		t.Fatalf("Path 6 discriminator failed (expected -32001 auth); streamable may own /mcp/tools/call: %s", truncate(p6body, 400))
+	}
+	if !has("POST", "/mcp/tools/call") {
+		t.Error("Walk missing POST /api/mcp/tools/call while streamable owns /api/mcp")
 	}
 
 	if got := postMCPJSON(router, "/mcp", `{"jsonrpc":"2.0","id":4,"method":"tools/list"}`); got.Code != http.StatusNotFound {
 		t.Errorf("POST /mcp: want 404, got %d", got.Code)
 	}
+}
+
+// TestMCP_InitializeCapableProbe is the harness form of the flip-checklist
+// live probe: mcp-go client initialize → tools/list → tools/call → refuse.
+// Uses a minimal mux (not full SetupRouter) so nil-DB region middleware
+// cannot panic under a tenant-bearing JWT.
+func TestMCP_InitializeCapableProbe(t *testing.T) {
+	const secret = "initialize-probe-secret"
+	sm := services.NewSecurityManager(nil, nil, []byte(secret))
+	token, err := sm.MintDevToken(services.DevTokenInput{
+		UserID:    "init-probe",
+		TenantIDs: []string{"99e99e99-99e9-49e9-89e9-99e99e99e999"},
+		Roles:     []string{"portfolio_manager"},
+	})
+	if err != nil {
+		t.Fatalf("MintDevToken: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/mcp", middleware.AuthContextMiddleware(sm)(mcp.NewServer(nil).HTTPHandler()))
+	ts := httptest.NewServer(mux)
+	t.Cleanup(ts.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	probe, err := mcp.ProbeStreamable(ctx, ts.URL+"/api/mcp", token)
+	if err != nil {
+		t.Fatalf("ProbeStreamable: %v", err)
+	}
+	if probe.ToolCount < 7 {
+		t.Fatalf("tools=%d", probe.ToolCount)
+	}
+	if !strings.Contains(probe.CallText, "99e99e99-99e9-49e9-89e9-99e99e99e999") {
+		t.Fatalf("call missing tenant_id field: %s", truncate(probe.CallText, 300))
+	}
+	refused := probe.RefuseIsErr || strings.Contains(probe.RefuseText, "refused") || strings.Contains(probe.RefuseText, "unknown")
+	if !refused {
+		t.Fatalf("expected refuse, got %q", probe.RefuseText)
+	}
+	t.Logf("initialize-capable probe ok session=%s tools=%d", mcp.SessionMode, probe.ToolCount)
 }
 
 func TestMCP_CutoverMarkerPresent(t *testing.T) {

@@ -33,6 +33,13 @@ func (s *Server) SetTemporal(c client.Client) *Server {
 // HTTPHandler returns the mark3labs streamable HTTP transport for /api/mcp.
 // It owns POST, GET, DELETE, and HEAD — do not also register a separate
 // GET info route on the same pattern (chi last-wins).
+//
+// Session model: SessionMode=stateless (WithStateLess(true)). No
+// Mcp-Session-Id; server restarts do not invalidate clients; GET is not
+// used for SSE pushes (bare GET → 405 Streaming unsupported). Liveness
+// probing uses ProbeStreamable / cmd/mcp-live-probe (initialize…), not
+// the retired Path 1 GET info JSON. chi r.Handle("/mcp") is exact — it
+// does not swallow POST /mcp/tools/call (Path 6).
 func (s *Server) HTTPHandler() http.Handler {
 	return server.NewStreamableHTTPServer(
 		s.registry,

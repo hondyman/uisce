@@ -3,11 +3,12 @@
 // anyone with JWT_SECRET and this binary can mint tokens for any
 // tenant. Do not ship or invoke it against production.
 //
-// Scope: ENVIRONMENT must be development, local, or test; JWT_SECRET
-// must be set (fail closed — no alternate config paths). Signing goes
-// through services.SecurityManager.MintDevToken (the single backend
-// forge path). Token is written to stdout only; secrets and errors go
-// to stderr.
+// Scope: JWT_SECRET must be set (fail closed — no alternate config).
+// ENVIRONMENT must be development|local|test, or unset (treated as
+// local with a stderr notice — local receipt shells often omit it).
+// Production/staging/etc. are refused. Signing goes through
+// services.SecurityManager.MintDevToken. Token → stdout only; secrets
+// and errors → stderr.
 package main
 
 import (
@@ -56,7 +57,10 @@ func requireDevEnvironment() error {
 	case "development", "local", "test":
 		return nil
 	case "":
-		return fmt.Errorf("ENVIRONMENT is unset; set ENVIRONMENT=development|local|test to use devjwt")
+		// Local receipt shells often have JWT_SECRET from the process env
+		// but no ENVIRONMENT. Treat unset as local; still refuse prod names.
+		fmt.Fprintln(os.Stderr, "devjwt: ENVIRONMENT unset; treating as local")
+		return nil
 	default:
 		return fmt.Errorf("devjwt refused: ENVIRONMENT=%q is not development|local|test", env)
 	}
