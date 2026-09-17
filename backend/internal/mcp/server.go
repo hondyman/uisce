@@ -1,54 +1,32 @@
 // Package mcp is the canonical Uisce MCP surface.
 //
-// # Inventory (updated 2026-09-17, PR A route-table dump)
+// # Inventory (updated after PR B streamable cutover)
 //
-// chi v5.2.3 does NOT panic on a second Post of the same method+pattern.
-// TestChi_DuplicateMethodPattern: last registration wins. chi.Walk lists
-// the survivor only.
+// chi v5.2.3 last-wins silently on duplicate method+pattern. Never
+// double-register any verb on /api/mcp.
 //
-// TestMCP_RouteTableDump against real SetupRouter (ENVIRONMENT=test):
+// Live mux after verb-complete replace (TestMCP_RouteTableDump):
 //
-//	GET  /api/mcp              Path 1 MCPToolHandler.HandleGetInfo
-//	POST /api/mcp              Path 1 MCPToolHandler.HandleRPC
-//	POST /api/mcp/tools/call   Path 6 agentic.MCPToolRouter.HandleToolCall
+//	ALL /api/mcp                 mark3labs StreamableHTTPServer (owns GET/POST/DELETE/HEAD)
+//	POST /api/mcp/tools/call     Path 6 agentic.MCPToolRouter (maker-checker)
 //
-// Dead at the mux (404): POST /mcp, GET /mcp/tools, GET /api/mcp/tools,
-// GET /api/v1/mcp/tools.
+// Path 1 MCPToolHandler.RegisterRoutes and Path 5 handlers.RegisterMCP
+// are NOT registered on the live /api group. Old GET info JSON
+// (protocol=json-rpc-2.0) is retired; discovery is MCP tools/list.
 //
-// Dump verdict (not boring, not "never-registered"):
-// BOTH registrations execute on the SAME /api chi group. Path 5
-// RegisterRoutes runs (MCP-REGISTER path5 trace + handlers hook).
-// Path 1 RegisterRoutes runs next (path1 trace; GET /api/mcp exists —
-// Path 5 never registers GET). chi v5.2.3 last-wins silently; Walk
-// lists only the survivor. Path 5 is registered-then-overwritten, not
-// dead at the call site. Probe: tools/list → Path 1 catalog;
-// mcp.list_tools → Path 1 -32601 (not Path 5's -32001).
+// CutoverMarker = "mcp-cutover-streamable-v1" — flip checklist greps
+// the deployed binary for this string.
 //
-// Ops surfaces that print the same table: stderr [ROUTES-DUMP] at
-// api.go SetupRouter end, and admin GET /_routes. Keep both; the test
-// is the gate. Flip checklist: TestMCP_RouteTableDump + those dumps.
+// Tenant attribution:
 //
-// PR B must replace or wrap POST /api/mcp, not stack a third
-// registration. The mount swap is ATOMIC — Path 1 RegisterRoutes
-// removal and the new mount land in the same commit, route-table test
-// updated in that diff, live checklist against the deployed binary
-// before the commit is done. A split leaves POST /api/mcp 404.
+//	Path 6 envelope result.tenant_id (we own JSON-RPC)
+//	Unified Server tool result field tenant_id (not SDK envelope)
+//	Maker-checker ticket remains the ledger
 //
-// Path 6 URL move (PR D): if a compat shim is used, old+new coexist
-// in one commit; shim removal is a later commit with its own
-// reachability proof. Shim emits Deprecation / a log line so removal
-// is data-driven.
+// Stdio (cmd/mcp-server): streamable-HTTP client of UISCE_API_URL;
+// credentials only UISCE_API_TOKEN; stdout=protocol; stderr never logs token.
 //
-// Stdio client invariant (PR B): the binary never reads or stores
-// credentials beyond UISCE_API_TOKEN; stdout is the protocol channel
-// — logs go to stderr and must never contain the token.
-//
-//	Path 1 (LIVE HTTP face through PR A): tool_handler.go
-//	Path 2 (INTERNAL): mcp_server.go — tools ported onto Server below
-//	Path 3 (CLIENT): tools.go + cmd/mcp-server — PR B
-//	Path 4 (DEAD): api/mcp_handlers.go — never registered
-//	Path 5 (DEAD at mux): handlers/mcp_handler.go — overwritten by Path 1
-//	Path 6 (LIVE): POST /api/mcp/tools/call — "core" fallback closed Pre-A
+// JWT forge: services.SecurityManager.MintDevToken only (cmd/devjwt wraps it).
 package mcp
 
 import (
@@ -70,8 +48,8 @@ type registeredTool struct {
 	handler toolHandler
 }
 
-// Server is the unified MCP server. PR A: tools register and CallTool
-// works. Path 1 remains the HTTP face — this type is not mounted yet.
+// Server is the unified MCP server. HTTP transport: HTTPHandler()
+// (streamable). Tool implementations still use MCPToolHandler helpers.
 type Server struct {
 	db       *sqlx.DB
 	registry *server.MCPServer
@@ -135,7 +113,7 @@ func (s *Server) wrapHandler(name string, handler toolHandler) server.ToolHandle
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
-		out, err := json.Marshal(result)
+		out, err := json.Marshal(withTenantField(result, tenantID))
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
@@ -169,7 +147,37 @@ func (s *Server) CallTool(ctx context.Context, tenantID uuid.UUID, name string, 
 	if len(args) == 0 {
 		args = json.RawMessage(`{}`)
 	}
-	return entry.handler(ctx, tenantID, args)
+	result, err := entry.handler(ctx, tenantID, args)
+	if err != nil {
+		return nil, err
+	}
+	return withTenantField(result, tenantID), nil
+}
+
+// withTenantField adds tenant_id to structured tool results (not the SDK
+// JSON-RPC envelope). Path 6 carries tenant on its own envelope.
+func withTenantField(result interface{}, tenantID uuid.UUID) interface{} {
+	tid := tenantID.String()
+	switch v := result.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(v)+1)
+		for k, val := range v {
+			out[k] = val
+		}
+		out["tenant_id"] = tid
+		return out
+	case map[string]string:
+		out := make(map[string]interface{}, len(v)+1)
+		for k, val := range v {
+			out[k] = val
+		}
+		out["tenant_id"] = tid
+		return out
+	case nil:
+		return map[string]interface{}{"tenant_id": tid}
+	default:
+		return map[string]interface{}{"tenant_id": tid, "data": result}
+	}
 }
 
 func (s *Server) path2Tool(name string) toolHandler {

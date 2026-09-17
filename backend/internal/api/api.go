@@ -1750,28 +1750,22 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.GraphService = catalogmeta.NewGraphService(sqlxDB)
 		abacService := services.NewAbacService(sqlxDB)
 		srv.WriteHandler = handlers.NewWriteHandler(srv.GraphService, sqlxDB, srv.IgniteClient, abacService)
-		srv.MCPHandler = handlers.NewMCPHandler(srv.GraphService)
+		// Path 5 MCPHandler is no longer mounted (verb-complete cutover).
+		// Field kept nil so stale references fail loudly.
+		srv.MCPHandler = nil
 
 		semanticTermsHandler.RegisterRoutes(r)
 		srv.GenAICopilotHandler.RegisterRoutes(r)
 		srv.ChartHandler.RegisterRoutes(r)
 		routes.RegisterMetadataWrite(r, srv.WriteHandler)
 
-		// ORDER IS LOAD-BEARING. chi v5.2.3 last-wins silently on duplicate
-		// method+pattern: this Path 5 RegisterMCP (POST /mcp) MUST run before
-		// Path 1 RegisterRoutes below, or POST /api/mcp flips to Path 5's
-		// non-spec mcp.list_tools protocol. Guard: TestMCP_RouteTableDump.
-		mcp.TraceRegister("path5 call site api.go:RegisterMCP → handlers.MCPHandler.RegisterRoutes POST /mcp")
-		routes.RegisterMCP(r, srv.MCPHandler)
-
-		// ORDER IS LOAD-BEARING. Must remain AFTER RegisterMCP (see above).
-		// Tenant from AuthInfo (AuthContextMiddleware), never the body.
-		// tools/list is public; tools/call requires auth.
-		// Guard: TestMCP_RouteTableDump. PR B: atomic replace with the
-		// streamable-HTTP mount in the SAME commit — do not stack a third
-		// POST /mcp and do not delete this line without the replacement.
-		mcp.TraceRegister("path1 call site api.go:MCPToolHandler.RegisterRoutes POST+GET /mcp")
-		mcp.NewMCPToolHandler(sqlxDB).SetTemporal(temporalClient).RegisterRoutes(r)
+		// Verb-complete MCP cutover (CutoverMarker=mcp-cutover-streamable-v1):
+		// one streamable handler owns ALL verbs on /api/mcp. Path 1
+		// RegisterRoutes and Path 5 RegisterMCP are intentionally NOT
+		// called — stacking either recreates chi last-wins fragility.
+		// Guard: TestMCP_RouteTableDump. Path 6 stays at /mcp/tools/call.
+		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp")
+		r.Handle("/mcp", mcp.NewServer(sqlxDB).SetTemporal(temporalClient).HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)

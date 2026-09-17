@@ -80,6 +80,9 @@ func TestServer_CallTool_ListBusinessObjects(t *testing.T) {
 	if _, ok := m["business_objects"]; !ok {
 		t.Fatalf("missing business_objects: %#v", m)
 	}
+	if m["tenant_id"] != testTenantID {
+		t.Fatalf("tenant_id=%v want %s", m["tenant_id"], testTenantID)
+	}
 }
 
 func TestServer_CallTool_GetContract(t *testing.T) {
@@ -139,7 +142,8 @@ func TestServer_RegisterTool_AddsToList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.(map[string]string)["ok"] != "yes" {
+	m, ok := got.(map[string]interface{})
+	if !ok || m["ok"] != "yes" || m["tenant_id"] != testTenantID {
 		t.Fatalf("%#v", got)
 	}
 }
