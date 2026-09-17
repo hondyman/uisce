@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { fdc3Agent } from './Fdc3DesktopAgent';
 import { Fdc3Context, UserChannelId } from './types';
+import { IntentHandler, IntentResolution, StandardIntent } from './intentTypes';
 
 /**
  * Hook to participate in FDC3 context synchronization.
@@ -53,10 +54,42 @@ export function useFdc3<T extends Fdc3Context = Fdc3Context>(
     fdc3Agent.joinUserChannel(channelId);
   }, []);
 
+  const raiseIntent = useCallback((intent: StandardIntent, context: Fdc3Context, targetViewId?: string): Promise<IntentResolution> => {
+    return fdc3Agent.raiseIntent(intent, context, targetViewId);
+  }, []);
+
   return {
     activeChannel,
     currentContext,
     broadcast,
     setChannel,
+    raiseIntent,
   };
 }
+
+/**
+ * Hook to register an internal intent handler with automatic mount/unmount lifecycle.
+ * Handles React StrictMode mount/unmount/mount idempotently.
+ */
+export function useIntentHandler(
+  intent: StandardIntent,
+  viewId: string,
+  title: string,
+  handler: IntentHandler
+) {
+  const handlerRef = useRef(handler);
+  handlerRef.current = handler;
+
+  useEffect(() => {
+    const unsub = fdc3Agent.registerIntentHandler(intent, viewId, title, (context) => {
+      if (handlerRef.current) {
+        return handlerRef.current(context);
+      }
+    });
+
+    return () => {
+      unsub();
+    };
+  }, [intent, viewId, title]);
+}
+

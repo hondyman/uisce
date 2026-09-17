@@ -7,6 +7,8 @@ import {
 } from './types';
 import { BroadcastChannelTransport } from './transports/BroadcastChannelTransport';
 import { devWarn } from '../../utils/devLogger';
+import { IntentRegistry } from './IntentRegistry';
+import { IntentHandler, IntentResolution, IntentTarget, StandardIntent } from './intentTypes';
 
 /**
  * Local channel instance representing a single FDC3 context channel (e.g. 'blue', 'red').
@@ -178,6 +180,7 @@ export class Fdc3DesktopAgent {
   private channels: Map<string, LocalFdc3Channel> = new Map();
   private currentChannel: LocalFdc3Channel | null = null;
   private channelChangeListeners: Set<(channelId: UserChannelId) => void> = new Set();
+  private intentRegistry: IntentRegistry;
 
   constructor(
     windowId: string = `win_${Math.random().toString(36).substring(2, 9)}`,
@@ -185,6 +188,7 @@ export class Fdc3DesktopAgent {
   ) {
     this.windowId = windowId;
     this.transport = transport;
+    this.intentRegistry = new IntentRegistry(this.windowId, this.transport);
 
     // Default to the Blue user channel (standard trading convention)
     this.joinUserChannel('blue');
@@ -197,6 +201,34 @@ export class Fdc3DesktopAgent {
   public setTransport(transport: IFdc3Transport): void {
     this.transport = transport;
     this.channels.forEach((channel) => channel.setTransport(transport));
+    this.intentRegistry.setTransport(transport);
+  }
+
+  public setIntentResolverPrompt(
+    prompt: (intent: StandardIntent, targets: IntentTarget[], context?: Fdc3Context) => Promise<IntentTarget>
+  ): void {
+    this.intentRegistry.setResolverPrompt(prompt);
+  }
+
+  public registerIntentHandler(
+    intent: string,
+    viewId: string,
+    title: string,
+    handler: IntentHandler
+  ): () => void {
+    return this.intentRegistry.registerIntentHandler(intent, viewId, title, handler);
+  }
+
+  public raiseIntent(
+    intent: string,
+    context: Fdc3Context,
+    targetViewId?: string
+  ): Promise<IntentResolution> {
+    return this.intentRegistry.raiseIntent(intent, context, targetViewId);
+  }
+
+  public findIntentTargets(intent: string): IntentTarget[] {
+    return this.intentRegistry.findIntentTargets(intent);
   }
 
   public getOrCreateChannel(channelId: string): LocalFdc3Channel {
@@ -259,6 +291,7 @@ export class Fdc3DesktopAgent {
     this.channelChangeListeners.clear();
     this.channels.forEach((chan) => chan.destroy());
     this.channels.clear();
+    this.intentRegistry.destroy();
     this.transport.destroy?.();
   }
 }

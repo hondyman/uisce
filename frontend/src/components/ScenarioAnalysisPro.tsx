@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../lib/apiClient';
-import { useFdc3 } from '../services/fdc3/useFdc3';
+import { useFdc3, useIntentHandler } from '../services/fdc3/useFdc3';
 import { Fdc3InstrumentContext } from '../services/fdc3/types';
 import './ScenarioAnalysisPro.css';
 
@@ -62,6 +62,20 @@ const ScenarioAnalysisPro: React.FC = () => {
   const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
     if (ctx?.id?.ticker) {
       const ticker = ctx.id.ticker.toUpperCase();
+      setFdc3LinkedTicker(ticker);
+      if (['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'TSLA'].includes(ticker)) {
+        setSelectedScenario('Tech Bubble Burst (-30% on tech stocks)');
+      } else {
+        setSelectedScenario('Market Crash (-20%)');
+      }
+    }
+  });
+
+  // Register standard FDC3-compatible intent handler for ViewAnalysis
+  useIntentHandler('ViewAnalysis', 'scenario', 'Scenario Analysis Pro', (ctx) => {
+    const inst = ctx as Fdc3InstrumentContext;
+    if (inst?.id?.ticker) {
+      const ticker = inst.id.ticker.toUpperCase();
       setFdc3LinkedTicker(ticker);
       if (['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'TSLA'].includes(ticker)) {
         setSelectedScenario('Tech Bubble Burst (-30% on tech stocks)');

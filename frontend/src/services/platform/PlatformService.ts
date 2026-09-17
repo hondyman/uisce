@@ -236,6 +236,49 @@ export class UniversalPlatformService implements IWorkspaceAdapter {
       }
     }
   }
+
+  /**
+   * Closes a specific detached window (Wails OS window or browser popup).
+   */
+  public async closeWindow(windowId: string): Promise<void> {
+    if (this.isWails()) {
+      try {
+        const deskManager = (window as unknown as {
+          go?: {
+            main?: {
+              DeskWindowManager?: {
+                CloseWindow?: (id: string) => Promise<void>;
+              };
+            };
+          };
+        })?.go?.main?.DeskWindowManager;
+        if (typeof deskManager?.CloseWindow === 'function') {
+          await deskManager.CloseWindow(windowId);
+          return;
+        }
+      } catch (err) {
+        devWarn('[PlatformService] Failed to close Wails window:', err);
+      }
+    }
+
+    // Browser popup
+    const popup = this.openedPopups.get(windowId);
+    if (popup && !popup.closed) {
+      popup.close();
+    }
+    this.openedPopups.delete(windowId);
+  }
+
+  /**
+   * Closes all active detached windows across the workstation.
+   */
+  public async closeAllDetachedWindows(): Promise<void> {
+    const detached = layoutManager.getDetachedWindows();
+    for (const win of detached) {
+      await this.closeWindow(win.windowId);
+    }
+  }
 }
 
 export const platformService = new UniversalPlatformService();
+

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNotification } from '../hooks/useNotification';
 import styles from './AIPortfolioRebalancer.module.css';
-import { useFdc3 } from '../services/fdc3/useFdc3';
+import { useFdc3, useIntentHandler } from '../services/fdc3/useFdc3';
 import { Fdc3InstrumentContext } from '../services/fdc3/types';
 
 interface Portfolio {
@@ -41,6 +41,14 @@ export const AIPortfolioRebalancer: React.FC = () => {
   const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
     if (ctx?.id?.ticker) {
       setHighlightedTicker(ctx.id.ticker.toUpperCase());
+    }
+  });
+
+  // Register standard FDC3-compatible intent handler for ViewAnalysis
+  useIntentHandler('ViewAnalysis', 'rebalancer', 'AI Portfolio Rebalancer', (ctx) => {
+    const inst = ctx as Fdc3InstrumentContext;
+    if (inst?.id?.ticker) {
+      setHighlightedTicker(inst.id.ticker.toUpperCase());
     }
   });
 

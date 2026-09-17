@@ -4,9 +4,12 @@ import 'dockview-react/dist/styles/dockview.css';
 import '../../services/docking/theme.css';
 import { platformService, ScreenLayoutTarget } from '../../services/platform/PlatformService';
 import { layoutManager } from '../../services/docking/LayoutManager';
-import { devLog } from '../../utils/devLogger';
+import { devLog, devWarn } from '../../utils/devLogger';
 import { useFdc3 } from '../../services/fdc3/useFdc3';
-import { UserChannelId } from '../../services/fdc3/types';
+import { UserChannelId, Fdc3Context } from '../../services/fdc3/types';
+import { fdc3Agent } from '../../services/fdc3/Fdc3DesktopAgent';
+import { IntentResolverModal } from './IntentResolverModal';
+import { IntentTarget, StandardIntent } from '../../services/fdc3/intentTypes';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
@@ -20,7 +23,7 @@ const FixedIncomeDashboard = React.lazy(() => import('../FixedIncomeDashboard'))
 let hasAutoRestoredOnBoot = false;
 
 const OrderBlotterPanel: React.FC = () => {
-  const { activeChannel, broadcast } = useFdc3();
+  const { activeChannel, broadcast, raiseIntent } = useFdc3();
   const demoTickers = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'TSLA'];
 
   return (
@@ -36,7 +39,7 @@ const OrderBlotterPanel: React.FC = () => {
         flexWrap: 'wrap',
         gap: '8px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
             Demo / Test FDC3 Sync:
           </span>
@@ -65,6 +68,35 @@ const OrderBlotterPanel: React.FC = () => {
               {ticker}
             </button>
           ))}
+
+          {/* Raise Intent Trigger */}
+          <button
+            onClick={async () => {
+              try {
+                await raiseIntent('ViewAnalysis', {
+                  type: 'fdc3.instrument',
+                  id: { ticker: 'NVDA' },
+                  name: 'NVIDIA Corp',
+                });
+              } catch (err: any) {
+                console.warn('[OrderBlotter] Intent resolution notice:', err?.message || err);
+              }
+            }}
+            style={{
+              padding: '2px 8px',
+              fontSize: '11px',
+              fontWeight: 600,
+              borderRadius: '4px',
+              border: '1px solid #a855f760',
+              background: '#7e22ce20',
+              color: '#c084fc',
+              cursor: 'pointer',
+              marginLeft: '4px',
+            }}
+            title="Raise 'ViewAnalysis' intent across workstation mesh (prompts resolver if multiple targets exist)"
+          >
+            ⚡ Raise ViewAnalysis
+          </button>
         </div>
         <div style={{ fontSize: '11px', color: '#64748b' }}>
           Active Channel: <strong style={{ color: '#38bdf8' }}>{activeChannel}</strong>
@@ -116,13 +148,55 @@ const dockComponents = {
   ),
 };
 
+export interface WorkstationAlert {
+  type: 'browser-restore' | 'travel-mode' | 'reconnect';
+  title: string;
+  message: string;
+  actionLabel: string;
+  dismissLabel: string;
+  onAction: () => void;
+  onDismiss: () => void;
+}
+
+export function getComponentForRoute(route: string): 'orders' | 'rebalancer' | 'scenario' | 'fixed_income' | null {
+  if (route.includes('rebalancer')) return 'rebalancer';
+  if (route.includes('scenario')) return 'scenario';
+  if (route.includes('fixed_income') || route.includes('fixed-income')) return 'fixed_income';
+  if (route.includes('orders')) return 'orders';
+  return null;
+}
+
 export const UniversalWorkspaceHub: React.FC = () => {
   const [dockApi, setDockApi] = useState<DockviewApi | null>(null);
   const [screens, setScreens] = useState<ScreenLayoutTarget[]>([]);
   const [isDesktop, setIsDesktop] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
-  const [browserRestorePending, setBrowserRestorePending] = useState<number>(0);
   const statusTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Single cohesive alert surface (replaces separate stacked banners)
+  const [activeAlert, setActiveAlert] = useState<WorkstationAlert | null>(null);
+
+  // Travel Mode state (ephemeral view-time consolidation)
+  const [isTravelMode, setIsTravelMode] = useState<boolean>(false);
+  const [consolidatedPanelIds, setConsolidatedPanelIds] = useState<string[]>([]);
+  const prevScreenCountRef = useRef<number>(1);
+  const isTravelModeRef = useRef<boolean>(false);
+  isTravelModeRef.current = isTravelMode;
+
+  // Cross-window intent resolver prompt modal state
+  const [resolverModal, setResolverModal] = useState<{
+    isOpen: boolean;
+    intent: StandardIntent | null;
+    context: Fdc3Context | null;
+    targets: IntentTarget[];
+    resolve?: (target: IntentTarget) => void;
+    reject?: (err: Error) => void;
+  }>({
+    isOpen: false,
+    intent: null,
+    context: null,
+    targets: [],
+  });
 
   const { activeChannel, setChannel } = useFdc3();
   const availableChannels: UserChannelId[] = ['blue', 'green', 'red', 'orange', 'purple'];
@@ -134,12 +208,40 @@ export const UniversalWorkspaceHub: React.FC = () => {
   };
 
   useEffect(() => {
+    // Wire FDC3 agent intent resolver prompt to UI modal
+    fdc3Agent.setIntentResolverPrompt((intent, targets, context) => {
+      return new Promise<IntentTarget>((resolve, reject) => {
+        setResolverModal({
+          isOpen: true,
+          intent,
+          context: context || null,
+          targets,
+          resolve,
+          reject,
+        });
+      });
+    });
+  }, []);
+
+  useEffect(() => {
     document.title = 'Uisce Multi-Monitor Workstation';
     const desktop = platformService.isWails();
     setIsDesktop(desktop);
 
+    // Synchronize roaming workspace profile from PostgreSQL
+    layoutManager.syncFromServer().then((synced) => {
+      if (synced?.dockviewLayout && dockApi) {
+        try {
+          dockApi.fromJSON(synced.dockviewLayout as any);
+        } catch (e) {
+          devLog('[UniversalWorkspaceHub] Failed to apply server layout:', e);
+        }
+      }
+    }).catch(console.error);
+
     platformService.getScreens().then((availScreens) => {
       setScreens(availScreens);
+      prevScreenCountRef.current = availScreens.length;
 
       const detached = layoutManager.getDetachedWindows();
       if (detached.length > 0 && !hasAutoRestoredOnBoot) {
@@ -162,8 +264,22 @@ export const UniversalWorkspaceHub: React.FC = () => {
           });
           showStatus(`Auto-restored ${detached.length} multi-monitor window(s)`);
         } else {
-          // Browser mode: prompt user to prevent browser popup blockers from suppressing windows
-          setBrowserRestorePending(detached.length);
+          // Browser mode: prompt via unified alert strip
+          setActiveAlert({
+            type: 'browser-restore',
+            title: 'Restore Session',
+            message: `Found ${detached.length} detached desk window(s) from previous session.`,
+            actionLabel: 'Restore Windows',
+            dismissLabel: 'Dismiss',
+            onAction: () => {
+              handleRestoreDesk();
+              setActiveAlert(null);
+            },
+            onDismiss: () => {
+              layoutManager.clearDetachedWindows();
+              setActiveAlert(null);
+            },
+          });
         }
       }
     }).catch(console.error);
@@ -212,7 +328,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
     if (!dockApi) return;
     await platformService.reconcileDetachedWindows();
     const json = dockApi.toJSON();
-    layoutManager.saveLayout(json);
+    await layoutManager.saveLayout(json);
     showStatus('Workspace layout saved');
   };
 
@@ -247,7 +363,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
           height: win.height,
         });
       }
-      setBrowserRestorePending(0);
+      setActiveAlert(null);
       showStatus(`Restored workspace & ${detached.length} detached window(s)`);
     } else {
       showStatus('Workspace dock layout restored');
@@ -257,7 +373,9 @@ export const UniversalWorkspaceHub: React.FC = () => {
   // Reset to default layout
   const handleResetLayout = () => {
     layoutManager.clearLayout();
-    setBrowserRestorePending(0);
+    setActiveAlert(null);
+    setIsTravelMode(false);
+    setConsolidatedPanelIds([]);
     if (dockApi) {
       dockApi.clear();
       const p1 = dockApi.addPanel({
@@ -280,6 +398,115 @@ export const UniversalWorkspaceHub: React.FC = () => {
     }
     showStatus('Layout reset to default');
   };
+
+  // Travel Mode: Consolidate detached multi-monitor windows into docked tabs (Non-destructive view-time mode)
+  const handleConsolidateToTabs = async () => {
+    if (!dockApi) return;
+    const detached = layoutManager.getDetachedWindows();
+
+    const newPanelIds: string[] = [];
+    for (const win of detached) {
+      const comp = getComponentForRoute(win.route);
+      if (comp) {
+        const panelId = `panel_consolidated_${win.windowId}`;
+        try {
+          dockApi.addPanel({
+            id: panelId,
+            component: comp,
+            title: `${win.title} (Tab)`,
+          });
+          newPanelIds.push(panelId);
+        } catch (err) {
+          devWarn('[UniversalWorkspaceHub] Failed to add consolidated panel:', err);
+        }
+      }
+    }
+
+    // Close detached windows on external screens so they do not linger off-screen
+    if (detached.length > 0) {
+      await platformService.closeAllDetachedWindows();
+    }
+
+    setConsolidatedPanelIds(newPanelIds);
+    setIsTravelMode(true);
+    setActiveAlert(null);
+    showStatus(
+      detached.length > 0
+        ? `Travel Mode active: Consolidated ${newPanelIds.length} window(s) into tabs`
+        : 'Travel Mode active (compact single display)'
+    );
+  };
+
+  // Reconnect / Exit Travel Mode: Restore detached windows to physical monitors
+  const handleRestoreFromTravelMode = async () => {
+    // 1. Remove temporary consolidated panels from Dockview
+    if (dockApi) {
+      for (const panelId of consolidatedPanelIds) {
+        try {
+          const p = dockApi.getPanel(panelId);
+          if (p) {
+            dockApi.removePanel(p);
+          }
+        } catch (e) {
+          devWarn('[UniversalWorkspaceHub] Error removing consolidated panel:', e);
+        }
+      }
+    }
+    setConsolidatedPanelIds([]);
+    setIsTravelMode(false);
+    setActiveAlert(null);
+
+    // 2. Restore detached windows to external monitors
+    await handleRestoreDesk();
+    showStatus('Restored multi-monitor desk windows');
+  };
+
+  // Display change polling effect for dynamic monitor disconnect / reconnect
+  useEffect(() => {
+    const monitorPollInterval = setInterval(async () => {
+      try {
+        const currentScreens = await platformService.getScreens();
+        const currentCount = currentScreens.length;
+        const prevCount = prevScreenCountRef.current;
+
+        if (currentCount !== prevCount) {
+          prevScreenCountRef.current = currentCount;
+          setScreens(currentScreens);
+
+          const detached = layoutManager.getDetachedWindows();
+
+          // Monitor disconnected: dropped from multi-monitor to 1 screen
+          if (prevCount > 1 && currentCount === 1 && detached.length > 0 && !isTravelModeRef.current) {
+            setActiveAlert({
+              type: 'travel-mode',
+              title: 'Travel Mode',
+              message: `External display disconnected. Consolidate ${detached.length} detached window(s) into tabs?`,
+              actionLabel: 'Consolidate to Tabs',
+              dismissLabel: 'Keep Hidden',
+              onAction: () => handleConsolidateToTabs(),
+              onDismiss: () => setActiveAlert(null),
+            });
+          }
+          // Monitor reconnected: increased from 1 to > 1 screens
+          else if (prevCount === 1 && currentCount > 1 && (isTravelModeRef.current || detached.length > 0)) {
+            setActiveAlert({
+              type: 'reconnect',
+              title: 'Displays Detected',
+              message: `External display reconnected (${currentCount} screens). Restore multi-monitor desk?`,
+              actionLabel: 'Restore Multi-Monitor Desk',
+              dismissLabel: 'Dismiss',
+              onAction: () => handleRestoreFromTravelMode(),
+              onDismiss: () => setActiveAlert(null),
+            });
+          }
+        }
+      } catch (err) {
+        devWarn('[UniversalWorkspaceHub] Display poll error:', err);
+      }
+    }, 4000);
+
+    return () => clearInterval(monitorPollInterval);
+  }, [dockApi, consolidatedPanelIds]);
 
   // Add individual panel to workspace
   const handleAddPanel = (component: 'orders' | 'rebalancer' | 'scenario' | 'fixed_income', title: string) => {
@@ -363,10 +590,10 @@ export const UniversalWorkspaceHub: React.FC = () => {
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#050d1a' }}>
-      {/* Browser mode detached window restore prompt */}
-      {browserRestorePending > 0 && (
+      {/* Unified Multi-Monitor & Travel Mode Alert Strip */}
+      {activeAlert && (
         <div style={{
-          background: '#0369a1',
+          background: activeAlert.type === 'travel-mode' ? '#7c2d12' : activeAlert.type === 'reconnect' ? '#065f46' : '#0369a1',
           color: '#ffffff',
           padding: '8px 16px',
           display: 'flex',
@@ -374,38 +601,43 @@ export const UniversalWorkspaceHub: React.FC = () => {
           justifyContent: 'space-between',
           fontSize: '12px',
           fontWeight: 500,
+          borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         }}>
-          <span>Found {browserRestorePending} detached desk window(s) from previous session.</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '14px' }}>
+              {activeAlert.type === 'travel-mode' ? '✈️' : activeAlert.type === 'reconnect' ? '🖥️' : '🪟'}
+            </span>
+            <span><strong>{activeAlert.title}:</strong> {activeAlert.message}</span>
+          </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             <button
-              onClick={handleRestoreDesk}
+              onClick={activeAlert.onAction}
               style={{
+                padding: '4px 12px',
                 background: '#ffffff',
-                color: '#0369a1',
+                color: '#0f172a',
                 border: 'none',
                 borderRadius: '4px',
-                padding: '4px 12px',
-                fontWeight: 600,
                 cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '11px',
               }}
             >
-              Restore Windows
+              {activeAlert.actionLabel}
             </button>
             <button
-              onClick={() => {
-                layoutManager.clearDetachedWindows();
-                setBrowserRestorePending(0);
-              }}
+              onClick={activeAlert.onDismiss}
               style={{
+                padding: '4px 8px',
                 background: 'transparent',
-                color: '#bae6fd',
-                border: '1px solid #bae6fd',
+                color: '#e2e8f0',
+                border: '1px solid rgba(255, 255, 255, 0.4)',
                 borderRadius: '4px',
-                padding: '4px 12px',
                 cursor: 'pointer',
+                fontSize: '11px',
               }}
             >
-              Dismiss
+              {activeAlert.dismissLabel}
             </button>
           </div>
         </div>
@@ -548,6 +780,17 @@ export const UniversalWorkspaceHub: React.FC = () => {
             <button onClick={handleRestoreDesk} style={secondaryBtnStyle} title="Restore workspace layout & detached windows">
               Restore Desk
             </button>
+            <button
+              onClick={isTravelMode ? handleRestoreFromTravelMode : handleConsolidateToTabs}
+              style={{
+                ...secondaryBtnStyle,
+                color: isTravelMode ? '#34d399' : '#fbbf24',
+                borderColor: isTravelMode ? '#059669' : '#d97706',
+              }}
+              title={isTravelMode ? 'Restore multi-monitor desk windows' : 'Consolidate detached windows to tabs (Travel Mode)'}
+            >
+              {isTravelMode ? '✈️ Exit Travel' : '✈️ Travel Mode'}
+            </button>
             <button onClick={handleResetLayout} style={secondaryBtnStyle} title="Reset layout to default">
               Reset
             </button>
@@ -563,6 +806,26 @@ export const UniversalWorkspaceHub: React.FC = () => {
           onReady={onReady}
         />
       </div>
+
+      {/* FDC3 Intent Resolver Modal */}
+      <IntentResolverModal
+        isOpen={resolverModal.isOpen}
+        intent={resolverModal.intent}
+        context={resolverModal.context}
+        targets={resolverModal.targets}
+        onSelect={(target) => {
+          if (resolverModal.resolve) {
+            resolverModal.resolve(target);
+          }
+          setResolverModal({ isOpen: false, intent: null, context: null, targets: [] });
+        }}
+        onCancel={() => {
+          if (resolverModal.reject) {
+            resolverModal.reject(new Error('Intent resolution cancelled by user'));
+          }
+          setResolverModal({ isOpen: false, intent: null, context: null, targets: [] });
+        }}
+      />
     </div>
   );
 };

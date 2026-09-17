@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { devError } from '../utils/devLogger';
 import { useAuthFetch } from '../utils/authFetch';
-import { useFdc3 } from '../services/fdc3/useFdc3';
+import { useFdc3, useIntentHandler } from '../services/fdc3/useFdc3';
 import { Fdc3InstrumentContext } from '../services/fdc3/types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
@@ -48,6 +48,22 @@ export default function FixedIncomeDashboard() {
   const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
     if (ctx?.id?.ticker || ctx?.id?.ISIN) {
       const symbol = (ctx.id.ticker || ctx.id.ISIN || '').toUpperCase();
+      setFdc3LinkedInstrument(symbol);
+      if (symbol.includes('TREASURY') || symbol === 'US10Y' || symbol === 'US_TREASURY_10Y') {
+        setSelectedSecurity('US_TREASURY_10Y');
+      } else if (symbol.includes('CORP') || symbol === 'CORP_BOND_ABC') {
+        setSelectedSecurity('CORP_BOND_ABC');
+      } else if (symbol.includes('MUNI') || symbol === 'MUNI_BOND_XYZ') {
+        setSelectedSecurity('MUNI_BOND_XYZ');
+      }
+    }
+  });
+
+  // Register standard FDC3-compatible intent handler for ViewInstrument
+  useIntentHandler('ViewInstrument', 'fixed_income', 'Fixed Income Analytics', (ctx) => {
+    const inst = ctx as Fdc3InstrumentContext;
+    if (inst?.id?.ticker || inst?.id?.ISIN) {
+      const symbol = (inst.id.ticker || inst.id.ISIN || '').toUpperCase();
       setFdc3LinkedInstrument(symbol);
       if (symbol.includes('TREASURY') || symbol === 'US10Y' || symbol === 'US_TREASURY_10Y') {
         setSelectedSecurity('US_TREASURY_10Y');

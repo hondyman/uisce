@@ -221,7 +221,34 @@ async function runSmokeTest() {
       throw new Error('Ghost restore banner unexpectedly reappeared');
     }
 
-    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED! ---');
+    // 8. Test Travel Mode Toggle & Ephemeral View-Time Consolidation
+    console.log('8. Testing Travel Mode button toggle...');
+    const travelBtn = pageWorkspace.locator('button:has-text("Travel Mode")').first();
+    const travelBtnVisible = await travelBtn.isVisible();
+    console.log('Travel Mode button visible in workspace toolbar:', travelBtnVisible);
+    if (!travelBtnVisible) {
+      throw new Error('Travel Mode button missing from header toolbar');
+    }
+
+    await travelBtn.click();
+    await pageWorkspace.waitForTimeout(300);
+
+    const exitTravelBtn = pageWorkspace.locator('button:has-text("Exit Travel")').first();
+    const exitVisible = await exitTravelBtn.isVisible();
+    console.log('Travel Mode engaged, Exit Travel button visible:', exitVisible);
+    if (!exitVisible) {
+      throw new Error('Failed to toggle Travel Mode into active state');
+    }
+
+    await exitTravelBtn.click();
+    await pageWorkspace.waitForTimeout(300);
+    const revertedToTravel = await pageWorkspace.locator('button:has-text("Travel Mode")').first().isVisible();
+    console.log('Travel Mode exited cleanly back to multi-monitor mode:', revertedToTravel);
+    if (!revertedToTravel) {
+      throw new Error('Failed to toggle back to standard multi-monitor mode');
+    }
+
+    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (8/8)! ---');
   } catch (err) {
     console.error('Smoke test failure:', err);
     process.exitCode = 1;

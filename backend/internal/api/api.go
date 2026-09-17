@@ -1579,10 +1579,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	layoutHandler := NewLayoutHandler(sqlxDB.DB, schedulerSecurityDeps)
 	layoutHandler.RegisterRoutes(r)
 
+	// Register multi-tenant user workspace layout profile handler
+	workspaceLayoutHandler := NewWorkspaceLayoutHandler(db)
+
 	// API routes
 	routes := NewRoutes()
 
 	r.Route("/api", func(r chi.Router) {
+		workspaceLayoutHandler.RegisterRoutes(r)
 		RegisterSemanticTagsRoutes(r, sqlxDB)
 
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
