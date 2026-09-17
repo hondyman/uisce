@@ -12,8 +12,15 @@ import (
 // Flip checklist: strings(deployed-binary) | grep this marker.
 const CutoverMarker = "mcp-cutover-streamable-v1"
 
-// Retain marker in the binary so deploy probes can find it.
-var cutoverBuildMarker = CutoverMarker
+// cutoverBuildMarker keeps the literal in the binary (const alone can be
+// inlined away from strings(1) probes).
+var cutoverBuildMarker = []byte(CutoverMarker)
+
+func init() {
+	if len(cutoverBuildMarker) == 0 || string(cutoverBuildMarker) != CutoverMarker {
+		panic("mcp cutover marker missing from binary")
+	}
+}
 
 // SetTemporal wires Temporal into Path 1 tool implementations used by Server.
 func (s *Server) SetTemporal(c client.Client) *Server {
@@ -27,7 +34,6 @@ func (s *Server) SetTemporal(c client.Client) *Server {
 // It owns POST, GET, DELETE, and HEAD — do not also register a separate
 // GET info route on the same pattern (chi last-wins).
 func (s *Server) HTTPHandler() http.Handler {
-	_ = cutoverBuildMarker
 	return server.NewStreamableHTTPServer(
 		s.registry,
 		server.WithStateLess(true),

@@ -1764,7 +1764,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// RegisterRoutes and Path 5 RegisterMCP are intentionally NOT
 		// called — stacking either recreates chi last-wins fragility.
 		// Guard: TestMCP_RouteTableDump. Path 6 stays at /mcp/tools/call.
-		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp")
+		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp [" + mcp.CutoverMarker + "]")
 		r.Handle("/mcp", mcp.NewServer(sqlxDB).SetTemporal(temporalClient).HTTPHandler())
 
 		// Register handlers that were previously orphaned
