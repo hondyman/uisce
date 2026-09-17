@@ -54,6 +54,12 @@ const wailsBridgeSnippet = `<script>
           return window.wails.Call.ByName("main.DeskWindowManager.RelayMessage", c, p);
         }
         return Promise.reject(new Error("Wails runtime not yet initialized"));
+      },
+      GetHeartbeat: function() {
+        if (window.wails && window.wails.Call && window.wails.Call.ByName) {
+          return window.wails.Call.ByName("main.DeskWindowManager.GetHeartbeat");
+        }
+        return Promise.resolve({ windowCount: 1, openWindowIds: ['win_main'], screenCount: 1, vaultTokenCount: 0, timestamp: Date.now() });
       }
     };
   } catch (e) {

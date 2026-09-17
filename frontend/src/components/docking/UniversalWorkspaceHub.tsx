@@ -205,6 +205,37 @@ export const UniversalWorkspaceHub: React.FC = () => {
   // Internal Command Bar state
   const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
 
+  // Local-First Workstation Heartbeat Telemetry (1-second cheap poll)
+  const [heartbeat, setHeartbeat] = useState<{
+    windowCount: number;
+    openWindowIds: string[];
+    screenCount: number;
+    vaultTokenCount: number;
+    timestamp: number;
+  }>({
+    windowCount: 1,
+    openWindowIds: ['win_main'],
+    screenCount: 1,
+    vaultTokenCount: 0,
+    timestamp: Date.now(),
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const pollHeartbeat = async () => {
+      try {
+        const hb = await platformService.getHeartbeat();
+        if (mounted) setHeartbeat(hb);
+      } catch {}
+    };
+    pollHeartbeat();
+    const interval = setInterval(pollHeartbeat, 1000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   const showStatus = (msg: string) => {
     setStatusMessage(msg);
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
@@ -708,6 +739,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
             {isDesktop ? 'Wails v3 Desktop' : 'Web Browser'}
           </span>
           <span
+            data-testid="heartbeat-display-badge"
             style={{
               padding: '2px 8px',
               borderRadius: '4px',
@@ -716,8 +748,9 @@ export const UniversalWorkspaceHub: React.FC = () => {
               border: '1px solid #1e293b',
               color: '#94a3b8',
             }}
+            title={`Active Windows: ${heartbeat.windowCount} (${heartbeat.openWindowIds.join(', ')}) | Active Vault Leases: ${heartbeat.vaultTokenCount}`}
           >
-            {screens.length} Display{screens.length === 1 ? '' : 's'} Detected
+            🖥️ {heartbeat.screenCount} Display{heartbeat.screenCount === 1 ? '' : 's'} | 🪟 {heartbeat.windowCount} Win{heartbeat.windowCount === 1 ? '' : 's'} | 🔒 {heartbeat.vaultTokenCount} Lease{heartbeat.vaultTokenCount === 1 ? '' : 's'}
           </span>
 
           {/* FDC3 User Channel Selector */}

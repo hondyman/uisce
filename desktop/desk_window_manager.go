@@ -204,6 +204,45 @@ func (m *DeskWindowManager) RegisterWindow(windowID string, win *application.Web
 	m.mu.Unlock()
 }
 
+// DesktopHeartbeat contains safe operational metrics for display in the workstation status area.
+// Rule: Zero tokens, JWTs, or secret credentials are ever exposed in heartbeat payloads.
+type DesktopHeartbeat struct {
+	WindowCount     int      `json:"windowCount"`
+	OpenWindowIDs   []string `json:"openWindowIds"`
+	ScreenCount     int      `json:"screenCount"`
+	VaultTokenCount int      `json:"vaultTokenCount"`
+	Timestamp       int64    `json:"timestamp"`
+}
+
+// GetHeartbeat returns clean operational telemetry without sensitive credential material.
+func (m *DeskWindowManager) GetHeartbeat() DesktopHeartbeat {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	ids := make([]string, 0, len(m.windows))
+	for id := range m.windows {
+		ids = append(ids, id)
+	}
+
+	screenCount := 1
+	if m.app != nil && m.app.Screen != nil {
+		screenCount = len(m.app.Screen.GetAll())
+	}
+
+	vaultTokens := 0
+	if m.vault != nil {
+		vaultTokens = m.vault.Count()
+	}
+
+	return DesktopHeartbeat{
+		WindowCount:     len(m.windows),
+		OpenWindowIDs:   ids,
+		ScreenCount:     screenCount,
+		VaultTokenCount: vaultTokens,
+		Timestamp:       time.Now().UnixMilli(),
+	}
+}
+
 // GetWindowCount returns the number of active windows currently registered.
 func (m *DeskWindowManager) GetWindowCount() int {
 	m.mu.RLock()

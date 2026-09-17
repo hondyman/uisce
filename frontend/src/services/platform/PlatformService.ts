@@ -278,6 +278,53 @@ export class UniversalPlatformService implements IWorkspaceAdapter {
       await this.closeWindow(win.windowId);
     }
   }
+
+  /**
+   * Retrieves operational health telemetry from desktop host or browser mock.
+   * Strictly secret-free: zero JWTs, tokens, or credentials exposed.
+   */
+  public async getHeartbeat(): Promise<{
+    windowCount: number;
+    openWindowIds: string[];
+    screenCount: number;
+    vaultTokenCount: number;
+    timestamp: number;
+  }> {
+    if (this.isWails()) {
+      try {
+        const deskManager = (window as unknown as {
+          go?: {
+            main?: {
+              DeskWindowManager?: {
+                GetHeartbeat?: () => Promise<{
+                  windowCount: number;
+                  openWindowIds: string[];
+                  screenCount: number;
+                  vaultTokenCount: number;
+                  timestamp: number;
+                }>;
+              };
+            };
+          };
+        })?.go?.main?.DeskWindowManager;
+        if (typeof deskManager?.GetHeartbeat === 'function') {
+          return await deskManager.GetHeartbeat();
+        }
+      } catch (err) {
+        devWarn('[PlatformService] Failed to retrieve Wails heartbeat:', err);
+      }
+    }
+
+    const screens = await this.getScreens();
+    const detached = layoutManager.getDetachedWindows();
+    return {
+      windowCount: 1 + detached.length,
+      openWindowIds: ['win_main', ...detached.map((d) => d.windowId)],
+      screenCount: screens.length,
+      vaultTokenCount: 0,
+      timestamp: Date.now(),
+    };
+  }
 }
 
 export const platformService = new UniversalPlatformService();
