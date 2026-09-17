@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -86,6 +87,93 @@ func TestOMS_ToolsRegistered(t *testing.T) {
 	}
 	if n := len(s.ListTools()); n < 14 {
 		t.Fatalf("expected >=14 tools after OMS rescue, got %d", n)
+	}
+}
+
+func TestOMS_ManifestParity(t *testing.T) {
+	// Dirty tool_handler.go list descriptors (read 2026-09-17) — agent contract.
+	want := map[string]struct {
+		descContains string
+		required     []string
+		props        []string
+	}{
+		"generate_page_spec": {
+			descContains: "Page Studio spec",
+			props:        []string{"bo_id", "bo_key", "bo_name", "page_kind"},
+		},
+		"describe_oms_journey": {
+			descContains: "Northwind Order",
+		},
+		"get_bo_schema": {
+			descContains: "form schema",
+			props:        []string{"bo_id", "bo_key"},
+		},
+		"start_fix_order_entry": {
+			descContains: "FIXOrderEntryWorkflow",
+			required:     []string{"order_id"},
+			props:        []string{"order_id", "command"},
+		},
+	}
+	s := NewServer(nil)
+	byName := map[string]ToolDefinition{}
+	for _, tool := range s.ListTools() {
+		byName[tool.Name] = tool
+	}
+	for name, spec := range want {
+		tool, ok := byName[name]
+		if !ok {
+			t.Fatalf("missing tool %s", name)
+			continue
+		}
+		if tool.Description == "" || !strings.Contains(tool.Description, spec.descContains) {
+			t.Errorf("%s description=%q want contain %q", name, tool.Description, spec.descContains)
+		}
+		schemaType, _ := tool.InputSchema["type"].(string)
+		if schemaType != "object" {
+			t.Errorf("%s schema type=%q", name, schemaType)
+		}
+		props, _ := tool.InputSchema["properties"].(map[string]interface{})
+		for _, p := range spec.props {
+			if _, ok := props[p]; !ok {
+				t.Errorf("%s missing property %s", name, p)
+			}
+		}
+		if len(spec.required) > 0 {
+			req, _ := tool.InputSchema["required"].([]string)
+			if req == nil {
+				// JSON round-trip sometimes yields []interface{}
+				if raw, ok := tool.InputSchema["required"].([]interface{}); ok {
+					for _, r := range raw {
+						req = append(req, fmt.Sprint(r))
+					}
+				}
+			}
+			have := map[string]bool{}
+			for _, r := range req {
+				have[r] = true
+			}
+			for _, r := range spec.required {
+				if !have[r] {
+					t.Errorf("%s required missing %s (got %v)", name, r, tool.InputSchema["required"])
+				}
+			}
+		}
+	}
+}
+
+func TestRefusalListParity(t *testing.T) {
+	// Dirty tool_handler.go executeToolCall refusal case includes create_page_draft.
+	for _, name := range []string{
+		"save_record", "delete_record", "run_sql", "create_business_object", "create_page_draft",
+	} {
+		if !IsRefusedTool(name) {
+			t.Errorf("refusal list missing %s (dirty Path 1 parity)", name)
+		}
+	}
+	s := NewServer(nil)
+	_, err := s.CallTool(context.Background(), uuid.MustParse(testTenantID), "create_page_draft", json.RawMessage(`{}`))
+	if err == nil || !strings.Contains(err.Error(), "refused") {
+		t.Fatalf("create_page_draft: want refused, got %v", err)
 	}
 }
 
