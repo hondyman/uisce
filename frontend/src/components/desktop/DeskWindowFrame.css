@@ -1,0 +1,98 @@
+/* Custom frameless financial window chrome for desktop and browser popouts */
+.desk-window-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  background-color: #050d1a;
+  color: #e2e8f0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.desk-caption-bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background-color: #091428;
+  border-bottom: 1px solid #1e293b;
+  user-select: none;
+  position: relative;
+  z-index: 1000;
+}
+
+.desk-caption-left {
+  display: flex;
+  align-items: center;
+  padding-left: 12px;
+  gap: 10px;
+  z-index: 10;
+}
+
+.channel-badge {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  padding: 0;
+}
+
+.channel-badge:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 6px currentColor;
+}
+
+.desk-caption-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* Wails v3 native drag region */
+.desk-drag-region {
+  flex: 1;
+  height: 100%;
+  --wails-non-client-region: caption;
+}
+
+.desk-caption-controls {
+  display: flex;
+  height: 100%;
+  z-index: 10;
+}
+
+.desk-control-btn {
+  width: 44px;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.desk-control-btn:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.desk-control-btn.close:hover {
+  background-color: #e11d48;
+  color: #ffffff;
+}
+
+.desk-window-body {
+  flex: 1;
+  position: relative;
+  overflow: auto;
+  background-color: #050d1a;
+}
