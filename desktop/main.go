@@ -91,6 +91,18 @@ func main() {
 
 	deskManager.RegisterWindow("win_main", mainWin)
 
+	// Register in-app window switching shortcuts: CmdOrCtrl+1..9
+	for i := 1; i <= 9; i++ {
+		winIdx := i - 1
+		accelerator := fmt.Sprintf("CmdOrCtrl+%d", i)
+		app.KeyBinding.Add(accelerator, func(window application.Window) {
+			focused := deskManager.FocusWindowByIndex(winIdx)
+			if focused {
+				log.Printf("[Desktop] Shortcut %s switched focus to window index %d", accelerator, winIdx)
+			}
+		})
+	}
+
 	// Launch automated verification suite if requested via --verify or UISCE_DESK_VERIFY=1
 	if IsVerifyMode() {
 		go RunDesktopVerificationSuite(app, deskManager, vault, spaHandler, mainWin)

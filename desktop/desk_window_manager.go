@@ -16,10 +16,11 @@ import (
 // DeskWindowManager manages desktop windows, multi-monitor targeting,
 // FDC3 IPC message relay, and zero-trust single-use token exchanges.
 type DeskWindowManager struct {
-	mu      sync.RWMutex
-	app     *application.App
-	vault   *manager.TokenVault
-	windows map[string]*application.WebviewWindow
+	mu         sync.RWMutex
+	app        *application.App
+	vault      *manager.TokenVault
+	windows    map[string]*application.WebviewWindow
+	spawnOrder []string
 }
 
 // NewDeskWindowManager creates a new DeskWindowManager instance.
@@ -29,9 +30,10 @@ func NewDeskWindowManager(app *application.App, vault *manager.TokenVault) *Desk
 	}
 
 	return &DeskWindowManager{
-		app:     app,
-		vault:   vault,
-		windows: make(map[string]*application.WebviewWindow),
+		app:        app,
+		vault:      vault,
+		windows:    make(map[string]*application.WebviewWindow),
+		spawnOrder: make([]string, 0),
 	}
 }
 
@@ -166,6 +168,7 @@ func (m *DeskWindowManager) SpawnWindow(opts manager.WindowSpawnOptions) (string
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		m.mu.Lock()
 		delete(m.windows, winID)
+		m.removeSpawnOrder(winID)
 		m.mu.Unlock()
 		log.Printf("[DeskWindowManager] Window closed and deregistered: %s", winID)
 		m.notifyWindowClosed(winID)
@@ -173,6 +176,7 @@ func (m *DeskWindowManager) SpawnWindow(opts manager.WindowSpawnOptions) (string
 
 	m.mu.Lock()
 	m.windows[winID] = win
+	m.appendSpawnOrder(winID)
 	m.mu.Unlock()
 
 	return winID, nil
@@ -188,6 +192,7 @@ func (m *DeskWindowManager) RegisterWindow(windowID string, win *application.Web
 	win.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
 		m.mu.Lock()
 		delete(m.windows, windowID)
+		m.removeSpawnOrder(windowID)
 		m.mu.Unlock()
 		log.Printf("[DeskWindowManager] Window closed and deregistered: %s", windowID)
 		m.notifyWindowClosed(windowID)
@@ -195,6 +200,7 @@ func (m *DeskWindowManager) RegisterWindow(windowID string, win *application.Web
 
 	m.mu.Lock()
 	m.windows[windowID] = win
+	m.appendSpawnOrder(windowID)
 	m.mu.Unlock()
 }
 
@@ -256,6 +262,7 @@ func (m *DeskWindowManager) CloseWindow(windowID string) error {
 	win, exists := m.windows[windowID]
 	if exists {
 		delete(m.windows, windowID)
+		m.removeSpawnOrder(windowID)
 	}
 	m.mu.Unlock()
 
@@ -266,6 +273,47 @@ func (m *DeskWindowManager) CloseWindow(windowID string) error {
 	m.notifyWindowClosed(windowID)
 	win.Close()
 	return nil
+}
+
+func (m *DeskWindowManager) appendSpawnOrder(winID string) {
+	for _, id := range m.spawnOrder {
+		if id == winID {
+			return
+		}
+	}
+	m.spawnOrder = append(m.spawnOrder, winID)
+}
+
+func (m *DeskWindowManager) removeSpawnOrder(winID string) {
+	newOrder := make([]string, 0, len(m.spawnOrder))
+	for _, id := range m.spawnOrder {
+		if id != winID {
+			newOrder = append(newOrder, id)
+		}
+	}
+	m.spawnOrder = newOrder
+}
+
+// FocusWindowByIndex brings the window at the specified spawn index to the foreground.
+// Index 0 is always the primary workspace window (win_main); indices 1..N correspond
+// to secondary windows in their exact chronological order of creation.
+func (m *DeskWindowManager) FocusWindowByIndex(index int) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if index < 0 || index >= len(m.spawnOrder) {
+		return false
+	}
+
+	targetID := m.spawnOrder[index]
+	win, exists := m.windows[targetID]
+	if !exists || win == nil {
+		return false
+	}
+
+	log.Printf("[DeskWindowManager] Focusing window index %d (%q)", index, targetID)
+	win.Focus()
+	return true
 }
 
 // RelayMessage broadcasts an FDC3 message across all open windows.

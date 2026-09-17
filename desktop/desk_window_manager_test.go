@@ -92,3 +92,38 @@ func TestDeskWindowManager_ReclampOrphanedWindows(t *testing.T) {
 		t.Fatalf("expected 0 reclamped windows, got %d", count)
 	}
 }
+
+func TestDeskWindowManager_SpawnOrderAndFocusByIndex(t *testing.T) {
+	mgr := NewDeskWindowManager(nil, nil)
+
+	// Out of range returns false
+	if mgr.FocusWindowByIndex(0) {
+		t.Fatalf("expected false on empty spawnOrder")
+	}
+
+	// Register pseudo-windows directly to verify deterministic ordering
+	mgr.mu.Lock()
+	mgr.appendSpawnOrder("win_main")
+	mgr.appendSpawnOrder("win_second")
+	mgr.appendSpawnOrder("win_third")
+	mgr.mu.Unlock()
+
+	if len(mgr.spawnOrder) != 3 {
+		t.Fatalf("expected 3 in spawnOrder, got %d", len(mgr.spawnOrder))
+	}
+	if mgr.spawnOrder[0] != "win_main" || mgr.spawnOrder[1] != "win_second" || mgr.spawnOrder[2] != "win_third" {
+		t.Fatalf("unexpected spawn order: %v", mgr.spawnOrder)
+	}
+
+	// Remove second window and check order preservation
+	mgr.mu.Lock()
+	mgr.removeSpawnOrder("win_second")
+	mgr.mu.Unlock()
+
+	if len(mgr.spawnOrder) != 2 {
+		t.Fatalf("expected 2 in spawnOrder, got %d", len(mgr.spawnOrder))
+	}
+	if mgr.spawnOrder[0] != "win_main" || mgr.spawnOrder[1] != "win_third" {
+		t.Fatalf("unexpected spawn order after removal: %v", mgr.spawnOrder)
+	}
+}

@@ -528,6 +528,113 @@ closeWait:
 	recordStep(9, "window_close_deregistration", "Close secondary window, verify deregistration and desktop:window-closed dispatch", step9Passed, step9Details, time.Since(step9Start))
 
 	// -------------------------------------------------------------------------
+	// STEP 10: Negative proof for window.__fdc3Agent without automation opt-in
+	// -------------------------------------------------------------------------
+	step10Start := time.Now()
+	recordLog("Executing Step 10: Negative proof for window.__fdc3Agent gating on clean window launch...")
+
+	cleanSpawnOpts := manager.WindowSpawnOptions{
+		WindowID:          "win_clean_probe",
+		Route:             "/workspace",
+		Title:             "Clean Probe Window",
+		TargetScreenIndex: 0,
+		Width:             800,
+		Height:            600,
+	}
+	cleanID, cleanSpawnErr := deskManager.SpawnWindow(cleanSpawnOpts)
+	if cleanSpawnErr != nil {
+		recordLog(fmt.Sprintf("Step 10 spawn warning: %v", cleanSpawnErr))
+	}
+	time.Sleep(2 * time.Second)
+
+	cleanProbeJS := `(function() {
+		let attempts = 0;
+		function sendReport() {
+			attempts++;
+			try {
+				// Do NOT set __ENABLE_FDC3_AUTOMATION_HOOK__ or query params
+				const exposed = typeof window.__fdc3Agent !== 'undefined';
+				fetch('/api/desk-verify/report', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						step: 'clean_probe_result',
+						windowId: 'win_clean_probe',
+						success: !exposed,
+						details: exposed ? 'FAIL: __fdc3Agent was exposed without opt-in' : 'CONFIRMED: window.__fdc3Agent is undefined'
+					})
+				}).catch(err => {
+					if (attempts < 10) setTimeout(sendReport, 300);
+				});
+			} catch(err) {
+				if (attempts < 10) setTimeout(sendReport, 300);
+			}
+		}
+		sendReport();
+	})();`
+
+	deskManager.mu.RLock()
+	cleanWin := deskManager.windows[cleanID]
+	deskManager.mu.RUnlock()
+
+	if cleanWin != nil {
+		cleanWin.ExecJS(cleanProbeJS)
+	}
+
+	step10Passed := false
+	step10Details := "FAIL: Timed out waiting for clean probe report"
+	step10Timeout := time.After(5 * time.Second)
+cleanPoll:
+	for {
+		select {
+		case rep := <-reports:
+			if rep.Step == "clean_probe_result" {
+				step10Passed = rep.Success
+				step10Details = rep.Details
+				break cleanPoll
+			}
+		case <-step10Timeout:
+			step10Passed = false
+			step10Details = "FAIL: Timed out waiting for clean probe report"
+			break cleanPoll
+		}
+	}
+
+	// Clean up clean probe window
+	_ = deskManager.CloseWindow(cleanID)
+	recordStep(10, "fdc3_security_negative_proof", "Security gating: window.__fdc3Agent is undefined on clean launch", step10Passed, step10Details, time.Since(step10Start))
+
+	// -------------------------------------------------------------------------
+	// STEP 11: In-App shortcut window switching (FocusWindowByIndex determinism)
+	// -------------------------------------------------------------------------
+	step11Start := time.Now()
+	recordLog("Executing Step 11: Testing FocusWindowByIndex deterministic spawn-order switching...")
+
+	// Spawn auxiliary window to test index focus
+	auxID, auxErr := deskManager.SpawnWindow(manager.WindowSpawnOptions{
+		WindowID: "win_auxiliary",
+		Route:    "/view/fixed-income",
+		Title:    "Auxiliary Fixed Income Window",
+	})
+	time.Sleep(500 * time.Millisecond)
+
+	// Focus primary window (index 0)
+	focusPrim := deskManager.FocusWindowByIndex(0)
+	// Focus auxiliary window (index 1)
+	focusAux := deskManager.FocusWindowByIndex(1)
+	// Focus non-existent window (index 5)
+	focusInvalid := deskManager.FocusWindowByIndex(5)
+
+	step11Passed := auxErr == nil && auxID == "win_auxiliary" && focusPrim && focusAux && !focusInvalid
+	step11Details := fmt.Sprintf("FocusPrimary=%v, FocusAuxiliary=%v, FocusInvalid=%v (spawnOrder=%v)", focusPrim, focusAux, !focusInvalid, deskManager.spawnOrder)
+	if !step11Passed {
+		step11Details = fmt.Sprintf("FAIL: FocusWindowByIndex failed: prim=%v, aux=%v, invalid=%v, err=%v", focusPrim, focusAux, focusInvalid, auxErr)
+	}
+
+	_ = deskManager.CloseWindow(auxID)
+	recordStep(11, "shortcut_window_switching", "In-App shortcut window switching via FocusWindowByIndex", step11Passed, step11Details, time.Since(step11Start))
+
+	// -------------------------------------------------------------------------
 	// FINALIZE & WRITE DESKTOP/VERIFICATION.MD
 	// -------------------------------------------------------------------------
 	passedCount := 0
