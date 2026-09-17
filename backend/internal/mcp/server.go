@@ -1,32 +1,17 @@
 // Package mcp is the canonical Uisce MCP surface.
 //
-// # Inventory (updated after PR B streamable cutover)
+// # Inventory (PR D — one server)
 //
-// chi v5.2.3 last-wins silently on duplicate method+pattern. Never
-// double-register any verb on /api/mcp.
+// Live HTTP (chi /api group):
 //
-// Live mux after verb-complete replace (TestMCP_RouteTableDump):
+//	ALL  /api/mcp                 StreamableHTTPServer (stateless; CutoverMarker)
+//	POST /api/agentic/proposals   maker-checker tool proposals (canonical)
+//	POST /api/mcp/tools/call      Deprecated shim → same handler + Deprecation header
 //
-//	ALL /api/mcp                 mark3labs StreamableHTTPServer (owns GET/POST/DELETE/HEAD)
-//	POST /api/mcp/tools/call     Path 6 agentic.MCPToolRouter (maker-checker)
-//
-// Path 1 MCPToolHandler.RegisterRoutes and Path 5 handlers.RegisterMCP
-// are NOT registered on the live /api group. Old GET info JSON
-// (protocol=json-rpc-2.0) is retired; discovery is MCP tools/list.
-//
-// CutoverMarker = "mcp-cutover-streamable-v1" — flip checklist greps
-// the deployed binary for this string.
-//
-// Tenant attribution:
-//
-//	Path 6 envelope result.tenant_id (we own JSON-RPC)
-//	Unified Server tool result field tenant_id (not SDK envelope)
-//	Maker-checker ticket remains the ledger
-//
-// Stdio (cmd/mcp-server): streamable-HTTP client of UISCE_API_URL;
-// credentials only UISCE_API_TOKEN; stdout=protocol; stderr never logs token.
-//
-// JWT forge: services.SecurityManager.MintDevToken only (cmd/devjwt wraps it).
+// Deleted: Path 2 MCPServer, Path 4 api.MCPHandler, Path 5 handlers.MCPHandler.
+// Catalog: 16 tools. Audit: catalog_mdm_ai via CallTool. Stdio: cmd/mcp-server.
+// Flip checklist: dump + mcp-live-probe tools=16 + marker + migrations clean
+// + Path 6 new URL + shim Deprecation.
 package mcp
 
 import (

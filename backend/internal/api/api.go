@@ -657,6 +657,18 @@ func (a *redisClientAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
+// deprecatedMCPToolsCall wraps Path 6's handler on the legacy
+// POST /api/mcp/tools/call URL. Emits Deprecation + Link so shim removal
+// is data-driven. Prefer POST /api/agentic/proposals.
+func deprecatedMCPToolsCall(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</api/agentic/proposals>; rel="successor-version"`)
+		log.Printf("[mcp] deprecated POST /api/mcp/tools/call used; prefer /api/agentic/proposals")
+		next(w, r)
+	}
+}
+
 func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
 
 	// Create chi router and helper services required for setup
@@ -1652,7 +1664,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		r.Get("/agentic/tickets", mcSvc.ListTicketsHandler)
 		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
-		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)
+		// Canonical maker-checker MCP-shaped proposals endpoint (was /mcp/tools/call).
+		r.Post("/agentic/proposals", mcpRouter.HandleToolCall)
+		// Compat shim: same handler + Deprecation header for one release.
+		r.Post("/mcp/tools/call", deprecatedMCPToolsCall(mcpRouter.HandleToolCall))
 
 		// Data Contract Gateway (CI/CD schema-change validation)
 		if os.Getenv("CONTRACT_GATEWAY_ENABLED") == "true" {

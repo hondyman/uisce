@@ -44,7 +44,8 @@ func collectMCPRoutes(t *testing.T, router chi.Router) []mcpRoute {
 	t.Helper()
 	var out []mcpRoute
 	if err := chi.Walk(router, func(method, route string, _ http.Handler, _ ...func(http.Handler) http.Handler) error {
-		if strings.Contains(strings.ToLower(route), "mcp") {
+		low := strings.ToLower(route)
+		if strings.Contains(low, "mcp") || strings.Contains(low, "agentic/proposals") {
 			out = append(out, mcpRoute{Method: method, Route: route})
 		}
 		return nil
@@ -119,7 +120,10 @@ func TestMCP_RouteTableDump(t *testing.T) {
 		t.Error("expected /api/mcp on the mux")
 	}
 	if !has("POST", "/mcp/tools/call") {
-		t.Error("expected POST /api/mcp/tools/call (Path 6)")
+		t.Error("expected POST /api/mcp/tools/call (Path 6 shim)")
+	}
+	if !has("POST", "/agentic/proposals") {
+		t.Error("expected POST /api/agentic/proposals (canonical Path 6)")
 	}
 
 	// GET must not be the old Path 1 info descriptor.
@@ -130,21 +134,27 @@ func TestMCP_RouteTableDump(t *testing.T) {
 		t.Fatal("GET /api/mcp still serves Path 1 info JSON; streamable must own GET")
 	}
 
-	// Path 6 subpath must NOT be swallowed by streamable /mcp.
-	// Discriminator: unauthenticated Path 6 returns JSON-RPC -32001 with
-	// the maker-checker auth message — not a streamable MCP parse/session error.
-	path6 := postMCPJSON(router, "/api/mcp/tools/call", `{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"x","arguments":{}}}`)
-	p6body := path6.Body.String()
-	t.Logf("POST /api/mcp/tools/call status=%d body=%s", path6.Code, truncate(p6body, 300))
-	if path6.Code == http.StatusNotFound {
-		t.Fatal("POST /api/mcp/tools/call 404; Path 6 missing (streamable may have swallowed subpath)")
+	assertPath6Auth := func(path string) *httptest.ResponseRecorder {
+		rec := postMCPJSON(router, path, `{"jsonrpc":"2.0","id":"3","method":"tools/call","params":{"name":"x","arguments":{}}}`)
+		body := rec.Body.String()
+		t.Logf("POST %s status=%d body=%s", path, rec.Code, truncate(body, 300))
+		if rec.Code == http.StatusNotFound {
+			t.Fatalf("POST %s 404", path)
+		}
+		if !strings.Contains(body, "-32001") || !strings.Contains(body, "auth required") {
+			t.Fatalf("%s: expected Path 6 -32001 auth, got %s", path, truncate(body, 400))
+		}
+		return rec
 	}
-	if !strings.Contains(p6body, "-32001") || !strings.Contains(p6body, "auth required") {
-		t.Fatalf("Path 6 discriminator failed (expected -32001 auth); streamable may own /mcp/tools/call: %s", truncate(p6body, 400))
+	canon := assertPath6Auth("/api/agentic/proposals")
+	shim := assertPath6Auth("/api/mcp/tools/call")
+	if shim.Header().Get("Deprecation") != "true" {
+		t.Fatal("shim missing Deprecation: true header")
 	}
-	if !has("POST", "/mcp/tools/call") {
-		t.Error("Walk missing POST /api/mcp/tools/call while streamable owns /api/mcp")
+	if !strings.Contains(shim.Header().Get("Link"), "/api/agentic/proposals") {
+		t.Fatalf("shim Link header=%q", shim.Header().Get("Link"))
 	}
+	_ = canon
 
 	if got := postMCPJSON(router, "/mcp", `{"jsonrpc":"2.0","id":4,"method":"tools/list"}`); got.Code != http.StatusNotFound {
 		t.Errorf("POST /mcp: want 404, got %d", got.Code)

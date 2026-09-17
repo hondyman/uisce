@@ -35,6 +35,7 @@ func TestStreamableCall_DoesNotCreatePath6Ticket(t *testing.T) {
 	path6 := agentic.NewMCPToolRouter(nil)
 	mux := http.NewServeMux()
 	mux.Handle("/api/mcp", middleware.AuthContextMiddleware(sm)(NewServer(nil).HTTPHandler()))
+	mux.Handle("/api/agentic/proposals", middleware.AuthContextMiddleware(sm)(http.HandlerFunc(path6.HandleToolCall)))
 	mux.Handle("/api/mcp/tools/call", middleware.AuthContextMiddleware(sm)(http.HandlerFunc(path6.HandleToolCall)))
 	ts := httptest.NewServer(mux)
 	t.Cleanup(ts.Close)
@@ -81,7 +82,7 @@ func TestStreamableCall_DoesNotCreatePath6Ticket(t *testing.T) {
 
 	// Direct POST to Path 6 still works (control).
 	body := []byte(`{"jsonrpc":"2.0","id":"p6","method":"tools/call","params":{"name":"draft_business_object","arguments":{"bo_name":"x"}}}`)
-	req, _ := http.NewRequest("POST", ts.URL+"/api/mcp/tools/call", bytes.NewReader(body))
+	req, _ := http.NewRequest("POST", ts.URL+"/api/agentic/proposals", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	rec := httptest.NewRecorder()
