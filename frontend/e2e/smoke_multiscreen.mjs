@@ -248,7 +248,43 @@ async function runSmokeTest() {
       throw new Error('Failed to toggle back to standard multi-monitor mode');
     }
 
-    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (8/8)! ---');
+    // 9. Test Live Cross-Window FDC3 Intent Routing & Explicit Acknowledgment
+    console.log('9. Testing live cross-window FDC3 intent routing with acknowledgment...');
+    // Ensure Window B (popout) is on /view/rebalancer and ready
+    await pagePopout.bringToFront();
+    await pagePopout.waitForTimeout(400);
+
+    // Raise ViewAnalysis intent from Window A (workspace hub) targeted to 'rebalancer' in Window B
+    const intentRes = await pageWorkspace.evaluate(async () => {
+      if (!window.__fdc3Agent) {
+        throw new Error('window.__fdc3Agent missing on pageWorkspace');
+      }
+      return await window.__fdc3Agent.raiseIntent('ViewAnalysis', {
+        type: 'fdc3.instrument',
+        id: { ticker: 'INTC' },
+        name: 'Intel Corp',
+      }, 'rebalancer');
+    });
+
+    console.log('Intent resolution returned in Window A:', JSON.stringify(intentRes));
+    if (intentRes.intent !== 'ViewAnalysis') {
+      throw new Error(`Expected intent ViewAnalysis, got ${intentRes.intent}`);
+    }
+    if (intentRes.target?.viewId !== 'rebalancer') {
+      throw new Error(`Expected target viewId 'rebalancer', got ${intentRes.target?.viewId}`);
+    }
+
+    // Wait and assert Window B (pagePopout) updated its UI with the intent payload
+    const tickerLocator = pagePopout.locator('[data-testid="rebalancer-ticker"]').first();
+    await tickerLocator.waitFor({ state: 'visible', timeout: 5000 });
+    const popoutTicker = await tickerLocator.textContent();
+    console.log('Popout view updated with target ticker from intent:', popoutTicker);
+    if (popoutTicker !== 'INTC') {
+      throw new Error(`Expected popout ticker 'INTC', got '${popoutTicker}'`);
+    }
+    console.log('Cross-window intent routing & visible response verified: true');
+
+    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (9/9)! ---');
   } catch (err) {
     console.error('Smoke test failure:', err);
     process.exitCode = 1;

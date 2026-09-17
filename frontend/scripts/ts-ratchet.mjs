@@ -10,6 +10,13 @@
  * continuation lines until the next error header. We compare block-sets,
  * not line-sets, so multi-line errors are compared atomically.
  *
+ * NOTE ON BASELINE COUNTING:
+ * normalizeLine() strips `(line, col)` so benign line shifts don't invalidate
+ * the baseline. As a result:
+ * - Total raw error blocks in baseline: 702 (now 699 as 3 were resolved)
+ * - Unique normalized error signatures: 386
+ * Both counts are now reported explicitly in the output to avoid ambiguity.
+ *
  * Usage:
  *   node scripts/ts-ratchet.mjs              # gate; non-zero exit on new errors
  *   node scripts/ts-ratchet.mjs --regenerate # rewrite the baseline from current tsc
@@ -112,8 +119,9 @@ const fresh = currentKeys.filter((k) => !baseline.has(k));
 const removed = [...baseline].filter((k) => !current.has(k));
 
 if (fresh.length === 0) {
+  const baselineTotalBlocks = baselineText.split('\n').filter(Boolean).length;
   console.log(
-    `ratchet OK: ${currentKeys.length} error blocks, 0 new (baseline ${baseline.size}, ${removed.length} resolved since)`,
+    `ratchet OK: ${currentKeys.length} total error blocks (${current.size} unique signatures), 0 new (baseline: ${baselineTotalBlocks} blocks, ${baseline.size} unique signatures; ${removed.length} signatures resolved since)`,
   );
   process.exit(0);
 }

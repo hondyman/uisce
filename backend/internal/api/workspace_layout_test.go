@@ -211,3 +211,81 @@ func TestWorkspaceLayout_SaveAndGet_Success(t *testing.T) {
 		t.Fatalf("unmet mock expectations: %v", err)
 	}
 }
+
+func TestWorkspaceLayout_TenantAndUserIsolation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatalf("failed to create sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	handler := NewWorkspaceLayoutHandler(db)
+
+	tenantA := uuid.New().String()
+	tenantB := uuid.New().String()
+	userA := "usr_alice_1"
+	userB := "usr_bob_2"
+	profileName := "equities_desk"
+
+	// 1. Cross-User Isolation (Same Tenant):
+	// User B attempts to access User A's layout in the same tenant.
+	// The DB query strictly includes user_id = $2, so User A's row is not returned.
+	mock.ExpectQuery(`SELECT (.+) FROM public\.user_workspace_layouts WHERE tenant_id = \$1 AND user_id = \$2 AND profile_name = \$3`).
+		WithArgs(tenantA, userB, profileName).
+		WillReturnError(sql.ErrNoRows)
+
+	reqUserB := httptest.NewRequest(http.MethodGet, "/api/user/preferences/workspace-layout?profile="+profileName, nil)
+	reqUserB = withAuthClaims(reqUserB, userB, tenantA)
+	recUserB := httptest.NewRecorder()
+
+	handler.GetLayout(recUserB, reqUserB)
+
+	if recUserB.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found for cross-user access, got %d", recUserB.Code)
+	}
+
+	// 2. Cross-Tenant Isolation (Same User ID across different tenants):
+	// User A in Tenant B attempts to access the profile that exists in Tenant A.
+	// The DB query strictly enforces tenant_id = $1, returning no rows.
+	mock.ExpectQuery(`SELECT (.+) FROM public\.user_workspace_layouts WHERE tenant_id = \$1 AND user_id = \$2 AND profile_name = \$3`).
+		WithArgs(tenantB, userA, profileName).
+		WillReturnError(sql.ErrNoRows)
+
+	reqTenantB := httptest.NewRequest(http.MethodGet, "/api/user/preferences/workspace-layout?profile="+profileName, nil)
+	reqTenantB = withAuthClaims(reqTenantB, userA, tenantB)
+	recTenantB := httptest.NewRecorder()
+
+	handler.GetLayout(recTenantB, reqTenantB)
+
+	if recTenantB.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 Not Found for cross-tenant access, got %d", recTenantB.Code)
+	}
+
+	// 3. Cross-Tenant Save Isolation:
+	// Verify that saving a layout for User A in Tenant A binds tenantA and userA to the INSERT/UPSERT.
+	sampleLayout := `{"dockviewLayout":{}}`
+	mock.ExpectQuery(`INSERT INTO public\.user_workspace_layouts`).
+		WithArgs(tenantA, userA, profileName, "v1", []byte(sampleLayout)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "tenant_id", "user_id", "profile_name", "schema_version", "layout_data", "created_at", "updated_at",
+		}).AddRow(uuid.New().String(), tenantA, userA, profileName, "v1", []byte(sampleLayout), time.Now(), time.Now()))
+
+	reqSave := httptest.NewRequest(http.MethodPost, "/api/user/preferences/workspace-layout", bytes.NewBufferString(`{
+		"profile_name": "`+profileName+`",
+		"schema_version": "v1",
+		"layout_data": {"dockviewLayout":{}}
+	}`))
+	reqSave = withAuthClaims(reqSave, userA, tenantA)
+	recSave := httptest.NewRecorder()
+
+	handler.SaveLayout(recSave, reqSave)
+
+	if recSave.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", recSave.Code)
+	}
+
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("unmet sqlmock expectations: %v", err)
+	}
+}
+

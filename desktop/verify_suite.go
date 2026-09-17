@@ -383,10 +383,93 @@ fdc3Poll:
 	recordStep(6, "cross_window_fdc3", "Bidirectional FDC3 messaging across native WebviewWindows", step6Passed, step6Details, time.Since(step6Start))
 
 	// -------------------------------------------------------------------------
-	// STEP 7: Verify window deduplication (refocusing when spawned again)
+	// STEP 7: Verify cross-window FDC3 Intent Resolution with explicit ACK
 	// -------------------------------------------------------------------------
 	step7Start := time.Now()
-	recordLog("Executing Step 7: Testing window deduplication (refocus existing without duplicate)...")
+	recordLog("Executing Step 7: Testing cross-window FDC3 Intent Resolution with explicit acknowledgment...")
+
+	raiseIntentJS := `(function() {
+		try {
+			if (window.__fdc3Agent) {
+				window.__fdc3Agent.raiseIntent('ViewAnalysis', {
+					type: 'fdc3.instrument',
+					id: { ticker: 'INTC' },
+					name: 'Intel Corp'
+				}, 'rebalancer').then(function(res) {
+					fetch('/api/desk-verify/report', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							step: 'intent_routing_ack_received',
+							windowId: 'win_main',
+							payload: JSON.stringify(res),
+							details: 'Intent ViewAnalysis resolved with explicit ack from ' + (res && res.target ? res.target.windowId : 'win_rebalancer'),
+							success: true
+						})
+					});
+				}).catch(function(err) {
+					fetch('/api/desk-verify/report', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({
+							step: 'intent_routing_ack_received',
+							windowId: 'win_main',
+							details: 'FAIL: raiseIntent rejected: ' + (err.message || err),
+							success: false
+						})
+					});
+				});
+			} else {
+				fetch('/api/desk-verify/report', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						step: 'intent_routing_ack_received',
+						windowId: 'win_main',
+						details: 'FAIL: window.__fdc3Agent not found on primary window',
+						success: false
+					})
+				});
+			}
+		} catch(err) {
+			console.error('[VerifyIntent] Error:', err);
+		}
+	})();`
+	mainWin.ExecJS(raiseIntentJS)
+
+	intentAckReceived := false
+	intentDetails := "FAIL: Timed out waiting for cross-window intent acknowledgment"
+	intentTimeout := time.After(6 * time.Second)
+
+intentPoll:
+	for {
+		select {
+		case rep := <-reports:
+			if rep.Step == "intent_routing_ack_received" {
+				intentAckReceived = rep.Success
+				intentDetails = rep.Details
+				if rep.Success {
+					recordLog("Verified: " + rep.Details)
+				} else {
+					recordLog("Intent resolution error: " + rep.Details)
+				}
+				break intentPoll
+			}
+		case <-intentTimeout:
+			// Strict failure on timeout - zero auto-pass
+			intentAckReceived = false
+			intentDetails = "FAIL: Timed out waiting for cross-window intent acknowledgment (1500ms ack timeout expired)"
+			break intentPoll
+		}
+	}
+
+	recordStep(7, "cross_window_intent_resolution", "Cross-window FDC3 Intent Resolution with explicit acknowledgment", intentAckReceived, intentDetails, time.Since(step7Start))
+
+	// -------------------------------------------------------------------------
+	// STEP 8: Verify window deduplication (refocusing when spawned again)
+	// -------------------------------------------------------------------------
+	step8Start := time.Now()
+	recordLog("Executing Step 8: Testing window deduplication (refocus existing without duplicate)...")
 
 	winCountBefore := deskManager.GetWindowCount()
 	secondSpawnID, secondErr := deskManager.SpawnWindow(manager.WindowSpawnOptions{
@@ -396,18 +479,18 @@ fdc3Poll:
 	})
 	winCountAfter := deskManager.GetWindowCount()
 
-	step7Passed := secondErr == nil && secondSpawnID == "win_rebalancer" && winCountBefore == winCountAfter && winCountAfter == 2
-	step7Details := fmt.Sprintf("Duplicate spawn returned existing %q without increasing window count (Before=%d, After=%d)", secondSpawnID, winCountBefore, winCountAfter)
-	if !step7Passed {
-		step7Details = fmt.Sprintf("FAIL: Window deduplication failed: err=%v, id=%q, countBefore=%d, countAfter=%d", secondErr, secondSpawnID, winCountBefore, winCountAfter)
+	step8Passed := secondErr == nil && secondSpawnID == "win_rebalancer" && winCountBefore == winCountAfter && winCountAfter == 2
+	step8Details := fmt.Sprintf("Duplicate spawn returned existing %q without increasing window count (Before=%d, After=%d)", secondSpawnID, winCountBefore, winCountAfter)
+	if !step8Passed {
+		step8Details = fmt.Sprintf("FAIL: Window deduplication failed: err=%v, id=%q, countBefore=%d, countAfter=%d", secondErr, secondSpawnID, winCountBefore, winCountAfter)
 	}
-	recordStep(7, "window_deduplication", "Window deduplication: refocus existing window without creating duplicate", step7Passed, step7Details, time.Since(step7Start))
+	recordStep(8, "window_deduplication", "Window deduplication: refocus existing window without creating duplicate", step8Passed, step8Details, time.Since(step8Start))
 
 	// -------------------------------------------------------------------------
-	// STEP 8: Close secondary window and verify registry cleanup & event dispatch
+	// STEP 9: Close secondary window and verify registry cleanup & event dispatch
 	// -------------------------------------------------------------------------
-	step8Start := time.Now()
-	recordLog("Executing Step 8: Closing secondary window, verifying deregistration & desktop:window-closed event dispatch...")
+	step9Start := time.Now()
+	recordLog("Executing Step 9: Closing secondary window, verifying deregistration & desktop:window-closed event dispatch...")
 
 	closeErr := deskManager.CloseWindow("win_rebalancer")
 
@@ -431,12 +514,12 @@ closeWait:
 	finalCount := deskManager.GetWindowCount()
 	openIDs := deskManager.GetOpenWindowIDs()
 
-	step8Passed := closeErr == nil && !hasSecondary && finalCount == 1 && closedEventReceived && len(openIDs) == 1
-	step8Details := fmt.Sprintf("Closed %q; HasWindow=%v, ActiveCount=%d, EventDispatched=%v, OpenIDs=%v", "win_rebalancer", hasSecondary, finalCount, closedEventReceived, openIDs)
-	if !step8Passed {
-		step8Details = fmt.Sprintf("FAIL: Deregistration failed: closeErr=%v, hasWindow=%v, count=%d, eventDispatched=%v, openIDs=%v", closeErr, hasSecondary, finalCount, closedEventReceived, openIDs)
+	step9Passed := closeErr == nil && !hasSecondary && finalCount == 1 && closedEventReceived && len(openIDs) == 1
+	step9Details := fmt.Sprintf("Closed %q; HasWindow=%v, ActiveCount=%d, EventDispatched=%v, OpenIDs=%v", "win_rebalancer", hasSecondary, finalCount, closedEventReceived, openIDs)
+	if !step9Passed {
+		step9Details = fmt.Sprintf("FAIL: Deregistration failed: closeErr=%v, hasWindow=%v, count=%d, eventDispatched=%v, openIDs=%v", closeErr, hasSecondary, finalCount, closedEventReceived, openIDs)
 	}
-	recordStep(8, "window_close_deregistration", "Close secondary window, verify deregistration and desktop:window-closed dispatch", step8Passed, step8Details, time.Since(step8Start))
+	recordStep(9, "window_close_deregistration", "Close secondary window, verify deregistration and desktop:window-closed dispatch", step9Passed, step9Details, time.Since(step9Start))
 
 	// -------------------------------------------------------------------------
 	// FINALIZE & WRITE DESKTOP/VERIFICATION.MD
@@ -487,7 +570,7 @@ func writeVerificationReportMarkdown(summary *VerificationSummary) {
 	}
 	sb.WriteString("\n---\n\n")
 
-	sb.WriteString("## 2. Step-by-Step Acceptance Criteria Matrix (8 Criteria)\n\n")
+	sb.WriteString("## 2. Step-by-Step Acceptance Criteria Matrix (9 Criteria)\n\n")
 	sb.WriteString("| Step | Criteria | Status | Duration | Evidence / Details |\n")
 	sb.WriteString("|---|---|---|---|---|\n")
 	for _, s := range summary.Steps {

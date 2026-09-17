@@ -31,16 +31,16 @@ Both Sprint 1 and Sprint 2 are **complete, fully verified, and passing all autom
     - Non-destructive view-time consolidation (`handleConsolidateToTabs`): collapses auxiliary windows into Dockview tabs without mutating saved multi-monitor profile.
     - Multi-monitor polling (4s interval) offering Travel Mode on display disconnect and restore prompt on display reconnect.
     - Vitest tests: **3 / 3 passed** (`TravelMode.test.ts`).
-    - Playwright multi-screen smoke test: **Step 8 added, 8 / 8 checks passed** (`smoke_multiscreen.mjs`).
+    - Playwright multi-screen smoke test: **Step 9 added, 9 / 9 checks passed** (`smoke_multiscreen.mjs`).
 
 - **Full Verification Chain (Sprint 2)**:
-  - **TypeScript Ratchet**: `node scripts/ts-ratchet.mjs` → **699 error blocks, 0 new** (exit code 0).
+  - **TypeScript Ratchet**: `node scripts/ts-ratchet.mjs` → **699 total error blocks / 383 unique signatures, 0 new** (baseline 702 / 386; exit code 0).
   - **Frontend Vitest**: **44 / 44 test files passed (195 tests, 0 failures)**.
-  - **Production Build**: **PASS** (`npm run build` generated `frontend/dist` in 21.47s).
-  - **Playwright Multi-Screen Smoke**: **8 / 8 checks passed** (`npm run test:multiscreen`).
-  - **Go Backend Unit Tests**: **4 / 4 passed** (`go test -v ./internal/api -run TestWorkspaceLayout`).
+  - **Production Build**: **PASS** (`npm run build` generated `frontend/dist` in 21.08s).
+  - **Playwright Multi-Screen Smoke**: **9 / 9 checks passed** (`npm run test:multiscreen`), verifying real cross-window intent routing, UI reflection, and explicit ack.
+  - **Go Backend Unit Tests**: **5 / 5 passed** (`go test -v ./internal/api -run TestWorkspaceLayout`), verifying cross-user and cross-tenant isolation.
   - **Go Desktop Unit Tests**: **22 / 22 passed** (`GOWORK=off go test -v ./manager ./...`).
-  - **Live macOS Desktop Suite**: **8 / 8 passed** on real WKWebView windows (`./desktop/uisce-desk --verify`).
+  - **Live macOS Desktop Suite**: **9 / 9 passed** on real WKWebView windows (`./desktop/uisce-desk --verify`), verifying live cross-window intent resolution with explicit acknowledgment.
 
 ---
 
@@ -131,10 +131,10 @@ flowchart TD
 ### Sprint 2: Internal Intent Resolution, PostgreSQL Profiles & Travel Mode (COMPLETED)
 - **Focus**: Windows-independent functional elevation.
 - **Deliverables & Evidence**:
-  - **FDC3-Compatible Intent Router**: Live handler registry (`IntentRegistry.ts`), closed standard vocabulary, 1500ms ack timeout with dead-handler purging (`AckTimeoutError`), fallback re-resolution, intent loop guard, and dark-themed `IntentResolverModal`.
-  - **PostgreSQL Layout Profile Service**: `public.user_workspace_layouts` migration, REST API with 1MB payload limit, single-writer rule (hub writes, popouts read), and server-authoritative merge.
+  - **FDC3-Compatible Intent Router**: Live handler registry (`IntentRegistry.ts`), closed standard vocabulary, 1500ms ack timeout with dead-handler purging (`AckTimeoutError`), fallback re-resolution, intent loop guard, and dark-themed `IntentResolverModal`. Live verified across real windows in both Playwright smoke (Step 9) and macOS desktop suite (Step 7).
+  - **PostgreSQL Layout Profile Service**: `public.user_workspace_layouts` migration, REST API with 1MB payload limit, single-writer rule (hub writes, popouts read), and server-authoritative merge. Cross-user and cross-tenant isolation verified by test (`TestWorkspaceLayout_TenantAndUserIsolation`).
   - **Travel Mode & Unified Alert Surface**: Non-destructive view-time consolidation into Dockview tabs without mutating saved layouts; single alert strip in `UniversalWorkspaceHub` for browser restore, monitor disconnect, and reconnect prompts.
-  - **Verification**: Vitest (44/44 suites, 195 tests), TS ratchet (699 blocks, 0 new), Production build (21.47s), Playwright multi-screen smoke (8/8 passed), Go backend layout tests (4/4 passed), Go desktop unit tests (22/22 passed), Live macOS desktop suite (8/8 passed).
+  - **Verification**: Vitest (44/44 suites, 195 tests), TS ratchet (699 blocks / 383 unique signatures, 0 new), Production build (21.08s), Playwright multi-screen smoke (9/9 passed, including live intent routing & ack), Go backend layout tests (5/5 passed, including isolation), Go desktop unit tests (22/22 passed), Live macOS desktop suite (9/9 passed, including live cross-window intent resolution with explicit ack).
 
 ### Sprint 3: High-Density Grids & Command Bar
 - **Focus**: High-throughput trading UI and keyboard ergonomics.

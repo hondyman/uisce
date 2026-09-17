@@ -242,9 +242,9 @@ export const AIPortfolioRebalancer: React.FC = () => {
               <p className="text-[#A0A0A0] text-base">Monitor and manage client portfolios with AI-powered insights.</p>
             </div>
             {highlightedTicker && (
-              <div className="flex items-center gap-2 rounded-lg bg-sky-950/80 border border-sky-500/40 px-3 py-1.5 text-xs text-sky-200">
+              <div data-testid="rebalancer-fdc3-badge" className="flex items-center gap-2 rounded-lg bg-sky-950/80 border border-sky-500/40 px-3 py-1.5 text-xs text-sky-200">
                 <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
-                <span>FDC3 ({activeChannel}): <strong>{highlightedTicker}</strong></span>
+                <span>FDC3 ({activeChannel}): <strong data-testid="rebalancer-ticker">{highlightedTicker}</strong></span>
                 <button
                   onClick={() => setHighlightedTicker(null)}
                   className="text-sky-400 hover:text-white ml-1 text-sm font-bold"

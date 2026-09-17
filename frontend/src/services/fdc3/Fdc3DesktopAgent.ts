@@ -298,3 +298,7 @@ export class Fdc3DesktopAgent {
 
 // Global default agent instance
 export const fdc3Agent = new Fdc3DesktopAgent();
+
+if (typeof window !== 'undefined') {
+  (window as any).__fdc3Agent = fdc3Agent;
+}
