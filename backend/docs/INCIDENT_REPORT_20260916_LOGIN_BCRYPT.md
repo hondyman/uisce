@@ -362,8 +362,28 @@ Follow-up owed (not done this session):
 5. *Then* add `shared/DEV_USER_PASSWORD` to `infisical-secrets-template.json`.
 
 Until the follow-up runs, AGENTS.md line 543 keeps its generic pointer
-("password in the dev env/secrets store"). The 16-char preimage lives in
-the operator's shell history or wherever the operator filed it.
+("password in the dev env/secrets store"). The 16-char preimage is **not**
+in any documented location: the Infisical push was deferred (Path B), and
+the temp file (`/tmp/dev_user_password.txt`) was deleted at Step 8 of the
+workstream. The preimage currently exists in exactly two places, both of
+which are unreliable and one of which is itself a documented hygiene
+problem:
+
+1. **Shell history** (`~/.zsh_history` on this Mac). The workstream's
+   verification curls used the literal password inline (e.g.
+   `curl ... -d "{\"email\":\"...\",\"password\":\"$PASS\"}"`), so the
+   password expanded into history at those commands.
+2. **`/tmp/uisce-server.log`** — the request-trace middleware at
+   `backend/internal/api/api.go:706-739` logs the full request body on
+   every request, including the `password` field, to stderr (redirected
+   to this file). See
+   `backend/docs/INCIDENT_REPORT_20260916_REQUEST_TRACE_PLAINTEXT_PASSWORDS.md`
+   for the open ticket on this.
+
+Neither location is appropriate for a credential. The Infisical follow-up
+above is therefore load-bearing, not optional: until it lands, dev-user
+auth is one lost shell history (or one log file rotation/compaction)
+away from "regenerate the password and re-run the migration."
 
 ## Probable Closure of Original 401 Thread
 
