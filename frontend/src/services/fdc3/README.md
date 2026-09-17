@@ -89,3 +89,18 @@ const unsubscribe = fdc3Agent.addContextListener<Fdc3InstrumentContext>(
 - **Advisory Staleness & Concurrent Write-Through**:
   If two windows broadcast on the exact same channel within the same clock tick, their write-throughs to `localStorage` may interleave. Live `BroadcastChannel` delivery is unaffected (handled immediately in-memory with last-write-wins per window). This only affects the *next* late-joining window that hydrates from `localStorage`. In alignment with the FDC3-compatible architectural contract, hydrated values on initial join are advisory and immediately superseded by any live incoming message.
 
+---
+
+## Automation & Test Hook: `window.__fdc3Agent`
+
+For automated end-to-end multi-window test verification (e.g. Playwright smoke tests, Wails live verification suites), the agent instance is conditionally exposed on `window.__fdc3Agent`.
+
+- **Security & Foot-gun Gating**:
+  To protect institutional trading environments and reduce malicious script exposure, this global is strictly gated. It is instantiated only when:
+  - Running under development (`import.meta.env.DEV`)
+  - Running on `localhost` or `127.0.0.1`
+  - URL explicitly contains `?verify=1` or `?test=1`
+  - Explicitly opted in via `window.__ENABLE_FDC3_AUTOMATION_HOOK__ = true`
+- **Production Staging/Live**: On non-localhost enterprise production hostnames, `window.__fdc3Agent` is omitted by default.
+
+

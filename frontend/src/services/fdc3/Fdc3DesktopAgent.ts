@@ -299,6 +299,24 @@ export class Fdc3DesktopAgent {
 // Global default agent instance
 export const fdc3Agent = new Fdc3DesktopAgent();
 
+/**
+ * Deliberate automation & test hook: window.__fdc3Agent
+ * 
+ * To reduce attack surface and prevent accidental script tampering in institutional
+ * production deployments, this global is gated to development, test runners,
+ * desktop verification harnesses, and localhost origins.
+ */
 if (typeof window !== 'undefined') {
-  (window as any).__fdc3Agent = fdc3Agent;
+  const isDevOrTest =
+    Boolean(import.meta.env?.DEV) ||
+    Boolean((window as any).__ENABLE_FDC3_AUTOMATION_HOOK__) ||
+    window.location.search.includes('verify=1') ||
+    window.location.search.includes('test=1') ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
+
+  if (isDevOrTest) {
+    (window as any).__fdc3Agent = fdc3Agent;
+  }
 }
+
