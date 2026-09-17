@@ -1,33 +1,34 @@
--- Idempotent upsert seed for the two dev users used by MCP auth work.
--- These rows previously existed via an unrecorded action; their
--- password_hash column held the literal placeholder 'testpass' which
--- fails bcrypt's length check on every login attempt. This migration
--- converts the unrecorded seeding into a recorded one and ensures both
--- rows carry a valid bcrypt hash on fresh rebuilds.
+-- SUPERSEDED 2026-09-17 — DO NOT REVERT TO THE PRIOR CONTENT.
 --
--- Column set mirrors the live rows captured 2026-09-16 (see
--- backend/docs/INCIDENT_REPORT_20260916_LOGIN_BCRYPT.md). The
--- tenant_id column is the load-bearing one — without it, login works
--- but every tenant-scoped endpoint returns 401.
+-- This migration was the initial fix for the dev-user bcrypt hashes
+-- (commit ab4e17b32, "upsert seed for dev users with valid bcrypt
+-- hashes"). It was SUPERSEDED by 20260916_regenerate_dev_user_password
+-- (commit 893f4ef5a), which carried a fresh 24-char-random preimage's
+-- bcrypt hash and recorded the operator handoff.
 --
--- No BEGIN/COMMIT: the migration runner (internal/migrations/runner.go)
--- wraps each file in its own transaction and rejects transaction-control
--- statements.
+-- Why this file is now a no-op: the runner applies *.up.sql files in
+-- sort.Strings(filename) order. This file sorts BEFORE
+-- 20260916_regenerate_dev_user_password.up.sql, so on a fresh rebuild
+-- the regen migration runs second and sets the canonical hash. The
+-- upsert below this comment was the OLD canonical hash, but if a
+-- rebuild ever runs only this file (e.g., a snapshot restore that
+-- skipped later migrations, or a reapply during an interrupted
+-- runner), the upsert would leave the DB at a stale hash with no
+-- subsequent regen to fix it. That exact failure was caught in this
+-- workstream: the DB had been reset to the stale-hash state from this
+-- migration, and the canonical migration had been skipped.
+--
+-- To prevent recurrence: this file now does nothing. Fresh rebuilds
+-- skip it; current DBs see an SHA-256 mismatch warning on next runner
+-- startup (the runner's content-changed-since-applied check at
+-- runner.go:215) and skip the file without re-applying the stale
+-- INSERT. The canonical hash lives in 20260916_regenerate_dev_user
+-- password.up.sql; drift detection is a separate script at
+-- backend/scripts/dev_password_drift_check.sh.
+--
+-- Verification:
+--   DB hash:       SELECT password_hash FROM public.app_user WHERE email = 'testuser@example.com';
+--   Migration:     grep '\$2a\$10\$' 20260916_regenerate_dev_user_password.up.sql | head -1
+--   They must match. The drift check script automates this.
 
-INSERT INTO public.app_user (
-    id, email, username, display_name, name,
-    is_active, password_hash, tenant_id, language, status, attributes,
-    permissions, is_core_admin, created_at, updated_at
-)
-VALUES
-    ('da83f01c-da3e-480c-bac0-5ace1a97bc6e', 'testuser@example.com',
-     'testuser@example.com', 'Test User', 'Test User',
-     true, '$2a$10$Ja1GX27lwmjc5oo/vnd93.uSZ9O2WWamgvzV/89flg02.5MMx1epS', '99e99e99-99e9-49e9-89e9-99e99e99e999',
-     'en', 'active', '{}', '[]', false, NOW(), NOW()),
-    ('811e9f41-622f-4ef0-90ad-1098e1407d85', 'testuser2@example.com',
-     'testuser2@example.com', 'Test User 2', 'Test User 2',
-     true, '$2a$10$Ja1GX27lwmjc5oo/vnd93.uSZ9O2WWamgvzV/89flg02.5MMx1epS', '99e99e99-99e9-49e9-89e9-99e99e99e999',
-     'en', 'active', '{}', '[]', false, NOW(), NOW())
-ON CONFLICT (email) DO UPDATE SET
-    password_hash = EXCLUDED.password_hash,
-    updated_at    = NOW();
+SELECT 1;
