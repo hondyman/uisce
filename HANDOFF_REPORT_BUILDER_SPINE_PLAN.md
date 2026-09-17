@@ -810,6 +810,11 @@ archaeology on. This doc's own sessions should follow that from here on.
       core vs. the tenant's own test fixtures — confirmed live that the
       gold-copy tenant holds non-core rows too, e.g. test-fixture-named
       reports under its own tenant_id).
+
+      **T.2's `ops_event_outbox` did NOT ride in this migration window**,
+      despite that being this ticket's and T.2's original plan (see T.2
+      below for why, and the corrected sequencing). This migration is
+      `report_templates`-only.
 - [x] **2.2** Backend: extend `ReportTemplate` (`internal/reports/model.go`)
       and `repository.go` to read/write the new typed columns instead of
       (or alongside, during migration) the opaque `LayoutConfig`/
@@ -887,9 +892,62 @@ archaeology on. This doc's own sessions should follow that from here on.
         touched twice), reload again, assert equality.
       - Both pass against the live `alpha` DB (`UISCE_TEST_DB=1`), alongside
         the full existing 63-test live suite (all green, no regressions).
+      - **Per-column granularity confirmed empirically, not just by
+        inspection.** A reviewer asked whether a single silently-dropped
+        column (e.g. `grouping`) could hide behind the "real values"
+        object in `CreateAndUpdate` passing overall, since a default is
+        also a value. Verified by injecting a synthetic bug (forcing
+        `CreateTemplate` to always write `grouping = null` regardless of
+        input) and re-running: exactly one assertion failed
+        (`grouping must round-trip through create`), all five other
+        columns' assertions still passed correctly on the same run. Bug
+        reverted after confirming. The two tests do have genuine
+        per-column failure attribution.
+      - **The `parameters`/`parameter_schema` dual-write gap this same
+        review found is a separate, real bug these two tests could not
+        have caught** (they set both fields directly, which no real
+        request ever does) — see 2.2's dual-write note above and the two
+        new sqlmock tests in `report_handlers_test.go` ("parameters
+        derived from parameter_schema when frontend omits top-level
+        parameters" / "parameters re-derived from parameter_schema, not
+        frozen at the stale existing value"), which simulate the real
+        payload shape instead. Confirmed those two fail without the
+        `deriveParametersFromSchema` fix and pass with it (same
+        before/after check as the build-break fix above).
 - [ ] **2.4** `CoreReportDefinition` frontend type (mirrors
       `CorePageDefinition` in `frontend/src/types/pageStudio.ts`) and status/
       version/draft flow parity with Page Studio's publish pipeline.
+
+      **Open decision this ticket must resolve, surfaced by review after
+      2.2: is `is_core` a real signal yet, and if so, does the frontend's
+      existing check need to change shape?** Checked precisely rather than
+      assumed: no ticket in this doc ever specified switching a backend
+      runtime check from "row belongs to the gold-copy tenant" to "row has
+      `is_core = true`" - 2.1/2.2 only committed to persisting the column
+      correctly, not to consulting it. Confirmed by reading the current
+      code: `GetTemplate`/`UpdateTemplate`/`DeleteTemplate`'s core-report
+      checks in `report_handlers.go` still all test
+      `template.TenantID == goldCopyID`, unchanged; `template.IsCore` is
+      written and read back correctly (2.3 proved that) but nothing
+      authorization-relevant looks at it yet. That's consistent with 2.2's
+      actual scope and not a regression.
+      What *is* worth deciding here: the frontend's own documented
+      `isCoreTemplate` check (`is_core === true || ... ||
+      tenant_id === goldCopyId`, an OR) is already *wider* than the
+      backend's gold-copy-only check, and `CreateTemplate`'s blanket
+      JSON-body unmarshal lets any authenticated caller set
+      `is_core: true` on a row landing in their own (non-gold-copy)
+      tenant - harmless today only because nothing trusts `is_core` for
+      anything but a read-only-in-UI cosmetic. Before this ticket adds a
+      published `CoreReportDefinition` type and any UI that branches on
+      `is_core`, decide explicitly: does `is_core` become the backend's
+      real authorization signal (replacing the tenant_id check, which
+      would need its own three/four-replay verification per this repo's
+      incident-response standard, since it changes an auth-path
+      semantic), stay purely cosmetic (in which case the frontend's OR
+      should arguably become tenant_id-gated too, so a self-declared
+      `is_core: true` can't widen anything), or something else. Don't
+      let 2.4 inherit this as an implicit default either way.
 
 ## Phase 3 — Document report kind, end to end
 
@@ -1021,9 +1079,35 @@ trigger type.
       3's execution contract is finalized, so `POST /api/reports/{id}/execute`
       emits `started`/`completed` events from its first version, not
       retrofitted.
-- [ ] **T.2** Add the `ops_event_outbox` table + Debezium capture config —
-      same migration window as Phase 2's `report_templates` typed-column
-      work (2.1), since both are schema changes to the same subsystem.
+- [ ] **T.2** Add the `ops_event_outbox` table + Debezium capture config.
+
+      **Did not ride in 2.1's migration window as originally planned —
+      correcting the record, not just noting the gap.** 2.1 shipped only
+      `report_templates`' six typed columns
+      (`20261018_002_report_templates_spine_columns.up.sql`); T.1's write
+      contract (this table's actual column shape) was still design-only
+      when 2.1 landed, and this table can't be added correctly before
+      that contract exists. T.3/Phase 3 now needs its own migration for
+      it — survivable, but it breaks the "one migration window, one
+      review pass" rationale 2.1's own ticket text gave for batching them.
+      Sequencing going forward: T.1 (write contract) must close before
+      T.2's migration is written, not in parallel with it.
+
+      **Two queues, not one - write this down now so T.3 doesn't have to
+      rediscover it under implementation pressure.** `ops_event_outbox` is
+      a **telemetry** outbox: Debezium reads it via CDC (log-based, reads
+      committed rows, never marks or deletes them itself) and ships to the
+      Iceberg `ops.report_executions` sink. It is not a work queue and
+      never needs consumer-coordination columns like `claimed_by`/
+      `claimed_at`/`locked_until` - those belong to a *dispatch* queue,
+      and this system already has one: Temporal (`report_activities.go`'s
+      workflows), which owns actually running an execution, retries, and
+      worker assignment. T.2's table exists purely so an execution's
+      already-happened phases become observable after the fact; it must
+      never be mistaken for or repurposed as the thing that decides an
+      execution runs. If a future ticket wants outbox rows to drive
+      work assignment, that is a new, different table, not this one.
+
       **Add the retention story in this same ticket, not later:** Debezium
       reads the outbox, it doesn't delete from it — without a sweeper,
       `ops_event_outbox` grows unbounded forever. One line of scope: a
@@ -1090,6 +1174,68 @@ not a nice-to-have.
   merge looks like abandoned WIP but has different, stricter git
   mechanics (no partial commits) and usually higher stakes than a feature
   branch's leftovers.
+
+  **Applied again, 2026-09-16, and sharper this time: a "commit or stash"
+  session-end can itself leave a broken `main` if the diff being stashed
+  was silently completing a previous commit.** After 2.1-2.3 landed, a
+  fresh `detect_changes` was still dominated by a large pre-existing
+  uncommitted diff (~25 files) sitting in the working tree since before
+  this session started. Deleted the obviously-disposable pieces (four
+  `frontend/.env.local.tmp.*` scratch files from Infisical bootstrap,
+  never cleaned up), and committed nine already-`cmd/migrate`-applied
+  migration files that existed only as untracked files (`ee94222f8`) -
+  that part was safe and mechanical. Stashing the rest (OMS/FIX trading
+  work, `bo_crud_handler.go`/`gemini_client.go`/`mcp/tool_handler.go`
+  edits, three frontend files) as one dated stash then **broke `go build
+  ./...` on `main`**: `api.go`'s AI-page-generation closure and
+  `GeminiClient.GeneratePageSpec` were missing the `pageKind` parameter
+  `handlers.PageAIGenerateFunc`'s type (committed, unchanged) requires -
+  the stash had been silently carrying the other half of a fix that merge
+  commit `076aa197f` landed only one side of. Root-caused via `git log -S`
+  (the type predates the merge commit that should have updated its
+  callers) rather than guessed, then the stash was popped back file-by-
+  file (`git checkout stash@{N} -- <path>`, since a plain `pop`/`apply`
+  conflicted on two files whose HEAD content had moved since the stash
+  was taken), verified with `go build`/`go vet`/`go test` after each
+  batch, and landed as three follow-up commits (`3350a75e9`, `26e1ae8da`,
+  `ba31431ff`). **New rule: before stashing a pre-existing diff you didn't
+  create, run `go build ./...` (or the language equivalent) with it
+  removed first.** A dirty tree that currently builds is not evidence the
+  tree builds without the dirt - some of it may be load-bearing.
+  Also confirmed, separately: some of what looked like "someone's
+  abandoned WIP" (`AGENTS.md`, `CLAUDE.md`, the `.claude/skills/gitnexus-*`
+  directory shape) was actually GitNexus's own index-stat/skill-file
+  auto-regeneration, re-written by routine MCP tool calls (`impact()`,
+  `detect_changes()`) within the session itself - not stashed, not
+  committed, just left alone. `backend/db/crims_orm/*.sql` (three seed
+  scripts) remains untracked and unresolved: no way found to confirm
+  whether they've been applied anywhere, unlike the migrations (which
+  `cmd/migrate status` could confirm) - flagged for whoever owns them
+  rather than committed on a guess.
+
+  **New test failures surfaced by this same investigation, confirmed
+  pre-existing (not caused by 2.1-2.3 or the build-break fix above) and
+  queued here since a session summary alone isn't a ticket:**
+  - `TestReportAPI_Phase3Executions` (`internal/api/report_handlers_test.go`)
+    — `GetExecution`'s JSON response fails to decode ("invalid character
+    's' looking for beginning of value"), i.e. the handler is writing a
+    non-JSON body on at least one path. Confirmed via `git stash` of only
+    this session's 2.2 files that it already fails on the pre-2.2
+    baseline. Not investigated further - out of scope for the
+    `report_templates` spine work, but it's squarely in this plan's own
+    domain (Phase 3 execution tracking) and should be root-caused before
+    Phase 3 builds on top of `GetExecution`.
+  - `TestMCP_GetContractCall` (`internal/mcp/tool_handler_test.go`) —
+    fails with "JWT missing tenant_id claim," predates `076aa197f` (added
+    in `79ab4d217a`, an unrelated older commit) - the same
+    JWT-claims-shape gap this doc's Phase 0/2 research already documented
+    for the real Keycloak-issued tokens this platform uses. Likely a
+    stale test JWT fixture, not a handler bug; not investigated further.
+  - `internal/compliance` fails `go vet`/`go test` to build at all
+    (`undefined: ParseFIXNewOrderSingle` in `compliance_test.go`) -
+    unrelated to anything in this plan; flagging since it means `go test
+    ./...` (not package-scoped) will always show a spurious failure here
+    until someone in that area fixes or skips it.
 
 ## Verification checklist (from the original proposal, kept verbatim)
 
