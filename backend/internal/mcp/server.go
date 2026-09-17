@@ -1,86 +1,61 @@
 // Package mcp is the canonical Uisce MCP surface.
 //
-// # Inventory
+// # Inventory (updated 2026-09-17, PR A route-table dump)
 //
-// As of 2026-09-17 (Phase 2 Step 1 skeleton), the platform's MCP-shaped
-// code lives in SIX paths across THREE files, with only one currently
-// reachable from the primary mux:
+// chi v5.2.3 does NOT panic on a second Post of the same method+pattern.
+// TestChi_DuplicateMethodPattern: last registration wins. chi.Walk lists
+// the survivor only.
 //
-//	Path 1 (LIVE): internal/mcp/tool_handler.go — MCPToolHandler.
-//	    Mount:  POST /api/mcp (chi, inside /api/* block).
-//	    Auth:   security.AuthInfoFromContext (JWT-derived tenant).
-//	    Tools:  7 read-only — get_business_object_contract,
-//	            resolve_relationship_path, list_business_objects,
-//	            get_bo_terms, list_pages, get_page, compile_semantic_query.
-//	    Mutation tools (save_record, delete_record, run_sql,
-//	    create_business_object) refused by name.
-//	    Audit:  none (gap noted; Step 3 in Phase 2 plan).
+// TestMCP_RouteTableDump against real SetupRouter (ENVIRONMENT=test):
 //
-//	Path 2 (INTERNAL): internal/mcp/mcp_server.go — MCPServer.
-//	    Mount:  none (programmatic API; called via Path 4).
-//	    Auth:   caller-controlled (relies on Path 4's gate).
-//	    Tools:  3 — text_to_semantic_ast, triage_mdm_exception,
-//	            inspect_schema_drift.
-//	    Audit:  writes to catalog_ai.mcp_tool_execution_logs
-//	            (input_parameters raw; redaction planned Step 3).
+//	GET  /api/mcp              Path 1 MCPToolHandler.HandleGetInfo
+//	POST /api/mcp              Path 1 MCPToolHandler.HandleRPC
+//	POST /api/mcp/tools/call   Path 6 agentic.MCPToolRouter.HandleToolCall
 //
-//	Path 3 (CLIENT): internal/mcp/tools.go + execution.go — UisceCopilot.
-//	    Mount:  none (client); invoked by cmd/mcp-server/main.go stdio loop.
-//	    Auth:   outbound bearer (UISCE_API_TOKEN env var).
-//	    Role:   thin HTTP client; calls /api/v1/mcp/tools.
-//	    Status: collapses to a 30-line shell around Path 1's HTTP
-//	            transport at Step 5 of Phase 2.
+// Dead at the mux (404): POST /mcp, GET /mcp/tools, GET /api/mcp/tools,
+// GET /api/v1/mcp/tools.
 //
-//	Path 4 (GATED-DEAD): internal/api/mcp_handlers.go — MCPHandler.
-//	    Mount:  zero callers (constructor never invoked post-merge).
-//	    Auth:   was X-Tenant-ID header trust. JWT-gated in commit
-//	            114e2c9cd (Phase 2 Step 0). Latent impersonation
-//	            vector closed.
-//	    Disposition: delete in Step 7.
+// Dump verdict (not boring, not "never-registered"):
+// BOTH registrations execute on the SAME /api chi group. Path 5
+// RegisterRoutes runs (MCP-REGISTER path5 trace + handlers hook).
+// Path 1 RegisterRoutes runs next (path1 trace; GET /api/mcp exists —
+// Path 5 never registers GET). chi v5.2.3 last-wins silently; Walk
+// lists only the survivor. Path 5 is registered-then-overwritten, not
+// dead at the call site. Probe: tools/list → Path 1 catalog;
+// mcp.list_tools → Path 1 -32601 (not Path 5's -32001).
 //
-//	Path 5 (GATED-DEAD): internal/handlers/mcp_handler.go — MCPHandler
-//	    (HandleMCPRequest at /mcp) + MCPToolsHandler (RegisterRoutes at
-//	    /mcp/tools) + MCPToolsHandler (RegisterMuxRoutes at
-//	    /api/v1/mcp/tools).
-//	    Mount:  MCPHandler.RegisterRoutes returns 404 at runtime;
-//	            MCPToolsHandler.RegisterRoutes returns 404 (no caller);
-//	            MCPToolsHandler.RegisterMuxRoutes has zero callers.
-//	    Auth:   was hardcoded tenantID := "default" / "core" and
-//	            X-Functional-Role header trust. JWT-gated in commit
-//	            114e2c9cd (Phase 2 Step 0).
-//	    Disposition: delete in Step 7; evaluate_compliance_trade and
-//	            shadow_evaluate_rule capabilities migrate to Path 2's
-//	            tool registry if kept, or to Path 1's read-only list.
+// Ops surfaces that print the same table: stderr [ROUTES-DUMP] at
+// api.go SetupRouter end, and admin GET /_routes. Keep both; the test
+// is the gate. Flip checklist: TestMCP_RouteTableDump + those dumps.
 //
-//	Path 6 (LIVE): api.go:1640 — agentic.MCPToolRouter.
-//	    Mount:  POST /api/mcp/tools/call (chi, inside /api/* block).
-//	    Auth:   inherits AuthContextMiddleware's JWT auth.
-//	    Role:   maker-checker workflow. Different protocol surface than
-//	            Path 1 (legacy JSON-RPC). Migrate to Path 1 in a later
-//	            step (not Phase 2 Step 0/1/2).
+// PR B must replace or wrap POST /api/mcp, not stack a third
+// registration. The mount swap is ATOMIC — Path 1 RegisterRoutes
+// removal and the new mount land in the same commit, route-table test
+// updated in that diff, live checklist against the deployed binary
+// before the commit is done. A split leaves POST /api/mcp 404.
 //
-// # Refactor status (Step 1, 2026-09-17)
+// Path 6 URL move (PR D): if a compat shim is used, old+new coexist
+// in one commit; shim removal is a later commit with its own
+// reachability proof. Shim emits Deprecation / a log line so removal
+// is data-driven.
 //
-// Phase 2 plan: unify Paths 1+2 under one mark3labs/mcp-go-backed
-// server, collapse Path 3 to a thin HTTP client, delete Paths 4+5+6 mux
-// registrations in Step 7, port 7 read-only tools (Path 1) + 3 audit-logged
-// tools (Path 2) to the unified server, add SSE + stdio transports.
+// Stdio client invariant (PR B): the binary never reads or stores
+// credentials beyond UISCE_API_TOKEN; stdout is the protocol channel
+// — logs go to stderr and must never contain the token.
 //
-// This file is the skeleton (Step 1). It compiles, its stub methods
-// respond, and the existing 12 tests in tool_handler_test.go and
-// integration_auth_test.go still pass. No existing handler is touched;
-// no behavior change.
-//
-// # Dependency
-//
-// github.com/mark3labs/mcp-go v1.1.0 pinned 2026-09-17. Check
-// https://github.com/mark3labs/mcp-go/releases for API stability before
-// bumping. v1.x is the API-stable line per the library's README.
+//	Path 1 (LIVE HTTP face through PR A): tool_handler.go
+//	Path 2 (INTERNAL): mcp_server.go — tools ported onto Server below
+//	Path 3 (CLIENT): tools.go + cmd/mcp-server — PR B
+//	Path 4 (DEAD): api/mcp_handlers.go — never registered
+//	Path 5 (DEAD at mux): handlers/mcp_handler.go — overwritten by Path 1
+//	Path 6 (LIVE): POST /api/mcp/tools/call — "core" fallback closed Pre-A
 package mcp
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -88,43 +63,133 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// Server is the unified MCP server. Step 1 skeleton — stub methods
-// only. Tools register via RegisterTool; transports (HTTP, SSE, stdio)
-// attach via the mark3labs/mcp-go library in subsequent steps.
+type toolHandler func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error)
+
+type registeredTool struct {
+	def     ToolDefinition
+	handler toolHandler
+}
+
+// Server is the unified MCP server. PR A: tools register and CallTool
+// works. Path 1 remains the HTTP face — this type is not mounted yet.
 type Server struct {
 	db       *sqlx.DB
 	registry *server.MCPServer
+	path1    *MCPToolHandler
+	path2    *MCPServer
+
+	mu    sync.RWMutex
+	order []string
+	tools map[string]registeredTool
 }
 
-// NewServer constructs a unified MCP server. Step 1: builds an empty
-// registry. Tools added in Step 2+. Transports in Step 4+ (SSE) and
-// Step 5+ (stdio wrapper).
 func NewServer(db *sqlx.DB) *Server {
-	return &Server{
+	s := &Server{
 		db:       db,
 		registry: server.NewMCPServer("uisce-semantic-mcp-server", "1.0.0"),
+		path1:    NewMCPToolHandler(db),
+		path2:    NewMCPServer(db),
+		tools:    make(map[string]registeredTool),
+	}
+	s.registerDefaultTools()
+	return s
+}
+
+func (s *Server) RegisterTool(name, description string, inputSchema interface{}, handler func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error)) {
+	if handler == nil {
+		handler = func(context.Context, uuid.UUID, json.RawMessage) (interface{}, error) {
+			return nil, fmt.Errorf("tool %s has no handler", name)
+		}
+	}
+	schema, _ := inputSchema.(map[string]interface{})
+	if schema == nil {
+		schema = map[string]interface{}{"type": "object", "properties": map[string]interface{}{}}
+	}
+	def := ToolDefinition{Name: name, Description: description, InputSchema: schema}
+
+	s.mu.Lock()
+	if _, exists := s.tools[name]; !exists {
+		s.order = append(s.order, name)
+	}
+	s.tools[name] = registeredTool{def: def, handler: handler}
+	s.mu.Unlock()
+
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		raw = []byte(`{"type":"object","properties":{}}`)
+	}
+	s.registry.AddTool(mcplib.NewToolWithRawSchema(name, description, raw), s.wrapHandler(name, handler))
+}
+
+func (s *Server) wrapHandler(name string, handler toolHandler) server.ToolHandlerFunc {
+	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		tenantID, err := tenantFromAuth(ctx)
+		if err != nil {
+			return mcplib.NewToolResultError(err.Error()), nil
+		}
+		args, err := json.Marshal(req.GetArguments())
+		if err != nil {
+			args = []byte(`{}`)
+		}
+		result, err := handler(ctx, tenantID, args)
+		if err != nil {
+			return mcplib.NewToolResultError(err.Error()), nil
+		}
+		out, err := json.Marshal(result)
+		if err != nil {
+			return mcplib.NewToolResultError(err.Error()), nil
+		}
+		return mcplib.NewToolResultText(string(out)), nil
 	}
 }
 
-// RegisterTool adds a tool to the registry. Step 1: signature only,
-// not yet called by any tool. Step 2+: each Path 1 tool registers
-// through this method.
-func (s *Server) RegisterTool(name, description string, inputSchema interface{}, handler func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error)) {
-	// Step 1 stub. Step 2 wires the mark3libs/mcp-go AddTool API.
-}
-
-// ListTools returns the registered tool manifest. Step 1: returns an
-// empty list. Step 2+: returns the full tool set from the registry.
 func (s *Server) ListTools() []ToolDefinition {
-	return []ToolDefinition{}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ToolDefinition, 0, len(s.order))
+	for _, name := range s.order {
+		out = append(out, s.tools[name].def)
+	}
+	return out
 }
 
-// CallTool dispatches a tool invocation. Step 1: not implemented.
-// Step 2+: dispatches via the mark3labs/mcp-go registry.
 func (s *Server) CallTool(ctx context.Context, tenantID uuid.UUID, name string, args json.RawMessage) (interface{}, error) {
-	return nil, nil
+	if tenantID == uuid.Nil {
+		return nil, fmt.Errorf("%s", authRequiredMsg)
+	}
+	if IsRefusedTool(name) {
+		return nil, refusedError(name)
+	}
+	s.mu.RLock()
+	entry, ok := s.tools[name]
+	s.mu.RUnlock()
+	if !ok {
+		return nil, fmt.Errorf("unknown tool: %s", name)
+	}
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
+	return entry.handler(ctx, tenantID, args)
 }
 
-// ensure import is referenced (mcplib is the v1 alias; will be used in
-// Step 2+). Without this the import would be unused at this step.
-var _ = mcplib.Tool{}
+func (s *Server) path2Tool(name string) toolHandler {
+	return func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error) {
+		params := map[string]interface{}{}
+		if len(args) > 0 {
+			_ = json.Unmarshal(args, &params)
+		}
+		resp, err := s.path2.ExecuteTool(ctx, ToolExecutionRequest{
+			TenantID:   tenantID,
+			ToolName:   name,
+			Actor:      "mcp",
+			Parameters: params,
+		})
+		if err != nil {
+			if resp != nil {
+				return resp, err
+			}
+			return nil, err
+		}
+		return resp.Result, nil
+	}
+}
