@@ -365,20 +365,29 @@ Until the follow-up runs, AGENTS.md line 543 keeps its generic pointer
 ("password in the dev env/secrets store"). The 16-char preimage is **not**
 in any documented location: the Infisical push was deferred (Path B), and
 the temp file (`/tmp/dev_user_password.txt`) was deleted at Step 8 of the
-workstream. The preimage currently exists in exactly two places, both of
-which are unreliable and one of which is itself a documented hygiene
-problem:
+workstream. The preimage currently exists in exactly one place — the
+`/tmp/uisce-server.log` file, where the dev-mode request-trace
+middleware logged it on every verification curl.
 
-1. **Shell history** (`~/.zsh_history` on this Mac). The workstream's
-   verification curls used the literal password inline (e.g.
-   `curl ... -d "{\"email\":\"...\",\"password\":\"$PASS\"}"`), so the
-   password expanded into history at those commands.
-2. **`/tmp/uisce-server.log`** — the request-trace middleware at
-   `backend/internal/api/api.go:706-739` logs the full request body on
-   every request, including the `password` field, to stderr (redirected
-   to this file). See
-   `backend/docs/INCIDENT_REPORT_20260916_REQUEST_TRACE_PLAINTEXT_PASSWORDS.md`
-   for the open ticket on this.
+**Correction (added after the original commit `276c815b5`):** the prior
+version of this section claimed the password was in shell history. That
+claim was incorrect. Verified this turn: `~/.zsh_history` (1512 lines,
+66 KB) and `~/.bash_history` (382 lines, 21 KB) both return zero matches
+for the literal. All verification curls used `$(cat
+/tmp/dev_user_password.txt)` substitution, not the literal, so the
+literal never expanded into shell history. The only surviving copy at
+the time this section was written was the log file.
+
+**Recovery procedure:** before any log truncation (the
+`/tmp/uisce-server.log` redirect-truncate in the request-trace
+middleware workstream), extract the literal from the log with
+`ssh eganpj@100.84.50.65 'grep -o "<literal>" /tmp/uisce-server.log
+| head -1' > /tmp/recovered.txt` and present it to the operator for
+recording in their preferred credential store. The log truncation
+then proceeds; the literal lives only with the operator and (after
+rotation) in the Infisical entry. See
+`backend/docs/INCIDENT_REPORT_20260916_REQUEST_TRACE_PLAINTEXT_PASSWORDS.md`
+for the request-trace ticket that documents the middleware fix.
 
 Neither location is appropriate for a credential. The Infisical follow-up
 above is therefore load-bearing, not optional: until it lands, dev-user
