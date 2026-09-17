@@ -55,7 +55,7 @@ type Server struct {
 	db       *sqlx.DB
 	registry *server.MCPServer
 	path1    *MCPToolHandler
-	path2    *MCPServer
+	nlEngine *TextToASTCompiler
 
 	mu    sync.RWMutex
 	order []string
@@ -67,7 +67,7 @@ func NewServer(db *sqlx.DB) *Server {
 		db:       db,
 		registry: server.NewMCPServer("uisce-semantic-mcp-server", "1.0.0"),
 		path1:    NewMCPToolHandler(db),
-		path2:    NewMCPServer(db),
+		nlEngine: NewTextToASTCompiler(db),
 		tools:    make(map[string]registeredTool),
 	}
 	s.registerDefaultTools()
@@ -190,27 +190,5 @@ func withTenantField(result interface{}, tenantID uuid.UUID) interface{} {
 		return map[string]interface{}{"tenant_id": tid}
 	default:
 		return map[string]interface{}{"tenant_id": tid, "data": result}
-	}
-}
-
-func (s *Server) path2Tool(name string) toolHandler {
-	return func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error) {
-		params := map[string]interface{}{}
-		if len(args) > 0 {
-			_ = json.Unmarshal(args, &params)
-		}
-		resp, err := s.path2.ExecuteTool(ctx, ToolExecutionRequest{
-			TenantID:   tenantID,
-			ToolName:   name,
-			Actor:      "mcp",
-			Parameters: params,
-		})
-		if err != nil {
-			if resp != nil {
-				return resp, err
-			}
-			return nil, err
-		}
-		return resp.Result, nil
 	}
 }

@@ -90,36 +90,5 @@ func (s *Server) registerDefaultTools() {
 		},
 	)
 
-	s.RegisterTool("text_to_semantic_ast",
-		"Translates natural language analytical questions into deterministic, catalog-grounded QueryAST objects.",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"prompt": map[string]interface{}{"type": "string", "description": "Natural language query"},
-			},
-			"required": []string{"prompt"},
-		},
-		s.path2Tool("text_to_semantic_ast"),
-	)
-	s.RegisterTool("triage_mdm_exception",
-		"Analyzes competing vendor feeds for a broken golden record and returns root-cause diagnosis and recommended values.",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"exceptionId": map[string]interface{}{"type": "string", "description": "UUID of the MDM exception"},
-			},
-			"required": []string{"exceptionId"},
-		},
-		s.path2Tool("triage_mdm_exception"),
-	)
-	s.RegisterTool("inspect_schema_drift",
-		"Scans active Business Objects for missing or renamed columns and returns high-confidence hot-swap proposals.",
-		map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"boId": map[string]interface{}{"type": "string", "description": "Optional Business Object UUID"},
-			},
-		},
-		s.path2Tool("inspect_schema_drift"),
-	)
+	s.registerCatalogTools()
 }
