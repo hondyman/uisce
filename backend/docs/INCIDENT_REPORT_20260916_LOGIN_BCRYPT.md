@@ -398,23 +398,63 @@ which was false. The session caught this in its closing review and
 chose to regenerate rather than leave the docs asserting a handoff
 that didn't occur.
 
+**Multi-step regeneration sequence.** Across the workstream's run, the
+preimage was lost three times before this one landed durably:
+
+1. **Original preimage** — the value initially hashed into migration
+   `ab4e17b32`. Never recorded in a credential store; the only
+   surviving copy was in `/tmp/uisce-server.log` from the request-trace
+   middleware, which the redaction workstream's truncate (commit
+   `58b2ae9f9`) then destroyed. The first recovery failure.
+
+2. **First regen preimage** (commit `82321608c`): a fresh
+   `openssl rand -base64 16` value, hashed, applied, login verified
+   200. Temp file deleted at cleanup **without** the operator handoff.
+   The second recovery failure.
+
+3. **Second regen preimage (out-of-band, uncommitted):** an attempt to
+   present the password to the operator ran a regeneration and
+   applied the SQL directly to the live DB via `psql < /tmp/mig2.sql`,
+   **without first writing the migration file**. The migration kept
+   the previous hash; the DB carried the new one. Discovered via the
+   DB-vs-migration hash cross-check (`893f4ef5a`'s commit message
+   documents the divergence). The preimage was never handed off and
+   never committed. The third recovery failure.
+
+4. **Third regen** (commit `893f4ef5a`): a fresh `openssl rand -base64
+   16` value, the migration **written with the correct hash before
+   applying**, applied, cross-checked DB hash == migration hash.
+   Atomic. Login verified 200. Temp file held for operator recording.
+   **This preimage is the one the operator recorded externally.**
+
+The superseded preimages exist nowhere today — only their bcrypt
+hashes are in repo history, which is inert without the preimages. All
+three were captured only to temp files (no operator-side credential
+store entry, no log, no shell history).
+
 **Regenerated preimage (current state):** the dev user passwords are
-now hashed from a fresh 24-char random value (`openssl rand -base64
-16`, captured to `/tmp/new_dev_user_password.txt`, mode 600). The
-migration `20260916_regenerate_dev_user_password.up.sql` (commit
-`82321608c`) is the new hash source. Operator action required: record
-the new preimage in their preferred credential store before the temp
-file is deleted. **Verified end-to-end this turn:** login returns 200,
-JWT decodes with `tenant_id = 99e99e99-99e9-49e9-89e9-99e99e99e999`,
+now hashed from a 24-char random value (`openssl rand -base64 16`).
+The migration `20260916_regenerate_dev_user_password.up.sql` carries
+a single bcrypt hash
+(`$2a$10$n1btyilO6DUZ83bh/HP5n.ay6wYS1nqyv.bK5pgQPJAUX5A/.izNu`)
+that matches the live `public.app_user.password_hash`. Migration
+committed in `893f4ef5a` is the source of truth; migration committed
+in `82321608c` was an intermediate state with a different hash and
+is operationally superseded (but kept in the repo for history).
+
+The operator handoff for this preimage was performed correctly (this
+time): the literal was extracted to a temp file and held until the
+operator recorded it externally. The temp file is deleted after
+recording. Verified end-to-end: login returns 200, JWT decodes with
+`tenant_id = 99e99e99-99e9-49e9-89e9-99e99e99e999`,
 `/api/page-studio/pages` returns 200.
 
-The previous preimage is **burnt** — it lives nowhere. The previous
-migration `20260916_fix_dev_user_password_hashes.up.sql` (commit
-`ab4e17b32`) now produces login 401 because the preimage it was
-generated against is unrecoverable. Migration `82321608c` supersedes
-it operationally; both files exist in the repo. The 401 if anyone
-runs `ab4e17b32` against a fresh DB is itself an alarm bell that the
-password chain was rotated.
+The previous preimage (`ab4e17b32`'s) is **burnt** — it lives
+nowhere. Migration `ab4e17b32` now produces login 401 because the
+preimage it was generated against is unrecoverable. Migration
+`893f4ef5a` supersedes it operationally; both files exist in the
+repo. The 401 if anyone runs `ab4e17b32` against a fresh DB is
+itself an alarm bell that the password chain was rotated.
 
 Neither location (operator's credential store, then Infisical) is
 appropriate as a *committed* artifact. The Infisical follow-up above
@@ -436,9 +476,10 @@ end-to-end.
 This file contains **no literal password**. `<dev password>` is a
 placeholder throughout. The current preimage (24 chars from
 `openssl rand -base64 16`) lives in the operator's preferred credential
-store (recorded this turn, 2026-09-16, after the previous unrecorded
-handoff was caught and the password regenerated in commit
-`82321608c`). The bcrypt hash is in migration
+store (recorded 2026-09-16, after three earlier failed handoffs
+caught this session's recurring unrecorded-cleanup pattern; the
+password was regenerated a third time under commit `893f4ef5a`).
+The bcrypt hash is in migration
 `20260916_regenerate_dev_user_password.up.sql`; the preimage is not.
 This matches the standing credential-hygiene rule in AGENTS.md line
 507/520, established after a prior session committed the same
