@@ -75,6 +75,11 @@ export async function fetchBusinessObjectBindings(boId: string): Promise<Binding
  * The backend should only return terms whose field_binding is RESOLVED for
  * the given bindingId.
  */
+function humanizeFieldLabel(raw: string): string {
+  const spaced = raw.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export async function fetchBOTerms(
   boId: string,
   bindingId: string
@@ -89,7 +94,7 @@ export async function fetchBOTerms(
     termNodeId: t.termNodeId || t.id || t.node_id || '',
     termKey: t.termKey || t.term_key || t.key || '',
     termName: t.termName || t.term_name || t.name || t.node_name || '',
-    displayName: t.displayName || t.display_name || t.termName || t.name || t.node_name || '',
+    displayName: t.displayName || t.display_name || humanizeFieldLabel(t.termName || t.term_name || t.name || t.termKey || t.term_key || t.key || ''),
     description: t.description,
     dataType: t.dataType || t.data_type || t.type || 'text',
     role: normalizeRole(t.role),

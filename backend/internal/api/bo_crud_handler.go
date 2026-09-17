@@ -588,11 +588,11 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 // Form widget itself only reads Fields. The Report Builder widget reads
 // Relationships to construct joins.
 type boSchemaResponse struct {
-	ID           string          `json:"id"`
-	BoKey        string          `json:"boKey"`
-	DrivingTable string          `json:"drivingTable"`
-	Fields       []boSchemaField `json:"fields"`
-	Relationships []boSchemaRel  `json:"relationships"`
+	ID            string          `json:"id"`
+	BoKey         string          `json:"boKey"`
+	DrivingTable  string          `json:"drivingTable"`
+	Fields        []boSchemaField `json:"fields"`
+	Relationships []boSchemaRel   `json:"relationships"`
 }
 
 type boSchemaRel struct {
@@ -607,16 +607,16 @@ type boSchemaEnum struct {
 }
 
 type boSchemaField struct {
-	ID                  string          `json:"id"`
-	Name                string          `json:"name"`
-	DisplayName         string          `json:"displayName,omitempty"`
-	Type                string          `json:"type"`
-	Required            bool            `json:"required,omitempty"`
-	PhysicalColumn      string          `json:"physicalColumn,omitempty"`
-	ReferenceBoId       string          `json:"referenceBoId,omitempty"`
-	ReferenceValueField string          `json:"referenceValueField,omitempty"`
-	EnumValues          []boSchemaEnum  `json:"enumValues,omitempty"`
-	DefaultValue        string          `json:"defaultValue,omitempty"`
+	ID                  string         `json:"id"`
+	Name                string         `json:"name"`
+	DisplayName         string         `json:"displayName,omitempty"`
+	Type                string         `json:"type"`
+	Required            bool           `json:"required,omitempty"`
+	PhysicalColumn      string         `json:"physicalColumn,omitempty"`
+	ReferenceBoId       string         `json:"referenceBoId,omitempty"`
+	ReferenceValueField string         `json:"referenceValueField,omitempty"`
+	EnumValues          []boSchemaEnum `json:"enumValues,omitempty"`
+	DefaultValue        string         `json:"defaultValue,omitempty"`
 }
 
 // HandleGetBOSchema returns the self-describing field shape of a Business
@@ -675,14 +675,14 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 	//    key and label. term_node_id is the FK to catalog_node that anchors
 	//    resolution to physical columns through MAPS_TO edges.
 	type fieldRow struct {
-		ID           string `db:"id"`
-		FieldName    string `db:"field_name"`
-		TermNodeID   string `db:"term_node_id"`
-		DisplayName  string `db:"display_name"`
-		FieldRole    string `db:"field_role"`
-		IsRequired   bool   `db:"is_required"`
-		DataType     string `db:"data_type"`
-		BindingReq   string `db:"binding_requirement"`
+		ID          string `db:"id"`
+		FieldName   string `db:"field_name"`
+		TermNodeID  string `db:"term_node_id"`
+		DisplayName string `db:"display_name"`
+		FieldRole   string `db:"field_role"`
+		IsRequired  bool   `db:"is_required"`
+		DataType    string `db:"data_type"`
+		BindingReq  string `db:"binding_requirement"`
 	}
 	var fields []fieldRow
 	if err := h.db.SelectContext(r.Context(), &fields, `
@@ -776,10 +776,10 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 	//    fallback so the form's submit payload uses the same keys the CRUD
 	//    handler will accept).
 	out := boSchemaResponse{
-		ID:           boID.String(),
-		BoKey:        boKey,
-		DrivingTable: boMeta.DrivingTable,
-		Fields:       make([]boSchemaField, 0, len(fields)),
+		ID:            boID.String(),
+		BoKey:         boKey,
+		DrivingTable:  boMeta.DrivingTable,
+		Fields:        make([]boSchemaField, 0, len(fields)),
 		Relationships: []boSchemaRel{},
 	}
 	for _, f := range fields {

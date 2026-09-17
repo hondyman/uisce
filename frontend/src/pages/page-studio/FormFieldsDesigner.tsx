@@ -17,7 +17,7 @@ import type { BOSchemaField } from '../../features/query-builder/types/queryDef'
 const GRID_COLS = 12;
 
 export interface FieldStyleEntry { fontSize?: 'small' | 'medium' | 'large'; bold?: boolean; color?: string }
-export interface FieldLayoutEntry { order: number; colSpan: number }
+export interface FieldLayoutEntry { order: number; colSpan: number; section?: string }
 export interface FieldOverrideEntry { label?: string; required?: boolean; hidden?: boolean; style?: FieldStyleEntry }
 
 /** field.name -> layout/override maps, stored on the Form component's own props (fieldLayout/fieldOverrides). */
@@ -71,8 +71,8 @@ export const TYPE_ICON: Record<string, React.ElementType> = {
  * gets mistaken for a drag), and a visible handle along the right edge resizes it, both fully inside the tile's own
  * bounds so neither ever lands on a neighboring tile. */
 /** Resolves a field's data-type icon consistently everywhere one is shown (this tile, PropertiesPanel's Data Binding block and "Change field" picker). */
-export const iconForField = (field: Pick<BOSchemaField, 'type' | 'referenceBoId'>): React.ElementType =>
-  TYPE_ICON[(field.type || '').toLowerCase()] || (field.referenceBoId ? ListAltIcon : TextFieldsIcon);
+export const iconForField = (field: Pick<BOSchemaField, 'type' | 'referenceBoId' | 'enumValues'>): React.ElementType =>
+  TYPE_ICON[(field.type || '').toLowerCase()] || (field.referenceBoId || (field.enumValues && field.enumValues.length > 0) ? ListAltIcon : TextFieldsIcon);
 
 const FieldTile: React.FC<{
   field: BOSchemaField;

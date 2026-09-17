@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Box, Typography, Dialog, DialogContent, DialogTitle, IconButton, Drawer } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import { ComponentDefinition, DataSourceDefinition, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
@@ -75,6 +75,8 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
 
   const { selection, select } = useSelection();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const viewOnly = searchParams.get('mode') === 'view';
   const crossFilters = useCrossFilterStore((s) => s.filters);
   const [modalRecordId, setModalRecordId] = useState<string | null>(null);
   const [drawerRecordId, setDrawerRecordId] = useState<string | null>(null);
@@ -176,7 +178,7 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
         recordId={formRecordId}
         fieldLayout={component.props?.fieldLayout as Record<string, FieldLayoutEntry> | undefined}
         fieldOverrides={component.props?.fieldOverrides as Record<string, FieldOverrideEntry> | undefined}
-        readOnly={overlay?.readOnly}
+        readOnly={overlay?.readOnly || viewOnly}
         componentId={component.id}
         onRecordLoaded={setRecord}
         onFieldEdit={(name, value, all) => { setRecord(all); setEditingField(name, value); }}
@@ -243,6 +245,7 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
           filterValue={cfg.masterFilter ? selection?.recordId : activeCrossFilter ? String(activeCrossFilter.value) : undefined}
           onRowSelect={!cfg.masterFilter ? handleRowClick : undefined}
           selectedRowId={!cfg.masterFilter && selection?.boId === cfg.boId ? selection.recordId : undefined}
+          recordPageSlug={!cfg.masterFilter ? (component.props?.recordPageSlug as string | undefined) : undefined}
         />
         {rowClickTargetSlug && (
           <Dialog open={!!modalRecordId} onClose={() => setModalRecordId(null)} maxWidth="lg" fullWidth>

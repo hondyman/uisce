@@ -216,6 +216,10 @@ export interface BOSchemaField {
   override?: boolean;
   type?: string;
   referenceBoId?: string;
+  /** Physical column on the referenced BO that this FK stores (e.g. sec_id, not uuid id). */
+  referenceValueField?: string;
+  enumValues?: Array<{ value: string; label: string }>;
+  defaultValue?: string;
   aggregation?: string;
   /** True when the BO field is marked is_required=true or binding_requirement='REQUIRED'. */
   required?: boolean;

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Box, Paper, Typography, List, ListItemButton, ListItemIcon, ListItemText, Collapse,
   CircularProgress, Alert, Divider, Tabs, Tab,
@@ -100,6 +100,9 @@ const NavTree: React.FC<{
 const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
   const { tenant } = useTenant();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isCreate = recordId === 'new';
+  const isView = searchParams.get('mode') === 'view';
   const [page, setPage] = useState<PageStudioPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,12 +128,18 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
   if (!page) return null;
 
   const rawTabs = (page as unknown as { tabs?: RuntimeTab[] }).tabs;
-  const tabs: RuntimeTab[] = rawTabs && rawTabs.length > 0
+  const allTabs: RuntimeTab[] = rawTabs && rawTabs.length > 0
     ? rawTabs
     : [{ id: '__default__', label: page.name, layout: page.layout as unknown as RuntimeTab['layout'] }];
+  const tabs = isCreate
+    ? allTabs.filter((t) => t.id === 'tab_order' || t.id === allTabs[0]?.id).slice(0, 1)
+    : allTabs;
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
   const layout = activeTab.layout;
-  const components = (page.components as unknown as Record<string, RuntimeComponent>) || {};
+  const allComponents = (page.components as unknown as Record<string, RuntimeComponent>) || {};
+  const components = isCreate
+    ? Object.fromEntries(Object.entries(allComponents).filter(([, c]) => c.type !== 'FixCommand'))
+    : allComponents;
   const dataSources = (page as unknown as { dataSources?: unknown[] }).dataSources || [];
   const filterBar = (page as unknown as { filterBar?: { root: string; nodes: Record<string, RuntimeLayoutNode> } }).filterBar;
 
@@ -141,21 +150,23 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
   // masterFilter, a Form) scopes to that one record without the page
   // needing its own master Table to click through first.
   const primaryBoId = (dataSources[0] as { config?: { boId?: string } } | undefined)?.config?.boId;
-  const initialSelection = recordId && primaryBoId ? { boId: primaryBoId, recordId } : null;
+  const initialSelection = !isCreate && recordId && primaryBoId ? { boId: primaryBoId, recordId } : null;
 
   return (
     <SelectionProvider key={`${page.id || slug}:${recordId || ''}`} initialSelection={initialSelection}>
     <PresentationProvider rules={(page as PageStudioPage).presentationEvents || [] as PresentationRule[]}>
     <Box sx={{ p: 3 }}>
-      {recordId && (
+      {(recordId || isCreate) && (
         <Box
-          onClick={() => navigate(`/pages/${slug}`)}
+          onClick={() => navigate(-1)}
           sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, cursor: 'pointer', color: 'primary.main', fontSize: 13, fontWeight: 600 }}
         >
           <ArrowBackIcon fontSize="inherit" /> Back to list
         </Box>
       )}
-      <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>{page.name}</Typography>
+      <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>
+        {isCreate ? `New ${page.name.replace(/ detail$/i, '')}` : isView ? page.name : page.name}
+      </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: tabs.length > 1 ? 2 : 3 }}>/{page.slug}</Typography>
       {filterBar?.root && (
         <Box sx={{ mb: 2 }}>

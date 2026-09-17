@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Box, TextField, Checkbox, FormControlLabel, Button, Typography, Alert, CircularProgress, MenuItem } from '@mui/material';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Box, TextField, Checkbox, FormControlLabel, Button, Typography, Alert, CircularProgress, MenuItem, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { fetchBOSchema } from '../../features/query-builder/services/queryBuilderApi';
 import type { BOSchema, BOSchemaField } from '../../features/query-builder/types/queryDef';
 import { apiFetch } from '../../lib/apiClient';
@@ -39,7 +41,7 @@ const inputTypeFor = (field: BOSchemaField): 'text' | 'number' | 'date' | 'check
   // gets a dropdown of that BO's real records, not a free-text id the user
   // would otherwise have to type in by hand - checked first since a reference
   // field's own `type` is usually just "string"/"uuid".
-  if (field.referenceBoId) return 'select';
+  if (field.referenceBoId || (field.enumValues && field.enumValues.length > 0)) return 'select';
   const t = (field.type || '').toLowerCase();
   if (['number', 'integer', 'float', 'decimal', 'currency'].includes(t)) return 'number';
   if (['date', 'datetime', 'timestamp'].includes(t)) return 'date';
@@ -49,11 +51,33 @@ const inputTypeFor = (field: BOSchemaField): 'text' | 'number' | 'date' | 'check
 
 /** Best-effort human label for a referenced record - prefers a name-ish field over the raw id. */
 const labelForRecord = (record: Record<string, unknown>): string => {
-  for (const key of ['name', 'display_name', 'displayName', 'label', 'title']) {
-    const v = record[key];
-    if (typeof v === 'string' && v.trim()) return v;
+  for (const key of ['name', 'display_name', 'displayName', 'label', 'title', 'acct_cd', 'bkr_cd', 'ticker', 'symbol', 'sec_id']) {
+    const v = record[key] ?? record[key.toUpperCase()];
+    if (v !== undefined && v !== null && String(v).trim()) {
+      const name = record.name ?? record.NAME;
+      if (name && key !== 'name') return `${v} — ${name}`;
+      return String(v);
+    }
   }
-  return String(record.id ?? '');
+  return String(record.id ?? record.ID ?? '');
+};
+
+const todayISODate = () => new Date().toISOString().slice(0, 10);
+
+const dateInputValue = (raw: unknown): string => {
+  if (raw === null || raw === undefined || raw === '') return '';
+  const s = String(raw);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  return s;
+};
+
+const sectionForField = (field: BOSchemaField, layout?: Record<string, FieldLayoutEntry>): string => {
+  if (layout?.[field.name]?.section) return layout[field.name].section as string;
+  const k = (field.physicalColumn || field.name).toLowerCase().replace(/_/g, '');
+  if (['status', 'side', 'ordertype', 'timeinforce', 'tif', 'secid', 'securityid', 'securitiesid'].includes(k)) return 'Identity';
+  if (['targetqty', 'executedqty', 'leavesqty', 'limitprice', 'avgprice', 'averageprice', 'price', 'quantity'].includes(k)) return 'Economics';
+  if ((field.type || '').toLowerCase().includes('date') || k.includes('date')) return 'Dates';
+  return 'Details';
 };
 
 /**
@@ -83,6 +107,8 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
   const [saved, setSaved] = useState(false);
   const [refOptions, setRefOptions] = useState<Record<string, ReferenceOption[]>>({});
   const { overlayFor } = usePresentationRuntime();
+  const navigate = useNavigate();
+  const { slug } = useParams<{ slug?: string }>();
 
   useEffect(() => {
     if (!boId || !tenantId) return;
@@ -91,11 +117,19 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
     fetchBOSchema(boId, tenantId)
       .then((s) => {
         setSchema(s);
-        setValues({});
+        if (!recordId) {
+          const defaults: Record<string, unknown> = {};
+          for (const f of s.fields) {
+            if (f.defaultValue === 'today') defaults[f.name] = todayISODate();
+          }
+          setValues(defaults);
+        } else {
+          setValues({});
+        }
       })
       .catch(() => setSchema(null))
       .finally(() => setLoading(false));
-  }, [boId, tenantId]);
+  }, [boId, tenantId, recordId]);
 
   // For every reference field, load the referenced BO's records once to
   // populate its dropdown - a small, static picklist is the common case for
@@ -112,9 +146,13 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
         .then((data) => {
           if (cancelled) return;
           const rows: Record<string, unknown>[] = Array.isArray(data) ? data : data?.rows || data?.records || [];
+          const valueKey = field.referenceValueField || 'id';
           setRefOptions((prev) => ({
             ...prev,
-            [field.name]: rows.map((row) => ({ value: String(row.id ?? ''), label: labelForRecord(row) })),
+            [field.name]: rows.map((row) => {
+              const raw = row[valueKey] ?? row[valueKey.toUpperCase()] ?? row.id ?? row.ID ?? '';
+              return { value: String(raw), label: labelForRecord(row) };
+            }),
           }));
         })
         .catch(() => { if (!cancelled) setRefOptions((prev) => ({ ...prev, [field.name]: [] })); });
@@ -140,7 +178,8 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
         for (const field of schema.fields) {
           const col = field.physicalColumn || field.name;
           if (rec && Object.prototype.hasOwnProperty.call(rec, col)) {
-            mapped[field.name] = rec[col];
+            const raw = rec[col];
+            mapped[field.name] = inputTypeFor(field) === 'date' ? dateInputValue(raw) : raw;
           }
         }
         setValues(mapped);
@@ -243,9 +282,13 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
         const detail = await res.text();
         throw new Error(detail || `Save failed (${res.status})`);
       }
-      const record = await res.json().catch(() => values);
+      const record = await res.json().catch(() => values) as Record<string, unknown>;
       setSaved(true);
       onSaved?.(record);
+      const newId = record?.id ?? record?.ID;
+      if (!recordId && slug && newId) {
+        navigate(`/pages/${slug}/${newId}`, { replace: true });
+      }
     } catch (err: any) {
       setSaveError(err?.message || 'Save failed');
     } finally {
@@ -253,86 +296,115 @@ const BOFormWidget: React.FC<BOFormWidgetProps> = ({
     }
   };
 
+  const visibleFields = orderedFields.filter((field) => {
+    const pres = componentId ? overlayFor(componentId, field.name) : undefined;
+    if (fieldOverrides?.[field.name]?.hidden || pres?.hidden) return false;
+    const k = (field.physicalColumn || field.name).toLowerCase();
+    if (!recordId && (k === 'id' || k === 'created_at' || k === 'updated_at' || k === 'createdat' || k === 'updatedat')) return false;
+    return true;
+  });
+  const grouped = new Map<string, BOSchemaField[]>();
+  for (const field of visibleFields) {
+    const name = sectionForField(field, fieldLayout);
+    const list = grouped.get(name) || [];
+    list.push(field);
+    grouped.set(name, list);
+  }
+  const sectionList = Array.from(grouped.entries());
+
+  const renderField = (field: BOSchemaField) => {
+    const pres = componentId ? overlayFor(componentId, field.name) : undefined;
+    const t = inputTypeFor(field);
+    const label = pres?.label || fieldOverrides?.[field.name]?.label || field.displayName || field.name;
+    const colSpan = Math.min(GRID_COLS, Math.max(1, fieldLayout?.[field.name]?.colSpan ?? 6));
+    const gridColumn = `span ${colSpan}`;
+    const labelSx = labelSxFromStyle({
+      ...fieldOverrides?.[field.name]?.style,
+      ...(pres?.style?.color ? { color: pres.style.color } : {}),
+      ...(pres?.style?.fontWeight ? { bold: pres.style.fontWeight === '700' || pres.style.fontWeight === 'bold' } : {}),
+    });
+    const locked = readOnly || pres?.readOnly;
+    if (t === 'checkbox') {
+      return (
+        <FormControlLabel
+          key={field.id}
+          sx={{ gridColumn }}
+          control={
+            <Checkbox
+              size="small"
+              checked={Boolean(values[field.name])}
+              disabled={locked}
+              onChange={(e) => handleChange(field, e.target.checked)}
+              onBlur={() => handleBlur(field)}
+            />
+          }
+          label={<Typography component="span" sx={labelSx}>{label}</Typography>}
+        />
+      );
+    }
+    if (t === 'select') {
+      const options = (field.enumValues && field.enumValues.length > 0)
+        ? field.enumValues.map((e) => ({ value: e.value, label: e.label }))
+        : (refOptions[field.name] || []);
+      const loadingRefs = !field.enumValues?.length && field.referenceBoId && options.length === 0;
+      return (
+        <TextField
+          key={field.id}
+          select
+          size="small"
+          sx={{ gridColumn }}
+          label={label}
+          InputLabelProps={{ sx: labelSx }}
+          value={values[field.name] ?? ''}
+          onChange={(e) => handleChange(field, e.target.value)}
+          onBlur={() => handleBlur(field)}
+          disabled={locked}
+          error={!!errors[field.name]}
+          helperText={errors[field.name] || (loadingRefs ? 'Loading options…' : undefined)}
+          fullWidth
+        >
+          {options.map((opt) => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}
+        </TextField>
+      );
+    }
+    return (
+      <TextField
+        key={field.id}
+        size="small"
+        sx={{ gridColumn }}
+        label={label}
+        type={t === 'date' ? 'date' : t === 'number' ? 'number' : 'text'}
+        InputLabelProps={{ sx: labelSx, ...(t === 'date' ? { shrink: true } : undefined) }}
+        value={t === 'date' ? dateInputValue(values[field.name]) : (values[field.name] ?? '')}
+        onChange={(e) => handleChange(field, e.target.value)}
+        onBlur={() => handleBlur(field)}
+        disabled={locked}
+        error={!!errors[field.name]}
+        helperText={errors[field.name]}
+        fullWidth
+      />
+    );
+  };
+
   return (
     <Box sx={{ p: 1.5, height: '100%', overflowY: 'auto' }}>
       {saveError && <Alert severity="error" sx={{ mb: 1, fontSize: '0.7rem' }}>{saveError}</Alert>}
       {saved && <Alert severity="success" sx={{ mb: 1, fontSize: '0.7rem' }}>Saved</Alert>}
-      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 1.25 }}>
-        {orderedFields.map((field) => {
-          const pres = componentId ? overlayFor(componentId, field.name) : undefined;
-          if (fieldOverrides?.[field.name]?.hidden || pres?.hidden) return null;
-          const t = inputTypeFor(field);
-          const label = pres?.label || fieldOverrides?.[field.name]?.label || field.displayName || field.name;
-          const colSpan = Math.min(GRID_COLS, Math.max(1, fieldLayout?.[field.name]?.colSpan ?? GRID_COLS));
-          const gridColumn = `span ${colSpan}`;
-          const labelSx = labelSxFromStyle({
-            ...fieldOverrides?.[field.name]?.style,
-            ...(pres?.style?.color ? { color: pres.style.color } : {}),
-            ...(pres?.style?.fontWeight ? { bold: pres.style.fontWeight === '700' || pres.style.fontWeight === 'bold' } : {}),
-          });
-          const locked = readOnly || pres?.readOnly;
-          if (t === 'checkbox') {
-            return (
-              <FormControlLabel
-                key={field.id}
-                sx={{ gridColumn }}
-                control={
-                  <Checkbox
-                    size="small"
-                    checked={Boolean(values[field.name])}
-                    disabled={locked}
-                    onChange={(e) => handleChange(field, e.target.checked)}
-                    onBlur={() => handleBlur(field)}
-                  />
-                }
-                label={<Typography component="span" sx={labelSx}>{label}</Typography>}
-              />
-            );
-          }
-          if (t === 'select') {
-            const options = refOptions[field.name] || [];
-            return (
-              <TextField
-                key={field.id}
-                select
-                size="small"
-                sx={{ gridColumn }}
-                label={label}
-                InputLabelProps={{ sx: labelSx }}
-                value={values[field.name] ?? ''}
-                onChange={(e) => handleChange(field, e.target.value)}
-                onBlur={() => handleBlur(field)}
-                disabled={locked}
-                error={!!errors[field.name]}
-                helperText={errors[field.name] || (options.length === 0 ? 'Loading options…' : undefined)}
-                fullWidth
-              >
-                {options.map((opt) => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}
-              </TextField>
-            );
-          }
-          return (
-            <TextField
-              key={field.id}
-              size="small"
-              sx={{ gridColumn }}
-              label={label}
-              type={t === 'date' ? 'date' : t === 'number' ? 'number' : 'text'}
-              InputLabelProps={{ sx: labelSx, ...(t === 'date' ? { shrink: true } : undefined) }}
-              value={values[field.name] ?? ''}
-              onChange={(e) => handleChange(field, e.target.value)}
-              onBlur={() => handleBlur(field)}
-              disabled={locked}
-              error={!!errors[field.name]}
-              helperText={errors[field.name]}
-              fullWidth
-            />
-          );
-        })}
-        <Button variant="contained" size="small" onClick={handleSubmit} disabled={saving || readOnly} sx={{ gridColumn: `span ${GRID_COLS}`, justifySelf: 'start' }}>
-          {saving ? 'Saving…' : recordId ? 'Update' : 'Create'}
-        </Button>
-      </Box>
+      {sectionList.map(([sectionName, fields]) => (
+        <Accordion key={sectionName} defaultExpanded disableGutters sx={{ mb: 1, '&:before': { display: 'none' }, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle2" fontWeight={700}>{sectionName}</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`, gap: 1.25 }}>
+              {fields.map(renderField)}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      ))}
+      <Button variant="contained" size="small" onClick={handleSubmit} disabled={saving || readOnly} sx={{ mt: 1 }}>
+        {saving ? 'Saving…' : recordId ? 'Update' : 'Create'}
+      </Button>
     </Box>
   );
 };

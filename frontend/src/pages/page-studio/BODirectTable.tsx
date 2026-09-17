@@ -2,13 +2,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Table, TableHead, TableBody, TableRow, TableCell, CircularProgress, Alert, Typography,
   IconButton, Tooltip, Button, Stack, Dialog, DialogTitle, DialogContent, DialogActions, TextField,
-  TablePagination, InputAdornment,
+  TablePagination, InputAdornment, Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../utils/apiClient';
 import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
 
@@ -48,6 +50,12 @@ interface BODirectTableProps {
   onRowSelect?: (row: Record<string, unknown>) => void;
   /** Row id (row.id) currently selected via onRowSelect, for highlighting. */
   selectedRowId?: string | null;
+  /**
+   * When set, View / Edit / Add navigate to this Page Studio slug instead of
+   * the header-only modal. Use for primary BOs with a ticket page (Order).
+   * Child tables leave this unset and keep the modal.
+   */
+  recordPageSlug?: string;
 }
 
 interface BODataResponse {
@@ -81,8 +89,9 @@ const DEBOUNCE_MS = 400;
 // client-side over a fixed-size page of rows.
 const BODirectTable: React.FC<BODirectTableProps> = ({
   boId, title, limit: initialLimit = 25, tableStyle, visibleColumns,
-  filterField, filterValue, onRowSelect, selectedRowId,
+  filterField, filterValue, onRowSelect, selectedRowId, recordPageSlug,
 }) => {
+  const navigate = useNavigate();
   const [data, setData] = useState<BODataResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +168,10 @@ const BODirectTable: React.FC<BODirectTableProps> = ({
   const editableColumns = (data?.columns || []).filter((c) => !READONLY_COLUMNS.has(c));
 
   const openAdd = () => {
+    if (recordPageSlug) {
+      navigate(`/pages/${recordPageSlug}/new`);
+      return;
+    }
     const blank: Record<string, string> = {};
     editableColumns.forEach((c) => { blank[c] = ''; });
     setFormValues(blank);
@@ -168,13 +181,18 @@ const BODirectTable: React.FC<BODirectTableProps> = ({
   };
 
   const openEditOrView = (row: Record<string, unknown>, mode: 'edit' | 'view') => {
+    const id = String(row.id ?? '');
+    if (recordPageSlug && id) {
+      navigate(`/pages/${recordPageSlug}/${id}${mode === 'view' ? '?mode=view' : ''}`);
+      return;
+    }
     const values: Record<string, string> = {};
     (data?.columns || []).forEach((c) => {
       const v = row[c];
       values[c] = v === null || v === undefined ? '' : String(v);
     });
     setFormValues(values);
-    setActiveRecordId(String(row.id ?? ''));
+    setActiveRecordId(id);
     setFormError(null);
     setDialogMode(mode);
   };
@@ -245,9 +263,9 @@ const BODirectTable: React.FC<BODirectTableProps> = ({
   // dump every child row across every master record, not "none selected".
   const awaitingMasterSelection = !!filterField && !filterValue;
 
-  return (
+  const body = (
     <Box sx={{ width: '100%', maxWidth: '100%' }}>
-      {title && <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{title}</Typography>}
+      {!filterField && title && <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{title}</Typography>}
       {awaitingMasterSelection ? (
         <Alert severity="info" sx={{ m: 1 }}>Select a record above to see related rows.</Alert>
       ) : (
@@ -390,6 +408,18 @@ const BODirectTable: React.FC<BODirectTableProps> = ({
       </Dialog>
     </Box>
   );
+
+  if (filterField && title) {
+    return (
+      <Accordion defaultExpanded disableGutters sx={{ '&:before': { display: 'none' }, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+        <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+          <Typography variant="subtitle2" fontWeight={700}>{title}</Typography>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 1 }}>{body}</AccordionDetails>
+      </Accordion>
+    );
+  }
+  return body;
 };
 
 export default BODirectTable;
