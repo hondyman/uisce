@@ -2,9 +2,6 @@ package mcp
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -76,7 +73,8 @@ func (s *MCPServer) ListTools() []ToolDefinition {
 	}
 }
 
-// ExecuteTool dispatches the MCP tool call, enforces Rule 7 security, and writes an audit log
+// ExecuteTool dispatches the MCP tool call and enforces Rule 7 security.
+// Audit rows are written by unified Server.CallTool (catalog_mdm_ai), not here.
 func (s *MCPServer) ExecuteTool(ctx context.Context, req ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	if req.TenantID == uuid.Nil {
 		return nil, fmt.Errorf("Rule 7 violation: tenant_id cannot be nil")
@@ -109,23 +107,9 @@ func (s *MCPServer) ExecuteTool(ctx context.Context, req ToolExecutionRequest) (
 
 	duration := int(time.Since(start).Milliseconds())
 
-	inputBytes, _ := json.Marshal(req.Parameters)
-	outputBytes, _ := json.Marshal(result)
-	hash := sha256.Sum256(append(inputBytes, outputBytes...))
-	checksum := hex.EncodeToString(hash[:])
-
-	if s.db != nil {
-		errStr := ""
-		if execErr != nil {
-			errStr = execErr.Error()
-		}
-		_, _ = s.db.ExecContext(ctx, `
-			INSERT INTO catalog_ai.mcp_tool_execution_logs (
-				tenant_id, tool_name, invoked_by_actor, input_parameters,
-				output_result, execution_duration_ms, is_success, error_message, payload_sha256
-			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
-		`, req.TenantID, req.ToolName, req.Actor, inputBytes, outputBytes, duration, execErr == nil, errStr, checksum)
-	}
+	// Audit ledger is owned by unified Server.CallTool → catalog_mdm_ai.
+	// The former silent INSERT into catalog_ai.mcp_tool_execution_logs was a
+	// live no-op (table absent on the API DB). Do not recreate _, _ = Exec.
 
 	if execErr != nil {
 		return &ToolExecutionResponse{

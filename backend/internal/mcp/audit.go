@@ -4,12 +4,17 @@ package mcp
 //
 // Schema verdict (PR C, live DB): only catalog_mdm_ai.mcp_tool_execution_logs
 // exists. Path 2's INSERT into catalog_ai.mcp_tool_execution_logs was a
-// silent no-op (table absent) — count(*)=0. This writer targets
-// catalog_mdm_ai and logs insert failures loudly (tool response still
-// succeeds — availability over fail-closed audit).
+// silent no-op (table absent) — count(*)=0. Path 2's silent insert was
+// removed; this writer is the sole ledger.
+//
+// Failure policy (current): fail-open — log loud, tool response still
+// succeeds (including refusals). Production posture (not yet
+// implemented): fail-open on successful tool rows; fail-closed on
+// refusal/auth audit inserts (those inserts must complete before the
+// response is sent).
 //
 // Prompt policy (text_to_semantic_ast): truncate to AuditPromptMaxRunes
-// (512) and store prompt_len alongside. Enough to debug; bounds PII.
+// (512) at rune boundaries and store prompt_len. Enough to debug; bounds PII.
 
 import (
 	"context"
