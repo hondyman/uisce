@@ -70,6 +70,7 @@ func NewServer(db *sqlx.DB) *Server {
 		tools:    make(map[string]registeredTool),
 	}
 	s.registerDefaultTools()
+	s.registerOMSTools()
 	return s
 }
 
