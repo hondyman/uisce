@@ -199,7 +199,6 @@ type Server struct {
 	SuccessionService *succession.Service
 	GraphService      *catalogmeta.GraphService
 	WriteHandler      *handlers.WriteHandler
-	MCPHandler        *handlers.MCPHandler
 	IgniteClient      *infrastructure.IgniteClient
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
@@ -1754,10 +1753,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.GraphService = catalogmeta.NewGraphService(sqlxDB)
 		abacService := services.NewAbacService(sqlxDB)
 		srv.WriteHandler = handlers.NewWriteHandler(srv.GraphService, sqlxDB, srv.IgniteClient, abacService)
-		// Path 5 MCPHandler is no longer mounted (verb-complete cutover).
-		// Field kept nil so stale references fail loudly.
-		srv.MCPHandler = nil
-
 		semanticTermsHandler.RegisterRoutes(r)
 		srv.GenAICopilotHandler.RegisterRoutes(r)
 		srv.ChartHandler.RegisterRoutes(r)

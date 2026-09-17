@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hondyman/uisce/backend/internal/api"
-	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -83,21 +82,14 @@ func TestMCP_RouteTableDump(t *testing.T) {
 
 	var traces []string
 	mcp.RegisterHook = func(source string) { traces = append(traces, source) }
-	handlers.MCPRegisterHook = func(source string) { traces = append(traces, source) }
-	t.Cleanup(func() {
-		mcp.RegisterHook = nil
-		handlers.MCPRegisterHook = nil
-	})
+	t.Cleanup(func() { mcp.RegisterHook = nil })
 
 	router := api.SetupRouter(nil, nil, nil, nil, nil, nil, &mockResolver{}, nil, nil)
 	t.Logf("MCP-REGISTER traces (%d): %v", len(traces), traces)
 
 	for _, tr := range traces {
-		if strings.Contains(tr, "path5") {
-			t.Errorf("Path 5 must not register after cutover; got trace %q", tr)
-		}
-		if strings.Contains(tr, "path1 call site") {
-			t.Errorf("Path 1 RegisterRoutes must not run after cutover; got trace %q", tr)
+		if strings.Contains(tr, "path5") || strings.Contains(tr, "path1 call site") {
+			t.Errorf("dead Path 1/5 registration must not run; got %q", tr)
 		}
 	}
 	hasStreamable := false
