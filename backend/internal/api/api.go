@@ -29,6 +29,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/audit"
+	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
@@ -156,6 +157,7 @@ type Server struct {
 	AggregatesDB            *sql.DB
 	Reg                     *Registry
 	WsHub                   *WebSocketHub
+	WsVault                 *auth.WsTicketVault
 	SemanticNameResolver    *SemanticNameResolver
 	AuditSvc                *audit.Service
 	NotificationSvc         *services.EngagementNotificationService
@@ -967,6 +969,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		auditService:         audit.NewChannelAuditService(sqlxDB),
 		Reg:                  &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
 		WsHub:                newWebSocketHub(),
+		WsVault:              auth.NewWsTicketVault(auth.DefaultWsTicketVaultConfig()),
 		SemanticNameResolver: semanticNameResolver,
 		AuditSvc:             auditSvc,
 		NotificationSvc:      notificationSvc,
@@ -1698,8 +1701,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem
 		registerAuthRoutes(r, srv)
 
-		// WebSocket token endpoint for short-lived signed tokens
+		// WebSocket ticket issuance endpoint for ephemeral single-use 30s tokens
+		r.Post("/ws/ticket", srv.issueWsTicket)
+
+		// WebSocket token endpoint for short-lived signed tokens (legacy)
 		r.Post("/ws/token", srv.getWsToken)
+
+		// WebSocket upgrade endpoint under /api
+		r.Get("/ws", srv.handleWebSocketTicketAndUpgrade)
 
 		// Policy Generation Requests (No auth required for prototype, but should be protected)
 		// Adding it here before middleware for simplicity if needed, but optimally after.
@@ -1939,6 +1948,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// This avoids the "middleware defined after routes" panic while still bypassing cache/buffer
 	rootMux := chi.NewRouter()
 	rootMux.Get("/api/catalog/scan/stream", srv.CatalogScanHandler.HandleScanStream)
+	rootMux.Get("/ws", srv.handleWebSocketTicketAndUpgrade)
+	rootMux.HandleFunc("/ws/profiler/*", srv.handleWebSocketTicketAndUpgrade)
 
 	// Add OPTIONS handler for CORS preflight for SSE
 	rootMux.Options("/api/catalog/scan/stream", func(w http.ResponseWriter, r *http.Request) {
