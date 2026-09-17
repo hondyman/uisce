@@ -246,4 +246,19 @@ const PageBrowser: React.FC = () => {
   );
 };
 
+export const StandalonePageRenderer: React.FC<{ slug?: string; recordId?: string }> = (props) => {
+  const params = useParams<{ slug: string; recordId?: string }>();
+  const slug = props.slug || params.slug;
+  const recordId = props.recordId || params.recordId;
+  if (!slug) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="info">No page slug specified.</Alert>
+      </Box>
+    );
+  }
+  return <PageContent slug={slug} recordId={recordId} />;
+};
+
 export default PageBrowser;
+

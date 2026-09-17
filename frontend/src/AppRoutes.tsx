@@ -179,7 +179,9 @@ import APIStudioPage from './pages/api-studio/APIStudioPage';
 import PageStudioListPage from './pages/page-studio/PageStudioListPage';
 import PageStudioDetailsPage from './pages/page-studio/PageStudioDetailsPage';
 import MenuDesignerPage from './pages/menu-designer/MenuDesignerPage';
-import PageBrowser from './pages/PageBrowser';
+import PageBrowser, { StandalonePageRenderer } from './pages/PageBrowser';
+import { StandaloneWindowWrapper } from './components/desktop';
+import { UniversalWorkspaceHub } from './components/docking/UniversalWorkspaceHub';
 import RuntimePage from './pages/PageRuntimeRenderer';
 
 // Intelligence & Governance (New)
@@ -313,6 +315,69 @@ function ProtectedApp() {
         <Route path="pages" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
         <Route path="pages/:slug" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
         <Route path="pages/:slug/:recordId" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            STANDALONE / DETACHED MULTI-MONITOR VIEWS (Wails v3 & Popouts)
+            ═══════════════════════════════════════════════════════════════════ */}
+        <Route
+          path="view/page/:slug"
+          element={
+            <StandaloneWindowWrapper title="Page View">
+              <ProtectedRoute>
+                <StandalonePageRenderer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/page/:slug/:recordId"
+          element={
+            <StandaloneWindowWrapper title="Page Detail">
+              <ProtectedRoute>
+                <StandalonePageRenderer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/rebalancer"
+          element={
+            <StandaloneWindowWrapper title="AI Portfolio Rebalancer">
+              <ProtectedRoute>
+                <AIPortfolioRebalancer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/scenario"
+          element={
+            <StandaloneWindowWrapper title="Scenario Analysis Pro">
+              <ProtectedRoute>
+                <ScenarioAnalysisPro />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/fixed-income"
+          element={
+            <StandaloneWindowWrapper title="Fixed Income Analytics">
+              <ProtectedRoute>
+                <FixedIncomeDashboard />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="workspace"
+          element={
+            <ProtectedRoute>
+              <UniversalWorkspaceHub />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
         <Route path="client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
         <Route path="client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />

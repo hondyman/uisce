@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { devError } from '../utils/devLogger';
 import { useAuthFetch } from '../utils/authFetch';
+import { useFdc3 } from '../services/fdc3/useFdc3';
+import { Fdc3InstrumentContext } from '../services/fdc3/types';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
@@ -40,6 +42,34 @@ export default function FixedIncomeDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedSecurity, setSelectedSecurity] = useState<string>('all');
   const [timeRange, setTimeRange] = useState<string>('30d');
+  const [fdc3LinkedInstrument, setFdc3LinkedInstrument] = useState<string | null>(null);
+
+  // Loop guard: incoming context ONLY updates local state, never broadcasts!
+  const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
+    if (ctx?.id?.ticker || ctx?.id?.ISIN) {
+      const symbol = (ctx.id.ticker || ctx.id.ISIN || '').toUpperCase();
+      setFdc3LinkedInstrument(symbol);
+      if (symbol.includes('TREASURY') || symbol === 'US10Y' || symbol === 'US_TREASURY_10Y') {
+        setSelectedSecurity('US_TREASURY_10Y');
+      } else if (symbol.includes('CORP') || symbol === 'CORP_BOND_ABC') {
+        setSelectedSecurity('CORP_BOND_ABC');
+      } else if (symbol.includes('MUNI') || symbol === 'MUNI_BOND_XYZ') {
+        setSelectedSecurity('MUNI_BOND_XYZ');
+      }
+    }
+  });
+
+  // Explicit user selection in UI -> broadcasts onto FDC3 bus
+  const handleUserSelectSecurity = (val: string) => {
+    setSelectedSecurity(val);
+    if (val !== 'all') {
+      broadcast({
+        type: 'fdc3.instrument',
+        id: { ticker: val },
+        name: `${val} Fixed Income`,
+      });
+    }
+  };
 
   useEffect(() => {
     loadFixedIncomeData();
@@ -146,8 +176,8 @@ export default function FixedIncomeDashboard() {
         </p>
 
         {/* Controls */}
-        <div className="flex space-x-4">
-          <Select value={selectedSecurity} onValueChange={setSelectedSecurity}>
+        <div className="flex items-center space-x-4">
+          <Select value={selectedSecurity} onValueChange={handleUserSelectSecurity}>
             <SelectTrigger className="w-48">
               <SelectValue placeholder="Select Security" />
             </SelectTrigger>
@@ -158,6 +188,20 @@ export default function FixedIncomeDashboard() {
               <SelectItem value="MUNI_BOND_XYZ">Muni Bond XYZ</SelectItem>
             </SelectContent>
           </Select>
+
+          {fdc3LinkedInstrument && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-sky-950 border border-sky-500/40 text-xs text-sky-200">
+              <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+              <span>FDC3 ({activeChannel}): <strong>{fdc3LinkedInstrument}</strong></span>
+              <button
+                onClick={() => { setFdc3LinkedInstrument(null); setSelectedSecurity('all'); }}
+                className="text-sky-400 hover:text-white ml-1 font-bold"
+                title="Clear filter"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger className="w-32">
