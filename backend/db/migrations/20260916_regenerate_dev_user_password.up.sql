@@ -21,11 +21,11 @@ INSERT INTO public.app_user (
 VALUES
     ('da83f01c-da3e-480c-bac0-5ace1a97bc6e', 'testuser@example.com',
      'testuser@example.com', 'Test User', 'Test User',
-     true, '$2a$10$yeiU0jY50QA671FR9sSXZOEkUgDmN8oj5PbbQhkQfs5S4mEo6rW8G', '99e99e99-99e9-49e9-89e9-99e99e99e999',
+     true, '$2a$10$n1btyilO6DUZ83bh/HP5n.ay6wYS1nqyv.bK5pgQPJAUX5A/.izNu', '99e99e99-99e9-49e9-89e9-99e99e99e999',
      'en', 'active', '{}', '[]', false, NOW(), NOW()),
     ('811e9f41-622f-4ef0-90ad-1098e1407d85', 'testuser2@example.com',
      'testuser2@example.com', 'Test User 2', 'Test User 2',
-     true, '$2a$10$yeiU0jY50QA671FR9sSXZOEkUgDmN8oj5PbbQhkQfs5S4mEo6rW8G', '99e99e99-99e9-49e9-89e9-99e99e99e999',
+     true, '$2a$10$n1btyilO6DUZ83bh/HP5n.ay6wYS1nqyv.bK5pgQPJAUX5A/.izNu', '99e99e99-99e9-49e9-89e9-99e99e99e999',
      'en', 'active', '{}', '[]', false, NOW(), NOW())
 ON CONFLICT (email) DO UPDATE SET
     password_hash = EXCLUDED.password_hash,
