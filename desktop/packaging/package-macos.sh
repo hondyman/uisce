@@ -55,8 +55,8 @@ echo "Bundling frontend assets into Resources/frontend_dist..."
 cp -R "$ROOT_DIR/frontend/dist" "$RESOURCES_DIR/frontend_dist"
 
 echo "=== 4. Applying Zero-Entitlement Hardened Runtime & Code Signing ==="
-# Audit check: Ensure zero unwanted permissions in Entitlements.plist (ignoring XML comments)
-if sed '/<!--/,/-->/d' "$SCRIPT_DIR/Entitlements.plist" | grep -E 'camera|audio-input|location|addressbook'; then
+# Audit check: Ensure zero unwanted permissions in Entitlements.plist by inspecting parsed plist keys (ignoring comments)
+if plutil -p "$SCRIPT_DIR/Entitlements.plist" | grep -E 'camera|audio-input|location|addressbook'; then
   echo "❌ AUDIT FAILURE: Disallowed hardware recording entitlements found in Entitlements.plist!"
   exit 1
 fi
@@ -71,6 +71,7 @@ if [ -n "$SIGNING_IDENTITY" ]; then
     --timestamp \
     "$APP_BUNDLE"
 
+  # ENABLE POINT: Uncomment below when Apple Developer ID + App Store Connect API credentials are provided
   if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
     echo "Submitting to Apple Notary Service via notarytool..."
     # xcrun notarytool submit "$APP_BUNDLE" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait

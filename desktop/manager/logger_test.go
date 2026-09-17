@@ -44,3 +44,25 @@ func TestScrubSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestScrubbingWriter(t *testing.T) {
+	var buf strings.Builder
+	sw := &ScrubbingWriter{target: &buf}
+
+	testMsg := "Connecting with Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.superSecretSig and init_token=secToken999\n"
+	n, err := sw.Write([]byte(testMsg))
+	if err != nil {
+		t.Fatalf("ScrubbingWriter error: %v", err)
+	}
+	if n != len(testMsg) {
+		t.Errorf("Expected n=%d, got %d", len(testMsg), n)
+	}
+
+	out := buf.String()
+	if strings.Contains(out, "superSecretSig") || strings.Contains(out, "secToken999") {
+		t.Fatalf("ScrubbingWriter leaked credentials to target: %s", out)
+	}
+	if !strings.Contains(out, "Bearer [REDACTED_JWT]") || !strings.Contains(out, "init_token=[REDACTED]") {
+		t.Errorf("ScrubbingWriter output unexpected: %s", out)
+	}
+}

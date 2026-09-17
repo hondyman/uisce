@@ -36,8 +36,20 @@ func ScrubSecrets(msg string) string {
 	return scrubbed
 }
 
+// ScrubbingWriter wraps an underlying io.Writer and scrubs all written bytes before emitting.
+type ScrubbingWriter struct {
+	target io.Writer
+}
+
+func (s *ScrubbingWriter) Write(p []byte) (n int, err error) {
+	scrubbed := ScrubSecrets(string(p))
+	_, err = s.target.Write([]byte(scrubbed))
+	return len(p), err
+}
+
 // InitWorkstationLogger sets up persistent, rotating local logging under
 // ~/Library/Logs/Uisce/workstation.log with a 10MB rotation ceiling.
+// Output is teed to stderr, with both streams passing through ScrubSecrets.
 func InitWorkstationLogger() io.Closer {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -54,10 +66,12 @@ func InitWorkstationLogger() io.Closer {
 		return nil
 	}
 
-	multi := io.MultiWriter(os.Stderr, writer)
+	// Route both stderr and the rotating file through secret scrubbing
+	scrubbedStderr := &ScrubbingWriter{target: os.Stderr}
+	multi := io.MultiWriter(scrubbedStderr, writer)
 	log.SetOutput(multi)
 	log.SetFlags(log.Ldate | log.Ltime | log.Lmicroseconds | log.Lmsgprefix)
-	log.Printf("[WorkstationLogger] Local logging initialized at %s (max 10MB rotating)", logPath)
+	log.Printf("[WorkstationLogger] Local logging initialized at %s (max 10MB rotating, 1 backup window)", logPath)
 
 	return writer
 }
