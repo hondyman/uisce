@@ -1,0 +1,42 @@
+# Standing gate for the unified MCP surface (Tier 0 IDOR suite + route dump +
+# compiler identifier allowlist). Must stay green while tools still own SQL;
+# after service-layer migration the IDOR negatives remain the regression net.
+name: MCP Security CI
+
+on:
+  push:
+    paths:
+      - "backend/internal/mcp/**"
+      - "backend/internal/boresolver/**"
+      - "backend/internal/agentic/**"
+      - "backend/internal/api/mcp_routes_test.go"
+      - "backend/internal/api/api.go"
+      - ".github/workflows/mcp-security-ci.yml"
+  pull_request:
+    paths:
+      - "backend/internal/mcp/**"
+      - "backend/internal/boresolver/**"
+      - "backend/internal/agentic/**"
+      - "backend/internal/api/mcp_routes_test.go"
+      - "backend/internal/api/api.go"
+      - ".github/workflows/mcp-security-ci.yml"
+
+jobs:
+  mcp-tier0:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Tier 0 IDOR + MCP package tests
+        run: go test -count=1 -timeout 120s ./internal/mcp/...
+      - name: Compiler identifier allowlist
+        run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
+      - name: Route-table dump (Path 6 dual URL + shim)
+        run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
+      - name: Path 6 auth / no-core
+        run: go test -count=1 -timeout 60s ./internal/agentic/ -run 'HandleToolCall|ListTickets|SubmitAgent'

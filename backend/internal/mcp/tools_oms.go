@@ -230,13 +230,10 @@ func (s *Server) omsGetBOSchema(ctx context.Context, tenantID uuid.UUID, argsRaw
 }
 
 func (s *Server) omsStartFIXOrderEntry(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
-	var temporal client.Client
-	if s.path1 != nil {
-		temporal = s.path1.temporal
-	}
-	if temporal == nil {
+	if s.temporal == nil {
 		return nil, fmt.Errorf("%s", ErrTemporalNotConfigured)
 	}
+	temporal := s.temporal
 	var args struct {
 		OrderID string `json:"order_id"`
 		Command string `json:"command"`

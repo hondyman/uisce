@@ -25,6 +25,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+	"go.temporal.io/sdk/client"
 )
 
 type toolHandler func(ctx context.Context, tenantID uuid.UUID, args json.RawMessage) (interface{}, error)
@@ -41,6 +42,7 @@ type Server struct {
 	registry *server.MCPServer
 	path1    *MCPToolHandler
 	nlEngine *TextToASTCompiler
+	temporal client.Client
 
 	mu    sync.RWMutex
 	order []string

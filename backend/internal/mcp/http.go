@@ -22,10 +22,10 @@ func init() {
 	}
 }
 
-// SetTemporal wires Temporal into Path 1 tool implementations used by Server.
+// SetTemporal wires Temporal for start_fix_order_entry on the unified Server.
 func (s *Server) SetTemporal(c client.Client) *Server {
-	if s != nil && s.path1 != nil {
-		s.path1.SetTemporal(c)
+	if s != nil {
+		s.temporal = c
 	}
 	return s
 }
