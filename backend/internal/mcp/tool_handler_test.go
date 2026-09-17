@@ -74,6 +74,7 @@ func TestMCP_GetContractCall(t *testing.T) {
 	}`)
 
 	req := httptest.NewRequest("POST", "/mcp", bytes.NewBuffer(reqBody))
+	req = req.WithContext(contextWithAuth(testTenantID))
 	rec := httptest.NewRecorder()
 
 	handler.HandleRPC(rec, req)
