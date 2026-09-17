@@ -34,6 +34,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -100,7 +101,7 @@ func (s *Server) RegisterTool(name, description string, inputSchema interface{},
 	s.registry.AddTool(mcplib.NewToolWithRawSchema(name, description, raw), s.wrapHandler(name, handler))
 }
 
-func (s *Server) wrapHandler(name string, handler toolHandler) server.ToolHandlerFunc {
+func (s *Server) wrapHandler(name string, _ toolHandler) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		tenantID, err := tenantFromAuth(ctx)
 		if err != nil {
@@ -110,11 +111,11 @@ func (s *Server) wrapHandler(name string, handler toolHandler) server.ToolHandle
 		if err != nil {
 			args = []byte(`{}`)
 		}
-		result, err := handler(ctx, tenantID, args)
+		result, err := s.CallTool(ctx, tenantID, name, args)
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
-		out, err := json.Marshal(withTenantField(result, tenantID))
+		out, err := json.Marshal(result)
 		if err != nil {
 			return mcplib.NewToolResultError(err.Error()), nil
 		}
@@ -133,26 +134,36 @@ func (s *Server) ListTools() []ToolDefinition {
 }
 
 func (s *Server) CallTool(ctx context.Context, tenantID uuid.UUID, name string, args json.RawMessage) (interface{}, error) {
+	started := time.Now()
+	if len(args) == 0 {
+		args = json.RawMessage(`{}`)
+	}
 	if tenantID == uuid.Nil {
-		return nil, fmt.Errorf("%s", authRequiredMsg)
+		err := fmt.Errorf("%s", authRequiredMsg)
+		s.auditCall(ctx, uuid.Nil, name, args, nil, err, started)
+		return nil, err
 	}
 	if IsRefusedTool(name) {
-		return nil, refusedError(name)
+		err := refusedError(name)
+		s.auditCall(ctx, tenantID, name, args, nil, err, started)
+		return nil, err
 	}
 	s.mu.RLock()
 	entry, ok := s.tools[name]
 	s.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("unknown tool: %s", name)
-	}
-	if len(args) == 0 {
-		args = json.RawMessage(`{}`)
+		err := fmt.Errorf("unknown tool: %s", name)
+		s.auditCall(ctx, tenantID, name, args, nil, err, started)
+		return nil, err
 	}
 	result, err := entry.handler(ctx, tenantID, args)
 	if err != nil {
+		s.auditCall(ctx, tenantID, name, args, nil, err, started)
 		return nil, err
 	}
-	return withTenantField(result, tenantID), nil
+	out := withTenantField(result, tenantID)
+	s.auditCall(ctx, tenantID, name, args, out, nil, started)
+	return out, nil
 }
 
 // withTenantField adds tenant_id to structured tool results (not the SDK
