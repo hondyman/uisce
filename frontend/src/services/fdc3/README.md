@@ -69,8 +69,23 @@ const unsubscribe = fdc3Agent.addContextListener<Fdc3InstrumentContext>(
 
 ---
 
+## Architectural Rules & Boundaries
+
+### 1. Loop-Guard Rule
+- **Rule**: Incoming context updates MUST only mutate local component/panel state. They MUST NEVER trigger an outgoing context broadcast.
+- **Rationale**: An echo or cascade of broadcasts across connected windows causes infinite update loops and UI stutter. Only explicit, intentional user interactions (e.g., clicking a table row, choosing an instrument from a dropdown, clicking a quick-sync button) trigger `fdc3Agent.broadcast()`.
+
+### 2. Market Data Flow Boundary: Tick Data Never Goes Over FDC3
+- **Rule**: High-frequency financial tick data, order book L2/L3 quotes, and execution fills MUST NEVER travel over the FDC3 context bus.
+- **Architecture**:
+  - **Market Data Flow**: High-frequency tick streams flow directly per-window via dedicated WebSocket / gRPC-web connections from the backend streaming services to each specific chart/depth/grid view.
+  - **FDC3 Context Flow**: The FDC3 bus carries **only user context** (e.g. which instrument is currently focused, which order was selected, which portfolio is active).
+- **Rationale**: Broadcasting ticks over FDC3 creates an IPC bottleneck where every window is spammed with every symbol's stream, degrading frame rates and starving window messaging.
+
+---
+
 ## Known Behaviors & Edge Cases
 
 - **Advisory Staleness & Concurrent Write-Through**:
-  If two windows broadcast on the exact same channel within the same clock tick, their write-throughs to `localStorage` may interleave. Live `BroadcastChannel` delivery is unaffected (handled immediately in-memory with last-write-wins per window). This only affects the *next* late-joining window that hydrates from `localStorage`. In alignment with the FDC3 architectural contract, hydrated values on initial join are advisory and immediately superseded by any live incoming message.
+  If two windows broadcast on the exact same channel within the same clock tick, their write-throughs to `localStorage` may interleave. Live `BroadcastChannel` delivery is unaffected (handled immediately in-memory with last-write-wins per window). This only affects the *next* late-joining window that hydrates from `localStorage`. In alignment with the FDC3-compatible architectural contract, hydrated values on initial join are advisory and immediately superseded by any live incoming message.
 
