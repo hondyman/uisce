@@ -40,13 +40,13 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: TypeScript Typecheck
+      - name: TypeScript Ratchet Check
         working-directory: frontend
-        run: npx tsc --noEmit
+        run: node scripts/ts-ratchet.mjs
 
-      - name: Workstation & FDC3 Vitest Suites
+      - name: Frontend Vitest Unit Test Suites
         working-directory: frontend
-        run: npx vitest run src/vitest/fdc3/ src/vitest/desktop/
+        run: npx vitest run
 
       - name: Frontend Production Build
         working-directory: frontend

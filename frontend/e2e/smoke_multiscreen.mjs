@@ -139,7 +139,89 @@ async function runSmokeTest() {
     const distributeBtn = await pageWorkspace.$('button:has-text("Distribute to Multi-Monitor")');
     console.log('Distribute to Multi-Monitor button present:', distributeBtn !== null);
 
-    console.log('\n--- ALL BROWSER SMOKE CHECKS PASSED! ---');
+    // 6. Test Interactive Live Cross-View FDC3 Sync (Blotter -> Rebalancer)
+    console.log('6. Testing interactive cross-view FDC3 synchronization...');
+    const aaplBtn = pageWorkspace.locator('button:has-text("AAPL")').first();
+    await aaplBtn.waitFor({ state: 'visible', timeout: 5000 });
+    console.log('Blotter demo quick-sync AAPL button found');
+
+    await aaplBtn.click();
+    await pageWorkspace.waitForTimeout(500);
+
+    const rebalancerAaplBadge = pageWorkspace.locator('text=FDC3 (blue): AAPL').first();
+    const isAaplSynced = await rebalancerAaplBadge.isVisible();
+    console.log('Rebalancer header received active FDC3 context (AAPL):', isAaplSynced);
+    if (!isAaplSynced) {
+      throw new Error('Rebalancer failed to display synced AAPL FDC3 badge');
+    }
+
+    // Switch context to NVDA
+    const nvdaBtn = pageWorkspace.locator('button:has-text("NVDA")').first();
+    await nvdaBtn.click();
+    await pageWorkspace.waitForTimeout(500);
+
+    const rebalancerNvdaBadge = pageWorkspace.locator('text=FDC3 (blue): NVDA').first();
+    const isNvdaSynced = await rebalancerNvdaBadge.isVisible();
+    console.log('Rebalancer header updated to new FDC3 context (NVDA):', isNvdaSynced);
+    if (!isNvdaSynced) {
+      throw new Error('Rebalancer failed to display updated NVDA FDC3 badge');
+    }
+
+    // 7. Test Desk Layout Restore & Ghost Window Prevention
+    console.log('7. Testing desk layout restore prompt and ghost window prevention...');
+    await pageWorkspace.evaluate(() => {
+      const layout = JSON.parse(localStorage.getItem('uisce_workspace_layout_v1') || '{"version":1,"detachedWindows":[]}');
+      layout.detachedWindows = [{
+        windowId: 'win_test_detached_1',
+        route: '/view/rebalancer',
+        title: 'Test Detached View',
+        targetScreenIndex: 0,
+        width: 1200,
+        height: 800,
+      }];
+      localStorage.setItem('uisce_workspace_layout_v1', JSON.stringify(layout));
+    });
+
+    // Reload workspace page to trigger session restore check
+    await pageWorkspace.reload();
+    await pageWorkspace.waitForLoadState('networkidle');
+
+    const restoreBanner = pageWorkspace.locator('text=Found 1 detached desk window(s) from previous session').first();
+    const bannerVisible = await restoreBanner.isVisible();
+    console.log('Restore prompt banner displayed on reload:', bannerVisible);
+    if (!bannerVisible) {
+      throw new Error('Restore prompt banner failed to appear on reload');
+    }
+
+    // Dismiss the banner and assert storage is cleared (ghost window prevention)
+    const dismissBtn = pageWorkspace.locator('button:has-text("Dismiss")').first();
+    await dismissBtn.click();
+    await pageWorkspace.waitForTimeout(200);
+
+    const bannerDismissed = !(await restoreBanner.isVisible());
+    console.log('Restore banner dismissed successfully:', bannerDismissed);
+
+    const storedState = await pageWorkspace.evaluate(() => {
+      return JSON.parse(localStorage.getItem('uisce_workspace_layout_v1') || '{}');
+    });
+    const detachedRemaining = (storedState.detachedWindows || []).length;
+    console.log('Detached windows cleared on dismiss (0 remaining):', detachedRemaining === 0);
+    if (detachedRemaining !== 0) {
+      throw new Error(`Expected 0 detached windows after dismiss, found ${detachedRemaining}`);
+    }
+
+    // Reload again to verify no ghost banner resurrects
+    await pageWorkspace.reload();
+    await pageWorkspace.waitForLoadState('networkidle');
+
+    const ghostBanner = pageWorkspace.locator('text=Found 1 detached desk window(s) from previous session').first();
+    const ghostVisible = await ghostBanner.isVisible();
+    console.log('Zero ghost restore banner on subsequent reload:', !ghostVisible);
+    if (ghostVisible) {
+      throw new Error('Ghost restore banner unexpectedly reappeared');
+    }
+
+    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED! ---');
   } catch (err) {
     console.error('Smoke test failure:', err);
     process.exitCode = 1;

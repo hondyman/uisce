@@ -90,6 +90,12 @@ export class LayoutManager {
     }
   }
 
+  public clearDetachedWindows(): void {
+    this.detachedWindows.clear();
+    const current = this.loadLayout();
+    this.saveLayout(current?.dockviewLayout);
+  }
+
   public getDetachedWindows(): DetachedWindowInfo[] {
     return Array.from(this.detachedWindows.values());
   }

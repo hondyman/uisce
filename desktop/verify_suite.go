@@ -152,6 +152,19 @@ func RunDesktopVerificationSuite(
 					})
 				});
 			};
+
+			window.addEventListener('desktop:window-closed', function(e) {
+				fetch('/api/desk-verify/report', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						step: 'window_closed_received',
+						windowId: 'win_main',
+						details: 'Primary window received desktop:window-closed event for ' + (e.detail ? e.detail.windowId : 'unknown'),
+						success: true
+					})
+				});
+			});
 		} catch(err) {
 			console.error('[VerifyPrimary] Probe error:', err);
 		}
@@ -391,23 +404,39 @@ fdc3Poll:
 	recordStep(7, "window_deduplication", "Window deduplication: refocus existing window without creating duplicate", step7Passed, step7Details, time.Since(step7Start))
 
 	// -------------------------------------------------------------------------
-	// STEP 8: Close secondary window and verify registry cleanup
+	// STEP 8: Close secondary window and verify registry cleanup & event dispatch
 	// -------------------------------------------------------------------------
 	step8Start := time.Now()
-	recordLog("Executing Step 8: Closing secondary window and verifying deregistration...")
+	recordLog("Executing Step 8: Closing secondary window, verifying deregistration & desktop:window-closed event dispatch...")
 
 	closeErr := deskManager.CloseWindow("win_rebalancer")
-	time.Sleep(500 * time.Millisecond)
+
+	closedEventReceived := false
+	closeTimeout := time.After(3 * time.Second)
+closeWait:
+	for {
+		select {
+		case rep := <-reports:
+			if rep.Step == "window_closed_received" {
+				closedEventReceived = true
+				recordLog("Verified: " + rep.Details)
+				break closeWait
+			}
+		case <-closeTimeout:
+			break closeWait
+		}
+	}
 
 	hasSecondary := deskManager.HasWindow("win_rebalancer")
 	finalCount := deskManager.GetWindowCount()
+	openIDs := deskManager.GetOpenWindowIDs()
 
-	step8Passed := closeErr == nil && !hasSecondary && finalCount == 1
-	step8Details := fmt.Sprintf("Closed %q; HasWindow=%v, RemainingActiveWindows=%d", "win_rebalancer", hasSecondary, finalCount)
+	step8Passed := closeErr == nil && !hasSecondary && finalCount == 1 && closedEventReceived && len(openIDs) == 1
+	step8Details := fmt.Sprintf("Closed %q; HasWindow=%v, ActiveCount=%d, EventDispatched=%v, OpenIDs=%v", "win_rebalancer", hasSecondary, finalCount, closedEventReceived, openIDs)
 	if !step8Passed {
-		step8Details = fmt.Sprintf("FAIL: Deregistration failed: closeErr=%v, hasWindow=%v, finalCount=%d", closeErr, hasSecondary, finalCount)
+		step8Details = fmt.Sprintf("FAIL: Deregistration failed: closeErr=%v, hasWindow=%v, count=%d, eventDispatched=%v, openIDs=%v", closeErr, hasSecondary, finalCount, closedEventReceived, openIDs)
 	}
-	recordStep(8, "window_close_deregistration", "Close secondary window and verify clean deregistration from manager", step8Passed, step8Details, time.Since(step8Start))
+	recordStep(8, "window_close_deregistration", "Close secondary window, verify deregistration and desktop:window-closed dispatch", step8Passed, step8Details, time.Since(step8Start))
 
 	// -------------------------------------------------------------------------
 	// FINALIZE & WRITE DESKTOP/VERIFICATION.MD

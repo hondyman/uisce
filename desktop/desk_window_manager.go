@@ -168,6 +168,7 @@ func (m *DeskWindowManager) SpawnWindow(opts manager.WindowSpawnOptions) (string
 		delete(m.windows, winID)
 		m.mu.Unlock()
 		log.Printf("[DeskWindowManager] Window closed and deregistered: %s", winID)
+		m.notifyWindowClosed(winID)
 	})
 
 	m.mu.Lock()
@@ -189,6 +190,7 @@ func (m *DeskWindowManager) RegisterWindow(windowID string, win *application.Web
 		delete(m.windows, windowID)
 		m.mu.Unlock()
 		log.Printf("[DeskWindowManager] Window closed and deregistered: %s", windowID)
+		m.notifyWindowClosed(windowID)
 	})
 
 	m.mu.Lock()
@@ -201,6 +203,43 @@ func (m *DeskWindowManager) GetWindowCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.windows)
+}
+
+// GetOpenWindowIDs returns the IDs of all currently open and registered windows.
+func (m *DeskWindowManager) GetOpenWindowIDs() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	ids := make([]string, 0, len(m.windows))
+	for id := range m.windows {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// notifyWindowClosed emits Wails and DOM events to remaining active windows.
+func (m *DeskWindowManager) notifyWindowClosed(winID string) {
+	if m.app != nil && m.app.Event != nil {
+		m.app.Event.Emit("desktop:window-closed", winID)
+	}
+
+	m.mu.RLock()
+	activeWindows := make([]*application.WebviewWindow, 0, len(m.windows))
+	for _, win := range m.windows {
+		if win != nil {
+			activeWindows = append(activeWindows, win)
+		}
+	}
+	m.mu.RUnlock()
+
+	jsScript := fmt.Sprintf(`(function() {
+		try {
+			window.dispatchEvent(new CustomEvent('desktop:window-closed', { detail: { windowId: %q } }));
+		} catch(e) {}
+	})();`, winID)
+
+	for _, win := range activeWindows {
+		win.ExecJS(jsScript)
+	}
 }
 
 // HasWindow checks whether a window with the given ID is currently registered.
@@ -224,6 +263,7 @@ func (m *DeskWindowManager) CloseWindow(windowID string) error {
 		return fmt.Errorf("window %q not found", windowID)
 	}
 
+	m.notifyWindowClosed(windowID)
 	win.Close()
 	return nil
 }

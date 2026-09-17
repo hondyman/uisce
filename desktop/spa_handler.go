@@ -31,6 +31,12 @@ const wailsBridgeSnippet = `<script>
         }
         return Promise.resolve([]);
       },
+      GetOpenWindowIDs: function() {
+        if (window.wails && window.wails.Call && window.wails.Call.ByName) {
+          return window.wails.Call.ByName("main.DeskWindowManager.GetOpenWindowIDs");
+        }
+        return Promise.resolve([]);
+      },
       SpawnWindow: function(o) {
         if (window.wails && window.wails.Call && window.wails.Call.ByName) {
           return window.wails.Call.ByName("main.DeskWindowManager.SpawnWindow", o);

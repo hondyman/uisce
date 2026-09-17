@@ -1,4 +1,5 @@
 import { devWarn } from '../../utils/devLogger';
+import { layoutManager } from '../docking/LayoutManager';
 
 export type PlatformType = 'wails-desktop' | 'web-browser';
 
@@ -33,6 +34,19 @@ export interface IWorkspaceAdapter {
 }
 
 export class UniversalPlatformService implements IWorkspaceAdapter {
+  private openedPopups = new Map<string, Window>();
+
+  constructor() {
+    if (typeof window !== 'undefined') {
+      window.addEventListener('desktop:window-closed', (e: any) => {
+        const winId = e?.detail?.windowId;
+        if (winId) {
+          layoutManager.unregisterDetachedWindow(winId);
+        }
+      });
+    }
+  }
+
   /**
    * Lazily re-evaluates whether the Wails v3 desktop bindings are present.
    * Never cached as a module-level constant because Wails injects bindings asynchronously.
@@ -158,7 +172,68 @@ export class UniversalPlatformService implements IWorkspaceAdapter {
       const left = options.x ?? 100;
       const top = options.y ?? 100;
       const features = `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`;
-      window.open(route, `win_${viewId}`, features);
+      const winId = `win_${viewId}`;
+      const popup = window.open(route, winId, features);
+      if (popup) {
+        this.openedPopups.set(winId, popup);
+        const pollInterval = setInterval(() => {
+          try {
+            if (!popup || popup.closed) {
+              clearInterval(pollInterval);
+              this.openedPopups.delete(winId);
+              layoutManager.unregisterDetachedWindow(winId);
+            }
+          } catch {
+            clearInterval(pollInterval);
+          }
+        }, 1000);
+      }
+    }
+  }
+
+  /**
+   * Reconciles registered detached windows with currently active OS/browser windows
+   * and removes any orphaned or closed windows.
+   */
+  public async reconcileDetachedWindows(): Promise<void> {
+    const detached = layoutManager.getDetachedWindows();
+    if (detached.length === 0) return;
+
+    if (this.isWails()) {
+      try {
+        const deskManager = (window as unknown as {
+          go?: {
+            main?: {
+              DeskWindowManager?: {
+                GetOpenWindowIDs?: () => Promise<string[]>;
+              };
+            };
+          };
+        })?.go?.main?.DeskWindowManager;
+
+        if (typeof deskManager?.GetOpenWindowIDs === 'function') {
+          const openIds = await deskManager.GetOpenWindowIDs();
+          if (Array.isArray(openIds)) {
+            const openSet = new Set(openIds);
+            for (const win of detached) {
+              if (!openSet.has(win.windowId)) {
+                layoutManager.unregisterDetachedWindow(win.windowId);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        devWarn('[PlatformService] Failed to reconcile Wails open windows:', err);
+      }
+    } else {
+      // Browser popup reconciliation
+      for (const win of detached) {
+        const popup = this.openedPopups.get(win.windowId);
+        if (popup && popup.closed) {
+          this.openedPopups.delete(win.windowId);
+          layoutManager.unregisterDetachedWindow(win.windowId);
+        }
+      }
     }
   }
 }

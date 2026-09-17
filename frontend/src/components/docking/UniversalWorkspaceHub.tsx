@@ -208,8 +208,9 @@ export const UniversalWorkspaceHub: React.FC = () => {
   }, []);
 
   // Save current workspace layout
-  const handleSaveLayout = () => {
+  const handleSaveLayout = async () => {
     if (!dockApi) return;
+    await platformService.reconcileDetachedWindows();
     const json = dockApi.toJSON();
     layoutManager.saveLayout(json);
     showStatus('Workspace layout saved');
@@ -391,7 +392,10 @@ export const UniversalWorkspaceHub: React.FC = () => {
               Restore Windows
             </button>
             <button
-              onClick={() => setBrowserRestorePending(0)}
+              onClick={() => {
+                layoutManager.clearDetachedWindows();
+                setBrowserRestorePending(0);
+              }}
               style={{
                 background: 'transparent',
                 color: '#bae6fd',
