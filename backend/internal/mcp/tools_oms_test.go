@@ -91,7 +91,12 @@ func TestOMS_ToolsRegistered(t *testing.T) {
 }
 
 func TestOMS_ManifestParity(t *testing.T) {
-	// Dirty tool_handler.go list descriptors (read 2026-09-17) — agent contract.
+	// Dirty tool_handler.go list descriptors (read 2026-09-17) — rescue-fidelity
+	// drift detector, not a normative spec. Intentional divergences:
+	//   - start_fix_order_entry Temporal-unset message normalized in 196982f4d
+	//     to ErrTemporalNotConfigured (dirty: "temporal is not configured; cannot
+	//     start FIXOrderEntryWorkflow"). Dirty OMS registrations carry no
+	//     role/ABAC checks beyond JWT tenant injection (verified in dirty diff).
 	want := map[string]struct {
 		descContains string
 		required     []string
