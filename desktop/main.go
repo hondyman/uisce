@@ -22,7 +22,7 @@ func resolveAssetFS() fs.FS {
 		}
 	}
 
-	// 2. Relative frontend/dist from desktop folder
+	// 2. Relative frontend/dist from desktop folder (Development path)
 	relDist := filepath.Join("..", "frontend", "dist")
 	if abs, err := filepath.Abs(relDist); err == nil {
 		if _, err := os.Stat(abs); err == nil {
@@ -31,10 +31,20 @@ func resolveAssetFS() fs.FS {
 		}
 	}
 
-	// 3. Local bundled folder if present
+	// 3. Local bundled folder if present (e.g. desktop/frontend_dist)
 	if _, err := os.Stat("frontend_dist"); err == nil {
 		log.Printf("[Desktop] Using bundled frontend_dist")
 		return os.DirFS("frontend_dist")
+	}
+
+	// 4. Packaged macOS App Bundle Resources path (../Resources/frontend_dist relative to binary)
+	exePath, err := os.Executable()
+	if err == nil {
+		bundleDist := filepath.Join(filepath.Dir(exePath), "..", "Resources", "frontend_dist")
+		if _, err := os.Stat(bundleDist); err == nil {
+			log.Printf("[Desktop] Using packaged bundle assets from: %s", bundleDist)
+			return os.DirFS(bundleDist)
+		}
 	}
 
 	log.Printf("[Desktop] Warning: No frontend assets found. Ensure frontend is built (npm run build).")
@@ -42,6 +52,12 @@ func resolveAssetFS() fs.FS {
 }
 
 func main() {
+	// Initialize local-first rotating logger with secret scrubbing
+	logCloser := manager.InitWorkstationLogger()
+	if logCloser != nil {
+		defer logCloser.Close()
+	}
+
 	vault := manager.NewTokenVault(60 * time.Second)
 	defer vault.Stop()
 

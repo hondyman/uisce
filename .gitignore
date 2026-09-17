@@ -162,5 +162,6 @@ backend/rule-engine/cmd/*/*
 keycloak-ssl/
 logs/heap-recovery-*/
 
-# Desktop binary
+# Desktop binary & packaging outputs
 desktop/uisce-desk
+desktop/bin/
