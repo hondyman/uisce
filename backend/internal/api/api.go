@@ -705,6 +705,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Moved to end of function using rootMux mounting strategy to avoid panic
 	// Development middleware: log every incoming request (method, path, headers, body)
 	// This is intentionally verbose and should only be enabled during local debugging.
+
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// Read body (if any) for logging and restore it for downstream handlers
@@ -713,13 +714,27 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				bodyBytes, _ = io.ReadAll(req.Body)
 				req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			}
-			// Collect a subset of headers for brevity
+			// Collect a subset of headers for brevity. Authorization is
+			// redacted (see redactAuthHeader) to keep credential material
+			// out of the unrotated /tmp/uisce-server.log.
 			headersToLog := []string{"Content-Type", "Authorization", "Origin", "X-Tenant-ID", "X-Tenant-Datasource-ID"}
 			headerParts := []string{}
 			for _, h := range headersToLog {
-				headerParts = append(headerParts, fmt.Sprintf("%s=%s", h, req.Header.Get(h)))
+				val := req.Header.Get(h)
+				if h == "Authorization" {
+					val = redactAuthHeader(val)
+				}
+				headerParts = append(headerParts, fmt.Sprintf("%s=%s", h, val))
 			}
-			fmt.Fprintf(os.Stderr, "[REQ] %s %s Headers:%s Body:%s\n", req.Method, req.URL.Path, strings.Join(headerParts, ","), string(bodyBytes))
+			// Body credential fields are redacted by default. Set
+			// REQUEST_TRACE_VERBOSE=true to opt into unredacted logging
+			// for local debugging — the only context where the wire
+			// body's full fidelity is needed.
+			bodyToLog := bodyBytes
+			if os.Getenv("REQUEST_TRACE_VERBOSE") != "true" {
+				bodyToLog = redactBody(bodyBytes)
+			}
+			fmt.Fprintf(os.Stderr, "[REQ] %s %s Headers:%s Body:%s\n", req.Method, req.URL.Path, strings.Join(headerParts, ","), string(bodyToLog))
 			fmt.Fprintf(os.Stderr, "[DEBUG-MARKER] path=%s method=%s contains_bo=%v\n", req.URL.Path, req.Method, strings.Contains(req.URL.Path, "/business-objects"))
 
 			// Additional detailed logging for business-objects endpoint
@@ -4516,4 +4531,69 @@ func newCBOTelemetryRouter(sqlxDB *sqlx.DB) *cbo.TelemetryRouter {
 	}
 	tr := cbo.NewTelemetryRouter(sqlxDB, redisClient, cfg, cbo.NewNopLogger())
 	return tr
+}
+
+// redactBody returns bodyBytes with credential fields replaced by "<redacted>".
+// Returns the input unchanged if it's not valid JSON or contains no
+// credential fields.
+//
+// Limitations (documented boundaries, not bugs):
+//   - Top-level fields only. A body like {"user":{"password":"..."}} passes
+//     through unredacted. Extend to recursive redaction if a nested-
+//     credential endpoint appears; today the only credential-bearing
+//     endpoint is the flat /api/auth/login body.
+//   - json.Marshal on the parsed map may reorder/reformat the logged JSON
+//     relative to the wire body. Harmless for logs (downstream readers
+//     don't depend on field order). Documented so nobody debugs a
+//     "why did the logged body change shape" non-issue.
+//   - The sensitive list is conservative: "token" redacts any field
+//     literally named that, including non-credential pagination cursors.
+//     Over-redaction is preferred to under-redaction for log safety.
+func redactBody(body []byte) []byte {
+	if len(body) == 0 || !json.Valid(body) {
+		return body
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return body
+	}
+	sensitive := []string{
+		"password", "current_password", "new_password", "old_password",
+		"secret", "token", "api_key",
+	}
+	changed := false
+	for _, field := range sensitive {
+		if _, ok := parsed[field]; ok {
+			parsed[field] = "<redacted>"
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	out, err := json.Marshal(parsed)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// redactAuthHeader returns the Authorization header value with the
+// credential replaced. The scheme prefix is preserved when present
+// (Bearer, Basic, ApiKey, etc.) so the log shows how the request was
+// authed — diagnostic value at zero risk. Empty values pass through.
+// Scheme-less non-empty values are redacted wholesale ("<redacted>")
+// because scheme-less raw tokens in the Authorization header are a real
+// pattern (raw API keys, signed cookies, etc.) and the helper's
+// contract is "Authorization is safe to log," not "Authorization is
+// safe to log when it has a scheme separator."
+func redactAuthHeader(v string) string {
+	if v == "" {
+		return v
+	}
+	parts := strings.SplitN(v, " ", 2)
+	if len(parts) != 2 {
+		return "<redacted>"
+	}
+	return parts[0] + " <redacted>"
 }
