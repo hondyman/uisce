@@ -1757,11 +1757,20 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.ChartHandler.RegisterRoutes(r)
 		routes.RegisterMetadataWrite(r, srv.WriteHandler)
 
+		// ORDER IS LOAD-BEARING. chi v5.2.3 last-wins silently on duplicate
+		// method+pattern: this Path 5 RegisterMCP (POST /mcp) MUST run before
+		// Path 1 RegisterRoutes below, or POST /api/mcp flips to Path 5's
+		// non-spec mcp.list_tools protocol. Guard: TestMCP_RouteTableDump.
+		mcp.TraceRegister("path5 call site api.go:RegisterMCP → handlers.MCPHandler.RegisterRoutes POST /mcp")
 		routes.RegisterMCP(r, srv.MCPHandler)
 
-		// MCP JSON-RPC server (tools/list, tools/call). Tenant is read from
-		// security.AuthInfo (populated globally by AuthContextMiddleware at api.go:847)
-		// — not from request body. tools/list is public; tools/call requires auth.
+		// ORDER IS LOAD-BEARING. Must remain AFTER RegisterMCP (see above).
+		// Tenant from AuthInfo (AuthContextMiddleware), never the body.
+		// tools/list is public; tools/call requires auth.
+		// Guard: TestMCP_RouteTableDump. PR B: atomic replace with the
+		// streamable-HTTP mount in the SAME commit — do not stack a third
+		// POST /mcp and do not delete this line without the replacement.
+		mcp.TraceRegister("path1 call site api.go:MCPToolHandler.RegisterRoutes POST+GET /mcp")
 		mcp.NewMCPToolHandler(sqlxDB).SetTemporal(temporalClient).RegisterRoutes(r)
 
 		// Register handlers that were previously orphaned

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -121,10 +122,10 @@ func (h *MCPHandler) handleListTools(w http.ResponseWriter, id interface{}) {
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"portfolio_id":     map[string]string{"type": "string", "description": "Portfolio identifier (e.g. 'PT-88120')"},
+					"portfolio_id":   map[string]string{"type": "string", "description": "Portfolio identifier (e.g. 'PT-88120')"},
 					"security_isin":  map[string]string{"type": "string", "description": "Security ISIN (e.g. 'US0378331005')"},
-					"order_quantity":  map[string]string{"type": "number", "description": "Order quantity"},
-					"order_price":     map[string]string{"type": "number", "description": "Order price"},
+					"order_quantity": map[string]string{"type": "number", "description": "Order quantity"},
+					"order_price":    map[string]string{"type": "number", "description": "Order price"},
 					"rule_chain_id":  map[string]string{"type": "string", "description": "Optional rule chain ID to evaluate against"},
 				},
 				"required": []string{"portfolio_id", "security_isin"},
@@ -136,7 +137,7 @@ func (h *MCPHandler) handleListTools(w http.ResponseWriter, id interface{}) {
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"draft_rule_ast":  map[string]string{"type": "string", "description": "JSON-encoded draft rule AST to evaluate in shadow mode"},
+					"draft_rule_ast":    map[string]string{"type": "string", "description": "JSON-encoded draft rule AST to evaluate in shadow mode"},
 					"evaluation_window": map[string]string{"type": "string", "description": "Time window for shadow evaluation (e.g. '24h', '7d')"},
 				},
 				"required": []string{"draft_rule_ast"},
@@ -242,24 +243,24 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, r *http.Request, para
 
 	case "evaluate_compliance_trade":
 		var args struct {
-			PortfolioID    string  `json:"portfolio_id"`
-			SecurityISIN   string  `json:"security_isin"`
-			OrderQuantity  float64 `json:"order_quantity"`
-			OrderPrice     float64 `json:"order_price"`
-			RuleChainID    string  `json:"rule_chain_id"`
+			PortfolioID   string  `json:"portfolio_id"`
+			SecurityISIN  string  `json:"security_isin"`
+			OrderQuantity float64 `json:"order_quantity"`
+			OrderPrice    float64 `json:"order_price"`
+			RuleChainID   string  `json:"rule_chain_id"`
 		}
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			h.writeError(w, id, -32602, "Invalid arguments")
 			return
 		}
 		h.writeResult(w, id, map[string]interface{}{
-			"approved":         true,
-			"can_override":     false,
-			"highest_severity": "INFORMATIONAL",
-			"evaluated_vm":     true,
+			"approved":          true,
+			"can_override":      false,
+			"highest_severity":  "INFORMATIONAL",
+			"evaluated_vm":      true,
 			"execution_time_ns": 850,
-			"violations":       []interface{}{},
-			"message":         "Compliance evaluation complete (MCP stub - real evaluation requires RuleEngine injection)",
+			"violations":        []interface{}{},
+			"message":           "Compliance evaluation complete (MCP stub - real evaluation requires RuleEngine injection)",
 		})
 
 	case "shadow_evaluate_rule":
@@ -272,13 +273,13 @@ func (h *MCPHandler) handleCallTool(w http.ResponseWriter, r *http.Request, para
 			return
 		}
 		h.writeResult(w, id, map[string]interface{}{
-			"shadow_mode":           true,
-			"orders_evaluated":     0,
-			"soft_warnings":         0,
-			"hard_blocks":           0,
-			"false_positive_rate":   0.0,
-			"recommendation":        "APPROVED",
-			"message":               "Shadow evaluation complete (MCP stub - real shadow evaluation requires Kafka stream tap)",
+			"shadow_mode":         true,
+			"orders_evaluated":    0,
+			"soft_warnings":       0,
+			"hard_blocks":         0,
+			"false_positive_rate": 0.0,
+			"recommendation":      "APPROVED",
+			"message":             "Shadow evaluation complete (MCP stub - real shadow evaluation requires Kafka stream tap)",
 		})
 
 	case "list_business_objects":
@@ -325,8 +326,16 @@ func (h *MCPHandler) writeResult(w http.ResponseWriter, id interface{}, result i
 	json.NewEncoder(w).Encode(resp)
 }
 
+// MCPRegisterHook is invoked from RegisterRoutes so tests can trace
+// source line → mux entry. Production leaves it nil.
+var MCPRegisterHook func(source string)
+
 // RegisterRoutes helper for wiring
 func (h *MCPHandler) RegisterRoutes(r chi.Router) {
+	log.Printf("[MCP-REGISTER] path5:backend/internal/handlers/mcp_handler.go:RegisterRoutes POST /mcp")
+	if MCPRegisterHook != nil {
+		MCPRegisterHook("path5:backend/internal/handlers/mcp_handler.go:RegisterRoutes POST /mcp")
+	}
 	r.Post("/mcp", h.HandleMCPRequest)
 }
 
@@ -371,7 +380,7 @@ func (h *MCPToolsHandler) ListTools(w http.ResponseWriter, r *http.Request) {
 			"name":        e.ToolName,
 			"description": e.Description,
 			"inputSchema": map[string]interface{}{
-				"type": "object",
+				"type":       "object",
 				"properties": map[string]interface{}{},
 			},
 		})
