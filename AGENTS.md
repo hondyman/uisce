@@ -537,3 +537,7 @@ The pattern to break is: **secrets flowing through prose.** The fix is: secrets 
 **Why this matters.** Without the fail-fast guard, rotating the key in Infisical was theater: a misspelled or missing `API_TOKEN_ENCRYPTION_KEY` env var would silently fall back to the leaked value with no error. Now the service refuses to start.
 
 **Cost of rotation: zero.** `alpha.integration_credentials` had 0 rows at the time of rotation (verified 2026-09-13) — the key was set but no data was encrypted with it. A fresh 32-byte base64 key was generated and written to the 4 `.env` files that carry it (`.env`, `backend/.env`, `calendar-service/.env`, `rebalancing/.env`; `frontend/.env.local` correctly has no such key).
+
+## Dev Credentials (2026-09-16)
+
+Dev users: `testuser@example.com` / `testuser2@example.com` (tenant `99e99e99-99e9-49e9-89e9-99e99e99e999`; password in the dev env/secrets store — see the 2026-09-13 credential-hygiene note *above*). `admin@uisce.com` does not exist in the dev DB.
