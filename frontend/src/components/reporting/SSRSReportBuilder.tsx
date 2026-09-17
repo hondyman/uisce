@@ -25,8 +25,14 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Stack
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress
 } from '@mui/material';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import useUndo from 'use-undo';
 import { getCachedGoldCopyId } from '../../utils/goldCopy';
@@ -35,6 +41,8 @@ import { apiClient } from '../../utils/apiClient';
 import { getSelectedRegion } from '../../lib/region';
 import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
 import { devError } from '../../utils/devLogger';
+import { generateReportSpec, type ReportGenerationKind } from '../../api/reporting';
+import { mergeGeneratedReportSpecIntoDraft } from './generateReportDraft';
 
 // Modular components & utils
 import ToolboxItem from './ToolboxItem';
@@ -54,7 +62,8 @@ import {
   sanitizeInput,
   exportFormatLabels,
   exportOptionDescriptions,
-  ExportOptions
+  ExportOptions,
+  buildDataBindingForType
 } from './reportingUtils';
 import GroupsEditor from './GroupsEditor';
 import CalculatedFieldsEditor, { CalculatedFieldItem } from './CalculatedFieldsEditor';
@@ -248,6 +257,18 @@ const SSRSReportBuilderContent: React.FC = () => {
   const [reportTitle, setReportTitle] = useState('Untitled Report');
   const [reportTitleEdited, setReportTitleEdited] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+
+  // AI report generation (Phase 6.1) - "Generate with AI"/"Regenerate"
+  // dialog and the always-visible in-canvas copilot bar both call the
+  // same generateReportSpec contract and merge additively via
+  // mergeGeneratedReportSpecIntoDraft; see generateReportDraft.ts.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
+  const [aiReportKind, setAiReportKind] = useState<ReportGenerationKind>('dashboard');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [copilot, setCopilot] = useState('');
+  const [copilotBusy, setCopilotBusy] = useState(false);
 
   const handleAddParameter = (param: Omit<ReportParameter, 'id'>) => {
     const newParam = { ...param, id: `param_${Date.now()}` };
@@ -835,45 +856,13 @@ const SSRSReportBuilderContent: React.FC = () => {
     let dataBinding: Record<string, any> = {};
 
     if (type === ELEMENT_TYPES.FORM && selectedBO?.id && tenant?.id) {
-      dataBinding = { boId: selectedBO.id, tenantId: tenant.id };
+      dataBinding = buildDataBindingForType(type, selectedBO.id, '', tenant.id, [], []);
     } else if (dataBoundTypes.includes(type as any) && selectedBO?.id && selectedBindingId && tenant?.id) {
       try {
         const boTerms = await fetchBOTerms(selectedBO.id, selectedBindingId);
         const dims = boTerms.filter((t) => t.role === 'DIMENSION');
         const measures = boTerms.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
-
-        if (type === ELEMENT_TYPES.SLICER) {
-          const d = dims[0];
-          if (d) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }] };
-        } else if (type === ELEMENT_TYPES.GAUGE) {
-          const m = measures[0] || dims[0];
-          if (m) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: measures[0] ? 'SUM' : 'COUNT' }] };
-        } else if (type === ELEMENT_TYPES.CHART || type === ELEMENT_TYPES.SPARKLINE) {
-          const d = dims[0];
-          const m = measures[0];
-          if (d && m) {
-            dataBinding = {
-              boId: selectedBO.id,
-              bindingId: selectedBindingId,
-              tenantId: tenant.id,
-              dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }],
-              measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: 'SUM' }],
-              chartType: 'bar',
-            };
-          }
-        } else {
-          // table / matrix / list: first few dimensions + measures as columns
-          const picked = [...dims.slice(0, 4), ...measures.slice(0, 2)];
-          if (picked.length > 0) {
-            dataBinding = {
-              boId: selectedBO.id,
-              bindingId: selectedBindingId,
-              tenantId: tenant.id,
-              dimensions: dims.slice(0, 4).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
-              measures: measures.slice(0, 2).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
-            };
-          }
-        }
+        dataBinding = buildDataBindingForType(type, selectedBO.id, selectedBindingId, tenant.id, dims, measures);
       } catch (err) {
         devError('Failed to default-bind new report widget', err);
       }
@@ -899,6 +888,84 @@ const SSRSReportBuilderContent: React.FC = () => {
     setSelectedElement(newElement.id);
     const boundMsg = dataBinding.boId ? ` bound to ${selectedBO?.displayName || selectedBO?.name}` : '';
     setSnackbar({ open: true, message: `Added ${type}${boundMsg} to ${targetSection}`, severity: 'success' });
+  };
+
+  // "Generate with AI" / "Regenerate with AI" (Phase 6.1) - available on
+  // both new and existing reports (confirmed decision). Additive via
+  // mergeGeneratedReportSpecIntoDraft, same as the copilot bar below -
+  // never wipes existing elements, so "regenerate" doesn't mean "start
+  // over."
+  const handleGenerateReport = async () => {
+    if (!selectedBO?.id || !tenant?.id) {
+      setAiError('Select a Business Object first.');
+      return;
+    }
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const boKey = selectedBO.key || selectedBO.technicalName || selectedBO.technical_name || '';
+      const boName = selectedBO.displayName || selectedBO.name || boKey;
+      const spec = await generateReportSpec(selectedBO.id, boKey, boName, aiDescription, aiReportKind);
+      const wasEmpty = elements.length === 0;
+      const merged = await mergeGeneratedReportSpecIntoDraft(elements, spec, {
+        boId: selectedBO.id,
+        bindingId: selectedBindingId,
+        tenantId: tenant.id,
+      });
+      setElements(merged);
+      if (wasEmpty && !reportTitleEdited && spec.title) {
+        setReportTitle(spec.title);
+      }
+      setAiOpen(false);
+      setAiDescription('');
+      setSnackbar({
+        open: true,
+        message: `Generated ${merged.length - elements.length} element(s) via ${spec.source === 'ai' ? 'AI' : 'template'}`,
+        severity: 'success',
+      });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to generate report');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // In-canvas copilot bar - identical contract to the dialog above, just
+  // taking a free-text instruction instead of a description field and
+  // using the already-bound primary BO instead of a picker (mirrors
+  // PageEditor.tsx's handleCopilot).
+  const handleCopilot = async () => {
+    const instruction = copilot.trim();
+    if (!instruction || copilotBusy) return;
+    if (!selectedBO?.id || !tenant?.id) {
+      setSnackbar({ open: true, message: 'Bind a primary Business Object first.', severity: 'error' });
+      return;
+    }
+    setCopilotBusy(true);
+    try {
+      const boKey = selectedBO.key || selectedBO.technicalName || selectedBO.technical_name || '';
+      const boName = selectedBO.displayName || selectedBO.name || boKey;
+      const spec = await generateReportSpec(selectedBO.id, boKey, boName, instruction, aiReportKind);
+      const before = elements.length;
+      const merged = await mergeGeneratedReportSpecIntoDraft(elements, spec, {
+        boId: selectedBO.id,
+        bindingId: selectedBindingId,
+        tenantId: tenant.id,
+      });
+      setElements(merged);
+      setCopilot('');
+      setSnackbar({
+        open: true,
+        message: merged.length > before
+          ? `Copilot added ${merged.length - before} element(s) via ${spec.source === 'ai' ? 'AI' : 'template'}`
+          : 'Copilot found nothing new to add',
+        severity: 'success',
+      });
+    } catch (err) {
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Copilot failed', severity: 'error' });
+    } finally {
+      setCopilotBusy(false);
+    }
   };
 
   const handleDragStart = (event: any) => {
@@ -1198,6 +1265,30 @@ const SSRSReportBuilderContent: React.FC = () => {
                   Parameters ({reportParameters.length})
                 </Button>
               </Tooltip>
+              <Tooltip title={elements.length > 0 ? 'Regenerate with AI (adds alongside existing elements)' : 'Generate with AI'}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={!selectedBO?.id || isReadOnlyCore}
+                    onClick={() => { setAiError(null); setAiOpen(true); }}
+                    startIcon={<AutoAwesomeIcon sx={{ fontSize: 15 }} />}
+                    sx={{
+                      color: 'rgba(255,255,255,0.85)',
+                      borderColor: 'rgba(255,255,255,0.2)',
+                      textTransform: 'none',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      height: 28,
+                      borderRadius: 1.5,
+                      px: 1,
+                      '&:hover': { color: '#FFF', borderColor: 'rgba(255,255,255,0.4)', bgcolor: 'rgba(255,255,255,0.08)' },
+                    }}
+                  >
+                    {elements.length > 0 ? 'Regenerate with AI' : 'Generate with AI'}
+                  </Button>
+                </span>
+              </Tooltip>
               <Tooltip title="Page Layout">
                 <IconButton size="small" onClick={() => setLayoutDrawerOpen(true)}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
@@ -1305,6 +1396,38 @@ const SSRSReportBuilderContent: React.FC = () => {
             </Box>
           </Box>
         </TopAppBar>
+
+        {/* AI copilot bar - always visible once a primary BO is bound;
+            calls the same generateReportSpec contract as the "Generate
+            with AI" dialog above, merging additively into the current
+            draft (mergeGeneratedReportSpecIntoDraft never removes or
+            replaces existing elements). */}
+        {!isReadOnlyCore && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75,
+            borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.background.paper,
+          }}>
+            <AutoAwesomeIcon fontSize="small" color="primary" />
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Copilot: add a table of allocations, add a Status slicer…"
+              value={copilot}
+              onChange={(e) => setCopilot(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleCopilot(); }}
+              disabled={copilotBusy || !selectedBO?.id}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => void handleCopilot()}
+              disabled={copilotBusy || !copilot.trim() || !selectedBO?.id}
+              startIcon={copilotBusy ? <CircularProgress size={14} /> : undefined}
+            >
+              {copilotBusy ? 'Working…' : 'Apply'}
+            </Button>
+          </Box>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             BODY: Left sidebar + main area (tabs + content)
@@ -1940,6 +2063,50 @@ const SSRSReportBuilderContent: React.FC = () => {
           isReadOnly={isReadOnlyCore}
           onClone={handleCloneReport}
         />
+        <Dialog open={aiOpen} onClose={() => !aiGenerating && setAiOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>{elements.length > 0 ? 'Regenerate with AI' : 'Generate a report with AI'}</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Widgets bind to {selectedBO?.displayName || selectedBO?.name || 'the selected Business Object'} and its related objects — never the whole catalog.
+              {elements.length > 0 && ' This adds new elements alongside what you already have — it won’t replace them.'}
+            </Typography>
+            {aiError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setAiError(null)}>{aiError}</Alert>}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="ai-report-kind-label">Report kind</InputLabel>
+              <Select
+                labelId="ai-report-kind-label"
+                label="Report kind"
+                value={aiReportKind}
+                onChange={(e) => setAiReportKind(e.target.value as ReportGenerationKind)}
+              >
+                <MenuItem value="list">List — table of records (optional slicer)</MenuItem>
+                <MenuItem value="detail">Detail — form plus related tables</MenuItem>
+                <MenuItem value="master-detail">Master-detail — list then form</MenuItem>
+                <MenuItem value="dashboard">Dashboard — gauge/chart/table mix</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="What should this report show? (optional)"
+              placeholder="e.g. A summary table of orders with region and status, plus a revenue chart"
+              value={aiDescription}
+              onChange={(e) => setAiDescription(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAiOpen(false)} disabled={aiGenerating}>Cancel</Button>
+            <Button
+              variant="contained"
+              startIcon={aiGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+              onClick={() => void handleGenerateReport()}
+              disabled={aiGenerating}
+            >
+              {aiGenerating ? 'Generating…' : 'Generate'}
+            </Button>
+          </DialogActions>
+        </Dialog>
         <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
           <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
         </Snackbar>

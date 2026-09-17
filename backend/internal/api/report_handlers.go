@@ -78,6 +78,14 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 
 // resolveAuthContext extracts tenant ID, user ID, and admin status from authenticated context.
 func (h *ReportHandler) resolveAuthContext(r *http.Request) (tenantID uuid.UUID, userID string, isAdmin bool, err error) {
+	return resolveReportAuthContext(r)
+}
+
+// resolveReportAuthContext is ReportHandler.resolveAuthContext's body,
+// extracted to a package-level function so other report-area handlers
+// (ReportGenerationHandler) can share the same 4-tier tenant-resolution
+// chain without depending on a *ReportHandler receiver they don't have.
+func resolveReportAuthContext(r *http.Request) (tenantID uuid.UUID, userID string, isAdmin bool, err error) {
 	// 1. Try security.AuthInfoFromContext (SecurityManager / AuthContextMiddleware)
 	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
 		userID = auth.UserID

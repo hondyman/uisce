@@ -56,8 +56,8 @@ import (
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
-	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/mcp"
+	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
@@ -1479,6 +1479,18 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	}
 	pageStudioHandler := handlers.NewPageStudioHandler(sqlxDB, boResolver, boService, pageAIGenerate)
 
+	// Report Builder "Generate with AI" + in-editor copilot (Phase 6.1,
+	// HANDOFF_REPORT_BUILDER_SPINE_PLAN.md). A sibling of reportHandler,
+	// not an addition to it - AI generation never reads/writes
+	// report_templates, only returns a spec, so it doesn't belong on the
+	// handler whose constructor 12 existing tests already call. boResolver/
+	// boService are already in scope here (same dependencies pageStudioHandler
+	// just used above); geminiClient is nil-safe the same way pageAIGenerate
+	// is - ReportGenerationHandler falls back to a deterministic template
+	// when it's nil.
+	reportGenerationHandler := NewReportGenerationHandler(sqlxDB, boResolver, boService, geminiClient)
+	reportGenerationHandler.RegisterRoutes(r)
+
 	// Initialize Catalog Handler (Phase 18)
 	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
 	// Registration moved to /api group below
@@ -1750,7 +1762,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// MCP JSON-RPC server (tools/list, tools/call). Tenant is read from
 		// security.AuthInfo (populated globally by AuthContextMiddleware at api.go:847)
 		// — not from request body. tools/list is public; tools/call requires auth.
-		mcp.NewMCPToolHandler(sqlxDB).RegisterRoutes(r)
+		mcp.NewMCPToolHandler(sqlxDB).SetTemporal(temporalClient).RegisterRoutes(r)
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)

@@ -295,6 +295,7 @@ export interface ReportTemplate {
   created_by_id?: string;
   is_core?: boolean;
   tenant_id?: string;
+  primary_business_object_id?: string;
   [key: string]: unknown;
 }
 
@@ -311,12 +312,84 @@ export interface SaveReportTemplateInput {
   is_active?: boolean;
   is_public?: boolean;
   is_personal?: boolean;
+  /** Additive, Phase 6.1 (AI report generation) - see builderSerialization.ts. */
+  primary_business_object_id?: string;
   [key: string]: unknown;
 }
 
 export interface UpdateReportTemplateInput {
   id: string;
   payload: Partial<SaveReportTemplateInput>;
+}
+
+// -------------------------------------------------------------------------------------
+// AI report generation (Phase 6.1) - mirrors Page Studio's
+// PageStudioApi.generateSpec contract (frontend/src/api/pageStudio.ts):
+// one endpoint, reused by both the "Generate with AI" dialog and the
+// in-editor copilot bar (SSRSReportBuilder.tsx), the copilot path passing
+// the free-text instruction as `description` and the already-bound
+// primary BO instead of a picker. See
+// backend/internal/api/report_generation_handler.go for the server side.
+// -------------------------------------------------------------------------------------
+
+export type ReportGenerationKind = 'list' | 'detail' | 'master-detail' | 'dashboard';
+
+export interface GeneratedReportElement {
+  /** "" = the report's primary Business Object; otherwise a key from relatedBusinessObjects. */
+  boKey: string;
+  type: string;
+  title: string;
+  /** termNodeIds, real fields already validated server-side against whichever BO this element resolved to. */
+  dimensions?: string[];
+  measures?: string[];
+}
+
+export interface GeneratedReportRelatedBO {
+  boId: string;
+  boKey: string;
+  displayName: string;
+  cardinality?: string;
+  joinCondition?: string;
+}
+
+export interface GeneratedReportField {
+  termNodeId: string;
+  key: string;
+  displayName: string;
+  dataType: string;
+  role: string;
+}
+
+export interface ReportGenerationSpec {
+  title: string;
+  reportKind?: ReportGenerationKind;
+  relatedBusinessObjects: GeneratedReportRelatedBO[];
+  elements: GeneratedReportElement[];
+  /** Field metadata keyed by boKey ("" = primary) - needed to resolve each element's termNodeIds into a real dataBinding client-side, since the spec only says which ones an element uses. */
+  fields: Record<string, GeneratedReportField[]>;
+  /** Which path produced this spec - lets the UI be honest about whether Gemini actually ran or the deterministic template did. */
+  source: 'ai' | 'template';
+}
+
+/**
+ * Asks the backend to pick a small widget mix with specific field
+ * bindings for a Business Object - via Gemini when configured, a
+ * deterministic template otherwise
+ * (backend/internal/api/report_generation_handler.go's `generate`).
+ * Returns only the spec; expanding it into real report elements is
+ * generateReportDraft.ts's job.
+ */
+export async function generateReportSpec(
+  boId: string,
+  boKey: string,
+  boName: string,
+  description: string,
+  reportKind?: ReportGenerationKind,
+): Promise<ReportGenerationSpec> {
+  return request<ReportGenerationSpec>(`${API_PREFIX}/reports/generate`, {
+    method: 'POST',
+    body: JSON.stringify({ boId, boKey, boName, description, reportKind }),
+  });
 }
 
 const tryParseDefinition = (value: unknown): JsonRecord | null => {

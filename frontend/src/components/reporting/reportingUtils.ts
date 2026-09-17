@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import DOMPurify from 'dompurify';
+import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
 
 // Type definitions
 export const ELEMENT_TYPES = {
@@ -271,6 +272,61 @@ export const defaultFieldWidgetPreset = (dataType?: string): FieldWidgetPreset =
   }
   return { format: 'Text', textAlign: 'left', width: 220, sampleText: (l) => `[${l}]` };
 };
+
+/**
+ * Builds a data-bound element's `dataBinding` (boId/bindingId/tenantId
+ * plus per-type dimensions/measures), extracted from
+ * SSRSReportBuilder.tsx's handleAddToolboxItem so the manual toolbox-drag
+ * path and the AI report-generation feature can't silently drift on what
+ * a widget's default binding looks like - both call this with a
+ * DIMENSION/MEASURE-split field list, the manual path passing every
+ * field the BO has, the AI path passing only the fields it already
+ * chose. Per-type shape mirrors handleAddToolboxItem's original inline
+ * logic exactly: slicer takes one dimension, gauge takes one
+ * measure-or-dimension, chart/sparkline take one of each, table/matrix/
+ * list take up to 4 dimensions + 2 measures, form takes none (it binds
+ * the whole record via boId/tenantId alone).
+ */
+export function buildDataBindingForType(
+  type: string,
+  boId: string,
+  bindingId: string,
+  tenantId: string,
+  dims: SemanticTermView[],
+  measures: SemanticTermView[],
+): Record<string, any> {
+  if (type === ELEMENT_TYPES.FORM) {
+    return { boId, tenantId };
+  }
+  const base = { boId, bindingId, tenantId };
+  if (type === ELEMENT_TYPES.SLICER) {
+    const d = dims[0];
+    return d ? { ...base, dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }] } : {};
+  }
+  if (type === ELEMENT_TYPES.GAUGE) {
+    const m = measures[0] || dims[0];
+    return m ? { ...base, measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: measures[0] ? 'SUM' : 'COUNT' }] } : {};
+  }
+  if (type === ELEMENT_TYPES.CHART || type === ELEMENT_TYPES.SPARKLINE) {
+    const d = dims[0];
+    const m = measures[0];
+    if (!d || !m) return {};
+    return {
+      ...base,
+      dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }],
+      measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: 'SUM' }],
+      chartType: 'bar',
+    };
+  }
+  // table / matrix / list: first few dimensions + measures as columns
+  const picked = [...dims.slice(0, 4), ...measures.slice(0, 2)];
+  if (picked.length === 0) return {};
+  return {
+    ...base,
+    dimensions: dims.slice(0, 4).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
+    measures: measures.slice(0, 2).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
+  };
+}
 
 // Sanitization function
 export const sanitizeInput = (value: string): string => {
