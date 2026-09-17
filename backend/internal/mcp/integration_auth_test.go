@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/services"
 )
@@ -19,11 +18,11 @@ func newTestSecurityManager() *services.SecurityManager {
 	return services.NewSecurityManager(nil, nil, []byte(integrationJWTSecret))
 }
 
-func mintIntegrationToken(t *testing.T, sm *services.SecurityManager, claims jwt.MapClaims) string {
+func mintIntegrationToken(t *testing.T, sm *services.SecurityManager, in services.DevTokenInput) string {
 	t.Helper()
-	token, err := sm.SignToken(claims)
+	token, err := sm.MintDevToken(in)
 	if err != nil {
-		t.Fatalf("SignToken: %v", err)
+		t.Fatalf("MintDevToken: %v", err)
 	}
 	return token
 }
@@ -70,14 +69,11 @@ func decodeMCP(t *testing.T, raw []byte) JSONRPCResponse {
 
 func TestMCP_Integration_RealSecurityManager_AuthRoundtrip(t *testing.T) {
 	srv, sm := newIntegrationServer(t)
-	token := mintIntegrationToken(t, sm, jwt.MapClaims{
-		"user_id":    "test-user",
-		"email":      "test@example.com",
-		"tenant_id":  testTenantID,
-		"tenant_ids": []string{testTenantID},
-		"roles":      []string{"portfolio_manager"},
-		"iat":        time.Now().Unix(),
-		"exp":        time.Now().Add(time.Hour).Unix(),
+	token := mintIntegrationToken(t, sm, services.DevTokenInput{
+		UserID:    "test-user",
+		Email:     "test@example.com",
+		TenantIDs: []string{testTenantID},
+		Roles:     []string{"portfolio_manager"},
 	})
 	body := `{"jsonrpc":"2.0","id":"it-1","method":"tools/call","params":{"name":"list_pages","arguments":{}}}`
 	status, raw := postMCP(srv.URL+"/mcp", token, body)
@@ -92,13 +88,10 @@ func TestMCP_Integration_RealSecurityManager_AuthRoundtrip(t *testing.T) {
 
 func TestMCP_Integration_TenantMismatch_RealToken(t *testing.T) {
 	srv, sm := newIntegrationServer(t)
-	token := mintIntegrationToken(t, sm, jwt.MapClaims{
-		"user_id":    "test-user",
-		"tenant_id":  testTenantID,
-		"tenant_ids": []string{testTenantID},
-		"roles":      []string{"portfolio_manager"},
-		"iat":        time.Now().Unix(),
-		"exp":        time.Now().Add(time.Hour).Unix(),
+	token := mintIntegrationToken(t, sm, services.DevTokenInput{
+		UserID:    "test-user",
+		TenantIDs: []string{testTenantID},
+		Roles:     []string{"portfolio_manager"},
 	})
 	body := `{"jsonrpc":"2.0","id":"it-2","method":"tools/call","params":{"name":"list_pages","arguments":{"tenant_id":"` + nonMemberTenantID + `"}}}`
 	status, raw := postMCP(srv.URL+"/mcp", token, body)
@@ -113,10 +106,8 @@ func TestMCP_Integration_TenantMismatch_RealToken(t *testing.T) {
 
 func TestMCP_Integration_NoTenantClaim(t *testing.T) {
 	srv, sm := newIntegrationServer(t)
-	token := mintIntegrationToken(t, sm, jwt.MapClaims{
-		"user_id": "test-user",
-		"iat":     time.Now().Unix(),
-		"exp":     time.Now().Add(time.Hour).Unix(),
+	token := mintIntegrationToken(t, sm, services.DevTokenInput{
+		UserID: "test-user",
 	})
 	body := `{"jsonrpc":"2.0","id":"it-3","method":"tools/call","params":{"name":"list_pages","arguments":{}}}`
 	status, raw := postMCP(srv.URL+"/mcp", token, body)

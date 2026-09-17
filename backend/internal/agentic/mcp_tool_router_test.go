@@ -8,9 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -167,17 +165,14 @@ func TestHandleToolCall_AuthContextMiddleware_ProposalCarriesJWTTenant(t *testin
 	// Same middleware the API process mounts (api.go:862). It injects
 	// security.AuthInfo and does NOT set jwtmiddleware.ClaimsContextKey.
 	sm := services.NewSecurityManager(nil, nil, []byte("test-jwt-secret-for-path6-discriminator"))
-	token, err := sm.SignToken(jwt.MapClaims{
-		"user_id":    "test-user",
-		"email":      "test@example.com",
-		"tenant_id":  testTenantID,
-		"tenant_ids": []string{testTenantID},
-		"roles":      []string{"portfolio_manager"},
-		"iat":        time.Now().Unix(),
-		"exp":        time.Now().Add(time.Hour).Unix(),
+	token, err := sm.MintDevToken(services.DevTokenInput{
+		UserID:    "test-user",
+		Email:     "test@example.com",
+		TenantIDs: []string{testTenantID},
+		Roles:     []string{"portfolio_manager"},
 	})
 	if err != nil {
-		t.Fatalf("SignToken: %v", err)
+		t.Fatalf("MintDevToken: %v", err)
 	}
 
 	router := NewMCPToolRouter(nil)
