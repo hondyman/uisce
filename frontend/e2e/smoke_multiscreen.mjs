@@ -284,7 +284,40 @@ async function runSmokeTest() {
     }
     console.log('Cross-window intent routing & visible response verified: true');
 
-    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (9/9)! ---');
+    // 10. Test Internal Command Bar (Cmd+K) Opening and Channel Switching
+    console.log('10. Testing Internal Command Bar (Cmd+K) overlay and execution...');
+    await pageWorkspace.bringToFront();
+    // Trigger command bar via trigger button or Cmd+K
+    const cmdBarTrigger = pageWorkspace.locator('[data-testid="command-bar-trigger"]').first();
+    await cmdBarTrigger.click();
+
+    const cmdModal = pageWorkspace.locator('[data-testid="command-bar-modal"]').first();
+    await cmdModal.waitFor({ state: 'visible', timeout: 3000 });
+    console.log('Command bar modal opened successfully: true');
+
+    // Filter for orange channel
+    const cmdInput = pageWorkspace.locator('[data-testid="command-bar-input"]').first();
+    await cmdInput.fill('Channel 2');
+    await pageWorkspace.waitForTimeout(200);
+
+    const orangeItem = pageWorkspace.locator('[data-testid="command-item-channel-orange"]').first();
+    await orangeItem.click();
+    await pageWorkspace.waitForTimeout(300);
+
+    const cmdModalClosed = !(await cmdModal.isVisible());
+    console.log('Command bar executed channel switch and closed cleanly:', cmdModalClosed);
+    if (!cmdModalClosed) {
+      throw new Error('Command bar failed to close after command execution');
+    }
+
+    // Verify workspace active channel changed to orange
+    const selectedChannel = await pageWorkspace.locator('select[title*="channel"]').inputValue();
+    console.log('Workspace active channel updated via command bar:', selectedChannel);
+    if (selectedChannel !== 'orange') {
+      throw new Error(`Expected active channel 'orange', got '${selectedChannel}'`);
+    }
+
+    console.log('\n--- ALL BROWSER & INTERACTIVE SMOKE CHECKS PASSED (10/10)! ---');
   } catch (err) {
     console.error('Smoke test failure:', err);
     process.exitCode = 1;

@@ -11,6 +11,7 @@ import { fdc3Agent } from '../../services/fdc3/Fdc3DesktopAgent';
 import { IntentResolverModal } from './IntentResolverModal';
 import { IntentTarget, StandardIntent } from '../../services/fdc3/intentTypes';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
+import { WorkstationCommandBar } from './WorkstationCommandBar';
 
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('../../pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
@@ -201,11 +202,43 @@ export const UniversalWorkspaceHub: React.FC = () => {
   const { activeChannel, setChannel } = useFdc3();
   const availableChannels: UserChannelId[] = ['blue', 'green', 'red', 'orange', 'purple'];
 
+  // Internal Command Bar state
+  const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
+
   const showStatus = (msg: string) => {
     setStatusMessage(msg);
     if (statusTimerRef.current) clearTimeout(statusTimerRef.current);
     statusTimerRef.current = setTimeout(() => setStatusMessage(''), 4000);
   };
+
+  // Keyboard shortcut listener: Cmd/Ctrl+K for Command Bar, Alt+1..9 for Browser Tab Switching
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandBarOpen((prev) => !prev);
+        return;
+      }
+
+      // Browser mode: Alt+1..9 switches active Dockview panel tabs
+      if (e.altKey && !e.ctrlKey && !e.metaKey && e.code.startsWith('Digit')) {
+        const digit = parseInt(e.code.replace('Digit', ''), 10);
+        if (digit >= 1 && digit <= 9 && dockApi) {
+          const panels = dockApi.panels;
+          const targetIndex = digit - 1;
+          if (targetIndex < panels.length) {
+            e.preventDefault();
+            panels[targetIndex].api.setActive();
+            showStatus(`Switched to tab ${digit}: ${panels[targetIndex].title}`);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dockApi]);
 
   useEffect(() => {
     // Wire FDC3 agent intent resolver prompt to UI modal
@@ -740,6 +773,27 @@ export const UniversalWorkspaceHub: React.FC = () => {
             <span>⛶</span> Distribute to Multi-Monitor
           </button>
 
+          <button
+            data-testid="command-bar-trigger"
+            onClick={() => setIsCommandBarOpen(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              background: '#1e293b',
+              color: '#38bdf8',
+              border: '1px solid #334155',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '12px',
+              fontWeight: 600,
+            }}
+            title="Open Internal Command Bar (Cmd+K / Ctrl+K)"
+          >
+            <span>⌘K</span> Commands
+          </button>
+
           {/* Add Views */}
           <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #1e293b', paddingLeft: '8px' }}>
             <button
@@ -824,6 +878,39 @@ export const UniversalWorkspaceHub: React.FC = () => {
             resolverModal.reject(new Error('Intent resolution cancelled by user'));
           }
           setResolverModal({ isOpen: false, intent: null, context: null, targets: [] });
+        }}
+      />
+
+      {/* Internal Command Bar (Cmd+K / Ctrl+K) */}
+      <WorkstationCommandBar
+        isOpen={isCommandBarOpen}
+        onClose={() => setIsCommandBarOpen(false)}
+        onSelectIntent={(intent, ticker) => {
+          fdc3Agent.raiseIntent(intent, {
+            type: 'fdc3.instrument',
+            id: { ticker: ticker || 'AAPL' },
+            name: `${ticker || 'AAPL'} Equity`,
+          });
+        }}
+        onApplyLayout={(action) => {
+          switch (action) {
+            case 'save':
+              handleSaveLayout();
+              break;
+            case 'restore':
+              handleRestoreDesk();
+              break;
+            case 'travel':
+              if (isTravelMode) {
+                handleRestoreFromTravelMode();
+              } else {
+                handleConsolidateToTabs();
+              }
+              break;
+            case 'reset':
+              handleResetLayout();
+              break;
+          }
         }}
       />
     </div>

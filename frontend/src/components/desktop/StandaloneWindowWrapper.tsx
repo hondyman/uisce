@@ -3,6 +3,7 @@ import { DeskWindowFrame } from './DeskWindowFrame';
 import { fdc3Agent, USER_CHANNELS, UserChannelId } from '../../services/fdc3';
 import { platformService } from '../../services/platform/PlatformService';
 import { devError } from '../../utils/devLogger';
+import { WorkstationCommandBar } from '../docking/WorkstationCommandBar';
 
 export interface StandaloneWindowWrapperProps {
   title: string;
@@ -127,6 +128,20 @@ export const StandaloneWindowWrapper: React.FC<StandaloneWindowWrapperProps> = (
     fdc3Agent.joinUserChannel(nextChannel);
   }, [activeChannelId]);
 
+  // 4. Command Bar state & shortcut
+  const [isCommandBarOpen, setIsCommandBarOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandBarOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const currentChannelDesc = USER_CHANNELS.find((c) => c.id === activeChannelId) || USER_CHANNELS[4]; // default blue
 
   if (authError) {
@@ -151,13 +166,20 @@ export const StandaloneWindowWrapper: React.FC<StandaloneWindowWrapperProps> = (
   }
 
   return (
-    <DeskWindowFrame
-      title={title}
-      channelColor={currentChannelDesc.color}
-      channelName={currentChannelDesc.name}
-      onChannelSelect={handleCycleChannel}
-    >
-      {children}
-    </DeskWindowFrame>
+    <>
+      <DeskWindowFrame
+        title={title}
+        channelColor={currentChannelDesc.color}
+        channelName={currentChannelDesc.name}
+        onChannelSelect={handleCycleChannel}
+      >
+        {children}
+      </DeskWindowFrame>
+
+      <WorkstationCommandBar
+        isOpen={isCommandBarOpen}
+        onClose={() => setIsCommandBarOpen(false)}
+      />
+    </>
   );
 };
