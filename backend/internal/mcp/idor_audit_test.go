@@ -359,7 +359,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		mock.ExpectQuery("FROM mdm.universal_exception_queue").
+		mock.ExpectQuery("FROM catalog_mdm.universal_exception_queue").
 			WithArgs(uuid.MustParse(exID), tidA).
 			WillReturnError(sql.ErrNoRows)
 		expectAuditExec(mock)

@@ -38,9 +38,11 @@ func (s *Service) GetByID(ctx context.Context, tenantID, exceptionID uuid.UUID) 
 		return nil, sql.ErrNoRows
 	}
 	var item ExceptionRow
+	// Live schema is catalog_mdm (20260921_mdm_exception_studio), not mdm —
+	// mdm.universal_exception_queue was an imagined path (sqlmock-proven only).
 	err := s.db.GetContext(ctx, &item, `
 		SELECT domain_key, master_entity_sid, field_name, competing_values
-		FROM mdm.universal_exception_queue
+		FROM catalog_mdm.universal_exception_queue
 		WHERE exception_id = $1 AND tenant_id = $2;
 	`, exceptionID, tenantID)
 	if err != nil {

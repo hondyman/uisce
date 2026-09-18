@@ -24,7 +24,7 @@ func (s *Server) registerCatalogTools() {
 		s.catalogTextToSemanticAST,
 	)
 	s.RegisterTool("triage_mdm_exception",
-		"Analyzes competing vendor feeds for a broken golden record and returns root-cause diagnosis and recommended values.",
+		"Analyzes competing vendor feeds for a broken golden record (reads catalog_mdm.universal_exception_queue; requires live MDM exception rows).",
 		map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{

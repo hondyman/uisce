@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
@@ -206,6 +207,12 @@ func (h *BOWizardHandler) SaveBusinessObject(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	defer tx.Rollback()
+
+	// Predicate delta: none — SQL already binds tid; GUC for FORCE RLS.
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx.Tx, tid.String(), ""); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	boID := uuid.New()
 	_, err = tx.ExecContext(r.Context(), `

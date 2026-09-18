@@ -18,7 +18,7 @@ func TestGetByID_NotFound(t *testing.T) {
 	defer db.Close()
 	tid := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	ex := uuid.MustParse("b1000000-0000-4000-8000-000000000001")
-	mock.ExpectQuery("FROM mdm.universal_exception_queue").
+	mock.ExpectQuery("FROM catalog_mdm.universal_exception_queue").
 		WithArgs(ex, tid).
 		WillReturnError(sql.ErrNoRows)
 	svc := NewService(sqlx.NewDb(db, "sqlmock"))
@@ -39,7 +39,7 @@ func TestGetByID_Found(t *testing.T) {
 	defer db.Close()
 	tid := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	ex := uuid.MustParse("b1000000-0000-4000-8000-000000000001")
-	mock.ExpectQuery("FROM mdm.universal_exception_queue").
+	mock.ExpectQuery("FROM catalog_mdm.universal_exception_queue").
 		WithArgs(ex, tid).
 		WillReturnRows(sqlmock.NewRows([]string{"domain_key", "master_entity_sid", "field_name", "competing_values"}).
 			AddRow("sec", "sid-1", "isin", []byte(`[]`)))
