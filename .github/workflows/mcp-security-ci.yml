@@ -57,7 +57,7 @@ jobs:
       - name: HTTP PageStudio gold resolver receipt
         run: go test -count=1 -timeout 30s ./internal/handlers/ -run 'TestPageStudio_Gold'
       - name: RLS choke-point GUCs + legacy ApplyTenantGUCs receipt
-        run: go test -count=1 -timeout 30s ./internal/db/ -run 'ApplyTenant|WithTenantGold|LegacySites|RLSPolicy'
+        run: go test -count=1 -timeout 30s ./internal/db/ -run 'ApplyTenant|WithTenantGold|LegacySites|RLSPolicy|BeginTxInventory'
       - name: Route-table dump (Path 6 dual URL + shim)
         run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
       - name: Path 6 auth / no-core

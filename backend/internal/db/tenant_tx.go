@@ -85,7 +85,10 @@ func ApplyTenantGUCs(ctx context.Context, tx *sql.Tx, tenantID, goldTenantID str
 	if _, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID); err != nil {
 		return fmt.Errorf("ApplyTenantGUCs: SET LOCAL uisce.current_tenant failed: %w", err)
 	}
-	// Legacy policies (swift / older migrations) still read app.tenant_id.
+	// Legacy belt: older policies (swift, pre-uisce.* migrations) still read
+	// app.tenant_id. MCP gold-aware policies use uisce.current_tenant /
+	// uisce.gold_tenant only — do NOT remove this set_config as "unused" until
+	// those legacy current_setting('app.tenant_id') consumers are gone.
 	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
 		return fmt.Errorf("ApplyTenantGUCs: SET LOCAL app.tenant_id failed: %w", err)
 	}
