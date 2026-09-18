@@ -95,28 +95,38 @@ SELECT gen_random_uuid(), t.id, 'MT', 'MT548', ':20C:SEME', 'sender_msg_ref', tr
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
 
--- pacs.008 Mappings
+-- pacs.008 Mappings (aligned with ParseMX emitted paths per TestParseMX_Pacs008_FieldExtraction)
 INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
-SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'CdtTrfTxInf/EndToEndId', 'transaction_ref', true, NULL
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/EndToEndId', 'transaction_ref', true, NULL
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
 
 INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
-SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'CdtTrfTxInf/Amt/InstdAmt', 'settlement_amount', true, 'parse_amount_ccy'
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmAmt', 'settlement_amount', true, 'parse_amount_ccy'
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
 
 INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
-SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'CdtTrfTxInf/CdtrAgt/FinInstnId/BICFI', 'bic_receiver', true, NULL
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/CdtTrfTxInf/Cdtr/FinInstnId/BICFI', 'bic_receiver', true, NULL
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
 
 INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
-SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'GrpHdr/MsgId', 'msg_id', true, NULL
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/GrpHdr/MsgId', 'msg_id', true, NULL
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
 
 INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
-SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'GrpHdr/CreDtTm', 'created_at', true, 'parse_iso_datetime'
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/GrpHdr/CreDtTm', 'created_at', true, 'parse_iso_datetime'
+FROM public.tenants t WHERE t.gold_copy = true
+ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
+
+INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/UETR', 'uetr', true, NULL
+FROM public.tenants t WHERE t.gold_copy = true
+ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;
+
+INSERT INTO swift_field_map (id, tenant_id, swift_version, msg_type, field_tag, semantic_field, required, transform_fn)
+SELECT gen_random_uuid(), t.id, 'MX', 'pacs.008', 'Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmDt', 'settlement_date', true, 'parse_swift_date'
 FROM public.tenants t WHERE t.gold_copy = true
 ON CONFLICT (tenant_id, swift_version, msg_type, field_tag) DO NOTHING;

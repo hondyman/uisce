@@ -1,7 +1,7 @@
 # HANDOFF — SWIFT Settlement Process over Data Pipeline
 
 **Authors:** Antigravity (2026-09-17)
-**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 28/28 tests pass (5 MT parser + 9 MX parser + 1 admin server + 5 tile + 8 workflow). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–010 applied to alpha.
+**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 29/29 tests pass (5 MT parser + 9 MX parser + 1 admin server + 5 tile + 8 workflow + 1 recon workflow). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–011 applied to alpha.
 **Task queue:** `bp_queue` (same as FIX)
 
 ---
@@ -23,6 +23,10 @@ backend/db/migrations/20261001_004_swift_session_log.up.sql
 backend/db/migrations/20261001_005_swift_compliance_rule_set.up.sql
 backend/db/migrations/20261001_006_swift_reconciliation_report.up.sql
 backend/db/migrations/20261001_007_cash_flow_settlement_swift_subtypes.up.sql
+backend/db/migrations/20261001_008_swift_uetr_unique_and_transaction_ref.up.sql
+backend/db/migrations/20261001_009_swift_settlement_unique_txn_ref.up.sql
+backend/db/migrations/20261001_010_swift_settlement_subtype_constraint.up.sql
+backend/db/migrations/20261001_011_swift_field_map_pacs008_align.up.sql
 backend/db/seeds/20261001_swift_subtype_registry.sql
 ```
 
@@ -204,7 +208,7 @@ Admin endpoints (`start`, `stop`) require `X-Swift-Admin-Token` header.
 # Build
 go build ./internal/swift/... ./internal/temporal/... ./internal/api/... ./cmd/server/...
 
-# Tests (28/28 pass: 5 MT parser + 9 MX parser + 1 admin + 5 tile + 8 workflow)
+# Tests (29/29 pass: 5 MT parser + 9 MX parser + 1 admin + 5 tile + 8 workflow + 1 recon)
 go test ./internal/swift/... ./internal/temporal -count=1 -v
 
 # Vet
@@ -220,7 +224,7 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d alpha -c "
   SELECT msg_type, count(*) FROM vend.swift_field_map GROUP BY msg_type ORDER BY msg_type;"
 
 # Worker registrations
-grep -E "SWIFT" backend/internal/temporal/worker.go | grep -v "^[[:space:]]*//"
+grep -E "SWIFT" backend/cmd/worker/main.go | grep -v "^[[:space:]]*//"
 
 # Routes registered at startup (check server logs for)
 # ✅ SWIFT settlement routes registered (/api/cash-flow/swift/*)
@@ -513,40 +517,31 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 
 *(Gaps 1–5 above updated. New gaps added below.)*
 
-### 6. CANCEL_PENDING has no resolver — lifecycle hole ⚠️
+### 6. CANCEL_PENDING resolver — IMPLEMENTED & TESTED ✅
 
-**Created:** Sept 2026 (CANCEL_PENDING state added to prevent lying CANCELLED on failed recall).
-**Status:** `SWIFTReconciliationWorkflow` does **not** currently query `settlement_status = 'CANCEL_PENDING'`.
+**File:** `backend/internal/temporal/swift_cancel_pending_resolver.go`
+**Status:** Implemented and wired into `SWIFTReconciliationWorkflow`. Verified by `TestSWIFTReconciliationWorkflow`.
+- Activity signature adheres to Temporal contract: `(ctx context.Context, tenantID string)`. DB injected via `workerDBKey` in context.
+- Sweeps `settlement_status = 'CANCEL_PENDING'` scoped strictly to `tenant_id = $1` (GSIFI write rule).
+- Rows within 24h SLA with inbound `camt.029` or `MT548` in `vend.swift_session_log` $\to$ `CANCELLED`.
+- Rows older than 24h SLA $\to$ `FAILED` with reason `recall_unresolved`.
 
-**Consequence:** A failed recall (today: always, because `SWIFTRecallActivity` returns `ErrRecallNotImplemented`) parks the row in `CANCEL_PENDING` permanently. No SLA, no escalation, no transition to terminal state.
+### 7. pacs.008 Field Map Alignment — ALIGNED & VERIFIED ✅
 
-**Required before recall traffic exists:**
+**Problem Discovered (2026-09-18):**
+Inspection of `vend.swift_field_map` on alpha revealed that 3 of 5 pacs.008 tags did not match parser output at all (missing `PmtId` container level, wrong element name for amount and BIC), and 2 critical fields (`uetr` and `settlement_date`) were missing completely.
 
-1. `SWIFTReconciliationWorkflow` must add a query:
-   ```sql
-   SELECT id, transaction_ref, tenant_id, custodian_id
-   FROM cash_flow.settlement
-   WHERE settlement_status = 'CANCEL_PENDING'
-     AND tenant_id = $1
-     AND updated_at < NOW() - INTERVAL '24 hours'  -- SLA: 24h resolution window
-     AND valid_to IS NULL
-   ```
-2. For each row: attempt custodian channel query or escalation signal. Transition to `CANCELLED` (confirmed) or `FAILED` with `failure_reason = 'recall_unresolved'` (no custodian response after SLA).
-3. Verify recon runs on a schedule (not only on settlement failure) — if schedule-driven: CANCEL_PENDING rows are picked up automatically. If failure-driven: add a dedicated CANCEL_PENDING sweep activity.
-
-**Stub branch:** `swift/stub-work` (see merge instructions).
-
-### 7. MX parser field paths verified against seed ✅
-
-Verified against live alpha database on 2026-09-18:
-`vend.swift_field_map` column is `field_tag`. Current pacs.008 seeds:
-- `CdtTrfTxInf/EndToEndId` -> `transaction_ref`
-- `CdtTrfTxInf/Amt/InstdAmt` -> `settlement_amount`
-- `CdtTrfTxInf/CdtrAgt/FinInstnId/BICFI` -> `bic_receiver`
-- `GrpHdr/MsgId` -> `msg_id`
-- `GrpHdr/CreDtTm` -> `created_at`
-
-Note for post-merge pipeline engine wiring: `ParseMX` flattens XML elements to full hierarchical paths (e.g., `Document/FIToFICstmrCdtTrf/GrpHdr/MsgId`). The seed tags use subpaths without the `Document/FIToFICstmrCdtTrf/` root. Either `ParseMX` should strip the root Document envelope or `field_map` tile should support suffix matching.
+**Resolution:**
+1. Applied migration `20261001_011_swift_field_map_pacs008_align.up.sql` to alpha DB.
+2. Updated seed file `backend/db/migrations/20261001_003_swift_field_map_seed.up.sql`.
+3. Verified 100% exact match against `TestParseMX_Pacs008_FieldExtraction`:
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/Cdtr/FinInstnId/BICFI` $\to$ `bic_receiver` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmAmt` $\to$ `settlement_amount` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmDt` $\to$ `settlement_date` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/EndToEndId` $\to$ `transaction_ref` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/UETR` $\to$ `uetr` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/GrpHdr/CreDtTm` $\to$ `created_at` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/GrpHdr/MsgId` $\to$ `msg_id` (MATCH ✅)
 
 ### 8. Frontend Studio palette (unchanged)
 
