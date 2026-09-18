@@ -79,6 +79,7 @@ func (s *SWIFTSettlementWorkflowTestSuite) mockPersistExpecting(
 	status string,
 ) {
 	env.OnActivity(PersistSettlementStatusActivity,
+		mock.Anything,             // context.Context
 		input.TransactionRef,      // exact: wrong ref = test failure
 		status,                    // exact: "SETTLED" not "BANANA"
 		input.TenantID.String(),   // exact: wrong tenant = test failure

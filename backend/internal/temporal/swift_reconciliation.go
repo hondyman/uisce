@@ -78,6 +78,23 @@ func SWIFTReconciliationWorkflow(ctx workflow.Context, input SWIFTReconciliation
 		}
 	}
 
+	// Resolve CANCEL_PENDING settlement rows that have aged out or received responses.
+	resolveCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Minute,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 3},
+	})
+	var resolveResult ResolveCancelPendingResult
+	if err := workflow.ExecuteActivity(resolveCtx, ResolveCancelPendingActivity, input.TenantID).Get(ctx, &resolveResult); err != nil {
+		logger.Error("SWIFTReconciliationWorkflow: CANCEL_PENDING resolver failed", "error", err)
+		// Non-fatal for the recon run — mismatch detection still completes.
+	} else {
+		logger.Info("SWIFTReconciliationWorkflow: CANCEL_PENDING resolver finished",
+			"scanned", resolveResult.Scanned,
+			"resolved", resolveResult.Resolved,
+			"auto_failed", resolveResult.AutoFailed,
+			"still_pending", resolveResult.StillPending)
+	}
+
 	return report, nil
 }
 
