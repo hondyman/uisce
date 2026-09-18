@@ -18,11 +18,9 @@ import (
 //
 // audit.go is intentionally absent: audit writes to catalog_mdm_ai are an
 // explicit out-of-scope ledger write, not business-table SQL owned by a tool.
-var transitionalDirectSQLFiles = map[string]string{
-	// Exit: trading-service extract unifying omsLoadCRIMSOrder + OMSFIXCommandHandler.loadOrder
-	// (MCP IDOR + HTTP FIX receipts in one commit; pick stricter/richer fence deliberately)
-	"tools_oms.go": "omsLoadCRIMSOrder only",
-}
+// transitionalDirectSQLFiles must stay empty after SL commit 5/5 (CRIMS unify).
+// Non-empty means a tool file re-acquired business SQL — fail the invariant.
+var transitionalDirectSQLFiles = map[string]string{}
 
 // sqlCallSuffixes are database/sql and sqlx query methods. Bare "Get" is
 // omitted — chi.Router.Get collides and is not SQL.
@@ -100,6 +98,9 @@ func TestNoDirectSQLInTools(t *testing.T) {
 
 	remaining := len(transitionalDirectSQLFiles)
 	t.Logf("TestNoDirectSQLInTools: %d transitional exception file(s) remaining (goal: 0)", remaining)
+	if remaining != 0 {
+		t.Fatalf("SL invariant incomplete: transitionalDirectSQLFiles length=%d (must be 0 after CRIMS unify)", remaining)
+	}
 }
 
 func collectSQLCallLines(fset *token.FileSet, file *ast.File) []string {

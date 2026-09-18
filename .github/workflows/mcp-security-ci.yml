@@ -44,12 +44,14 @@ jobs:
           go-version: "1.25"
       - name: Tier 0 IDOR + MCP package tests
         run: go test -count=1 -timeout 120s ./internal/mcp/...
-      - name: No-direct-SQL tripwire (shrinks to empty exception list)
+      - name: No-direct-SQL tripwire (exception list must be 0)
         run: go test -count=1 -timeout 30s ./internal/mcp/ -run 'TestNoDirectSQLInTools' -v
       - name: Compiler identifier allowlist
         run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
       - name: SL service package unit tests
-        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/...
+        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/... ./internal/trading/ -run 'LoadOrder'
+      - name: HTTP FIX CRIMS unify receipt
+        run: go test -count=1 -timeout 30s ./internal/handlers/ -run 'TestOMSFIX_DelegatesCRIMSLoadToTrading'
       - name: Route-table dump (Path 6 dual URL + shim)
         run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
       - name: Path 6 auth / no-core

@@ -6,7 +6,6 @@ package mcp
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/client"
 
 	fixpkg "github.com/hondyman/uisce/backend/internal/fix"
@@ -222,7 +220,7 @@ func (s *Server) omsStartFIXOrderEntry(ctx context.Context, tenantID uuid.UUID, 
 	if cmd == "" {
 		cmd = "NewOrderSingle"
 	}
-	order, err := omsLoadCRIMSOrder(ctx, tenantID, args.OrderID)
+	order, err := trading.LoadOrder(ctx, tenantID, args.OrderID)
 	if err != nil {
 		return nil, err
 	}
@@ -263,45 +261,5 @@ func (s *Server) omsStartFIXOrderEntry(ctx context.Context, tenantID uuid.UUID, 
 		"clOrdId":    clOrdID,
 		"command":    cmd,
 		"status":     "started",
-	}, nil
-}
-
-// omsLoadCRIMSOrder is transitional MCP-owned SQL.
-// Exit commit: extract into trading/OMS service unifying this fence with
-// handlers.OMSFIXCommandHandler.loadOrder (same WHERE id AND tenant_id today —
-// pick the stricter/richer predicate deliberately; verify MCP IDOR + HTTP FIX
-// receipts in one commit).
-func omsLoadCRIMSOrder(ctx context.Context, tenantID uuid.UUID, orderID string) (*trading.Order, error) {
-	db, err := trading.OpenCRIMS(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-	var id, side string
-	var qty, leaves, price sql.NullFloat64
-	var secID, status sql.NullString
-	err = sqlx.NewDb(db, "postgres").QueryRowxContext(ctx, `
-		SELECT id::text, side, target_qty, leaves_qty, limit_price, sec_id::text, status
-		FROM orm."order"
-		WHERE id = $1::uuid AND tenant_id = $2::uuid
-	`, orderID, tenantID).Scan(&id, &side, &qty, &leaves, &price, &secID, &status)
-	if err != nil {
-		return nil, fmt.Errorf("order %s not found on crims.orm: %w", orderID, err)
-	}
-	q := qty.Float64
-	if leaves.Valid && leaves.Float64 > 0 {
-		q = leaves.Float64
-	}
-	symbol := "AAPL"
-	if secID.Valid && secID.String != "" {
-		symbol = secID.String
-	}
-	return &trading.Order{
-		OrderID:  id,
-		Symbol:   symbol,
-		Quantity: q,
-		Side:     side,
-		Price:    price.Float64,
-		Status:   status.String,
 	}, nil
 }

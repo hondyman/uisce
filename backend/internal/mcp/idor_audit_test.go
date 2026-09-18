@@ -454,11 +454,11 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		_, err := s.CallTool(context.Background(), tidA, "start_fix_order_entry",
 			mustJSON(map[string]string{"order_id": "b1000000-0000-4000-8000-000000000003"}))
 		ok := err != nil && err.Error() == ErrTemporalNotConfigured
-		detail := "Temporal gate before CRIMS; omsLoadCRIMSOrder SQL binds order_id+tenant_id (code review). Full CRIMS IDOR needs live/integration."
+		detail := "Temporal gate before CRIMS; trading.LoadOrder binds id+tenant_id"
 		status := "review"
 		if ok {
 			status = "proven"
-			detail = "Temporal-unset named error; CRIMS WHERE id=$1 AND tenant_id=$2 in omsLoadCRIMSOrder"
+			detail = "Temporal-unset named error; via trading.LoadOrder (unified with HTTP FIX); WHERE id=$1 AND tenant_id=$2"
 		}
 		add(idorRow{"start_fix_order_entry", "order_id", status, detail, ok})
 	}

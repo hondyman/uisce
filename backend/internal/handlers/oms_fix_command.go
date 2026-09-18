@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -154,43 +153,6 @@ func (h *OMSFIXCommandHandler) start(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *OMSFIXCommandHandler) loadOrder(ctx context.Context, tenantID uuid.UUID, orderID string) (*trading.Order, error) {
-	db, err := trading.OpenCRIMS(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer db.Close()
-
-	var row struct {
-		ID     string          `db:"id"`
-		Side   string          `db:"side"`
-		Qty    sql.NullFloat64 `db:"target_qty"`
-		Leaves sql.NullFloat64 `db:"leaves_qty"`
-		Price  sql.NullFloat64 `db:"limit_price"`
-		SecID  sql.NullString  `db:"sec_id"`
-		Status sql.NullString  `db:"status"`
-	}
-	err = sqlx.NewDb(db, "postgres").GetContext(ctx, &row, `
-		SELECT id::text, side, target_qty, leaves_qty, limit_price, sec_id::text, status
-		FROM orm."order"
-		WHERE id = $1::uuid AND tenant_id = $2::uuid
-	`, orderID, tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("order %s not found on crims.orm: %w", orderID, err)
-	}
-	qty := row.Qty.Float64
-	if row.Leaves.Valid && row.Leaves.Float64 > 0 {
-		qty = row.Leaves.Float64
-	}
-	symbol := row.SecID.String
-	if symbol == "" {
-		symbol = "AAPL"
-	}
-	return &trading.Order{
-		OrderID:  row.ID,
-		Symbol:   symbol,
-		Quantity: qty,
-		Side:     row.Side,
-		Price:    row.Price.Float64,
-		Status:   row.Status.String,
-	}, nil
+	// Shared fence with MCP start_fix_order_entry (trading.LoadOrder).
+	return trading.LoadOrder(ctx, tenantID, orderID)
 }
