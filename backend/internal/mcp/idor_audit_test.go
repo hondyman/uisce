@@ -142,7 +142,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "list_business_objects", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "WithArgs(tenantA); note also allows gold-copy UUID in SQL OR clause"
+		detail := "via boread.ListSummaries; WithArgs(tenantA); nil-UUID OR preserved (not BusinessObjectService)"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -170,7 +170,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		got, err := s.CallTool(context.Background(), tidA, "get_business_object_contract",
 			mustJSON(map[string]interface{}{"bo_id": boID.String(), "bo_key": "order"}))
 		ok := err == nil
-		detail := "WithArgs(bo_id, bo_key, tenantA); gold-copy OR in SQL (global-row fallback)"
+		detail := "via boread.GetContract; WithArgs(bo_id,bo_key,tenantA); nil-UUID OR preserved"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -200,7 +200,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		_, err = s.CallTool(context.Background(), tidA, "get_bo_terms",
 			mustJSON(map[string]string{"bo_id": boID.String(), "bo_key": "order"}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "WithArgs(bo_id, bo_key, tenantA)"
+		detail := "via boread.ListTerms; WithArgs(bo_id,bo_key,tenantA); predicate unchanged"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -227,7 +227,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		got, err := s.CallTool(context.Background(), tidA, "resolve_relationship_path",
 			mustJSON(map[string]string{"source_node_id": nodeA.String(), "target_node_id": nodeB.String()}))
 		ok := err == nil
-		detail := "WithArgs(src,tgt,tenantA); no row → path_found:false"
+		detail := "via boread.ResolveEdge; WithArgs(src,tgt,tenantA); no row → path_found:false"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -258,7 +258,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		_, err = s.CallTool(context.Background(), tidA, "get_bo_schema",
 			mustJSON(map[string]string{"bo_id": boID.String()}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "WithArgs(tenantA, bo_id)"
+		detail := "via boread.ListFieldSchema; WithArgs(tenantA, bo_id); predicate unchanged"
 		if err != nil {
 			ok = false
 			detail = err.Error()

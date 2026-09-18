@@ -180,44 +180,27 @@ func (s *Server) omsGetBOSchema(ctx context.Context, tenantID uuid.UUID, argsRaw
 		BOKey string `json:"bo_key"`
 	}
 	_ = json.Unmarshal(argsRaw, &args)
-	if s.db == nil {
+	if s.bos == nil {
 		return map[string]interface{}{"fields": []interface{}{}}, nil
 	}
 	boID := args.BOID
 	if boID == "" && args.BOKey != "" {
-		_ = s.db.QueryRowContext(ctx, `
-			SELECT id::text FROM public.business_objects
-			WHERE tenant_id = $1 AND name = $2
-			LIMIT 1
-		`, tenantID, args.BOKey).Scan(&boID)
+		if id, err := s.bos.ResolveBOIDByKey(ctx, tenantID, args.BOKey); err == nil {
+			boID = id
+		}
 	}
 	if boID == "" {
 		return map[string]interface{}{"fields": []interface{}{}, "note": "bo_id or bo_key required"}, nil
 	}
-	rows, err := s.db.QueryxContext(ctx, `
-		SELECT COALESCE(technical_name, field_name) AS name,
-		       COALESCE(NULLIF(display_name, ''), field_name) AS display_name,
-		       COALESCE(data_type, 'text') AS data_type
-		FROM public.business_object_fields
-		WHERE tenant_id = $1 AND bo_id::text = $2
-		ORDER BY display_order NULLS LAST, field_name
-	`, tenantID, boID)
+	fields, err := s.bos.ListFieldSchema(ctx, tenantID, boID)
 	if err != nil {
 		return map[string]interface{}{"fields": []interface{}{}, "note": err.Error()}, nil
 	}
-	defer rows.Close()
-	var fields []map[string]interface{}
-	for rows.Next() {
-		var name, display, dt string
-		if err := rows.Scan(&name, &display, &dt); err != nil {
-			return nil, err
-		}
-		fields = append(fields, map[string]interface{}{"name": name, "displayName": display, "type": dt})
+	out := make([]map[string]interface{}, 0, len(fields))
+	for _, f := range fields {
+		out = append(out, map[string]interface{}{"name": f.Name, "displayName": f.DisplayName, "type": f.DataType})
 	}
-	if fields == nil {
-		fields = []map[string]interface{}{}
-	}
-	return map[string]interface{}{"bo_id": boID, "fields": fields}, nil
+	return map[string]interface{}{"bo_id": boID, "fields": out}, nil
 }
 
 func (s *Server) omsStartFIXOrderEntry(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
@@ -283,6 +266,11 @@ func (s *Server) omsStartFIXOrderEntry(ctx context.Context, tenantID uuid.UUID, 
 	}, nil
 }
 
+// omsLoadCRIMSOrder is transitional MCP-owned SQL.
+// Exit commit: extract into trading/OMS service unifying this fence with
+// handlers.OMSFIXCommandHandler.loadOrder (same WHERE id AND tenant_id today —
+// pick the stricter/richer predicate deliberately; verify MCP IDOR + HTTP FIX
+// receipts in one commit).
 func omsLoadCRIMSOrder(ctx context.Context, tenantID uuid.UUID, orderID string) (*trading.Order, error) {
 	db, err := trading.OpenCRIMS(ctx)
 	if err != nil {

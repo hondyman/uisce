@@ -10,8 +10,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/boread"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
-	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/pagestudio"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
@@ -22,6 +22,7 @@ type MCPToolHandler struct {
 	db       *sqlx.DB
 	compiler *boresolver.BitemporalRangeCompiler
 	pages    *pagestudio.Service
+	bos      *boread.Service
 }
 
 // NewMCPToolHandler creates a new MCPToolHandler instance.
@@ -34,6 +35,7 @@ func NewMCPToolHandler(db *sqlx.DB, optionalCompiler ...*boresolver.BitemporalRa
 		db:       db,
 		compiler: compiler,
 		pages:    pagestudio.NewService(db),
+		bos:      boread.NewService(db),
 	}
 }
 
@@ -292,17 +294,19 @@ func (h *MCPToolHandler) getBusinessObjectContract(ctx context.Context, tenantID
 		}, nil
 	}
 
-	var boName, displayName, status string
-	query := `
-		SELECT name, display_name, status
-		FROM public.business_objects
-		WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000')
-		LIMIT 1`
-	err := h.db.QueryRowContext(ctx, query, args.BOID.String(), args.BOKey, tenantID.String()).Scan(&boName, &displayName, &status)
+	c, err := h.bos.GetContract(ctx, tenantID, args.BOID, args.BOKey)
 	if err != nil && err != sql.ErrNoRows {
-		logging.GetLogger().Sugar().Warnf("MCP getBusinessObjectContract note: %v", err)
+		return map[string]interface{}{
+			"tenant_id":    tenantID,
+			"bo_name":      "",
+			"display_name": "",
+			"status":       "",
+		}, nil
 	}
-
+	boName, displayName, status := "", "", ""
+	if c != nil {
+		boName, displayName, status = c.Name, c.DisplayName, c.Status
+	}
 	return map[string]interface{}{
 		"tenant_id":    tenantID,
 		"bo_name":      boName,
@@ -329,15 +333,7 @@ func (h *MCPToolHandler) resolveRelationshipPath(ctx context.Context, tenantID u
 		}, nil
 	}
 
-	var edgeTypeName string
-	var propsRaw []byte
-	query := `
-		SELECT edge_type_name, properties
-		FROM public.catalog_edge
-		WHERE source_id = $1 AND target_id = $2
-		  AND (tenant_id = $3::text OR tenant_id = '00000000-0000-0000-0000-000000000000')
-		LIMIT 1`
-	err := h.db.QueryRowContext(ctx, query, args.SourceNodeID.String(), args.TargetNodeID.String(), tenantID.String()).Scan(&edgeTypeName, &propsRaw)
+	edge, err := h.bos.ResolveEdge(ctx, tenantID, args.SourceNodeID, args.TargetNodeID)
 	if err != nil {
 		return map[string]interface{}{
 			"source_node_id": args.SourceNodeID,
@@ -347,44 +343,29 @@ func (h *MCPToolHandler) resolveRelationshipPath(ctx context.Context, tenantID u
 	}
 
 	var props map[string]interface{}
-	_ = json.Unmarshal(propsRaw, &props)
+	_ = json.Unmarshal(edge.Properties, &props)
 
 	return map[string]interface{}{
 		"source_node_id": args.SourceNodeID,
 		"target_node_id": args.TargetNodeID,
 		"path_found":     true,
-		"edge_type":      edgeTypeName,
+		"edge_type":      edge.EdgeTypeName,
 		"properties":     props,
 	}, nil
 }
 
 func (h *MCPToolHandler) listBusinessObjects(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
-	if h.db == nil {
-		return map[string]interface{}{"business_objects": []interface{}{}}, nil
-	}
-	rows, err := h.db.QueryxContext(ctx, `
-		SELECT id::text, COALESCE(name, '') AS name, COALESCE(display_name, name, '') AS display_name, COALESCE(status, '') AS status
-		FROM public.business_objects
-		WHERE tenant_id = $1 OR tenant_id = '00000000-0000-0000-0000-000000000000'
-		ORDER BY display_name
-		LIMIT 200
-	`, tenantID.String())
+	list, err := h.bos.ListSummaries(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var list []map[string]interface{}
-	for rows.Next() {
-		var id, name, display, status string
-		if err := rows.Scan(&id, &name, &display, &status); err != nil {
-			return nil, err
-		}
-		list = append(list, map[string]interface{}{"id": id, "key": name, "display_name": display, "status": status})
+	out := make([]map[string]interface{}, 0, len(list))
+	for _, item := range list {
+		out = append(out, map[string]interface{}{
+			"id": item.ID, "key": item.Name, "display_name": item.DisplayName, "status": item.Status,
+		})
 	}
-	if list == nil {
-		list = []map[string]interface{}{}
-	}
-	return map[string]interface{}{"business_objects": list}, nil
+	return map[string]interface{}{"business_objects": out}, nil
 }
 
 func (h *MCPToolHandler) getBOTerms(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
@@ -395,35 +376,15 @@ func (h *MCPToolHandler) getBOTerms(ctx context.Context, tenantID uuid.UUID, arg
 	if err := json.Unmarshal(argsRaw, &args); err != nil {
 		return nil, err
 	}
-	if h.db == nil {
-		return map[string]interface{}{"terms": []interface{}{}}, nil
-	}
-	rows, err := h.db.QueryxContext(ctx, `
-		SELECT COALESCE(term_key, name, '') AS term_key,
-		       COALESCE(display_name, term_key, name, '') AS display_name,
-		       COALESCE(role, '') AS role
-		FROM public.business_object_fields
-		WHERE business_object_id::text = $1 OR business_object_id IN (
-			SELECT id FROM public.business_objects WHERE name = $2 AND (tenant_id = $3 OR tenant_id = '00000000-0000-0000-0000-000000000000')
-		)
-		LIMIT 200
-	`, args.BOID, args.BOKey, tenantID.String())
+	terms, err := h.bos.ListTerms(ctx, tenantID, args.BOID, args.BOKey)
 	if err != nil {
 		return map[string]interface{}{"terms": []interface{}{}, "note": err.Error()}, nil
 	}
-	defer rows.Close()
-	var terms []map[string]interface{}
-	for rows.Next() {
-		var key, display, role string
-		if err := rows.Scan(&key, &display, &role); err != nil {
-			return nil, err
-		}
-		terms = append(terms, map[string]interface{}{"termKey": key, "displayName": display, "role": role})
+	out := make([]map[string]interface{}, 0, len(terms))
+	for _, t := range terms {
+		out = append(out, map[string]interface{}{"termKey": t.TermKey, "displayName": t.DisplayName, "role": t.Role})
 	}
-	if terms == nil {
-		terms = []map[string]interface{}{}
-	}
-	return map[string]interface{}{"terms": terms}, nil
+	return map[string]interface{}{"terms": out}, nil
 }
 
 func (h *MCPToolHandler) listPages(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {

@@ -19,16 +19,20 @@ import (
 // audit.go is intentionally absent: audit writes to catalog_mdm_ai are an
 // explicit out-of-scope ledger write, not business-table SQL owned by a tool.
 var transitionalDirectSQLFiles = map[string]string{
-	"tool_handler.go":     "BO contract/list/terms/edge helpers (list_pages/get_page migrated)",
-	"tools_oms.go":        "get_bo_schema + omsLoadCRIMSOrder (describe_oms_journey migrated)",
-	"tools_catalog.go":    "triage_mdm_exception + inspect_schema_drift",
-	"tools_governance.go": "search_catalog (discovery/search is discovery_candidates, not BOs)",
+	// Exit: trading-service extract unifying omsLoadCRIMSOrder + OMSFIXCommandHandler.loadOrder
+	"tools_oms.go": "omsLoadCRIMSOrder only (get_bo_schema → boread)",
+	// Exit: MDM exception service extract
+	"tools_catalog.go": "triage_mdm_exception + inspect_schema_drift read extract",
+	// Exit: boread search extract (NOT discovery/search — different table)
+	"tools_governance.go": "search_catalog",
 }
 
+// sqlCallSuffixes are database/sql and sqlx query methods. Bare "Get" is
+// omitted — chi.Router.Get collides and is not SQL.
 var sqlCallSuffixes = []string{
 	"Query", "QueryContext", "Queryx", "QueryxContext",
 	"QueryRow", "QueryRowContext", "QueryRowx", "QueryRowxContext",
-	"Select", "SelectContext", "Get", "GetContext",
+	"Select", "SelectContext", "GetContext",
 	"Exec", "ExecContext",
 }
 
