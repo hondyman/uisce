@@ -2713,8 +2713,10 @@ func (s *Server) broadcastFundUpdate(fundID string, metrics map[string]interface
 }
 
 func (s *Server) broadcastToUser(userID string, message []byte) {
-	s.WsHub.mutex.RLock()
-	defer s.WsHub.mutex.RUnlock()
+	// Write lock: the default branch below deletes from s.WsHub.clients,
+	// which races under a read lock.
+	s.WsHub.mutex.Lock()
+	defer s.WsHub.mutex.Unlock()
 
 	for client := range s.WsHub.clients {
 		if client.userID == userID {
