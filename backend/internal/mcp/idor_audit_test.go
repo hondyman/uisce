@@ -398,7 +398,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		_, err := s.CallTool(context.Background(), tidA, "text_to_semantic_ast",
 			mustJSON(map[string]string{"prompt": "show orders"}))
 		ok := err == nil
-		detail := "no resource id; tenant passed to CompilePromptToAST (AuthInfo→CallTool)"
+		detail := "via semanticast.Compiler; tenant→CompilePromptToAST; nil tenant rejected at CallTool"
 		if err != nil {
 			ok = false
 			detail = err.Error()

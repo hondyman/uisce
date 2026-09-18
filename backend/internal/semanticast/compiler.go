@@ -1,4 +1,7 @@
-package mcp
+// Package semanticast owns NL→QueryAST compilation for catalog-grounded prompts.
+// Ported from internal/mcp (SL commit 3/5); MCP tools call this package and
+// never own the compiler.
+package semanticast
 
 import (
 	"context"
@@ -10,16 +13,18 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-type TextToASTCompiler struct {
+// Compiler grounds natural-language prompts against catalog semantic terms.
+type Compiler struct {
 	db *sqlx.DB
 }
 
-func NewTextToASTCompiler(db *sqlx.DB) *TextToASTCompiler {
-	return &TextToASTCompiler{db: db}
+func NewCompiler(db *sqlx.DB) *Compiler {
+	return &Compiler{db: db}
 }
 
-// CompilePromptToAST ground natural language prompts against active catalog semantic terms
-func (c *TextToASTCompiler) CompilePromptToAST(
+// CompilePromptToAST grounds natural language prompts against active catalog
+// semantic terms. Rejects uuid.Nil tenant (Rule 7).
+func (c *Compiler) CompilePromptToAST(
 	ctx context.Context,
 	tenantID uuid.UUID,
 	prompt string,

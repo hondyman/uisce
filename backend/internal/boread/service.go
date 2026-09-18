@@ -237,17 +237,13 @@ type SearchMatch struct {
 	DisplayName string `db:"display_name" json:"display_name"`
 }
 
-// Search finds business_objects by name/display_name ILIKE for the tenant.
+// Search is the MCP catalog search contract: tenant-scoped-or-gold (nil-UUID OR),
+// ILIKE on name/display_name, LIMIT 50. Use this for BO/catalog name search —
+// not discovery/search, which queries discovery_candidates for a different purpose.
 //
-// This is a new service contract (extraction), not a delegation — there is no
-// existing BusinessObjectService search with this shape. discovery/search is
-// rejected: it queries discovery_candidates, not business_objects.
-//
-// Predicate comparison (SL extract from MCP search_catalog):
-//
-//	OLD (tool SQL): (tenant_id = $1 OR nil-UUID) AND (name ILIKE … OR display_name ILIKE …)
-//	NEW:            identical bind shape and WHERE (new boread.Search)
-//	DELTA:          none (predicate copied; contract newly owned by boread)
+// New service surface (extraction, not delegation). Predicate comparison
+// (SL extract from MCP search_catalog): OLD tool SQL → NEW identical WHERE/binds;
+// DELTA none.
 func (s *Service) Search(ctx context.Context, tenantID uuid.UUID, query string) ([]SearchMatch, error) {
 	if s == nil || s.db == nil {
 		return []SearchMatch{}, nil

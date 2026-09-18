@@ -28,6 +28,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boread"
 	"github.com/hondyman/uisce/backend/internal/pagestudio"
+	"github.com/hondyman/uisce/backend/internal/semanticast"
 	"github.com/jmoiron/sqlx"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -49,7 +50,7 @@ type Server struct {
 	path1    *MCPToolHandler
 	pages    *pagestudio.Service
 	bos      *boread.Service
-	nlEngine *TextToASTCompiler
+	nlEngine *semanticast.Compiler
 	temporal client.Client
 
 	mu    sync.RWMutex
@@ -66,7 +67,7 @@ func NewServer(db *sqlx.DB) *Server {
 		path1:    NewMCPToolHandler(db),
 		pages:    pages,
 		bos:      bos,
-		nlEngine: NewTextToASTCompiler(db),
+		nlEngine: semanticast.NewCompiler(db),
 		tools:    make(map[string]registeredTool),
 	}
 	s.registerDefaultTools()
