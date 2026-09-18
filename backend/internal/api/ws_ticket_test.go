@@ -194,6 +194,25 @@ func TestWsTicket_HostileOriginDoesNotBurnTicket(t *testing.T) {
 	}
 	defer conn.Close()
 
+	// Verify Finding 1: Ensure WebSocketClient registered in WsHub carries tenantID "tenant-prod"
+	time.Sleep(50 * time.Millisecond) // wait for registration channel
+	srv.WsHub.mutex.RLock()
+	var foundClient *WebSocketClient
+	for c := range srv.WsHub.clients {
+		if c.userID == "user-prod" {
+			foundClient = c
+			break
+		}
+	}
+	srv.WsHub.mutex.RUnlock()
+
+	if foundClient == nil {
+		t.Fatalf("expected client with userID user-prod to be registered in WsHub")
+	}
+	if foundClient.tenantID != "tenant-prod" {
+		t.Fatalf("expected registered client to have tenantID='tenant-prod', got '%s'", foundClient.tenantID)
+	}
+
 	// Now that it succeeded once, a second connect with the same ticket MUST fail (single-use)
 	_, secondResp, err := dialer.Dial(wsURL, validHeader)
 	if err == nil {

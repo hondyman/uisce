@@ -253,6 +253,7 @@ func (s *Server) handleWebSocketTicketAndUpgrade(w http.ResponseWriter, r *http.
 			conn:     conn,
 			send:     make(chan []byte, 256),
 			userID:   userID,
+			tenantID: tenantID,
 			audience: audience,
 			hub:      s.WsHub,
 		}
