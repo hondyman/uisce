@@ -443,13 +443,59 @@ const SSRSReportBuilderContent: React.FC = () => {
     );
     const isReadOnlyCore = isCoreTemplate && !isGoldCopyTenant;
 
-    const handleSaveReport = useCallback(async () => {
-      if (isReadOnlyCore) {
+    // Creates the tenant's own customized copy of a gold-copy-inherited
+    // report: same BO/layout/parameters, a fresh id and report_key,
+    // is_core=false. This is what lets a tenant "tweak" an inherited
+    // report without ever writing to the shared core row.
+    const handleCloneReport = useCallback(async () => {
+      try {
+        const baseName = reportTitle.replace(/\s*\(Custom\s*Copy\)/i, '').replace(/\s*\(Core\)/i, '');
+        const cloneTitle = isReadOnlyCore ? baseName : `${baseName} (Custom Copy)`;
+        const payload = buildSavePayload(
+          {
+            elements,
+            reportTitle: cloneTitle,
+            sectionConfig,
+            layoutSettings: layoutSettingsState,
+            parameters: reportParameters,
+          },
+          selectedBO as BOBinding | null,
+          undefined
+        );
+        (payload as any).is_core = false;
+        (payload as any).name = cloneTitle;
+        (payload as any).report_key = `${(loadedTemplate as any)?.report_key || 'rep'}_custom_${Date.now()}`;
+
+        const result = await createMutation.mutateAsync(payload as any);
+        const newId = (result as any)?.id || (result as any)?.report_id;
         setSnackbar({
           open: true,
-          message: 'Core templates cannot be overwritten directly by client tenants. Please click "Clone" to create your own customizable copy.',
-          severity: 'warning',
+          message: `Report saved as "${cloneTitle}"! You can now customize parameters, filters, and layout for your tenant.`,
+          severity: 'success',
         });
+        if (newId) {
+          setTimeout(() => {
+            window.location.href = `/reports/${newId}/edit`;
+          }, 800);
+        }
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: `Failed to save your copy: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          severity: 'error',
+        });
+      }
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation, isReadOnlyCore]);
+
+    const handleSaveReport = useCallback(async () => {
+      // A gold-copy-inherited report is tweak-able but never directly
+      // overwritten by a non-gold tenant: Save transparently creates (or,
+      // on a later save, updates) the tenant's own customized copy instead
+      // of the shared core row. This is the same operation "Clone" performs
+      // explicitly — it just happens on Save so tenants don't need a
+      // separate clone step before they can keep their edits.
+      if (isReadOnlyCore) {
+        await handleCloneReport();
         return;
       }
 
@@ -487,47 +533,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       } catch (err) {
         setSnackbar({ open: true, message: `Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`, severity: 'error' });
       }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation]);
-
-    const handleCloneReport = useCallback(async () => {
-      try {
-        const baseName = reportTitle.replace(/\s*\(Custom\s*Copy\)/i, '').replace(/\s*\(Core\)/i, '');
-        const cloneTitle = `${baseName} (Custom Copy)`;
-        const payload = buildSavePayload(
-          {
-            elements,
-            reportTitle: cloneTitle,
-            sectionConfig,
-            layoutSettings: layoutSettingsState,
-            parameters: reportParameters,
-          },
-          selectedBO as BOBinding | null,
-          undefined
-        );
-        (payload as any).is_core = false;
-        (payload as any).name = cloneTitle;
-        (payload as any).report_key = `${(loadedTemplate as any)?.report_key || 'rep'}_custom_${Date.now()}`;
-
-        const result = await createMutation.mutateAsync(payload as any);
-        const newId = (result as any)?.id || (result as any)?.report_id;
-        setSnackbar({
-          open: true,
-          message: `Report cloned successfully as "${cloneTitle}"! You can now customize parameters, filters, and layout for your tenant.`,
-          severity: 'success',
-        });
-        if (newId) {
-          setTimeout(() => {
-            window.location.href = `/reports/${newId}/edit`;
-          }, 800);
-        }
-      } catch (err) {
-        setSnackbar({
-          open: true,
-          message: `Failed to clone report: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          severity: 'error',
-        });
-      }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation]);
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation, handleCloneReport]);
 
   const handleRunReport = useCallback(async (paramOverrides?: Record<string, any>) => {
     if (!urlReportId && !loadedTemplate?.report_key) {
@@ -1173,13 +1179,13 @@ const SSRSReportBuilderContent: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', px: 1 }}>
             {/* Left: action icons */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flex: '0 0 auto' }}>
-              <Tooltip title={isReadOnlyCore ? "Core template (read-only). Click Clone to create a custom tenant copy." : "Save (Ctrl+S)"}>
+              <Tooltip title={isReadOnlyCore ? "Save as your own tenant copy — the shared core template stays unchanged" : "Save (Ctrl+S)"}>
                 <IconButton
-                  aria-label={isReadOnlyCore ? "Core template (read-only)" : "Save (Ctrl+S)"}
+                  aria-label={isReadOnlyCore ? "Save as your own tenant copy" : "Save (Ctrl+S)"}
                   size="small"
                   onClick={handleSaveReport}
-                  disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
-                  sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <SaveIcon sx={{ fontSize: 19 }} />
                 </IconButton>
@@ -1214,7 +1220,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   aria-label="Undo"
                   size="small"
                   onClick={undo}
-                  disabled={!canUndo || isReadOnlyCore}
+                  disabled={!canUndo}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <UndoIcon sx={{ fontSize: 19 }} />
@@ -1225,7 +1231,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   aria-label="Redo"
                   size="small"
                   onClick={redo}
-                  disabled={!canRedo || isReadOnlyCore}
+                  disabled={!canRedo}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <RedoIcon sx={{ fontSize: 19 }} />
@@ -1285,7 +1291,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   <Button
                     size="small"
                     variant="outlined"
-                    disabled={!selectedBO?.id || isReadOnlyCore}
+                    disabled={!selectedBO?.id}
                     onClick={() => { setAiError(null); setAiOpen(true); }}
                     startIcon={<AutoAwesomeIcon sx={{ fontSize: 15 }} />}
                     sx={{
@@ -1317,7 +1323,7 @@ const SSRSReportBuilderContent: React.FC = () => {
               {isCoreTemplate && (
                 <Chip
                   size="small"
-                  label={isReadOnlyCore ? 'Core Template (Read-Only)' : 'Core Template (Master)'}
+                  label={isReadOnlyCore ? 'Core Template (Save creates your copy)' : 'Core Template (Master)'}
                   sx={{
                     height: 22,
                     fontSize: '0.65rem',
@@ -1328,7 +1334,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   }}
                 />
               )}
-              {editingTitle && !isReadOnlyCore ? (
+              {editingTitle ? (
                 <TextField
                   inputRef={(input) => input?.focus()}
                   value={reportTitle}
@@ -1348,22 +1354,22 @@ const SSRSReportBuilderContent: React.FC = () => {
                   }}
                 />
               ) : (
-                <Tooltip title={isReadOnlyCore ? "Core template (read-only)" : "Click or tap pencil to rename report"}>
+                <Tooltip title="Click or tap pencil to rename report">
                   <Box
-                    onClick={() => !isReadOnlyCore && setEditingTitle(true)}
+                    onClick={() => setEditingTitle(true)}
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 1,
-                      cursor: isReadOnlyCore ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       px: 1.5,
                       py: 0.5,
                       borderRadius: 1,
-                      border: isReadOnlyCore ? '1px solid transparent' : '1px dashed',
+                      border: '1px dashed',
                       borderColor: 'divider',
                       bgcolor: 'action.hover',
                       transition: 'all 0.15s ease-in-out',
-                      '&:hover': isReadOnlyCore ? {} : {
+                      '&:hover': {
                         bgcolor: 'action.selected',
                         borderColor: 'primary.main',
                       },
@@ -1372,9 +1378,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
                       {reportTitle}
                     </Typography>
-                    {!isReadOnlyCore && (
-                      <EditIcon sx={{ fontSize: 15, color: 'primary.main', opacity: 0.8 }} />
-                    )}
+                    <EditIcon sx={{ fontSize: 15, color: 'primary.main', opacity: 0.8 }} />
                   </Box>
                 </Tooltip>
               )}
@@ -1391,7 +1395,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   value={selectedBOId}
                   displayEmpty
                   onChange={(e) => setSelectedBOId(e.target.value as string)}
-                  disabled={(!!urlReportId && !!selectedBOId) || isReadOnlyCore}
+                  disabled={!!urlReportId && !!selectedBOId}
                   sx={{
                     height: 28, color: '#FFF', bgcolor: 'rgba(255,255,255,0.09)', fontSize: '0.75rem', fontWeight: 600,
                     borderRadius: 1.5, '& .MuiSvgIcon-root': { color: '#FFF' },
@@ -1862,7 +1866,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                           value={selectedBOId}
                           label="Business Object"
                           onChange={(e) => setSelectedBOId(e.target.value as string)}
-                          disabled={(!!urlReportId && !!selectedBOId) || isReadOnlyCore}
+                          disabled={!!urlReportId && !!selectedBOId}
                         >
                           <MenuItem value=""><em>Select Business Object...</em></MenuItem>
                           {businessObjects.map((bo: any) => (
