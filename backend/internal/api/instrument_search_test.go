@@ -178,8 +178,10 @@ func TestInstrumentSearch_LimitClamping(t *testing.T) {
 	}
 }
 
-// 6. Benchmark & execution latency assertion (<100ms) with mocked high-density response
-func TestInstrumentSearch_LatencyBudget(t *testing.T) {
+// 6. Handler smoke test verifying Go HTTP, JSON framing, and query parameter parsing overhead (<50ms).
+// NOTE: Production-scale database query latency across 25k+ indexed securities is environment-gated
+// and must be evaluated against physical PostgreSQL with real trigram index scans.
+func TestInstrumentSearch_HandlerSmoke(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("failed to create sqlmock: %v", err)
@@ -208,7 +210,17 @@ func TestInstrumentSearch_LatencyBudget(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK, got %d", rec.Code)
 	}
-	if elapsed > 100*time.Millisecond {
-		t.Fatalf("latency exceeded 100ms budget: took %v", elapsed)
+
+	var resp InstrumentSearchResponse
+	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if len(resp.Results) != 20 {
+		t.Fatalf("expected 20 results in payload, got %d", len(resp.Results))
+	}
+
+	// Verify Go HTTP serialization / dispatch overhead does not block the event loop
+	if elapsed > 50*time.Millisecond {
+		t.Fatalf("handler overhead exceeded 50ms: took %v", elapsed)
 	}
 }

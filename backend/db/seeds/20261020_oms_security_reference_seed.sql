@@ -8,8 +8,17 @@ DECLARE
 BEGIN
     SELECT id INTO gold_copy_tenant_id FROM public.tenants WHERE gold_copy = true LIMIT 1;
     IF gold_copy_tenant_id IS NULL THEN
-        -- Fallback to default platform gold-copy tenant if tenants table record not yet marked
-        gold_copy_tenant_id := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+        -- Fallback to '99e99e99-99e9-49e9-89e9-99e99e99e999' which is the documented default
+        -- platform master tenant ("northwind" gold-copy in core seeds).
+        -- If running in a greenfield database where even that tenant does not exist yet,
+        -- we verify its presence to avoid foreign-key violations and exit cleanly/silently
+        -- to maintain idempotent execution across test runners and operators.
+        IF EXISTS (SELECT 1 FROM public.tenants WHERE id = '99e99e99-99e9-49e9-89e9-99e99e99e999') THEN
+            gold_copy_tenant_id := '99e99e99-99e9-49e9-89e9-99e99e99e999';
+        ELSE
+            RAISE NOTICE 'No gold-copy tenant found; skipping oms.security reference seed.';
+            RETURN;
+        END IF;
     END IF;
 
     INSERT INTO oms.security (

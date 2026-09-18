@@ -63,6 +63,9 @@ func (h *InstrumentSearchHandler) Search(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Auth resolution: Temporarily delegating to WorkspaceLayoutHandler.resolveUserAndTenant
+	// for multi-channel auth extraction (JWT context/header, AuthInfo, Identity, and dev fallbacks).
+	// TODO: Extract to a unified shared internal/api auth helper to avoid instantiating WorkspaceLayoutHandler.
 	layoutHelper := NewWorkspaceLayoutHandler(h.db)
 	_, tenantID, err := layoutHelper.resolveUserAndTenant(r)
 	if err != nil || tenantID == uuid.Nil {

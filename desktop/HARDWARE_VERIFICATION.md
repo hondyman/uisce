@@ -21,6 +21,7 @@ It serves as the execution checklist for the moment an external display (USB-C/H
 | **3. Mixed-DPI Seam & Rendering** | Zero clipping/misalignment between 2x Retina and 1x External | Drag or spawn window on external monitor. Check Canvas blotter, command bar, and window borders. | Sharp typography, canvas DPR scaling matches display, zero coordinate shift or clipping at seam. | [ ] | Visual inspection of canvas text and command bar overlay. |
 | **4. Physical Cable Disconnect** | Live hotplug reclamping mid-session | Unplug external display cable while secondary window is open. | macOS fires `ApplicationDidChangeScreenParameters`. Go `ReclampOrphanedWindows` runs. Secondary window smoothly relocates onto primary display. | [ ] | Verify window is visible and accessible on primary screen. |
 | **5. Layout Save & Restore** | Multi-monitor desk geometry persistence across restarts | With 2 displays active, arrange windows and click "Save". Quit app, re-launch, click "Restore Desk". | Both windows re-appear in exact positions and dimensions on their respective physical screens. | [ ] | Confirm multi-screen layout persists in PostgreSQL/localStorage. |
+| **6. Production-Scale Search Latency** | Database trigram index search under 100ms across 25k+ securities | In live database with >=25k securities populated, run `GET /api/instruments/search?q=<token>&limit=20` and assert server processing time. | Trigram & B-tree index scans return ranked results in <100ms p95; zero sequential scan bottlenecks. | [ ] | Query execution plan & API latency metrics. |
 
 ---
 

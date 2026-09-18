@@ -158,28 +158,59 @@ flowchart TD
     - [TODO] Connect Command Bar instrument search to backend `/api/catalog/search` or search index endpoint once instrument service is available (currently using verified stub catalogue).
     - [TODO] Opportunistically convert 133 enterprise route imports in `AppRoutes.tsx` to `React.lazy()` (demonstrated to reduce shell bundle to ~76 KB gzip) without monolithic manualChunks circularities.
 
-### Sprint 4: Institutional macOS Packaging & Local-First Observability
-- **Focus**: Enterprise packaging, zero-entitlement auditing, ad-hoc signing, and local-first workstation diagnostics.
-- **Scope**:
+### Sprint 4: Institutional macOS Packaging & Local-First Observability (COMPLETED)
+- **Focus**: Enterprise packaging, zero-entitlement auditing, ad-hoc signing, local-first workstation diagnostics, and Sprint 3 follow-through items.
+- **Deliverables & Evidence**:
   - **Institutional macOS Packaging (`package-macos.sh`)**:
     - Self-contained `.app` bundle with embedded frontend distribution (`frontend/dist`), Info.plist (`LSApplicationCategoryType=public.app-category.finance`, `NSHighResolutionCapable=true`), and ad-hoc code signing (`codesign --sign -`) mandatory for Apple Silicon arm64 execution.
     - Scripted DMG creation (`UisceTradingDesk.dmg`) and documented Developer ID signing & `xcrun notarytool` submission workflows.
-    - Zero-entitlement hardened runtime: `Entitlements.plist` restricted to zero camera, microphone, or keystroke permissions.
+    - Zero-entitlement hardened runtime: `Entitlements.plist` restricted to zero camera, microphone, or keystroke permissions (verified via `plutil -extract Entitlements xml1`).
   - **Local-First Observability & Telemetry**:
-    - Size-capped rotating log writer to `~/Library/Logs/Uisce/workstation.log` with strict no-secret discipline (zero JWTs, tokens, or auth headers logged).
+    - Size-capped rotating log writer to `~/Library/Logs/Uisce/workstation.log` (`ScrubbingWriter` wrapping stdout and stderr) with strict no-secret discipline (zero JWTs, tokens, or auth headers logged).
     - Status heartbeat in `UniversalWorkspaceHub` status bar (window count, screen count, token vault lease status, tick throughput).
     - Secret-scrubbed crash diagnostic dump mechanism.
-  - **Hardware-Gated Checklist (Pre-Written)**:
-    - Dedicated checklist in `desktop/HARDWARE_VERIFICATION.md` ready for immediate 30-minute execution once an external display (USB-C/HDMI) is plugged in:
-      1. Physical display enumeration (`GetMonitors`).
-      2. Multi-screen window distribution.
-      3. Mixed-DPI rendering (Retina 2x + External 1x seam check).
-      4. Physical cable disconnect mid-session (`ApplicationDidChangeScreenParameters` triggering `ReclampOrphanedWindows`).
-      5. Multi-display layout save and clean restore.
+  - **Sprint 3 Follow-Through Closure**:
+    - Enforced bundle size & code-splitting gate (`check-bundle-size.mjs`).
+    - Drift-compensated synthetic tick generator (`SyntheticTickGenerator.ts`).
+    - Real Chromium Canvas 2D rasterization loop benchmark integrated into smoke test suite (Step 11, 3.5ms baseline).
 
-### Sprint 5: Multi-Platform Enterprise Distribution (Windows MSIX & macOS Notarization)
-- **HARD GATE**: **Sprint 5 Windows packaging is blocked until Sprint 4 Windows WebView2 verification passes.**
-- **Scope**:
-  - **Windows Build**: Signed **MSIX** enterprise installer with code-signing certificate (ready for Intune and Group Policy deployment).
-  - **macOS Production Release**: Automated signing and Apple notarization via CI secrets.
-  - **Automated Release Workflow**: Pinned Wails v3 packaging automation in GitHub Actions.
+---
+
+## 5. Workstation Program Closure & Holding-Pattern State
+
+All functional engineering work across Sprints 1–4 and the final workstation backlog items is **100% complete and verified on macOS**.
+
+### Summary of Completed Capabilities
+
+| Capability / Backlog Item | Implementation Status | Evidence / Verification |
+|---|---|---|
+| **Wails v3 Desktop Multi-Window Host** | ✅ Complete | 11/11 live macOS suite (`./uisce-desk --verify`) |
+| **FDC3-Compatible Context Bus & Intent Router** | ✅ Complete | Intent resolution with explicit ack + dead-handler timeout |
+| **Dockview Layouts & PostgreSQL Roaming Profiles** | ✅ Complete | Multi-tenant bitemporal isolation (`workspace_layout_test.go`) |
+| **Travel Mode & Screen Reclamping** | ✅ Complete | Non-destructive view-time consolidation |
+| **High-Density Canvas Streaming Engine** | ✅ Complete | 4,494 msg/s sustained, 0 React renders, real 3.5ms canvas paint |
+| **macOS Packaging & Zero-Entitlement Hardening** | ✅ Complete | DMG, ad-hoc arm64 codesign, zero-entitlement audit |
+| **WS Ticket Auth Hardening** | ✅ Complete | 30s single-use vault, tenant context bound to WebSocketClient |
+| **Instrument Search Backend & Live Command Bar** | ✅ Complete | `GET /api/instruments/search`, pg_trgm GIN, tenant override, 200ms debounce + abort |
+
+---
+
+### Gated Holding-Pattern Checklist (Awaiting Hardware / Credentials / Target Machines)
+
+The workstation module is **engineering-complete** for everything executable on single-screen macOS Apple Silicon without signing credentials. The following items are pre-scripted and gated:
+
+1. **Physical External Display Lab (Mixed-DPI & Hotplug)**:
+   - Specification & Protocol: [`desktop/HARDWARE_VERIFICATION.md`](file:///Users/eganpj/GitHub/uisce/desktop/HARDWARE_VERIFICATION.md) (6 steps).
+   - Un-gates: Dual-monitor mixed DPI seam check (Retina 2x + External 1x) and live cable disconnect reclamping proof.
+2. **Windows WebView2 Cross-Window Protocol**:
+   - Specification & Protocol: [`desktop/WINDOWS_VERIFICATION_CHECKLIST.md`](file:///Users/eganpj/GitHub/uisce/desktop/WINDOWS_VERIFICATION_CHECKLIST.md) (6 checks).
+   - Un-gates: Sprint 5 Windows MSIX package generation.
+3. **Apple Developer ID Notarization**:
+   - Automated via `package-macos.sh` with CI secrets (`APPLE_DEVELOPER_ID`, `NOTARY_API_KEY`).
+4. **WebSocket Legacy JWT Cutoff (`WS_ALLOW_LEGACY_JWT=false`)**:
+   - Gated on migration of `/ws/profiler/*` consumers to ticket auth.
+5. **Production-Scale Instrument Search Latency Validation**:
+   - Listed in `HARDWARE_VERIFICATION.md` Step 6; requires physical PostgreSQL with >=25k populated securities.
+6. **Enterprise Route Code-Splitting (Shell reduction to ~76 KB gzip)**:
+   - Optional, incremental refactor of 133 enterprise route imports in `AppRoutes.tsx`.
+
