@@ -39,6 +39,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
@@ -501,7 +502,6 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use transaction to set RLS context
 	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to start transaction: %v", err), http.StatusInternalServerError)
@@ -509,8 +509,8 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Set RLS context for this request
-	if _, err := tx.ExecContext(r.Context(), "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+	// RLS choke point — same ApplyTenantGUCs as WithTenantTransaction (SET LOCAL).
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx, tenantID, ""); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to set tenant context: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -662,6 +662,11 @@ func (a *redisClientAdapter) Ping(ctx context.Context) error {
 // deprecatedMCPToolsCall wraps Path 6's handler on the legacy
 // POST /api/mcp/tools/call URL. Emits Deprecation + Link so shim removal
 // is data-driven. Prefer POST /api/agentic/proposals.
+//
+// Removal gate: delete the shim only after observed zero traffic on
+// /api/mcp/tools/call over a sustained window (Deprecation/log counts).
+// TestMCP_RouteTableDump asserts BOTH /api/agentic/proposals and the
+// shim remain registered until that gate trips.
 func deprecatedMCPToolsCall(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Deprecation", "true")

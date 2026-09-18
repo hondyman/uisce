@@ -1,6 +1,10 @@
 // Package boread is the thin read choke point for business_objects /
 // business_object_fields / catalog_edge queries used by MCP adapters.
 //
+// Consumers today: MCP Server / MCPToolHandler only (no HTTP handler imports
+// this package). Gold-copy widen predicate changes therefore have no second
+// HTTP surface beyond PageStudio's shared goldcopy.ResolveTenantID.
+//
 // # Platform gold-copy standard (decided at widen)
 //
 // Shared BO/catalog rows are those owned by goldcopy.ResolveTenantID

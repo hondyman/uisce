@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -776,14 +777,14 @@ func (s *BusinessObjectService) ListBusinessObjectsLegacy(
 	tenantID := secCtx.TenantID
 	datasourceID := secCtx.DatasourceID
 
-	// Use a transaction if we need to set local config (standard for legacy RLS compatibility)
+	// RLS choke point: SET LOCAL via ApplyTenantGUCs (same as db.WithTenantTransaction).
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	if _, err := tx.ExecContext(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID, ""); err != nil {
 		return nil, fmt.Errorf("failed to set tenant context: %w", err)
 	}
 
