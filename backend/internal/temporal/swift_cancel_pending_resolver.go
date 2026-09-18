@@ -15,14 +15,23 @@ import (
 const CancelPendingSLAHours = 24
 
 // CancelResponseMsgTypes lists inbound message types that may carry a
-// custodian's response to a cancellation request.
+// custodian's RESPONSE to a cancellation request.
 //
-// TODO(stub-work): confirm against real custodian behavior.
-//   - camt.029 (Resolution of Investigation) is the MX response to camt.056.
-//   - MT548 settlement status/confirmation carries cancel confirmations for 5xx.
-//   - "camt.056"/"192" are the REQUESTS, not responses — do not add them here;
-//     matching a request would falsely resolve its own row.
-var CancelResponseMsgTypes = []string{"camt.029", "MT548"}
+// v1: camt.029 ONLY.
+//
+// DO NOT add "MT548" without status parsing. MT548 (Settlement Status and
+// Confirmation) is sent for EVERY settlement instruction — matched, affirmed,
+// pending, rejected, cancelled all arrive as MT548. Matching any MT548
+// resolves a CANCEL_PENDING row to terminal CANCELLED even when the custodian
+// never confirmed the cancellation and the trade is still live. That is the
+// false-CANCELLED bug CANCEL_PENDING exists to prevent, reintroduced through
+// the response matcher.
+//
+// MT548 becomes safe to include only when hasCancelResponse parses the
+// message body and requires a cancel-confirmation event (e.g. a CANC status
+// code / :24B:CANC// qualifier). TestCancelResponseMsgTypes_V1 fails the
+// build if this list grows without that work landing first.
+var CancelResponseMsgTypes = []string{"camt.029"}
 
 // ResolveCancelPendingResult reports what one resolver pass did.
 type ResolveCancelPendingResult struct {
@@ -141,12 +150,13 @@ func ResolveCancelPendingActivity(ctx context.Context, tenantID string) (Resolve
 }
 
 // hasCancelResponse checks the session log for an inbound cancellation-response
-// message referencing this transaction. v1 heuristic: any response-type message
-// with the same transaction_ref counts as a response.
+// message referencing this transaction. v1: camt.029 only (see
+// CancelResponseMsgTypes for why MT548 is excluded).
 //
-// TODO(stub-work): v1 cannot distinguish acceptance from rejection. Parse the
-// response (camt.029 CxlSts / MT548 cancel confirmation) and only treat
-// ACCEPTED as CANCELLED; REJECTED should become FAILED with the custodian reason.
+// TODO(recall-traffic): v1 cannot distinguish acceptance from rejection.
+// Parse the camt.029 CxlSts element: ACCEPTED → CANCELLED; REJECTED → the
+// trade is still live and must return to PENDING_SETTLEMENT (or FAILED with
+// the custodian's reason), NOT CANCELLED. Required before recall traffic.
 func hasCancelResponse(ctx context.Context, db *sql.DB, tenantID, txRef string) (bool, error) {
 	var n int
 	err := db.QueryRowContext(ctx, `

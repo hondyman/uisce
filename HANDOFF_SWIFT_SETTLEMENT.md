@@ -1,7 +1,7 @@
 # HANDOFF — SWIFT Settlement Process over Data Pipeline
 
 **Authors:** Antigravity (2026-09-17)
-**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 29/29 tests pass (5 MT parser + 9 MX parser + 1 admin server + 5 tile + 8 workflow + 1 recon workflow). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–011 applied to alpha.
+**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 30/30 tests pass (5 MT parser + 9 MX parser + 1 admin server + 5 tile + 8 workflow + 1 recon + 1 resolver canary). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–011 applied to alpha.
 **Task queue:** `bp_queue` (same as FIX)
 
 ---
@@ -64,7 +64,8 @@ backend/internal/temporal/swift_settlement_workflow.go   ← SWIFTSettlementWork
 backend/internal/temporal/swift_settlement_workflow_test.go ← 8/8 workflow tests pass (exact-arg pins)
 backend/internal/temporal/swift_reconciliation.go        ← SWIFTReconciliationWorkflow
 backend/internal/temporal/swift_reconciliation_test.go   ← Recon workflow + resolver unit test
-backend/internal/temporal/swift_cancel_pending_resolver.go ← ResolveCancelPendingActivity (swift/stub-work)
+backend/internal/temporal/swift_cancel_pending_resolver.go ← ResolveCancelPendingActivity
+backend/internal/temporal/swift_cancel_pending_resolver_test.go ← TestCancelResponseMsgTypes_V1 (canary)
 backend/internal/temporal/swift_large_value.go           ← SWIFTLargeValueApprovalWorkflow
 backend/cmd/worker/main.go                               ← 4 SWIFT workflows + 16 SWIFT activities registered
 ```
@@ -208,7 +209,7 @@ Admin endpoints (`start`, `stop`) require `X-Swift-Admin-Token` header.
 # Build
 go build ./internal/swift/... ./internal/temporal/... ./internal/api/... ./cmd/server/...
 
-# Tests (29/29 pass: 5 MT parser + 9 MX parser + 1 admin + 5 tile + 8 workflow + 1 recon)
+# Tests (30/30 pass: 5 MT parser + 9 MX parser + 1 admin + 5 tile + 8 workflow + 1 recon + 1 resolver canary)
 go test ./internal/swift/... ./internal/temporal -count=1 -v
 
 # Vet
@@ -331,10 +332,36 @@ go test ./internal/swift/... ./internal/temporal/... -count=1
 
 ### Step 2 — Merge and rebuild
 
+**The merge is a session, not a step.** The dry-run (2026-09-18) shows
+conflicts well beyond the SWIFT files: `cmd/server/main.go`,
+`cmd/worker/main.go`, `internal/api/api.go`, plus extensive
+querybuilder/boresolver/reporting files, and a broad frontend surface
+(page studio, reporting widgets, BO dialogs, navigation). The
+querybuilder/boresolver conflicts ARE the pipeline engine — resolve them
+with the same care as the SWIFT wiring.
+
+Resolution happens on `merge-prep` BEFORE merge day:
+
 ```bash
-git merge nifty-greider-015b86
-go build ./...   # must still be exit 0
+git checkout merge-prep          # create from main if it doesn't exist
+git merge --no-commit remotes/origin/claude/nifty-greider-015b86
+# Resolve ALL conflicts.
+go build ./...                                            # gate
+go test ./internal/swift/... ./internal/temporal/... -count=1   # gate (30/30)
+git commit -m "merge: nifty-greider-015b86 (resolved on merge-prep)"
 ```
+
+Then merge day's Step 2 is:
+
+```bash
+git checkout main
+git merge merge-prep     # clean — conflicts already resolved
+go build ./...           # must still be exit 0
+```
+
+Running `git merge nifty-greider-015b86` directly on main on merge day buys
+you a multi-hour conflict resolution with nine later runbook steps stacked
+behind it. Don't.
 
 ### Step 3 — Wire `RunSWIFTPipelineDAGActivity`
 
@@ -517,14 +544,30 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 
 *(Gaps 1–5 above updated. New gaps added below.)*
 
-### 6. CANCEL_PENDING resolver — IMPLEMENTED & TESTED ✅
+### 6. CANCEL_PENDING resolver — IMPLEMENTED ✅ (v1, with stated limits)
 
 **File:** `backend/internal/temporal/swift_cancel_pending_resolver.go`
-**Status:** Implemented and wired into `SWIFTReconciliationWorkflow`. Verified by `TestSWIFTReconciliationWorkflow`.
-- Activity signature adheres to Temporal contract: `(ctx context.Context, tenantID string)`. DB injected via `workerDBKey` in context.
-- Sweeps `settlement_status = 'CANCEL_PENDING'` scoped strictly to `tenant_id = $1` (GSIFI write rule).
-- Rows within 24h SLA with inbound `camt.029` or `MT548` in `vend.swift_session_log` $\to$ `CANCELLED`.
-- Rows older than 24h SLA $\to$ `FAILED` with reason `recall_unresolved`.
+**Status:** Implemented, wired into `SWIFTReconciliationWorkflow`. Verified by
+`TestSWIFTReconciliationWorkflow` (exact-tenant-arg) and
+`TestCancelResponseMsgTypes_V1` (matcher canary).
+- Signature adheres to the Temporal contract: `(ctx, tenantID)`; DB via
+  `workerDBKey` context — never a `*sql.DB` argument.
+- Writes strictly tenant-scoped (GSIFI Write Rule).
+- Rows within 24h SLA with a custodian cancellation response $\to$ `CANCELLED`.
+- Rows older than 24h SLA $\to$ `FAILED`, reason `recall_unresolved`.
+  The reason is LOG-ONLY — `cash_flow.settlement` has no `status_reason`
+  column; add one (tiny migration) if the reason must be queryable.
+
+**v1 limits (known, deliberate):**
+1. **Response matching is camt.029 ONLY.** MT548 is intentionally excluded:
+   it is the standard status message sent for every settlement, so matching
+   any MT548 would falsely confirm cancellations of live trades. MT548 may
+   only be added alongside cancel-status parsing in `hasCancelResponse`;
+   `TestCancelResponseMsgTypes_V1` fails the build otherwise.
+2. **Acceptance vs rejection is not distinguished.** Any camt.029 resolves to
+   CANCELLED. A REJECTED cancellation means the trade is still live and
+   should return to PENDING_SETTLEMENT (or FAILED with the custodian's
+   reason) — parse the camt.029 CxlSts element before recall traffic exists.
 
 ### 7. pacs.008 Field Map Alignment — ALIGNED & VERIFIED ✅
 
