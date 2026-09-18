@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { fdc3Agent, USER_CHANNELS, UserChannelId } from '../../services/fdc3';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { fdc3Agent, USER_CHANNELS } from '../../services/fdc3';
 import { platformService } from '../../services/platform/PlatformService';
 import { StandardIntent } from '../../services/fdc3/intentTypes';
+import { searchInstruments, InstrumentSearchResultItem } from '../../services/api/instrumentsApi';
 
 export interface CommandItem {
   id: string;
@@ -20,15 +21,15 @@ export interface WorkstationCommandBarProps {
   onApplyLayout?: (action: 'save' | 'restore' | 'travel' | 'reset') => void;
 }
 
-const MOCK_INSTRUMENTS = [
-  { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity' },
-  { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity' },
-  { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'Equity' },
-  { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity' },
-  { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity' },
+export const MOCK_INSTRUMENTS: Array<{ symbol: string; name: string; type: string; isin?: string }> = [
+  { symbol: 'AAPL', name: 'Apple Inc.', type: 'Equity', isin: 'US0378331005' },
+  { symbol: 'MSFT', name: 'Microsoft Corporation', type: 'Equity', isin: 'US5949181045' },
+  { symbol: 'NVDA', name: 'NVIDIA Corporation', type: 'Equity', isin: 'US67066G1040' },
+  { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'Equity', isin: 'US02079K3059' },
+  { symbol: 'TSLA', name: 'Tesla Inc.', type: 'Equity', isin: 'US88160R1014' },
   { symbol: 'US10Y', name: 'US 10-Year Treasury Yield', type: 'Fixed Income' },
   { symbol: 'US02Y', name: 'US 2-Year Treasury Yield', type: 'Fixed Income' },
-  { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', type: 'Fixed Income' },
+  { symbol: 'BND', name: 'Vanguard Total Bond Market ETF', type: 'Fixed Income', isin: 'US9219378356' },
 ];
 
 export const WorkstationCommandBar: React.FC<WorkstationCommandBarProps> = ({
@@ -39,168 +40,277 @@ export const WorkstationCommandBar: React.FC<WorkstationCommandBarProps> = ({
 }) => {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [liveInstruments, setLiveInstruments] = useState<InstrumentSearchResultItem[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const isWails = platformService.isWails();
 
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setSelectedIndex(0);
+      setLiveInstruments(null);
+      setIsLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
+    } else {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
     }
   }, [isOpen]);
 
-  // Build command catalogue
-  const commands: CommandItem[] = [];
-
-  // 1. Intents
-  commands.push(
-    {
-      id: 'intent-rebalancer',
-      category: 'Intent',
-      title: 'View Analysis: AI Portfolio Rebalancer',
-      subtitle: 'Raise ViewAnalysis intent targeted to AIPortfolioRebalancer view',
-      badge: 'Intent',
-      badgeColor: '#38bdf8',
-      onSelect: () => {
-        if (onSelectIntent) {
-          onSelectIntent('ViewAnalysis', 'AAPL');
-        } else {
-          fdc3Agent.raiseIntent('ViewAnalysis', { type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
-        }
-      },
-    },
-    {
-      id: 'intent-scenario',
-      category: 'Intent',
-      title: 'View Analysis: Scenario Analysis Pro',
-      subtitle: 'Raise ViewAnalysis intent targeted to ScenarioAnalysisPro view',
-      badge: 'Intent',
-      badgeColor: '#38bdf8',
-      onSelect: () => {
-        if (onSelectIntent) {
-          onSelectIntent('ViewAnalysis', 'NVDA');
-        } else {
-          fdc3Agent.raiseIntent('ViewAnalysis', { type: 'fdc3.instrument', id: { ticker: 'NVDA' } });
-        }
-      },
-    },
-    {
-      id: 'intent-fixed-income',
-      category: 'Intent',
-      title: 'View Instrument: Fixed Income Analytics',
-      subtitle: 'Raise ViewInstrument intent targeted to Fixed Income dashboard',
-      badge: 'Intent',
-      badgeColor: '#38bdf8',
-      onSelect: () => {
-        if (onSelectIntent) {
-          onSelectIntent('ViewInstrument', 'US10Y');
-        } else {
-          fdc3Agent.raiseIntent('ViewInstrument', { type: 'fdc3.instrument', id: { ticker: 'US10Y' } });
-        }
-      },
-    },
-    {
-      id: 'intent-orders',
-      category: 'Intent',
-      title: 'View Orders: OMS Order Blotter',
-      subtitle: 'Raise ViewOrders intent filtered by focused symbol',
-      badge: 'Intent',
-      badgeColor: '#38bdf8',
-      onSelect: () => {
-        if (onSelectIntent) {
-          onSelectIntent('ViewOrders', 'AAPL');
-        } else {
-          fdc3Agent.raiseIntent('ViewOrders', { type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
-        }
-      },
+  // Live instrument search with 200ms debounce and AbortController cancellation
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+      setLiveInstruments(null);
+      setIsLoading(false);
+      return;
     }
-  );
 
-  // 2. FDC3 Color Channels
-  for (const ch of USER_CHANNELS) {
-    commands.push({
-      id: `channel-${ch.id}`,
-      category: 'Channel',
-      title: `Join Channel: ${ch.name}`,
-      subtitle: `Switch current window to FDC3 ${ch.id} channel context`,
-      badge: ch.id.toUpperCase(),
-      badgeColor: ch.color,
-      onSelect: () => {
-        fdc3Agent.joinUserChannel(ch.id);
-      },
-    });
-  }
-
-  // 3. Layout Presets & Travel Mode
-  commands.push(
-    {
-      id: 'layout-save',
-      category: 'Layout',
-      title: 'Save Current Workspace Layout',
-      subtitle: 'Persist current Dockview layout and multi-monitor window bounds',
-      badge: 'Layout',
-      badgeColor: '#10b981',
-      onSelect: () => onApplyLayout?.('save'),
-    },
-    {
-      id: 'layout-restore',
-      category: 'Layout',
-      title: 'Restore Multi-Monitor Desk',
-      subtitle: 'Re-spawn and re-clamp detached windows across all physical monitors',
-      badge: 'Layout',
-      badgeColor: '#10b981',
-      onSelect: () => onApplyLayout?.('restore'),
-    },
-    {
-      id: 'layout-travel',
-      category: 'Layout',
-      title: 'Toggle Travel Mode',
-      subtitle: 'Consolidate detached windows into primary tabs (or restore)',
-      badge: 'Mode',
-      badgeColor: '#f59e0b',
-      onSelect: () => onApplyLayout?.('travel'),
-    },
-    {
-      id: 'layout-reset',
-      category: 'Layout',
-      title: 'Reset Workspace to Default',
-      subtitle: 'Clear customized layout and return to default multi-panel grid',
-      badge: 'Reset',
-      badgeColor: '#ef4444',
-      onSelect: () => onApplyLayout?.('reset'),
+    // Abort any prior in-flight request immediately upon query change
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
     }
-  );
 
-  // 4. Instruments
-  for (const inst of MOCK_INSTRUMENTS) {
-    commands.push({
-      id: `inst-${inst.symbol}`,
-      category: 'Instrument',
-      title: `${inst.symbol} — ${inst.name}`,
-      subtitle: `Broadcast ${inst.symbol} onto active FDC3 channel (${inst.type})`,
-      badge: inst.symbol,
-      badgeColor: '#6366f1',
-      onSelect: () => {
-        fdc3Agent.broadcast({
-          type: 'fdc3.instrument',
-          id: { ticker: inst.symbol },
-          name: inst.name,
+    setIsLoading(true);
+    const timer = setTimeout(async () => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+
+      try {
+        const results = await searchInstruments(trimmed, {
+          limit: 10,
+          signal: controller.signal,
         });
-      },
-    });
-  }
+        setLiveInstruments(results);
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return; // Stale request was aborted
+        }
+        // Fallback gracefully on network error or offline
+        setLiveInstruments(null);
+      } finally {
+        if (abortControllerRef.current === controller) {
+          setIsLoading(false);
+          abortControllerRef.current = null;
+        }
+      }
+    }, 200);
 
-  // Filter commands by query
-  const filtered = commands.filter((cmd) => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return (
-      cmd.title.toLowerCase().includes(q) ||
-      cmd.category.toLowerCase().includes(q) ||
-      cmd.subtitle?.toLowerCase().includes(q)
+    return () => {
+      clearTimeout(timer);
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+        abortControllerRef.current = null;
+      }
+    };
+  }, [query]);
+
+  // Static Local System Commands (Intents, Channels, Layout)
+  const systemCommands: CommandItem[] = useMemo(() => {
+    const cmds: CommandItem[] = [];
+
+    // 1. Intents
+    cmds.push(
+      {
+        id: 'intent-rebalancer',
+        category: 'Intent',
+        title: 'View Analysis: AI Portfolio Rebalancer',
+        subtitle: 'Raise ViewAnalysis intent targeted to AIPortfolioRebalancer view',
+        badge: 'Intent',
+        badgeColor: '#38bdf8',
+        onSelect: () => {
+          if (onSelectIntent) {
+            onSelectIntent('ViewAnalysis', 'AAPL');
+          } else {
+            fdc3Agent.raiseIntent('ViewAnalysis', { type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
+          }
+        },
+      },
+      {
+        id: 'intent-scenario',
+        category: 'Intent',
+        title: 'View Analysis: Scenario Analysis Pro',
+        subtitle: 'Raise ViewAnalysis intent targeted to ScenarioAnalysisPro view',
+        badge: 'Intent',
+        badgeColor: '#38bdf8',
+        onSelect: () => {
+          if (onSelectIntent) {
+            onSelectIntent('ViewAnalysis', 'NVDA');
+          } else {
+            fdc3Agent.raiseIntent('ViewAnalysis', { type: 'fdc3.instrument', id: { ticker: 'NVDA' } });
+          }
+        },
+      },
+      {
+        id: 'intent-fixed-income',
+        category: 'Intent',
+        title: 'View Instrument: Fixed Income Analytics',
+        subtitle: 'Raise ViewInstrument intent targeted to Fixed Income dashboard',
+        badge: 'Intent',
+        badgeColor: '#38bdf8',
+        onSelect: () => {
+          if (onSelectIntent) {
+            onSelectIntent('ViewInstrument', 'US10Y');
+          } else {
+            fdc3Agent.raiseIntent('ViewInstrument', { type: 'fdc3.instrument', id: { ticker: 'US10Y' } });
+          }
+        },
+      },
+      {
+        id: 'intent-orders',
+        category: 'Intent',
+        title: 'View Orders: OMS Order Blotter',
+        subtitle: 'Raise ViewOrders intent filtered by focused symbol',
+        badge: 'Intent',
+        badgeColor: '#38bdf8',
+        onSelect: () => {
+          if (onSelectIntent) {
+            onSelectIntent('ViewOrders', 'AAPL');
+          } else {
+            fdc3Agent.raiseIntent('ViewOrders', { type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
+          }
+        },
+      }
     );
-  });
+
+    // 2. FDC3 Color Channels
+    for (const ch of USER_CHANNELS) {
+      cmds.push({
+        id: `channel-${ch.id}`,
+        category: 'Channel',
+        title: `Join Channel: ${ch.name}`,
+        subtitle: `Switch current window to FDC3 ${ch.id} channel context`,
+        badge: ch.id.toUpperCase(),
+        badgeColor: ch.color,
+        onSelect: () => {
+          fdc3Agent.joinUserChannel(ch.id);
+        },
+      });
+    }
+
+    // 3. Layout Presets & Travel Mode
+    cmds.push(
+      {
+        id: 'layout-save',
+        category: 'Layout',
+        title: 'Save Current Workspace Layout',
+        subtitle: 'Persist current Dockview layout and multi-monitor window bounds',
+        badge: 'Layout',
+        badgeColor: '#10b981',
+        onSelect: () => onApplyLayout?.('save'),
+      },
+      {
+        id: 'layout-restore',
+        category: 'Layout',
+        title: 'Restore Multi-Monitor Desk',
+        subtitle: 'Re-spawn and re-clamp detached windows across all physical monitors',
+        badge: 'Layout',
+        badgeColor: '#10b981',
+        onSelect: () => onApplyLayout?.('restore'),
+      },
+      {
+        id: 'layout-travel',
+        category: 'Layout',
+        title: 'Toggle Travel Mode',
+        subtitle: 'Consolidate detached windows into primary tabs (or restore)',
+        badge: 'Mode',
+        badgeColor: '#f59e0b',
+        onSelect: () => onApplyLayout?.('travel'),
+      },
+      {
+        id: 'layout-reset',
+        category: 'Layout',
+        title: 'Reset Workspace to Default',
+        subtitle: 'Clear customized layout and return to default multi-panel grid',
+        badge: 'Reset',
+        badgeColor: '#ef4444',
+        onSelect: () => onApplyLayout?.('reset'),
+      }
+    );
+
+    return cmds;
+  }, [onSelectIntent, onApplyLayout]);
+
+  // Combine system commands with instrument items (live or fallback)
+  const allCommands: CommandItem[] = useMemo(() => {
+    const cmds: CommandItem[] = [...systemCommands];
+
+    if (liveInstruments !== null) {
+      // Use live API search results
+      for (const inst of liveInstruments) {
+        cmds.push({
+          id: `inst-${inst.symbol}`,
+          category: 'Instrument',
+          title: `${inst.symbol} — ${inst.name}`,
+          subtitle: `Broadcast ${inst.symbol} onto active FDC3 channel (${inst.asset_class}${inst.isin ? ` · ${inst.isin}` : ''})`,
+          badge: inst.symbol,
+          badgeColor: '#6366f1',
+          onSelect: () => {
+            const idObj: { ticker: string; ISIN?: string } = { ticker: inst.symbol };
+            if (inst.isin) {
+              idObj.ISIN = inst.isin;
+            }
+            fdc3Agent.broadcast({
+              type: 'fdc3.instrument',
+              id: idObj,
+              name: inst.name,
+            });
+          },
+        });
+      }
+    } else {
+      // Static fallback instruments
+      for (const inst of MOCK_INSTRUMENTS) {
+        cmds.push({
+          id: `inst-${inst.symbol}`,
+          category: 'Instrument',
+          title: `${inst.symbol} — ${inst.name}`,
+          subtitle: `Broadcast ${inst.symbol} onto active FDC3 channel (${inst.type})`,
+          badge: inst.symbol,
+          badgeColor: '#6366f1',
+          onSelect: () => {
+            const idObj: { ticker: string; ISIN?: string } = { ticker: inst.symbol };
+            if (inst.isin) {
+              idObj.ISIN = inst.isin;
+            }
+            fdc3Agent.broadcast({
+              type: 'fdc3.instrument',
+              id: idObj,
+              name: inst.name,
+            });
+          },
+        });
+      }
+    }
+
+    return cmds;
+  }, [systemCommands, liveInstruments]);
+
+  // Filter commands by query (system commands filter client-side; live instruments are already filtered)
+  const filtered = useMemo(() => {
+    if (!query.trim()) return allCommands;
+    const q = query.toLowerCase();
+    return allCommands.filter((cmd) => {
+      // If live instruments are active and this is an instrument, keep it since the server matched it
+      if (liveInstruments !== null && cmd.category === 'Instrument') {
+        return true;
+      }
+      return (
+        cmd.title.toLowerCase().includes(q) ||
+        cmd.category.toLowerCase().includes(q) ||
+        cmd.subtitle?.toLowerCase().includes(q)
+      );
+    });
+  }, [allCommands, query, liveInstruments]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -269,7 +379,9 @@ export const WorkstationCommandBar: React.FC<WorkstationCommandBarProps> = ({
             background: '#070d1e',
           }}
         >
-          <span style={{ color: '#64748b', marginRight: '12px', fontSize: '15px' }}>🔍</span>
+          <span style={{ color: '#64748b', marginRight: '12px', fontSize: '15px' }}>
+            {isLoading ? '⏳' : '🔍'}
+          </span>
           <input
             ref={inputRef}
             data-testid="command-bar-input"
