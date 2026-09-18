@@ -1,25 +1,12 @@
 // Package boread is the thin read choke point for business_objects /
 // business_object_fields / catalog_edge queries used by MCP adapters.
 //
-// # MCP vs HTTP gold-copy divergence (named decision, open until widen)
+// # Platform gold-copy standard (decided at widen)
 //
-// MCP reads in this package use the nil-UUID OR
-// (tenant_id = caller OR tenant_id = '00000000-…').
-// HTTP BusinessObjectService paths use different gold semantics:
-//   - GetBusinessObject: requireAccess + tenants.gold_copy lookup
-//   - ListBusinessObjects: tenant-only (no gold OR)
-//   - ListBusinessObjectsLegacy: EXISTS(gold_copy) + set_config('app.tenant_id')
-//     — LIVE on api.Server listBusinessObjects (api.go) and a cousin set_config
-//     on getBusinessObjectByID. RLS design must account for pre-existing
-//     session-config tenancy, not assume it introduces the only one.
-//
-// Until the gold-copy-widen commit, preserving MCP predicates means the two
-// surfaces can see different rows on the same tables. Widen must decide
-// deliberately (adopt HTTP richer semantics vs keep MCP nil-UUID OR) for
-// both pages and BOs — not accumulate divergence by deference.
-//
-// Why not metadata.BusinessObjectService yet: the three bullets above are
-// evidence-backed rejections (commit 1/5), not preferences.
+// Shared BO/catalog rows are those owned by goldcopy.ResolveTenantID
+// (public.tenants.gold_copy = true). The transitional MCP nil-UUID OR is retired.
+// Pages use the same resolver plus is_core (see pagestudio). RLS policies must
+// encode this post-widen semantics, not the nil-UUID sentinel.
 package boread
 
 import (
@@ -28,12 +15,9 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 )
-
-// GlobalTenantNilUUID is the sentinel MCP queries use for shared/gold rows.
-// Distinct from tenants.gold_copy=true lookup used by BusinessObjectService.
-const GlobalTenantNilUUID = "00000000-0000-0000-0000-000000000000"
 
 type Service struct {
 	db *sqlx.DB
@@ -73,25 +57,26 @@ type Edge struct {
 	Properties   json.RawMessage `db:"properties"`
 }
 
-// ListSummaries lists BOs for the tenant including the nil-UUID global sentinel.
+// ListSummaries lists BOs for the caller plus the gold-copy tenant.
 //
-// Predicate comparison (SL extract from MCP list_business_objects):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD: WHERE tenant_id = $1 OR tenant_id = '00000000-…'
-//	NEW: identical
-//	DELTA: none — NOT ListBusinessObjects (tenant-only) and NOT Legacy (EXISTS gold_copy).
+//	OLD: WHERE tenant_id = $1 OR tenant_id = nil-UUID
+//	NEW: WHERE tenant_id = $1 OR tenant_id = $2  ($2 = goldcopy.ResolveTenantID)
+//	DELTA: intentional — platform standard is tenants.gold_copy, not nil-UUID
 func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]Summary, error) {
 	if s == nil || s.db == nil {
 		return []Summary{}, nil
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var list []Summary
 	err := s.db.SelectContext(ctx, &list, `
 		SELECT id::text, COALESCE(name, '') AS name, COALESCE(display_name, name, '') AS display_name, COALESCE(status, '') AS status
 		FROM public.business_objects
-		WHERE tenant_id = $1 OR tenant_id = '`+GlobalTenantNilUUID+`'
+		WHERE tenant_id = $1 OR tenant_id = $2
 		ORDER BY display_name
 		LIMIT 200
-	`, tenantID.String())
+	`, tenantID.String(), gold.String())
 	if err != nil {
 		return nil, err
 	}
@@ -101,41 +86,43 @@ func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]Summ
 	return list, nil
 }
 
-// GetContract loads one BO contract row by id or name with nil-UUID global OR.
+// GetContract loads one BO by id or name for caller or gold tenant.
 //
-// Predicate comparison (SL extract from MCP get_business_object_contract):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD: WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = nil-UUID)
-//	NEW: identical
-//	DELTA: none — NOT GetBusinessObject (requireAccess + gold_copy tenant fallback).
+//	OLD: (id OR name) AND (tenant OR nil-UUID)
+//	NEW: (id OR name) AND (tenant OR gold)
+//	DELTA: intentional
 func (s *Service) GetContract(ctx context.Context, tenantID uuid.UUID, boID uuid.UUID, boKey string) (*Contract, error) {
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var c Contract
 	err := s.db.GetContext(ctx, &c, `
 		SELECT name, display_name, status
 		FROM public.business_objects
-		WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = '`+GlobalTenantNilUUID+`')
+		WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = $4)
 		LIMIT 1
-	`, boID.String(), boKey, tenantID.String())
+	`, boID.String(), boKey, tenantID.String(), gold.String())
 	if err != nil {
 		return nil, err
 	}
 	return &c, nil
 }
 
-// ListTerms returns field/term rows for a BO id or key.
+// ListTerms returns field/term rows for a BO id or key (caller or gold BO).
 //
-// Predicate comparison (SL extract from MCP get_bo_terms):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD: business_object_id = $1 OR id IN (SELECT … name = $2 AND tenant OR nil-UUID)
-//	NEW: identical
-//	DELTA: none
+//	OLD: … tenant OR nil-UUID in subquery
+//	NEW: … tenant OR gold in subquery
+//	DELTA: intentional
 func (s *Service) ListTerms(ctx context.Context, tenantID uuid.UUID, boID, boKey string) ([]Term, error) {
 	if s == nil || s.db == nil {
 		return []Term{}, nil
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var terms []Term
 	err := s.db.SelectContext(ctx, &terms, `
 		SELECT COALESCE(term_key, name, '') AS term_key,
@@ -143,10 +130,10 @@ func (s *Service) ListTerms(ctx context.Context, tenantID uuid.UUID, boID, boKey
 		       COALESCE(role, '') AS role
 		FROM public.business_object_fields
 		WHERE business_object_id::text = $1 OR business_object_id IN (
-			SELECT id FROM public.business_objects WHERE name = $2 AND (tenant_id = $3 OR tenant_id = '`+GlobalTenantNilUUID+`')
+			SELECT id FROM public.business_objects WHERE name = $2 AND (tenant_id = $3 OR tenant_id = $4)
 		)
 		LIMIT 200
-	`, boID, boKey, tenantID.String())
+	`, boID, boKey, tenantID.String(), gold.String())
 	if err != nil {
 		return nil, err
 	}
@@ -156,25 +143,26 @@ func (s *Service) ListTerms(ctx context.Context, tenantID uuid.UUID, boID, boKey
 	return terms, nil
 }
 
-// ResolveEdge looks up one catalog_edge between two nodes.
+// ResolveEdge looks up one catalog_edge between two nodes (caller or gold).
 //
-// Predicate comparison (SL extract from MCP resolve_relationship_path):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD: source_id/target_id + (tenant_id = $3 OR nil-UUID)
-//	NEW: identical
-//	DELTA: none — NOT GetBusinessObjectRelationships (FK graph, different shape).
+//	OLD: tenant_id = $3 OR nil-UUID
+//	NEW: tenant_id = $3 OR gold
+//	DELTA: intentional
 func (s *Service) ResolveEdge(ctx context.Context, tenantID, sourceID, targetID uuid.UUID) (*Edge, error) {
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var e Edge
 	err := s.db.GetContext(ctx, &e, `
 		SELECT edge_type_name, properties
 		FROM public.catalog_edge
 		WHERE source_id = $1 AND target_id = $2
-		  AND (tenant_id = $3::text OR tenant_id = '`+GlobalTenantNilUUID+`')
+		  AND (tenant_id = $3::text OR tenant_id = $4)
 		LIMIT 1
-	`, sourceID.String(), targetID.String(), tenantID.String())
+	`, sourceID.String(), targetID.String(), tenantID.String(), gold.String())
 	if err != nil {
 		return nil, err
 	}
@@ -237,26 +225,28 @@ type SearchMatch struct {
 	DisplayName string `db:"display_name" json:"display_name"`
 }
 
-// Search is the MCP catalog search contract: tenant-scoped-or-gold (nil-UUID OR),
-// ILIKE on name/display_name, LIMIT 50. Use this for BO/catalog name search —
-// not discovery/search, which queries discovery_candidates for a different purpose.
+// Search is the MCP catalog search contract: tenant-or-gold, ILIKE on
+// name/display_name, LIMIT 50. Not discovery/search (discovery_candidates).
 //
-// New service surface (extraction, not delegation). Predicate comparison
-// (SL extract from MCP search_catalog): OLD tool SQL → NEW identical WHERE/binds;
-// DELTA none.
+// Predicate comparison (gold-copy widen):
+//
+//	OLD: tenant OR nil-UUID
+//	NEW: tenant OR goldcopy.ResolveTenantID
+//	DELTA: intentional
 func (s *Service) Search(ctx context.Context, tenantID uuid.UUID, query string) ([]SearchMatch, error) {
 	if s == nil || s.db == nil {
 		return []SearchMatch{}, nil
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var matches []SearchMatch
 	err := s.db.SelectContext(ctx, &matches, `
 		SELECT id::text, COALESCE(name,'') AS name, COALESCE(display_name, name, '') AS display_name
 		FROM public.business_objects
-		WHERE (tenant_id = $1 OR tenant_id = '`+GlobalTenantNilUUID+`')
-		  AND (name ILIKE '%' || $2 || '%' OR display_name ILIKE '%' || $2 || '%')
+		WHERE (tenant_id = $1 OR tenant_id = $2)
+		  AND (name ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%')
 		ORDER BY display_name
 		LIMIT 50
-	`, tenantID.String(), query)
+	`, tenantID.String(), gold.String(), query)
 	if err != nil {
 		return nil, err
 	}

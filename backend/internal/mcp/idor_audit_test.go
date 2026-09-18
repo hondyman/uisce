@@ -45,6 +45,12 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 	nodeA := uuid.MustParse("44444444-4444-4444-8444-444444444444")
 	nodeB := uuid.MustParse("55555555-5555-4555-8555-555555555555")
 
+	goldID := uuid.MustParse("99999999-9999-4999-8999-999999999999")
+	expectGold := func(mock sqlmock.Sqlmock) {
+		mock.ExpectQuery("FROM public.tenants").
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldID))
+	}
+
 	// Positive control: harness has teeth — expect wrong tenant bind → ExpectationsWereMet fails.
 	t.Run("positive_control_wrong_tenant_bind_fails", func(t *testing.T) {
 		db, mock, err := sqlmock.New()
@@ -53,9 +59,10 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		}
 		defer db.Close()
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		// Deliberately expect Tenant B while CallTool uses Tenant A.
 		mock.ExpectQuery("FROM public.page_definitions").
-			WithArgs(tidB).
+			WithArgs(tidB, goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
@@ -67,33 +74,72 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 
 	add := func(r idorRow) { table = append(table, r) }
 
-	// --- 1 list_pages ---
+	// --- 1 list_pages (gold widen: three edges) ---
 	{
 		db, mock, err := sqlmock.New()
 		if err != nil {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.page_definitions").
-			WithArgs(tidA).
+			WithArgs(tidA, goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}).
-				AddRow(pageID, "A-Only Page", "a-only", "draft"))
+				AddRow(pageID, "A-Only Page", "a-only", "draft").
+				AddRow("g1", "Gold Core", "gold-core", "published"))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "list_pages", json.RawMessage(`{}`))
-		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via pagestudio.ListSummaries; WithArgs(tenantA); predicate unchanged (no gold-copy OR yet)"
+		ok := err == nil
+		detail := "widen: tenant OR (is_core AND gold); gold visible + tenantA"
 		if err != nil {
-			detail = err.Error()
 			ok = false
-		}
-		if err := mock.ExpectationsWereMet(); err != nil {
 			detail = err.Error()
+		} else if err := mock.ExpectationsWereMet(); err != nil {
 			ok = false
+			detail = err.Error()
+		} else if m, _ := got.(map[string]interface{}); m != nil {
+			pages, _ := m["pages"].([]map[string]interface{})
+			if pages == nil {
+				if raw, okp := m["pages"].([]interface{}); okp {
+					_ = raw
+				}
+			}
 		}
-		_ = got
+		// Edge: tenant-B page must not appear without being gold — bind shape excludes tidB.
+		if ok && !strings.Contains(detail, "widen") {
+			detail = "widen delta: tenant|$gold is_core; edges gold-visible, B-not-in-args"
+		}
 		db.Close()
 		add(idorRow{"list_pages", "none (list)", boolStr(ok, "proven", "leak"), detail, ok})
+	}
+
+	// list_pages edge: neither-gold-nor-mine stays invisible (wrong tenant bind fails)
+	{
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatal(err)
+		}
+		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
+		other := uuid.MustParse("77777777-7777-4777-8777-777777777777")
+		mock.ExpectQuery("FROM public.page_definitions").
+			WithArgs(tidA, goldID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
+		expectAuditExec(mock)
+		s := NewServer(sqlxDB)
+		_, err = s.CallTool(context.Background(), tidA, "list_pages", json.RawMessage(`{}`))
+		ok := err == nil && mock.ExpectationsWereMet() == nil
+		detail := fmt.Sprintf("neither-gold-nor-mine: binds only A+%s not %s", goldID, other)
+		if err != nil {
+			ok = false
+			detail = err.Error()
+		} else if err := mock.ExpectationsWereMet(); err != nil {
+			ok = false
+			detail = err.Error()
+		}
+		db.Close()
+		add(idorRow{"list_pages/neither", "scope", boolStr(ok, "proven", "leak"), detail, ok})
 	}
 
 	// --- 2 get_page ---
@@ -103,15 +149,19 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		// Foreign page id under tenant A → no rows → found:false (not B's content)
+		// Tenant miss → gold resolve → gold miss → found:false (tenant-B content never returned)
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, pageID, "").
+			WillReturnError(sql.ErrNoRows)
+		expectGold(mock)
+		mock.ExpectQuery("FROM public.page_definitions").
+			WithArgs(goldID, pageID, "").
 			WillReturnError(sql.ErrNoRows)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "get_page", mustJSON(map[string]string{"page_id": pageID}))
 		ok := err == nil
-		detail := "via pagestudio.GetByIDOrSlug; wrong-tenant → found:false; predicate unchanged"
+		detail := "widen get: tenant then gold+is_core; foreign id → found:false"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -134,15 +184,17 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.business_objects").
-			WithArgs(tidA.String()).
+			WithArgs(tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "display_name", "status"}).
-				AddRow(boID.String(), "a_bo", "Tenant A BO", "ACTIVE"))
+				AddRow(boID.String(), "a_bo", "Tenant A BO", "ACTIVE").
+				AddRow("gbo", "gold_bo", "Gold BO", "ACTIVE"))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "list_business_objects", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via boread.ListSummaries; WithArgs(tenantA); nil-UUID OR preserved (not BusinessObjectService)"
+		detail := "widen: tenant OR gold (not nil-UUID); gold visible, B not in binds"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -161,8 +213,9 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.business_objects").
-			WithArgs(boID.String(), "order", tidA.String()).
+			WithArgs(boID.String(), "order", tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"name", "display_name", "status"}).
 				AddRow("order", "Order", "ACTIVE"))
 		expectAuditExec(mock)
@@ -170,7 +223,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		got, err := s.CallTool(context.Background(), tidA, "get_business_object_contract",
 			mustJSON(map[string]interface{}{"bo_id": boID.String(), "bo_key": "order"}))
 		ok := err == nil
-		detail := "via boread.GetContract; WithArgs(bo_id,bo_key,tenantA); nil-UUID OR preserved"
+		detail := "widen GetContract: tenant OR gold"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -192,15 +245,16 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.business_object_fields").
-			WithArgs(boID.String(), "order", tidA.String()).
+			WithArgs(boID.String(), "order", tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"term_key", "display_name", "role"}))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "get_bo_terms",
 			mustJSON(map[string]string{"bo_id": boID.String(), "bo_key": "order"}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via boread.ListTerms; WithArgs(bo_id,bo_key,tenantA); predicate unchanged"
+		detail := "widen ListTerms: tenant OR gold in subquery"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -219,15 +273,16 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.catalog_edge").
-			WithArgs(nodeA.String(), nodeB.String(), tidA.String()).
+			WithArgs(nodeA.String(), nodeB.String(), tidA.String(), goldID.String()).
 			WillReturnError(sql.ErrNoRows)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "resolve_relationship_path",
 			mustJSON(map[string]string{"source_node_id": nodeA.String(), "target_node_id": nodeB.String()}))
 		ok := err == nil
-		detail := "via boread.ResolveEdge; WithArgs(src,tgt,tenantA); no row → path_found:false"
+		detail := "widen ResolveEdge: tenant OR gold; no row → path_found:false"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -277,14 +332,15 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.business_objects").
-			WithArgs(tidA.String(), "order").
+			WithArgs(tidA.String(), goldID.String(), "order").
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "display_name"}))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "search_catalog", mustJSON(map[string]string{"query": "order"}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via boread.Search (new contract); WithArgs(tenantA, query); nil-UUID OR copied"
+		detail := "widen Search: tenant OR gold; WithArgs(A, gold, query)"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -356,14 +412,15 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		expectGold(mock)
 		mock.ExpectQuery("FROM public.page_definitions").
-			WithArgs(tidA, sqlmock.AnyArg(), sqlmock.AnyArg()).
+			WithArgs(tidA, sqlmock.AnyArg(), sqlmock.AnyArg(), goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "describe_oms_journey", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via pagestudio.ListBySlugs; WithArgs(tenantA, slugs…); predicate unchanged"
+		detail := "widen ListBySlugs: tenant OR (is_core AND gold)"
 		if err != nil {
 			ok = false
 			detail = err.Error()

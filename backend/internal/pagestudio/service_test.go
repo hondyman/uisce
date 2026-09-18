@@ -9,15 +9,18 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-func TestListSummaries_BindsTenantOnly(t *testing.T) {
+func TestListSummaries_BindsTenantAndGold(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	tid := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	gold := uuid.MustParse("99999999-9999-4999-8999-999999999999")
+	mock.ExpectQuery("FROM public.tenants").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	mock.ExpectQuery("FROM public.page_definitions").
-		WithArgs(tid).
+		WithArgs(tid, gold).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}).
 			AddRow("p1", "Page", "slug", "draft"))
 	svc := NewService(sqlx.NewDb(db, "sqlmock"))
@@ -33,7 +36,7 @@ func TestListSummaries_BindsTenantOnly(t *testing.T) {
 	}
 }
 
-func TestGetByIDOrSlug_BindsTenantAndID(t *testing.T) {
+func TestGetByIDOrSlug_TenantHit(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
@@ -58,15 +61,18 @@ func TestGetByIDOrSlug_BindsTenantAndID(t *testing.T) {
 	}
 }
 
-func TestListBySlugs_BindsTenantAndTwoSlugs(t *testing.T) {
+func TestListBySlugs_BindsTenantGoldAndSlugs(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
 	tid := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	gold := uuid.MustParse("99999999-9999-4999-8999-999999999999")
+	mock.ExpectQuery("FROM public.tenants").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	mock.ExpectQuery("FROM public.page_definitions").
-		WithArgs(tid, "a", "b").
+		WithArgs(tid, "a", "b", gold).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
 	svc := NewService(sqlx.NewDb(db, "sqlmock"))
 	got, err := svc.ListBySlugs(context.Background(), tid, "a", "b")

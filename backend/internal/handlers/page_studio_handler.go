@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
@@ -711,9 +712,7 @@ func normalizeUpsertDefaults(req *pageStudioUpsertRequest) {
 }
 
 func (h *PageStudioHandler) goldCopyID(ctx context.Context) uuid.UUID {
-	var id uuid.UUID
-	_ = h.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true ORDER BY created_at LIMIT 1`)
-	return id
+	return goldcopy.ResolveTenantID(ctx, h.db)
 }
 
 func (h *PageStudioHandler) canEditCore(r *http.Request, tenantID uuid.UUID) bool {

@@ -13,6 +13,7 @@ on:
       - "backend/internal/semanticast/**"
       - "backend/internal/mdmread/**"
       - "backend/internal/driftread/**"
+      - "backend/internal/goldcopy/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -26,6 +27,7 @@ on:
       - "backend/internal/semanticast/**"
       - "backend/internal/mdmread/**"
       - "backend/internal/driftread/**"
+      - "backend/internal/goldcopy/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -49,7 +51,7 @@ jobs:
       - name: Compiler identifier allowlist
         run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
       - name: SL service package unit tests
-        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/... ./internal/trading/ -run 'LoadOrder'
+        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/goldcopy/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/... ./internal/trading/ -run 'LoadOrder|Resolve'
       - name: HTTP FIX CRIMS unify receipt
         run: go test -count=1 -timeout 30s ./internal/handlers/ -run 'TestOMSFIX_DelegatesCRIMSLoadToTrading'
       - name: Route-table dump (Path 6 dual URL + shim)

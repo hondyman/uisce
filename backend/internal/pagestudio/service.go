@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -41,26 +42,28 @@ type PageDetail struct {
 	FilterBar          json.RawMessage `db:"filter_bar" json:"filterBar"`
 }
 
-// ListSummaries returns tenant-owned pages only.
+// ListSummaries returns tenant pages plus gold-copy core pages.
 //
-// Predicate comparison (SL extract from MCP list_pages):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD (MCP): WHERE tenant_id = $1
-//	NEW:       WHERE tenant_id = $1
-//	DELTA:     none — gold-copy OR from PageStudioHandler.list deliberately deferred
-//	           to a follow-up that widens with IDOR coverage (gold visible, tenant-B not).
+//	OLD (MCP SL extract): WHERE tenant_id = $1
+//	NEW:                  WHERE tenant_id = $1 OR (is_core = true AND tenant_id = $2)
+//	                      ($2 = goldcopy.ResolveTenantID)
+//	DELTA:                intentional — adopt PageStudioHandler.list gold semantics
 func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]PageSummary, error) {
 	if s == nil || s.db == nil {
 		return []PageSummary{}, nil
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var pages []PageSummary
 	err := s.db.SelectContext(ctx, &pages, `
 		SELECT id::text, name, slug, COALESCE(status, '') AS status
 		FROM public.page_definitions
 		WHERE tenant_id = $1
+		   OR (is_core = true AND tenant_id = $2)
 		ORDER BY updated_at DESC
 		LIMIT 100
-	`, tenantID)
+	`, tenantID, gold)
 	if err != nil {
 		return nil, err
 	}
@@ -70,19 +73,18 @@ func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]Page
 	return pages, nil
 }
 
-// GetByIDOrSlug returns one tenant-owned page.
+// GetByIDOrSlug returns a tenant page, falling back to gold-copy core.
 //
-// Predicate comparison (SL extract from MCP get_page):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD (MCP): WHERE tenant_id = $1 AND (id::text = $2 OR slug = $3)
-//	NEW:       identical
-//	DELTA:     none — handler gold-copy fallback (is_core + gold tenant) deferred.
+//	OLD: WHERE tenant_id = $1 AND (id OR slug)
+//	NEW: try tenant match; on miss, id/slug AND is_core AND tenant_id = gold
+//	DELTA: intentional — adopt PageStudioHandler.get / getBySlug fallback
 func (s *Service) GetByIDOrSlug(ctx context.Context, tenantID uuid.UUID, pageID, slug string) (*PageDetail, error) {
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	var page PageDetail
-	err := s.db.GetContext(ctx, &page, `
+	page, err := s.getOne(ctx, `
 		SELECT id::text, name, slug, COALESCE(status, '') AS status,
 		       layout, components, data_sources,
 		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
@@ -91,29 +93,51 @@ func (s *Service) GetByIDOrSlug(ctx context.Context, tenantID uuid.UUID, pageID,
 		WHERE tenant_id = $1 AND (id::text = $2 OR slug = $3)
 		LIMIT 1
 	`, tenantID, pageID, slug)
-	if err != nil {
+	if err == nil {
+		return page, nil
+	}
+	if err != sql.ErrNoRows {
+		return nil, err
+	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
+	return s.getOne(ctx, `
+		SELECT id::text, name, slug, COALESCE(status, '') AS status,
+		       layout, components, data_sources,
+		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
+		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar
+		FROM public.page_definitions
+		WHERE is_core = true AND tenant_id = $1 AND (id::text = $2 OR slug = $3)
+		LIMIT 1
+	`, gold, pageID, slug)
+}
+
+func (s *Service) getOne(ctx context.Context, query string, args ...interface{}) (*PageDetail, error) {
+	var page PageDetail
+	if err := s.db.GetContext(ctx, &page, query, args...); err != nil {
 		return nil, err
 	}
 	return &page, nil
 }
 
-// ListBySlugs returns tenant-owned pages matching exactly two slugs.
+// ListBySlugs returns tenant or gold-core pages matching two slugs.
 //
-// Predicate comparison (SL extract from MCP describe_oms_journey):
+// Predicate comparison (gold-copy widen):
 //
-//	OLD (MCP): WHERE tenant_id = $1 AND slug IN ($2, $3)
-//	NEW:       identical bind shape
-//	DELTA:     none
+//	OLD: WHERE tenant_id = $1 AND slug IN ($2, $3)
+//	NEW: WHERE (tenant_id = $1 OR (is_core AND tenant_id = $4)) AND slug IN ($2, $3)
+//	DELTA: intentional — journey can resolve gold core blotter/ticket pages
 func (s *Service) ListBySlugs(ctx context.Context, tenantID uuid.UUID, slugA, slugB string) ([]PageSummary, error) {
 	if s == nil || s.db == nil {
 		return []PageSummary{}, nil
 	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var pages []PageSummary
 	err := s.db.SelectContext(ctx, &pages, `
 		SELECT id::text, name, slug, COALESCE(status, '') AS status
 		FROM public.page_definitions
-		WHERE tenant_id = $1 AND slug IN ($2, $3)
-	`, tenantID, slugA, slugB)
+		WHERE (tenant_id = $1 OR (is_core = true AND tenant_id = $4))
+		  AND slug IN ($2, $3)
+	`, tenantID, slugA, slugB, gold)
 	if err != nil {
 		return nil, err
 	}

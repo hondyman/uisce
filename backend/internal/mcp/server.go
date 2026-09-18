@@ -13,9 +13,8 @@
 // Flip checklist: dump + mcp-live-probe tools=16 + marker + migrations clean
 // + Path 6 new URL + shim Deprecation.
 //
-// SL reads: pagestudio + boread. MCP BO/page gold semantics = nil-UUID OR;
-// HTTP uses tenants.gold_copy / Legacy set_config — divergence is open until
-// the gold-copy-widen commit (named decision; see boread package doc).
+// SL reads: pagestudio + boread + goldcopy.ResolveTenantID.
+// Platform gold standard: tenants.gold_copy=true (not nil-UUID OR).
 package mcp
 
 import (
