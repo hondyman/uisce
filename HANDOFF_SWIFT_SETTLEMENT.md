@@ -18,7 +18,7 @@ A SWIFT trade settlement process built on top of the existing FIX-over-pipeline 
 ```
 backend/db/migrations/20261001_001_swift_tenant_config.up.sql
 backend/db/migrations/20261001_002_swift_field_map.up.sql
-backend/db/migrations/20261001_003_swift_field_map_seed.up.sql   ← 24 gold-copy defaults
+backend/db/migrations/20261001_003_swift_field_map_seed.up.sql   ← 26 gold-copy defaults (24 + 2 from migration 011)
 backend/db/migrations/20261001_004_swift_session_log.up.sql
 backend/db/migrations/20261001_005_swift_compliance_rule_set.up.sql
 backend/db/migrations/20261001_006_swift_reconciliation_report.up.sql
@@ -287,7 +287,7 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d alpha -c "
 # Expected: 4 tables with rowsecurity=t, 1 (session_log) with f
 
 # 4. Worker registration
-grep -c "SWIFT" backend/internal/temporal/worker.go
+grep -c "SWIFT" backend/cmd/worker/main.go
 
 # 5. No top-level BEGIN/COMMIT in migrations
 grep -l "^BEGIN;" backend/db/migrations/20261001_*.sql   # must be empty
@@ -295,7 +295,7 @@ grep -l "^BEGIN;" backend/db/migrations/20261001_*.sql   # must be empty
 # 6. Verify gold-copy seed applied
 PGPASSWORD=postgres psql -h localhost -U postgres -d alpha -c "
   SELECT count(*) FROM vend.swift_field_map;"
-# Expected: 24
+# Expected: 26 (24 original + uetr and settlement_date added by migration 011)
 ```
 
 ---
@@ -303,7 +303,7 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d alpha -c "
 ## If Starting a New Session on This
 
 1. Read `HANDOFF_FIX_OVER_PIPELINE.md` first — the SWIFT process mirrors it in every structural decision.
-2. GSIFI is the contract. Every SQL in every tile and activity must include the gold-copy OR-clause.
+2. GSIFI is the contract. READS on swift_* config tables include the gold-copy OR-clause; WRITES (UPDATE/INSERT/DELETE) are tenant-scoped ONLY. See the CRITICAL WRITE RULE in §GSIFI Isolation.
 3. The admin server (`127.0.0.1:8982`) owns the network connection. Workflows talk to it via HTTP activities — never directly.
 4. Two idempotency keys:
    - **Inbound** (`swift_settlement_writer`): `(tenant_id, transaction_ref)` — SHA-256 of raw bytes as fallback when ref is absent. Unique index `settlement_transaction_ref_tenant_uniq` is the arbiter (migration 009).
@@ -442,9 +442,14 @@ Update DAG JSON position 0 in `vend.swift_pipeline_dag` (or equivalent table):
 { "type": "swift_session_log", "config": {} }
 ```
 
-### Step 8 — CANCEL_PENDING resolver (pre-traffic requirement)
+### Step 8 — CANCEL_PENDING resolver (already implemented — verify only)
 
-`SWIFTReconciliationWorkflow` must query `settlement_status = 'CANCEL_PENDING'` and attempt to resolve each row before any cancel traffic can exist. See Known Gap #6 below. Wire this before enabling recall in production.
+`ResolveCancelPendingActivity` is implemented, wired into `SWIFTReconciliationWorkflow`,
+and registered on bp_queue. On merge day, verify:
+  go test ./internal/temporal -run "TestSWIFTReconciliationWorkflow|TestCancelResponseMsgTypes_V1" -count=1
+  grep "ResolveCancelPendingActivity" backend/cmd/worker/main.go
+Both must pass/show. The pre-recall-traffic prerequisite (camt.029 CxlSts
+acceptance/rejection parsing — Gap #6 v1 limit #2) is separate from the merge.
 
 ### Step 9 — Smoke tests (executed and verified, not just written)
 
@@ -553,8 +558,8 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 - Signature adheres to the Temporal contract: `(ctx, tenantID)`; DB via
   `workerDBKey` context — never a `*sql.DB` argument.
 - Writes strictly tenant-scoped (GSIFI Write Rule).
-- Rows within 24h SLA with a custodian cancellation response $\to$ `CANCELLED`.
-- Rows older than 24h SLA $\to$ `FAILED`, reason `recall_unresolved`.
+- Rows within 24h SLA with a custodian cancellation response → `CANCELLED`.
+- Rows older than 24h SLA → `FAILED`, reason `recall_unresolved`.
   The reason is LOG-ONLY — `cash_flow.settlement` has no `status_reason`
   column; add one (tiny migration) if the reason must be queryable.
 
@@ -578,13 +583,13 @@ Inspection of `vend.swift_field_map` on alpha revealed that 3 of 5 pacs.008 tags
 1. Applied migration `20261001_011_swift_field_map_pacs008_align.up.sql` to alpha DB.
 2. Updated seed file `backend/db/migrations/20261001_003_swift_field_map_seed.up.sql`.
 3. Verified 100% exact match against `TestParseMX_Pacs008_FieldExtraction`:
-   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/Cdtr/FinInstnId/BICFI` $\to$ `bic_receiver` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmAmt` $\to$ `settlement_amount` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmDt` $\to$ `settlement_date` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/EndToEndId` $\to$ `transaction_ref` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/UETR` $\to$ `uetr` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/GrpHdr/CreDtTm` $\to$ `created_at` (MATCH ✅)
-   - `Document/FIToFICstmrCdtTrf/GrpHdr/MsgId` $\to$ `msg_id` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/Cdtr/FinInstnId/BICFI` → `bic_receiver` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmAmt` → `settlement_amount` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/IntrBkSttlmDt` → `settlement_date` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/EndToEndId` → `transaction_ref` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/CdtTrfTxInf/PmtId/UETR` → `uetr` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/GrpHdr/CreDtTm` → `created_at` (MATCH ✅)
+   - `Document/FIToFICstmrCdtTrf/GrpHdr/MsgId` → `msg_id` (MATCH ✅)
 
 ### 8. Frontend Studio palette (unchanged)
 
