@@ -284,7 +284,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "search_catalog", mustJSON(map[string]string{"query": "order"}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "WithArgs(tenantA, query); gold-copy OR in SQL"
+		detail := "via boread.Search (new contract); WithArgs(tenantA, query); nil-UUID OR copied"
 		if err != nil {
 			ok = false
 			detail = err.Error()

@@ -21,10 +21,8 @@ import (
 var transitionalDirectSQLFiles = map[string]string{
 	// Exit: trading-service extract unifying omsLoadCRIMSOrder + OMSFIXCommandHandler.loadOrder
 	"tools_oms.go": "omsLoadCRIMSOrder only (get_bo_schema → boread)",
-	// Exit: MDM exception service extract
+	// Exit: MDM exception service extract + drift read extract
 	"tools_catalog.go": "triage_mdm_exception + inspect_schema_drift read extract",
-	// Exit: boread search extract (NOT discovery/search — different table)
-	"tools_governance.go": "search_catalog",
 }
 
 // sqlCallSuffixes are database/sql and sqlx query methods. Bare "Get" is

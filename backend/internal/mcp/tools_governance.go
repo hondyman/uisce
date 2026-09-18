@@ -49,35 +49,20 @@ func (s *Server) searchCatalog(ctx context.Context, tenantID uuid.UUID, argsRaw 
 	if q == "" {
 		return nil, fmt.Errorf("query is required")
 	}
-	if s.db == nil {
+	if s.bos == nil || s.db == nil {
 		return map[string]interface{}{
 			"matches": []map[string]string{
 				{"id": "offline", "key": q, "display_name": q, "note": "db unavailable"},
 			},
 		}, nil
 	}
-	rows, err := s.db.QueryxContext(ctx, `
-		SELECT id::text, COALESCE(name,'') AS name, COALESCE(display_name, name, '') AS display_name
-		FROM public.business_objects
-		WHERE (tenant_id = $1 OR tenant_id = '00000000-0000-0000-0000-000000000000')
-		  AND (name ILIKE '%' || $2 || '%' OR display_name ILIKE '%' || $2 || '%')
-		ORDER BY display_name
-		LIMIT 50
-	`, tenantID.String(), q)
+	hits, err := s.bos.Search(ctx, tenantID, q)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var matches []map[string]interface{}
-	for rows.Next() {
-		var id, name, display string
-		if err := rows.Scan(&id, &name, &display); err != nil {
-			return nil, err
-		}
-		matches = append(matches, map[string]interface{}{"id": id, "key": name, "display_name": display})
-	}
-	if matches == nil {
-		matches = []map[string]interface{}{}
+	matches := make([]map[string]interface{}, 0, len(hits))
+	for _, h := range hits {
+		matches = append(matches, map[string]interface{}{"id": h.ID, "key": h.Name, "display_name": h.DisplayName})
 	}
 	return map[string]interface{}{"matches": matches, "query": q}, nil
 }

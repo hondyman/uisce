@@ -1,14 +1,25 @@
 // Package boread is the thin read choke point for business_objects /
 // business_object_fields / catalog_edge queries used by MCP adapters.
 //
-// Why not metadata.BusinessObjectService yet:
-//   - ListBusinessObjects is tenant-only (no nil-UUID OR) and uses bo_key/bo_name.
-//   - GetBusinessObject adds requireAccess + gold via tenants.gold_copy lookup.
-//   - ListBusinessObjectsLegacy widens gold via EXISTS(gold_copy) and sets
-//     app.tenant_id — a deliberate scope change, not a zero-delta move.
+// # MCP vs HTTP gold-copy divergence (named decision, open until widen)
 //
-// This package preserves the Tier 0 MCP predicates exactly. Reconciling onto
-// BusinessObjectService is a follow-up with its own predicate table + IDOR.
+// MCP reads in this package use the nil-UUID OR
+// (tenant_id = caller OR tenant_id = '00000000-…').
+// HTTP BusinessObjectService paths use different gold semantics:
+//   - GetBusinessObject: requireAccess + tenants.gold_copy lookup
+//   - ListBusinessObjects: tenant-only (no gold OR)
+//   - ListBusinessObjectsLegacy: EXISTS(gold_copy) + set_config('app.tenant_id')
+//     — LIVE on api.Server listBusinessObjects (api.go) and a cousin set_config
+//     on getBusinessObjectByID. RLS design must account for pre-existing
+//     session-config tenancy, not assume it introduces the only one.
+//
+// Until the gold-copy-widen commit, preserving MCP predicates means the two
+// surfaces can see different rows on the same tables. Widen must decide
+// deliberately (adopt HTTP richer semantics vs keep MCP nil-UUID OR) for
+// both pages and BOs — not accumulate divergence by deference.
+//
+// Why not metadata.BusinessObjectService yet: the three bullets above are
+// evidence-backed rejections (commit 1/5), not preferences.
 package boread
 
 import (
@@ -217,4 +228,44 @@ func (s *Service) ListFieldSchema(ctx context.Context, tenantID uuid.UUID, boID 
 		fields = []FieldSchema{}
 	}
 	return fields, nil
+}
+
+// SearchMatch is one hit from Search.
+type SearchMatch struct {
+	ID          string `db:"id" json:"id"`
+	Name        string `db:"name" json:"key"`
+	DisplayName string `db:"display_name" json:"display_name"`
+}
+
+// Search finds business_objects by name/display_name ILIKE for the tenant.
+//
+// This is a new service contract (extraction), not a delegation — there is no
+// existing BusinessObjectService search with this shape. discovery/search is
+// rejected: it queries discovery_candidates, not business_objects.
+//
+// Predicate comparison (SL extract from MCP search_catalog):
+//
+//	OLD (tool SQL): (tenant_id = $1 OR nil-UUID) AND (name ILIKE … OR display_name ILIKE …)
+//	NEW:            identical bind shape and WHERE (new boread.Search)
+//	DELTA:          none (predicate copied; contract newly owned by boread)
+func (s *Service) Search(ctx context.Context, tenantID uuid.UUID, query string) ([]SearchMatch, error) {
+	if s == nil || s.db == nil {
+		return []SearchMatch{}, nil
+	}
+	var matches []SearchMatch
+	err := s.db.SelectContext(ctx, &matches, `
+		SELECT id::text, COALESCE(name,'') AS name, COALESCE(display_name, name, '') AS display_name
+		FROM public.business_objects
+		WHERE (tenant_id = $1 OR tenant_id = '`+GlobalTenantNilUUID+`')
+		  AND (name ILIKE '%' || $2 || '%' OR display_name ILIKE '%' || $2 || '%')
+		ORDER BY display_name
+		LIMIT 50
+	`, tenantID.String(), query)
+	if err != nil {
+		return nil, err
+	}
+	if matches == nil {
+		matches = []SearchMatch{}
+	}
+	return matches, nil
 }

@@ -58,6 +58,30 @@ func TestGetContract_BindsIDKeyTenant(t *testing.T) {
 	}
 }
 
+func TestSearch_BindsTenantAndQuery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	tid := uuid.MustParse("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+	mock.ExpectQuery("FROM public.business_objects").
+		WithArgs(tid.String(), "order").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "name", "display_name"}).
+			AddRow("1", "order", "Order"))
+	svc := NewService(sqlx.NewDb(db, "sqlmock"))
+	got, err := svc.Search(context.Background(), tid, "order")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Name != "order" {
+		t.Fatalf("%#v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestListFieldSchema_BindsTenantAndBOID(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
