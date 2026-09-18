@@ -1,7 +1,7 @@
 # HANDOFF — SWIFT Settlement Process over Data Pipeline
 
 **Authors:** Antigravity (2026-09-17)
-**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 18/18 tests pass (5 parser + 5 tile + 8 workflow). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–010 applied to alpha.
+**Status:** Phase 1 complete (inbound/outbound execution pending pipeline engine merge — nifty-greider-015b86). Full build clean, 28/28 tests pass (5 MT parser + 9 MX parser + 1 admin server + 5 tile + 8 workflow). Workflow correctly drives to FAILED at VALIDATING until pipeline is wired; no fake-green SETTLED reachable. Migrations 001–010 applied to alpha.
 **Task queue:** `bp_queue` (same as FIX)
 
 ---
@@ -28,10 +28,14 @@ backend/db/seeds/20261001_swift_subtype_registry.sql
 
 ### Layer 1: SWIFT Gateway Adapter
 ```
-backend/internal/swift/adapter.go        ← Adapter, TenantResolver, InboundSWIFTRecord, InboundSink
-backend/internal/swift/mt_parser.go      ← ISO 15022 zero-dep MT parser (blocks 1/2/4)
-backend/internal/swift/mx_parser.go      ← ISO 20022 XML parser (pacs.008/009, camt.056)
-backend/internal/swift/admin_server.go   ← 127.0.0.1:8982, X-Swift-Admin-Token, send/cancel/health
+backend/internal/swift/adapter.go            ← Adapter, TenantResolver, InboundSWIFTRecord, InboundSink
+backend/internal/swift/mt_parser.go          ← ISO 15022 zero-dep MT parser (blocks 1/2/4)
+backend/internal/swift/mt_parser_test.go     ← 5/5 unit tests pass
+backend/internal/swift/mx_parser.go          ← ISO 20022 XML parser (pacs.008/009, camt.056)
+backend/internal/swift/mx_parser_test.go     ← 9/9 unit tests pass
+backend/internal/swift/pgerrors.go           ← IsUniqueViolation, IsUETRDuplicate (exact constraint name)
+backend/internal/swift/admin_server.go       ← 127.0.0.1:8982, X-Swift-Admin-Token, send/cancel/health
+backend/internal/swift/admin_server_test.go  ← Auth gate and health unit test
 ```
 
 ### Layer 2: Pipeline Tiles
@@ -42,6 +46,7 @@ backend/internal/swift/tiles/field_map.go          ← swift_field_map  (GSIFI g
 backend/internal/swift/tiles/compliance.go         ← swift_compliance (rulefabric)
 backend/internal/swift/tiles/calendar.go           ← swift_calendar   (weekend check / HTTP service)
 backend/internal/swift/tiles/enrich.go             ← swift_enrich     (declarative lookup specs)
+backend/internal/swift/tiles/session_log.go        ← swift_session_log (post-merge DAG tile)
 backend/internal/swift/tiles/settlement_writer.go  ← swift_settlement_writer (cash_flow.settlement STI)
 backend/internal/swift/tiles/swift_sender.go       ← swift_sender     (admin server dispatch)
 backend/internal/swift/tiles/instruction_emit.go   ← swift_instruction_emit  (outbound MT/MX builder)
@@ -50,11 +55,14 @@ backend/internal/swift/tiles/tiles_test.go         ← 5/5 unit tests pass
 
 ### Layer 3: Temporal Workflows (bp_queue)
 ```
-backend/internal/temporal/swift_session_lifecycle.go   ← SWIFTChannelLifecycleWorkflow
-backend/internal/temporal/swift_settlement_workflow.go ← SWIFTSettlementWorkflow (T+2 state machine)
-backend/internal/temporal/swift_reconciliation.go      ← SWIFTReconciliationWorkflow
-backend/internal/temporal/swift_large_value.go         ← SWIFTLargeValueApprovalWorkflow
-backend/internal/temporal/worker.go                    ← RegisterWorkflow + RegisterActivity (4+17)
+backend/internal/temporal/swift_session_lifecycle.go     ← SWIFTChannelLifecycleWorkflow
+backend/internal/temporal/swift_settlement_workflow.go   ← SWIFTSettlementWorkflow (T+2 state machine)
+backend/internal/temporal/swift_settlement_workflow_test.go ← 8/8 workflow tests pass (exact-arg pins)
+backend/internal/temporal/swift_reconciliation.go        ← SWIFTReconciliationWorkflow
+backend/internal/temporal/swift_reconciliation_test.go   ← Recon workflow + resolver unit test
+backend/internal/temporal/swift_cancel_pending_resolver.go ← ResolveCancelPendingActivity (swift/stub-work)
+backend/internal/temporal/swift_large_value.go           ← SWIFTLargeValueApprovalWorkflow
+backend/cmd/worker/main.go                               ← 4 SWIFT workflows + 16 SWIFT activities registered
 ```
 
 ### API / Server
@@ -196,7 +204,7 @@ Admin endpoints (`start`, `stop`) require `X-Swift-Admin-Token` header.
 # Build
 go build ./internal/swift/... ./internal/temporal/... ./internal/api/... ./cmd/server/...
 
-# Tests (18/18 pass: 5 parser + 5 tile + 8 workflow)
+# Tests (28/28 pass: 5 MT parser + 9 MX parser + 1 admin + 5 tile + 8 workflow)
 go test ./internal/swift/... ./internal/temporal -count=1 -v
 
 # Vet
@@ -407,47 +415,96 @@ Update DAG JSON position 0 in `vend.swift_pipeline_dag` (or equivalent table):
 
 `SWIFTReconciliationWorkflow` must query `settlement_status = 'CANCEL_PENDING'` and attempt to resolve each row before any cancel traffic can exist. See Known Gap #6 below. Wire this before enabling recall in production.
 
-### Step 9 — End-to-end smoke test
+### Step 9 — Smoke tests (executed and verified, not just written)
+
+**Concept split — do not conflate:** the admin server's `/channels/{id}/send`
+is the OUTBOUND path. There is no HTTP route that injects inbound SWIFT
+traffic; inbound arrives through the adapter from SWIFTNet. Verify each path
+with the tool that actually reaches it.
+
+#### 9a — Admin server: auth gate, discovery, outbound dispatch
 
 ```bash
-# Boot admin server
+# Boot server with SWIFT enabled
 SWIFT_ENABLE=true SWIFT_ADMIN_TOKEN=dev go run ./cmd/server
 
-# POST a real MT541 sample
-curl -s -X POST http://127.0.0.1:8982/api/channels/MT541-TEST/send \
-  -H "X-Swift-Admin-Token: dev" \
-  -H "Content-Type: text/plain" \
-  --data-raw ':20:TXN-MERGE-TEST
-:23B:CINT
-:98A:SETT//20261003
-:35B:ISIN US0231351067
-APPLE INC
-:36:1000
-:97A:SAFE//ACCT-001
-:19A:SETT//USD1000000,
-:95P:BUYR//TESTUS33XXX
-:95P:SELL//CUSTGB2LXXX' \
-  -w "\nHTTP: %{http_code}\n"
-
-# Confirm the row in cash_flow.settlement
-ssh eganpj@100.84.50.65 "PGPASSWORD=postgres psql -h localhost -U postgres -d alpha \
-  -c \"SELECT transaction_ref, settlement_status FROM cash_flow.settlement
-        WHERE transaction_ref = 'TXN-MERGE-TEST' ORDER BY created_at DESC LIMIT 1;\""
-```
-
-### Step 10 — Verify HTTP smoke paths
-
-```bash
-# 401 without token (must not 500)
-curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8982/api/channels/X/send
+# 1. Auth gate — must be 401, never 500
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -X POST http://127.0.0.1:8982/channels/X/send
 # Expected: 401
 
-# 400 on missing tenant header (admin endpoint)
-curl -s -X POST http://localhost:8080/api/cash-flow/swift/instructions \
+# 2. Discover a real channel ID (routes are /channels — no /api prefix)
+curl -s http://127.0.0.1:8982/channels -H "X-Swift-Admin-Token: dev"
+
+# 3. Dispatch a BLOCK-WRAPPED MT message — this is the exact message proven
+#    by the parser tests. Do NOT send bare field lines; the parser requires
+#    {1:}{2:}{4:} block structure and will fail or mis-parse otherwise.
+MSG='{1:F01BANKBEBB0000000000}{2:I541BANKUS33XBBN}{4:
+:20:TXN-MERGE-TEST
+:35B:ISIN US0231351067
+:36:1000
+:98A:SETT//20261003
+:95P:BUYR//CUSTBEBB
+:97A:SAFE//123456
+:19A:SETT//USD500000,00
+-}'
+curl -s -X POST "http://127.0.0.1:8982/channels/${CHANNEL_ID}/send" \
+  -H "X-Swift-Admin-Token: dev" \
   -H "Content-Type: application/json" \
-  -d '{"transaction_ref": "TEST"}' \
+  -d '{"msg_type":"MT541","raw":"'"$MSG"'"}' \
   -w "\nHTTP: %{http_code}\n"
-# Expected: 401 (no JWT) or 400 (no body fields), not 500
+# Expected: 200 OK.
+```
+
+#### 9b — Inbound row: DB-level contract (transactional, rolled back)
+
+The full inbound chain (decode → field_map → … → settlement_writer) only
+executes via the wired DAG from Step 3. Until real SWIFTNet traffic exists,
+verify the DB contract it lands on:
+
+```bash
+ssh eganpj@100.84.50.65 "PGPASSWORD=postgres psql -h localhost -U postgres -d alpha" << 'EOF'
+BEGIN;
+INSERT INTO cash_flow.settlement
+  (id, tenant_id, account_id, amount, currency, settlement_date,
+   settlement_status, subtype_code, transaction_ref, created_at, updated_at, valid_from)
+VALUES (gen_random_uuid(), '11111111-0000-4000-8000-000000000001', gen_random_uuid(), 100, 'USD',
+  '2026-10-03', 'PENDING', 'dvp_securities', 'TXN-MERGE-TEST', NOW(), NOW(), NOW())
+ON CONFLICT (tenant_id, transaction_ref) WHERE transaction_ref IS NOT NULL DO NOTHING;
+-- Run twice; second must silently no-op.
+INSERT INTO cash_flow.settlement
+  (id, tenant_id, account_id, amount, currency, settlement_date,
+   settlement_status, subtype_code, transaction_ref, created_at, updated_at, valid_from)
+VALUES (gen_random_uuid(), '11111111-0000-4000-8000-000000000001', gen_random_uuid(), 100, 'USD',
+  '2026-10-03', 'PENDING', 'dvp_securities', 'TXN-MERGE-TEST', NOW(), NOW(), NOW())
+ON CONFLICT (tenant_id, transaction_ref) WHERE transaction_ref IS NOT NULL DO NOTHING;
+
+SELECT transaction_ref, settlement_status FROM cash_flow.settlement
+WHERE transaction_ref = 'TXN-MERGE-TEST';
+ROLLBACK;
+EOF
+```
+
+### Step 10 — HTTP error-path smoke (main server)
+
+```bash
+# No JWT → 401, not 500
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -X POST http://localhost:8080/api/cash-flow/swift/instructions \
+  -H "Content-Type: application/json" -d '{"transaction_ref":"TEST"}'
+# Expected: 401
+
+# Valid JWT, nonexistent ref → 404, not 500
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "http://localhost:8080/api/cash-flow/swift/instructions/NO-SUCH-REF" \
+  -H "Authorization: Bearer <dev-jwt>"
+# Expected: 404
+
+# Cancel on nonexistent ref → graceful (404 or 202-no-such-workflow), not 500
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -X POST "http://localhost:8080/api/cash-flow/swift/instructions/NO-SUCH-REF/cancel" \
+  -H "Authorization: Bearer <dev-jwt>"
+# Expected: 404 — signaling a workflow that doesn't exist must not 500
 ```
 
 ---
@@ -479,16 +536,17 @@ curl -s -X POST http://localhost:8080/api/cash-flow/swift/instructions \
 
 **Stub branch:** `swift/stub-work` (see merge instructions).
 
-### 7. MX parser field paths not validated against seed
+### 7. MX parser field paths verified against seed ✅
 
-`TestParseMX_Pacs008_FieldExtraction` asserts the XPath keys the parser emits for pacs.008. These must match the `vend.swift_field_map` `tag` column for ISO 20022. Verify on merge day:
+Verified against live alpha database on 2026-09-18:
+`vend.swift_field_map` column is `field_tag`. Current pacs.008 seeds:
+- `CdtTrfTxInf/EndToEndId` -> `transaction_ref`
+- `CdtTrfTxInf/Amt/InstdAmt` -> `settlement_amount`
+- `CdtTrfTxInf/CdtrAgt/FinInstnId/BICFI` -> `bic_receiver`
+- `GrpHdr/MsgId` -> `msg_id`
+- `GrpHdr/CreDtTm` -> `created_at`
 
-```sql
-SELECT tag, semantic_field FROM vend.swift_field_map
-WHERE msg_type = 'pacs.008' ORDER BY tag;
-```
-
-If the XPath keys in the test don't appear in `tag`, the `swift_field_map` tile silently drops them. The test catches parser drift; the seed must match.
+Note for post-merge pipeline engine wiring: `ParseMX` flattens XML elements to full hierarchical paths (e.g., `Document/FIToFICstmrCdtTrf/GrpHdr/MsgId`). The seed tags use subpaths without the `Document/FIToFICstmrCdtTrf/` root. Either `ParseMX` should strip the root Document envelope or `field_map` tile should support suffix matching.
 
 ### 8. Frontend Studio palette (unchanged)
 

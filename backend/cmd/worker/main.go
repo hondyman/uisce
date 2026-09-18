@@ -99,6 +99,31 @@ func main() {
 	w.RegisterActivity(trading.PersistFIXFillActivity)
 	log.Println("✅ Registered FIX workflows: FIXSessionLifecycleWorkflow, FIXOrderEntryWorkflow, FIXReconciliationWorkflow")
 
+	// SWIFT settlement workflows and activities (HANDOFF_SWIFT_SETTLEMENT.md).
+	// Registered on bp_queue.
+	w.RegisterWorkflow(uiscetemporal.SWIFTChannelLifecycleWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTSettlementWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTReconciliationWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTLargeValueApprovalWorkflow)
+
+	w.RegisterActivity(uiscetemporal.SWIFTAckActivity)
+	w.RegisterActivity(uiscetemporal.RunSWIFTPipelineDAGActivity)
+	w.RegisterActivity(uiscetemporal.PersistSettlementStatusActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTRecallActivity)
+	w.RegisterActivity(uiscetemporal.ResolveCancelPendingActivity)
+	w.RegisterActivity(uiscetemporal.LoadSWIFTExpectedSettlementsActivity)
+	w.RegisterActivity(uiscetemporal.MatchSWIFTSettlementsActivity)
+	w.RegisterActivity(uiscetemporal.PersistSWIFTReconciliationReportActivity)
+	w.RegisterActivity(uiscetemporal.EscalateUnmatchedActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTConnectActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTDisconnectActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTChannelLivenessCheckActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTReconnectActivity)
+	w.RegisterActivity(uiscetemporal.CreateLargeValueApprovalTaskActivity)
+	w.RegisterActivity(uiscetemporal.RecordLargeValueDecisionActivity)
+	w.RegisterActivity(uiscetemporal.EscalateSLABreachActivity)
+	log.Println("✅ Registered SWIFT workflows and activities (4 workflows, 16 activities)")
+
 	// Register activities with Activities struct
 	activities := workflows.NewActivities(db)
 	w.RegisterActivity(activities.LoadBPStepsActivity)
