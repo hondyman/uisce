@@ -246,12 +246,8 @@ const SSRSReportBuilderContent: React.FC = () => {
     includeComments: false,
   });
 
-  const [reportParameters, setReportParameters] = useState<ReportParameter[]>([
-    { id: 'param_year', name: 'Year', type: 'number', prompt: 'Enter a Year', defaultValue: String(new Date().getFullYear()) },
-  ]);
-  const [runtimeParamValues, setRuntimeParamValues] = useState<Record<string, any>>({
-    Year: String(new Date().getFullYear()),
-  });
+  const [reportParameters, setReportParameters] = useState<ReportParameter[]>([]);
+  const [runtimeParamValues, setRuntimeParamValues] = useState<Record<string, any>>({});
 
   // Report title (editable in top bar)
   const [reportTitle, setReportTitle] = useState('Untitled Report');
@@ -805,7 +801,7 @@ const SSRSReportBuilderContent: React.FC = () => {
         name: field.label || field.name,
         fontSize: 12,
         fontWeight: 500,
-        textColor: isDark ? '#E2E8F0' : '#1E293B',
+        textColor: '#000000', // reports render on white; text stays black regardless of theme
       },
     };
     setElements([...elements, newElement]);
@@ -814,8 +810,25 @@ const SSRSReportBuilderContent: React.FC = () => {
   };
 
   // Add all BO fields as a Table
-  const handleAddAllAsTable = (fields: BOField[]) => {
+  const handleAddAllAsTable = async (fields: BOField[]) => {
     const tableColumns = fields.map(f => f.name);
+    let dataBinding: Record<string, any> = {};
+    if (selectedBO?.id && selectedBindingId && tenant?.id) {
+      try {
+        const boTerms = await fetchBOTerms(selectedBO.id, selectedBindingId);
+        const dims = boTerms.filter((t) => t.role === 'DIMENSION');
+        const measures = boTerms.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
+        dataBinding = {
+          boId: selectedBO.id,
+          bindingId: selectedBindingId,
+          tenantId: tenant.id,
+          dimensions: dims.map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
+          measures: measures.map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
+        };
+      } catch (err) {
+        devError('Failed to bind "Add All as Table"', err);
+      }
+    }
     const newTable = {
       id: `table_bo_${Date.now()}`,
       type: ELEMENT_TYPES.TABLE,
@@ -828,11 +841,13 @@ const SSRSReportBuilderContent: React.FC = () => {
         fontSize: 11,
         showGridLines: true,
         alternatingRowColors: true,
+        ...dataBinding,
       },
     };
     setElements([...elements, newTable]);
     setSelectedElement(newTable.id);
-    setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}`, severity: 'success' });
+    const boundMsg = dataBinding.boId ? '' : ' (unbound - select a Business Object with an active binding first to see live values)';
+    setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}${boundMsg}`, severity: dataBinding.boId ? 'success' : 'warning' });
   };
 
   const handleAddToolboxItem = async (type: string, targetSection: string = REPORT_SECTIONS.BODY) => {
@@ -877,7 +892,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       properties: {
         name: `${type.charAt(0).toUpperCase() + type.slice(1)} 1`,
         fontSize: 12,
-        textColor: isDark ? '#E2E8F0' : '#1E293B',
+        textColor: '#000000', // reports render on white; text stays black regardless of theme
         // Empty container scaffolding: tables/matrixes initialize with NO pre-populated columns
         columns: type === ELEMENT_TYPES.TABLE || type === ELEMENT_TYPES.MATRIX || type === ELEMENT_TYPES.LIST ? [] : undefined,
         ...dataBinding,
@@ -1376,7 +1391,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   value={selectedBOId}
                   displayEmpty
                   onChange={(e) => setSelectedBOId(e.target.value as string)}
-                  disabled={!!urlReportId || isReadOnlyCore}
+                  disabled={(!!urlReportId && !!selectedBOId) || isReadOnlyCore}
                   sx={{
                     height: 28, color: '#FFF', bgcolor: 'rgba(255,255,255,0.09)', fontSize: '0.75rem', fontWeight: 600,
                     borderRadius: 1.5, '& .MuiSvgIcon-root': { color: '#FFF' },
@@ -1649,6 +1664,8 @@ const SSRSReportBuilderContent: React.FC = () => {
                       selectedSection={selectedSection}
                       onSectionSelect={handleSectionSelect}
                       orientation={orientation}
+                      reportParameters={reportParameters}
+                      runtimeParamValues={runtimeParamValues}
                       isLivePreview={false}
                       availableFieldDefs={availableFieldDefs}
                     />
@@ -1813,6 +1830,8 @@ const SSRSReportBuilderContent: React.FC = () => {
                     onElementSelect={() => {}}
                     sectionConfig={sectionConfig}
                     orientation={orientation}
+                    reportParameters={reportParameters}
+                    runtimeParamValues={runtimeParamValues}
                     isLivePreview={true}
                     previewData={(() => {
                       if (!previewData || previewData.length === 0) return null;
@@ -1843,7 +1862,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                           value={selectedBOId}
                           label="Business Object"
                           onChange={(e) => setSelectedBOId(e.target.value as string)}
-                          disabled={!!urlReportId || isReadOnlyCore}
+                          disabled={(!!urlReportId && !!selectedBOId) || isReadOnlyCore}
                         >
                           <MenuItem value=""><em>Select Business Object...</em></MenuItem>
                           {businessObjects.map((bo: any) => (
@@ -2062,6 +2081,9 @@ const SSRSReportBuilderContent: React.FC = () => {
           onDelete={handleRemoveParameter}
           isReadOnly={isReadOnlyCore}
           onClone={handleCloneReport}
+          boId={selectedBO?.id}
+          boKey={selectedBO?.key || selectedBO?.technicalName || selectedBO?.technical_name}
+          bindingId={selectedBindingId}
         />
         <Dialog open={aiOpen} onClose={() => !aiGenerating && setAiOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>{elements.length > 0 ? 'Regenerate with AI' : 'Generate a report with AI'}</DialogTitle>

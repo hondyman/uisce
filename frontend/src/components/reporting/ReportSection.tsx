@@ -39,7 +39,7 @@ const getSectionLabel = (section: string) => {
   }
 };
 
-const ReportSection: FC<any> = ({ section, elements, onElementUpdate, onElementDelete, onElementSelect, selectedElement, layoutSettings }) => {
+const ReportSection: FC<any> = ({ section, elements, onElementUpdate, onElementDelete, onElementSelect, selectedElement, layoutSettings, reportParameters, runtimeParamValues }) => {
   const { setNodeRef, isOver } = useDroppable({
     id: section,
   });
@@ -69,7 +69,7 @@ const ReportSection: FC<any> = ({ section, elements, onElementUpdate, onElementD
       )}
       <Box ref={setNodeRef} sx={{ position: 'relative', height: getSectionHeight(section), border: '1px solid #ddd', bgcolor: isOver ? alpha('#6366f1', 0.1) : '#ffffff', backgroundImage: `linear-gradient(rgba(0,0,0,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,.1) 1px, transparent 1px)`, backgroundSize: '20px 20px', overflow: 'hidden', ...columnStyles }} aria-label={`Drop zone for ${getSectionLabel(section)}`}>
         {elements.filter((el: any) => el.section === section).map((element: any) => (
-          <ReportElement key={element.id} {...element} onUpdate={onElementUpdate} onDelete={onElementDelete} onSelect={onElementSelect} isSelected={selectedElement === element.id} />
+          <ReportElement key={element.id} {...element} onUpdate={onElementUpdate} onDelete={onElementDelete} onSelect={onElementSelect} isSelected={selectedElement === element.id} reportParameters={reportParameters} runtimeParamValues={runtimeParamValues} />
         ))}
         {elements.filter((el: any) => el.section === section).length === 0 && (
           <Typography sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: 'text.secondary', pointerEvents: 'none' }}>

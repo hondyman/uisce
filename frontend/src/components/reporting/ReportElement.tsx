@@ -18,6 +18,13 @@ interface ReportElementProps {
   onDelete: (id: string) => void;
   onSelect: (id: string) => void;
   isSelected: boolean;
+  /** Report-level parameters (ParamSpec[]) + their current runtime values -
+   * threaded down to ReportWidgetRenderer, which resolves any param with a
+   * `source: {kind:'ref', termKey}` against this widget's own Business
+   * Object fields and folds it into the query's WHERE criteria. See
+   * ReportWidgetRenderer.tsx. */
+  reportParameters?: any[];
+  runtimeParamValues?: Record<string, any>;
 }
 
 const ReportElement: FC<ReportElementProps> = ({
@@ -30,6 +37,8 @@ const ReportElement: FC<ReportElementProps> = ({
   onDelete,
   onSelect,
   isSelected,
+  reportParameters,
+  runtimeParamValues,
 }) => {
   const renderContent = () => {
     if (type === 'form' && properties.boId) {
@@ -48,6 +57,8 @@ const ReportElement: FC<ReportElementProps> = ({
             chartType: properties.chartType,
             limit: properties.limit,
           }}
+          reportParameters={reportParameters}
+          runtimeParamValues={runtimeParamValues}
         />
       );
     }

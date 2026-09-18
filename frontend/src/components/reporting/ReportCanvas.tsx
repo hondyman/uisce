@@ -3,10 +3,10 @@ import { Paper } from '@mui/material';
 import ReportSection from './ReportSection';
 import { REPORT_SECTIONS } from './reportingUtils';
 
-const ReportCanvas: FC<any> = ({ elements, layoutSettings, selectedElement, onElementUpdate, onElementDelete, onElementSelect, orientation }) => (
+const ReportCanvas: FC<any> = ({ elements, layoutSettings, selectedElement, onElementUpdate, onElementDelete, onElementSelect, orientation, reportParameters, runtimeParamValues }) => (
   <Paper sx={{ width: orientation === 'Portrait' ? 794 : 1123, mx: 'auto', border: '1px solid #ddd' }}>
     {Object.values(REPORT_SECTIONS).map(section => (
-      <ReportSection key={section} section={section} elements={elements} onElementUpdate={onElementUpdate} onElementDelete={onElementDelete} onElementSelect={onElementSelect} selectedElement={selectedElement} layoutSettings={layoutSettings} />
+      <ReportSection key={section} section={section} elements={elements} onElementUpdate={onElementUpdate} onElementDelete={onElementDelete} onElementSelect={onElementSelect} selectedElement={selectedElement} layoutSettings={layoutSettings} reportParameters={reportParameters} runtimeParamValues={runtimeParamValues} />
     ))}
   </Paper>
 );

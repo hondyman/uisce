@@ -213,6 +213,21 @@ export function serializeForBackend(def: BuilderDefinition): Record<string, unkn
 }
 
 export function deserializeFromBackend(raw: Record<string, unknown>): BuilderDefinition {
+  // This is the actual live save format written by SSRSReportBuilder's own
+  // save path (buildSavePayload) — a flat `{elements: [...]}` array, not
+  // the section-based shapes the branches below were built for. Without
+  // this branch, every existing report silently deserialized to an empty
+  // element list on load, regardless of what it actually contained.
+  if (Array.isArray(raw.elements)) {
+    return {
+      _schemaVersion: 2,
+      elements: raw.elements as BuilderElement[],
+      reportTitle: (raw.reportTitle as string) || '',
+      sectionConfig: (raw.sectionConfig as Record<string, SectionConfigEntry>) || {},
+      layoutSettings: raw.layoutSettings as LayoutSettings | undefined,
+    };
+  }
+
   const schemaVersion = (raw._schemaVersion as number | undefined) || 1;
 
   // Handle ReportLayout schema (the actual shape stored in report_definitions.definition)
