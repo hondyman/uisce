@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/pagestudio"
 	"github.com/jmoiron/sqlx"
 	mcplib "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -41,6 +42,7 @@ type Server struct {
 	db       *sqlx.DB
 	registry *server.MCPServer
 	path1    *MCPToolHandler
+	pages    *pagestudio.Service
 	nlEngine *TextToASTCompiler
 	temporal client.Client
 
@@ -50,10 +52,12 @@ type Server struct {
 }
 
 func NewServer(db *sqlx.DB) *Server {
+	pages := pagestudio.NewService(db)
 	s := &Server{
 		db:       db,
 		registry: server.NewMCPServer("uisce-semantic-mcp-server", "1.0.0"),
 		path1:    NewMCPToolHandler(db),
+		pages:    pages,
 		nlEngine: NewTextToASTCompiler(db),
 		tools:    make(map[string]registeredTool),
 	}

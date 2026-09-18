@@ -82,7 +82,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "list_pages", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "sqlmock WithArgs(tenantA); returns A-only row"
+		detail := "via pagestudio.ListSummaries; WithArgs(tenantA); predicate unchanged (no gold-copy OR yet)"
 		if err != nil {
 			detail = err.Error()
 			ok = false
@@ -111,7 +111,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "get_page", mustJSON(map[string]string{"page_id": pageID}))
 		ok := err == nil
-		detail := "wrong-tenant resource → found:false; WithArgs(tenantA,page_id)"
+		detail := "via pagestudio.GetByIDOrSlug; wrong-tenant → found:false; predicate unchanged"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -358,12 +358,12 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, sqlmock.AnyArg(), sqlmock.AnyArg()).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug"}))
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "describe_oms_journey", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "page lookup WithArgs(tenantA, slugs…)"
+		detail := "via pagestudio.ListBySlugs; WithArgs(tenantA, slugs…); predicate unchanged"
 		if err != nil {
 			ok = false
 			detail = err.Error()

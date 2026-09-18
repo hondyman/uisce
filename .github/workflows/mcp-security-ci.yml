@@ -8,6 +8,7 @@ on:
     paths:
       - "backend/internal/mcp/**"
       - "backend/internal/boresolver/**"
+      - "backend/internal/pagestudio/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -16,6 +17,7 @@ on:
     paths:
       - "backend/internal/mcp/**"
       - "backend/internal/boresolver/**"
+      - "backend/internal/pagestudio/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -34,8 +36,12 @@ jobs:
           go-version: "1.25"
       - name: Tier 0 IDOR + MCP package tests
         run: go test -count=1 -timeout 120s ./internal/mcp/...
+      - name: No-direct-SQL tripwire (shrinks to empty exception list)
+        run: go test -count=1 -timeout 30s ./internal/mcp/ -run 'TestNoDirectSQLInTools' -v
       - name: Compiler identifier allowlist
         run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
+      - name: Page studio service unit tests
+        run: go test -count=1 -timeout 60s ./internal/pagestudio/...
       - name: Route-table dump (Path 6 dual URL + shim)
         run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
       - name: Path 6 auth / no-core

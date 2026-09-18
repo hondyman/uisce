@@ -155,17 +155,8 @@ func (s *Server) omsDescribeOMSJourney(ctx context.Context, tenantID uuid.UUID) 
 			"note":      "Command starts FIXOrderEntryWorkflow. Fills persist to crims.orm, never the page.",
 		},
 	}
-	if s.db != nil {
-		type row struct {
-			ID   string `db:"id"`
-			Name string `db:"name"`
-			Slug string `db:"slug"`
-		}
-		var pages []row
-		_ = s.db.SelectContext(ctx, &pages, `
-			SELECT id::text, name, slug FROM public.page_definitions
-			WHERE tenant_id = $1 AND slug IN ($2, $3)
-		`, tenantID, omsOwnedListSlug, omsOwnedDetailSlug)
+	if s.pages != nil {
+		pages, _ := s.pages.ListBySlugs(ctx, tenantID, omsOwnedListSlug, omsOwnedDetailSlug)
 		for _, p := range pages {
 			if p.Slug == omsOwnedListSlug {
 				out["list"] = map[string]interface{}{"id": p.ID, "name": p.Name, "slug": p.Slug, "path": "/pages/" + p.Slug}

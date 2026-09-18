@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/pagestudio"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
 )
@@ -20,6 +21,7 @@ import (
 type MCPToolHandler struct {
 	db       *sqlx.DB
 	compiler *boresolver.BitemporalRangeCompiler
+	pages    *pagestudio.Service
 }
 
 // NewMCPToolHandler creates a new MCPToolHandler instance.
@@ -31,6 +33,7 @@ func NewMCPToolHandler(db *sqlx.DB, optionalCompiler ...*boresolver.BitemporalRa
 	return &MCPToolHandler{
 		db:       db,
 		compiler: compiler,
+		pages:    pagestudio.NewService(db),
 	}
 }
 
@@ -424,32 +427,15 @@ func (h *MCPToolHandler) getBOTerms(ctx context.Context, tenantID uuid.UUID, arg
 }
 
 func (h *MCPToolHandler) listPages(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
-	if h.db == nil {
-		return map[string]interface{}{"pages": []interface{}{}}, nil
-	}
-	rows, err := h.db.QueryxContext(ctx, `
-		SELECT id::text, name, slug, COALESCE(status, '') AS status
-		FROM public.page_definitions
-		WHERE tenant_id = $1
-		ORDER BY updated_at DESC
-		LIMIT 100
-	`, tenantID)
+	pages, err := h.pages.ListSummaries(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	var pages []map[string]interface{}
-	for rows.Next() {
-		var id, name, slug, status string
-		if err := rows.Scan(&id, &name, &slug, &status); err != nil {
-			return nil, err
-		}
-		pages = append(pages, map[string]interface{}{"id": id, "name": name, "slug": slug, "status": status})
+	out := make([]map[string]interface{}, 0, len(pages))
+	for _, p := range pages {
+		out = append(out, map[string]interface{}{"id": p.ID, "name": p.Name, "slug": p.Slug, "status": p.Status})
 	}
-	if pages == nil {
-		pages = []map[string]interface{}{}
-	}
-	return map[string]interface{}{"pages": pages}, nil
+	return map[string]interface{}{"pages": out}, nil
 }
 
 func (h *MCPToolHandler) getPage(ctx context.Context, tenantID uuid.UUID, argsRaw json.RawMessage) (interface{}, error) {
@@ -460,32 +446,20 @@ func (h *MCPToolHandler) getPage(ctx context.Context, tenantID uuid.UUID, argsRa
 	if err := json.Unmarshal(argsRaw, &args); err != nil {
 		return nil, err
 	}
-	if h.db == nil {
-		return map[string]interface{}{"found": false}, nil
-	}
-	var id, name, slug, status string
-	var layout, components, dataSources, events, filterBar []byte
-	err := h.db.QueryRowxContext(ctx, `
-		SELECT id::text, name, slug, COALESCE(status, ''),
-		       layout, components, data_sources,
-		       COALESCE(presentation_events, '[]'::jsonb), COALESCE(filter_bar, '{}'::jsonb)
-		FROM public.page_definitions
-		WHERE tenant_id = $1 AND (id::text = $2 OR slug = $3)
-		LIMIT 1
-	`, tenantID, args.PageID, args.Slug).Scan(&id, &name, &slug, &status, &layout, &components, &dataSources, &events, &filterBar)
+	page, err := h.pages.GetByIDOrSlug(ctx, tenantID, args.PageID, args.Slug)
 	if err != nil {
 		return map[string]interface{}{"found": false}, nil
 	}
 	return map[string]interface{}{
 		"found":              true,
-		"id":                 id,
-		"name":               name,
-		"slug":               slug,
-		"status":             status,
-		"layout":             json.RawMessage(layout),
-		"components":         json.RawMessage(components),
-		"dataSources":        json.RawMessage(dataSources),
-		"presentationEvents": json.RawMessage(events),
-		"filterBar":          json.RawMessage(filterBar),
+		"id":                 page.ID,
+		"name":               page.Name,
+		"slug":               page.Slug,
+		"status":             page.Status,
+		"layout":             page.Layout,
+		"components":         page.Components,
+		"dataSources":        page.DataSources,
+		"presentationEvents": page.PresentationEvents,
+		"filterBar":          page.FilterBar,
 	}, nil
 }
