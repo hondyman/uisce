@@ -27,6 +27,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/boread"
+	"github.com/hondyman/uisce/backend/internal/driftread"
+	"github.com/hondyman/uisce/backend/internal/mdmread"
 	"github.com/hondyman/uisce/backend/internal/pagestudio"
 	"github.com/hondyman/uisce/backend/internal/semanticast"
 	"github.com/jmoiron/sqlx"
@@ -50,6 +52,8 @@ type Server struct {
 	path1    *MCPToolHandler
 	pages    *pagestudio.Service
 	bos      *boread.Service
+	mdm      *mdmread.Service
+	drift    *driftread.Service
 	nlEngine *semanticast.Compiler
 	temporal client.Client
 
@@ -67,6 +71,8 @@ func NewServer(db *sqlx.DB) *Server {
 		path1:    NewMCPToolHandler(db),
 		pages:    pages,
 		bos:      bos,
+		mdm:      mdmread.NewService(db),
+		drift:    driftread.NewService(db),
 		nlEngine: semanticast.NewCompiler(db),
 		tools:    make(map[string]registeredTool),
 	}

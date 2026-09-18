@@ -20,9 +20,8 @@ import (
 // explicit out-of-scope ledger write, not business-table SQL owned by a tool.
 var transitionalDirectSQLFiles = map[string]string{
 	// Exit: trading-service extract unifying omsLoadCRIMSOrder + OMSFIXCommandHandler.loadOrder
-	"tools_oms.go": "omsLoadCRIMSOrder only (get_bo_schema → boread)",
-	// Exit: MDM exception service extract + drift read extract
-	"tools_catalog.go": "triage_mdm_exception + inspect_schema_drift read extract",
+	// (MCP IDOR + HTTP FIX receipts in one commit; pick stricter/richer fence deliberately)
+	"tools_oms.go": "omsLoadCRIMSOrder only",
 }
 
 // sqlCallSuffixes are database/sql and sqlx query methods. Bare "Get" is

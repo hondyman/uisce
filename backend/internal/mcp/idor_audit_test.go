@@ -311,7 +311,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		_, err = s.CallTool(context.Background(), tidA, "triage_mdm_exception",
 			mustJSON(map[string]string{"exceptionId": exID}))
 		ok := err != nil && strings.Contains(err.Error(), "exception not found")
-		detail := "WithArgs(exceptionId, tenantA); foreign id → not found"
+		detail := "via mdmread.GetByID; WithArgs(exceptionId, tenantA); foreign id → not found"
 		if !ok {
 			detail = fmt.Sprintf("err=%v", err)
 		}
@@ -337,7 +337,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "inspect_schema_drift", json.RawMessage(`{}`))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "WithArgs(tenantA); optional boId unused in SQL today"
+		detail := "via driftread.ListPending (SELECT-only); WithArgs(tenantA); boId unused"
 		if err != nil {
 			ok = false
 			detail = err.Error()

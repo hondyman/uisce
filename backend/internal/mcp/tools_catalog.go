@@ -66,20 +66,10 @@ func (s *Server) catalogTriageMDMException(ctx context.Context, tenantID uuid.UU
 	if err != nil {
 		return nil, fmt.Errorf("invalid exceptionId UUID")
 	}
-	if s.db == nil {
+	if s.db == nil || s.mdm == nil {
 		return map[string]interface{}{"diagnosis": "Mock triage: DTCC priority winner selected"}, nil
 	}
-	var item struct {
-		DomainKey       string `db:"domain_key"`
-		MasterEntitySID string `db:"master_entity_sid"`
-		FieldName       string `db:"field_name"`
-		CompetingValues []byte `db:"competing_values"`
-	}
-	err = s.db.GetContext(ctx, &item, `
-		SELECT domain_key, master_entity_sid, field_name, competing_values
-		FROM mdm.universal_exception_queue
-		WHERE exception_id = $1 AND tenant_id = $2;
-	`, exID, tenantID)
+	item, err := s.mdm.GetByID(ctx, tenantID, exID)
 	if err != nil {
 		return nil, fmt.Errorf("exception not found: %w", err)
 	}
@@ -94,23 +84,10 @@ func (s *Server) catalogTriageMDMException(ctx context.Context, tenantID uuid.UU
 }
 
 func (s *Server) catalogInspectSchemaDrift(ctx context.Context, tenantID uuid.UUID, _ json.RawMessage) (interface{}, error) {
-	if s.db == nil {
+	if s.db == nil || s.drift == nil {
 		return []map[string]interface{}{}, nil
 	}
-	var proposals []struct {
-		ProposalID     uuid.UUID `db:"proposal_id"`
-		BOName         string    `db:"bo_name"`
-		FieldName      string    `db:"field_name"`
-		ProposedColumn string    `db:"proposed_column_name"`
-		Confidence     float64   `db:"confidence_score"`
-	}
-	err := s.db.SelectContext(ctx, &proposals, `
-		SELECT p.proposal_id, bo.bo_name, p.field_name, p.proposed_column_name, p.confidence_score
-		FROM catalog_drift.schema_drift_proposals p
-		JOIN public.business_objects bo ON bo.id = p.bo_id
-		WHERE p.tenant_id = $1 AND p.status = 'PENDING'
-		ORDER BY p.confidence_score DESC;
-	`, tenantID)
+	proposals, err := s.drift.ListPending(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}

@@ -11,6 +11,8 @@ on:
       - "backend/internal/pagestudio/**"
       - "backend/internal/boread/**"
       - "backend/internal/semanticast/**"
+      - "backend/internal/mdmread/**"
+      - "backend/internal/driftread/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -22,6 +24,8 @@ on:
       - "backend/internal/pagestudio/**"
       - "backend/internal/boread/**"
       - "backend/internal/semanticast/**"
+      - "backend/internal/mdmread/**"
+      - "backend/internal/driftread/**"
       - "backend/internal/agentic/**"
       - "backend/internal/api/mcp_routes_test.go"
       - "backend/internal/api/api.go"
@@ -44,8 +48,8 @@ jobs:
         run: go test -count=1 -timeout 30s ./internal/mcp/ -run 'TestNoDirectSQLInTools' -v
       - name: Compiler identifier allowlist
         run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
-      - name: Page studio + BO read + semanticast unit tests
-        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/semanticast/...
+      - name: SL service package unit tests
+        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/...
       - name: Route-table dump (Path 6 dual URL + shim)
         run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
       - name: Path 6 auth / no-core
