@@ -17,8 +17,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 )
@@ -29,6 +31,25 @@ type Service struct {
 
 func NewService(db *sqlx.DB) *Service {
 	return &Service{db: db}
+}
+
+func (s *Service) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(tx *sqlx.Tx, gold uuid.UUID) error) error {
+	if s == nil || s.db == nil {
+		return fn(nil, uuid.Nil)
+	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), gold.String()); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
+	if err := fn(tx, gold); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type Summary struct {
@@ -72,15 +93,16 @@ func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]Summ
 	if s == nil || s.db == nil {
 		return []Summary{}, nil
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var list []Summary
-	err := s.db.SelectContext(ctx, &list, `
-		SELECT id::text, COALESCE(name, '') AS name, COALESCE(display_name, name, '') AS display_name, COALESCE(status, '') AS status
-		FROM public.business_objects
-		WHERE tenant_id = $1 OR tenant_id = $2
-		ORDER BY display_name
-		LIMIT 200
-	`, tenantID.String(), gold.String())
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.SelectContext(ctx, &list, `
+			SELECT id::text, COALESCE(name, '') AS name, COALESCE(display_name, name, '') AS display_name, COALESCE(status, '') AS status
+			FROM public.business_objects
+			WHERE tenant_id = $1 OR tenant_id = $2
+			ORDER BY display_name
+			LIMIT 200
+		`, tenantID.String(), gold.String())
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -101,14 +123,15 @@ func (s *Service) GetContract(ctx context.Context, tenantID uuid.UUID, boID uuid
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var c Contract
-	err := s.db.GetContext(ctx, &c, `
-		SELECT name, display_name, status
-		FROM public.business_objects
-		WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = $4)
-		LIMIT 1
-	`, boID.String(), boKey, tenantID.String(), gold.String())
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.GetContext(ctx, &c, `
+			SELECT name, display_name, status
+			FROM public.business_objects
+			WHERE (id = $1 OR name = $2) AND (tenant_id = $3 OR tenant_id = $4)
+			LIMIT 1
+		`, boID.String(), boKey, tenantID.String(), gold.String())
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -116,28 +139,23 @@ func (s *Service) GetContract(ctx context.Context, tenantID uuid.UUID, boID uuid
 }
 
 // ListTerms returns field/term rows for a BO id or key (caller or gold BO).
-//
-// Predicate comparison (gold-copy widen):
-//
-//	OLD: … tenant OR nil-UUID in subquery
-//	NEW: … tenant OR gold in subquery
-//	DELTA: intentional
 func (s *Service) ListTerms(ctx context.Context, tenantID uuid.UUID, boID, boKey string) ([]Term, error) {
 	if s == nil || s.db == nil {
 		return []Term{}, nil
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var terms []Term
-	err := s.db.SelectContext(ctx, &terms, `
-		SELECT COALESCE(term_key, name, '') AS term_key,
-		       COALESCE(display_name, term_key, name, '') AS display_name,
-		       COALESCE(role, '') AS role
-		FROM public.business_object_fields
-		WHERE business_object_id::text = $1 OR business_object_id IN (
-			SELECT id FROM public.business_objects WHERE name = $2 AND (tenant_id = $3 OR tenant_id = $4)
-		)
-		LIMIT 200
-	`, boID, boKey, tenantID.String(), gold.String())
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.SelectContext(ctx, &terms, `
+			SELECT COALESCE(term_key, name, '') AS term_key,
+			       COALESCE(display_name, term_key, name, '') AS display_name,
+			       COALESCE(role, '') AS role
+			FROM public.business_object_fields
+			WHERE business_object_id::text = $1 OR business_object_id IN (
+				SELECT id FROM public.business_objects WHERE name = $2 AND (tenant_id = $3 OR tenant_id = $4)
+			)
+			LIMIT 200
+		`, boID, boKey, tenantID.String(), gold.String())
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -148,71 +166,60 @@ func (s *Service) ListTerms(ctx context.Context, tenantID uuid.UUID, boID, boKey
 }
 
 // ResolveEdge looks up one catalog_edge between two nodes (caller or gold).
-//
-// Predicate comparison (gold-copy widen):
-//
-//	OLD: tenant_id = $3 OR nil-UUID
-//	NEW: tenant_id = $3 OR gold
-//	DELTA: intentional
 func (s *Service) ResolveEdge(ctx context.Context, tenantID, sourceID, targetID uuid.UUID) (*Edge, error) {
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var e Edge
-	err := s.db.GetContext(ctx, &e, `
-		SELECT edge_type_name, properties
-		FROM public.catalog_edge
-		WHERE source_id = $1 AND target_id = $2
-		  AND (tenant_id = $3::text OR tenant_id = $4)
-		LIMIT 1
-	`, sourceID.String(), targetID.String(), tenantID.String(), gold.String())
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.GetContext(ctx, &e, `
+			SELECT edge_type_name, properties
+			FROM public.catalog_edge
+			WHERE source_id = $1 AND target_id = $2
+			  AND (tenant_id = $3::text OR tenant_id = $4)
+			LIMIT 1
+		`, sourceID.String(), targetID.String(), tenantID.String(), gold.String())
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &e, nil
 }
 
-// ResolveBOIDByKey resolves a BO id from tenant + name (no nil-UUID OR).
-//
-// Predicate comparison (SL extract from MCP get_bo_schema key lookup):
-//
-//	OLD: WHERE tenant_id = $1 AND name = $2
-//	NEW: identical
-//	DELTA: none
+// ResolveBOIDByKey resolves a BO id from tenant + name.
 func (s *Service) ResolveBOIDByKey(ctx context.Context, tenantID uuid.UUID, boKey string) (string, error) {
 	if s == nil || s.db == nil {
 		return "", sql.ErrNoRows
 	}
 	var id string
-	err := s.db.GetContext(ctx, &id, `
-		SELECT id::text FROM public.business_objects
-		WHERE tenant_id = $1 AND name = $2
-		LIMIT 1
-	`, tenantID, boKey)
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		_ = gold
+		return tx.GetContext(ctx, &id, `
+			SELECT id::text FROM public.business_objects
+			WHERE tenant_id = $1 AND name = $2
+			LIMIT 1
+		`, tenantID, boKey)
+	})
 	return id, err
 }
 
 // ListFieldSchema returns form fields for a BO under the calling tenant.
-//
-// Predicate comparison (SL extract from MCP get_bo_schema):
-//
-//	OLD: WHERE tenant_id = $1 AND bo_id::text = $2
-//	NEW: identical
-//	DELTA: none
 func (s *Service) ListFieldSchema(ctx context.Context, tenantID uuid.UUID, boID string) ([]FieldSchema, error) {
 	if s == nil || s.db == nil {
 		return []FieldSchema{}, nil
 	}
 	var fields []FieldSchema
-	err := s.db.SelectContext(ctx, &fields, `
-		SELECT COALESCE(technical_name, field_name) AS name,
-		       COALESCE(NULLIF(display_name, ''), field_name) AS display_name,
-		       COALESCE(data_type, 'text') AS data_type
-		FROM public.business_object_fields
-		WHERE tenant_id = $1 AND bo_id::text = $2
-		ORDER BY display_order NULLS LAST, field_name
-	`, tenantID, boID)
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		_ = gold
+		return tx.SelectContext(ctx, &fields, `
+			SELECT COALESCE(technical_name, field_name) AS name,
+			       COALESCE(NULLIF(display_name, ''), field_name) AS display_name,
+			       COALESCE(data_type, 'text') AS data_type
+			FROM public.business_object_fields
+			WHERE tenant_id = $1 AND bo_id::text = $2
+			ORDER BY display_order NULLS LAST, field_name
+		`, tenantID, boID)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -241,16 +248,17 @@ func (s *Service) Search(ctx context.Context, tenantID uuid.UUID, query string) 
 	if s == nil || s.db == nil {
 		return []SearchMatch{}, nil
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var matches []SearchMatch
-	err := s.db.SelectContext(ctx, &matches, `
-		SELECT id::text, COALESCE(name,'') AS name, COALESCE(display_name, name, '') AS display_name
-		FROM public.business_objects
-		WHERE (tenant_id = $1 OR tenant_id = $2)
-		  AND (name ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%')
-		ORDER BY display_name
-		LIMIT 50
-	`, tenantID.String(), gold.String(), query)
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.SelectContext(ctx, &matches, `
+			SELECT id::text, COALESCE(name,'') AS name, COALESCE(display_name, name, '') AS display_name
+			FROM public.business_objects
+			WHERE (tenant_id = $1 OR tenant_id = $2)
+			  AND (name ILIKE '%' || $3 || '%' OR display_name ILIKE '%' || $3 || '%')
+			ORDER BY display_name
+			LIMIT 50
+		`, tenantID.String(), gold.String(), query)
+	})
 	if err != nil {
 		return nil, err
 	}

@@ -50,6 +50,21 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		mock.ExpectQuery("FROM public.tenants").
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldID))
 	}
+	// pagestudio/boread withTenant: ResolveTenantID → Begin → ApplyTenantGUCs → query → Commit
+	beginTenantTx := func(mock sqlmock.Sqlmock, tenant uuid.UUID) {
+		expectGold(mock)
+		mock.ExpectBegin()
+		mock.ExpectExec("uisce\\.current_tenant").
+			WithArgs(tenant.String()).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec("app\\.tenant_id").
+			WithArgs(tenant.String()).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+		mock.ExpectExec("uisce\\.gold_tenant").
+			WithArgs(goldID.String()).
+			WillReturnResult(sqlmock.NewResult(0, 0))
+	}
+	commitTx := func(mock sqlmock.Sqlmock) { mock.ExpectCommit() }
 
 	// Positive control: harness has teeth — expect wrong tenant bind → ExpectationsWereMet fails.
 	t.Run("positive_control_wrong_tenant_bind_fails", func(t *testing.T) {
@@ -59,8 +74,8 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 		}
 		defer db.Close()
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
-		// Deliberately expect Tenant B while CallTool uses Tenant A.
+		beginTenantTx(mock, tidA) // real CallTool uses A
+		// Deliberately expect Tenant B bind on the page query.
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidB, goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
@@ -81,12 +96,13 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}).
 				AddRow(pageID, "A-Only Page", "a-only", "draft").
 				AddRow("g1", "Gold Core", "gold-core", "published"))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "list_pages", json.RawMessage(`{}`))
@@ -121,11 +137,12 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		other := uuid.MustParse("77777777-7777-4777-8777-777777777777")
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "list_pages", json.RawMessage(`{}`))
@@ -149,14 +166,15 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		// Tenant miss → gold resolve → gold miss → found:false (tenant-B content never returned)
+		// withTenant: gold resolve + GUCs, then tenant miss → gold+is_core miss → found:false
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, pageID, "").
 			WillReturnError(sql.ErrNoRows)
-		expectGold(mock)
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(goldID, pageID, "").
 			WillReturnError(sql.ErrNoRows)
+		mock.ExpectRollback() // withTenant rolls back when fn returns ErrNoRows
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "get_page", mustJSON(map[string]string{"page_id": pageID}))
@@ -184,12 +202,13 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.business_objects").
 			WithArgs(tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "display_name", "status"}).
 				AddRow(boID.String(), "a_bo", "Tenant A BO", "ACTIVE").
 				AddRow("gbo", "gold_bo", "Gold BO", "ACTIVE"))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "list_business_objects", json.RawMessage(`{}`))
@@ -213,11 +232,12 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.business_objects").
 			WithArgs(boID.String(), "order", tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"name", "display_name", "status"}).
 				AddRow("order", "Order", "ACTIVE"))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "get_business_object_contract",
@@ -245,10 +265,11 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.business_object_fields").
 			WithArgs(boID.String(), "order", tidA.String(), goldID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"term_key", "display_name", "role"}))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "get_bo_terms",
@@ -273,10 +294,11 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.catalog_edge").
 			WithArgs(nodeA.String(), nodeB.String(), tidA.String(), goldID.String()).
 			WillReturnError(sql.ErrNoRows)
+		mock.ExpectRollback() // fn returns ErrNoRows → rollback
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		got, err := s.CallTool(context.Background(), tidA, "resolve_relationship_path",
@@ -305,15 +327,17 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.business_object_fields").
 			WithArgs(tidA, boID.String()).
 			WillReturnRows(sqlmock.NewRows([]string{"name", "display_name", "data_type"}))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "get_bo_schema",
 			mustJSON(map[string]string{"bo_id": boID.String()}))
 		ok := err == nil && mock.ExpectationsWereMet() == nil
-		detail := "via boread.ListFieldSchema; WithArgs(tenantA, bo_id); predicate unchanged"
+		detail := "via boread.ListFieldSchema + tenant GUCs; WithArgs(tenantA, bo_id)"
 		if err != nil {
 			ok = false
 			detail = err.Error()
@@ -332,10 +356,11 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.business_objects").
 			WithArgs(tidA.String(), goldID.String(), "order").
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "display_name"}))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "search_catalog", mustJSON(map[string]string{"query": "order"}))
@@ -412,10 +437,11 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlxDB := sqlx.NewDb(db, "sqlmock")
-		expectGold(mock)
+		beginTenantTx(mock, tidA)
 		mock.ExpectQuery("FROM public.page_definitions").
 			WithArgs(tidA, sqlmock.AnyArg(), sqlmock.AnyArg(), goldID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "slug", "status"}))
+		commitTx(mock)
 		expectAuditExec(mock)
 		s := NewServer(sqlxDB)
 		_, err = s.CallTool(context.Background(), tidA, "describe_oms_journey", json.RawMessage(`{}`))

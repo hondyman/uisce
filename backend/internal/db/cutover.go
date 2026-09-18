@@ -14,10 +14,15 @@
 // this arc was about. Intermediate dual-identity (MCP app role / HTTP
 // postgres) is explicit and time-boxed by TestBeginTxInventory.
 //
-// Blockers before MCP pool flip: Infisical home for UISCE_APP_DSN (do not
-// mint another orphaned .env secret), pg_hba allow for uisce_mcp_app from
-// backend hosts, grant manifest for MCP tables (20261020_002/003), triple
-// receipt through the server's MCP pool.
+// Implementation (landed): OpenMCPAppDB pins SET ROLE uisce_mcp_app on the
+// MCP-only pool (api.go SetupRouter). Prefer UISCE_APP_DSN when pg_hba allows;
+// otherwise SET ROLE on DATABASE_URL connections. pagestudio/boread wrap reads
+// in ApplyTenantGUCs so FORCE policies see gold GUCs.
+//
+// Still before claiming production binding: Infisical home for UISCE_APP_DSN
+// (do not leave only .env), optional pg_hba for direct role login, restart
+// server and triple-receipt via pg_stat_activity usename + MCP IDOR through
+// that pool + standing flip checklist.
 //
 // Rejected alternative: single fleet DATABASE_URL flip after full BeginTx
 // migration — cleaner ops story, longer wait, couples MCP headline claim to

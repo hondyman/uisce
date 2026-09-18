@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/goldcopy"
 	"github.com/jmoiron/sqlx"
 )
@@ -19,6 +21,26 @@ type Service struct {
 
 func NewService(db *sqlx.DB) *Service {
 	return &Service{db: db}
+}
+
+// withTenant opens a tx, SET LOCALs tenant+gold GUCs (FORCE RLS), runs fn, commits.
+func (s *Service) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(tx *sqlx.Tx, gold uuid.UUID) error) error {
+	if s == nil || s.db == nil {
+		return fn(nil, uuid.Nil)
+	}
+	gold := goldcopy.ResolveTenantID(ctx, s.db)
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID.String(), gold.String()); err != nil {
+		return fmt.Errorf("tenant GUC: %w", err)
+	}
+	if err := fn(tx, gold); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // PageSummary is the list_pages / journey wire shape.
@@ -54,16 +76,17 @@ func (s *Service) ListSummaries(ctx context.Context, tenantID uuid.UUID) ([]Page
 	if s == nil || s.db == nil {
 		return []PageSummary{}, nil
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var pages []PageSummary
-	err := s.db.SelectContext(ctx, &pages, `
-		SELECT id::text, name, slug, COALESCE(status, '') AS status
-		FROM public.page_definitions
-		WHERE tenant_id = $1
-		   OR (is_core = true AND tenant_id = $2)
-		ORDER BY updated_at DESC
-		LIMIT 100
-	`, tenantID, gold)
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.SelectContext(ctx, &pages, `
+			SELECT id::text, name, slug, COALESCE(status, '') AS status
+			FROM public.page_definitions
+			WHERE tenant_id = $1
+			   OR (is_core = true AND tenant_id = $2)
+			ORDER BY updated_at DESC
+			LIMIT 100
+		`, tenantID, gold)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -84,36 +107,48 @@ func (s *Service) GetByIDOrSlug(ctx context.Context, tenantID uuid.UUID, pageID,
 	if s == nil || s.db == nil {
 		return nil, sql.ErrNoRows
 	}
-	page, err := s.getOne(ctx, `
-		SELECT id::text, name, slug, COALESCE(status, '') AS status,
-		       layout, components, data_sources,
-		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar
-		FROM public.page_definitions
-		WHERE tenant_id = $1 AND (id::text = $2 OR slug = $3)
-		LIMIT 1
-	`, tenantID, pageID, slug)
-	if err == nil {
-		return page, nil
-	}
-	if err != sql.ErrNoRows {
+	var out *PageDetail
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		page, err := getOneTx(ctx, tx, `
+			SELECT id::text, name, slug, COALESCE(status, '') AS status,
+			       layout, components, data_sources,
+			       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
+			       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar
+			FROM public.page_definitions
+			WHERE tenant_id = $1 AND (id::text = $2 OR slug = $3)
+			LIMIT 1
+		`, tenantID, pageID, slug)
+		if err == nil {
+			out = page
+			return nil
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+		page, err = getOneTx(ctx, tx, `
+			SELECT id::text, name, slug, COALESCE(status, '') AS status,
+			       layout, components, data_sources,
+			       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
+			       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar
+			FROM public.page_definitions
+			WHERE is_core = true AND tenant_id = $1 AND (id::text = $2 OR slug = $3)
+			LIMIT 1
+		`, gold, pageID, slug)
+		if err != nil {
+			return err
+		}
+		out = page
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
-	return s.getOne(ctx, `
-		SELECT id::text, name, slug, COALESCE(status, '') AS status,
-		       layout, components, data_sources,
-		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar
-		FROM public.page_definitions
-		WHERE is_core = true AND tenant_id = $1 AND (id::text = $2 OR slug = $3)
-		LIMIT 1
-	`, gold, pageID, slug)
+	return out, nil
 }
 
-func (s *Service) getOne(ctx context.Context, query string, args ...interface{}) (*PageDetail, error) {
+func getOneTx(ctx context.Context, tx *sqlx.Tx, query string, args ...interface{}) (*PageDetail, error) {
 	var page PageDetail
-	if err := s.db.GetContext(ctx, &page, query, args...); err != nil {
+	if err := tx.GetContext(ctx, &page, query, args...); err != nil {
 		return nil, err
 	}
 	return &page, nil
@@ -130,14 +165,15 @@ func (s *Service) ListBySlugs(ctx context.Context, tenantID uuid.UUID, slugA, sl
 	if s == nil || s.db == nil {
 		return []PageSummary{}, nil
 	}
-	gold := goldcopy.ResolveTenantID(ctx, s.db)
 	var pages []PageSummary
-	err := s.db.SelectContext(ctx, &pages, `
-		SELECT id::text, name, slug, COALESCE(status, '') AS status
-		FROM public.page_definitions
-		WHERE (tenant_id = $1 OR (is_core = true AND tenant_id = $4))
-		  AND slug IN ($2, $3)
-	`, tenantID, slugA, slugB, gold)
+	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx, gold uuid.UUID) error {
+		return tx.SelectContext(ctx, &pages, `
+			SELECT id::text, name, slug, COALESCE(status, '') AS status
+			FROM public.page_definitions
+			WHERE (tenant_id = $1 OR (is_core = true AND tenant_id = $4))
+			  AND slug IN ($2, $3)
+		`, tenantID, slugA, slugB, gold)
+	})
 	if err != nil {
 		return nil, err
 	}

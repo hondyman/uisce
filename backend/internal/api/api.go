@@ -1795,7 +1795,21 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// called — stacking either recreates chi last-wins fragility.
 		// Guard: TestMCP_RouteTableDump. Path 6 stays at /mcp/tools/call.
 		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp [" + mcp.CutoverMarker + "]")
-		r.Handle("/mcp", mcp.NewServer(sqlxDB).SetTemporal(temporalClient).HTTPHandler())
+		// Staged MCP-first cutover: MCP pool runs as uisce_mcp_app (SET ROLE on
+		// connect when UISCE_APP_DSN TCP is unavailable). HTTP/api keep sqlxDB/postgres.
+		mcpDB := sqlxDB
+		if parentDSN := os.Getenv("DATABASE_URL"); parentDSN != "" || os.Getenv("POSTGRES_DSN") != "" {
+			if parentDSN == "" {
+				parentDSN = os.Getenv("POSTGRES_DSN")
+			}
+			if pinned, mode, err := dbpkg.OpenMCPAppDB(parentDSN); err != nil {
+				log.Printf("[mcp-cutover] OpenMCPAppDB failed (MCP stays on shared pool): %v", err)
+			} else {
+				mcpDB = pinned
+				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
+			}
+		}
+		r.Handle("/mcp", mcp.NewServer(mcpDB).SetTemporal(temporalClient).HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
