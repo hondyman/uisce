@@ -299,6 +299,16 @@ generate_composite_secrets() {
         fi
     fi
 
+    if ! grep -q "^JWT_SECRET=" "$tmp_path"; then
+        if [ -n "${JWT_SECRET:-}" ]; then
+            echo "JWT_SECRET=\"${JWT_SECRET}\"" >> "$tmp_path"
+        else
+            echo "ERROR: JWT_SECRET not set in environment. Bootstrap must source an existing .env or have JWT_SECRET in the shell environment." >&2
+            rm -f "$tmp_path"
+            return 1
+        fi
+    fi
+
     # Keycloak JWKS/issuer defaults. These are not currently stored as
     # Infisical secrets, so without this fallback the backend silently
     # ends up with no RSA public key configured and rejects every
@@ -398,6 +408,17 @@ main() {
         set -a
         # shellcheck disable=SC1090
         source "$rebalancing_env"
+        set +a
+    fi
+    # Source existing root .env so JWT_SECRET (stored there) is visible to
+    # generate_composite_secrets' env-tier fallback. Sourcing before (not after)
+    # generate_env_file is deliberate: prev_db_url is captured before the tmp
+    # file is created, so the env var only fills gaps in the composite step
+    # (empty Infisical pull + no prior file), never overrides a real pull.
+    if [ -f "$root_env" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "$root_env"
         set +a
     fi
 
