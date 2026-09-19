@@ -27,20 +27,80 @@ interface LocalRealTimeSubscription {
   callback: (data: any) => void;
 }
 
-class WebSocketService {
+export class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectInterval = 1000;
   private subscriptions: Map<string, LocalRealTimeSubscription> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private authErrorCallbacks: Array<() => void> = [];
 
-  constructor(private url: string) {}
+  /**
+   * Note on query string ?ticket= authentication:
+   * The browser WebSocket API does not allow setting custom Authorization headers during the handshake.
+   * To bound exposure risk compared to long-lived JWTs, we exchange the user's session token for an
+   * ephemeral 30-second single-use ticket via POST /api/ws/ticket.
+   */
+  constructor(private baseUrl: string) {}
 
-  connect(): Promise<void> {
+  onAuthError(callback: () => void) {
+    this.authErrorCallbacks.push(callback);
+  }
+
+  private triggerAuthError() {
+    this.authErrorCallbacks.forEach((cb) => {
+      try {
+        cb();
+      } catch (err) {
+        devError('Error in onAuthError callback:', err);
+      }
+    });
+  }
+
+  /**
+   * Fetches an ephemeral single-use ticket from POST /api/ws/ticket.
+   * If an auth failure occurs (401), notifies onAuthError listeners and halts.
+   */
+  private async fetchTicket(): Promise<string> {
+    const token = localStorage.getItem('auth_token');
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    const response = await fetch('/api/ws/ticket', {
+      method: 'POST',
+      headers,
+    });
+
+    if (response.status === 401) {
+      this.triggerAuthError();
+      throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+      throw new Error(`Failed to acquire ticket: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!data.ticket) {
+      throw new Error('Invalid ticket response: missing ticket string');
+    }
+
+    return data.ticket;
+  }
+
+  async connect(): Promise<void> {
+    const ticket = await this.fetchTicket();
+    const delimiter = this.baseUrl.includes('?') ? '&' : '?';
+    const connectionUrl = `${this.baseUrl}${delimiter}ticket=${encodeURIComponent(ticket)}`;
+
     return new Promise((resolve, reject) => {
       try {
-        this.ws = new WebSocket(this.url);
+        this.ws = new WebSocket(connectionUrl);
 
         this.ws.onopen = () => {
           this.reconnectAttempts = 0;
@@ -57,8 +117,12 @@ class WebSocketService {
           }
         };
 
-        this.ws.onclose = () => {
+        this.ws.onclose = (event) => {
           this.stopHeartbeat();
+          if (event && (event.code === 4001 || event.code === 401)) {
+            this.triggerAuthError();
+            return;
+          }
           this.handleReconnect();
         };
 

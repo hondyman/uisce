@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Activity, Clock, Mail, CheckSquare, Workflow, Database, Zap } from 'lucide-react';
+import { useDraggable } from '@dnd-kit/core';
 
 interface ActivityType {
   id: string;
@@ -66,13 +67,46 @@ interface ActivityPaletteProps {
   onAddActivity: (activityType: string) => void;
 }
 
+interface DraggableActivityCardProps {
+  activity: ActivityType;
+  onAddActivity: (activityType: string) => void;
+}
+
+const DraggableActivityCard: React.FC<DraggableActivityCardProps> = ({ activity, onAddActivity }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `palette-activity-${activity.id}`,
+    data: {
+      source: 'palette',
+      activityType: activity.id,
+    },
+  });
+
+  return (
+    <Card
+      ref={setNodeRef}
+      onClick={() => onAddActivity(activity.id)}
+      className="cursor-move hover:shadow-md transition-shadow"
+      style={{ opacity: isDragging ? 0.4 : 1 }}
+      {...attributes}
+      {...listeners}
+    >
+      <CardContent className="p-3">
+        <div className="flex items-start gap-2">
+          <div className="text-gray-600 mt-0.5">
+            {activity.icon}
+          </div>
+          <div className="flex-1">
+            <div className="font-medium text-sm">{activity.name}</div>
+            <div className="text-xs text-gray-500">{activity.description}</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 export const ActivityPalette: React.FC<ActivityPaletteProps> = ({ onAddActivity }) => {
   const categories = Array.from(new Set(activityTypes.map(a => a.category)));
-
-  const handleDragStart = (e: React.DragEvent, activityType: string) => {
-    e.dataTransfer.setData('activityType', activityType);
-    e.dataTransfer.effectAllowed = 'copy';
-  };
 
   return (
     <div className="p-4 space-y-4">
@@ -88,25 +122,7 @@ export const ActivityPalette: React.FC<ActivityPaletteProps> = ({ onAddActivity 
             {activityTypes
               .filter(a => a.category === category)
               .map(activity => (
-                <Card
-                  key={activity.id}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, activity.id)}
-                  onClick={() => onAddActivity(activity.id)}
-                  className="cursor-move hover:shadow-md transition-shadow"
-                >
-                  <CardContent className="p-3">
-                    <div className="flex items-start gap-2">
-                      <div className="text-gray-600 mt-0.5">
-                        {activity.icon}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-medium text-sm">{activity.name}</div>
-                        <div className="text-xs text-gray-500">{activity.description}</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                <DraggableActivityCard key={activity.id} activity={activity} onAddActivity={onAddActivity} />
               ))}
           </div>
         </div>

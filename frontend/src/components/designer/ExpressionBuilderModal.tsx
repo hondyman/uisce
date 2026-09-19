@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { apiFetch } from '../../lib/apiClient';
 
 interface ExpressionBuilderModalProps {
   open: boolean;
@@ -51,9 +52,8 @@ export const ExpressionBuilderModal: React.FC<ExpressionBuilderModalProps> = ({
     setValidationResult(null);
 
     try {
-      const res = await fetch('/api/calculation/compile', {
+      const res = await apiFetch('/api/calculation/compile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ formula, boName }),
       });
       const data = await res.json();

@@ -19,7 +19,7 @@ import (
 )
 
 type ReportHandler struct {
-	service        *reports.ReportService
+	service       *reports.ReportService
 	executor      reports.ReportExecutor
 	db            *sql.DB
 	executionRepo *reports.ExecutionRepository
@@ -27,7 +27,7 @@ type ReportHandler struct {
 
 func NewReportHandler(service *reports.ReportService, executor reports.ReportExecutor, dbConn *sql.DB) *ReportHandler {
 	return &ReportHandler{
-		service:        service,
+		service:       service,
 		executor:      executor,
 		db:            dbConn,
 		executionRepo: reports.NewExecutionRepository(dbConn),
@@ -78,6 +78,14 @@ func (h *ReportHandler) RegisterRoutes(r chi.Router) {
 
 // resolveAuthContext extracts tenant ID, user ID, and admin status from authenticated context.
 func (h *ReportHandler) resolveAuthContext(r *http.Request) (tenantID uuid.UUID, userID string, isAdmin bool, err error) {
+	return resolveReportAuthContext(r)
+}
+
+// resolveReportAuthContext is ReportHandler.resolveAuthContext's body,
+// extracted to a package-level function so other report-area handlers
+// (ReportGenerationHandler) can share the same 4-tier tenant-resolution
+// chain without depending on a *ReportHandler receiver they don't have.
+func resolveReportAuthContext(r *http.Request) (tenantID uuid.UUID, userID string, isAdmin bool, err error) {
 	// 1. Try security.AuthInfoFromContext (SecurityManager / AuthContextMiddleware)
 	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
 		userID = auth.UserID
@@ -182,6 +190,20 @@ func (h *ReportHandler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(templates)
 }
 
+// deriveParametersFromSchema extracts the wrapped array from
+// parameter_schema's {"parameters": [...]} shape - the only shape
+// buildSavePayload has ever written, per
+// frontend/src/components/reporting/builderSerialization.ts - so the
+// typed `parameters` column stays in sync with `parameter_schema` during
+// the Phase 2 dual-write window, before ticket 2.4's frontend cutover to
+// sending `parameters` directly.
+func deriveParametersFromSchema(schema map[string]interface{}) []interface{} {
+	if params, ok := schema["parameters"].([]interface{}); ok {
+		return params
+	}
+	return []interface{}{}
+}
+
 func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
 	if err != nil {
@@ -278,6 +300,15 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	if template.ParameterSchema == nil {
 		template.ParameterSchema = make(map[string]interface{})
 	}
+	if template.Parameters == nil {
+		// Dual-write window (Phase 2, pre-2.4 frontend cutover):
+		// buildSavePayload only ever sends parameter_schema
+		// ({"parameters": [...]}), never a top-level `parameters` key -
+		// derive it so the typed column isn't silently empty while
+		// parameter_schema carries the real data. Same divergence class
+		// as the filterBar bug this plan exists to fix.
+		template.Parameters = deriveParametersFromSchema(template.ParameterSchema)
+	}
 	if !template.IsActive {
 		template.IsActive = true
 	}
@@ -297,6 +328,12 @@ func (h *ReportHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ReportHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
+	tenantID, _, _, authErr := h.resolveAuthContext(r)
+	if authErr != nil {
+		http.Error(w, authErr.Error(), http.StatusUnauthorized)
+		return
+	}
+
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -304,13 +341,30 @@ func (h *ReportHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	template, err := h.service.GetTemplate(r.Context(), id)
+	template, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+
+	// Tenant isolation check - this handler previously had none at all
+	// (unlike UpdateTemplate/DeleteTemplate, which already did this),
+	// making report_templates.layout_config/parameter_schema/
+	// semantic_view_ids readable cross-tenant by anyone who could guess or
+	// enumerate a report id. report_templates' RLS policy does not backstop
+	// this: this package never sets uisce.current_tenant, so RLS is not
+	// the actual enforcement point for this table - this check is.
+	// Gold-copy core reports are readable by any tenant (that's the
+	// inheritance model - see isCoreTemplate/isReadOnlyCore in
+	// SSRSReportBuilder.tsx); anything else must belong to the caller.
+	goldCopyID, _ := h.service.ResolveGoldCopyTenantID(r.Context())
+	isCore := goldCopyID != uuid.Nil && template.TenantID == goldCopyID
+	if !isCore && template.TenantID != tenantID {
+		http.Error(w, "report template not found", http.StatusNotFound)
 		return
 	}
 
@@ -338,7 +392,7 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.service.GetTemplate(r.Context(), id)
+	existing, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -438,6 +492,41 @@ func (h *ReportHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
 	if schema, ok := raw["parameter_schema"].(map[string]interface{}); ok {
 		template.ParameterSchema = schema
 	}
+	if bands, ok := raw["bands"].([]interface{}); ok {
+		template.Bands = bands
+	}
+	if params, ok := raw["parameters"].([]interface{}); ok {
+		template.Parameters = params
+	} else if _, ok := raw["parameter_schema"]; ok {
+		// Dual-write window (Phase 2, pre-2.4 frontend cutover): the
+		// current frontend only ever sends parameter_schema, never a
+		// top-level `parameters` key - derive it so `parameters` doesn't
+		// silently freeze at whatever the 2.1 backfill (or the last
+		// direct write) set it to while parameter_schema keeps moving.
+		// Same divergence class as the filterBar bug this plan exists to
+		// fix; caught by review, not by the 2.3 round-trip test, since
+		// that test exercises the backend in isolation and sets both
+		// fields directly rather than simulating the real payload shape.
+		template.Parameters = deriveParametersFromSchema(template.ParameterSchema)
+	}
+	if events, ok := raw["presentation_events"].([]interface{}); ok {
+		template.PresentationEvents = events
+	}
+	if grouping, ok := raw["grouping"].(map[string]interface{}); ok {
+		template.Grouping = grouping
+	}
+	if boIDStr, ok := raw["primary_business_object_id"].(string); ok {
+		if boID, err := uuid.Parse(boIDStr); err == nil {
+			template.PrimaryBusinessObjectID = &boID
+		}
+	}
+	// is_core is deliberately NOT settable from this handler: it is only
+	// ever true for gold-copy-tenant rows, and this handler already
+	// forbids gold-copy tenants from being edited by non-gold-copy
+	// callers above (see the core-report check), so exposing it here
+	// would let a gold-copy-tenant admin flip is_core on tenant-owned
+	// rows it doesn't apply to. Setting is_core is a data-authoring
+	// concern, not a report-edit concern.
 	if active, ok := raw["is_active"].(bool); ok {
 		template.IsActive = active
 	}
@@ -473,7 +562,7 @@ func (h *ReportHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	existing, err := h.service.GetTemplate(r.Context(), id)
+	existing, err := h.service.GetTemplate(r.Context(), id, tenantID)
 	if err != nil {
 		if errors.Is(err, reports.ErrNotFound) {
 			http.Error(w, err.Error(), http.StatusNotFound)
@@ -786,7 +875,9 @@ func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Reques
 
 // GetExecution handles GET /api/v1/reports/executions/{id}.
 // Enforces the pinned two-clause visibility predicate:
-//   (e.tenant_id = $2 OR e.triggered_by = $3)
+//
+//	(e.tenant_id = $2 OR e.triggered_by = $3)
+//
 // Returns 404 if execution is not found or inaccessible (zero existence leak).
 func (h *ReportHandler) GetExecution(w http.ResponseWriter, r *http.Request) {
 	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
@@ -1101,4 +1192,3 @@ func (h *ReportHandler) ListScheduleExecutions(w http.ResponseWriter, r *http.Re
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(resp)
 }
-

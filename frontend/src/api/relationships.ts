@@ -1,5 +1,6 @@
 import { devLog, devError } from '../utils/devLogger';
 import { getSelectedRegion } from '../lib/region';
+import { apiFetch, ApiError } from '../lib/apiClient';
 
 function getAuthToken(): string {
   try { return localStorage.getItem('auth_token') || ''; } catch { return ''; }
@@ -92,21 +93,13 @@ export async function fetchRelationshipSuggestions(
   });
 
   try {
-    const response = await fetch(
+    const response = await apiFetch(
       `/api/relationships/${entityIdOrName}/suggestions?${params.toString()}`,
       {
         method: 'GET',
         headers: buildHeaders(tenantId, datasourceId),
       }
     );
-
-    if (!response.ok) {
-      devError('Failed to fetch relationship suggestions:', {
-        status: response.status,
-        statusText: response.statusText,
-      });
-      return [];
-    }
 
     const data = await response.json();
     devLog('✅ Relationship suggestions fetched:', data);
@@ -133,7 +126,7 @@ export async function applyRelationship(
   devLog('🔗 Applying relationship:', { sourceEntity, targetEntity, relationshipType, cardinality });
 
   try {
-    const response = await fetch('/api/relationships/apply', {
+    const response = await apiFetch('/api/relationships/apply', {
       method: 'POST',
       headers: buildHeaders(tenantId, datasourceId),
       body: JSON.stringify({
@@ -144,20 +137,6 @@ export async function applyRelationship(
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      devError('Failed to apply relationship:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-      });
-
-      return {
-        success: false,
-        error: `Failed to apply relationship: ${response.statusText}`,
-      };
-    }
-
     const data = await response.json();
     devLog('✅ Relationship applied:', data);
 
@@ -166,6 +145,16 @@ export async function applyRelationship(
       edgeId: data.edge_id || data.id || 'applied',
     };
   } catch (err) {
+    if (err instanceof ApiError) {
+      devError('Failed to apply relationship:', {
+        status: err.status,
+        statusText: err.statusText,
+      });
+      return {
+        success: false,
+        error: `Failed to apply relationship: ${err.statusText}`,
+      };
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     devError('Error applying relationship:', message);
     return {
@@ -188,7 +177,7 @@ export async function unlinkRelationship(
   devLog('🔗 Unlinking relationship:', { sourceEntity, targetEntity });
 
   try {
-    const response = await fetch('/api/relationships/remove', {
+    await apiFetch('/api/relationships/remove', {
       method: 'POST',
       headers: buildHeaders(tenantId, datasourceId),
       body: JSON.stringify({
@@ -197,20 +186,16 @@ export async function unlinkRelationship(
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '');
-      devError('Failed to unlink relationship:', {
-        status: response.status,
-        statusText: response.statusText,
-        body: errorText,
-      });
-
-      return { success: false, error: `Failed to unlink relationship: ${response.statusText}` };
-    }
-
     devLog('✅ Relationship unlinked');
     return { success: true };
   } catch (err) {
+    if (err instanceof ApiError) {
+      devError('Failed to unlink relationship:', {
+        status: err.status,
+        statusText: err.statusText,
+      });
+      return { success: false, error: `Failed to unlink relationship: ${err.statusText}` };
+    }
     const message = err instanceof Error ? err.message : 'Unknown error';
     devError('Error unlinking relationship:', message);
     return { success: false, error: message };
@@ -229,21 +214,13 @@ export async function dismissRelationshipSuggestion(
   devLog('🗑️ Dismissing suggestion:', { suggestionId });
 
   try {
-    const response = await fetch('/api/relationships/suggestions/dismiss', {
+    await apiFetch('/api/relationships/suggestions/dismiss', {
       method: 'POST',
       headers: buildHeaders(tenantId, datasourceId),
       body: JSON.stringify({
         suggestion_id: suggestionId,
       }),
     });
-
-    if (!response.ok) {
-      devError('Failed to dismiss suggestion:', {
-        status: response.status,
-        statusText: response.statusText,
-      });
-      return false;
-    }
 
     devLog('✅ Suggestion dismissed');
     return true;

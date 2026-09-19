@@ -35,6 +35,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 import { TermMetadataEditorDrawer } from './TermMetadataEditorDrawer';
 import { SemanticTermPhysicalMappingEditor } from './SemanticTermPhysicalMappingEditor';
 import { Link as LinkIcon, Info as InfoIcon } from '@mui/icons-material';
@@ -104,15 +105,11 @@ export const BOTermsTab: React.FC<BOTermsTabProps> = ({ boId, terms: propsTerms,
     setError(null);
 
     try {
-      const response = await fetch(`/api/bo/${boId}/terms`, {
+      const response = await apiFetch(`/api/bo/${boId}/terms`, {
         headers: {
           'X-Tenant-ID': tenantId,
         },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to load terms');
-      }
 
       const data = await response.json();
       setTerms(data.terms || []);

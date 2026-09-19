@@ -10,6 +10,18 @@
  * continuation lines until the next error header. We compare block-sets,
  * not line-sets, so multi-line errors are compared atomically.
  *
+ * NOTE ON BASELINE COUNTING:
+ * normalizeLine() strips `(line, col)` so benign line shifts don't invalidate
+ * the baseline. As a result:
+ * - Total raw error blocks in baseline: 702 (now 699 as 3 were resolved)
+ * - Unique normalized error signatures: 386
+ * Both counts are now reported explicitly in the output to avoid ambiguity.
+ *
+ * NOTE ON CI:
+ * CI unaffected; only local runs from repo root were degraded. CI workflow
+ * (workstation-ci.yml) executes with `working-directory: frontend`, so it
+ * always resolved the real baseline at `frontend/docs/ts-baseline.txt`.
+ *
  * Usage:
  *   node scripts/ts-ratchet.mjs              # gate; non-zero exit on new errors
  *   node scripts/ts-ratchet.mjs --regenerate # rewrite the baseline from current tsc
@@ -17,11 +29,16 @@
 import { execSync } from 'node:child_process';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const BASELINE_PATH = path.resolve('docs/ts-baseline.txt');
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const FRONTEND_DIR = path.resolve(__dirname, '..');
+// docs/ts-baseline.txt lives inside frontend/docs/ts-baseline.txt
+const BASELINE_PATH = path.resolve(FRONTEND_DIR, 'docs/ts-baseline.txt');
 
 function stripProjectRoot(line) {
-  const projectRoot = process.cwd();
+  const projectRoot = FRONTEND_DIR;
   let out = line;
   if (projectRoot) out = out.split(projectRoot).join('');
   // Strip leading slashes inside any quoted string — tsc's Namespace/import
@@ -62,6 +79,7 @@ function blockToKey(block) {
 function runTsc() {
   try {
     return execSync('npx tsc --noEmit --pretty false', {
+      cwd: FRONTEND_DIR,
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 64 * 1024 * 1024,
@@ -112,8 +130,9 @@ const fresh = currentKeys.filter((k) => !baseline.has(k));
 const removed = [...baseline].filter((k) => !current.has(k));
 
 if (fresh.length === 0) {
+  const baselineTotalBlocks = baselineText.split('\n').filter(Boolean).length;
   console.log(
-    `ratchet OK: ${currentKeys.length} error blocks, 0 new (baseline ${baseline.size}, ${removed.length} resolved since)`,
+    `ratchet OK: ${currentKeys.length} total error blocks (${current.size} unique signatures), 0 new (baseline: ${baselineTotalBlocks} blocks, ${baseline.size} unique signatures; ${removed.length} signatures resolved since)`,
   );
   process.exit(0);
 }

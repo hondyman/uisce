@@ -6,6 +6,17 @@ import type { QueryDef, QueryExecuteResult, SemanticTermView } from '../../featu
 import { apiFetch } from '../../lib/apiClient';
 import { useCrossFilterStore, crossFilterKey } from '../../store/useCrossFilterStore';
 
+// Reports always render on a white page background, regardless of app
+// theme (light/dark) — text must stay black/near-black so values are
+// visible.
+const REPORT_TEXT_COLOR = '#000000';
+const REPORT_MUTED_TEXT_COLOR = '#374151';
+
+export interface ReportWidgetParam {
+  name: string;
+  source?: { kind: 'ref'; boKey: string; termKey: string };
+}
+
 export interface ReportWidgetBinding {
   boId: string;
   bindingId: string;
@@ -18,9 +29,29 @@ export interface ReportWidgetBinding {
   limit?: number;
 }
 
+export interface WidgetStyleOptions {
+  /** chart: primary series/bar/pie color. */
+  color?: string;
+  /** chart (pie only): show the legend. */
+  showLegend?: boolean;
+  /** gauge/KPI: value text color. */
+  valueColor?: string;
+  /** gauge/KPI: value font size (px). */
+  valueFontSize?: number;
+  /** gauge/KPI: label shown under the value, overriding the column name. */
+  label?: string;
+  /** slicer: color used for the active/selected chip. */
+  activeColor?: string;
+  /** slicer: chip style for inactive values. */
+  variant?: 'filled' | 'outlined';
+}
+
 interface ReportWidgetRendererProps {
   type: string; // 'table' | 'matrix' | 'list' | 'chart' | 'sparkline' | 'gauge'
   binding: ReportWidgetBinding;
+  style?: WidgetStyleOptions;
+  reportParameters?: ReportWidgetParam[];
+  runtimeParamValues?: Record<string, any>;
 }
 
 interface DrillTargetResponse {
@@ -54,7 +85,7 @@ interface DrillStep {
  * the shared store and every other widget bound to the same (boId, field)
  * picks it up on its next fetch.
  */
-const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, binding }) => {
+const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, binding, style, reportParameters, runtimeParamValues }) => {
   const [result, setResult] = useState<QueryExecuteResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +126,15 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
 
   const queryDef: QueryDef | null = useMemo(() => {
     if (!binding.boId || !binding.bindingId || !binding.tenantId) return null;
-    const dims = effectiveDim ? [{ termNodeId: effectiveDim.termNodeId, alias: effectiveDim.alias, boId: effectiveDim.boId }] : [];
+    // Tabular widgets (table/matrix/list) show every configured column, not
+    // just the first one — a widget bound to N dimensions previously only
+    // ever queried dimension 0.
+    const isTabular = type === 'table' || type === 'matrix' || type === 'list';
+    const dims = isTabular
+      ? (binding.dimensions || []).map((d) => ({ termNodeId: d.termNodeId, alias: d.alias, boId: binding.boId }))
+      : effectiveDim
+        ? [{ termNodeId: effectiveDim.termNodeId, alias: effectiveDim.alias, boId: effectiveDim.boId }]
+        : [];
     if (dims.length === 0 && (binding.measures?.length || 0) === 0) return null;
 
     const relatedBoIds = Array.from(new Set(dims.filter((d) => d.boId !== binding.boId).map((d) => d.boId)));
@@ -116,17 +155,31 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
       })
       .filter((f): f is NonNullable<typeof f> => f !== null);
 
+    // Report parameters bound to a real field (source.kind === 'ref') fold
+    // straight into the WHERE criteria. Unbound params, or params with no
+    // runtime value set, contribute nothing.
+    const paramFilters = (reportParameters || [])
+      .filter((p) => p.source?.kind === 'ref' && p.source.termKey)
+      .map((p) => {
+        const raw = runtimeParamValues?.[p.name];
+        if (raw === undefined || raw === null || raw === '') return null;
+        const term = terms.find((t) => t.termKey === p.source!.termKey);
+        if (!term) return null;
+        return { termNodeId: term.termNodeId, operator: 'eq' as const, value: raw as any, boId: binding.boId };
+      })
+      .filter((f): f is NonNullable<typeof f> => f !== null);
+
     return {
       context: { boId: binding.boId, bindingId: binding.bindingId, tenantId: binding.tenantId, relatedBoIds: relatedBoIds.length > 0 ? relatedBoIds : undefined },
       query: {
         dimensions: dims,
         measures: (binding.measures || []).map((m) => ({ ...m, agg: (m.agg as any) || 'NONE' })),
-        filters: [...drillFilters, ...crossFilterFilters],
+        filters: [...drillFilters, ...crossFilterFilters, ...paramFilters],
         limit: binding.limit || 200,
       },
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [binding.boId, binding.bindingId, binding.tenantId, JSON.stringify(effectiveDim), JSON.stringify(binding.measures), binding.limit, JSON.stringify(crossFilters), JSON.stringify(drillSteps)]);
+  }, [type, binding.boId, binding.bindingId, binding.tenantId, JSON.stringify(binding.dimensions), JSON.stringify(effectiveDim), JSON.stringify(binding.measures), binding.limit, JSON.stringify(crossFilters), JSON.stringify(drillSteps), JSON.stringify(terms), JSON.stringify(reportParameters), JSON.stringify(runtimeParamValues)]);
 
   useEffect(() => {
     if (!queryDef) return;
@@ -203,7 +256,7 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
   if (!queryDef) {
     return (
       <Box sx={{ p: 1, height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" sx={{ color: REPORT_MUTED_TEXT_COLOR }}>
           Bind this {type} to a Business Object and fields in Properties
         </Typography>
       </Box>
@@ -231,7 +284,7 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
       <Box sx={{ p: 1, height: '100%', display: 'flex', flexDirection: 'column' }}>
         {breadcrumb}
         <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography variant="caption" color="text.secondary">No data</Typography>
+          <Typography variant="caption" sx={{ color: REPORT_MUTED_TEXT_COLOR }}>No data</Typography>
         </Box>
       </Box>
     );
@@ -244,18 +297,27 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
     const values = result.rows.map((r) => Number(r[measureCol]) || 0);
     const chartType = type === 'sparkline' ? 'line' : binding.chartType || 'bar';
 
+    const seriesColor = style?.color;
     const option =
       chartType === 'pie'
         ? {
             tooltip: { trigger: 'item' },
-            series: [{ type: 'pie', radius: '65%', data: categories.map((c, i) => ({ name: c, value: values[i] })) }],
+            legend: { show: !!style?.showLegend, bottom: 0 },
+            series: [{
+              type: 'pie', radius: '65%',
+              data: categories.map((c, i) => ({ name: c, value: values[i] })),
+              ...(seriesColor ? { color: [seriesColor] } : {}),
+            }],
           }
         : {
             grid: { left: 40, right: 12, top: 12, bottom: type === 'sparkline' ? 12 : 30 },
             xAxis: type === 'sparkline' ? { show: false, type: 'category', data: categories } : { type: 'category', data: categories, axisLabel: { fontSize: 9, rotate: 30 } },
             yAxis: type === 'sparkline' ? { show: false } : { type: 'value' },
             tooltip: { trigger: 'axis' },
-            series: [{ type: chartType, data: values, smooth: chartType === 'line' }],
+            series: [{
+              type: chartType, data: values, smooth: chartType === 'line',
+              ...(seriesColor ? { itemStyle: { color: seriesColor }, lineStyle: { color: seriesColor } } : {}),
+            }],
           };
 
     return (
@@ -284,7 +346,7 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
 
     return (
       <Box sx={{ p: 1, height: '100%', overflowY: 'auto' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        <Typography variant="caption" sx={{ color: REPORT_MUTED_TEXT_COLOR, display: 'block', mb: 0.5 }}>
           {primaryDimension?.alias}
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -293,8 +355,9 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
               key={i}
               size="small"
               label={String(v)}
-              color={activeValue === v ? 'primary' : 'default'}
-              variant={activeValue === v ? 'filled' : 'outlined'}
+              color={style?.activeColor ? undefined : (activeValue === v ? 'primary' : 'default')}
+              variant={activeValue === v ? 'filled' : (style?.variant || 'outlined')}
+              sx={activeValue === v && style?.activeColor ? { bgcolor: style.activeColor, color: '#fff' } : undefined}
               onClick={() => {
                 if (!effectiveDim) return;
                 if (activeValue === v) {
@@ -315,8 +378,10 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
     const value = Number(result.rows[0]?.[measureCol]) || 0;
     return (
       <Box sx={{ p: 1, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <Typography variant="h4" fontWeight={700}>{value.toLocaleString()}</Typography>
-        <Typography variant="caption" color="text.secondary">{measureCol}</Typography>
+        <Typography variant="h4" fontWeight={700} sx={{ color: style?.valueColor || REPORT_TEXT_COLOR, fontSize: style?.valueFontSize ? `${style.valueFontSize}px` : undefined }}>
+          {value.toLocaleString()}
+        </Typography>
+        <Typography variant="caption" sx={{ color: REPORT_MUTED_TEXT_COLOR }}>{style?.label || measureCol}</Typography>
       </Box>
     );
   }
@@ -345,18 +410,18 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9' }}>{rowDim.alias}</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9', color: REPORT_TEXT_COLOR }}>{rowDim.alias}</TableCell>
                 {colKeys.map((ck) => (
-                  <TableCell key={ck} sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9' }} align="right">{ck}</TableCell>
+                  <TableCell key={ck} sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9', color: REPORT_TEXT_COLOR }} align="right">{ck}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {rowKeys.map((rk) => (
                 <TableRow key={rk} hover>
-                  <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600 }}>{rk}</TableCell>
+                  <TableCell sx={{ fontSize: '0.75rem', fontWeight: 600, color: REPORT_TEXT_COLOR }}>{rk}</TableCell>
                   {colKeys.map((ck) => (
-                    <TableCell key={ck} align="right" sx={{ fontSize: '0.75rem' }}>
+                    <TableCell key={ck} align="right" sx={{ fontSize: '0.75rem', color: REPORT_TEXT_COLOR }}>
                       {(cellMap.get(`${rk}|${ck}`) ?? 0).toLocaleString()}
                     </TableCell>
                   ))}
@@ -379,7 +444,7 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
           <TableHead>
             <TableRow>
               {result.columns.map((col) => (
-                <TableCell key={col.name} sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9' }}>
+                <TableCell key={col.name} sx={{ fontWeight: 'bold', fontSize: '0.7rem', bgcolor: '#f9f9f9', color: REPORT_TEXT_COLOR }}>
                   {col.name}
                 </TableCell>
               ))}
@@ -394,7 +459,7 @@ const ReportWidgetRenderer: React.FC<ReportWidgetRendererProps> = ({ type, bindi
                 sx={{ cursor: effectiveDim ? 'pointer' : 'default' }}
               >
                 {result.columns.map((col) => (
-                  <TableCell key={col.name} sx={{ fontSize: '0.75rem' }}>
+                  <TableCell key={col.name} sx={{ fontSize: '0.75rem', color: REPORT_TEXT_COLOR }}>
                     {typeof row[col.name] === 'object' ? JSON.stringify(row[col.name]) : String(row[col.name] ?? '-')}
                   </TableCell>
                 ))}

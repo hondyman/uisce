@@ -65,6 +65,9 @@ func (c *BitemporalRangeCompiler) CompileRangeQuery(
 	if req.TenantID == uuid.Nil {
 		return nil, fmt.Errorf("Rule 7 violation: tenant_id must be a valid UUID")
 	}
+	if err := validateBitemporalIdentifiers(req); err != nil {
+		return nil, err
+	}
 	if req.EffectiveStartDate.After(req.EffectiveEndDate) {
 		return nil, fmt.Errorf("invalid range: effective_start_date cannot be after effective_end_date")
 	}

@@ -1,67 +1,85 @@
-import React, { useCallback, useMemo, useRef, DragEvent } from 'react';
-import ReactFlow, { 
-  ReactFlowProvider, 
-  Controls, 
-  Background, 
+import React, { useCallback, useMemo, useRef } from 'react';
+import ReactFlow, {
+  ReactFlowProvider,
+  Controls,
+  Background,
   NodeTypes,
   MiniMap,
   ConnectionLineType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { useDroppable, useDndMonitor, DragEndEvent } from '@dnd-kit/core';
 import useUisceStore, { UisceNode } from '../hooks/useUisceStore';
 import CustomNode from './CustomNode';
-import { Box, useTheme } from '@mui/material';
+import { Box, useTheme, alpha } from '@mui/material';
+
+export const STREAM_CANVAS_DROPZONE_ID = 'stream-canvas-dropzone';
 
 const StreamCanvas = () => {
-  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const reactFlowWrapper = useRef<HTMLDivElement | null>(null);
   const theme = useTheme();
-  const { 
-    nodes, edges, 
-    onNodesChange, onEdgesChange, onConnect, 
-    addNode, selectNode 
+  const {
+    nodes, edges,
+    onNodesChange, onEdgesChange, onConnect,
+    addNode, selectNode
   } = useUisceStore();
+
+  const { setNodeRef, isOver } = useDroppable({ id: STREAM_CANVAS_DROPZONE_ID });
+
+  const setRefs = useCallback((node: HTMLDivElement | null) => {
+    reactFlowWrapper.current = node;
+    setNodeRef(node);
+  }, [setNodeRef]);
 
   const nodeTypes = useMemo<NodeTypes>(() => ({
     default: CustomNode,
-    input: CustomNode 
+    input: CustomNode
   }), []);
 
-  const onDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      
-      const type = event.dataTransfer.getData('application/reactflow');
-      if (!type || !reactFlowWrapper.current) return;
+  useDndMonitor({
+    onDragEnd(event: DragEndEvent) {
+      const { active, over } = event;
+      if (over?.id !== STREAM_CANVAS_DROPZONE_ID) return;
+      const filterType = active.data.current?.filterType as string | undefined;
+      if (!filterType || !reactFlowWrapper.current) return;
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      const label = active.data.current?.label as string | undefined;
+      const bounds = reactFlowWrapper.current.getBoundingClientRect();
+      const activeRect = active.rect.current.translated ?? active.rect.current.initial;
+      const centerX = activeRect ? activeRect.left + activeRect.width / 2 : bounds.left + bounds.width / 2;
+      const centerY = activeRect ? activeRect.top + activeRect.height / 2 : bounds.top + bounds.height / 2;
+
       const position = {
-        x: event.clientX - reactFlowBounds.left - 100,
-        y: event.clientY - reactFlowBounds.top,
+        x: centerX - bounds.left - 100,
+        y: centerY - bounds.top,
       };
 
       const newNode: UisceNode = {
         id: `filter_${Date.now()}`,
         type: 'default',
         position,
-        data: { 
-            label: event.dataTransfer.getData('application/reactflow-label') || `${type} Filter`, 
-            filterType: type,
-            config: {} 
+        data: {
+          label: label || `${filterType} Filter`,
+          filterType,
+          config: {},
         },
       };
 
       addNode(newNode);
     },
-    [addNode]
-  );
-
-  const onDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
+  });
 
   return (
-    <Box sx={{ width: '100%', height: '100%', flexGrow: 1, bgcolor: '#f8fafc' }} ref={reactFlowWrapper}>
+    <Box
+      sx={{
+        width: '100%',
+        height: '100%',
+        flexGrow: 1,
+        bgcolor: isOver ? alpha('#6366f1', 0.06) : '#f8fafc',
+        transition: 'background-color 0.15s ease',
+      }}
+      ref={setRefs}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -71,8 +89,6 @@ const StreamCanvas = () => {
         onNodeClick={(_e, node) => selectNode(node.id)}
         onPaneClick={() => selectNode(null)}
         nodeTypes={nodeTypes}
-        onDrop={onDrop}
-        onDragOver={onDragOver}
         fitView
         connectionLineType={ConnectionLineType.SmoothStep}
         defaultEdgeOptions={{
@@ -83,10 +99,10 @@ const StreamCanvas = () => {
       >
         <Background gap={24} color="#e2e8f0" />
         <Controls style={{ boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)', border: 'none', borderRadius: 8, overflow: 'hidden' }} />
-        <MiniMap 
-            style={{ height: 120, borderRadius: 8, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} 
-            zoomable 
-            pannable 
+        <MiniMap
+            style={{ height: 120, borderRadius: 8, boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+            zoomable
+            pannable
             nodeColor={(n) => {
                 if (n.data.label.includes('Sanctions')) return '#fca5a5';
                 if (n.data.label.includes('Limit')) return '#86efac';

@@ -203,11 +203,6 @@ func (rs *Routes) RegisterMetadataWrite(r chi.Router, handler interface {
 	r.Post("/object/{ObjectType}", handler.HandleGenericWrite)
 }
 
-// RegisterMCP mounts the Agentic AI Interface (MCP)
-func (rs *Routes) RegisterMCP(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
-	handler.RegisterRoutes(r)
-}
-
 // RegisterCalendarSync mounts the calendar sync endpoints
 func (rs *Routes) RegisterCalendarSync(r chi.Router, handler interface{ RegisterRoutes(chi.Router) }) {
 	handler.RegisterRoutes(r)

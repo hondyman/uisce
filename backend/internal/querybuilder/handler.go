@@ -106,18 +106,36 @@ func (h *QueryBuilderHandler) decodeAndAuthorize(w http.ResponseWriter, r *http.
 		return nil, nil, false
 	}
 
-	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, qd.Context.BindingID, "", h.deps)
+	// Resolve tenant/datasource from the request headers/JWT (the same
+	// authoritative path every other endpoint uses) - NOT from
+	// qd.Context.BindingID. BindingID identifies a specific BO's physical
+	// backend binding (business_object_bindings.id); it lives in a
+	// different ID space than a tenant's provisioned datasource
+	// (tenant_product_datasource.id) that SecurityContextFromRequest
+	// resolves. Passing it in as an override made every widget/report
+	// query with a populated BindingID fail datasource resolution outright.
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
 		h.writeError(w, err, http.StatusBadRequest)
 		return nil, nil, false
 	}
 
-	// The security context datasource is authoritative; ensure it matches the
-	// binding the user selected. A mismatch means the user is trying to query a
-	// datasource outside their scope.
-	if !stringsEqual(secCtx.DatasourceID, qd.Context.BindingID) {
-		h.writeError(w, fmt.Errorf("binding scope mismatch"), http.StatusForbidden)
-		return nil, nil, false
+	// Real tenant-ownership check in place of the old (always-false)
+	// string-equality comparison: the BO this query targets must actually
+	// belong to the resolved tenant. Without this, decodeAndAuthorize would
+	// only be enforcing "the caller has some valid tenant," not "the caller
+	// may query this specific BO" - the actual cross-tenant guard this
+	// function exists for.
+	if qd.Context.BOID != "" {
+		owned, err := h.service.BOBelongsToTenant(qd.Context.BOID, secCtx.TenantID)
+		if err != nil {
+			h.writeError(w, err, http.StatusInternalServerError)
+			return nil, nil, false
+		}
+		if !owned {
+			h.writeError(w, fmt.Errorf("forbidden: business object does not belong to the caller's tenant"), http.StatusForbidden)
+			return nil, nil, false
+		}
 	}
 
 	_ = ctx
@@ -141,11 +159,4 @@ func (h *QueryBuilderHandler) writeError(w http.ResponseWriter, err error, statu
 		"error":   http.StatusText(status),
 		"details": err.Error(),
 	})
-}
-
-func stringsEqual(a, b string) bool {
-	if a == "" || b == "" {
-		return true
-	}
-	return a == b
 }

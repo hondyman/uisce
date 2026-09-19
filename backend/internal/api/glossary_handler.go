@@ -2080,8 +2080,11 @@ func tokenizeColumnName(name string) []string {
 // commonWords are short tokens that look abbreviation-like but are already
 // real English words - skip these when deciding whether a token needs
 // abbreviation lookup/LLM disambiguation.
+// NOTE: "ID" is intentionally excluded; "ID" in column names (account_id,
+// customer_id) should be expanded to "IDENTIFIER" by the LLM since it
+// unambiguously means "Identifier" in a database naming context.
 var commonShortWords = map[string]bool{
-	"ID": true, "NO": true, "OF": true, "IN": true, "ON": true, "AT": true,
+	"NO": true, "OF": true, "IN": true, "ON": true, "AT": true,
 	"IS": true, "OR": true, "TO": true, "BY": true, "AN": true, "UP": true,
 	"DUE": true, "NEW": true, "OLD": true, "KEY": true, "PIN": true,
 }
@@ -2152,23 +2155,13 @@ type derivedTermNames struct {
 	BusinessName string
 }
 
-// idSuffixWords are trailing tokens that stay abbreviated at the semantic
-// (identifier) layer even though the business layer spells them out in
-// full - e.g. "customer_type_id" -> semantic "CustomerTypeID", business
-// "Customer Type Identifier". This mirrors the common data-modeling
-// convention of "...ID" suffixes on identifier columns.
-var idSuffixWords = map[string]string{
-	"IDENTIFIER": "ID",
-	"CODE":       "CD",
-}
-
 // deriveTermNames expands abbreviations (dictionary lookup, then Gemini
 // disambiguation for anything unresolved) and returns both the compact
 // semantic-term name and the fully-expanded business-term name for a raw
 // column/technical name. Newly-disambiguated abbreviations are persisted
 // back to the abbreviation dictionary so the next generation for the same
 // column name doesn't need the LLM again.
-func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName string) derivedTermNames {
+func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName string, tableSchemaContext string, siblingColumnNames []string) derivedTermNames {
 	tokens := tokenizeColumnName(rawName)
 	if len(tokens) == 0 {
 		return derivedTermNames{}
@@ -2206,7 +2199,7 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 	}
 
 	if len(unresolvedTokens) > 0 {
-		suggestions, err := h.abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName)
+		suggestions, err := h.abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName, tableSchemaContext, siblingColumnNames)
 		if err != nil {
 			log.Printf("[deriveTermNames] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
 		} else {
@@ -2223,19 +2216,8 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 		}
 	}
 
-	// The semantic layer keeps common identifier/code suffixes abbreviated
-	// (ID, CD) even though the business layer spells them out fully.
-	semanticTokens := make([]string, len(resolved))
-	copy(semanticTokens, resolved)
-	if len(semanticTokens) > 0 {
-		last := strings.ToUpper(semanticTokens[len(semanticTokens)-1])
-		if abbr, ok := idSuffixWords[last]; ok {
-			semanticTokens[len(semanticTokens)-1] = abbr
-		}
-	}
-
 	return derivedTermNames{
-		SemanticName: pascalCase(semanticTokens),
+		SemanticName: pascalCase(resolved),
 		BusinessName: titleCase(resolved),
 	}
 }
@@ -2371,15 +2353,49 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 	// on any datasource ("orm.corporate_action.record_date",
 	// "public.customers.customer_type_id") maps to the same semantic term -
 	// there is no per-datasource "ORM" vs "CRM" semantic term, by design.
-	var columnNodeName string
-	_ = h.db.QueryRow(`SELECT node_name FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&columnNodeName)
+	var columnNodeName, qualifiedPath string
+	_ = h.db.QueryRow(`SELECT node_name, COALESCE(qualified_path, '') FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&columnNodeName, &qualifiedPath)
 	if columnNodeName == "" {
 		http.Error(w, "could not resolve a name for this term: column not found", http.StatusBadRequest)
 		return
 	}
-	names := h.deriveTermNames(r.Context(), secCtx.TenantID, columnNodeName)
+
+	// Extract table/schema context from qualified_path (format: schema.table.column)
+	var tableSchemaContext string
+	var siblingColumnNames []string
+	if qualifiedPath != "" {
+		parts := strings.Split(qualifiedPath, ".")
+		if len(parts) >= 3 {
+			schemaName := parts[len(parts)-3]
+			tableName := parts[len(parts)-2]
+			tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
+
+			// Query sibling columns from the same table (same schema.table, different column)
+			// Cap at 40 to avoid prompt bloat
+			tablePrefix := schemaName + "." + tableName + "."
+			rows, err := h.db.Query(`
+				SELECT node_name FROM catalog_node
+				WHERE tenant_id = $1
+				  AND qualified_path LIKE $2
+				  AND qualified_path != $3
+				  AND node_type_id = (SELECT id FROM catalog_node_type WHERE node_type = 'ATTRIBUTE' LIMIT 1)
+				LIMIT 40
+			`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var siblingName string
+					if err := rows.Scan(&siblingName); err == nil {
+						siblingColumnNames = append(siblingColumnNames, siblingName)
+					}
+				}
+			}
+		}
+	}
+
+	names := h.deriveTermNames(r.Context(), secCtx.TenantID, columnNodeName, tableSchemaContext, siblingColumnNames)
 	semanticName := names.SemanticName
-	if req.Name != "" && !strings.Contains(req.Name, "/") {
+	if semanticName == "" && req.Name != "" && !strings.Contains(req.Name, "/") {
 		semanticName = req.Name
 	}
 	if semanticName == "" {

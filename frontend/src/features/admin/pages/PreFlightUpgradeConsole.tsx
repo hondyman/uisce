@@ -31,6 +31,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch';
 import LockIcon from '@mui/icons-material/Lock';
 import MemoryIcon from '@mui/icons-material/Memory';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface TenantWarning {
   tenant_id: string;
@@ -83,7 +84,7 @@ export const PreFlightUpgradeConsole: React.FC = () => {
 
   const runPreFlightCheck = () => {
     setLoading(true);
-    fetch('/api/admin/upgrade/preflight-simulation', {
+    apiFetch('/api/admin/upgrade/preflight-simulation', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version: 'v1.3.0' }),
@@ -105,7 +106,7 @@ export const PreFlightUpgradeConsole: React.FC = () => {
     setDeployResult(null);
 
     try {
-      const res = await fetch('/api/admin/upgrade/deploy-globally', {
+      const res = await apiFetch('/api/admin/upgrade/deploy-globally', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ version: report?.version || 'v1.3.0' }),

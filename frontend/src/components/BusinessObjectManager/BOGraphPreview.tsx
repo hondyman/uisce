@@ -34,6 +34,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 
 // ============================================================================
 // Types
@@ -137,13 +138,9 @@ export const BOGraphPreview: React.FC<BOGraphPreviewProps> = ({ boId, boName }) 
     setError(null);
 
     try {
-      const response = await fetch(`/api/bo/${boId}/graph?mode=${viewMode}`, {
+      const response = await apiFetch(`/api/bo/${boId}/graph?mode=${viewMode}`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to load graph');
-      }
 
       const data: BOGraphResponse = await response.json();
       setGraphData(data);

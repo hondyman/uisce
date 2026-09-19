@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/models"
@@ -39,6 +40,12 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 	var probe vm.RuleNode
 	if err := json.Unmarshal(req.RuleAST, &probe); err != nil {
 		return nil, fmt.Errorf("rule_ast is not a valid vm.RuleNode: %w", err)
+	}
+
+	if dupName, err := s.findDuplicateRuleAST(ctx, req.TenantID, req.BOName, req.Name, req.RuleAST); err != nil {
+		return nil, fmt.Errorf("duplicate check failed: %w", err)
+	} else if dupName != "" {
+		return nil, fmt.Errorf("a rule with these exact conditions already exists on %s: %q", req.BOName, dupName)
 	}
 
 	var nodeTypeID string
@@ -114,6 +121,54 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 	return s.GetByID(ctx, nodeID)
 }
 
+// findDuplicateRuleAST returns the name of an existing active rule on the
+// same BO whose rule_ast is structurally identical to the one being
+// submitted, or "" if none matches. Matching is by decoded AST equality
+// (key order/whitespace in the raw JSON don't matter), not by name, since
+// name is already the upsert's own conflict key (renaming while editing
+// would otherwise slip past a name-only check as a new rule). The rule
+// being edited (same name) is excluded so re-saving it isn't flagged as a
+// duplicate of itself.
+func (s *ValidationRuleService) findDuplicateRuleAST(ctx context.Context, tenantID, boName, name string, ruleAST json.RawMessage) (string, error) {
+	var incoming interface{}
+	if err := json.Unmarshal(ruleAST, &incoming); err != nil {
+		return "", err
+	}
+
+	var nodes []struct {
+		NodeName string          `db:"node_name"`
+		Config   json.RawMessage `db:"config"`
+	}
+	err := s.db.SelectContext(ctx, &nodes, `
+		SELECT n.node_name, n.config
+		FROM catalog_node n
+		JOIN catalog_node_type nt ON n.node_type_id = nt.id
+		WHERE nt.catalog_type_name = 'validation_rule'
+		  AND n.tenant_id = $1
+		  AND n.properties->>'bo_name' = $2
+		  AND n.is_active = true
+		  AND n.node_name != $3
+	`, tenantID, boName, name)
+	if err != nil {
+		return "", err
+	}
+
+	for _, n := range nodes {
+		cfg, err := models.ParseValidationRuleConfig(n.Config)
+		if err != nil {
+			continue
+		}
+		var existing interface{}
+		if err := json.Unmarshal(cfg.RuleAST, &existing); err != nil {
+			continue
+		}
+		if reflect.DeepEqual(incoming, existing) {
+			return n.NodeName, nil
+		}
+	}
+	return "", nil
+}
+
 // ensureGovernedByRuleEdge creates the GOVERNED_BY_RULE catalog_edge from
 // the BO node to the validation-rule node if it doesn't already exist.
 // GOVERNED_BY_RULE was seeded into catalog_edge_type before this session
@@ -154,12 +209,13 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		Description string          `db:"description"`
 		Properties  json.RawMessage `db:"properties"`
 		Config      json.RawMessage `db:"config"`
+		IsActive    bool            `db:"is_active"`
 		CreatedAt   string          `db:"created_at"`
 		UpdatedAt   string          `db:"updated_at"`
 	}
 
 	err := s.db.GetContext(ctx, &node, `
-		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.created_at, n.updated_at
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active, n.created_at, n.updated_at
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
@@ -169,7 +225,7 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		return nil, fmt.Errorf("validation rule not found: %w", err)
 	}
 
-	return descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config)
+	return descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config, node.IsActive)
 }
 
 // ListByBO returns all validation rules targeting the given BO. If domain
@@ -186,17 +242,22 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 		Description string          `db:"description"`
 		Properties  json.RawMessage `db:"properties"`
 		Config      json.RawMessage `db:"config"`
+		IsActive    bool            `db:"is_active"`
 	}
 
+	// Deliberately not filtering on n.is_active: a rule the user has
+	// toggled off via handleSetActive still targets this BO and should
+	// stay visible (with its switch reflecting the off state) so it can
+	// be turned back on - filtering it out here would make the toggle a
+	// one-way door.
 	err := s.db.SelectContext(ctx, &nodes, `
-		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.tenant_id = $1
 		  AND n.properties->>'bo_name' = $2
 		  AND ($3 = '' OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
-		  AND n.is_active = true
 		ORDER BY n.node_name
 	`, tenantID, boName, domain, models.ValidationRuleDomainDefault)
 	if err != nil {
@@ -205,7 +266,7 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 
 	result := make([]models.ValidationRuleDescriptor, 0, len(nodes))
 	for _, n := range nodes {
-		desc, err := descriptorFromNode(n.ID, n.NodeName, n.Description, n.Properties, n.Config)
+		desc, err := descriptorFromNode(n.ID, n.NodeName, n.Description, n.Properties, n.Config, n.IsActive)
 		if err != nil {
 			return nil, err
 		}
@@ -214,7 +275,7 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 	return result, nil
 }
 
-func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw json.RawMessage) (*models.ValidationRuleDescriptor, error) {
+func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw json.RawMessage, isActive bool) (*models.ValidationRuleDescriptor, error) {
 	props, err := models.ParseValidationRuleProperties(propsRaw)
 	if err != nil {
 		return nil, err
@@ -239,6 +300,7 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 		Domain:           domain,
 		RuleAST:          cfg.RuleAST,
 		GovernanceStatus: props.GovernanceStatus,
+		IsActive:         isActive,
 	}, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -164,6 +165,12 @@ func (h *CalcHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Predicate delta: none — SQL already binds tenantID; GUC for FORCE RLS.
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx.Tx, tenantID, ""); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"tenant GUC: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
 
 	// 1. Upsert into calc_fields catalog
 	var id string
@@ -393,6 +400,12 @@ func (h *CalcHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Predicate delta: none — SQL already binds tenantID; GUC for FORCE RLS.
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx.Tx, tenantID, ""); err != nil {
+		http.Error(w, fmt.Sprintf(`{"error":"tenant GUC: %s"}`, err.Error()), http.StatusInternalServerError)
+		return
+	}
 
 	// Get the calc field details before deleting
 	var objectID, name string

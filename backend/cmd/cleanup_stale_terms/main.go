@@ -94,11 +94,6 @@ func pascalCase(tokens []string) string {
 	return b.String()
 }
 
-var idSuffixWords = map[string]string{
-	"IDENTIFIER": "ID",
-	"CODE":       "CD",
-}
-
 type derivedNames struct {
 	SemanticName string
 	BusinessName string
@@ -138,7 +133,7 @@ func deriveTermNames(ctx context.Context, abbrevSvc *services.AbbreviationServic
 	}
 
 	if len(unresolvedTokens) > 0 {
-		suggestions, err := abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName)
+		suggestions, err := abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName, "", nil)
 		if err != nil {
 			log.Printf("LLM disambiguation failed for %v (%q): %v", unresolvedTokens, rawName, err)
 		} else {
@@ -154,16 +149,7 @@ func deriveTermNames(ctx context.Context, abbrevSvc *services.AbbreviationServic
 		}
 	}
 
-	semanticTokens := make([]string, len(resolved))
-	copy(semanticTokens, resolved)
-	if len(semanticTokens) > 0 {
-		last := strings.ToUpper(semanticTokens[len(semanticTokens)-1])
-		if abbr, ok := idSuffixWords[last]; ok {
-			semanticTokens[len(semanticTokens)-1] = abbr
-		}
-	}
-
-	return derivedNames{SemanticName: pascalCase(semanticTokens), BusinessName: titleCase(resolved)}
+	return derivedNames{SemanticName: pascalCase(resolved), BusinessName: titleCase(resolved)}
 }
 
 func resolveOrCreateNodeType(db *sql.DB, typeName string) (string, error) {

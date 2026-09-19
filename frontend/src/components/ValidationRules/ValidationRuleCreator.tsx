@@ -49,6 +49,7 @@ import type { ValidationRule as SharedValidationRule } from '../../components/va
 import { ValidationRuleScriptEditor } from './ValidationRuleScriptEditor';
 import ValidationRuleSimulator from './ValidationRuleSimulator';
 import { dedupeFields } from '../../utils/dedupeFields';
+import { apiFetch } from '../../lib/apiClient';
 
 export interface FieldTypeInfo {
   type: string;
@@ -164,14 +165,9 @@ record: {
 
       if (tenantId && boId) {
         try {
-          const res = await fetch(`/api/validation-rules/schema?tenant_id=${tenantId}&bo_id=${boId}&locale=en`);
-          if (res.ok) {
-            const data = await res.json();
-            setSchemaContext(data.schema || '');
-          } else {
-            console.warn("Failed to fetch CUE schema");
-            setSchemaContext('');
-          }
+          const res = await apiFetch(`/api/validation-rules/schema?tenant_id=${tenantId}&bo_id=${boId}&locale=en`);
+          const data = await res.json();
+          setSchemaContext(data.schema || '');
         } catch (e) {
           console.error(e);
           setSchemaContext('');

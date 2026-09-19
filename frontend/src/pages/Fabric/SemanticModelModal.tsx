@@ -1,6 +1,5 @@
 // React JSX runtime provides automatic React import
-import { DndProvider } from 'react-dnd';
-import { HTML5Backend } from 'react-dnd-html5-backend';
+import { DndContext } from '@dnd-kit/core';
 import UnifiedSemanticBuilder from './UnifiedSemanticBuilder';
 
 interface SemanticModelModalProps {
@@ -17,14 +16,14 @@ const SemanticModelModal: React.FC<SemanticModelModalProps> = ({
   onClose 
 }) => {
   return (
-    <DndProvider backend={HTML5Backend}>
-      <UnifiedSemanticBuilder 
+    <DndContext>
+      <UnifiedSemanticBuilder
         tenantId={tenantId}
-        datasourceId={datasourceId} 
+        datasourceId={datasourceId}
         alphaDatasourceId={alphaDatasourceId}
-        onClose={onClose} 
+        onClose={onClose}
       />
-    </DndProvider>
+    </DndContext>
   );
 };
 

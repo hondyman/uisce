@@ -1,0 +1,135 @@
+name: Desktop Workstation CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'desktop/**'
+      - '.github/workflows/workstation-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'frontend/**'
+      - 'desktop/**'
+      - '.github/workflows/workstation-ci.yml'
+  workflow_dispatch:
+    inputs:
+      run_live_desktop_suite:
+        description: 'Run live macOS GUI desktop test suite (flaky on headless runner)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  frontend-workstation:
+    name: Frontend Typecheck, Vitest, Build & Playwright Smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: TypeScript Ratchet Check
+        working-directory: frontend
+        run: node scripts/ts-ratchet.mjs
+
+      - name: Frontend Vitest Unit Test Suites
+        working-directory: frontend
+        run: npx vitest run
+
+      - name: Frontend Production Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Playwright Chromium & Dependencies
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Multi-Screen Playwright Smoke Test
+        working-directory: frontend
+        run: npm run test:multiscreen
+
+  desktop-go-pure:
+    name: Desktop Pure-Go Manager Unit Tests (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.22+
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: 'desktop/go.sum'
+
+      - name: Run Pure-Go Manager Unit Tests
+        working-directory: desktop
+        run: GOWORK=off go test -v ./manager/...
+
+  desktop-go-macos:
+    name: Desktop CGO / macOS Unit Tests (macOS Runner)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go 1.22+
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: 'desktop/go.sum'
+
+      - name: Run Standard Desktop Package Tests
+        working-directory: desktop
+        run: GOWORK=off go test -v ./...
+
+      - name: Run Verify-Tagged Desktop Package Tests
+        working-directory: desktop
+        run: GOWORK=off go test -tags verify -v ./...
+
+  desktop-live-e2e:
+    name: Live Desktop GUI Suite (Manual Trigger)
+    runs-on: macos-latest
+    if: ${{ inputs.run_live_desktop_suite == true }}
+    steps:
+      # NOTE: This job executes the 8-step live macOS WKWebView verification suite.
+      # Because GitHub-hosted macOS runners have non-deterministic WindowServer
+      # timing and no persistent display attached, this job is intentionally
+      # kept off standard PR gating and reserved for manual/nightly dispatch.
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Go 1.22+
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build Frontend Assets
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Compile Verify Desktop Executable
+        working-directory: desktop
+        run: GOWORK=off go build -tags verify -o uisce-desk .
+
+      - name: Execute Live Desktop Verification Suite
+        working-directory: desktop
+        run: ./uisce-desk --verify

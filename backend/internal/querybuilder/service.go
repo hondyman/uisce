@@ -21,6 +21,10 @@ type BOResolver interface {
 	GetBODefinition(boID string) (*boresolver.BODefinition, error)
 	GetBusinessObjectBinding(boID, bindingID string) (*boresolver.BOBinding, error)
 	GetBOTerms(boID, bindingID string) ([]boresolver.SemanticTermView, error)
+	// BOBelongsToTenant reports whether boID is a business object owned by
+	// tenantID - the real tenant-ownership check decodeAndAuthorize needs
+	// (see its doc comment for what it replaced).
+	BOBelongsToTenant(boID, tenantID string) (bool, error)
 }
 
 // RelationshipResolver abstracts join-path resolution across Business
@@ -49,6 +53,13 @@ func NewQueryService(generator *boresolver.BOSQLGenerator, resolver BOResolver, 
 		resolver:      resolver,
 		relationships: relationships,
 	}
+}
+
+// BOBelongsToTenant exposes the resolver's tenant-ownership check to
+// QueryBuilderHandler.decodeAndAuthorize, which has no direct resolver
+// access (only the service).
+func (s *QueryService) BOBelongsToTenant(boID, tenantID string) (bool, error) {
+	return s.resolver.BOBelongsToTenant(boID, tenantID)
 }
 
 // Preview compiles a QueryDef into SQL without executing it.

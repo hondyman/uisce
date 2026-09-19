@@ -7,6 +7,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ValidationRuleScriptEditor from './ValidationRuleScriptEditor'; // Reused for input
+import { apiFetch } from '../../lib/apiClient';
 
 interface ValidationRuleSimulatorProps {
   scriptContent: string;
@@ -30,15 +31,11 @@ export const ValidationRuleSimulator: React.FC<ValidationRuleSimulatorProps> = (
         throw new Error("Invalid JSON in Test Data. Please ensure keys are quoted.");
       }
 
-      const response = await fetch('/api/validation-rules/simulate', {
+      const response = await apiFetch('/api/validation-rules/simulate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ script: scriptContent, data: parsedData }),
       });
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || data.message || "Simulation failed");
-      }
       setResult(data);
     } catch (err: any) {
       setError(err.message);

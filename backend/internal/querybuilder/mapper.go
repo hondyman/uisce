@@ -18,9 +18,15 @@ func mapQueryDefToSemanticRequest(
 		return nil, fmt.Errorf("BO definition is nil")
 	}
 
+	// BusinessObjectID short-circuits ResolveSemanticRequest's name-based
+	// lookup - boDef is already resolved here, so re-resolving via
+	// Datasource (which used to be set to boDef.DrivingTable, a physical
+	// table path like "/orm/order") only to have GetBOByTechnicalName
+	// match it against business_objects.bo_key (a plain name like
+	// "order") could never succeed. See BusinessObjectID's doc comment.
 	req := &boresolver.SemanticSQLGenerationRequest{
-		Datasource: boDef.DrivingTable,
-		Limit:      qd.Query.Limit,
+		BusinessObjectID: boDef.ID,
+		Limit:            qd.Query.Limit,
 	}
 
 	for _, dim := range qd.Query.Dimensions {

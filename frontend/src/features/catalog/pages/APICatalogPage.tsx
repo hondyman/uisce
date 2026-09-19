@@ -13,6 +13,7 @@ import ApiIcon from '@mui/icons-material/Api';
 import LinkIcon from '@mui/icons-material/Link';
 import BusinessIcon from '@mui/icons-material/Business';
 import { LineageGraph } from '../../../LineageGraph';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface APIEndpoint {
   id: string;
@@ -57,7 +58,7 @@ const APICatalogPage: React.FC = () => {
     setLoading(true);
     try {
       // Replace with actual API call to your backend
-      const response = await fetch('/api/catalog/apis');
+      const response = await apiFetch('/api/catalog/apis');
       const data = await response.json();
       // Defensive normalization: backend may return { apis: [...] } or an object wrapper
       if (Array.isArray(data)) {
@@ -110,7 +111,7 @@ const APICatalogPage: React.FC = () => {
   const loadBusinessTerms = async () => {
     try {
       // Replace with actual API call
-      const response = await fetch('/api/business-terms');
+      const response = await apiFetch('/api/business-terms');
       const data = await response.json();
       if (Array.isArray(data)) {
         setBusinessTerms(data);

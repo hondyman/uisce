@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../lib/apiClient';
 
 interface LookupValue {
     id: string;
@@ -16,13 +17,9 @@ export function useLookupValues(lookupType: string | undefined) {
         queryFn: async () => {
             if (!lookupType) return [];
 
-            const res = await fetch(`/api/lookup-values?type=${lookupType}`, {
+            const res = await apiFetch(`/api/lookup-values?type=${lookupType}`, {
                 credentials: 'include',
             });
-
-            if (!res.ok) {
-                throw new Error('Failed to fetch lookup values');
-            }
 
             const data: LookupValue[] = await res.json();
             return data;

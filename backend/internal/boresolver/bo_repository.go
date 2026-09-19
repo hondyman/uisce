@@ -150,6 +150,48 @@ type semanticField struct {
 // "/<schema>/<table>/<column>" - see 20260112-era catalog scan output).
 // Returns ("", "") when nothing resolves; callers must treat that as
 // "unbound", not guess.
+// catalogPathPrefix converts a driving table reference into the
+// "/<schema>/<table>" prefix catalog_node.qualified_path uses for scanned
+// physical columns - drivingTable itself is either already in that shape
+// (path-style, e.g. "/orm/order") or "schema.table"/a bare table name
+// (legacy shape, implicit "public" schema).
+func catalogPathPrefix(drivingTable string) string {
+	if strings.HasPrefix(drivingTable, "/") {
+		return strings.TrimSuffix(drivingTable, "/")
+	}
+	schema := "public"
+	table := drivingTable
+	if idx := strings.LastIndex(drivingTable, "."); idx >= 0 {
+		schema = drivingTable[:idx]
+		table = drivingTable[idx+1:]
+	}
+	return "/" + schema + "/" + table
+}
+
+// TableHasColumn reports whether drivingTable has a physical column named
+// exactly `column`, per the real catalog scan (catalog_node rows with
+// is_physical_column=true). Used to decide whether tenant-scoping can add a
+// "table.tenant_id = $N" predicate at all - many ORM-schema tables (e.g.
+// orm.order) have no tenant_id column because tenant isolation for them is
+// enforced at the datasource/connection level (one physical database per
+// tenant), not by a row-level column, and blindly adding the predicate
+// there is a SQL error, not a security gap closed.
+func (r *PostgresBORepository) TableHasColumn(drivingTable, column string) bool {
+	pathPrefix := catalogPathPrefix(drivingTable)
+	var exists bool
+	err := r.DB.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM catalog_node
+			WHERE qualified_path = $1 || '/' || $2
+			  AND COALESCE(properties->>'is_physical_column', 'false') = 'true'
+		)
+	`, pathPrefix, column).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
+}
+
 func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTable, fieldName, technicalName string) (physicalColumn string, sourceNodeID string) {
 	// 1. A real, explicitly authored binding always wins.
 	var boundCol, boundNode sql.NullString
@@ -165,14 +207,20 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 	}
 
 	// 2. No explicit binding yet: try to match a scanned catalog_node physical
-	// column under the driving table by name. drivingTable may be
-	// "schema.table" or a bare table name (implicit "public" schema).
-	schema := "public"
-	table := drivingTable
-	if idx := strings.LastIndex(drivingTable, "."); idx >= 0 {
-		schema = drivingTable[:idx]
-		table = drivingTable[idx+1:]
-	}
+	// column under the driving table by name. catalog_node's qualified_path
+	// for a scanned column is always "/<schema>/<table>/<column>" (confirmed
+	// against real scan output, e.g. "/orm/order/avg_price"). drivingTable
+	// itself comes in two shapes depending on how the BO was authored:
+	//   - path-style, e.g. "/orm/order" - this IS already "/<schema>/<table>",
+	//     so the qualified_path prefix is just drivingTable itself.
+	//   - "schema.table" or a bare table name (implicit "public" schema) -
+	//     the legacy shape, rebuilt into "/<schema>/<table>" below.
+	// Treating a path-style drivingTable as dot-separated (the previous
+	// logic, unconditionally) built "//public//orm/order/<column>" - a
+	// qualified_path that could never match anything - so every field on a
+	// path-style BO without its own field_bindings row (avg_price on Order,
+	// confirmed) silently resolved to no physical column at query time.
+	pathPrefix := catalogPathPrefix(drivingTable)
 
 	for _, candidate := range []string{technicalName, fieldName} {
 		norm := normalizeIdentifier(candidate)
@@ -183,16 +231,35 @@ func (r *PostgresBORepository) resolveCatalogPhysicalColumn(fieldID, drivingTabl
 		err := r.DB.QueryRow(`
 			SELECT node_name, id::text
 			FROM catalog_node
-			WHERE qualified_path = '/' || $1 || '/' || $2 || '/' || $3
+			WHERE qualified_path = $1 || '/' || $2
 			  AND COALESCE(properties->>'is_physical_column', 'false') = 'true'
 			LIMIT 1
-		`, schema, table, norm).Scan(&nodeName, &nodeID)
+		`, pathPrefix, norm).Scan(&nodeName, &nodeID)
 		if err == nil && nodeName.Valid && nodeName.String != "" {
 			return fmt.Sprintf("%s.%s", drivingTable, nodeName.String), nodeID.String
 		}
 	}
 
 	return "", ""
+}
+
+// BOBelongsToTenant reports whether boID is a business object owned by
+// tenantID. This is the real security check querybuilder's
+// decodeAndAuthorize needs before executing a query scoped to that BO -
+// see its call site for what it replaced: a string-equality check between
+// two ID spaces (a tenant's provisioned datasource vs. a BO's own physical
+// backend binding) that could never legitimately match, so the endpoint
+// 403'd on every request that populated Context.BindingID the way every
+// frontend caller actually does.
+func (r *PostgresBORepository) BOBelongsToTenant(boID, tenantID string) (bool, error) {
+	var exists bool
+	err := r.DB.Get(&exists, `
+		SELECT EXISTS(SELECT 1 FROM public.business_objects WHERE id = $1::uuid AND tenant_id = $2::uuid)
+	`, boID, tenantID)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify BO tenant ownership: %w", err)
+	}
+	return exists, nil
 }
 
 // GetBODefinition fetches the BO definition from the database
@@ -464,26 +531,43 @@ func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) 
 }
 
 // GetBOTerms returns the semantic terms that are RESOLVED for the given BO/binding.
+//
+// This previously queried public.bo_fields, a table that does not exist in
+// this schema at all (the real field-definition table is
+// business_object_fields, with field_bindings holding per-binding physical
+// resolution) - so this always failed, silently, because every caller
+// (PageComponentRenderer via fetchBOTerms) treats a fetch error the same as
+// "this BO has no fields" rather than surfacing it. Every Page Studio /
+// consumer-nav widget bound to a BO rendered "has no resolved fields to
+// display" regardless of how complete its actual field bindings were.
 func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTermView, error) {
-	// TODO: when business_object_binding_fields exists, join to it and filter on
-	// binding_status = 'RESOLVED' for the specific binding. Until then, we use the
-	// bo_fields.binding_status column as the source of truth.
+	// nil (not "") when unset: $2::uuid on an empty string fails to bind
+	// regardless of short-circuiting, since parameter type coercion happens
+	// at bind time, before the OR in the ON clause is ever evaluated.
+	var bindingIDParam *string
+	if bindingID != "" {
+		bindingIDParam = &bindingID
+	}
 	query := `
 		SELECT
-			COALESCE(semantic_term_id::text, id) AS term_node_id,
-			COALESCE(key, name, technical_name) AS term_key,
-			COALESCE(name, key, technical_name) AS term_name,
-			COALESCE(display_label, name, key, technical_name) AS display_name,
-			COALESCE(description, '') AS description,
-			COALESCE(field_type, 'string') AS data_type,
-			COALESCE(field_role, 'DIMENSION') AS role,
-			COALESCE(binding_status, 'RESOLVED') AS binding_status
-		FROM public.bo_fields
-		WHERE business_object_id = $1::uuid
-		  AND COALESCE(binding_status, 'RESOLVED') = 'RESOLVED'
-		ORDER BY display_order, name
+			COALESCE(f.term_node_id::text, f.id::text) AS term_node_id,
+			COALESCE(f.technical_name, f.field_name) AS term_key,
+			COALESCE(f.display_name, f.field_name) AS term_name,
+			COALESCE(f.display_name, f.field_name) AS display_name,
+			COALESCE(f.description, '') AS description,
+			COALESCE(f.data_type, 'string') AS data_type,
+			COALESCE(f.field_role, 'DIMENSION') AS role,
+			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status
+		FROM public.business_object_fields f
+		LEFT JOIN public.field_bindings fb
+			ON fb.field_id = f.id
+			AND fb.bo_id = f.bo_id
+			AND (fb.binding_id = $2::uuid OR $2::uuid IS NULL)
+		WHERE f.bo_id = $1::uuid
+		  AND COALESCE(fb.binding_status, 'RESOLVED') = 'RESOLVED'
+		ORDER BY f.display_order, f.field_name
 	`
-	rows, err := r.DB.Queryx(query, boID)
+	rows, err := r.DB.Queryx(query, boID, bindingIDParam)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load terms for BO %s: %w", boID, err)
 	}

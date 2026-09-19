@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -37,6 +38,12 @@ func (s *BOSaveService) SaveBusinessObjectAtomic(
 		return uuid.Nil, err
 	}
 	defer tx.Rollback()
+
+	// Predicate delta: none — existing SQL already binds req.TenantID; choke
+	// point only SET LOCALs GUCs for FORCE RLS (BeginTx wave quartet).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, req.TenantID.String(), ""); err != nil {
+		return uuid.Nil, fmt.Errorf("tenant GUC: %w", err)
+	}
 
 	// 1. Upsert Business Object Header
 	boID := uuid.New()

@@ -271,6 +271,18 @@ rows regardless of what any Go handler believes, which is the only fix
 that survives the next handler someone writes without reading this
 document.
 
+> **CORRECTED 2026-09-16 — this sentence is false under the connection
+> role this platform actually uses.** Every connection string this app
+> uses (`POSTGRES_DSN`/`DATABASE_URL`/`UISCE_DATABASE_URL`) authenticates
+> as `postgres`, a superuser with `rolbypassrls = true`, which makes RLS
+> inert regardless of policy correctness — confirmed directly via
+> `pg_roles`, not inferred. RLS does not fix the class today; hand-written
+> `WHERE tenant_id` in each query does, everywhere in this codebase, not
+> just here. See "New Entry (2026-09-16, continued): RLS is inert
+> platform-wide" below for the full finding, and Standing Gates item 6 for
+> what closing this actually requires. The consolidated function fix
+> above stands — only the claim that RLS backstops it is retracted.
+
 ## New Entry (2026-09-07): Tier 0 Write-Path Fix — A Replay Caught The Fix's Own Bug
 
 `bo_crud_handler.go`'s `extractTenantUUIDFromRequest` was the sweep's only
@@ -418,6 +430,253 @@ the global gate is proven — one gate, one tenant rule, zero per-handler
 dialects — the same consolidation shape that just finished for tenant
 resolution, one layer up.
 
+## New Entry (2026-09-16): GetTemplate cross-tenant read (report_templates), and RLS confirmed inert on this table
+
+Found during a routine RLS-policy check ahead of a schema migration on
+`report_templates` (not a triage sweep) — `ReportHandler.GetTemplate`
+(`GET /api/v1/reports/{id}`) was the one handler in
+`internal/api/report_handlers.go` with no tenant check at all: no call to
+`resolveAuthContext`, and its repository query
+(`SELECT ... FROM report_templates WHERE id = $1`) has no `tenant_id`
+filter either. Any authenticated user, from any tenant, could read
+another tenant's full report definition (`layout_config`,
+`parameter_schema`, `semantic_view_ids`) by guessing or enumerating a
+report id — the same IDOR shape this document's earlier entries describe,
+one more handler that "nobody happened to add the check" to (2026-09-08's
+own phrase, recurring).
+
+**RLS did not backstop this, and the reason generalizes beyond this one
+table.** `report_templates` has RLS `ENABLE`+`FORCE`'d with a policy keyed
+on `current_setting('uisce.current_tenant', true)` — but nothing in
+`internal/reports` (the package backing this table) ever sets that GUC.
+The application works today, so the DB role this package connects as must
+bypass RLS; the policy is enabled in the schema but not the actual
+enforcement boundary for any query this package runs. Hand-written
+`WHERE tenant_id = $1` per query is the real boundary — exactly the
+per-handler-dialect pattern the 2026-09-08 entry above already flagged as
+the platform's standing failure mode, now confirmed present at the RLS
+layer too, not just the handler layer. `internal/temporal/activities/report_activities.go`
+was checked separately and does **not** share this gap: it uses
+`withTenantTx` (`set_config('uisce.current_tenant', $1, true)` per
+transaction) for its own queries, and never calls the unscoped
+`Repository.GetTemplate` at all.
+
+**Sweep, not just the one fix.** Every other `ReportHandler` method that
+fetches by id (`UpdateTemplate`, `DeleteTemplate`, `SetFavorite`,
+`RemoveFavorite`, `ListSchedulesForTemplate`, `CreateScheduleForTemplate`,
+`GetExecution`, `ListExecutionEvents`) was checked directly and correctly
+threads `tenantID` from `resolveAuthContext` into its service/repository
+call. `GetTemplate` was an isolated omission in this file, not a pattern
+repeated across it. The unscoped `Repository.GetTemplate`/
+`ReportService.GetTemplate` method itself has exactly two callers
+codebase-wide (`GetTemplate`, now fixed, and `DeleteTemplate`, which
+already checked ownership after the fetch) — worth narrowing to a
+tenant-scoped query at the repository layer as a defense-in-depth
+follow-up so a third future caller can't reintroduce this by omission, but
+not done here as no such caller exists today.
+
+**Fix:** `internal/api/report_handlers.go`'s `GetTemplate` now mirrors
+`DeleteTemplate`'s existing tenant-ownership check, with gold-copy core
+reports still readable cross-tenant (the existing, intentional
+inheritance model). Commit `f11b158cd`.
+
+**Four-replay, run against the running server after a full rebuild** (not
+the sqlmock suite alone — this document's own standing rule above; extended
+to four cases here because this fix touches two `allow` paths, not one —
+"a fix that rejects everyone looks identical to a correct fix on the
+attacker-rejected cases alone" applies just as much to a fix that *only*
+protects one of two legitimate paths and silently breaks the other):
+1. No `Authorization` header → **401**.
+2. Authenticated (real JWT, this platform's JWTs carry no singular tenant
+   claim so tenant resolution runs through `AuthContextMiddleware`'s
+   `X-Tenant-ID`-header fallback — the actual request shape the app's own
+   frontend sends, replicated exactly), requesting another tenant's
+   private report, **two different foreign tenants** (queried directly
+   from `report_templates` via the DB, not guessed) → **404, 404**.
+3. Same authenticated caller, own (gold-copy) tenant's report → **200**.
+4. **A different, non-gold-copy tenant** requesting the **gold-copy core**
+   report → **200**. This is the discriminating case for the inheritance
+   path specifically: an inverted condition on the `is_core`/gold-copy
+   branch would pass replays 1-3 unchanged (all three exercise only the
+   "deny foreign, allow own" logic) and silently break tenant inheritance
+   of core reports — the fix would ship a live regression that reads as a
+   successful security patch to every check that doesn't include this
+   case.
+
+Scripted regression coverage added to match: the original deny-case test
+plus two new cases (`Get Template - 200 on Same-Tenant Read`,
+`Get Template - 200 on Gold-Copy Core Read from a Different Tenant`) so
+the suite can't pass a future deny-everything regression the way a
+deny-only test could. Commit `590e5bd2a`.
+
+**Exploitation-evidence check** (per this document's own methodology —
+verification methodology note above: the database and its logs are the
+witnesses that don't misrepresent state, not narrative). Grepped every
+retained backend log (`logs/backend_*.log`, 70 files, full available
+window Aug 31 – Sep 16 — no earlier retention exists) for direct
+`GET /api/v1/reports/{uuid}` requests, extracting only the requested path
+and the `X-Tenant-ID` header value (never the `Authorization` value, to
+avoid repeating this entry's own credential-exposure finding). 16 total
+matches; **11 are this session's own verification traffic** (the four-replay
+above, run today). The remaining **5 are pre-existing**, spanning Sep 8–14:
+- 2× `f48a510c-1fa3-5054-85ac-10e067480625` ("AUM & Fee Revenue Summary",
+  owned by the gold-copy tenant), Sep 8, no `X-Tenant-ID` header sent.
+- 1× `053d1fc1-28f1-4e4e-a7c9-c55e1a8bf3dd` ("AlicePersonal_05006595",
+  owned by a non-gold-copy tenant), Sep 11, no `X-Tenant-ID` header.
+- 1× `66817b7a-dcd1-4bd9-8d6a-a09a61b5719c` ("User B Personal Report
+  dc3520e8", owned by a different non-gold-copy tenant), Sep 11, no
+  `X-Tenant-ID` header.
+- 1× `f48a510c-...` again, Sep 14, this time **with** `X-Tenant-ID` set to
+  the gold-copy tenant — i.e., the gold-copy tenant reading its own report,
+  a legitimate access even under the fixed logic.
+
+**Weak negative, not a clean bill of health.** All 5 target reports carry
+test-fixture-style names ("AlicePersonal_*", "User B Personal Report *",
+matching the same `TwoSidedReport_*`/`DeleteTestReport_*` naming
+convention seen broadly across `report_templates` in this alpha database),
+consistent with this repo's own integration-test or manual dev-curl
+traffic rather than an external actor probing for real tenant data. Four
+of five carried no `X-Tenant-ID` at all — under the *old* vulnerable code
+this didn't matter (no tenant check existed either way), so these
+requests plausibly succeeded regardless, but the absence of any tenant
+self-identification also means the requester's actual identity/intent
+can't be reconstructed from this log alone. No request in the retained
+window shows a *different* tenant's context paired with a *foreign*
+report id in a way distinguishable from same-project test activity. Log
+retention covers only ~16 days; anything before Aug 31 is unknown and
+unrecoverable from this evidence.
+
+**Incidental credential exposure during verification, noted for the
+record:** diagnosing why an early replay attempt returned a false 401
+required reading the running server's request-trace log, which
+prints full request headers including `Authorization: Bearer <token>` in
+plaintext for every request. That put a live, valid bearer token into the
+verifying agent's context for one turn. Local dev instance, short-lived
+Keycloak token, not repeated or persisted anywhere past that point;
+checked and `/logs/` is gitignored, so this doesn't reach git history.
+The log's own behavior (full bearer tokens in plaintext, on every
+request) is still worth a follow-up look independent of this entry's main
+finding — a checked-out or shared dev machine's `logs/` directory is a
+real exposure surface this pattern creates.
+
+**Standing-gate implication:** the 2.1 migration this finding was found
+ahead of (`report_templates` typed-column work, Report Builder spine plan)
+was about to add a new tenant-sensitive column
+(`primary_business_object_id`) to this exact table. That work is gated on
+an explicit decision — real tenant-transaction/RLS enforcement for
+`internal/reports`, or a documented app-level-only boundary with this
+sweep as its compensating control — written into the migration ticket
+rather than decided by omission, per the same discipline this document's
+2026-09-08 entry already established for the handler layer generally.
+
+### Queue Addition Earned By This Entry
+
+Same shape as the two queue items the 2026-09-07 incident added
+(per-request access logging, `pg_stat_statements`) — a control-surface gap
+this entry's own verification work exposed, not speculative hardening:
+
+3. **Redact `Authorization` (and any other bearer/secret headers) in the
+   request-trace middleware.** The middleware that logs `[REQ] GET ...
+   Headers:...` currently writes the full `Authorization: Bearer <token>`
+   value, in plaintext, for every request, to a file under `logs/` on
+   every developer's machine. This entry's own exploitation-evidence check
+   (above) depended on reading that log — and had to work around printing
+   a live token into an agent's context while doing it. A one-line change
+   (replace the `Authorization` header's value with a fixed redaction
+   marker before the log line is built) closes this without losing the
+   method/path/status/tenant fields the log — and this entry's own
+   forensics — actually needed. **Sequence this with queue item #1
+   (per-request access logging) when that item is picked up, not after
+   it**: shipping more per-request logging before this redaction lands
+   multiplies the exposure the access-logging item is trying to close
+   instead of fixing it — the same file, one PR, token redaction first in
+   that PR's own commit order.
+
+## New Entry (2026-09-16, continued): RLS is inert platform-wide — the standing BYPASSRLS gate this document named but never recorded
+
+While scoping the fix for the entry above ("adopt real tenant-scoped
+transactions... so `report_templates`' already-enabled RLS policy becomes
+the actual enforcement boundary"), verified the premise before
+implementing it, per this document's own methodology — and the premise is
+false.
+
+**Every database connection this application makes, across every
+environment variable in use (`POSTGRES_DSN`, `DATABASE_URL`,
+`UISCE_DATABASE_URL` — all three identical), authenticates as `postgres`.**
+Confirmed directly, not inferred:
+
+```
+SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = 'postgres';
+ rolname  | rolsuper | rolbypassrls
+----------+----------+--------------
+ postgres | t        | t
+```
+
+A superuser role unconditionally bypasses Row-Level Security in
+PostgreSQL — this is not a configuration flag `withTenantTx` or any
+GUC-setting code can override; it's how superuser semantics work.
+**This means RLS is not a real enforcement boundary anywhere in this
+application today** — not `report_templates` alone, but every table the
+2026-09-16 (`fix/strict-tenant-rls-migration-port`, merged `076aa197f`)
+strict-tenant migration touched: `tenant_instance`, `tenant_product`,
+`tenant_product_datasource`, `connections`, `audit_logs`. And every table
+this earlier entry above already fixed via the consolidated tenant
+function.
+
+**This corrects a specific claim in the 2026-09-07 entry above, not just
+adds context to it.** That entry closes with: *"The consolidated function
+fixes today's instances. RLS fixes the class — the database refusing
+cross-tenant rows regardless of what any Go handler believes, which is the
+only fix that survives the next handler someone writes without reading
+this document."* Under the connection role confirmed today, that sentence
+describes a capability the platform does not have. The consolidated
+function's fix stands; the claim that RLS backstops it does not. A future
+reader trusting the original sentence would believe the class is closed
+when it isn't — this correction exists so they don't.
+
+**The strict-tenant-RLS migration retains real value, precisely scoped:**
+its policies are now correctly fail-closed *in their SQL logic* — the day
+a non-superuser, non-`BYPASSRLS` role connects instead, those policies
+start enforcing immediately, with no further code change. Today, with the
+current connection role, their runtime effect is zero. Both of those
+sentences are true at once and this entry states both, deliberately,
+because a partial statement of either is how the 09-07 aspiration
+happened in the first place.
+
+**`withTenantTx` in `report_activities.go` (2026-09-14, Report Builder
+telemetry work) is, right now, ceremony.** The GUC it sets
+(`uisce.current_tenant`) is real and its SQL is correct, but with the
+connecting role bypassing RLS unconditionally, setting that GUC currently
+changes no query's actual result set. Not a bug in that code — it's
+correctly written for the day the role changes — but it should not be
+read today as evidence that report execution telemetry is tenant-isolated
+at the database layer. It isn't; nothing is.
+
+**The actual tenant boundary, app-wide, right now, is exclusively
+hand-written `WHERE tenant_id = $1` (or equivalent) in application code.**
+This was already true before this entry — the 09-16 `GetTemplate` finding
+above is a direct instance of that boundary failing once. This entry
+doesn't change what was protecting the platform; it removes the
+mistaken belief that something else was standing behind it.
+
+**Decision, made with this finding in hand (Report Builder spine plan,
+`HANDOFF_REPORT_BUILDER_SPINE_PLAN.md`):** `report_templates`'
+tenant-enforcement model, gated in the entry above, is resolved as
+**app-level boundary, explicitly documented** — not "adopt `withTenantTx`
+and make RLS real," which the finding here shows isn't achievable without
+first landing the non-superuser role (its own, larger, platform-wide
+initiative — see the new Standing Gates item below). The compensating
+control — narrowing `Repository.GetTemplate` to a tenant-scoped SQL query
+so a future caller can't reintroduce the 09-16 bug by omission — is
+promoted from optional follow-up to required scope in that plan's ticket
+2.2, since app-level checks are now confirmed as the *only* boundary this
+table has, not one layer of several. `withTenantTx`/GUC-setting is adopted
+for *new* code written against `internal/reports` going forward (the
+Report Builder execute endpoint, Phase 3) so it inherits real enforcement
+automatically the day the role changes — but existing repository methods
+are not retrofitted with it now, to avoid the exact false-confidence
+pattern this entry exists to correct.
+
 ## Standing Gates
 
 These require human decisions before any further feature work:
@@ -426,3 +685,5 @@ These require human decisions before any further feature work:
 2. **Infisical token + exposed password** — flagged in first exchange; rotation unconfirmed. Treat as compromised until confirmed rotated.
 3. **CA key custody** — `ca.key` exists only in a scratch directory on one Mac. DR gap for issuing new per-role certs. Recommend password manager or ops vault.
 4. **Replication `trust` rule** — `pg_hba.conf` has `host replication all 172.16.0.0/12 trust` — any host in that range can connect as any replication role without auth. Tailscale-scoped acceptable risk vs. real hole requires owner judgment.
+5. **`internal/reports` tenant-enforcement model — resolved 2026-09-16.** App-level boundary, explicitly documented (`WHERE tenant_id` per query, no RLS backstop — see item 6): real RLS enforcement isn't achievable for this package alone, since it depends on item 6 landing platform-wide first. Compensating control (narrowing `Repository.GetTemplate` to a tenant-scoped query) promoted to required scope in `HANDOFF_REPORT_BUILDER_SPINE_PLAN.md` ticket 2.2. No longer blocks Phase 2.
+6. **Non-superuser, non-`BYPASSRLS` application database role** (2026-09-16, "RLS is inert platform-wide" entry above) — every connection string this app uses (`POSTGRES_DSN`/`DATABASE_URL`/`UISCE_DATABASE_URL`) authenticates as `postgres`, a superuser with `rolbypassrls = true`, which makes every RLS policy in the database — including the just-merged strict-tenant fail-closed policies — inert at runtime regardless of how correctly they're written. This is the only path to making the 2026-09-07 entry's "RLS fixes the class" claim actually true; until it lands, that claim is corrected to "hand-written `WHERE tenant_id` is the class fix" everywhere in this codebase, not just `report_templates`. **Rollout hazard, not just a credential swap:** any query anywhere that currently relies — knowingly or not — on the superuser bypass will start returning empty results or erroring the moment a restricted role is introduced. This needs queue item #1 (per-request access logging) landed first, so the failure surface is observable rather than silent, and a staged rollout (a canary role/table, not a flag-day cutover). Owner judgment required before scheduling — genuinely platform-wide, not scoped to any single feature's migration.

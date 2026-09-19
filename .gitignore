@@ -117,6 +117,7 @@ Thumbs.db
 *.rej
 *.before_fix.bak
 .env.before_fix.bak
+.env.infisical
 schema_backup_*.sql
 vite.config.ts.timestamp-*.mjs
 
@@ -159,3 +160,8 @@ backend/rule-engine/cmd/*/*
 !backend/rule-engine/cmd/*/*/
 !backend/rule-engine/cmd/*/Dockerfile
 keycloak-ssl/
+logs/heap-recovery-*/
+
+# Desktop binary & packaging outputs
+desktop/uisce-desk
+desktop/bin/

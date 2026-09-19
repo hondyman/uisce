@@ -15,6 +15,7 @@ import {
 import CodeIcon from '@mui/icons-material/Code';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { apiFetch, ApiError } from '../../lib/apiClient';
 
 interface BOValidationRuleBindingPreviewProps {
   businessObjectId?: string;
@@ -49,10 +50,9 @@ export const BOValidationRuleBindingPreview: React.FC<BOValidationRuleBindingPre
     setError(null);
 
     try {
-      const resp = await fetch('/api/v1/validation-rules/execute-binding', {
+      const resp = await apiFetch('/api/v1/validation-rules/execute-binding', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           ...(tenantId ? { 'X-Tenant-ID': tenantId } : {}),
         },
         body: JSON.stringify({
@@ -63,15 +63,14 @@ export const BOValidationRuleBindingPreview: React.FC<BOValidationRuleBindingPre
         }),
       });
 
-      if (!resp.ok) {
-        const errData = await resp.json().catch(() => ({ message: resp.statusText }));
-        throw new Error(errData.message || 'Failed to compile binding SQL');
-      }
-
       const data = await resp.json();
       setCompiledResult(data);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Compilation failed');
+      if (err instanceof ApiError) {
+        setError(err.message || 'Failed to compile binding SQL');
+      } else {
+        setError(err instanceof Error ? err.message : 'Compilation failed');
+      }
     } finally {
       setLoading(false);
     }

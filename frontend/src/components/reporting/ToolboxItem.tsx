@@ -7,9 +7,10 @@ interface ToolboxItemProps {
   type: string;
   icon: ReactNode;
   label: string;
+  onAdd?: (type: string) => void;
 }
 
-const ToolboxItem: FC<ToolboxItemProps> = ({ type, icon, label }) => {
+const ToolboxItem: FC<ToolboxItemProps> = ({ type, icon, label, onAdd }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `toolbox-${type}`,
     data: { type },
@@ -23,6 +24,11 @@ const ToolboxItem: FC<ToolboxItemProps> = ({ type, icon, label }) => {
     <div
       ref={setNodeRef}
       style={{ ...style, cursor: isDragging ? 'grabbing' : 'grab' }}
+      onClick={() => {
+        if (!isDragging && onAdd) {
+          onAdd(type);
+        }
+      }}
       {...listeners}
       {...attributes}
     >

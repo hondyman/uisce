@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { DndContext, useDraggable } from '@dnd-kit/core';
 import {
   Box,
   Typography,
@@ -54,6 +55,72 @@ interface VisualObjectsPaletteProps {
   activeMode?: ViewMode;
 }
 
+interface DraggableVisualCardProps {
+  item: VisualObjectItem;
+  isActive: boolean;
+  onSelectVisual: (mode: ViewMode) => void;
+  theme: ReturnType<typeof useExplorerTheme>;
+}
+
+const DraggableVisualCard: React.FC<DraggableVisualCardProps> = ({ item, isActive, onSelectVisual, theme }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `visual_${item.mode}`,
+    data: { type: 'visual_object', mode: item.mode, name: item.name },
+  });
+
+  return (
+    <Paper
+      ref={setNodeRef}
+      elevation={0}
+      onClick={() => onSelectVisual(item.mode)}
+      sx={{
+        p: 1.25,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: isActive ? theme.accent : theme.border,
+        bgcolor: isActive ? (theme.background) : theme.backgroundElevated,
+        cursor: 'grab',
+        opacity: isDragging ? 0.4 : 1,
+        transition: 'all 0.15s ease-in-out',
+        '&:hover': {
+          borderColor: theme.accent,
+          bgcolor: theme.background,
+          transform: 'translateY(-1px)',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+        },
+        '&:active': { cursor: 'grabbing' },
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+        <Stack direction="row" spacing={1} alignItems="center">
+          <DragIcon sx={{ fontSize: 14, color: theme.textMuted, cursor: 'grab' }} />
+          {item.icon}
+          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem', color: theme.text }}>
+            {item.name}
+          </Typography>
+        </Stack>
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{
+          color: theme.textMuted,
+          fontSize: '0.72rem',
+          lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitLineClamp: 2,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+          pl: 2.75,
+        }}
+      >
+        {item.description}
+      </Typography>
+    </Paper>
+  );
+};
+
 export const VisualObjectsPalette: React.FC<VisualObjectsPaletteProps> = ({
   onSelectVisual,
   activeMode,
@@ -71,6 +138,7 @@ export const VisualObjectsPalette: React.FC<VisualObjectsPaletteProps> = ({
   const categories = Array.from(new Set(filteredVisuals.map((v) => v.category)));
 
   return (
+    <DndContext>
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: theme.backgroundElevated }}>
       {/* Search Header */}
       <Box sx={{ p: 1.5, borderBottom: `1px solid ${theme.border}` }}>
@@ -123,63 +191,13 @@ export const VisualObjectsPalette: React.FC<VisualObjectsPaletteProps> = ({
                 {items.map((item) => {
                   const isActive = activeMode === item.mode;
                   return (
-                    <Paper
+                    <DraggableVisualCard
                       key={item.mode}
-                      elevation={0}
-                      draggable
-                      onDragStart={(e) => {
-                        const payload = {
-                          type: 'visual_object',
-                          mode: item.mode,
-                          name: item.name,
-                        };
-                        e.dataTransfer.setData('application/json', JSON.stringify(payload));
-                        e.dataTransfer.setData('text/plain', `visual:${item.mode}`);
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      onClick={() => onSelectVisual(item.mode)}
-                      sx={{
-                        p: 1.25,
-                        borderRadius: 2,
-                        border: '1px solid',
-                        borderColor: isActive ? theme.accent : theme.border,
-                        bgcolor: isActive ? (theme.background) : theme.backgroundElevated,
-                        cursor: 'grab',
-                        transition: 'all 0.15s ease-in-out',
-                        '&:hover': {
-                          borderColor: theme.accent,
-                          bgcolor: theme.background,
-                          transform: 'translateY(-1px)',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                        },
-                        '&:active': { cursor: 'grabbing' },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                          <DragIcon sx={{ fontSize: 14, color: theme.textMuted, cursor: 'grab' }} />
-                          {item.icon}
-                          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.82rem', color: theme.text }}>
-                            {item.name}
-                          </Typography>
-                        </Stack>
-                      </Box>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          color: theme.textMuted,
-                          fontSize: '0.72rem',
-                          lineHeight: 1.3,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          pl: 2.75,
-                        }}
-                      >
-                        {item.description}
-                      </Typography>
-                    </Paper>
+                      item={item}
+                      isActive={isActive}
+                      onSelectVisual={onSelectVisual}
+                      theme={theme}
+                    />
                   );
                 })}
               </Stack>
@@ -188,6 +206,7 @@ export const VisualObjectsPalette: React.FC<VisualObjectsPaletteProps> = ({
         })}
       </Box>
     </Box>
+    </DndContext>
   );
 };
 

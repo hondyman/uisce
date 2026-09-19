@@ -1,0 +1,17 @@
+ALTER TABLE orm."order" DROP CONSTRAINT IF EXISTS chk_order_leaves;
+ALTER TABLE orm.placement DROP CONSTRAINT IF EXISTS chk_placement_leaves;
+DROP INDEX IF EXISTS orm.uq_orm_placement_tenant_clordid;
+DROP INDEX IF EXISTS orm.idx_orm_account_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_broker_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_order_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_order_allocation_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_placement_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_execution_tenant;
+DROP INDEX IF EXISTS orm.idx_orm_execution_allocation_tenant;
+ALTER TABLE orm.account DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm.broker DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm."order" DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm.order_allocation DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm.placement DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm.execution DROP COLUMN IF EXISTS tenant_id;
+ALTER TABLE orm.execution_allocation DROP COLUMN IF EXISTS tenant_id;

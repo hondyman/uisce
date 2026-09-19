@@ -26,6 +26,7 @@ import {
   Functions as FunctionsIcon,
 } from '@mui/icons-material';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 
 // ============================================================================
 // Types
@@ -150,15 +151,11 @@ export const TermMetadataEditorDrawer: React.FC<TermMetadataEditorDrawerProps> =
     setError(null);
 
     try {
-      const response = await fetch(`/api/bo/${boId}/term/${term.term_id}/metadata`, {
+      const response = await apiFetch(`/api/bo/${boId}/term/${term.term_id}/metadata`, {
         headers: {
           'X-Tenant-ID': tenantId,
         },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to load metadata');
-      }
 
       const data = await response.json();
 
@@ -189,19 +186,13 @@ export const TermMetadataEditorDrawer: React.FC<TermMetadataEditorDrawerProps> =
     setError(null);
 
     try {
-      const response = await fetch(`/api/bo/${boId}/term/${term.term_id}/metadata`, {
+      await apiFetch(`/api/bo/${boId}/term/${term.term_id}/metadata`, {
         method: 'PATCH',
         headers: {
-          'Content-Type': 'application/json',
           'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify(formData),
       });
-
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(errText || 'Failed to save metadata');
-      }
 
       onSave?.();
       onClose();

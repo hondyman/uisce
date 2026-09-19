@@ -1,6 +1,7 @@
 /* eslint-disable react/forbid-dom-props */
 /* eslint-disable react/forbid-component-props */
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
+import { DndContext, useDraggable, useDroppable, DragEndEvent } from '@dnd-kit/core';
 import { useNotification } from '../hooks/useNotification';
 import { 
   Grid, Plus as _Plus, Trash2, Copy, Settings, Save, Download, Eye as _Eye, Code, 
@@ -56,6 +57,41 @@ interface LayoutComponent {
     sort?: { field: string; direction: 'asc' | 'desc' }[];
   };
 }
+
+interface DraggableLibraryItemProps {
+  compType: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  defaultSize: { width: number; height: number };
+  onDragStart: (componentType: string) => void;
+}
+
+const DraggableLibraryItem: React.FC<DraggableLibraryItemProps> = ({ compType, icon: Icon, label, defaultSize, onDragStart }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `component-lib-${compType}`,
+    data: { componentType: compType },
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      onPointerDown={() => onDragStart(compType)}
+      className={`bg-slate-700 hover:bg-slate-600 rounded-lg p-3 cursor-move transition border-2 border-transparent hover:border-purple-500 ${isDragging ? 'opacity-40' : ''}`}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="flex items-center gap-3">
+        <Icon className="w-6 h-6 text-purple-400" />
+        <div>
+          <div className="font-medium text-sm">{label}</div>
+          <div className="text-xs text-slate-400">
+            {defaultSize.width}×{defaultSize.height}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const SemanticLayoutBuilder: React.FC = () => {
   const [components, setComponents] = useState<LayoutComponent[]>([]);
@@ -120,20 +156,28 @@ const SemanticLayoutBuilder: React.FC = () => {
     setDraggedComponentType(componentType);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-  };
+  const LAYOUT_GRID_DROPZONE_ID = 'semantic-layout-grid-dropzone';
+  const { setNodeRef: setGridDroppableRef, isOver: isGridOver } = useDroppable({ id: LAYOUT_GRID_DROPZONE_ID });
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
+  const setGridRefs = useCallback((node: HTMLDivElement | null) => {
+    (gridRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
+    setGridDroppableRef(node);
+  }, [setGridDroppableRef]);
+
+  const handleDragEnd = (event: DragEndEvent) => {
     setIsDragging(false);
+    const { active, over } = event;
+    if (over?.id !== LAYOUT_GRID_DROPZONE_ID) return;
 
-    if (!draggedComponentType || !gridRef.current) return;
+    const componentType = active.data.current?.componentType as string | undefined;
+    if (!componentType || !gridRef.current) return;
 
     const rect = gridRef.current.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const activeRect = active.rect.current.translated ?? active.rect.current.initial;
+    const centerX = activeRect ? activeRect.left + activeRect.width / 2 : rect.left;
+    const centerY = activeRect ? activeRect.top + activeRect.height / 2 : rect.top;
+    const x = centerX - rect.left;
+    const y = centerY - rect.top;
 
     const cellWidth = rect.width / gridSize.cols;
     const cellHeight = rect.height / gridSize.rows;
@@ -141,7 +185,7 @@ const SemanticLayoutBuilder: React.FC = () => {
     const col = Math.floor(x / cellWidth) + 1;
     const row = Math.floor(y / cellHeight) + 1;
 
-    const comp = componentLibrary.find(c => c.type === draggedComponentType);
+    const comp = componentLibrary.find(c => c.type === componentType);
     if (!comp) return;
 
     const newComponent: LayoutComponent = {
@@ -239,6 +283,7 @@ const SemanticLayoutBuilder: React.FC = () => {
   const selectedView = semanticViews.find(v => v.id === selectedComponent?.config.semanticView);
 
   return (
+    <DndContext onDragEnd={handleDragEnd}>
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
       <div className="bg-slate-800 border-b border-slate-700 px-6 py-4">
@@ -283,27 +328,16 @@ const SemanticLayoutBuilder: React.FC = () => {
           </h2>
           
           <div className="space-y-2">
-            {componentLibrary.map((comp, idx) => {
-              const Icon = comp.icon;
-              return (
-                <div
-                  key={idx}
-                  draggable
-                  onDragStart={() => handleDragStart(comp.type)}
-                  className="bg-slate-700 hover:bg-slate-600 rounded-lg p-3 cursor-move transition border-2 border-transparent hover:border-purple-500"
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className="w-6 h-6 text-purple-400" />
-                    <div>
-                      <div className="font-medium text-sm">{comp.label}</div>
-                      <div className="text-xs text-slate-400">
-                        {comp.defaultSize.width}×{comp.defaultSize.height}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+            {componentLibrary.map((comp, idx) => (
+              <DraggableLibraryItem
+                key={idx}
+                compType={comp.type}
+                icon={comp.icon}
+                label={comp.label}
+                defaultSize={comp.defaultSize}
+                onDragStart={handleDragStart}
+              />
+            ))}
           </div>
 
           <div className="mt-6 p-3 bg-purple-900/30 border border-purple-500/30 rounded-lg">
@@ -359,10 +393,8 @@ const SemanticLayoutBuilder: React.FC = () => {
           <div className="flex-1 p-6 overflow-auto bg-slate-900">
             {/* eslint-disable-next-line react/forbid-dom-props, react/forbid-component-props */}
             <div
-              ref={gridRef}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className="relative bg-slate-800/50 rounded-xl border-2 border-dashed border-slate-600 min-h-[800px]"
+              ref={setGridRefs}
+              className={`relative bg-slate-800/50 rounded-xl border-2 border-dashed min-h-[800px] ${isGridOver ? 'border-purple-500' : 'border-slate-600'}`}
               // Dynamic grid dimensions - must use inline style
               style={{
                 display: 'grid',
@@ -703,6 +735,7 @@ const SemanticLayoutBuilder: React.FC = () => {
         </div>
       )}
     </div>
+    </DndContext>
   );
 };
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/iceberg"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
@@ -91,6 +92,12 @@ func (h *OnboardingHandler) OnboardTenant(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer tx.Rollback()
+
+	// Predicate delta: none — subsequent writes already bind tenantID; GUC for FORCE RLS.
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx, tenantID, ""); err != nil {
+		http.Error(w, "failed to set tenant context: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	_, err = tx.ExecContext(r.Context(), `
 		INSERT INTO tenants (id, code, name, is_active)

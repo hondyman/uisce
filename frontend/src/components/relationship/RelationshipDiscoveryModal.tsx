@@ -23,6 +23,7 @@ import {
 import { ArrowForward, Link as LinkIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import './RelationshipDiscoveryModal.module.css';
 import RelationshipPathVisualizer from './RelationshipPathVisualizer';
+import { apiFetch } from '../../lib/apiClient';
 
 interface EnhancedRelatedEntity {
   entity_id: string;
@@ -94,7 +95,7 @@ const RelationshipDiscoveryModal: FC<RelationshipDiscoveryModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/relationships/discover', {
+      const response = await apiFetch('/api/relationships/discover', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -107,10 +108,6 @@ const RelationshipDiscoveryModal: FC<RelationshipDiscoveryModalProps> = ({
           max_hop_depth: maxHopDepth,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to discover relationships: ${response.statusText}`);
-      }
 
       const data = await response.json();
       setDirectRelationships(data.direct_relationships || []);
@@ -140,7 +137,7 @@ const RelationshipDiscoveryModal: FC<RelationshipDiscoveryModalProps> = ({
     setError(null);
 
     try {
-      const response = await fetch('/api/relationships/apply', {
+      await apiFetch('/api/relationships/apply', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -156,11 +153,6 @@ const RelationshipDiscoveryModal: FC<RelationshipDiscoveryModalProps> = ({
           foreignKeyPath: relationship.foreign_key_path,
         }),
       });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `Failed to apply relationship: ${response.status}`);
-      }
 
       await onApplyRelationship(relationship);
       setSelectedRelationship(null);

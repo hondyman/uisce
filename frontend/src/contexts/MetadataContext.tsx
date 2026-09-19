@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useRef, useState, useEffect, useCallback, ReactNode } from 'react';
 import { devWarn } from '../utils/devLogger';
+import { apiFetch, ApiError } from '../lib/apiClient';
 
 /**
  * MetadataProvider - Client-side deduplication for metadata fetches
@@ -171,26 +172,22 @@ export const MetadataProvider: React.FC<MetadataProviderProps> = ({
     const fetchPromise = (async () => {
       try {
         const headers = getTenantHeaders();
-        const response = await fetch(`${baseUrl}/api/layouts/${layoutKey}`, { headers });
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            devWarn(`[MetadataProvider] Layout not found: ${layoutKey}`);
-            return null;
-          }
-          throw new Error(`Failed to fetch layout: ${response.status}`);
-        }
-        
+        const response = await apiFetch(`${baseUrl}/api/layouts/${layoutKey}`, { headers });
+
         const data = await response.json();
-        
+
         // Store in cache
         cache.current.layouts[layoutKey] = data;
-        
+
         // Trigger re-render for sync consumers
         incrementVersion();
-        
+
         return data;
       } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          devWarn(`[MetadataProvider] Layout not found: ${layoutKey}`);
+          return null;
+        }
         console.error(`[MetadataProvider] Error fetching layout ${layoutKey}:`, error);
         return null;
       } finally {
@@ -228,21 +225,17 @@ export const MetadataProvider: React.FC<MetadataProviderProps> = ({
     const fetchPromise = (async () => {
       try {
         const headers = getTenantHeaders();
-        const response = await fetch(`${baseUrl}/api/schemas/${schemaKey}`, { headers });
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            devWarn(`[MetadataProvider] Schema not found: ${schemaKey}`);
-            return null;
-          }
-          throw new Error(`Failed to fetch schema: ${response.status}`);
-        }
-        
+        const response = await apiFetch(`${baseUrl}/api/schemas/${schemaKey}`, { headers });
+
         const data = await response.json();
         cache.current.schemas[schemaKey] = data;
         incrementVersion();
         return data;
       } catch (error) {
+        if (error instanceof ApiError && error.status === 404) {
+          devWarn(`[MetadataProvider] Schema not found: ${schemaKey}`);
+          return null;
+        }
         console.error(`[MetadataProvider] Error fetching schema ${schemaKey}:`, error);
         return null;
       } finally {

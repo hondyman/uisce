@@ -60,6 +60,7 @@ import {
   Stack,
   FormHelperText
 } from '@mui/material';
+import { apiFetch } from '../../../lib/apiClient';
 
 // Mock Data
 // Mock Data removed in favor of API fetch
@@ -92,18 +93,16 @@ export const FieldPermissionEditor: React.FC<FieldPermissionEditorProps> = ({ te
     // Fetch business terms from API
     const fetchTerms = async () => {
       try {
-        const response = await fetch(`/api/semantic-terms?tenant_instance_id=${datasource?.id || ''}`);
-        if (response.ok) {
-          const data = await response.json();
-          const mappedFields = (data.data || []).map((term: any) => ({
-            id: term.id,
-            name: term.node_name,
-            key: term.qualified_path || term.node_name.toLowerCase().replace(/\s+/g, '_'),
-            category: term.properties?.category || 'General', // Fallback category
-            ...term
-          }));
-          setFields(mappedFields);
-        }
+        const response = await apiFetch(`/api/semantic-terms?tenant_instance_id=${datasource?.id || ''}`);
+        const data = await response.json();
+        const mappedFields = (data.data || []).map((term: any) => ({
+          id: term.id,
+          name: term.node_name,
+          key: term.qualified_path || term.node_name.toLowerCase().replace(/\s+/g, '_'),
+          category: term.properties?.category || 'General', // Fallback category
+          ...term
+        }));
+        setFields(mappedFields);
       } catch (error) {
         console.error('Failed to fetch semantic terms:', error);
       }

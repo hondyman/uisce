@@ -36,6 +36,7 @@ import {
   Link as LinkIcon,
 } from '@mui/icons-material';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 
 // ============================================================================
 // Types
@@ -114,13 +115,9 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
     setError(null);
 
     try {
-      const response = await fetch(`/api/semantic-term/${termId}/mappings`, {
+      const response = await apiFetch(`/api/semantic-term/${termId}/mappings`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to load mappings');
-      }
 
       const result = await response.json();
       setData(result);
@@ -134,13 +131,11 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
   // Load available tables
   const loadTables = async () => {
     try {
-      const response = await fetch(`/api/catalog/nodes?type=table&datasource_id=${datasourceId}`, {
+      const response = await apiFetch(`/api/catalog/nodes?type=table&datasource_id=${datasourceId}`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (response.ok) {
-        const tables = await response.json();
-        setAvailableTables(tables || []);
-      }
+      const tables = await response.json();
+      setAvailableTables(tables || []);
     } catch (err) {
       console.error('Failed to load tables:', err);
     }
@@ -154,13 +149,11 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
     }
 
     try {
-      const response = await fetch(`/api/catalog/nodes/${tableId}/columns`, {
+      const response = await apiFetch(`/api/catalog/nodes/${tableId}/columns`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (response.ok) {
-        const columns = await response.json();
-        setAvailableColumns(columns || []);
-      }
+      const columns = await response.json();
+      setAvailableColumns(columns || []);
     } catch (err) {
       console.error('Failed to load columns:', err);
     }
@@ -190,18 +183,13 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
         ? `/api/semantic-term/${termId}/mappings/${editMapping.mapping_id}`
         : `/api/semantic-term/${termId}/mappings`;
 
-      const response = await fetch(url, {
+      await apiFetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
           'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify(newMapping),
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to save mapping');
-      }
 
       setAddDialogOpen(false);
       setEditMapping(null);
@@ -223,14 +211,10 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
     if (!confirm('Delete this mapping?')) return;
 
     try {
-      const response = await fetch(`/api/semantic-term/${termId}/mappings/${mappingId}`, {
+      await apiFetch(`/api/semantic-term/${termId}/mappings/${mappingId}`, {
         method: 'DELETE',
         headers: { 'X-Tenant-ID': tenantId },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete mapping');
-      }
 
       loadMappings();
     } catch (err: any) {
@@ -240,14 +224,10 @@ export const SemanticTermPhysicalMappingEditor: React.FC<SemanticTermPhysicalMap
 
   const handleSetDefault = async (mappingId: string) => {
     try {
-      const response = await fetch(`/api/semantic-term/${termId}/mappings/${mappingId}/default`, {
+      await apiFetch(`/api/semantic-term/${termId}/mappings/${mappingId}/default`, {
         method: 'PUT',
         headers: { 'X-Tenant-ID': tenantId },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to set default');
-      }
 
       loadMappings();
     } catch (err: any) {
