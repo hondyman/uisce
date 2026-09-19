@@ -133,12 +133,14 @@ CREATE INDEX IF NOT EXISTS idx_catalog_edge_properties ON public.catalog_edge US
 CREATE INDEX IF NOT EXISTS idx_catalog_edge_types_config ON public.catalog_edge_types USING GIN(config);
 
 -- Insert default tenant
-INSERT INTO public.tenants (id, name) VALUES ('default', 'Default Tenant')
+-- id is uuid PRIMARY KEY so we use a fixed UUID instead of the literal 'default'
+INSERT INTO public.tenants (id, name) VALUES ('00000000-0000-0000-0000-000000000001', 'Default Tenant')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert default datasource
+-- tenant_id and datasource_id are both uuid NOT NULL
 INSERT INTO public.tenant_datasources (tenant_id, datasource_id, connection_string)
-VALUES ('default', 'default', 'postgres://semlayer_user:semlayer_password@localhost:5432/semlayer_db')
+VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'postgres://semlayer_user:semlayer_password@localhost:5432/semlayer_db')
 ON CONFLICT (tenant_id, datasource_id) DO NOTHING;
 
 -- Insert basic node types
