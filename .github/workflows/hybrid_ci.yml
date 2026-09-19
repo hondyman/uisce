@@ -15,7 +15,7 @@ jobs:
       
       - name: Setup CUE
         run: |
-          curl -sSfL https://github.com/cuelang/cue/releases/download/v0.5.0/cue_0.5.0_linux_amd64.tar.gz | tar -xz
+          curl -sSfL https://github.com/cuelang/cue/releases/download/v0.4.0/cue_v0.4.0_linux_amd64.tar.gz | tar -xz
           sudo mv cue /usr/local/bin/
           
       - name: Validate CUE pack
