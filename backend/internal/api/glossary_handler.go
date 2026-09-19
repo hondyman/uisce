@@ -2143,18 +2143,58 @@ func pascalCase(tokens []string) string {
 
 // pascalCaseToWords splits a PascalCase string into individual word tokens
 // suitable for title-casing (e.g. "EmployeeCity" → ["Employee", "City"]).
+// An uppercase letter followed by a lowercase letter (e.g. 'C' in SupplierCity,
+// 'P' in XMLParser) starts a new word beginning with that uppercase.
+// Consecutive uppercase letters where each is followed by another uppercase
+// accumulate into the same word (e.g. "XML" in "XMLParser", "ID", "ROE").
 func pascalCaseToWords(s string) []string {
 	var words []string
-	var current strings.Builder
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' && i > 0 {
+	var current, acronym strings.Builder
+	flushCurrent := func() {
+		if current.Len() > 0 {
 			words = append(words, current.String())
 			current.Reset()
 		}
-		current.WriteRune(r)
+	}
+	flushAcronym := func() {
+		if acronym.Len() > 0 {
+			words = append(words, acronym.String())
+			acronym.Reset()
+		}
+	}
+
+	prevUpperFollowedByLower := false
+
+	for i := 0; i < len(s); i++ {
+		r := rune(s[i])
+		if r >= 'A' && r <= 'Z' {
+			nextLower := i+1 < len(s) && s[i+1] >= 'a' && s[i+1] <= 'z'
+			nextUpper := i+1 < len(s) && s[i+1] >= 'A' && s[i+1] <= 'Z'
+			prevUpper := i > 0 && s[i-1] >= 'A' && s[i-1] <= 'Z'
+
+			if nextLower {
+				flushAcronym()
+				flushCurrent()
+				current.WriteRune(r)
+			} else if prevUpper && !prevUpperFollowedByLower && nextUpper {
+				current.WriteRune(r)
+			} else {
+				flushAcronym()
+				current.WriteRune(r)
+			}
+
+			prevUpperFollowedByLower = nextLower
+		} else {
+			flushAcronym()
+			current.WriteRune(r)
+			prevUpperFollowedByLower = false
+		}
 	}
 	if current.Len() > 0 {
 		words = append(words, current.String())
+	}
+	if acronym.Len() > 0 {
+		words = append(words, acronym.String())
 	}
 	if len(words) == 0 {
 		words = []string{s}
