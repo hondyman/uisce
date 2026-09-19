@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
 )
@@ -463,7 +462,6 @@ func (s *AbbreviationService) ScanForAbbreviations(ctx context.Context) ([]strin
 // tableSchemaContext provides table and schema name for disambiguation; siblingColumnNames
 // provides context from other columns in the same table (capped at 40).
 func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string, tableSchemaContext string, siblingColumnNames []string) (map[string]string, error) {
-	logging.GetLogger().Sugar().Infof("[SuggestExpansionsInContext] called with %d candidates: %v", len(candidates), candidates)
 	if s.llmProvider == nil {
 		return nil, fmt.Errorf("LLM provider not configured")
 	}
@@ -506,10 +504,8 @@ Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
 
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
-		logging.GetLogger().Sugar().Errorf("[SuggestExpansionsInContext] LLM call failed for %d tokens: %v", len(candidates), err)
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}
-	logging.GetLogger().Sugar().Infof("[SuggestExpansionsInContext] AI expansion suggestion generated for %d tokens: %v", len(candidates), candidates)
 
 	cleanResponse := strings.TrimSpace(response)
 	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
@@ -522,73 +518,6 @@ Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 	return suggestions, nil
-}
-
-// QualifyGenericWord uses the LLM to produce a contextually-qualified term name
-// from a bare generic word (e.g. "city" + table "employees" → "EmployeeCity").
-// Returns the qualified term or an empty string if the LLM cannot help.
-func (s *AbbreviationService) QualifyGenericWord(ctx context.Context, genericWord string, tableName string, siblingColumnNames []string) (string, error) {
-	logging.GetLogger().Sugar().Infof("[QualifyGenericWord] qualifying %q using table %q", genericWord, tableName)
-	if s.llmProvider == nil {
-		return "", fmt.Errorf("LLM provider not configured")
-	}
-
-	maxSiblings := 40
-	siblings := siblingColumnNames
-	if len(siblings) > maxSiblings {
-		siblings = siblings[:maxSiblings]
-	}
-
-	var siblingContext string
-	if len(siblings) > 0 {
-		siblingContext = fmt.Sprintf("\nOther columns in the same table (for disambiguation): %s", strings.Join(siblings, ", "))
-	}
-
-	prompt := fmt.Sprintf(`You are a data architect expert in Wealth Management and Financial domains, grounded in
-industry-standard terminology from FINRA (Financial Industry Regulatory Authority), the
-EDM Council's Financial Industry Business Ontology (FIBO), and ISO 20022.
-
-A database column %q was found in the %q table.
-This column name is a generic word that is ambiguous without table context.
-Produce a qualified, contextually-specific term name by combining the table name with the column concept.
-
-Examples of qualified names this task should produce:
-- column "city" in table "employees"  → "EmployeeCity"
-- column "city" in table "issuers"    → "IssuerCity"
-- column "name" in table "brokers"    → "BrokerName"
-- column "status" in table "orders"   → "OrderStatus"
-- column "type" in table "accounts"   → "AccountType"
-- column "type" in table "securities" → "SecurityType"
-- column "amount" in table "transactions" → "TransactionAmount"
-- column "date" in table "settlements"  → "SettlementDate"
-
-Rules:
-- Always prefix with the table's business name (use the table name as-given if the business name is unknown)
-- Use PascalCase for the result
-- If the column name is already specific (e.g. "isin", "cusip", "lei"), return just the column name unchanged
-- Do NOT produce a plain generic word like "City" or "Name" — the whole point is disambiguation
-
-%s
-
-Return ONLY the qualified term name as a single PascalCase word, with no surrounding text or explanation.
-Example valid responses: EmployeeCity, OrderStatus, TransactionAmount
-`, genericWord, tableName, siblingContext)
-
-	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
-	if err != nil {
-		logging.GetLogger().Sugar().Errorf("[QualifyGenericWord] LLM call failed for %q: %v", genericWord, err)
-		return "", fmt.Errorf("LLM qualification failed: %w", err)
-	}
-	logging.GetLogger().Sugar().Infof("[QualifyGenericWord] AI qualified %q → %q", genericWord, strings.TrimSpace(response))
-
-	qualified := strings.TrimSpace(response)
-	qualified = strings.TrimPrefix(qualified, "```json")
-	qualified = strings.TrimPrefix(qualified, "```")
-	qualified = strings.TrimSuffix(qualified, "```")
-	qualified = strings.TrimSpace(qualified)
-	qualified = strings.Trim(qualified, "\"'")
-
-	return qualified, nil
 }
 
 // SuggestExpansions uses LLM to suggest expansions for abbreviations

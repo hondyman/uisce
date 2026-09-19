@@ -68,6 +68,16 @@ if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     set +a
 fi
 
+# Declare environment explicitly. This script is local-dev only — production
+# deploys invoke the binary directly. Fail-closed production config assertion
+# (backend/internal/api/helpers.go::AssertProductionConfig) treats unset
+# ENVIRONMENT as production and rejects dev-only flags; defaulting to
+# "development" keeps the safe-set behavior aligned with the script's actual
+# use case. Operators can still override by setting ENVIRONMENT=local/test in
+# their shell.
+export ENVIRONMENT="${ENVIRONMENT:-development}"
+
+# Set defaults if not loaded
 export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
 export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
 : "${JWT_SECRET:?JWT_SECRET not set — refusing to start with the test-secret default that is in git history}"
@@ -75,6 +85,11 @@ export JWT_SECRET
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
+export FIX_ENABLE="${FIX_ENABLE:-true}"
+export FIX_DEMO_AGENT="${FIX_DEMO_AGENT:-true}"
+export FIX_ADMIN_ADDR="${FIX_ADMIN_ADDR:-127.0.0.1:8981}"
+export FIX_ADMIN_TOKEN="${FIX_ADMIN_TOKEN:-dev-fix-admin}"
+export FIX_ACCEPTOR_PORT="${FIX_ACCEPTOR_PORT:-8980}"
 export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-true}"
 : "${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY not set — refusing to fall back to a value that is in git history (origin/main:de336a41af)}"
 

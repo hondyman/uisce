@@ -2141,27 +2141,6 @@ func pascalCase(tokens []string) string {
 	return b.String()
 }
 
-// pascalCaseToWords splits a PascalCase string into individual word tokens
-// suitable for title-casing (e.g. "EmployeeCity" → ["Employee", "City"]).
-func pascalCaseToWords(s string) []string {
-	var words []string
-	var current strings.Builder
-	for i, r := range s {
-		if r >= 'A' && r <= 'Z' && i > 0 {
-			words = append(words, current.String())
-			current.Reset()
-		}
-		current.WriteRune(r)
-	}
-	if current.Len() > 0 {
-		words = append(words, current.String())
-	}
-	if len(words) == 0 {
-		words = []string{s}
-	}
-	return words
-}
-
 // derivedTermNames holds the two names generated for a single physical
 // column: a compact, cross-datasource-stable identifier for the semantic
 // term layer, and a fully human-readable name for the business term layer.
@@ -2174,10 +2153,6 @@ type derivedTermNames struct {
 	// BusinessName is the fully-expanded, human-readable name (e.g.
 	// "Customer Type Identifier") for the business term layer.
 	BusinessName string
-	// BaseGenericTerm is set when the LLM qualified a bare generic word
-	// (e.g. "City" for "EmployeeCity"). Used to create IS_SPECIALIZATION_OF
-	// edge from the qualified term to the base generic term.
-	BaseGenericTerm string
 }
 
 // deriveTermNames expands abbreviations (dictionary lookup, then Gemini
@@ -2186,49 +2161,6 @@ type derivedTermNames struct {
 // column/technical name. Newly-disambiguated abbreviations are persisted
 // back to the abbreviation dictionary so the next generation for the same
 // column name doesn't need the LLM again.
-var genericWords = map[string]bool{
-	"city":    true,
-	"status":  true,
-	"name":    true,
-	"type":    true,
-	"code":    true,
-	"number":  true,
-	"amount":  true,
-	"balance": true,
-	"rate":    true,
-	"date":    true,
-	"id":      true,
-	"value":   true,
-	"desc":    true,
-	"level":   true,
-	"group":   true,
-	"class":   true,
-	"category": true,
-	"source":  true,
-	"target":  true,
-}
-
-func isGenericWord(word string) bool {
-	return genericWords[strings.ToLower(word)]
-}
-
-func extractTableNameFromContext(tableSchemaContext string) string {
-	parts := strings.Split(tableSchemaContext, ".")
-	for i := len(parts) - 1; i >= 0; i-- {
-		part := strings.TrimSpace(parts[i])
-		part = strings.Trim(part, "\"")
-		if part != "" && !strings.HasPrefix(part, "table ") && !strings.HasPrefix(part, "schema ") {
-			return part
-		}
-	}
-	re := regexp.MustCompile(`table\s+"([^"]+)"`)
-	m := re.FindStringSubmatch(tableSchemaContext)
-	if len(m) > 1 {
-		return m[1]
-	}
-	return ""
-}
-
 func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName string, tableSchemaContext string, siblingColumnNames []string) derivedTermNames {
 	tokens := tokenizeColumnName(rawName)
 	if len(tokens) == 0 {
@@ -2258,7 +2190,7 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 		if full, ok := abbrMap[upper]; ok {
 			resolved[i] = full
 		} else if looksLikeAbbreviation(tok) {
-			resolved[i] = tok
+			resolved[i] = tok // placeholder, may be overwritten below
 			unresolvedIdx = append(unresolvedIdx, i)
 			unresolvedTokens = append(unresolvedTokens, upper)
 		} else {
@@ -2267,7 +2199,6 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 	}
 
 	if len(unresolvedTokens) > 0 {
-		log.Printf("[deriveTermNames] calling SuggestExpansionsInContext for %d unresolved tokens: %v", len(unresolvedTokens), unresolvedTokens)
 		suggestions, err := h.abbrevSvc.SuggestExpansionsInContext(svcCtx, unresolvedTokens, rawName, tableSchemaContext, siblingColumnNames)
 		if err != nil {
 			log.Printf("[deriveTermNames] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
@@ -2276,6 +2207,7 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 				upper := strings.ToUpper(tokens[idx])
 				if full, ok := suggestions[upper]; ok && full != "" {
 					resolved[idx] = full
+					// Persist so future generations reuse the dictionary instead of the LLM.
 					if addErr := h.abbrevSvc.AddAbbreviation(svcCtx, upper, full, "auto-learned via semantic term generation"); addErr != nil {
 						log.Printf("[deriveTermNames] failed to persist learned abbreviation %s=%s: %v", upper, full, addErr)
 					}
@@ -2284,29 +2216,9 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 		}
 	}
 
-	semanticName := pascalCase(resolved)
-	businessName := titleCase(resolved)
-
-	var baseGenericTerm string
-	if len(resolved) == 1 && strings.EqualFold(resolved[0], rawName) && isGenericWord(resolved[0]) && tableSchemaContext != "" {
-		tableName := extractTableNameFromContext(tableSchemaContext)
-		if tableName != "" && !strings.EqualFold(tableName, rawName) {
-			log.Printf("[deriveTermNames] bare generic word %q detected — invoking LLM qualification with table %q", rawName, tableName)
-			if qualified, qualErr := h.abbrevSvc.QualifyGenericWord(svcCtx, resolved[0], tableName, siblingColumnNames); qualErr == nil && qualified != "" {
-				semanticName = qualified
-				businessName = titleCase(pascalCaseToWords(qualified))
-				baseGenericTerm = strings.Title(strings.ToLower(resolved[0]))
-				log.Printf("[deriveTermNames] LLM qualified %q → semanticName=%q, businessName=%q, base=%q", rawName, semanticName, businessName, baseGenericTerm)
-			} else if qualErr != nil {
-				log.Printf("[deriveTermNames] LLM qualification failed for %q: %v", rawName, qualErr)
-			}
-		}
-	}
-
 	return derivedTermNames{
-		SemanticName:    semanticName,
-		BusinessName:    businessName,
-		BaseGenericTerm: baseGenericTerm,
+		SemanticName: pascalCase(resolved),
+		BusinessName: titleCase(resolved),
 	}
 }
 
@@ -2448,51 +2360,27 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	// Extract table/schema context from qualified_path (format: /schema/table/column or schema.table.column)
+	// Extract table/schema context from qualified_path (format: schema.table.column)
 	var tableSchemaContext string
 	var siblingColumnNames []string
 	if qualifiedPath != "" {
-		var schemaName, tableName string
-		if strings.HasPrefix(qualifiedPath, "/") {
-			parts := strings.Split(strings.TrimPrefix(qualifiedPath, "/"), "/")
-			if len(parts) >= 3 {
-				schemaName = parts[len(parts)-3]
-				tableName = parts[len(parts)-2]
-				tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
-			}
-		} else {
-			parts := strings.Split(qualifiedPath, ".")
-			if len(parts) >= 3 {
-				schemaName = parts[len(parts)-3]
-				tableName = parts[len(parts)-2]
-				tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
-			}
-		}
+		parts := strings.Split(qualifiedPath, ".")
+		if len(parts) >= 3 {
+			schemaName := parts[len(parts)-3]
+			tableName := parts[len(parts)-2]
+			tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
 
-		// Query sibling columns from the same table (same schema.table, different column)
-		// Cap at 40 to avoid prompt bloat
-		if tableName != "" && schemaName != "" {
-			var rows *sql.Rows
-			var err error
-			if strings.HasPrefix(qualifiedPath, "/") {
-				tablePrefix := "/" + schemaName + "/" + tableName + "/"
-				rows, err = h.db.Query(`
-					SELECT node_name FROM catalog_node
-					WHERE tenant_id = $1
-					  AND qualified_path LIKE $2
-					  AND qualified_path != $3
-					LIMIT 40
-				`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
-			} else {
-				tablePrefix := schemaName + "." + tableName + "."
-				rows, err = h.db.Query(`
-					SELECT node_name FROM catalog_node
-					WHERE tenant_id = $1
-					  AND qualified_path LIKE $2
-					  AND qualified_path != $3
-					LIMIT 40
-				`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
-			}
+			// Query sibling columns from the same table (same schema.table, different column)
+			// Cap at 40 to avoid prompt bloat
+			tablePrefix := schemaName + "." + tableName + "."
+			rows, err := h.db.Query(`
+				SELECT node_name FROM catalog_node
+				WHERE tenant_id = $1
+				  AND qualified_path LIKE $2
+				  AND qualified_path != $3
+				  AND node_type_id = (SELECT id FROM catalog_node_type WHERE node_type = 'ATTRIBUTE' LIMIT 1)
+				LIMIT 40
+			`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
 			if err == nil {
 				defer rows.Close()
 				for rows.Next() {
@@ -2555,29 +2443,6 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 			continue
 		}
 		linked++
-	}
-
-	// If the LLM qualified a bare generic word (e.g. city → EmployeeCity),
-	// create an IS_SPECIALIZATION_OF edge from the new qualified term to the
-	// base generic term (e.g. City) so the glossary hierarchy is preserved.
-	if names.BaseGenericTerm != "" && names.BaseGenericTerm != semanticName {
-		var baseTermID string
-		err := h.db.QueryRow(`
-			SELECT id FROM catalog_node
-			WHERE tenant_id = $1 AND node_name = $2
-			  AND node_type_id = $3
-			LIMIT 1
-		`, secCtx.TenantID, names.BaseGenericTerm, semanticNodeTypeID).Scan(&baseTermID)
-		if err == nil && baseTermID != "" && baseTermID != semanticTermID {
-			specializationEdgeTypeID, edgeErr := h.resolveOrCreateEdgeType(secCtx.TenantID, "IS_SPECIALIZATION_OF")
-			if edgeErr == nil {
-				if linkErr := h.ensureEdge(secCtx.TenantID, datasourceID, semanticTermID, baseTermID, specializationEdgeTypeID); linkErr != nil {
-					log.Printf("[GenerateSemanticTerms] failed to create IS_SPECIALIZATION_OF edge from %s to %s: %v", semanticName, names.BaseGenericTerm, linkErr)
-				} else {
-					log.Printf("[GenerateSemanticTerms] created IS_SPECIALIZATION_OF edge: %s → %s", semanticName, names.BaseGenericTerm)
-				}
-			}
-		}
 	}
 
 	// Resolve (or create) the business_term layer: a human-readable term
