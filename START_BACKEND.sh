@@ -70,7 +70,8 @@ fi
 
 export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
 export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
-export JWT_SECRET="${JWT_SECRET:-test-secret}"
+: "${JWT_SECRET:?JWT_SECRET not set — refusing to start with the test-secret default that is in git history}"
+export JWT_SECRET
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
