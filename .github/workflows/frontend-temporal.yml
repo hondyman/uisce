@@ -22,7 +22,7 @@ jobs:
 
     - name: Install dependencies
       working-directory: frontend-temporal
-      run: npm ci
+      run: npm ci --legacy-peer-deps
 
     - name: Build
       working-directory: frontend-temporal
