@@ -2141,6 +2141,27 @@ func pascalCase(tokens []string) string {
 	return b.String()
 }
 
+// pascalCaseToWords splits a PascalCase string into individual word tokens
+// suitable for title-casing (e.g. "EmployeeCity" → ["Employee", "City"]).
+func pascalCaseToWords(s string) []string {
+	var words []string
+	var current strings.Builder
+	for i, r := range s {
+		if r >= 'A' && r <= 'Z' && i > 0 {
+			words = append(words, current.String())
+			current.Reset()
+		}
+		current.WriteRune(r)
+	}
+	if current.Len() > 0 {
+		words = append(words, current.String())
+	}
+	if len(words) == 0 {
+		words = []string{s}
+	}
+	return words
+}
+
 // derivedTermNames holds the two names generated for a single physical
 // column: a compact, cross-datasource-stable identifier for the semantic
 // term layer, and a fully human-readable name for the business term layer.
@@ -2153,6 +2174,10 @@ type derivedTermNames struct {
 	// BusinessName is the fully-expanded, human-readable name (e.g.
 	// "Customer Type Identifier") for the business term layer.
 	BusinessName string
+	// BaseGenericTerm is set when the LLM qualified a bare generic word
+	// (e.g. "City" for "EmployeeCity"). Used to create IS_SPECIALIZATION_OF
+	// edge from the qualified term to the base generic term.
+	BaseGenericTerm string
 }
 
 // deriveTermNames expands abbreviations (dictionary lookup, then Gemini
@@ -2262,15 +2287,16 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 	semanticName := pascalCase(resolved)
 	businessName := titleCase(resolved)
 
+	var baseGenericTerm string
 	if len(resolved) == 1 && strings.EqualFold(resolved[0], rawName) && isGenericWord(resolved[0]) && tableSchemaContext != "" {
 		tableName := extractTableNameFromContext(tableSchemaContext)
-		if tableName != "" {
+		if tableName != "" && !strings.EqualFold(tableName, rawName) {
 			log.Printf("[deriveTermNames] bare generic word %q detected — invoking LLM qualification with table %q", rawName, tableName)
 			if qualified, qualErr := h.abbrevSvc.QualifyGenericWord(svcCtx, resolved[0], tableName, siblingColumnNames); qualErr == nil && qualified != "" {
 				semanticName = qualified
-				businessName = titleCase(strings.Split(qualified, ""))
-				businessName = strings.Join(strings.Fields(qualified), " ")
-				log.Printf("[deriveTermNames] LLM qualified %q → semanticName=%q", rawName, semanticName)
+				businessName = titleCase(pascalCaseToWords(qualified))
+				baseGenericTerm = strings.Title(strings.ToLower(resolved[0]))
+				log.Printf("[deriveTermNames] LLM qualified %q → semanticName=%q, businessName=%q, base=%q", rawName, semanticName, businessName, baseGenericTerm)
 			} else if qualErr != nil {
 				log.Printf("[deriveTermNames] LLM qualification failed for %q: %v", rawName, qualErr)
 			}
@@ -2278,8 +2304,9 @@ func (h *GlossaryHandler) deriveTermNames(ctx context.Context, tenantID, rawName
 	}
 
 	return derivedTermNames{
-		SemanticName: semanticName,
-		BusinessName: businessName,
+		SemanticName:    semanticName,
+		BusinessName:    businessName,
+		BaseGenericTerm: baseGenericTerm,
 	}
 }
 
@@ -2528,6 +2555,29 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 			continue
 		}
 		linked++
+	}
+
+	// If the LLM qualified a bare generic word (e.g. city → EmployeeCity),
+	// create an IS_SPECIALIZATION_OF edge from the new qualified term to the
+	// base generic term (e.g. City) so the glossary hierarchy is preserved.
+	if names.BaseGenericTerm != "" && names.BaseGenericTerm != semanticName {
+		var baseTermID string
+		err := h.db.QueryRow(`
+			SELECT id FROM catalog_node
+			WHERE tenant_id = $1 AND node_name = $2
+			  AND node_type_id = $3
+			LIMIT 1
+		`, secCtx.TenantID, names.BaseGenericTerm, semanticNodeTypeID).Scan(&baseTermID)
+		if err == nil && baseTermID != "" && baseTermID != semanticTermID {
+			specializationEdgeTypeID, edgeErr := h.resolveOrCreateEdgeType(secCtx.TenantID, "IS_SPECIALIZATION_OF")
+			if edgeErr == nil {
+				if linkErr := h.ensureEdge(secCtx.TenantID, datasourceID, semanticTermID, baseTermID, specializationEdgeTypeID); linkErr != nil {
+					log.Printf("[GenerateSemanticTerms] failed to create IS_SPECIALIZATION_OF edge from %s to %s: %v", semanticName, names.BaseGenericTerm, linkErr)
+				} else {
+					log.Printf("[GenerateSemanticTerms] created IS_SPECIALIZATION_OF edge: %s → %s", semanticName, names.BaseGenericTerm)
+				}
+			}
+		}
 	}
 
 	// Resolve (or create) the business_term layer: a human-readable term
