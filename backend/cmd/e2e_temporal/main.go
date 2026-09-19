@@ -1,6 +1,3 @@
-//go:build legacy_amqp
-// +build legacy_amqp
-
 package main
 
 import (
