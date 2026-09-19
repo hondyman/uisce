@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
@@ -338,7 +339,13 @@ func getUserIDFromContext(ctx context.Context) string {
 
 // Extract tenant ID from headers only (NOT from URL query params per security policy)
 func getTenantIDFromRequest(r *http.Request) string {
-	return jwtmiddleware.GetClaimsFromContext(r).TenantID
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		return claims.TenantID
+	}
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && len(auth.TenantIDs) > 0 {
+		return auth.TenantIDs[0]
+	}
+	return ""
 }
 
 // Extract datasource ID from headers only (NOT from URL query params per security policy)
