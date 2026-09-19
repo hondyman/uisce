@@ -1083,6 +1083,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize semantic mapping service with fuzzy logic and abbreviation support
 	// Initialize semantic mapping service with fuzzy logic, abbreviation support, and auditing
 	srv.SemanticMappingSvc = analytics.NewSemanticMappingService(sqlxDB, analytics.NewSimpleFIBOMatcher(), analyticsAbbrevSvc, llmProvider, semanticPublisher, sqlRepo)
+	if err := srv.SemanticMappingSvc.InitializeGeminiProvider(os.Getenv("GEMINI_API_KEY")); err != nil {
+		logging.GetLogger().Sugar().Warnf("⚠️ SemanticMappingSvc: Gemini provider not initialized: %v (AI semantic term suggestions will use fallback logic)", err)
+	} else {
+		logging.GetLogger().Sugar().Info("✅ SemanticMappingSvc: Gemini provider initialized for AI semantic term generation")
+	}
 	srv.SemanticMappingHandler = handlers.NewSemanticMappingHandler(srv.SemanticMappingSvc, handlers.SecurityContextDeps{
 		Resolver: srv.DatasourceResolver,
 	})

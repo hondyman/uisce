@@ -459,7 +459,9 @@ func (s *AbbreviationService) ScanForAbbreviations(ctx context.Context) ([]strin
 // were tokenized from, so an ambiguous token like "EX" gets expanded the way
 // it's actually used in that name ("ex-dividend date") rather than the most
 // generic reading ("exchange").
-func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string) (map[string]string, error) {
+// tableSchemaContext provides table and schema name for disambiguation; siblingColumnNames
+// provides context from other columns in the same table (capped at 40).
+func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string, tableSchemaContext string, siblingColumnNames []string) (map[string]string, error) {
 	if s.llmProvider == nil {
 		return nil, fmt.Errorf("LLM provider not configured")
 	}
@@ -467,19 +469,38 @@ func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, ca
 		return map[string]string{}, nil
 	}
 
+	// Cap sibling columns to avoid prompt bloat
+	maxSiblings := 40
+	siblings := siblingColumnNames
+	if len(siblings) > maxSiblings {
+		siblings = siblings[:maxSiblings]
+	}
+
+	var siblingContext string
+	if len(siblings) > 0 {
+		siblingContext = fmt.Sprintf("\nOther columns in the same table (for disambiguation): %s", strings.Join(siblings, ", "))
+	} else {
+		siblingContext = ""
+	}
+
 	prompt := fmt.Sprintf(`You are a data architect expert in Wealth Management and Financial domains, grounded in
 industry-standard terminology from FINRA (Financial Industry Regulatory Authority), the
 EDM Council's Financial Industry Business Ontology (FIBO), and ISO 20022.
 
-These potential abbreviations were extracted from the database column name %q. Use that
-full context to resolve any abbreviation that has more than one common meaning (e.g. "EX" in
+These potential abbreviations were extracted from the database column name %q.%s
+Use that full context to resolve any abbreviation that has more than one common meaning (e.g. "EX" in
 "ex_date" means "ex-dividend", not "exchange"; "EX" in "exch_cd" means "exchange").
 Abbreviations to expand: %s
+
+Conventions:
+- Prefer "Identifier" over "Id" for primary/foreign keys (e.g., "AccountIdentifier" not "AccountId")
+- Prefer "Number" over "Num" for codes and identifiers
+- Use standard FIBO/ISO 20022 names when applicable
 
 Return ONLY a valid JSON object where keys are the abbreviations and values are the suggested full words (in UPPERCASE).
 If you are unsure or it looks like a full word already, exclude it from the JSON.
 Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
-`, contextHint, strings.Join(candidates, ", "))
+`, contextHint, siblingContext, strings.Join(candidates, ", "))
 
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
