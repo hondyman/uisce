@@ -8,6 +8,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -119,6 +120,71 @@ func TestTenantIDFromRequest_NoAuthNoClaims_ReturnsFalse(t *testing.T) {
 	}
 }
 
+// jwtClaimsKey is the exported ClaimsContextKey from jwtmiddleware.
+// We use it directly to set JWT claims in the context for testing.
+// Using a plain string "jwt_claims" would fail because context key
+// comparison requires exact type equality (not just string equality).
+const jwtClaimsKey = jwtmiddleware.ClaimsContextKey
+
+func TestRequirePermission_JWTClaimsTakePriorityOverAuthInfo(t *testing.T) {
+	enforcer, mock := testRBACEnforcer(t)
+
+	// JWT tenant ("jwt-tenant") should be used, NOT authInfo tenant ("auth-tenant")
+	mock.ExpectQuery("SELECT bp_user_has_permission").
+		WithArgs("user-123", "jwt-tenant", "ds-456", "process.read").
+		WillReturnRows(sqlmock.NewRows([]string{"has_permission"}).AddRow(true))
+
+	handler := enforcer.RequirePermission("process.read")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
+
+	// Set both JWT claims (should win) and AuthInfo (should be ignored)
+	ctx := context.WithValue(context.Background(), "user_id", "user-123")
+	ctx = context.WithValue(ctx, jwtClaimsKey, &jwtmiddleware.JWTClaims{TenantID: "jwt-tenant"})
+	ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+		UserID:    "user-123",
+		TenantIDs: []string{"auth-tenant"},
+		Roles:     []string{"editor"},
+	})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestRequirePermission_EmptyAuthInfoTenantID_Returns400(t *testing.T) {
+	enforcer, _ := testRBACEnforcer(t)
+	handler := enforcer.RequirePermission("process.read")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called with empty tenant")
+	}))
+
+	// AuthInfo with no TenantIDs and no JWT claims
+	req := httptest.NewRequest("GET", "/", nil)
+	ctx := context.WithValue(context.Background(), "user_id", "user-123")
+	ctx = security.WithAuthInfo(ctx, security.AuthInfo{
+		UserID:    "user-123",
+		TenantIDs: []string{}, // empty — fail-closed
+		Roles:     []string{"editor"},
+	})
+	req = req.WithContext(ctx)
+	rr := httptest.NewRecorder()
+
+	handler.ServeHTTP(rr, req)
+
+	// getTenantIDFromRequest returns "" when neither source has a tenant,
+	// which triggers the "tenant_id and datasource_id required" 400 response.
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty tenant, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestRequirePermission_MissingDatasource_Returns400(t *testing.T) {
 	enforcer, _ := testRBACEnforcer(t)
 	handler := enforcer.RequirePermission("process.read")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,3 +206,5 @@ func TestRequirePermission_MissingDatasource_Returns400(t *testing.T) {
 		t.Fatalf("expected 400, got %d", rr.Code)
 	}
 }
+
+
