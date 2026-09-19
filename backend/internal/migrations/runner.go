@@ -260,7 +260,7 @@ func stripTransactionStatements(content string) string {
 }
 
 func hasTransactionControl(content string) bool {
-	content = regexp.MustCompile(`(?i)--.*$`).ReplaceAllString(content, "")          // strip single-line comments
+	content = regexp.MustCompile(`(?im)--.*$`).ReplaceAllString(content, "")          // strip single-line comments (multiline: $ matches per-line, not just end-of-text)
 	content = regexp.MustCompile(`(?i)'[^']*'`).ReplaceAllString(content, "")        // strip single-quoted string literals
 	content = regexp.MustCompile(`(?i)"[^"]*"`).ReplaceAllString(content, "")        // strip double-quoted identifiers
 	matched, _ := regexp.MatchString(`(?i)\b(COMMIT|ROLLBACK)\b`, content)
