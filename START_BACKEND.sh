@@ -46,7 +46,8 @@ chmod +x ./server
 
 if [ -f "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" ] && command -v infisical &>/dev/null; then
     echo -e "${YELLOW}Bootstrapping secrets from Infisical...${NC}"
-    INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev || true
+    INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev \
+      || echo -e "${RED}⚠️  Infisical bootstrap FAILED — serving from stale .env files${NC}"
 fi
 
 if [ -f "$SCRIPT_DIR/.env" ]; then
