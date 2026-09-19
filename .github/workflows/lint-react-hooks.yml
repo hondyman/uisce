@@ -20,7 +20,7 @@ jobs:
         node-version: '18'
 
     - name: Install frontend dependencies
-      run: npm ci
+      run: npm ci --legacy-peer-deps
       working-directory: frontend
 
     - name: Run focused react-hooks lint
@@ -43,7 +43,7 @@ jobs:
         node-version: '18'
 
     - name: Install frontend dependencies
-      run: npm ci
+      run: npm ci --legacy-peer-deps
       working-directory: frontend
 
     - name: Run jsx-a11y lint

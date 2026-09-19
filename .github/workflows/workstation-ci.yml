@@ -38,7 +38,7 @@ jobs:
 
       - name: Install Frontend Dependencies
         working-directory: frontend
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: TypeScript Ratchet Check
         working-directory: frontend
@@ -123,7 +123,7 @@ jobs:
       - name: Build Frontend Assets
         working-directory: frontend
         run: |
-          npm ci
+          npm ci --legacy-peer-deps
           npm run build
 
       - name: Compile Verify Desktop Executable
