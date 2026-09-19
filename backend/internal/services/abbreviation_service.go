@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -506,6 +507,7 @@ Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
 	if err != nil {
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}
+	log.Printf("[SuggestExpansionsInContext] AI expansion suggestion generated for %d tokens: %v", len(candidates), candidates)
 
 	cleanResponse := strings.TrimSpace(response)
 	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
