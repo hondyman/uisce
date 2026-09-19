@@ -169,3 +169,47 @@ func TestLooksLikeAbbreviation(t *testing.T) {
 		})
 	}
 }
+
+func TestPascalCaseToWords(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want []string
+	}{
+		{"SupplierCity", []string{"Supplier", "City"}},
+		{"IssuerAddressCity", []string{"Issuer", "Address", "City"}},
+		{"AccountIdentifier", []string{"Account", "Identifier"}},
+		{"EmployeeCity", []string{"Employee", "City"}},
+		{"City", []string{"City"}},
+		{"ID", []string{"ID"}},
+		{"XMLParser", []string{"XML", "Parser"}},
+		{"ROE", []string{"ROE"}},
+	} {
+		got := pascalCaseToWords(tc.in)
+		if len(got) != len(tc.want) {
+			t.Errorf("pascalCaseToWords(%q) = %v, want %v", tc.in, got, tc.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("pascalCaseToWords(%q)[%d] = %q, want %q", tc.in, i, got[i], tc.want[i])
+			}
+		}
+	}
+}
+
+func TestQualifiedTermBusinessName(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+	}{
+		{"SupplierCity", "Supplier City"},
+		{"IssuerAddressCity", "Issuer Address City"},
+		{"AccountIdentifier", "Account Identifier"},
+		{"EmployeeCity", "Employee City"},
+	} {
+		got := titleCase(pascalCaseToWords(tc.in))
+		if got != tc.want {
+			t.Errorf("titleCase(pascalCaseToWords(%q)) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
