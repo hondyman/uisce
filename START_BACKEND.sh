@@ -75,7 +75,7 @@ export JWT_SECRET
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
-export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-true}"
+export ENVIRONMENT="${ENVIRONMENT:-}"
 : "${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY not set — refusing to fall back to a value that is in git history (origin/main:de336a41af)}"
 
 echo -e "${YELLOW}Starting server...${NC}"
