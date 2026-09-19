@@ -27,8 +27,6 @@
 --   LEFT JOIN catalog_node cn ON cn.id = bf.term_node_id
 --   WHERE bf.field_name = 'Excel NPV';
 
-BEGIN;
-
 -- Guard: only touch the northwind tenant's execution BO's field, so a
 -- coincidental field_name collision in another tenant doesn't get caught
 -- in this fix.
@@ -61,5 +59,3 @@ BEGIN
 
     RAISE NOTICE 'Excel NPV field removed from northwind execution BO';
 END $$;
-
-COMMIT;
