@@ -666,6 +666,14 @@ export default function GlossaryExplorer() {
     (progressModalOpen || isGenerating) && !!activeJobId
   );
 
+  // NOTE: mappedColumnIds is deliberately omitted from the dependency array.
+  // It is a new Set reference each time allEdges changes. Including it would cause
+  // this effect to call setGenSearchTerm('') on every allEdges refresh, wiping
+  // the user's search term before React can render filtered results.
+  // The mapped-column filtering is still applied inside the effect body; the only
+  // observable difference is that genColumns is not recalculated when mappedColumnIds
+  // changes mid-session — which is correct, since the user can just close/reopen
+  // the modal to get a fresh column list.
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
     dirtyColumns.current.clear();
@@ -710,7 +718,7 @@ export default function GlossaryExplorer() {
         return sugg ? { ...c, suggestedName: sugg.semantic_name, source: sugg.source } : c;
       }));
     }).catch(() => { /* silent fallback to naive PascalCase */ });
-  }, [allColumns, isGenModalOpen, mappedColumnIds]);
+  }, [allColumns, isGenModalOpen]);
 
   const inputStyle = {
     background: '#1E2130', border: `1px solid ${C.border}`, color: C.text,
