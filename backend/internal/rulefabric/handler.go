@@ -1279,17 +1279,16 @@ func (h *Handler) GetRuleStats(w http.ResponseWriter, r *http.Request) {
 // =============================================================================
 
 func getTenantID(r *http.Request) (uuid.UUID, error) {
-	tenantIDStr := func() string { auth, _ := security.AuthInfoFromContext(r.Context()); if len(auth.TenantIDs) > 0 { return auth.TenantIDs[0] }; return "" }()
-	if tenantIDStr == "" {
-		tenantIDStr = r.Header.Get("X-Tenant-ID")
+	// HOTFIX 2026-09-20: previous implementation trusted X-Tenant-ID header and
+	// tenant_id query param above JWT claims without validating them against the
+	// token — any authenticated user could operate as any tenant by setting the
+	// header. Delegates to security.ResolveTenantForRequest (Variant A: admin
+	// override preserved). See backend/docs/TENANT_MIDDLEWARE_DESIGN.md.
+	tenant, err := security.ResolveTenantForRequest(r)
+	if err != nil {
+		return uuid.Nil, err
 	}
-	if tenantIDStr == "" {
-		tenantIDStr = r.URL.Query().Get("tenant_id")
-	}
-	if tenantIDStr == "" {
-		return uuid.Nil, fmt.Errorf("tenant_id is required")
-	}
-	return uuid.Parse(tenantIDStr)
+	return uuid.Parse(tenant)
 }
 
 func getDatasourceID(r *http.Request) uuid.UUID {

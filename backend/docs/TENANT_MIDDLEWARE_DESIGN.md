@@ -1,7 +1,7 @@
 # Tenant-ID Resolution — Canonical Middleware Design
 
 **Date:** 2026-09-20
-**Status:** Partially Implemented — V2 hotfixed 2026-09-20; Phase A/B/C deferred
+**Status:** V1 and V2 both hotfixed 2026-09-20. Phase C (identity deprecation) deferred pending audit.
 **Incident reference:** INCIDENT_REPORT_20260906 / hotfix 2026-09-07
 
 ---
@@ -68,8 +68,10 @@ curl -H "Authorization: Bearer <jwt-for-tenant-A>" \
 
 **Severity:** CRITICAL — 25 call sites in production, no admin-gate, direct tenant spoofing.
 
-**Status 2026-09-20:** NOT MOUNTED in server/main.go — dead code. No immediate risk.
-Will be fixed when rulefabric routes are wired into the server. See Phase 2 plan.
+**Status 2026-09-20:** HOTFIXED — rulefabric.getTenantID now delegates to
+security.ResolveTenantForRequest. 25 call sites updated in one commit. Variant A
+confirmed: admin override preserved. Non-admin spoof attempts (header != JWT tenant)
+are now rejected fail-closed.
 
 ---
 
@@ -201,23 +203,21 @@ Handlers that need to operate without a tenant context (e.g., `/health`, `/metri
 
 **File:** `backend/internal/rulefabric/handler.go:1281–1293`
 
-**Change:** Replace with a call to a new `rulefabric.RequireTenant(r)` that wraps `security.ResolveTenantID`.
+**Change:** Replace with a call to `security.ResolveTenantForRequest`. Signature unchanged
+(`(uuid.UUID, error)`) — UUID conversion happens inside the wrapper.
 
 **Scope:** 25 call sites in `rulefabric/handler.go` and `rulefabric/bo_policy_handler.go`.
 
-**Risk:** Same as Phase A — any call site that was implicitly relying on tenant spoofing will start receiving errors. These are the vulnerable call paths.
-
-**Commit:** One commit, includes updated unit tests.
+**Status 2026-09-20:** DONE — committed as part of hotfix. `getTenantID` now
+delegates to `security.ResolveTenantForRequest`. Unit tests added.
 
 ---
 
 ### Phase C: Deprecate `identity.TenantIDFromContext`
 
-The `identity.TenantIDFromContext` is a second, parallel tenant-ID source (separate from `security.AuthInfo.TenantIDs`). It is set by `WithActorTenant` in `AuthContextMiddleware` and read by `WithTenantContext`. Consolidate to `security.AuthInfo.TenantIDs` as the single authoritative source.
-
-**Change:** Remove `identity.WithActorTenant` and `identity.TenantIDFromContext`. Update `AuthContextMiddleware` to only set `security.AuthInfo`.
-
-**Risk:** Medium — any remaining reader of `identity.TenantIDFromContext` will break. Audit required before this phase.
+**Status 2026-09-20:** PARTIALLY DONE — `WithTenantContext` no longer reads
+`identity.TenantIDFromContext`. The `identity` package is still used in
+`AuthContextMiddleware` (sets actor context) and should be audited before removal.
 
 ---
 
