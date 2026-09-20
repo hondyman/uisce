@@ -22,7 +22,10 @@ import (
 	"github.com/hondyman/uisce/backend/internal/handlers"
 )
 
-// GlossaryHandler handles glossary-related API requests
+// GlossaryHandler handles glossary-related API requests.
+// Note: InMemoryJobStore is single-replica only — if the backend runs behind
+// multiple replicas, job polling will hit the wrong pod. A Postgres-backed
+// JobStore would be needed for multi-replica deployments.
 type GlossaryHandler struct {
 	db           *sql.DB
 	dbx          *sqlx.DB
@@ -30,10 +33,12 @@ type GlossaryHandler struct {
 	lineageRepo  lineage.LineageRepository
 	securityDeps handlers.SecurityContextDeps
 	abbrevSvc    *services.AbbreviationService
+	glossarySvc  *GlossaryService
+	jobStore     *InMemoryJobStore
 }
 
 // NewGlossaryHandler creates a new glossary handler
-func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps, abbrevSvc *services.AbbreviationService) *GlossaryHandler {
+func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, securityDeps handlers.SecurityContextDeps, abbrevSvc *services.AbbreviationService, glossarySvc *GlossaryService, jobStore *InMemoryJobStore) *GlossaryHandler {
 	dbx := sqlx.NewDb(db, "postgres")
 	return &GlossaryHandler{
 		db:           db,
@@ -42,11 +47,13 @@ func NewGlossaryHandler(db *sql.DB, lineageRepo lineage.LineageRepository, secur
 		lineageRepo:  lineageRepo,
 		securityDeps: securityDeps,
 		abbrevSvc:    abbrevSvc,
+		glossarySvc:  glossarySvc,
+		jobStore:     jobStore,
 	}
 }
 
 func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
-	r.Route("/glossary", func(r chi.Router) {
+		r.Route("/glossary", func(r chi.Router) {
 		r.Get("/semantic-terms", h.ListSemanticTerms)
 		r.Get("/business-terms", h.ListBusinessTerms)
 		r.Get("/edges", h.ListEdges)
@@ -55,6 +62,7 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/terms/{id}", h.DeleteTerm)
 		r.Post("/edges", h.CreateEdge)
 		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
+		r.Get("/jobs/{jobID}", h.GetJobStatus)
 		r.Put("/edges/{id}", h.UpdateEdge)
 		r.Delete("/edges/{id}", h.DeleteEdge)
 		// Technical assets & graph endpoints for selected term detail view
@@ -2234,6 +2242,30 @@ func (h *GlossaryHandler) ensureEdge(tenantID, datasourceID, subjectID, objectID
 	return err
 }
 
+func (h *GlossaryHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	jobID := chi.URLParam(r, "jobID")
+	if jobID == "" {
+		http.Error(w, "jobID is required", http.StatusBadRequest)
+		return
+	}
+	if h.jobStore == nil || h.glossarySvc == nil {
+		http.Error(w, "job status not available", http.StatusServiceUnavailable)
+		return
+	}
+	job, found := h.glossarySvc.getJob(secCtx.TenantID, jobID)
+	if !found {
+		http.Error(w, "job not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(job)
+}
+
 func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
 	if err != nil {
@@ -2241,224 +2273,59 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var req struct {
-		// Name is accepted for backward compatibility / manual override, but
-		// is only used verbatim when it does NOT look like a raw catalog path
-		// (contains "/"). Otherwise the name is derived from the column itself.
-		Name      string   `json:"name"`
-		ColumnIDs []string `json:"column_ids"`
+	if h.glossarySvc == nil {
+		http.Error(w, "glossary service not available", http.StatusServiceUnavailable)
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+
+	var rawReq rawGenerateTermsRequest
+	if err := json.NewDecoder(r.Body).Decode(&rawReq); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-	if len(req.ColumnIDs) == 0 {
-		http.Error(w, "column_ids is required", http.StatusBadRequest)
+
+	items, err := rawReq.Normalize()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(items) == 0 {
+		http.Error(w, "column_ids or items is required", http.StatusBadRequest)
 		return
 	}
 
 	datasourceID := secCtx.DatasourceID
 	if datasourceID == "" || datasourceID == "none" {
 		datasourceID = ""
-		_ = h.db.QueryRow(
-			`SELECT tenant_datasource_id::text FROM catalog_node WHERE id = $1 AND tenant_datasource_id IS NOT NULL`,
-			req.ColumnIDs[0],
-		).Scan(&datasourceID)
-	}
-
-	// Derive names: manual override wins for the semantic name only if it
-	// isn't a raw path; otherwise both names derive from the first column's
-	// own node_name. Semantic names are compact/stable so the same concept
-	// on any datasource ("orm.corporate_action.record_date",
-	// "public.customers.customer_type_id") maps to the same semantic term -
-	// there is no per-datasource "ORM" vs "CRM" semantic term, by design.
-	var columnNodeName, qualifiedPath string
-	_ = h.db.QueryRow(`SELECT node_name, COALESCE(qualified_path, '') FROM catalog_node WHERE id = $1`, req.ColumnIDs[0]).Scan(&columnNodeName, &qualifiedPath)
-	if columnNodeName == "" {
-		http.Error(w, "could not resolve a name for this term: column not found", http.StatusBadRequest)
-		return
-	}
-
-	// Extract table/schema context from qualified_path (format: /schema/table/column or schema.table.column)
-	var tableSchemaContext string
-	var siblingColumnNames []string
-	if qualifiedPath != "" {
-		var schemaName, tableName string
-		if strings.HasPrefix(qualifiedPath, "/") {
-			parts := strings.Split(strings.TrimPrefix(qualifiedPath, "/"), "/")
-			if len(parts) >= 3 {
-				schemaName = parts[len(parts)-3]
-				tableName = parts[len(parts)-2]
-				tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
-			}
-		} else {
-			parts := strings.Split(qualifiedPath, ".")
-			if len(parts) >= 3 {
-				schemaName = parts[len(parts)-3]
-				tableName = parts[len(parts)-2]
-				tableSchemaContext = fmt.Sprintf("table %q in schema %q", tableName, schemaName)
-			}
-		}
-
-		// Query sibling columns from the same table (same schema.table, different column)
-		// Cap at 40 to avoid prompt bloat
-		if tableName != "" && schemaName != "" {
-			var rows *sql.Rows
-			var err error
-			if strings.HasPrefix(qualifiedPath, "/") {
-				tablePrefix := "/" + schemaName + "/" + tableName + "/"
-				rows, err = h.db.Query(`
-					SELECT node_name FROM catalog_node
-					WHERE tenant_id = $1
-					  AND qualified_path LIKE $2
-					  AND qualified_path != $3
-					LIMIT 40
-				`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
-			} else {
-				tablePrefix := schemaName + "." + tableName + "."
-				rows, err = h.db.Query(`
-					SELECT node_name FROM catalog_node
-					WHERE tenant_id = $1
-					  AND qualified_path LIKE $2
-					  AND qualified_path != $3
-					LIMIT 40
-				`, secCtx.TenantID, tablePrefix+"%", qualifiedPath)
-			}
-			if err == nil {
-				defer rows.Close()
-				for rows.Next() {
-					var siblingName string
-					if err := rows.Scan(&siblingName); err == nil {
-						siblingColumnNames = append(siblingColumnNames, siblingName)
-					}
-				}
-			}
+		if len(items) > 0 && len(items[0].ColumnIDs) > 0 {
+			_ = h.db.QueryRow(
+				`SELECT tenant_datasource_id::text FROM catalog_node WHERE id = $1 AND tenant_datasource_id IS NOT NULL`,
+				items[0].ColumnIDs[0],
+			).Scan(&datasourceID)
 		}
 	}
 
-	names := h.deriveTermNames(r.Context(), secCtx.TenantID, columnNodeName, tableSchemaContext, siblingColumnNames)
-	semanticName := names.SemanticName
-	if semanticName == "" && req.Name != "" && !strings.Contains(req.Name, "/") {
-		semanticName = req.Name
-	}
-	if semanticName == "" {
-		http.Error(w, "could not derive a semantic term name", http.StatusBadRequest)
+	ctx := r.Context()
+	resp := h.glossarySvc.generateTerms(ctx, secCtx.TenantID, datasourceID, items)
+
+	if resp.JobID != "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": true,
+			"job_id":  resp.JobID,
+		})
 		return
-	}
-	businessName := names.BusinessName
-	if businessName == "" {
-		businessName = semanticName
-	}
-
-	// Resolve (or create) the semantic_term catalog_node_type, same as CreateTerm.
-	semanticNodeTypeID, err := h.resolveOrCreateNodeType(secCtx.TenantID, "semantic_term")
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve semantic_term node type: %v", err)
-		http.Error(w, "Failed to resolve semantic term type", http.StatusInternalServerError)
-		return
-	}
-
-	// Reuse an existing term with the same name for this tenant (across every
-	// datasource) before creating a duplicate - a repeated concept must map
-	// to one semantic term, not one per table or per datasource.
-	semanticTermID, semanticReused, err := h.findOrCreateTermNode(r.Context(), secCtx.TenantID, datasourceID, semanticNodeTypeID, "semantic_term", semanticName, "")
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve semantic term %q: %v", semanticName, err)
-		http.Error(w, "Failed to resolve semantic term: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// Resolve (or create) the MAPS_TO edge type, same lookup pattern as CreateEdge.
-	mapsToEdgeTypeID, err := h.resolveOrCreateEdgeType(secCtx.TenantID, "MAPS_TO")
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve MAPS_TO edge type: %v", err)
-		http.Error(w, "Failed to resolve MAPS_TO edge type", http.StatusInternalServerError)
-		return
-	}
-
-	linked := 0
-	for _, colID := range req.ColumnIDs {
-		if colID == "" {
-			continue
-		}
-		if err := h.ensureEdge(secCtx.TenantID, datasourceID, semanticTermID, colID, mapsToEdgeTypeID); err != nil {
-			log.Printf("[GenerateSemanticTerms] failed to link column %s to term %s: %v", colID, semanticTermID, err)
-			continue
-		}
-		linked++
-	}
-
-	// If the LLM qualified a bare generic word (e.g. city → EmployeeCity),
-	// create an IS_SPECIALIZATION_OF edge from the new qualified term to the
-	// base generic term (e.g. City) so the glossary hierarchy is preserved.
-	if names.BaseGenericTerm != "" && names.BaseGenericTerm != semanticName {
-		var baseTermID string
-		err := h.db.QueryRow(`
-			SELECT id FROM catalog_node
-			WHERE tenant_id = $1 AND node_name = $2
-			  AND node_type_id = $3
-			LIMIT 1
-		`, secCtx.TenantID, names.BaseGenericTerm, semanticNodeTypeID).Scan(&baseTermID)
-		if err == nil && baseTermID != "" && baseTermID != semanticTermID {
-			specializationEdgeTypeID, edgeErr := h.resolveOrCreateEdgeType(secCtx.TenantID, "IS_SPECIALIZATION_OF")
-			if edgeErr == nil {
-				if linkErr := h.ensureEdge(secCtx.TenantID, datasourceID, semanticTermID, baseTermID, specializationEdgeTypeID); linkErr != nil {
-					log.Printf("[GenerateSemanticTerms] failed to create IS_SPECIALIZATION_OF edge from %s to %s: %v", semanticName, names.BaseGenericTerm, linkErr)
-				} else {
-					log.Printf("[GenerateSemanticTerms] created IS_SPECIALIZATION_OF edge: %s → %s", semanticName, names.BaseGenericTerm)
-				}
-			}
-		}
-	}
-
-	// Resolve (or create) the business_term layer: a human-readable term
-	// linked to the semantic term via has_semantic_context, per the
-	// established two-layer convention (see business_term_generation.go).
-	businessNodeTypeID, err := h.resolveOrCreateNodeType(secCtx.TenantID, "business_term")
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve business_term node type: %v", err)
-		http.Error(w, "Failed to resolve business term type", http.StatusInternalServerError)
-		return
-	}
-
-	definitionSource := ""
-	var definition string
-	if h.abbrevSvc != nil {
-		svcCtx := context.WithValue(r.Context(), "tenant_id", secCtx.TenantID)
-		if def, defErr := h.abbrevSvc.GenerateStandardDefinition(svcCtx, businessName, columnNodeName); defErr != nil {
-			log.Printf("[GenerateSemanticTerms] definition generation failed for %q: %v", businessName, defErr)
-		} else {
-			definition = def.Definition
-			definitionSource = def.Source
-		}
-	}
-	businessTermID, businessReused, err := h.findOrCreateTermNode(r.Context(), secCtx.TenantID, datasourceID, businessNodeTypeID, "business_term", businessName, definition)
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve business term %q: %v", businessName, err)
-		http.Error(w, "Failed to resolve business term: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	hasSemanticEdgeTypeID, err := h.resolveOrCreateEdgeType(secCtx.TenantID, "has_semantic_context")
-	if err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to resolve has_semantic_context edge type: %v", err)
-		http.Error(w, "Failed to resolve has_semantic_context edge type", http.StatusInternalServerError)
-		return
-	}
-	if err := h.ensureEdge(secCtx.TenantID, datasourceID, businessTermID, semanticTermID, hasSemanticEdgeTypeID); err != nil {
-		log.Printf("[GenerateSemanticTerms] failed to link business term %s to semantic term %s: %v", businessTermID, semanticTermID, err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":                   semanticTermID,
-		"name":                 semanticName,
-		"reused_existing":      semanticReused,
-		"business_term_id":     businessTermID,
-		"business_term_name":   businessName,
-		"business_term_reused": businessReused,
-		"definition_source":    definitionSource,
-		"columns_linked":       linked,
-		"columns_total":        len(req.ColumnIDs),
+		"success":         resp.Success,
+		"total_requested": resp.TotalRequested,
+		"created_terms":   resp.CreatedTerms,
+		"reused_terms":    resp.ReusedTerms,
+		"columns_linked":  resp.ColumnsLinked,
+		"results":         resp.Results,
 	})
 }

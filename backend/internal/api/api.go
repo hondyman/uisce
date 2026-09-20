@@ -1837,7 +1837,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		if srv.SemanticMappingHandler != nil {
 			srv.SemanticMappingHandler.RegisterRoutes(r)
 		}
-		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc)
+		glossaryJobStore := NewInMemoryJobStore()
+		glossarySvc := NewGlossaryService(context.Background(), db, srv.AbbreviationSvc, glossaryJobStore)
+		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc, glossarySvc, glossaryJobStore)
 		glossaryHandler.RegisterRoutes(r)
 
 		// Semantic Relationships Handler (AI-suggested term relationships,
