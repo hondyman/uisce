@@ -63,6 +63,8 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/edges", h.CreateEdge)
 		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
 		r.Post("/preview-semantic-terms", h.PreviewSemanticTerms)
+		r.Post("/reject-semantic-suggestion", h.RecordRejection)
+		r.Post("/unreject-semantic-suggestion", h.UnrecordRejection)
 		r.Get("/jobs/{jobID}", h.GetJobStatus)
 		r.Put("/edges/{id}", h.UpdateEdge)
 		r.Delete("/edges/{id}", h.DeleteEdge)
@@ -2358,4 +2360,103 @@ func (h *GlossaryHandler) PreviewSemanticTerms(w http.ResponseWriter, r *http.Re
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(previewSemanticTermsResponse{Suggestions: suggestions})
+}
+
+// RecordRejection persists a per-(datasource, column, name) rejection so the preview
+// and generate paths skip that candidate going forward. Uses INSERT ... ON CONFLICT DO
+// NOTHING so it is idempotent under concurrent double-click.
+func (h *GlossaryHandler) RecordRejection(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if h.glossarySvc == nil {
+		http.Error(w, "glossary service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req rejectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.ColumnID == "" {
+		http.Error(w, "column_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.RejectedName == "" {
+		http.Error(w, "rejected_name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	// Resolve column_id → qualified_path + datasource_id from catalog_node.
+	var datasourceID, qualifiedPath string
+	err = h.glossarySvc.DB().QueryRowContext(ctx, `
+		SELECT COALESCE(tenant_datasource_id::text, ''),
+		       COALESCE(qualified_path, '')
+		FROM catalog_node WHERE id = $1 AND tenant_id = $2
+	`, req.ColumnID, secCtx.TenantID).Scan(&datasourceID, &qualifiedPath)
+	if err != nil {
+		http.Error(w, "column not found: "+err.Error(), http.StatusNotFound)
+		return
+	}
+
+	if err := h.glossarySvc.RecordRejection(ctx, secCtx.TenantID, datasourceID, qualifiedPath, req.RejectedName); err != nil {
+		http.Error(w, "failed to record rejection: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// UnrecordRejection removes a previously recorded rejection. Idempotent: returns 204
+// whether the row existed or not.
+func (h *GlossaryHandler) UnrecordRejection(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	if h.glossarySvc == nil {
+		http.Error(w, "glossary service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req unrejectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.ColumnID == "" {
+		http.Error(w, "column_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.RejectedName == "" {
+		http.Error(w, "rejected_name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+
+	var datasourceID, qualifiedPath string
+	err = h.glossarySvc.DB().QueryRowContext(ctx, `
+		SELECT COALESCE(tenant_datasource_id::text, ''),
+		       COALESCE(qualified_path, '')
+		FROM catalog_node WHERE id = $1 AND tenant_id = $2
+	`, req.ColumnID, secCtx.TenantID).Scan(&datasourceID, &qualifiedPath)
+	if err != nil {
+		// Column not found — nothing to unreject, treat as success.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if err := h.glossarySvc.UnrecordRejection(ctx, secCtx.TenantID, datasourceID, qualifiedPath, req.RejectedName); err != nil {
+		http.Error(w, "failed to remove rejection: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -17,6 +17,7 @@ import {
   AutoFixHigh as AutoFixIcon,
   ContentCopy as ContentCopyIcon,
   Check as CheckIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { useDeleteTerm } from '../../api/glossary';
 import { RelationshipExplorer } from './components/RelationshipExplorer';
@@ -539,8 +540,28 @@ export default function GlossaryExplorer() {
     } catch (e) {
       console.error(e);
       alert('Error generating semantic terms');
-    } finally {
+      } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleRejectSuggestion = async (col: { id: string; suggestedName: string }) => {
+    if (!tenantId || !col.suggestedName) return;
+    try {
+      await apiClient('/api/glossary/reject-semantic-suggestion', {
+        method: 'POST',
+        body: JSON.stringify({ column_id: col.id, rejected_name: col.suggestedName }),
+      });
+      const preview = await apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
+        '/api/glossary/preview-semantic-terms',
+        { method: 'POST', body: JSON.stringify({ column_ids: [col.id] }) }
+      );
+      const updated = preview.suggestions?.[0];
+      if (updated) {
+        setGenColumns(prev => prev.map(c => c.id === col.id ? { ...c, suggestedName: updated.semantic_name, source: updated.source } : c));
+      }
+    } catch (e) {
+      console.error('[handleRejectSuggestion]', e);
     }
   };
 
@@ -789,15 +810,29 @@ export default function GlossaryExplorer() {
                             <span style={{ fontFamily: 'monospace', fontSize: 12, color: C.textMuted }}>{col.qualifiedPath}</span>
                           </td>
                           <td style={{ padding: '8px' }}>
-                            <input
-                              disabled={isGenerating}
-                              style={{ ...inputStyle, marginBottom: 0, width: 'auto' }}
-                              value={col.suggestedName}
-                              onChange={e => {
-                                dirtyColumns.current.add(col.id);
-                                setGenColumns(prev => prev.map(c => c.id === col.id ? { ...c, suggestedName: e.target.value } : c));
-                              }}
-                            />
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <input
+                                disabled={isGenerating}
+                                style={{ ...inputStyle, marginBottom: 0, width: 'auto' }}
+                                value={col.suggestedName}
+                                onChange={e => {
+                                  dirtyColumns.current.add(col.id);
+                                  setGenColumns(prev => prev.map(c => c.id === col.id ? { ...c, suggestedName: e.target.value } : c));
+                                }}
+                              />
+                              <Tooltip title={dirtyColumns.current.has(col.id) ? 'Cannot reject a user-edited name' : 'Reject this suggestion'}>
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    disabled={isGenerating || dirtyColumns.current.has(col.id)}
+                                    onClick={() => handleRejectSuggestion(col)}
+                                    sx={{ color: C.textMuted, padding: '2px', '&:hover': { color: C.danger }, '&.Mui-disabled': { color: C.border } }}
+                                  >
+                                    <CloseIcon sx={{ fontSize: 14 }} />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </div>
                           </td>
                         </tr>
                       );

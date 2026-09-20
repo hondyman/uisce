@@ -31,6 +31,13 @@ func NewGlossaryService(ctx context.Context, db *sql.DB, abbrevSvc *services.Abb
 	}
 }
 
+// DB exposes the underlying database connection for use by handlers that need
+// to resolve column metadata (qualified_path, datasource_id) not available in
+// the service layer.
+func (s *GlossaryService) DB() *sql.DB {
+	return s.db
+}
+
 func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName string, tableSchemaContext string, siblingColumnNames []string) derivedTermNames {
 	tokens := tokenizeColumnName(rawName)
 	if len(tokens) == 0 {
@@ -219,7 +226,7 @@ func (s *GlossaryService) ensureEdge(tenantID, datasourceID, subjectID, objectID
 	return err
 }
 
-func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defaultDatasourceID string, item generateTermItem, cache *termCache) (*generateTermResult, error) {
+func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defaultDatasourceID string, item generateTermItem, cache *termCache, rejections rejectionSet) (*generateTermResult, error) {
 	if len(item.ColumnIDs) == 0 {
 		return nil, fmt.Errorf("column_ids is required")
 	}
@@ -295,9 +302,29 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 
 	names := s.deriveTermNames(ctx, tenantID, columnNodeName, tableSchemaContext, siblingColumnNames)
 	semanticName := names.SemanticName
+
+	// If the user provided an explicit name (dirty / edited cell), use it verbatim.
+	// Rejection logic does NOT override user edits — rejections must only ever record
+	// derived candidate names, not user-typed values.
+	// See: amendment 3 — ✕ is disabled when dirtyColumns.has(id).
 	if item.Name != "" && !strings.Contains(item.Name, "/") {
 		semanticName = item.Name
+	} else if rejections != nil {
+		// No user edit: apply rejection filtering to the ranked candidate list.
+		// Use the deterministic path's resolved tokens for candidate generation.
+		candidates := deriveTermNamesCandidates(
+			resolveTokensWithAbbreviations(ctx, s.abbrevSvc, tenantID, tokenizeColumnName(columnNodeName)),
+			columnNodeName,
+			tableSchemaContext,
+		)
+		if len(candidates) > 0 {
+			chosen, _ := pickFirstNonRejected(candidates, rejections, datasourceID, qualifiedPath)
+			if chosen != "" {
+				semanticName = chosen
+			}
+		}
 	}
+
 	if semanticName == "" {
 		return nil, fmt.Errorf("could not derive a semantic term name")
 	}
@@ -444,13 +471,15 @@ func (s *GlossaryService) generateTerms(ctx context.Context, tenantID, datasourc
 }
 
 func (s *GlossaryService) generateTermsSync(ctx context.Context, tenantID, datasourceID string, items []generateTermItem) generateTermsResponse {
+	rejections, _ := s.loadRejections(ctx, tenantID)
+
 	results := make([]generateTermResult, 0, len(items))
 	createdTerms := 0
 	reusedTerms := 0
 	columnsLinked := 0
 
 	for _, item := range items {
-		res, err := s.generateSingleTerm(ctx, tenantID, datasourceID, item, nil)
+		res, err := s.generateSingleTerm(ctx, tenantID, datasourceID, item, nil, rejections)
 		if err != nil {
 			results = append(results, generateTermResult{
 				Name:  item.Name,
@@ -536,7 +565,7 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 	}
 
 	query := `
-		SELECT id, node_name, COALESCE(qualified_path, node_name)
+		SELECT id, node_name, COALESCE(qualified_path, node_name), COALESCE(tenant_datasource_id, '00000000-0000-0000-0000-000000000000'::uuid)
 		FROM catalog_node
 		WHERE id = ANY($1) AND tenant_id = $2
 	`
@@ -546,16 +575,23 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 	}
 	defer rows.Close()
 
-	nodeMap := make(map[string]struct{ nodeName, qualifiedPath string }, len(columnIDs))
+	nodeMap := make(map[string]struct{ nodeName, qualifiedPath, datasourceID string }, len(columnIDs))
 	for rows.Next() {
-		var id, nodeName, qualifiedPath string
-		if err := rows.Scan(&id, &nodeName, &qualifiedPath); err != nil {
+		var id, nodeName, qualifiedPath, datasourceID string
+		if err := rows.Scan(&id, &nodeName, &qualifiedPath, &datasourceID); err != nil {
 			return nil, fmt.Errorf("scanning catalog node: %w", err)
 		}
-		nodeMap[id] = struct{ nodeName, qualifiedPath string }{nodeName, qualifiedPath}
+		nodeMap[id] = struct{ nodeName, qualifiedPath, datasourceID string }{nodeName, qualifiedPath, datasourceID}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterating catalog nodes: %w", err)
+	}
+
+	// Load rejection set once per request — keyed by (datasourceID, qualifiedPath, rejectedName).
+	rejections, err := s.loadRejections(ctx, tenantID)
+	if err != nil {
+		log.Printf("[PreviewSemanticTerms] failed to load rejections: %v", err)
+		rejections = rejectionSet{}
 	}
 
 	results := make([]PreviewResult, 0, len(columnIDs))
@@ -570,12 +606,21 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 			tableSchemaContext = buildTableSchemaContext(node.qualifiedPath)
 		}
 
-		names := deriveTermNamesPreview(ctx, abbreviationSvcAdapter{real: s.abbrevSvc}, tenantID, node.nodeName, tableSchemaContext)
+		candidates := deriveTermNamesPreviewCandidates(ctx, abbreviationSvcAdapter{real: s.abbrevSvc}, tenantID, node.nodeName, tableSchemaContext)
+
+		semanticName, source := pickFirstNonRejected(candidates, rejections, node.datasourceID, node.qualifiedPath)
+
+		// Derive business name from the primary candidate's businessName (derived from first candidate).
+		var businessName string
+		if len(candidates) > 0 {
+			businessName = titleCase(pascalCaseToWords(candidates[0].Name))
+		}
+
 		results = append(results, PreviewResult{
 			ColumnID:     colID,
-			SemanticName: names.SemanticName,
-			BusinessName: names.BusinessName,
-			Source:       names.GetSource(),
+			SemanticName: semanticName,
+			BusinessName: businessName,
+			Source:       source,
 		})
 	}
 
@@ -601,4 +646,82 @@ func buildTableSchemaContext(qualifiedPath string) string {
 		return fmt.Sprintf("table %q in schema %q", tableName, schemaName)
 	}
 	return ""
+}
+
+// resolveTokensWithAbbreviations resolves tokens using the abbreviation table only
+// (no LLM). Used by generateSingleTerm to build the candidate list for rejection
+// filtering without calling the LLM a second time.
+func resolveTokensWithAbbreviations(ctx context.Context, abbrevSvc *services.AbbreviationService, tenantID string, tokens []string) []string {
+	if abbrevSvc == nil {
+		return tokens
+	}
+	svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
+	abbrevs, err := abbrevSvc.GetAllAbbreviations(svcCtx)
+	if err != nil || len(abbrevs) == 0 {
+		return tokens
+	}
+	abbrMap := make(map[string]string, len(abbrevs))
+	for _, a := range abbrevs {
+		abbrMap[strings.ToUpper(a.Abbreviation)] = a.FullWord
+	}
+	resolved := make([]string, len(tokens))
+	for i, tok := range tokens {
+		upper := strings.ToUpper(tok)
+		if full, ok := abbrMap[upper]; ok {
+			resolved[i] = full
+		} else {
+			resolved[i] = tok
+		}
+	}
+	return resolved
+}
+
+// loadRejections loads all rejection records for a tenant and returns them as a
+// rejectionSet keyed by datasourceID + "\x00" + qualifiedPath + "\x00" + rejectedName.
+// The set is built once per PreviewSemanticTerms or generateTermsSync call.
+func (s *GlossaryService) loadRejections(ctx context.Context, tenantID string) (rejectionSet, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT COALESCE(datasource_id, '00000000-0000-0000-0000-000000000000'::uuid)::text,
+		       qualified_path, rejected_name
+		FROM sml.semantic_term_rejections
+		WHERE tenant_id = $1
+	`, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("loading rejections: %w", err)
+	}
+	defer rows.Close()
+
+	set := make(rejectionSet)
+	for rows.Next() {
+		var dsID, qPath, name string
+		if err := rows.Scan(&dsID, &qPath, &name); err != nil {
+			return nil, fmt.Errorf("scanning rejection row: %w", err)
+		}
+		set[makeRejectionKey(dsID, qPath, name)] = struct{}{}
+	}
+	return set, rows.Err()
+}
+
+// RecordRejection persists a rejection. It uses INSERT ... ON CONFLICT DO NOTHING
+// so it is idempotent under concurrent double-click or multi-tab submissions.
+func (s *GlossaryService) RecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName string) error {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path, rejected_name)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (tenant_id, datasource_id, qualified_path, rejected_name) DO NOTHING
+	`, tenantID, datasourceID, qualifiedPath, rejectedName)
+	return err
+}
+
+// UnrecordRejection removes a rejection. Idempotent: returns 204 whether the row
+// existed or not.
+func (s *GlossaryService) UnrecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName string) error {
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM sml.semantic_term_rejections
+		WHERE tenant_id = $1
+		  AND datasource_id = $2
+		  AND qualified_path = $3
+		  AND rejected_name = $4
+	`, tenantID, datasourceID, qualifiedPath, rejectedName)
+	return err
 }

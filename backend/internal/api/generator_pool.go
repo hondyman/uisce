@@ -37,6 +37,7 @@ func (c *termCache) store(key termCacheKey, id string) {
 
 func (s *GlossaryService) runBulk(ctx context.Context, tenantID, datasourceID string, items []generateTermItem, job *Job, store JobStore) {
 	cache := newTermCache()
+	rejections, _ := s.loadRejections(ctx, tenantID)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(8)
@@ -49,7 +50,7 @@ func (s *GlossaryService) runBulk(ctx context.Context, tenantID, datasourceID st
 	for i, item := range items {
 		i, item := i, item
 		g.Go(func() error {
-			res, err := s.generateSingleTerm(ctx, tenantID, datasourceID, item, cache)
+			res, err := s.generateSingleTerm(ctx, tenantID, datasourceID, item, cache, rejections)
 			if err != nil {
 				store.Update(job.ID, func(j *Job) {
 					if len(j.Errors) < maxErrorsPerJob {

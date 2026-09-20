@@ -162,6 +162,66 @@ func (d derivedTermNames) GetSource() string {
 	return d.source
 }
 
+// CandidateTerm is a single candidate in the ranked candidate list returned by
+// deriveTermNamesCandidates. Rank 0 = primary suggestion; rank N = Nth fallback.
+type CandidateTerm struct {
+	Name   string
+	Source string
+}
+
+// deriveTermNamesCandidates returns a ranked list of candidate semantic term names,
+// ordered from most preferred to least. It is deterministic-only (no LLM) and
+// is used by both the preview endpoint and the generate path to implement
+// "skip rejected candidates" logic.
+//
+// The ranked order is:
+//   1. SemanticName (contextual PascalCase, e.g. EmployeeAddress1)
+//   2. BusinessName (title-case, e.g. Employee Address Line 1) — only included
+//      if different from SemanticName
+//   3. BaseGenericTerm qualified with table context — only present when the
+//      address-line rule applied (e.g. Address for address_line_N without a table)
+//   4. Naive PascalCase on the original tokens — always present as final fallback
+//
+// Rejection filtering (caller's responsibility): iterate candidates in order,
+// pick the first one not in the rejection set; if all are rejected, use the
+// naive PascalCase fallback with source "pascal".
+func deriveTermNamesCandidates(resolvedTokens []string, rawName string, tableSchemaContext string) []CandidateTerm {
+	if len(resolvedTokens) == 0 {
+		return nil
+	}
+
+	derived := deriveTermNamesDeterministic(resolvedTokens, rawName, tableSchemaContext)
+
+	var candidates []CandidateTerm
+
+	// 1. Primary: semantic name (always present)
+	candidates = append(candidates, CandidateTerm{Name: derived.SemanticName, Source: derived.source})
+
+	// 2. Business name (only if different from semantic — prevents duplicate candidates)
+	if derived.BusinessName != "" && derived.BusinessName != derived.SemanticName {
+		candidates = append(candidates, CandidateTerm{Name: derived.BusinessName, Source: derived.source})
+	}
+
+	// 3. Base generic term: for address_line_N without a table qualifier, the bare
+	//    "Address" is a legitimate fallback the user might prefer over the contextual
+	//    rule's output. Only included when the address-line rule applied AND the
+	//    base term is non-empty AND it's different from both semantic and business names.
+	if derived.BaseGenericTerm != "" {
+		baseTerm := derived.BaseGenericTerm
+		if baseTerm != derived.SemanticName && baseTerm != derived.BusinessName {
+			candidates = append(candidates, CandidateTerm{Name: baseTerm, Source: "bare_generic"})
+		}
+	}
+
+	// 4. Naive PascalCase fallback: always last resort.
+	naive := pascalCase(resolvedTokens)
+	if naive != derived.SemanticName && naive != derived.BusinessName && naive != derived.BaseGenericTerm {
+		candidates = append(candidates, CandidateTerm{Name: naive, Source: "pascal"})
+	}
+
+	return candidates
+}
+
 // deriveTermNamesDeterministic applies the contextual naming rules to already-resolved
 // tokens. It does NOT resolve abbreviations or call the LLM — those steps must
 // happen before this is called. Contract:

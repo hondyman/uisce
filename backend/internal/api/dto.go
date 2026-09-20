@@ -70,3 +70,13 @@ type previewSemanticTermsRequest struct {
 type previewSemanticTermsResponse struct {
 	Suggestions []PreviewResult `json:"suggestions"`
 }
+
+type rejectRequest struct {
+	ColumnID       string `json:"column_id"`
+	RejectedName   string `json:"rejected_name"`
+}
+
+type unrejectRequest struct {
+	ColumnID       string `json:"column_id"`
+	RejectedName   string `json:"rejected_name"`
+}
