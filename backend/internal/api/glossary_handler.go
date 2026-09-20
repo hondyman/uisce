@@ -62,6 +62,7 @@ func (h *GlossaryHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/terms/{id}", h.DeleteTerm)
 		r.Post("/edges", h.CreateEdge)
 		r.Post("/generate-semantic-terms", h.GenerateSemanticTerms)
+		r.Post("/preview-semantic-terms", h.PreviewSemanticTerms)
 		r.Get("/jobs/{jobID}", h.GetJobStatus)
 		r.Put("/edges/{id}", h.UpdateEdge)
 		r.Delete("/edges/{id}", h.DeleteEdge)
@@ -2328,4 +2329,33 @@ func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.R
 		"columns_linked":  resp.ColumnsLinked,
 		"results":         resp.Results,
 	})
+}
+
+func (h *GlossaryHandler) PreviewSemanticTerms(w http.ResponseWriter, r *http.Request) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil {
+		http.Error(w, "security context initialization failed: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+
+	if h.glossarySvc == nil {
+		http.Error(w, "glossary service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	var req previewSemanticTermsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	suggestions, err := h.glossarySvc.PreviewSemanticTerms(ctx, secCtx.TenantID, req.ColumnIDs)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(previewSemanticTermsResponse{Suggestions: suggestions})
 }

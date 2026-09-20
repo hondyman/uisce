@@ -505,3 +505,100 @@ func (s *GlossaryService) startBulkJob(ctx context.Context, tenantID, datasource
 func (s *GlossaryService) getJob(tenantID, jobID string) (Job, bool) {
 	return s.jobStore.Get(tenantID, jobID)
 }
+
+const previewCap = 2000
+
+type abbreviationSvcAdapter struct {
+	real *services.AbbreviationService
+}
+
+func (a abbreviationSvcAdapter) GetAllAbbreviations(ctx context.Context) ([]map[string]string, error) {
+	entries, err := a.real.GetAllAbbreviations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]string, len(entries))
+	for i, e := range entries {
+		result[i] = map[string]string{
+			"abbreviation": e.Abbreviation,
+			"full_word":    e.FullWord,
+		}
+	}
+	return result, nil
+}
+
+func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID string, columnIDs []string) ([]PreviewResult, error) {
+	if len(columnIDs) == 0 {
+		return nil, fmt.Errorf("column_ids is required")
+	}
+	if len(columnIDs) > previewCap {
+		return nil, fmt.Errorf("column_ids capped at %d (got %d)", previewCap, len(columnIDs))
+	}
+
+	query := `
+		SELECT id, node_name, COALESCE(qualified_path, node_name)
+		FROM catalog_node
+		WHERE id = ANY($1) AND tenant_id = $2
+	`
+	rows, err := s.db.QueryContext(ctx, query, columnIDs, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("querying catalog nodes: %w", err)
+	}
+	defer rows.Close()
+
+	nodeMap := make(map[string]struct{ nodeName, qualifiedPath string }, len(columnIDs))
+	for rows.Next() {
+		var id, nodeName, qualifiedPath string
+		if err := rows.Scan(&id, &nodeName, &qualifiedPath); err != nil {
+			return nil, fmt.Errorf("scanning catalog node: %w", err)
+		}
+		nodeMap[id] = struct{ nodeName, qualifiedPath string }{nodeName, qualifiedPath}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterating catalog nodes: %w", err)
+	}
+
+	results := make([]PreviewResult, 0, len(columnIDs))
+	for _, colID := range columnIDs {
+		node, ok := nodeMap[colID]
+		if !ok {
+			continue
+		}
+
+		var tableSchemaContext string
+		if node.qualifiedPath != "" {
+			tableSchemaContext = buildTableSchemaContext(node.qualifiedPath)
+		}
+
+		names := deriveTermNamesPreview(ctx, abbreviationSvcAdapter{real: s.abbrevSvc}, tenantID, node.nodeName, tableSchemaContext)
+		results = append(results, PreviewResult{
+			ColumnID:     colID,
+			SemanticName: names.SemanticName,
+			BusinessName: names.BusinessName,
+			Source:       names.GetSource(),
+		})
+	}
+
+	return results, nil
+}
+
+func buildTableSchemaContext(qualifiedPath string) string {
+	var schemaName, tableName string
+	if strings.HasPrefix(qualifiedPath, "/") {
+		parts := strings.Split(strings.TrimPrefix(qualifiedPath, "/"), "/")
+		if len(parts) >= 3 {
+			schemaName = parts[len(parts)-3]
+			tableName = parts[len(parts)-2]
+		}
+	} else {
+		parts := strings.Split(qualifiedPath, ".")
+		if len(parts) >= 3 {
+			schemaName = parts[len(parts)-3]
+			tableName = parts[len(parts)-2]
+		}
+	}
+	if tableName != "" && schemaName != "" {
+		return fmt.Sprintf("table %q in schema %q", tableName, schemaName)
+	}
+	return ""
+}

@@ -155,6 +155,11 @@ type derivedTermNames struct {
 	SemanticName    string
 	BusinessName    string
 	BaseGenericTerm string
+	source          string // one of: "pascal", "abbrev_map", "addr_line_context", "bare_generic"
+}
+
+func (d derivedTermNames) GetSource() string {
+	return d.source
 }
 
 // deriveTermNamesDeterministic applies the contextual naming rules to already-resolved
@@ -201,9 +206,17 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 		}
 	}
 
+	source := "pascal"
+	if addrMatch := addrLineRe.FindStringSubmatch(strings.ToLower(rawName)); addrMatch != nil && tableName != "" {
+		source = "addr_line_context"
+	} else if len(resolvedTokens) == 1 && strings.EqualFold(resolvedTokens[0], rawName) && isGenericWord(resolvedTokens[0]) && tableSchemaContext != "" && tableName != "" && !strings.EqualFold(tableName, rawName) {
+		source = "bare_generic"
+	}
+
 	return derivedTermNames{
 		SemanticName:    semanticName,
 		BusinessName:    businessName,
 		BaseGenericTerm: baseGenericTerm,
+		source:          source,
 	}
 }

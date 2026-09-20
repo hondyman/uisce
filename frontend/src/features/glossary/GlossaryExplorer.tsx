@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useLocale } from '../../i18n/useLocale';
 import { LineageGraph } from './components/LineageGraph';
@@ -626,9 +626,12 @@ export default function GlossaryExplorer() {
   // Wizard Generation State — per-column (not per group)
   const [genColumns, setGenColumns] = useState<any[]>([]);
   const [selectedGenColumns, setSelectedGenColumns] = useState<Set<string>>(new Set());
+  const dirtyColumns = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
+    dirtyColumns.current.clear();
+
     const rawColList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
     const colList = rawColList.filter((c: any) => !mappedColumnIds.has(c.id));
     if (colList.length === 0) {
@@ -636,25 +639,38 @@ export default function GlossaryExplorer() {
       setSelectedGenColumns(new Set());
       return;
     }
+
     const cols = colList
       .filter((c: any) => c.qualified_path)
       .map((c: any) => {
-        const parts = c.qualified_path.split('.');
+        const parts = c.qualified_path.split(/[./]/).filter(Boolean);
         const colName = parts[parts.length - 1];
-        const baseName = colName
-          .toLowerCase()
-          .replace(/_/g, ' ')
-          .replace(/\b\w/g, (l: string) => l.toUpperCase());
         const pascalName = colName
           .split('_')
           .filter(Boolean)
           .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
           .join('');
-        return { id: c.id, qualifiedPath: c.qualified_path, suggestedName: baseName, termName: pascalName };
+        return { id: c.id, qualifiedPath: c.qualified_path, suggestedName: pascalName, source: 'pascal' };
       });
 
     setGenColumns(cols);
     setSelectedGenColumns(new Set());
+
+    if (cols.length === 0) return;
+    apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
+      `/api/glossary/preview-semantic-terms`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ column_ids: cols.map((c: any) => c.id) }),
+      }
+    ).then(r => {
+      const byId = new Map(r.suggestions.map(s => [s.column_id, s]));
+      setGenColumns(prev => prev.map(c => {
+        if (dirtyColumns.current.has(c.id)) return c;
+        const sugg = byId.get(c.id);
+        return sugg ? { ...c, suggestedName: sugg.semantic_name, source: sugg.source } : c;
+      }));
+    }).catch(() => { /* silent fallback to naive PascalCase */ });
   }, [allColumns, isGenModalOpen, mappedColumnIds]);
 
   const inputStyle = {
@@ -744,6 +760,7 @@ export default function GlossaryExplorer() {
                               style={{ ...inputStyle, marginBottom: 0, width: 'auto' }}
                               value={col.suggestedName}
                               onChange={e => {
+                                dirtyColumns.current.add(col.id);
                                 const next = [...genColumns];
                                 next[i].suggestedName = e.target.value;
                                 setGenColumns(next);

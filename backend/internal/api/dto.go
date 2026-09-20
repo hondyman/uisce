@@ -49,3 +49,24 @@ var ErrColumnIDsRequired = errColumnIDsRequired{}
 type errColumnIDsRequired struct{}
 
 func (e errColumnIDsRequired) Error() string { return "column_ids or items is required" }
+
+// PreviewResult is returned by POST /api/glossary/preview-semantic-terms.
+// Source is one of:
+//   - "pascal": raw pascal-case of column name, no abbreviation matched
+//   - "abbrev_map": abbreviation table resolved at least one token
+//   - "addr_line_context": address_line_N contextual rule applied (table context used)
+//   - "bare_generic": bare generic word qualified by table name (LLM may refine on create)
+type PreviewResult struct {
+	ColumnID     string `json:"column_id"`
+	SemanticName string `json:"semantic_name"`
+	BusinessName string `json:"business_name"`
+	Source       string `json:"source"`
+}
+
+type previewSemanticTermsRequest struct {
+	ColumnIDs []string `json:"column_ids"`
+}
+
+type previewSemanticTermsResponse struct {
+	Suggestions []PreviewResult `json:"suggestions"`
+}
