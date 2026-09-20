@@ -241,9 +241,13 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 	}
 
 	var columnNodeName, qualifiedPath string
-	_ = s.db.QueryRow(`SELECT node_name, COALESCE(qualified_path, '') FROM catalog_node WHERE id = $1`, item.ColumnIDs[0]).Scan(&columnNodeName, &qualifiedPath)
-	if columnNodeName == "" {
-		return nil, fmt.Errorf("could not resolve a name for this term: column not found")
+	rowErr := s.db.QueryRow(`
+		SELECT node_name, COALESCE(qualified_path, '')
+		FROM catalog_node
+		WHERE id = $1 AND tenant_id = $2
+	`, item.ColumnIDs[0], tenantID).Scan(&columnNodeName, &qualifiedPath)
+	if rowErr != nil || columnNodeName == "" {
+		return nil, fmt.Errorf("could not resolve a name for this term: column not found (tenant=%s): %v", tenantID, rowErr)
 	}
 
 	var tableSchemaContext string
