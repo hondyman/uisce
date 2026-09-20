@@ -73,6 +73,13 @@ security.ResolveTenantForRequest. 25 call sites updated in one commit. Variant A
 confirmed: admin override preserved. Non-admin spoof attempts (header != JWT tenant)
 are now rejected fail-closed.
 
+**Mechanism of initial misclassification:** V1 was initially marked "dead code"
+because `grep -n 'rulefabric' cmd/server/main.go` returned empty. The actual
+registration is transitive: `server/main.go → api.go:SetupRouter → api.go:1267
+(rulefabric.RegisterRoutes)`. Grep of the entrypoint alone missed the sub-router
+mount. The `route-tree.sh` script in `scripts/refactor/route-tree.sh` encodes
+the correct audit discipline: transitive walk from SetupRouter, not grep of main.go.
+
 ---
 
 #### V2: `WithTenantContext` middleware — all routes via api.go:899 (CRITICAL)
@@ -218,6 +225,29 @@ delegates to `security.ResolveTenantForRequest`. Unit tests added.
 **Status 2026-09-20:** PARTIALLY DONE — `WithTenantContext` no longer reads
 `identity.TenantIDFromContext`. The `identity` package is still used in
 `AuthContextMiddleware` (sets actor context) and should be audited before removal.
+
+---
+
+### Phase 4 (deferred): TemplatesTab + RegisterTemplateRoutes dead-wire
+
+**Finding:** `frontend/src/features/semantic-playground/components/TemplatesTab.tsx`
+makes 6 raw `fetch` calls to `/api/semantic/templates` with `X-Tenant-ID: tenant-1`
+set in each request. `backend/internal/api/template_handlers.go:648` defines
+`Server.RegisterTemplateRoutes(router chi.Router)` but `api.go` never calls it —
+the routes are not mounted. Result: all 6 calls return 404.
+
+**Classification:** Not a security risk (endpoint doesn't exist), but broken
+functionality — a user-facing tab making dead requests.
+
+**Options:**
+1. Wire the routes: mount `Server.RegisterTemplateRoutes` in `api.go` and
+   fix the frontend to send the context tenant instead of hardcoded `tenant-1`.
+2. Delete both halves: remove `TemplatesTab.tsx` API calls and
+   `Server.RegisterTemplateRoutes` definition.
+
+**route-tree.sh validation:** `RegisterTemplateRoutes` should appear as UNMOUNTED
+once the definition-line false negative is fixed. Use it as a regression test
+for the script.
 
 ---
 
