@@ -37,6 +37,3 @@ CREATE TABLE IF NOT EXISTS sml.semantic_term_rejections (
 
 CREATE INDEX IF NOT EXISTS idx_semantic_term_rejections_lookup
     ON sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path);
-
--- DOWN
-DROP TABLE IF EXISTS sml.semantic_term_rejections;

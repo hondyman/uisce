@@ -66,33 +66,3 @@ BEGIN
     END IF;
 END
 $$;
-
--- DOWN: remove the constraint from whichever schema it lives in
-DO $$
-DECLARE
-    target_schema TEXT;
-BEGIN
-    SELECT nspname INTO target_schema
-    FROM pg_class c
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relname = 'catalog_node'
-      AND c.relkind = 'r'
-    LIMIT 1;
-
-    IF target_schema IS NULL THEN
-        RETURN;
-    END IF;
-
-    IF EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conrelid = (target_schema || '.catalog_node')::regclass
-          AND conname   = 'catalog_node_tenant_path_uniq'
-          AND contype   = 'u'
-    ) THEN
-        EXECUTE format(
-            'ALTER TABLE %I.catalog_node DROP CONSTRAINT catalog_node_tenant_path_uniq',
-            target_schema
-        );
-    END IF;
-END
-$$;
