@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
+	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // TenantProvisioningConfig configures TenantProvisioningMiddleware.
@@ -60,22 +62,39 @@ func TenantProvisioningMiddleware(cfg TenantProvisioningConfig) func(http.Handle
 			ctx := r.Context()
 			log := logging.GetLogger().Sugar()
 
-			var existingCount int
-			if err := cfg.DB.QueryRowContext(ctx,
-				`SELECT COUNT(*) FROM public.user_tenant WHERE user_id = $1`, authInfo.UserID,
-			).Scan(&existingCount); err != nil {
-				log.Warnf("[TenantProvisioningMiddleware] user_tenant lookup failed for user=%s: %v", authInfo.UserID, err)
-				next.ServeHTTP(w, r)
+			rows, err := cfg.DB.QueryContext(ctx,
+				`SELECT tenant_id FROM public.user_tenant WHERE user_id = $1`, authInfo.UserID)
+			if err != nil {
+				log.Errorf("[TenantProvisioningMiddleware] user_tenant lookup failed for user=%s: %v", authInfo.UserID, err)
+				http.Error(w, `{"error":"failed to resolve tenant context"}`, http.StatusInternalServerError)
 				return
 			}
-			if existingCount > 0 {
-				// User already has assignment(s) — e.g. professional-services
-				// staff with several tenants — but the token happened to carry
-				// no tenant claim on this request. Leave tenant resolution to
-				// whatever mechanism already handles that (route param, header
-				// validated against their assignment set, etc). Auto-provisioning
-				// must never guess which of several assignments to pick.
-				next.ServeHTTP(w, r)
+			defer rows.Close()
+
+			var tenantIDs []string
+			for rows.Next() {
+				var tid string
+				if err := rows.Scan(&tid); err != nil {
+					log.Errorf("[TenantProvisioningMiddleware] failed to scan tenant_id for user=%s: %v", authInfo.UserID, err)
+					http.Error(w, `{"error":"failed to resolve tenant context"}`, http.StatusInternalServerError)
+					return
+				}
+				tenantIDs = append(tenantIDs, tid)
+			}
+			if len(tenantIDs) > 0 {
+				authInfo.TenantIDs = tenantIDs
+				ctx = security.WithAuthInfo(ctx, authInfo)
+				if jclaims, _ := authInfo.RawClaims.(*services.JWTClaims); jclaims != nil {
+					jwtClaims := &jwtmiddleware.JWTClaims{
+						UserID:    jclaims.UserID,
+						Email:     jclaims.Email,
+						TenantID:  tenantIDs[0],
+						TenantIDs: tenantIDs,
+						Roles:     jclaims.Roles,
+					}
+					ctx = context.WithValue(ctx, jwtmiddleware.ClaimsContextKey, jwtClaims)
+				}
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
@@ -115,6 +134,16 @@ func TenantProvisioningMiddleware(cfg TenantProvisioningConfig) func(http.Handle
 			authInfo.TenantIDs = []string{tenantID}
 			ctx = security.WithAuthInfo(ctx, authInfo)
 			ctx = identity.WithActorTenant(ctx, authInfo.UserID, tenantID)
+			if jclaims, _ := authInfo.RawClaims.(*services.JWTClaims); jclaims != nil {
+				jwtClaims := &jwtmiddleware.JWTClaims{
+					UserID:    jclaims.UserID,
+					Email:     jclaims.Email,
+					TenantID:  tenantID,
+					TenantIDs: []string{tenantID},
+					Roles:     jclaims.Roles,
+				}
+				ctx = context.WithValue(ctx, jwtmiddleware.ClaimsContextKey, jwtClaims)
+			}
 			r = r.WithContext(ctx)
 			next.ServeHTTP(w, r)
 		})
