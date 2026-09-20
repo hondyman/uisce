@@ -37,33 +37,3 @@ func ResolveTenantForRequest(r *http.Request) (string, error) {
 
 	return tenant, nil
 }
-
-// ResolveTenantForRequestWarn is like ResolveTenantForRequest but degrades spoof
-// attempts to a warning log and returns the JWT tenant rather than an error.
-// Use this when you want to silently block tenant spoofing without returning an
-// error to the caller (reduces error noise for accidental misconfiguration).
-func ResolveTenantForRequestWarn(r *http.Request) (string, error) {
-	auth, ok := AuthInfoFromContext(r.Context())
-	if !ok {
-		return "", fmt.Errorf("tenant resolution requires authentication context")
-	}
-
-	requested := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
-	if requested != "" {
-		resolved, ok := ResolveTenantID(auth, requested)
-		if !ok {
-			// Spoof attempt: header does not match JWT tenant and caller is not admin.
-			// Degrade to JWT tenant rather than returning error.
-			if len(auth.TenantIDs) > 0 {
-				return auth.TenantIDs[0], nil
-			}
-			return "", fmt.Errorf("no tenant available")
-		}
-		return resolved, nil
-	}
-
-	if len(auth.TenantIDs) == 0 {
-		return "", fmt.Errorf("no tenant available")
-	}
-	return auth.TenantIDs[0], nil
-}
