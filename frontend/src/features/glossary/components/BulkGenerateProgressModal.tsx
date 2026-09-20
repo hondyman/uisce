@@ -1,34 +1,6 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { Box, Typography, LinearProgress, Button, Alert } from '@mui/material';
-import apiClient from '../../../utils/apiClient';
-
-interface JobResult {
-  id: string;
-  name: string;
-  reused_existing: boolean;
-  business_term_id: string;
-  business_term_name: string;
-  business_term_reused: boolean;
-  definition_source: string;
-  columns_linked: number;
-  columns_total: number;
-  error?: string;
-}
-
-interface JobStatus {
-  id: string;
-  tenant_id: string;
-  datasource_id: string;
-  status: 'running' | 'completed' | 'failed';
-  total: number;
-  done: number;
-  failed: number;
-  results: JobResult[];
-  errors: string[];
-  started_at: string;
-  finished_at: string;
-}
+import { useJobPolling, JobStatus } from '../hooks/useJobPolling';
 
 interface BulkGenerateProgressModalProps {
   open: boolean;
@@ -49,18 +21,11 @@ export default function BulkGenerateProgressModal({
 }: BulkGenerateProgressModalProps) {
   const [closed, setClosed] = useState(false);
 
-  const { data: job, isError, dataUpdatedAt } = useQuery<JobStatus>({
-    queryKey: ['glossary-bulk-job', jobId, tenantId],
-    queryFn: () => apiClient<JobStatus>(
-      `/api/glossary/jobs/${jobId}`
-    ),
-    enabled: open && !!jobId && !!tenantId && !closed,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status;
-      if (status === 'completed' || status === 'failed') return false;
-      return 1500;
-    },
-  });
+  const { data: job, isError, dataUpdatedAt } = useJobPolling(
+    jobId,
+    tenantId,
+    open && !!jobId && !!tenantId && !closed
+  );
 
   if (!open || closed) return null;
 

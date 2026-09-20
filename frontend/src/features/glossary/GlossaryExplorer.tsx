@@ -23,6 +23,7 @@ import { RelationshipExplorer } from './components/RelationshipExplorer';
 import { useEntityRelationships } from './hooks/useEntityRelationships';
 import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 import BulkGenerateProgressModal from './components/BulkGenerateProgressModal';
+import { useJobPolling, JobStatus } from './hooks/useJobPolling';
 
 // ─────────────────────────────────────────────
 // Theme tokens
@@ -627,10 +628,27 @@ export default function GlossaryExplorer() {
   const [genColumns, setGenColumns] = useState<any[]>([]);
   const [selectedGenColumns, setSelectedGenColumns] = useState<Set<string>>(new Set());
   const dirtyColumns = useRef<Set<string>>(new Set());
+  const [genSearchTerm, setGenSearchTerm] = useState('');
+
+  const filteredGenColumns = useMemo(() => {
+    if (!genSearchTerm) return genColumns;
+    const q = genSearchTerm.toLowerCase();
+    return genColumns.filter(c =>
+      (c.qualifiedPath || '').toLowerCase().includes(q) ||
+      (c.suggestedName || '').toLowerCase().includes(q)
+    );
+  }, [genColumns, genSearchTerm]);
+
+  const { data: jobProgress } = useJobPolling(
+    activeJobId,
+    tenantId,
+    (progressModalOpen || isGenerating) && !!activeJobId
+  );
 
   useEffect(() => {
     if (!isGenModalOpen || !allColumns) return;
     dirtyColumns.current.clear();
+    setGenSearchTerm('');
 
     const rawColList = Array.isArray(allColumns) ? allColumns : (allColumns as any)?.data ?? [];
     const colList = rawColList.filter((c: any) => !mappedColumnIds.has(c.id));
@@ -726,13 +744,29 @@ export default function GlossaryExplorer() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ background: C.panel, borderRadius: 12, width: 900, maxHeight: '80vh', border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
             <h2 style={{ margin: 0, padding: '24px 24px 16px 24px' }}>Generate Semantic Terms from Columns</h2>
+            <div style={{ padding: '0 24px 12px 24px' }}>
+              <input
+                placeholder="Filter columns or terms..."
+                value={genSearchTerm}
+                onChange={e => setGenSearchTerm(e.target.value)}
+                style={{ ...inputStyle, marginBottom: 0 }}
+              />
+            </div>
             <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '0 24px', minHeight: 0 }}>
-              {columnsLoading ? <Spinner /> : (
+              {columnsLoading ? <Spinner /> : filteredGenColumns.length === 0 ? (
+                <Empty
+                  icon="🔍"
+                  title={genColumns.length === 0 ? "All columns already mapped" : `No columns match "${genSearchTerm}"`}
+                  subtitle={genColumns.length === 0
+                    ? "Every catalog column already has a semantic term linked."
+                    : `Try a different filter — "${genSearchTerm}" matches none of ${genColumns.length} columns.`}
+                />
+              ) : (
                 <table style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${C.border}` }}>
                       <th style={{ padding: '8px', width: 40 }}><input type="checkbox" onChange={e => {
-                        if (e.target.checked) setSelectedGenColumns(new Set(genColumns.map(c => c.id)));
+                        if (e.target.checked) setSelectedGenColumns(new Set(filteredGenColumns.map(c => c.id)));
                         else setSelectedGenColumns(new Set());
                       }} /></th>
                       <th style={{ padding: '8px' }}>Database Column</th>
@@ -740,7 +774,7 @@ export default function GlossaryExplorer() {
                     </tr>
                   </thead>
                   <tbody>
-                    {genColumns.map((col, i) => {
+                    {filteredGenColumns.map((col, i) => {
                       const isSelected = selectedGenColumns.has(col.id);
                       return (
                         <tr key={col.id} style={{ borderBottom: `1px solid ${C.border}`, background: isSelected ? 'rgba(124, 58, 237, 0.12)' : 'transparent' }}>
@@ -761,9 +795,7 @@ export default function GlossaryExplorer() {
                               value={col.suggestedName}
                               onChange={e => {
                                 dirtyColumns.current.add(col.id);
-                                const next = [...genColumns];
-                                next[i].suggestedName = e.target.value;
-                                setGenColumns(next);
+                                setGenColumns(prev => prev.map(c => c.id === col.id ? { ...c, suggestedName: e.target.value } : c));
                               }}
                             />
                           </td>
@@ -774,6 +806,15 @@ export default function GlossaryExplorer() {
                 </table>
               )}
             </div>
+            {jobProgress && jobProgress.status === 'running' && (
+              <div style={{ padding: '8px 24px 0 24px', borderTop: `1px solid ${C.border}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted, marginBottom: 6 }}>
+                  <span>Mapping in progress…</span>
+                  <span>{jobProgress.done} / {jobProgress.total}{jobProgress.failed > 0 ? ` (${jobProgress.failed} failed)` : ''}</span>
+                </div>
+                <progress max={jobProgress.total} value={jobProgress.done} style={{ width: '100%', height: 6, appearance: 'none' }} />
+              </div>
+            )}
             <div style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'space-between', padding: '16px 24px 24px 24px', borderTop: `1px solid ${C.border}` }}>
               <span style={{ fontSize: 13, color: C.textMuted }}>
                 {isGenerating ? 'Creating terms…' : `${selectedGenColumns.size} selected`}
