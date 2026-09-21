@@ -195,13 +195,19 @@ func (h *NodeTypesHandler) handleCreateNodeType(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if nt.TenantID == "" {
-		var ok bool
-		if nt.TenantID, ok = TenantIDFromRequest(r); !ok {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
-			return
-		}
+	// The tenant comes from the validated claims only. A tenant_id in the body is not trusted: catalog_node_type
+	// has no row-level security, so honouring it would let one tenant create node types in another tenant,
+	// including the gold copy.
+	callerTenant, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
 	}
+	if nt.TenantID != "" && nt.TenantID != callerTenant {
+		http.Error(w, "tenant_id does not match the authenticated tenant", http.StatusForbidden)
+		return
+	}
+	nt.TenantID = callerTenant
 
 	if nt.IsActive == nil {
 		active := true
