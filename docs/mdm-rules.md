@@ -71,11 +71,30 @@ The engine (`vm.AdvancedEvaluator`) cannot express these yet, so no rule exists 
    compare a term to a literal; expressions are numeric only.
 4. **Set membership (`in`)**: expressible only as an OR of equals today.
 
+## Verifying it end to end
+
+`backend/cmd/verify_mdm_e2e` acts as a regular tenant against the real database and reports PASS/FAIL per
+check: the tenant sees the gold-copy rules marked core; what else of the gold-copy tenant it can read; every
+rule term resolves to a column under the BO's driving table; the stored rules accept and reject their
+examples; a binding-scoped rule finds the inherited gold-copy binding; a tenant cannot shadow a core rule;
+with `-write`, a temporary custom rule is created, seen only by its tenant, and removed.
+
+```bash
+DATABASE_URL='<the application role>' go run ./cmd/verify_mdm_e2e [-tenant <uuid>] [-write]
+```
+
+Use the application's role, not the owner: RLS does not apply to a superuser or a `BYPASSRLS` role, and
+the command says so and skips the visibility checks if it is one.
+
+If step 3 or 5 fails for many BOs at once, the tenant cannot read the gold-copy column nodes and `MAPS_TO`
+targets it needs to resolve inherited terms; the rules themselves are fine.
+
 ## Open items
 
-* **Published golden record** (`Status = 'PUBLISHED'` requires `PublishedAt` and `PublishedBy`): not
-  written. If the status string is not exactly right the rule would silently never fire. Confirm the
-  golden-record status vocabulary first.
+* **Golden-record status**: there is no rule keyed on a status value (`Status = 'PUBLISHED'`), because the
+  status vocabulary is not defined anywhere in the repo and a wrong string would silently never fire.
+  `mdm.issuer_golden_record.publication_recorded_completely` covers the integrity that matters without it:
+  `PublishedAt` and `PublishedBy` must be present together or absent together.
 * **Mapping hygiene**: `is_active` maps to per-BO names (`IssuerIsActive` on five unrelated BOs,
   `MatchIsActive`, `DqIsActive`, ...), and the `issuer_*` `id` columns map to `IssuerId`. Neither blocks
   the current rules; both weaken "one term, one meaning".

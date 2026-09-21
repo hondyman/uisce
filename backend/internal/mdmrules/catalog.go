@@ -195,6 +195,20 @@ func requiredIf(bo, name, description, boolTerm, needed string) Rule {
 		}}
 }
 
+// bothOrNeither: a and b must be set together or not at all. Used where two terms describe one fact
+// (who published and when) so a half-filled pair is caught without depending on a status vocabulary.
+func bothOrNeither(bo, name, description, a, b string) Rule {
+	return Rule{BO: bo, Name: fmt.Sprintf("mdm.%s.%s", bo, name), Description: description,
+		Severity: blockSev, Timing: "pre_write", Category: catIntegrity,
+		AST: group("OR", group("AND", isNull(a), isNull(b)), group("AND", notNull(a), notNull(b))),
+		Cases: []Case{
+			{"neither set", map[string]any{a: nil, b: nil}, true},
+			{"both set", map[string]any{a: "x", b: "y"}, true},
+			{a + " only", map[string]any{a: "x", b: nil}, false},
+			{b + " only", map[string]any{a: nil, b: "y"}, false},
+		}}
+}
+
 // Catalog returns the tier 1 and 2 rule set.
 //
 // Deliberately not rules: anything on Status, Priority or an *IsActive term (enumerations and UX
@@ -221,6 +235,8 @@ func Catalog() []Rule {
 	// ---- tier 1: numeric ------------------------------------------------------------------
 	add(
 		atLeast("issuer_golden_record", "GoldenVersion", 1),
+		bothOrNeither("issuer_golden_record", "publication_recorded_completely",
+			"PublishedAt and PublishedBy must be recorded together: a half-published golden record is inconsistent.", "PublishedAt", "PublishedBy"),
 		inRange("issuer_golden_record", "OverallDqScore", 0, 100),
 		inRange("issuer_golden_record", "IdentityConfidence", 0, 100),
 		inRange("issuer_golden_record", "HierarchyConfidence", 0, 100),
