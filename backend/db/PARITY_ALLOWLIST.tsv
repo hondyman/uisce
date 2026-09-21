@@ -3,14 +3,14 @@
 # A reason is REQUIRED. This list should shrink; STALE entries are reported.
 
 # --- applied-but-missing: no SQL exists in any ref or worktree ---------------------
-20260824_001_catalog_sti_unique_constraints.up.sql	missing	SQL unrecoverable (no ref or worktree holds it). Reconstruction from live schema planned; see docs/migrations/MIGRATION_LOSS_RECORD.md
-20261020_004_gold_copy_sync_datasource_grants.up.sql	missing	SQL unrecoverable. Reconstruction from live grants planned; see docs/migrations/MIGRATION_LOSS_RECORD.md
 20261001_012_swift_inbound_channel.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
 20261001_013_swift_webhook_inbox.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
 20261001_014_swift_refund_reversal_rows.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
 20261019_workflow_definitions.up.sql	missing	A ref holds this filename but with different content than was applied; needs comparison against the live schema (follow-up)
 
 # --- applied-but-different: disk content differs from the hash the runner recorded ---
+20261020_004_gold_copy_sync_datasource_grants.up.sql	different	RECONSTRUCTION: original SQL lost, file rebuilt from live state (uisce_gold_copy_sync SELECT-all grants and default privileges); original hash unrecoverable. See MIGRATION_LOSS_RECORD.md
+20260824_001_catalog_sti_unique_constraints.up.sql	different	RECONSTRUCTION: original SQL lost, file rebuilt from live state (catalog_node_unique constraint); original hash unrecoverable. See MIGRATION_LOSS_RECORD.md
 20261021_001_catalog_node_tenant_path_unique.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the object, which was then created manually. Disk is authoritative
 20261021_002_semantic_term_rejections.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the table, which was then created manually. Disk is authoritative
 000063_fix_identity_profile_mappings.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
