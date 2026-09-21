@@ -31,9 +31,9 @@ func (a *DownstreamSyncActivities) ResolveTargetBindingsActivity(
 		return nil, nil
 	}
 	query := `
-		SELECT b.id AS binding_id, c.target_name, c.delivery_channel, COALESCE(c.api_endpoint_url, '') AS endpoint_url
-		FROM public.business_object_bindings b
-		JOIN mdm_pipeline.binding_sync_configs c ON c.binding_id = b.id AND c.tenant_id = b.tenant_id
+		SELECT b.bo_binding_id AS binding_id, c.target_name, c.delivery_channel, COALESCE(c.api_endpoint_url, '') AS endpoint_url
+		FROM public.business_object_binding b
+		JOIN mdm_pipeline.binding_sync_configs c ON c.binding_id = b.bo_binding_id AND c.tenant_id = b.tenant_id
 		WHERE b.bo_id = $1 AND b.tenant_id = $2 AND b.is_active = TRUE AND c.is_active = TRUE;
 	`
 	var targets []mdm.BindingTargetDescriptor

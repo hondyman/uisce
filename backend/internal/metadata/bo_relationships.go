@@ -34,7 +34,7 @@ func (s *BusinessObjectService) resolveDrivingTableNode(ctx context.Context, ten
 	var nodeID sql.NullString
 	err := s.db.GetContext(ctx, &nodeID, `
 		SELECT driving_node_id::text
-		FROM public.business_object_bindings
+		FROM public.business_object_binding
 		WHERE bo_id = $1::uuid AND tenant_id = $2::uuid
 		ORDER BY is_default DESC, created_at DESC
 		LIMIT 1
@@ -89,7 +89,7 @@ func (s *BusinessObjectService) drivingNodeToBO(ctx context.Context, tenantID st
 	var fromBind []boRow
 	if err := s.db.SelectContext(ctx, &fromBind, `
 		SELECT b.bo_id::text AS id, COALESCE(bo.bo_name, '') AS bo_name, COALESCE(bo.bo_key, '') AS bo_key, b.driving_node_id::text AS node_id
-		FROM public.business_object_bindings b
+		FROM public.business_object_binding b
 		JOIN public.business_objects bo ON bo.id = b.bo_id
 		WHERE b.tenant_id = $1::uuid
 	`, tenantID); err != nil {

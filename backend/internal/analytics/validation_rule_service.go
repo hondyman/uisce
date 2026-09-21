@@ -425,7 +425,7 @@ func ResolveSemanticFieldMap(ctx context.Context, db *sqlx.DB, boID, driverTable
 
 // ResolveSemanticFieldMapForBinding is ResolveSemanticFieldMap's
 // counterpart for a *non-canonical* binding: bindingID names a
-// business_object_bindings row, and the map comes from field_bindings
+// business_object_binding row, and the map comes from field_bindings
 // (RESOLVED rows only) rather than MAPS_TO. MAPS_TO stays the canonical/
 // default binding (unchanged, zero migration risk to what's already
 // proven live) - field_bindings becomes the table for every additional

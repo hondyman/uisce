@@ -2022,11 +2022,12 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	var bRows []bindingRow
 	bindingQuery := `
-		SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
-		       bob.backend_type AS backend_type,
+		SELECT bob.bo_binding_id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+		       COALESCE(upper(pb.dialect_name), '') AS backend_type,
 		       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-		       bob.is_default AS is_default, bob.temporal_override AS temporal_override
-		FROM business_object_bindings bob
+		       bob.is_default AS is_default, COALESCE(bob.temporal_override, 'NONE') AS temporal_override
+		FROM public.business_object_binding bob
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = bob.backend_id
 		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 		WHERE bob.bo_id::text = $1 AND (bob.tenant_id::text = $2 OR bob.tenant_id::text = $3)
 	`
@@ -2035,11 +2036,12 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	if len(bRows) == 0 {
 		fallbackBindingQuery := `
-			SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
-			       bob.backend_type AS backend_type,
+			SELECT bob.bo_binding_id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+			       COALESCE(upper(pb.dialect_name), '') AS backend_type,
 			       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-			       bob.is_default AS is_default, bob.temporal_override AS temporal_override
-			FROM business_object_bindings bob
+			       bob.is_default AS is_default, COALESCE(bob.temporal_override, 'NONE') AS temporal_override
+			FROM public.business_object_binding bob
+			LEFT JOIN public.physical_backend pb ON pb.backend_id = bob.backend_id
 			LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 			WHERE bob.bo_id::text = $1
 		`

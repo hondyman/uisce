@@ -721,7 +721,7 @@ func (h *BusinessObjectHandler) DeleteBusinessObjectRelationship(w http.Response
 // fetchBusinessObjectBindings expects them (bindingId/isDefault/etc.) -
 // that client called this exact path with no handler behind it at all
 // (GetBusinessObjectWithBindings below is a different path, "with_bindings",
-// and its own bindings query targets columns business_object_bindings
+// and its own bindings query targets columns business_object_binding
 // doesn't have, so it silently returns none either). Page Studio's
 // DataBindingsPanel depends on this to resolve a real bindingId; without
 // one, PageComponentRenderer never renders live data for a bound widget.
@@ -745,9 +745,10 @@ func (h *BusinessObjectHandler) GetBusinessObjectBindings(w http.ResponseWriter,
 	}
 	var rows []bindingRow
 	err = h.db.SelectContext(ctx, &rows, `
-		SELECT b.id AS binding_id, b.backend_id, b.backend_type, b.driving_node_id,
-		       cn.node_name AS driving_node_name, b.is_default
-		FROM public.business_object_bindings b
+		SELECT b.bo_binding_id AS binding_id, b.backend_id, COALESCE(upper(pb.dialect_name), '') AS backend_type,
+		       b.driving_node_id, cn.node_name AS driving_node_name, b.is_default
+		FROM public.business_object_binding b
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = b.backend_id
 		LEFT JOIN public.catalog_node cn ON cn.id = b.driving_node_id
 		WHERE b.tenant_id = $1 AND b.bo_id = $2
 		ORDER BY b.is_default DESC
@@ -841,12 +842,14 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 		calcFields = []map[string]interface{}{}
 	}
 
-	// Get bindings for this BO from business_object_bindings
+	// Get bindings for this BO from business_object_binding
 	var bindings []map[string]interface{}
 	bindingQuery := `
-		SELECT bob.id, bob.backend_id, bob.backend_type, bob.is_default, bob.temporal_override,
+		SELECT bob.bo_binding_id AS id, bob.backend_id, COALESCE(upper(pb.dialect_name), '') AS backend_type,
+		       bob.is_default, COALESCE(bob.temporal_override, 'NONE') AS temporal_override,
 		       COALESCE(cn.node_name, '') as node_name, COALESCE(cn.qualified_path, '') as qualified_path
-		FROM public.business_object_bindings bob
+		FROM public.business_object_binding bob
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = bob.backend_id
 		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 		WHERE bob.tenant_id = $1 AND bob.bo_id = $2
 		ORDER BY bob.is_default DESC
