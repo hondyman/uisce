@@ -1123,13 +1123,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		handler.RegisterRoutes(r)
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Monthly PnL", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Monthly PnL", "completed", []byte(`{}`),
 			"s3://reports/out.pdf", int64(1024), int64(50), int64(300),
 			nil, "wf-1", "run-1", ownerID, "admin-trigger",
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -1175,13 +1175,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		triggerUser := "cross-tenant-caller"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Core Valuation", "pending", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Core Valuation", "pending", []byte(`{}`),
 			nil, nil, nil, nil,
 			nil, "wf-2", "run-2", ownerID, triggerUser,
 			[]byte(`{}`), time.Now(), nil,
@@ -1293,13 +1293,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		ownerID := "template-owner"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Personal Holdings", "completed", []byte(`{}`),
 			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
 			nil, "wf-personal", "run-p", ownerID, ownerID,
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -1345,13 +1345,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		adminUserID := "tenant-admin"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Personal Holdings", "completed", []byte(`{}`),
 			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
 			nil, "wf-personal", "run-p", ownerID, ownerID,
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -1384,7 +1384,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 	})
 
 	t.Run("Route Specificity - GET /api/v1/reports/executions does not 400 Invalid UUID", func(t *testing.T) {
-		db, _, err := sqlmock.New()
+		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -1392,6 +1392,15 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		handler := httpapi.NewReportHandler(service, nil, db)
 		r := chi.NewRouter()
 		handler.RegisterRoutes(r)
+
+		// The list endpoint is real: it runs one query, which returns no rows here.
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
+				"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+				"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+				"metadata", "created_at", "completed_at", "is_personal", "created_by_id",
+			}))
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/executions", nil)
 		auth := security.AuthInfo{
@@ -1406,6 +1415,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 
 		// Assert route is not shadowed by /{id} which returns 400 "Invalid template ID"
 		assert.NotEqual(t, http.StatusBadRequest, w.Code, "GET /executions was routed to /{id} and returned 400!")
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }

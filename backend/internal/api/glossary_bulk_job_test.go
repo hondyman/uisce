@@ -35,7 +35,7 @@ func TestGenerateTermsAsyncDispatch(t *testing.T) {
 	hasEdgeID := uuid.New().String()
 
 	// Column node lookup
-	mock.ExpectQuery(`^SELECT node_name, COALESCE`).WithArgs(colID).WillReturnRows(
+	mock.ExpectQuery(`^SELECT node_name, COALESCE`).WithArgs(colID, tenantID).WillReturnRows(
 		sqlmock.NewRows([]string{"node_name", "qualified_path"}).AddRow("test_column", qualifiedPath))
 
 	// Sibling columns (LIKE pattern)
@@ -113,7 +113,7 @@ func TestGenerateTermsAsyncDispatch(t *testing.T) {
 
 	// 1 goroutine succeeded (mocked colID), 29 failed (no mocks) → completed, done=1
 	if finalJob.Status != JobStatusCompleted {
-		t.Errorf("status=%q; want completed (failed goroutines: %d)", finalJob.Status, finalJob.Failed)
+		t.Errorf("status=%q; want completed (failed goroutines: %d) errors=%v", finalJob.Status, finalJob.Failed, finalJob.Errors)
 	}
 	if finalJob.Done != 1 {
 		t.Errorf("done=%d; want 1 (only the mocked goroutine)", finalJob.Done)
@@ -142,7 +142,7 @@ func TestGenerateTermsSyncPath(t *testing.T) {
 	hasEdgeID := uuid.New().String()
 
 	mock.ExpectQuery("SELECT node_name, COALESCE\\(qualified_path, ''\\) FROM catalog_node WHERE id = \\$1").
-		WithArgs(colID).WillReturnRows(
+		WithArgs(colID, tenantID).WillReturnRows(
 		sqlmock.NewRows([]string{"node_name", "qualified_path"}).AddRow("test_col", qualifiedPath))
 
 	mock.ExpectQuery("SELECT node_name FROM catalog_node WHERE tenant_id = \\$1 AND qualified_path LIKE \\$2 AND qualified_path != \\$3 LIMIT 40").

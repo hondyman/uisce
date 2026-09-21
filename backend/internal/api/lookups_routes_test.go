@@ -17,11 +17,18 @@ import (
 func setupLookupTestDB(t *testing.T) *sql.DB {
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
+	// The handlers query the schema-qualified public.tenants. SQLite only understands that
+	// prefix for an attached database, and ATTACH is per connection, so pin the pool to one
+	// connection and attach an in-memory database named "public".
+	db.SetMaxOpenConns(1)
+	_, err = db.Exec(`ATTACH DATABASE ':memory:' AS public`)
+	require.NoError(t, err)
 
 	schema := `
-	CREATE TABLE IF NOT EXISTS tenants (
+	CREATE TABLE IF NOT EXISTS public.tenants (
 		id TEXT PRIMARY KEY,
-		gold_copy BOOLEAN DEFAULT FALSE
+		gold_copy BOOLEAN DEFAULT FALSE,
+		is_active BOOLEAN DEFAULT TRUE
 	);
 
 	CREATE TABLE IF NOT EXISTS lookups (
@@ -49,7 +56,7 @@ func setupLookupTestDB(t *testing.T) *sql.DB {
 	require.NoError(t, err)
 
 	// Insert a test tenant
-	_, err = db.Exec(`INSERT INTO tenants (id, gold_copy) VALUES ('t1', 0)`)
+	_, err = db.Exec(`INSERT INTO public.tenants (id, gold_copy) VALUES ('t1', 0)`)
 	require.NoError(t, err)
 
 	return db
@@ -67,7 +74,7 @@ func TestListLookupsPaginationAndSearch(t *testing.T) {
 	RegisterLookupsRoutes(r, db)
 
 	// Test pagination (limit 2): should return two items and a next_cursor that's > 0
-	req := httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1&limit=2", nil)
+	req := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1&limit=2", nil), "user1", "t1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -79,7 +86,7 @@ func TestListLookupsPaginationAndSearch(t *testing.T) {
 	require.Contains(t, body, "next_cursor")
 
 	// Test search (q=iso) should include iso_countries and iso_currencies
-	req2 := httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1&q=iso", nil)
+	req2 := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1&q=iso", nil), "user1", "t1")
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusOK, w2.Code)
@@ -102,7 +109,7 @@ func TestGetLookupValues(t *testing.T) {
 	r := chi.NewRouter()
 	RegisterLookupsRoutes(r, db)
 
-	req := httptest.NewRequest(http.MethodGet, "/lookups/lu1/values?tenant_id=t1", nil)
+	req := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/lu1/values?tenant_id=t1", nil), "user1", "t1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -122,7 +129,7 @@ func TestLookupCRUD(t *testing.T) {
 
 	// Create a lookup
 	body := strings.NewReader(`{"name":"test_lookup","description":"desc"}`)
-	req := httptest.NewRequest(http.MethodPost, "/lookups?tenant_id=t1", body)
+	req := withAuthClaims(httptest.NewRequest(http.MethodPost, "/lookups?tenant_id=t1", body), "user1", "t1")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
@@ -134,14 +141,14 @@ func TestLookupCRUD(t *testing.T) {
 
 	// Update
 	upBody := strings.NewReader(`{"name":"test_lookup2","description":"desc2"}`)
-	req2 := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/lookups/%s?tenant_id=t1", created.ID), upBody)
+	req2 := withAuthClaims(httptest.NewRequest(http.MethodPut, fmt.Sprintf("/lookups/%s?tenant_id=t1", created.ID), upBody), "user1", "t1")
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusNoContent, w2.Code)
 
 	// List and ensure updated name present
-	req3 := httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1", nil)
+	req3 := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups?tenant_id=t1", nil), "user1", "t1")
 	w3 := httptest.NewRecorder()
 	r.ServeHTTP(w3, req3)
 	require.Equal(t, http.StatusOK, w3.Code)
@@ -159,7 +166,7 @@ func TestLookupCRUD(t *testing.T) {
 
 	// Create a lookup value
 	valBody := strings.NewReader(`{"value":"v1","label":"Label1"}`)
-	req4 := httptest.NewRequest(http.MethodPost, fmt.Sprintf("/lookups/%s/values?tenant_id=t1", created.ID), valBody)
+	req4 := withAuthClaims(httptest.NewRequest(http.MethodPost, fmt.Sprintf("/lookups/%s/values?tenant_id=t1", created.ID), valBody), "user1", "t1")
 	req4.Header.Set("Content-Type", "application/json")
 	w4 := httptest.NewRecorder()
 	r.ServeHTTP(w4, req4)
@@ -169,13 +176,13 @@ func TestLookupCRUD(t *testing.T) {
 	require.Equal(t, "v1", v.Value)
 
 	// Delete value
-	req5 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/lookups/%s/values/%s?tenant_id=t1", created.ID, v.ID), nil)
+	req5 := withAuthClaims(httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/lookups/%s/values/%s?tenant_id=t1", created.ID, v.ID), nil), "user1", "t1")
 	w5 := httptest.NewRecorder()
 	r.ServeHTTP(w5, req5)
 	require.Equal(t, http.StatusNoContent, w5.Code)
 
 	// Delete lookup
-	req6 := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/lookups/%s?tenant_id=t1", created.ID), nil)
+	req6 := withAuthClaims(httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/lookups/%s?tenant_id=t1", created.ID), nil), "user1", "t1")
 	w6 := httptest.NewRecorder()
 	r.ServeHTTP(w6, req6)
 	require.Equal(t, http.StatusNoContent, w6.Code)
@@ -198,7 +205,7 @@ func TestGetLookupValuesWithParent(t *testing.T) {
 	r := chi.NewRouter()
 	RegisterLookupsRoutes(r, db)
 
-	req := httptest.NewRequest(http.MethodGet, "/lookups/lu2/values?tenant_id=t1", nil)
+	req := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/lu2/values?tenant_id=t1", nil), "user1", "t1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -211,7 +218,7 @@ func TestGetLookupValuesWithParent(t *testing.T) {
 	require.GreaterOrEqual(t, len(items), 1)
 
 	// Now fetch child items by parent_id and assert we receive the child
-	reqChild := httptest.NewRequest(http.MethodGet, "/lookups/lu2/values?tenant_id=t1&parent_id=p1", nil)
+	reqChild := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/lu2/values?tenant_id=t1&parent_id=p1", nil), "user1", "t1")
 	wChild := httptest.NewRecorder()
 	r.ServeHTTP(wChild, reqChild)
 	require.Equal(t, http.StatusOK, wChild.Code)
@@ -253,7 +260,7 @@ func TestGetLookupValuesFromSourceTable(t *testing.T) {
 	RegisterLookupsRoutes(r, db)
 
 	// Default request - should return top-level items (parents)
-	req := httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1", nil)
+	req := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1", nil), "user1", "t1")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
@@ -263,7 +270,7 @@ func TestGetLookupValuesFromSourceTable(t *testing.T) {
 	require.GreaterOrEqual(t, len(items), 2)
 
 	// Fetch child items by parent_id
-	req2 := httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1&parent_id=p1", nil)
+	req2 := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1&parent_id=p1", nil), "user1", "t1")
 	w2 := httptest.NewRecorder()
 	r.ServeHTTP(w2, req2)
 	require.Equal(t, http.StatusOK, w2.Code)
@@ -273,7 +280,7 @@ func TestGetLookupValuesFromSourceTable(t *testing.T) {
 	require.GreaterOrEqual(t, len(childItems), 1)
 
 	// Fetch child items by parent_value (name) should also resolve and return the child
-	req3 := httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1&parent_value=Parent", nil)
+	req3 := withAuthClaims(httptest.NewRequest(http.MethodGet, "/lookups/l_src/values?tenant_id=t1&parent_value=Parent", nil), "user1", "t1")
 	w3 := httptest.NewRecorder()
 	r.ServeHTTP(w3, req3)
 	require.Equal(t, http.StatusOK, w3.Code)
