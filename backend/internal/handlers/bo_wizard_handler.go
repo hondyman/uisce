@@ -239,13 +239,13 @@ func (h *BOWizardHandler) SaveBusinessObject(w http.ResponseWriter, r *http.Requ
 
 	var backendID uuid.UUID
 	_ = tx.GetContext(r.Context(), &backendID, `
-		SELECT backend_id FROM business_object_bindings WHERE tenant_id = $1 LIMIT 1
+		SELECT backend_id FROM business_object_binding WHERE tenant_id = $1 LIMIT 1
 	`, tid)
 	if backendID != uuid.Nil {
 		_, _ = tx.ExecContext(r.Context(), `
-			INSERT INTO business_object_bindings (tenant_id, bo_id, backend_id, backend_type, driving_node_id, is_default, temporal_override)
-			VALUES ($1,$2,$3,'POSTGRES',$4,true,'NONE')
-			ON CONFLICT (tenant_id, bo_id, backend_id) DO NOTHING
+			INSERT INTO business_object_binding (tenant_id, bo_id, backend_id, driving_node_id, is_default, temporal_override, is_active)
+			VALUES ($1,$2,$3,$4,true,'NONE',true)
+			ON CONFLICT DO NOTHING
 		`, tid, boID, backendID, tableID)
 	}
 
