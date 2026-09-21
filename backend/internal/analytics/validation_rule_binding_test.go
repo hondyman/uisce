@@ -136,14 +136,14 @@ func TestResolveActiveBinding(t *testing.T) {
 	})
 	t.Run("explicit binding wins and must belong to the BO", func(t *testing.T) {
 		db, mock := newDB(t)
-		mock.ExpectQuery(`b.id = \$3::uuid`).WithArgs("t", "bo", "b9").
+		mock.ExpectQuery(`b.bo_binding_id = \$3::uuid`).WithArgs("t", "bo", "b9").
 			WillReturnRows(sqlmock.NewRows(cols).AddRow("b9", "/alpha/oms/orders"))
 		ab, err := ResolveActiveBinding(WithBinding(context.Background(), "b9"), db, "t", "bo", "/mdm/party")
 		if err != nil || ab == nil || ab.DrivingPath != "/alpha/oms/orders" {
 			t.Fatalf("got %+v, %v", ab, err)
 		}
 		db2, mock2 := newDB(t)
-		mock2.ExpectQuery(`b.id = \$3::uuid`).WillReturnRows(sqlmock.NewRows(cols))
+		mock2.ExpectQuery(`b.bo_binding_id = \$3::uuid`).WillReturnRows(sqlmock.NewRows(cols))
 		if _, err := ResolveActiveBinding(WithBinding(context.Background(), "nope"), db2, "t", "bo", "/mdm/party"); err == nil {
 			t.Fatal("explicit binding that is not on the BO was accepted")
 		}

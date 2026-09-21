@@ -15,7 +15,7 @@ import (
 // A rule's field references are semantic terms, resolved to physical columns per binding at
 // evaluation time, so one rule can run against every binding of a BO. Some rules should not:
 // MDM sourcing rules, for example, only make sense on the MDM binding. A rule can therefore
-// carry BindingIDs (business_object_binding.id). Empty means "every binding".
+// carry BindingIDs (business_object_binding.bo_binding_id). Empty means "every binding".
 
 type bindingCtxKey struct{}
 
@@ -61,19 +61,19 @@ type ActiveBinding struct {
 // when no binding row matches, which is the case for BOs that have not been bound yet.
 func ResolveActiveBinding(ctx context.Context, db *sqlx.DB, tenantID, boID, drivingTable string) (*ActiveBinding, error) {
 	const base = `
-		SELECT b.id::text AS id, n.qualified_path AS driving_path
+		SELECT b.bo_binding_id::text AS id, n.qualified_path AS driving_path
 		FROM public.business_object_binding b
 		JOIN public.catalog_node n ON n.id = b.driving_node_id
 		WHERE b.tenant_id = $1::uuid AND b.bo_id = $2::uuid AND b.is_active`
 	var ab ActiveBinding
 	var err error
 	if id := BindingFromContext(ctx); id != "" {
-		err = db.GetContext(ctx, &ab, base+` AND b.id = $3::uuid`, tenantID, boID, id)
+		err = db.GetContext(ctx, &ab, base+` AND b.bo_binding_id = $3::uuid`, tenantID, boID, id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("binding %s is not an active binding of BO %s", id, boID)
 		}
 	} else {
-		err = db.GetContext(ctx, &ab, base+` AND n.qualified_path = $3 ORDER BY b.is_core DESC, b.id LIMIT 1`, tenantID, boID, drivingTable)
+		err = db.GetContext(ctx, &ab, base+` AND n.qualified_path = $3 ORDER BY b.is_core DESC, b.bo_binding_id LIMIT 1`, tenantID, boID, drivingTable)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
@@ -100,11 +100,11 @@ func (s *ValidationRuleService) validateBindingScope(ctx context.Context, tenant
 	}
 	var found []string
 	err := s.db.SelectContext(ctx, &found, `
-		SELECT b.id::text
+		SELECT b.bo_binding_id::text
 		FROM public.business_object_binding b
 		JOIN public.business_objects bo ON bo.id = b.bo_id
 		WHERE b.tenant_id = $1::uuid AND (bo.bo_key = $2 OR bo.bo_name = $2)
-		  AND bo.tenant_id = $1::uuid AND b.id::text = ANY($3)`, tenantID, boName, pq.Array(ids))
+		  AND bo.tenant_id = $1::uuid AND b.bo_binding_id::text = ANY($3)`, tenantID, boName, pq.Array(ids))
 	if err != nil {
 		return fmt.Errorf("validate binding scope: %w", err)
 	}

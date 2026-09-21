@@ -29,7 +29,7 @@ type ValidationRuleProperties struct {
 	// is unambiguous for anything written from this point forward.
 	Domain string `json:"domain,omitempty"`
 	// BindingIDs scopes the rule to specific bindings of the BO
-	// (business_object_binding.id). Empty means the rule applies to every
+	// (business_object_binding.bo_binding_id). Empty means the rule applies to every
 	// binding, which is what every rule written before this field existed
 	// means, so they are unchanged. The rule's field references stay
 	// semantic terms either way; scoping only decides whether the rule runs
