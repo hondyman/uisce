@@ -1,7 +1,27 @@
-# MDM validation rules (tier 1 and 2)
+# MDM validation rules (tiers 1-2 and security)
 
 The catalog lives in `backend/internal/mdmrules`; `backend/cmd/seed_mdm_rules` writes it to the
-gold-copy tenant through `ValidationRuleService.UpsertValidationRule` (domain `mdm`).
+gold-copy tenant through `ValidationRuleService.UpsertValidationRule` (domain `mdm`). It has 105 rules: 43 for
+the issuer/benchmark and tier 1-3 BOs (`catalog.go`) and 62 for the 30 security MDM BOs
+(`catalog_security.go`, vocabulary in `vocabulary_security.go`).
+
+### The security rules
+
+Every one of the 30 security BOs has a `required_terms` rule (what makes a record identifiable). On top of that:
+
+* **Scores and confidences** (`OverallScore`, `OverallDqScore`, `IdentityConfidence`, `MinConfidence`,
+  `Confidence`, the match thresholds) are 0-100, the range of their `numeric(5,2)` columns.
+* **Match thresholds** must be ordered: `ThresholdAutoMatch >= ThresholdReview >= ThresholdNoMatch`.
+* **Counts and durations** are positive (`PeriodsPerYear`, `SlaMinutes`, `MaxStalenessHours`, `SourcePage`),
+  `GracePeriodMinutes` is not negative, and `GoldenVersion`, `HierarchyDepth` and the classification levels are at least 1.
+* **Recorded together**: who/when pairs (`PublishedBy`/`PublishedAt` on a golden record, and the review,
+  resolution, validation and extraction pairs on the queues) are both set or both empty.
+* **Flags**: a rating is not both investment grade and high yield; an identifier that requires checksum
+  validation names the algorithm.
+
+As with the earlier tiers there is nothing on `Status`, `Priority` or an `IsActive` flag, and no rule is
+binding-scoped. The only checks left out are the engine gaps below (for example `SourceSystemIdentifierA` must
+differ from `SourceSystemIdentifierB`, and `EffectiveTo >= EffectiveFrom`).
 
 ## How the rules are authored
 
@@ -49,6 +69,9 @@ DATABASE_URL=... go run ./cmd/seed_mdm_rules -apply     # write; idempotent (key
 Rules are created with `governance_status = draft` by the service.
 
 ## Regenerating the vocabulary
+
+`vocabulary.go` holds tiers 1-3 (from the pasted field list); `vocabulary_security.go` was generated from
+the query below for the 30 security BOs.
 
 ```sql
 SELECT bo.bo_key, f.field_name, f.field_role

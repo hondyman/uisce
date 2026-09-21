@@ -1,4 +1,5 @@
-// Package mdmrules is the validation-rule catalog for the tier 1 and 2 MDM business objects.
+// Package mdmrules is the validation-rule catalog for the tier 1 and 2 MDM business objects and the security MDM
+// business objects (catalog_security.go).
 //
 // Every rule is authored against semantic terms (see Vocabulary), never physical columns. At
 // execution the engine resolves each term to the column that represents it under the active binding
@@ -209,7 +210,7 @@ func bothOrNeither(bo, name, description, a, b string) Rule {
 		}}
 }
 
-// Catalog returns the tier 1 and 2 rule set.
+// Catalog returns the tier 1 and 2 rule set followed by the security MDM rules.
 //
 // Deliberately not rules: anything on Status, Priority or an *IsActive term (enumerations and UX
 // controls own those); anything on IssuerId (every issuer_* table maps its own id to that term, so it
@@ -297,7 +298,7 @@ func Catalog() []Rule {
 			"ParentIssuerId", "ChildIssuerId", "ChangeType"),
 		inRange("issuer_hierarchy_review", "Confidence", 0, 100),
 	)
-	return r
+	return append(r, securityRules()...)
 }
 
 func snake(s string) string {
