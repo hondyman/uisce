@@ -40,6 +40,7 @@ func head(s string)                { fmt.Printf("\n== %s\n", s) }
 
 func main() {
 	tenantFlag := flag.String("tenant", "", "regular tenant to act as (default: the first non-gold-copy tenant)")
+	otherFlag := flag.String("other", "", "a second regular tenant, to check custom-rule isolation (public.tenants shows a tenant only its own row under RLS)")
 	write := flag.Bool("write", false, "also create a temporary custom rule as the tenant (and remove it)")
 	flag.Parse()
 	ctx := context.Background()
@@ -146,14 +147,19 @@ func main() {
 	if !rlsMeaningful {
 		skip("needs a role subject to RLS")
 	} else {
+		var structure int
 		if err := db.GetContext(ctx, &goldReadable, `
 			SELECT count(*) FROM public.catalog_node n JOIN public.catalog_node_type nt ON nt.id = n.node_type_id
-			WHERE n.tenant_id = $1::uuid AND nt.catalog_type_name <> 'validation_rule'`, gold); err != nil {
+			WHERE n.tenant_id = $1::uuid AND nt.catalog_type_name NOT IN ('validation_rule', 'table', 'column')`, gold); err != nil {
+			bad("query: %v", err)
+		} else if err := db.GetContext(ctx, &structure, `
+			SELECT count(*) FROM public.catalog_node n JOIN public.catalog_node_type nt ON nt.id = n.node_type_id
+			WHERE n.tenant_id = $1::uuid AND nt.catalog_type_name IN ('table', 'column')`, gold); err != nil {
 			bad("query: %v", err)
 		} else if goldReadable == 0 {
-			ok("the tenant reads only validation rules from the gold-copy tenant (the catalog_node_read_gold_copy_rules policy is narrow)")
+			ok("the tenant reads only validation rules and table/column structure (%d nodes) from the gold-copy tenant (policies catalog_node_read_gold_copy_rules and _structure)", structure)
 		} else {
-			note("the tenant can also read %d other gold-copy catalog nodes (columns, terms, tables...). That does not come from catalog_node_read_gold_copy_rules, which is limited to validation rules: some other policy or role setting grants it. Fine if intended; inherited BOs need it for steps 3 and 5.", goldReadable)
+			bad("the tenant can read %d gold-copy catalog nodes beyond validation rules and table/column structure (terms, business terms, API nodes...): some policy is wider than intended", goldReadable)
 		}
 	}
 
@@ -308,9 +314,13 @@ func main() {
 			} else {
 				bad("tenant view of party rules: core=%d, own custom=%d", core, custom)
 			}
-			var other string
-			if err := db.GetContext(ctx, &other, `SELECT id::text FROM public.tenants WHERE gold_copy IS NOT TRUE AND id <> $1::uuid ORDER BY id LIMIT 1`, tenant); err != nil {
-				skip("no second regular tenant to check isolation against")
+			other := *otherFlag
+			var lookupErr error
+			if other == "" {
+				lookupErr = db.GetContext(ctx, &other, `SELECT id::text FROM public.tenants WHERE gold_copy IS NOT TRUE AND id <> $1::uuid ORDER BY id LIMIT 1`, tenant)
+			}
+			if lookupErr != nil || other == "" {
+				skip("no second regular tenant to check isolation against (pass -other; public.tenants shows a tenant only its own row under RLS)")
 			} else if rlsMeaningful {
 				if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false), set_config('hasura.tenant_id', $1, false)`, other); err == nil {
 					l2, _ := svc.ListByBO(ctx, other, "party", "")

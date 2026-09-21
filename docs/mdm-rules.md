@@ -80,14 +80,24 @@ examples; a binding-scoped rule finds the inherited gold-copy binding; a tenant 
 with `-write`, a temporary custom rule is created, seen only by its tenant, and removed.
 
 ```bash
-DATABASE_URL='<the application role>' go run ./cmd/verify_mdm_e2e [-tenant <uuid>] [-write]
+cd backend && set -a && source .env && set +a
+# Act as the RLS-subject role app_user on the existing login (SET ROLE via a startup option); no new credential.
+DATABASE_URL="${DATABASE_URL}&options=-c%20role%3Dapp_user" \
+  go run ./cmd/verify_mdm_e2e -tenant <uuid> -other <uuid> -write
 ```
 
-Use the application's role, not the owner: RLS does not apply to a superuser or a `BYPASSRLS` role, and
-the command says so and skips the visibility checks if it is one.
+RLS does not apply to a superuser or a `BYPASSRLS` role, so run it as a role that is subject to it. The
+`.env` login is `postgres` (a superuser), which is why the startup option above drops to `app_user` for the
+session; the command says so and skips the visibility checks if it is still a superuser. `-other` is a second
+regular tenant for the custom-rule isolation check (`public.tenants` shows a tenant only its own row under
+RLS, so it cannot be looked up).
 
-If step 3 or 5 fails for many BOs at once, the tenant cannot read the gold-copy column nodes and `MAPS_TO`
-targets it needs to resolve inherited terms; the rules themselves are fine.
+What a regular tenant can read of the gold copy, under RLS: its validation rules
+(`catalog_node_read_gold_copy_rules`), `table` and `column` catalog nodes
+(`catalog_node_read_gold_copy_structure`), business objects, bindings and BO fields/edges. It cannot write any
+of them. The gold-copy tenant id comes from `uisce_gold_copy_tenant_id()` because `public.tenants` is not
+readable by a tenant. If step 3 or 5 fails for many BOs at once, one of those reads is missing; the rules
+themselves are fine.
 
 ## Open items
 
