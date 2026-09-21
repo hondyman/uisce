@@ -47,6 +47,12 @@ const (
 	ValidationRuleDomainDefault    = "validation"
 	ValidationRuleDomainMDM        = "mdm"
 	ValidationRuleDomainCompliance = "compliance"
+
+	// Origin of a rule as seen by a tenant. A rule authored in the gold-copy tenant is "core": every
+	// tenant inherits it read-only. A rule authored in the tenant itself is "custom" and applies to
+	// that tenant only.
+	ValidationRuleOriginCore   = "core"
+	ValidationRuleOriginCustom = "custom"
 )
 
 // ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
@@ -91,6 +97,7 @@ type ValidationRuleDescriptor struct {
 	Category         string          `json:"category,omitempty"`
 	Domain           string          `json:"domain"`
 	BindingIDs       []string        `json:"binding_ids,omitempty"`
+	Origin           string          `json:"origin,omitempty"` // "core" | "custom", relative to the requesting tenant
 	RuleAST          json.RawMessage `json:"rule_ast"`
 	GovernanceStatus string          `json:"governance_status"`
 	IsActive         bool            `json:"is_active"`

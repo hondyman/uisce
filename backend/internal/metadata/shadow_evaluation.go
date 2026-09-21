@@ -230,6 +230,11 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	enforce := enforcementEnabled()
 	ae := vm.NewAdvancedEvaluator()
 	for _, rule := range rules {
+		// ListByBO returns switched-off rules on purpose (so the switch can be turned back on); enforcement
+		// must not run them. This also lets the gold-copy tenant retire a core rule for every tenant.
+		if !rule.IsActive {
+			continue
+		}
 		if applies, undetermined := analytics.RuleScopeApplies(rule.BindingIDs, activeBindingID); undetermined {
 			// A scoped rule whose binding cannot be determined is never a silent skip.
 			why := "no active binding matches this write's driving table"

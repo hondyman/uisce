@@ -61,6 +61,15 @@ func TestDescriptorCarriesBindingScope(t *testing.T) {
 	}
 }
 
+// expectGold registers the gold-copy tenant lookup that every inheritance-aware query starts with.
+func expectGold(mock sqlmock.Sqlmock, gold string) {
+	rows := sqlmock.NewRows([]string{"id"})
+	if gold != "" {
+		rows.AddRow(gold)
+	}
+	mock.ExpectQuery(`FROM public.tenants`).WillReturnRows(rows)
+}
+
 func TestValidateBindingScope(t *testing.T) {
 	newSvc := func(t *testing.T) (*ValidationRuleService, sqlmock.Sqlmock) {
 		db, mock, err := sqlmock.New()
@@ -83,6 +92,7 @@ func TestValidateBindingScope(t *testing.T) {
 	})
 	t.Run("accepts bindings of the BO", func(t *testing.T) {
 		svc, mock := newSvc(t)
+		expectGold(mock, "gold")
 		mock.ExpectQuery(`FROM public.business_object_binding b`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("b1").AddRow("b2"))
 		if err := svc.validateBindingScope(ctx, "t", "party", []string{"b1", "b2"}); err != nil {
@@ -91,6 +101,7 @@ func TestValidateBindingScope(t *testing.T) {
 	})
 	t.Run("rejects a binding that is not on the BO", func(t *testing.T) {
 		svc, mock := newSvc(t)
+		expectGold(mock, "gold")
 		mock.ExpectQuery(`FROM public.business_object_binding b`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("b1"))
 		err := svc.validateBindingScope(ctx, "t", "party", []string{"b1", "elsewhere"})
@@ -119,7 +130,8 @@ func TestResolveActiveBinding(t *testing.T) {
 
 	t.Run("inferred from the driving table", func(t *testing.T) {
 		db, mock := newDB(t)
-		mock.ExpectQuery(`n.qualified_path = \$3`).WithArgs("t", "bo", "/mdm/party").
+		expectGold(mock, "gold")
+		mock.ExpectQuery(`n.qualified_path = \$3`).WithArgs(sqlmock.AnyArg(), "bo", "/mdm/party", "t").
 			WillReturnRows(sqlmock.NewRows(cols).AddRow("b1", "/mdm/party"))
 		ab, err := ResolveActiveBinding(context.Background(), db, "t", "bo", "/mdm/party")
 		if err != nil || ab == nil || ab.ID != "b1" {
@@ -128,6 +140,7 @@ func TestResolveActiveBinding(t *testing.T) {
 	})
 	t.Run("no matching binding is (nil, nil), not an error", func(t *testing.T) {
 		db, mock := newDB(t)
+		expectGold(mock, "gold")
 		mock.ExpectQuery(`n.qualified_path = \$3`).WillReturnRows(sqlmock.NewRows(cols))
 		ab, err := ResolveActiveBinding(context.Background(), db, "t", "bo", "/mdm/party")
 		if err != nil || ab != nil {
@@ -136,13 +149,15 @@ func TestResolveActiveBinding(t *testing.T) {
 	})
 	t.Run("explicit binding wins and must belong to the BO", func(t *testing.T) {
 		db, mock := newDB(t)
-		mock.ExpectQuery(`b.bo_binding_id = \$3::uuid`).WithArgs("t", "bo", "b9").
+		expectGold(mock, "gold")
+		mock.ExpectQuery(`b.bo_binding_id = \$3::uuid`).WithArgs(sqlmock.AnyArg(), "bo", "b9").
 			WillReturnRows(sqlmock.NewRows(cols).AddRow("b9", "/alpha/oms/orders"))
 		ab, err := ResolveActiveBinding(WithBinding(context.Background(), "b9"), db, "t", "bo", "/mdm/party")
 		if err != nil || ab == nil || ab.DrivingPath != "/alpha/oms/orders" {
 			t.Fatalf("got %+v, %v", ab, err)
 		}
 		db2, mock2 := newDB(t)
+		expectGold(mock2, "gold")
 		mock2.ExpectQuery(`b.bo_binding_id = \$3::uuid`).WillReturnRows(sqlmock.NewRows(cols))
 		if _, err := ResolveActiveBinding(WithBinding(context.Background(), "nope"), db2, "t", "bo", "/mdm/party"); err == nil {
 			t.Fatal("explicit binding that is not on the BO was accepted")

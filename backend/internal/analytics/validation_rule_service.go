@@ -10,6 +10,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/models"
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // ValidationRuleService manages validation rules as catalog nodes - the
@@ -42,7 +43,15 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 		return nil, fmt.Errorf("rule_ast is not a valid vm.RuleNode: %w", err)
 	}
 
-	if dupName, err := s.findDuplicateRuleAST(ctx, req.TenantID, req.BOName, req.Name, req.RuleAST); err != nil {
+	gold, err := goldCopyTenantID(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.rejectCoreShadow(ctx, req.TenantID, gold, req.BOName, req.Name); err != nil {
+		return nil, err
+	}
+
+	if dupName, err := s.findDuplicateRuleAST(ctx, visibleTenants(req.TenantID, gold), req.BOName, req.Name, req.RuleAST); err != nil {
 		return nil, fmt.Errorf("duplicate check failed: %w", err)
 	} else if dupName != "" {
 		return nil, fmt.Errorf("a rule with these exact conditions already exists on %s: %q", req.BOName, dupName)
@@ -64,12 +73,14 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 	// reference catalog_node.id for the edge to actually be traversable -
 	// an edge built from business_objects.id inserts without error (no FK
 	// enforces it) but silently can never be joined back to anything.
+	// A tenant's own BO wins; otherwise the gold-copy BO it inherits (a custom rule on a core BO).
 	var boNodeID string
 	if err := s.db.GetContext(ctx, &boNodeID, `
 		SELECT classification_node_id FROM business_objects
-		WHERE (bo_key = $1 OR bo_name = $1) AND tenant_id = $2::uuid
+		WHERE (bo_key = $1 OR bo_name = $1) AND tenant_id = ANY($2::uuid[])
+		ORDER BY (tenant_id = $3::uuid) DESC
 		LIMIT 1
-	`, req.BOName, req.TenantID); err != nil {
+	`, req.BOName, pq.Array(visibleTenants(req.TenantID, gold)), req.TenantID); err != nil {
 		return nil, fmt.Errorf("BO %q not found: %w", req.BOName, err)
 	}
 
@@ -133,8 +144,10 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 // name is already the upsert's own conflict key (renaming while editing
 // would otherwise slip past a name-only check as a new rule). The rule
 // being edited (same name) is excluded so re-saving it isn't flagged as a
-// duplicate of itself.
-func (s *ValidationRuleService) findDuplicateRuleAST(ctx context.Context, tenantID, boName, name string, ruleAST json.RawMessage) (string, error) {
+// duplicate of itself. tenantIDs is the caller's tenant plus the gold-copy
+// tenant (visibleTenants): a custom rule identical to a core rule is a
+// duplicate too, since the tenant already inherits the core one.
+func (s *ValidationRuleService) findDuplicateRuleAST(ctx context.Context, tenantIDs []string, boName, name string, ruleAST json.RawMessage) (string, error) {
 	var incoming interface{}
 	if err := json.Unmarshal(ruleAST, &incoming); err != nil {
 		return "", err
@@ -149,11 +162,11 @@ func (s *ValidationRuleService) findDuplicateRuleAST(ctx context.Context, tenant
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
-		  AND n.tenant_id = $1
+		  AND n.tenant_id = ANY($1::uuid[])
 		  AND n.properties->>'bo_name' = $2
 		  AND n.is_active = true
 		  AND n.node_name != $3
-	`, tenantID, boName, name)
+	`, pq.Array(tenantIDs), boName, name)
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +243,14 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		return nil, fmt.Errorf("validation rule not found: %w", err)
 	}
 
-	return descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config, node.IsActive)
+	desc, err := descriptorFromNode(node.ID, node.NodeName, node.Description, node.Properties, node.Config, node.IsActive)
+	if err != nil {
+		return nil, err
+	}
+	if gold, gerr := goldCopyTenantID(ctx, s.db); gerr == nil {
+		desc.Origin = originOf(desc.TenantID, gold)
+	}
+	return desc, nil
 }
 
 // ListByBO returns all validation rules targeting the given BO. If domain
@@ -241,6 +261,11 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 // read-side default, so an empty-string domain filter doesn't need a
 // separate "or properties->>'domain' is null" clause.
 func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, domain string) ([]models.ValidationRuleDescriptor, error) {
+	gold, err := goldCopyTenantID(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+
 	var nodes []struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -248,33 +273,48 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 		Properties  json.RawMessage `db:"properties"`
 		Config      json.RawMessage `db:"config"`
 		IsActive    bool            `db:"is_active"`
+		TenantID    string          `db:"tenant_id"`
 	}
 
+	// The tenant's own rules plus the gold-copy tenant's core rules, which every tenant inherits
+	// read-only.
+	//
 	// Deliberately not filtering on n.is_active: a rule the user has
 	// toggled off via handleSetActive still targets this BO and should
 	// stay visible (with its switch reflecting the off state) so it can
 	// be turned back on - filtering it out here would make the toggle a
-	// one-way door.
-	err := s.db.SelectContext(ctx, &nodes, `
-		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active
+	// one-way door. Callers that enforce rules must check IsActive.
+	err = s.db.SelectContext(ctx, &nodes, `
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active, n.tenant_id::text AS tenant_id
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
-		  AND n.tenant_id = $1
+		  AND n.tenant_id = ANY($1::uuid[])
 		  AND n.properties->>'bo_name' = $2
 		  AND ($3 = '' OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
 		ORDER BY n.node_name
-	`, tenantID, boName, domain, models.ValidationRuleDomainDefault)
+	`, pq.Array(visibleTenants(tenantID, gold)), boName, domain, models.ValidationRuleDomainDefault)
 	if err != nil {
 		return nil, err
 	}
 
+	// A core rule and a custom rule can share a name only if the custom one predates the core one
+	// (rejectCoreShadow blocks new ones). Core wins, so a tenant can never override a core rule.
+	byName := make(map[string]int, len(nodes))
 	result := make([]models.ValidationRuleDescriptor, 0, len(nodes))
 	for _, n := range nodes {
 		desc, err := descriptorFromNode(n.ID, n.NodeName, n.Description, n.Properties, n.Config, n.IsActive)
 		if err != nil {
 			return nil, err
 		}
+		desc.Origin = originOf(n.TenantID, gold)
+		if i, dup := byName[desc.Name]; dup {
+			if desc.Origin == models.ValidationRuleOriginCore {
+				result[i] = *desc
+			}
+			continue
+		}
+		byName[desc.Name] = len(result)
 		result = append(result, *desc)
 	}
 	return result, nil

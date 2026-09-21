@@ -17,6 +17,20 @@ gold-copy tenant through `ValidationRuleService.UpsertValidationRule` (domain `m
 * **Vocabulary.** `mdmrules.Vocabulary` is the term list per BO; the tests check every referenced term
   against it and evaluate every rule against passing and failing example records.
 
+## Core and custom rules
+
+* A rule authored in the **gold-copy tenant is core**: every tenant inherits it, read-only.
+* A rule authored in a **tenant is custom**: it applies to that tenant only.
+* `ValidationRuleService.ListByBO` returns the tenant's own rules plus the gold-copy tenant's, each marked
+  `origin: core | custom`. The evaluator therefore holds a tenant to every core rule and to its own.
+* A tenant can never override, shadow or switch off a core rule: writes only ever touch the caller's own
+  nodes (`handleSetActive` filters on the caller's tenant), and a custom rule may not reuse a core rule's
+  name or duplicate its conditions (`rejectCoreShadow`, `findDuplicateRuleAST`). If a same-name pair does
+  exist, core wins.
+* A tenant may add a custom rule on an inherited core BO, and scope it to the inherited gold-copy binding.
+* Only the gold-copy tenant can retire a core rule (switch it off); the evaluator skips inactive rules.
+  Before this the evaluator ignored `is_active`, so the UI switch did not actually stop enforcement.
+
 ## What is deliberately not a rule
 
 * `Status`, `Priority` and any `*IsActive` term: enumerations and UX controls own those.

@@ -22,9 +22,14 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 	ruleProps := func(scope string) string {
 		return `{"bo_name":"party","tenant_id":"t-1","severity":"BLOCK","timing":"pre_write"` + scope + `}`
 	}
-	ruleRow := func(name, scope string) []interface{} {
+	ruleRowFor := func(name, scope, ruleTenant string, active bool) []interface{} {
 		return []interface{}{"00000000-0000-0000-0000-00000000000" + name[len(name)-1:], name, "", []byte(ruleProps(scope)),
-			[]byte(`{"rule_ast":` + failing + `}`), true}
+			[]byte(`{"rule_ast":` + failing + `}`), active, ruleTenant}
+	}
+	ruleRow := func(name, scope string) []interface{} { return ruleRowFor(name, scope, tenant, true) }
+	const gold = "99e99e99-99e9-49e9-89e9-99e99e99e999"
+	expectGold := func(m sqlmock.Sqlmock) {
+		m.ExpectQuery(`FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	}
 	run := func(t *testing.T, rules [][]interface{}, expectBinding func(sqlmock.Sqlmock)) []ruleViolation {
 		t.Helper()
@@ -33,7 +38,7 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer db.Close()
-		rows := sqlmock.NewRows([]string{"id", "node_name", "description", "properties", "config", "is_active"})
+		rows := sqlmock.NewRows([]string{"id", "node_name", "description", "properties", "config", "is_active", "tenant_id"})
 		for _, r := range rules {
 			vals := make([]driver.Value, len(r))
 			for i, x := range r {
@@ -41,6 +46,7 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 			}
 			rows.AddRow(vals...)
 		}
+		expectGold(mock) // ListByBO
 		mock.ExpectQuery(`FROM catalog_node n`).WillReturnRows(rows)
 		expectBinding(mock)
 		mock.ExpectQuery(`FROM business_object_fields bf`).
@@ -60,11 +66,13 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 	}
 	bindingIs := func(id string) func(sqlmock.Sqlmock) {
 		return func(m sqlmock.Sqlmock) {
+			expectGold(m) // ResolveActiveBinding
 			m.ExpectQuery(`FROM public.business_object_binding b`).
 				WillReturnRows(sqlmock.NewRows([]string{"id", "driving_path"}).AddRow(id, "/mdm/party"))
 		}
 	}
 	noBinding := func(m sqlmock.Sqlmock) {
+		expectGold(m) // ResolveActiveBinding
 		m.ExpectQuery(`FROM public.business_object_binding b`).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "driving_path"}))
 	}
@@ -97,6 +105,36 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 		}
 		if b, _ := json.Marshal(v[0].Message); len(b) == 0 {
 			t.Error("empty message")
+		}
+	})
+	t.Run("an inactive rule is never enforced, core or custom", func(t *testing.T) {
+		rules := [][]interface{}{
+			ruleRowFor("rule-1", "", tenant, false), // custom, switched off
+			ruleRowFor("rule-2", "", gold, false),   // core, retired by the gold-copy tenant
+			ruleRowFor("rule-3", "", tenant, true),  // custom, on
+		}
+		v := names(run(t, rules, noBindingLookup))
+		if _, ok := v["rule-1"]; ok {
+			t.Errorf("switched-off custom rule was enforced: %v", v)
+		}
+		if _, ok := v["rule-2"]; ok {
+			t.Errorf("retired core rule was enforced for a tenant: %v", v)
+		}
+		if _, ok := v["rule-3"]; !ok {
+			t.Errorf("active rule did not run: %v", v)
+		}
+	})
+	t.Run("a tenant is held to an inherited core rule as well as its own", func(t *testing.T) {
+		rules := [][]interface{}{
+			ruleRowFor("rule-1", "", gold, true),   // core, authored in the gold-copy tenant
+			ruleRowFor("rule-2", "", tenant, true), // custom
+		}
+		v := names(run(t, rules, noBindingLookup))
+		if _, ok := v["rule-1"]; !ok {
+			t.Errorf("inherited core rule did not run for the tenant: %v", v)
+		}
+		if _, ok := v["rule-2"]; !ok {
+			t.Errorf("tenant's own rule did not run: %v", v)
 		}
 	})
 }
