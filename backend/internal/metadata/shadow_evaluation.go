@@ -188,7 +188,23 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	// value, so a rule authored against "TargetQuantity" (portable across
 	// bindings) and one authored directly against "target_qty" (tied to
 	// this binding) both evaluate correctly against the same write.
-	if fieldMap, err := analytics.ResolveSemanticFieldMap(ctx, s.db, bo.ID, bo.DriverTableName); err != nil {
+	//
+	// The active binding is resolved only when some rule is binding-scoped, so BOs whose
+	// rules are all unscoped behave exactly as before. When it resolves, terms map to
+	// columns under that binding's driving table rather than the BO's canonical one.
+	var active *analytics.ActiveBinding
+	var activeErr error
+	for _, r := range rules {
+		if len(r.BindingIDs) > 0 {
+			active, activeErr = analytics.ResolveActiveBinding(ctx, s.db, tenantID, bo.ID, bo.DriverTableName)
+			break
+		}
+	}
+	activeBindingID, drivingPath := "", bo.DriverTableName
+	if active != nil {
+		activeBindingID, drivingPath = active.ID, active.DrivingPath
+	}
+	if fieldMap, err := analytics.ResolveSemanticFieldMap(ctx, s.db, bo.ID, drivingPath); err != nil {
 		logging.GetLogger().Sugar().Warnf("rule evaluation: failed to resolve semantic field map for BO %s: %v", boKey, err)
 	} else {
 		for semantic, physical := range fieldMap {
@@ -214,6 +230,25 @@ func (s *BusinessObjectService) evaluateAndEnforceRules(ctx context.Context, exe
 	enforce := enforcementEnabled()
 	ae := vm.NewAdvancedEvaluator()
 	for _, rule := range rules {
+		if applies, undetermined := analytics.RuleScopeApplies(rule.BindingIDs, activeBindingID); undetermined {
+			// A scoped rule whose binding cannot be determined is never a silent skip.
+			why := "no active binding matches this write's driving table"
+			if activeErr != nil {
+				why = activeErr.Error()
+			}
+			violations = append(violations, ruleViolation{
+				RuleID: rule.ID.String(), RuleName: rule.Name, Severity: rule.Severity,
+				Message:   fmt.Sprintf("rule error: rule is scoped to bindings %v but the active binding could not be determined: %s", rule.BindingIDs, why),
+				Context:   data,
+				RuleError: true,
+			})
+			if enforce && rule.Severity == "BLOCK" {
+				blocked = true
+			}
+			continue
+		} else if !applies {
+			continue
+		}
 		var node vm.RuleNode
 		if err := json.Unmarshal(rule.RuleAST, &node); err != nil {
 			v := ruleViolation{

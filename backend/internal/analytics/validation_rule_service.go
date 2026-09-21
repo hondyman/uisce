@@ -73,6 +73,10 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 		return nil, fmt.Errorf("BO %q not found: %w", req.BOName, err)
 	}
 
+	if err := s.validateBindingScope(ctx, req.TenantID, req.BOName, req.BindingIDs); err != nil {
+		return nil, err
+	}
+
 	domain := req.Domain
 	if domain == "" {
 		domain = models.ValidationRuleDomainDefault
@@ -84,6 +88,7 @@ func (s *ValidationRuleService) UpsertValidationRule(ctx context.Context, req mo
 		Timing:           req.Timing,
 		Category:         req.Category,
 		Domain:           domain,
+		BindingIDs:       req.BindingIDs,
 		GovernanceStatus: "draft",
 	}
 	propsJSON, err := json.Marshal(props)
@@ -298,6 +303,7 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 		Timing:           props.Timing,
 		Category:         props.Category,
 		Domain:           domain,
+		BindingIDs:       props.BindingIDs,
 		RuleAST:          cfg.RuleAST,
 		GovernanceStatus: props.GovernanceStatus,
 		IsActive:         isActive,

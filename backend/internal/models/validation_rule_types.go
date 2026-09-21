@@ -28,6 +28,13 @@ type ValidationRuleProperties struct {
 	// it explicitly rather than leaving new rows blank too, so "domain"
 	// is unambiguous for anything written from this point forward.
 	Domain string `json:"domain,omitempty"`
+	// BindingIDs scopes the rule to specific bindings of the BO
+	// (business_object_binding.id). Empty means the rule applies to every
+	// binding, which is what every rule written before this field existed
+	// means, so they are unchanged. The rule's field references stay
+	// semantic terms either way; scoping only decides whether the rule runs
+	// for a write that arrived through a given binding.
+	BindingIDs []string `json:"binding_ids,omitempty"`
 }
 
 const (
@@ -66,6 +73,10 @@ type UpsertValidationRuleRequest struct {
 	// ("validation") in the service layer.
 	Domain  string          `json:"domain,omitempty"`
 	RuleAST json.RawMessage `json:"rule_ast"`
+	// BindingIDs optionally scopes the rule to specific bindings of the BO;
+	// see ValidationRuleProperties.BindingIDs. Each must be a binding of
+	// BOName in this tenant.
+	BindingIDs []string `json:"binding_ids,omitempty"`
 }
 
 // ValidationRuleDescriptor is the API response shape.
@@ -79,6 +90,7 @@ type ValidationRuleDescriptor struct {
 	Timing           string          `json:"timing"`
 	Category         string          `json:"category,omitempty"`
 	Domain           string          `json:"domain"`
+	BindingIDs       []string        `json:"binding_ids,omitempty"`
 	RuleAST          json.RawMessage `json:"rule_ast"`
 	GovernanceStatus string          `json:"governance_status"`
 	IsActive         bool            `json:"is_active"`
