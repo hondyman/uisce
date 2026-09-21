@@ -728,6 +728,9 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 			&adsID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
 			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
 		}
+		// Every endpoint built on this loader returns to a browser: never send credentials
+		// (passwords, private keys, API keys) from the datasource config.
+		ds.Config = redactSecretConfig(ds.Config)
 		if adsID.Valid {
 			ads.ID = adsID.String
 			ds.AlphaDatasourceID = adsID.String

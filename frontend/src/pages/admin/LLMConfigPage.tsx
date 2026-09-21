@@ -45,7 +45,6 @@ export default function LLMConfigPage() {
   const loadConfig = async () => {
     try {
       const response = await fetchAPI<LLMConfig>('/admin/llm/config');
-      console.log('Loaded LLM config:', response);
       console.log('API Key present:', !!response.api_key);
       setConfig(response);
     } catch (error) {

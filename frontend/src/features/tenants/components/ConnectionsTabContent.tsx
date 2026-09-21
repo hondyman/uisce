@@ -257,7 +257,6 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
             console.log(`    Found datasource with connection_id: ${ds.connection_id}`);
             // Use connection_id as the key to avoid duplicates
             if (!connectionsMap.has(ds.connection_id)) {
-              console.log(`[DEBUG] Building connection for ds.connection_id: ${ds.connection_id}, ds.config:`, JSON.stringify(ds.config, null, 2));
               const displayName =
                 ds.alpha_datasource?.datasource_name ||
                 ds.connection_name ||
@@ -269,7 +268,6 @@ export const ConnectionsTabContent: React.FC<ConnectionsTabContentProps> = ({
               const configSchema = ds.config?.schema || ds.schema || '';
               const configUsername = ds.config?.auth?.basic?.username || ds.username || '';
               const configPassword = ds.config?.auth?.basic?.password || ds.password || '';
-              console.log(`[DEBUG] configHost=${configHost}, configPort=${configPort}, configDatabase=${configDatabase}`);
               connectionsMap.set(ds.connection_id, {
                 id: ds.connection_id,
                 name: displayName,
