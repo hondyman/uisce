@@ -145,6 +145,95 @@ func (s *AnsiScanner) processPrimaryKeys() error {
 	return nil
 }
 
+// processUniqueKeys records UNIQUE constraints on the column nodes. Business objects need a
+// business key, and the primary key is usually a surrogate uuid; the natural key is the
+// unique constraint (typically (tenant_id, <x>_cd)). Each member column gets
+//
+//	is_unique_key: true
+//	unique_key_groups: [{"name": "party_cd_key", "columns": ["tenant_id","party_cd"], "position": 2}]
+//
+// A column in several unique constraints gets one group entry per constraint. ANSI
+// information_schema only: unique indexes that are not constraints (including expression
+// indexes) are not reported.
+func (s *AnsiScanner) processUniqueKeys() error {
+	query := `
+        SELECT kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.column_name, kcu.ordinal_position
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+            AND tc.table_name = kcu.table_name
+        WHERE tc.constraint_type = 'UNIQUE' AND tc.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+    `
+	var args []interface{}
+	if len(s.schemaWhitelist) > 0 {
+		placeholders := make([]string, len(s.schemaWhitelist))
+		for i, v := range s.schemaWhitelist {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args = append(args, v)
+		}
+		query += fmt.Sprintf(" AND tc.table_schema IN (%s)", strings.Join(placeholders, ", "))
+	}
+	query += " ORDER BY kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.ordinal_position"
+
+	rows, err := s.sourceDB.Query(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to query unique constraints: %w", err)
+	}
+	defer rows.Close()
+
+	type uniqueKey struct {
+		schema, table, name string
+		columns             []string
+	}
+	keys := map[string]*uniqueKey{}
+	var order []string
+	for rows.Next() {
+		var schema, table, name, column string
+		var pos int
+		if err := rows.Scan(&schema, &table, &name, &column, &pos); err != nil {
+			logging.GetLogger().Sugar().Warnf("Error scanning unique constraint details: %v", err)
+			continue
+		}
+		k := schema + "/" + table + "/" + name
+		if keys[k] == nil {
+			keys[k] = &uniqueKey{schema: schema, table: table, name: name}
+			order = append(order, k)
+		}
+		keys[k].columns = append(keys[k].columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating unique constraints: %w", err)
+	}
+
+	for _, k := range order {
+		uk := keys[k]
+		for i, column := range uk.columns {
+			colAssetPath := fmt.Sprintf("/%s/%s/%s", uk.schema, uk.table, column)
+			colID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_COLUMN.String(), colAssetPath)
+			col, ok := s.columnMap[colID]
+			if !ok {
+				continue
+			}
+			var propsMap map[string]interface{}
+			if err := json.Unmarshal(col.Properties, &propsMap); err != nil {
+				logging.GetLogger().Sugar().Warnf("Error unmarshaling properties for column %s: %v", col.QualifiedPath, err)
+				continue
+			}
+			groups, _ := propsMap["unique_key_groups"].([]interface{})
+			groups = append(groups, map[string]interface{}{"name": uk.name, "columns": uk.columns, "position": i + 1})
+			propsMap["is_unique_key"] = true
+			propsMap["unique_key_groups"] = groups
+			propsJSON, err := json.Marshal(propsMap)
+			if err != nil {
+				logging.GetLogger().Sugar().Warnf("Error marshaling updated properties for column %s: %v", col.QualifiedPath, err)
+				continue
+			}
+			col.Properties = propsJSON
+		}
+	}
+	return nil
+}
+
 // FINAL FIX: processForeignKeys - deduplicates by relationship, not constraint name
 func (s *AnsiScanner) processForeignKeys() error {
 	query := `
@@ -805,6 +894,9 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 
 	if err := s.processPrimaryKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing primary keys: %v", err)
+	}
+	if err := s.processUniqueKeys(); err != nil {
+		logging.GetLogger().Sugar().Warnf("Error processing unique keys: %v", err)
 	}
 	if err := s.processForeignKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing foreign keys: %v", err)
