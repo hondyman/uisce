@@ -40,14 +40,14 @@ func newVRRouter(t *testing.T, ruleTenant string, expectQuery bool) (http.Handle
 	t.Cleanup(func() { db.Close() })
 	x := sqlx.NewDb(db, "postgres")
 	if expectQuery {
-		mock.ExpectQuery(`FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(vrGold))
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(vrGold))
 		rows := sqlmock.NewRows(vrCols)
 		if ruleTenant == vrTenant || ruleTenant == vrGold {
 			rows.AddRow(vrRow(ruleTenant)...)
 		}
 		mock.ExpectQuery(`FROM catalog_node n`).WillReturnRows(rows)
 		// a successful load also asks for the gold-copy tenant again to classify the origin
-		mock.ExpectQuery(`FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(vrGold))
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(vrGold))
 	}
 	r := chi.NewRouter()
 	NewValidationRuleHandler(analytics.NewValidationRuleService(x), x).RegisterRoutes(r)

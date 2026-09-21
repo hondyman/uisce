@@ -109,7 +109,7 @@ func (h *GlossaryHandler) listTerms(w http.ResponseWriter, r *http.Request, term
 			COALESCE(cn.node_type, cnt.catalog_type_name, '') as node_type
 		FROM catalog_node cn
 		LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-		WHERE (cn.tenant_id = $1 OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		WHERE (cn.tenant_id = $1 OR cn.tenant_id = public.uisce_gold_copy_tenant_id())
 	`
 	args := []interface{}{secCtx.TenantID}
 
@@ -214,7 +214,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 				ce.edge_type_id
 			FROM catalog_edge ce
 			LEFT JOIN catalog_edge_type cet ON ce.edge_type_id = cet.id
-			WHERE (ce.tenant_id = $1 OR ce.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (ce.tenant_id = $1 OR ce.tenant_id = public.uisce_gold_copy_tenant_id())
 			  AND (ce.tenant_datasource_id = $2 OR ce.tenant_datasource_id IS NULL)
 			ORDER BY ce.created_at DESC
 		`
@@ -240,7 +240,7 @@ func (h *GlossaryHandler) ListEdges(w http.ResponseWriter, r *http.Request) {
 				ce.edge_type_id
 			FROM catalog_edge ce
 			LEFT JOIN catalog_edge_type cet ON ce.edge_type_id = cet.id
-			WHERE (ce.tenant_id = $1 OR ce.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (ce.tenant_id = $1 OR ce.tenant_id = public.uisce_gold_copy_tenant_id())
 			ORDER BY ce.created_at DESC
 		`
 		var err error
@@ -1182,7 +1182,7 @@ func (h *GlossaryHandler) DeleteTerm(w http.ResponseWriter, r *http.Request) {
 	tenantID := secCtx.TenantID
 	if tenantID == "default" {
 		var coreID string
-		if err := h.db.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&coreID); err == nil && coreID != "" {
+		if err := h.db.QueryRowContext(r.Context(), `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&coreID); err == nil && coreID != "" {
 			tenantID = coreID
 		}
 	}

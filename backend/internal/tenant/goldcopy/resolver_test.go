@@ -49,7 +49,7 @@ func TestResolver_Resolve_FromDB(t *testing.T) {
 
 	goldID := uuid.New().String()
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(goldID)
-	mock.ExpectQuery(`SELECT id FROM public.tenants WHERE gold_copy = true`).
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)
@@ -68,7 +68,7 @@ func TestResolver_Resolve_DBError(t *testing.T) {
 	db, mock, _ := sqlmock.New()
 	defer db.Close()
 
-	mock.ExpectQuery(`SELECT id FROM public.tenants WHERE gold_copy = true`).
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 		WillReturnError(errors.New("db error"))
 
 	r := NewResolver(nil, nil, nil)
@@ -85,7 +85,7 @@ func TestResolver_Resolve_NoRows(t *testing.T) {
 	defer db.Close()
 
 	rows := sqlmock.NewRows([]string{"id"})
-	mock.ExpectQuery(`SELECT id FROM public.tenants WHERE gold_copy = true`).
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)
@@ -132,7 +132,7 @@ func TestResolver_Resolve_RedisMissFallsBackToDB(t *testing.T) {
 
 	goldID := uuid.New().String()
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(goldID)
-	mock.ExpectQuery(`SELECT id FROM public.tenants WHERE gold_copy = true`).
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 		WillReturnRows(rows)
 
 	redisClient := &mockRedis{
@@ -181,7 +181,7 @@ func TestResolver_IsGoldCopy(t *testing.T) {
 
 	goldID := uuid.New().String()
 	rows := sqlmock.NewRows([]string{"id"}).AddRow(goldID)
-	mock.ExpectQuery(`SELECT id FROM public.tenants WHERE gold_copy = true`).
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 		WillReturnRows(rows)
 
 	r := NewResolver(nil, nil, nil)

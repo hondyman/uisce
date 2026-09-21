@@ -296,7 +296,7 @@ func (e *CostEstimator) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error
 		return e.goldcopyResolver.Resolve(ctx)
 	}
 	var id string
-	err := e.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	err := e.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&id)
 	if err != nil {
 		return uuid.Nil, err
 	}

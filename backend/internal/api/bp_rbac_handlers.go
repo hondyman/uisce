@@ -128,7 +128,7 @@ func (h *RBACHandlers) listRoles(w http.ResponseWriter, r *http.Request) {
 	err = h.db.Select(&roles, `
 		SELECT * FROM bp_roles
 		WHERE is_active = true
-		  AND (tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (tenant_id = $1 OR tenant_id = public.uisce_gold_copy_tenant_id())
 		ORDER BY role_level, role_name
 	`, tenantID)
 
@@ -271,7 +271,7 @@ func (h *RBACHandlers) createRole(w http.ResponseWriter, r *http.Request) {
 	isTemplate := false
 	if req.IsTemplate {
 		var goldCopyTenantID sql.NullString
-		if err := h.db.QueryRow(`SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID); err == nil {
+		if err := h.db.QueryRow(`SELECT id::text FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID); err == nil {
 			isTemplate = goldCopyTenantID.Valid && goldCopyTenantID.String == tenantID
 		}
 	}

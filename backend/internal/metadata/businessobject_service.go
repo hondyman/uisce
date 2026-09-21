@@ -503,7 +503,7 @@ func (s *BusinessObjectService) GetBusinessObject(
 
 	// Fallback: Check Gold Copy Tenant if not found in User Tenant
 	var goldCopyTenantID string
-	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 
 	if gcErr == nil && goldCopyTenantID != "" && goldCopyTenantID != tenantID {
 		err = s.db.GetContext(ctx, bo, oldQuery, goldCopyTenantID, boKey, isUUID)
@@ -601,7 +601,7 @@ func (s *BusinessObjectService) ListBusinessObjectsComposed(
 	datasourceID := secCtx.DatasourceID
 	// 1. Get gold copy tenant ID
 	var goldCopyTenantID string
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 	if err != nil {
 		// If no gold copy tenant, fall back to regular listing
 		logging.GetLogger().Sugar().Warnf("No gold copy tenant found, falling back to regular listing: %v", err)
@@ -791,10 +791,10 @@ func (s *BusinessObjectService) ListBusinessObjectsLegacy(
 	query := `
 		SELECT bo.id, bo.name, bo.display_name, COALESCE(bo.description, '') as description, COALESCE(bo.icon, '') as icon, 
 		       COALESCE(bo.config, '{}'::jsonb) as config_json, bo.tenant_id, 
-		       (SELECT gold_copy FROM public.tenants t WHERE t.id = bo.tenant_id) as owner_is_gold_copy
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id()) as owner_is_gold_copy
 		FROM public.business_objects bo
 		WHERE (bo.tenant_id = $1::uuid OR 
-		       EXISTS(SELECT 1 FROM public.tenants t WHERE t.id = bo.tenant_id AND t.gold_copy = TRUE AND bo.tenant_id != $1::uuid))
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id() AND bo.tenant_id != $1::uuid))
 		  AND bo.parent_id IS NULL
 	`
 	args := []interface{}{tenantID}
@@ -928,11 +928,11 @@ func (s *BusinessObjectService) GetBusinessObjectLegacy(
 		SELECT bo.id, bo.name, bo.display_name, COALESCE(bo.description, '') as description, 
 		       COALESCE(bo.icon, '') as icon, COALESCE(bo.config, '{}'::jsonb) as config_json,
 		       bo.tenant_id, 
-		       (SELECT gold_copy FROM public.tenants t WHERE t.id = bo.tenant_id) as owner_is_gold_copy
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id()) as owner_is_gold_copy
 		FROM public.business_objects bo
 		WHERE bo.id = $1::uuid
 		  AND (bo.tenant_id = $2::uuid OR 
-		       EXISTS(SELECT 1 FROM public.tenants t WHERE t.id = bo.tenant_id AND t.gold_copy = TRUE AND bo.tenant_id != $2::uuid))
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id() AND bo.tenant_id != $2::uuid))
 	`
 
 	var id, name, displayName, description, icon string
@@ -3003,7 +3003,7 @@ func (s *BusinessObjectService) ListCatalogNodes(
 	// to the scoped tenant only (no merge, no error).
 	var goldCopyID string
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`,
+		`SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`,
 	).Scan(&goldCopyID); err != nil {
 		devLogGoldCopyWarn(err)
 	}
@@ -3951,7 +3951,7 @@ func (s *BusinessObjectService) GetBODelta(
 
 	// Get Gold Copy tenant ID
 	var goldCopyTenantID string
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	_ = s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 
 	var coreBO *models.BusinessObjectDefinition
 	if goldCopyTenantID != "" && goldCopyTenantID != secCtx.TenantID {

@@ -616,7 +616,7 @@ func (r *PostgresBORepository) GetBOByTechnicalName(technicalName, tenantID, dat
 	query := `
 		SELECT id FROM business_objects
 		WHERE bo_key = $1
-		  AND (tenant_id = $2::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (tenant_id = $2::uuid OR tenant_id = public.uisce_gold_copy_tenant_id())
 		ORDER BY (tenant_id = $2::uuid) DESC
 		LIMIT 1
 	`

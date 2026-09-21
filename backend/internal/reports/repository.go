@@ -224,7 +224,7 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 		       created_at, updated_at, version
 		FROM report_templates
 		WHERE id = $1
-		  AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (tenant_id = $2 OR tenant_id = public.uisce_gold_copy_tenant_id())
 	`
 
 	var tmpl ReportTemplate
@@ -323,7 +323,7 @@ func (r *Repository) GetTemplate(ctx context.Context, id, tenantID uuid.UUID) (*
 // ResolveGoldCopyTenantID looks up the master tenant where gold_copy = true in public.tenants.
 func (r *Repository) ResolveGoldCopyTenantID(ctx context.Context) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := r.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	err := r.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("failed to resolve gold_copy tenant: %w", err)
 	}

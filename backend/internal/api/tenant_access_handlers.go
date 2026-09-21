@@ -214,7 +214,7 @@ func (h *TenantAccessHandlers) getGoldCopyTenant(w http.ResponseWriter, r *http.
 		return
 	}
 	var id string
-	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.Header().Set("Content-Type", "application/json")

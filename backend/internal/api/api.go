@@ -4234,7 +4234,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 		args = append(args, tenantID)
 		argIndex = 2
@@ -4243,7 +4243,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-			WHERE (cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+			WHERE (cn.tenant_id = public.uisce_gold_copy_tenant_id() OR 1=1)
 		`
 	}
 
@@ -4344,7 +4344,7 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 		query = `
 			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
-			WHERE (tenant_id = $1::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (tenant_id = $1::uuid OR tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 		args = append(args, tenantID)
 		argIndex = 2
@@ -4352,7 +4352,7 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 		query = `
 			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
-			WHERE (tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+			WHERE (tenant_id = public.uisce_gold_copy_tenant_id() OR 1=1)
 		`
 	}
 

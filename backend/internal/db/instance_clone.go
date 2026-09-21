@@ -64,7 +64,7 @@ func LogGoldCopySyncAudit(
 	if entry.GoldCopyTenantID == uuid.Nil && db != nil {
 		var goldCopyTenantID uuid.UUID
 		err := db.GetContext(ctx, &goldCopyTenantID, `
-			SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1
+			SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL
 		`)
 		if err == nil {
 			entry.GoldCopyTenantID = goldCopyTenantID

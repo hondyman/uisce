@@ -117,7 +117,7 @@ func (d *MetadataEvolutionDaemon) ProcessCatalogEvent(ctx context.Context, evt C
 	query := `
 		SELECT node_name, qualified_path, properties->>'data_type', properties
 		FROM catalog_node 
-		WHERE id = $1 AND (tenant_id = $2 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		WHERE id = $1 AND (tenant_id = $2 OR tenant_id = '00000000-0000-0000-0000-000000000000' OR tenant_id = public.uisce_gold_copy_tenant_id())
 		LIMIT 1`
 	err := d.db.QueryRowContext(ctx, query, evt.NodeID.String(), evt.TenantID.String()).Scan(&nodeName, &nodeKey, &dataType, &rawProperties)
 	if err != nil {
@@ -213,7 +213,7 @@ func (d *MetadataEvolutionDaemon) LinkSymbologyPeers(ctx context.Context, tenant
 		CROSS JOIN catalog_edge_type cet
 		WHERE cet.edge_type_name = 'IS_PEER_IDENTIFIER_OF'
 		  AND cn.id != $2
-		  AND (cn.tenant_id = $1::text OR cn.tenant_id = (SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (cn.tenant_id = $1::text OR cn.tenant_id = public.uisce_gold_copy_tenant_id()::text)
 		  AND (cn.properties->>'symbology_family' = $3 OR cn.node_name ILIKE '%ISIN%' OR cn.node_name ILIKE '%CUSIP%' OR cn.node_name ILIKE '%SEDOL%')
 		ON CONFLICT (tenant_id, source_id, target_id, edge_type_name) DO NOTHING`
 	_, err := d.db.ExecContext(ctx, query, tenantID.String(), sourceNodeID.String(), family)
@@ -230,7 +230,7 @@ func (d *MetadataEvolutionDaemon) DiscoverDifferentiationsAndSynonyms(ctx contex
 		SELECT cn.id, cn.node_name
 		FROM catalog_node cn
 		WHERE cn.id != $1
-		  AND (cn.tenant_id = $2::text OR cn.tenant_id = (SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (cn.tenant_id = $2::text OR cn.tenant_id = public.uisce_gold_copy_tenant_id()::text)
 		  AND (cn.node_name ILIKE '%' || $3 || '%' OR $3 ILIKE '%' || cn.node_name || '%')
 		  AND NOT EXISTS (
 		      SELECT 1 FROM catalog_edge ce

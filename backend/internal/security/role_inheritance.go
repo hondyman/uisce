@@ -13,7 +13,7 @@ import (
 // business_objects core/custom overlay.
 func GoldCopyTenantID(ctx context.Context, db *sql.DB) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	err := db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&id)
 	if err == sql.ErrNoRows {
 		return uuid.Nil, nil
 	}

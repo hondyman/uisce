@@ -88,7 +88,7 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates", func(t *testing.T) {
 		// Mock resolve gold_copy tenant
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
@@ -182,7 +182,7 @@ func TestReportAPI(t *testing.T) {
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		payload := map[string]interface{}{
@@ -223,7 +223,7 @@ func TestReportAPI(t *testing.T) {
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Non-author attempts to un-personalize (is_personal: false)
@@ -264,7 +264,7 @@ func TestReportAPI(t *testing.T) {
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Author attempts to share a non-personal report
@@ -375,7 +375,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000010", nil)
@@ -414,7 +414,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000020", nil)
@@ -448,7 +448,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Admin of tenant A trying to delete tenant B's report
@@ -487,7 +487,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// A tenant-A user requesting tenant B's report by id must not see it.
@@ -525,7 +525,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000032", nil)
@@ -563,7 +563,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		// A tenant-A user (not gold-copy) reading a core report must still succeed - read-only inheritance.
@@ -736,7 +736,7 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates - Search with ?q= binds parameter", func(t *testing.T) {
 		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
@@ -790,7 +790,7 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates - Empty or whitespace ?q= delegates to standard listing", func(t *testing.T) {
 		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
@@ -899,7 +899,7 @@ func TestReportAPI(t *testing.T) {
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
@@ -1003,7 +1003,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 				AddRow(schedID, tenantID, tmplID, ownerID))
 
 		// 2. Gold copy resolution
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// 3. Fetch linked template
@@ -1075,7 +1075,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "report_definition_id", "owner_id"}).
 				AddRow(schedID, tenantID, tmplID, ownerID))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		mock.ExpectQuery(`SELECT id, tenant_id, template_name, description, category, semantic_view_ids, layout_config, parameter_schema, is_active, is_public, is_personal, created_by_id, created_by, created_at, updated_at, version FROM public\.report_templates WHERE id = \$1 AND is_active = true AND tenant_id IN \(\$2, \$3\)`).

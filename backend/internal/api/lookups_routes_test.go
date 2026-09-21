@@ -10,12 +10,23 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	_ "github.com/mattn/go-sqlite3"
+	"github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/require"
 )
 
+// sqlite3WithGoldFn is SQLite plus a stand-in for the Postgres function the handlers use to find the
+// gold-copy tenant (uisce_gold_copy_tenant_id). It returns NULL, meaning there is no gold-copy tenant,
+// which is what these tests' data (a single non-gold tenant) has always implied.
+func init() {
+	sql.Register("sqlite3_uisce_gold_fn", &sqlite3.SQLiteDriver{
+		ConnectHook: func(c *sqlite3.SQLiteConn) error {
+			return c.RegisterFunc("uisce_gold_copy_tenant_id", func() interface{} { return nil }, true)
+		},
+	})
+}
+
 func setupLookupTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite3", ":memory:")
+	db, err := sql.Open("sqlite3_uisce_gold_fn", ":memory:")
 	require.NoError(t, err)
 	// The handlers query the schema-qualified public.tenants. SQLite only understands that
 	// prefix for an attached database, and ATTACH is per connection, so pin the pool to one

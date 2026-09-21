@@ -114,7 +114,7 @@ func (r *Resolver) IsGoldCopy(id uuid.UUID) (bool, error) {
 
 func (r *Resolver) resolveFromDB(ctx context.Context) (uuid.UUID, error) {
 	var id string
-	query := `SELECT id FROM public.tenants WHERE gold_copy = true ORDER BY created_at LIMIT 1`
+	query := `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`
 	err := r.db.GetContext(ctx, &id, query)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -25,6 +25,6 @@ func ResolveTenantID(ctx context.Context, db *sqlx.DB) uuid.UUID {
 		return uuid.Nil
 	}
 	var id uuid.UUID
-	_ = db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true ORDER BY created_at LIMIT 1`)
+	_ = db.GetContext(ctx, &id, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`)
 	return id
 }
