@@ -598,6 +598,13 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 		rejections = rejectionSet{}
 	}
 
+	// Load the abbreviation map once per request, not once per column (see buildAbbreviationMap).
+	var abbrevLookup abbreviationLookup
+	if s.abbrevSvc != nil {
+		abbrevLookup = abbreviationSvcAdapter{real: s.abbrevSvc}
+	}
+	abbrMap := buildAbbreviationMap(ctx, abbrevLookup, tenantID)
+
 	results := make([]PreviewResult, 0, len(columnIDs))
 	for _, colID := range columnIDs {
 		node, ok := nodeMap[colID]
@@ -610,7 +617,7 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 			tableSchemaContext = buildTableSchemaContext(node.qualifiedPath)
 		}
 
-		candidates := deriveTermNamesPreviewCandidates(ctx, abbreviationSvcAdapter{real: s.abbrevSvc}, tenantID, node.nodeName, tableSchemaContext)
+		candidates := deriveTermNamesPreviewCandidatesWithMap(abbrMap, node.nodeName, tableSchemaContext)
 
 		semanticName, source := pickFirstNonRejected(candidates, rejections, node.datasourceID, node.qualifiedPath)
 

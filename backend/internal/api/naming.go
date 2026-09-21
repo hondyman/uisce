@@ -213,8 +213,15 @@ func deriveTermNamesCandidates(resolvedTokens []string, rawName string, tableSch
 		}
 	}
 
-	// 4. Naive PascalCase fallback: always last resort.
-	naive := pascalCase(resolvedTokens)
+	// 4. Naive PascalCase fallback: always last resort. It is built from the ORIGINAL
+	// column tokens, not the abbreviation-expanded ones: from the resolved tokens it
+	// duplicates the primary (auditor_id -> AuditorIdentifier), is de-duplicated away,
+	// and leaves the candidate list exhausted after one rejection.
+	naiveTokens := tokenizeColumnName(rawName)
+	if len(naiveTokens) == 0 {
+		naiveTokens = resolvedTokens
+	}
+	naive := pascalCase(naiveTokens)
 	if naive != derived.SemanticName && naive != derived.BusinessName && naive != derived.BaseGenericTerm {
 		candidates = append(candidates, CandidateTerm{Name: naive, Source: "pascal"})
 	}

@@ -314,3 +314,124 @@ func TestDeriveTermNamesCandidates_AccountIdWithAbbreviation(t *testing.T) {
 		t.Errorf("candidates[0] = %q; want %q", candidates[0].Name, "AccountIdentifier")
 	}
 }
+
+// --- fix: the naive fallback is built from the ORIGINAL tokens -------------------------
+
+func TestDeriveTermNamesCandidates_NaiveFallbackSurvivesAbbreviationExpansion(t *testing.T) {
+	// auditor_id with ID->IDENTIFIER. Built from the resolved tokens the naive candidate
+	// equalled the primary and was de-duplicated away, leaving [AuditorIdentifier,
+	// "Auditor Identifier"] exhausted after one rejection.
+	candidates := deriveTermNamesCandidates(
+		[]string{"auditor", "IDENTIFIER"}, "auditor_id", `table "fund" in schema "orm"`)
+
+	var names []string
+	for _, c := range candidates {
+		names = append(names, c.Name)
+	}
+	want := []string{"AuditorIdentifier", "Auditor Identifier", "AuditorId"}
+	if len(names) != len(want) {
+		t.Fatalf("candidates = %q; want %q", names, want)
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("candidates = %q; want %q", names, want)
+		}
+	}
+	if last := candidates[len(candidates)-1]; last.Source != "pascal" {
+		t.Errorf("last candidate source = %q; want pascal", last.Source)
+	}
+}
+
+func TestPickFirstNonRejected_ExhaustedAbbreviatedColumnFallsBackToNaive(t *testing.T) {
+	candidates := deriveTermNamesCandidates(
+		[]string{"auditor", "IDENTIFIER"}, "auditor_id", `table "fund" in schema "orm"`)
+	rejections := rejectionSet{
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorIdentifier"):  struct{}{},
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "Auditor Identifier"): struct{}{},
+		makeRejectionKey("ds1", "/orm/fund/auditor_id", "AuditorId"):          struct{}{},
+	}
+	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/fund/auditor_id")
+	if got != "AuditorId" || src != "pascal" {
+		t.Errorf("got (%q, %q); want (AuditorId, pascal)", got, src)
+	}
+}
+
+func TestPickFirstNonRejected_ExhaustedNeverReturnsSpacedName(t *testing.T) {
+	// The naive candidate was de-duplicated away, so the list ends with a spaced business
+	// name. Exhausting it must not hand that back as the last resort.
+	candidates := []CandidateTerm{
+		{Name: "CountryCode", Source: "abbrev_map"},
+		{Name: "Country Code", Source: "abbrev_map"},
+	}
+	rejections := rejectionSet{
+		makeRejectionKey("ds1", "/orm/issuer/country_cd", "CountryCode"):  struct{}{},
+		makeRejectionKey("ds1", "/orm/issuer/country_cd", "Country Code"): struct{}{},
+	}
+	got, src := pickFirstNonRejected(candidates, rejections, "ds1", "/orm/issuer/country_cd")
+	if got != "CountryCode" || src != "pascal" {
+		t.Errorf("got (%q, %q); want (CountryCode, pascal)", got, src)
+	}
+}
+
+// --- fix: the abbreviation table is loaded once per request, not once per column -------
+
+type countingAbbrevSvc struct {
+	calls   int
+	abbrevs []map[string]string
+	err     error
+}
+
+func (c *countingAbbrevSvc) GetAllAbbreviations(ctx context.Context) ([]map[string]string, error) {
+	c.calls++
+	return c.abbrevs, c.err
+}
+
+func TestBuildAbbreviationMap_LoadsOnceForManyColumns(t *testing.T) {
+	svc := &countingAbbrevSvc{abbrevs: []map[string]string{
+		{"abbreviation": "ID", "full_word": "IDENTIFIER"},
+		{"abbreviation": "CD", "full_word": "CODE"},
+	}}
+	abbrMap := buildAbbreviationMap(context.Background(), svc, "tenant-1")
+	cols := []string{"account_id", "country_cd", "fund_id", "auditor_id", "address_line_1"}
+	for i := 0; i < 2000; i++ {
+		_ = deriveTermNamesPreviewCandidatesWithMap(abbrMap, cols[i%len(cols)], `table "fund" in schema "orm"`)
+	}
+	if svc.calls != 1 {
+		t.Errorf("abbreviations loaded %d times for 2000 columns; want exactly 1", svc.calls)
+	}
+}
+
+func TestPreviewCandidatesWithMap_MatchesPerColumnLoad(t *testing.T) {
+	svc := &countingAbbrevSvc{abbrevs: []map[string]string{
+		{"abbreviation": "ID", "full_word": "IDENTIFIER"},
+		{"abbreviation": "QTY", "full_word": "QUANTITY"},
+	}}
+	abbrMap := buildAbbreviationMap(context.Background(), svc, "t")
+	for _, col := range []string{"account_id", "min_order_qty", "address_line_1", "city", "id"} {
+		want := deriveTermNamesPreviewCandidates(context.Background(), svc, "t", col, `table "x" in schema "orm"`)
+		got := deriveTermNamesPreviewCandidatesWithMap(abbrMap, col, `table "x" in schema "orm"`)
+		if len(got) != len(want) {
+			t.Fatalf("%s: got %d candidates, want %d", col, len(got), len(want))
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("%s candidate %d: got %+v, want %+v", col, i, got[i], want[i])
+			}
+		}
+	}
+}
+
+func TestBuildAbbreviationMap_NilServiceOrErrorDegradesGracefully(t *testing.T) {
+	if m := buildAbbreviationMap(context.Background(), nil, "t"); len(m) != 0 {
+		t.Errorf("nil service: got %d entries, want 0", len(m))
+	}
+	errSvc := &countingAbbrevSvc{err: context.DeadlineExceeded}
+	if m := buildAbbreviationMap(context.Background(), errSvc, "t"); len(m) != 0 {
+		t.Errorf("failing service: got %d entries, want 0", len(m))
+	}
+	// Unexpanded tokens still yield a usable name.
+	c := deriveTermNamesPreviewCandidatesWithMap(nil, "account_id", `table "fund" in schema "orm"`)
+	if len(c) == 0 || c[0].Name == "" {
+		t.Errorf("no candidates without an abbreviation map: %+v", c)
+	}
+}
