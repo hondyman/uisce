@@ -165,3 +165,67 @@ logs/heap-recovery-*/
 # Desktop binary & packaging outputs
 desktop/uisce-desk
 desktop/bin/
+
+# Built binaries and Go archives (compiled outputs, > 512 KB). Listed by exact path so nothing broader is
+# ignored. GitNexus reads .gitignore, so these are no longer scanned and reported as "large files skipped".
+# NOTE: .gitignore does not affect files git already tracks - most of these are still committed; removing
+# them from history/the index (git rm --cached) is a separate change.
+/api-gateway/gateway
+/backend/backend_gsifi_linux
+/backend/backend_new
+/backend/bp-starter
+/backend/bp-worker
+/backend/bundles
+/backend/catalog-admin
+/backend/catalog-sync
+/backend/cmd/bundles/bundles
+/backend/cmd/catalog-worker/catalog-worker
+/backend/cmd/mock_admin_server/mock_admin_server
+/backend/compliance-demo
+/backend/cube-parity
+/backend/demo_xirr_execution
+/backend/dev-proxy/dev-proxy
+/backend/dev-proxy/proxy
+/backend/e2e_temporal
+/backend/loadtest
+/backend/local/cmd/proxy/proxy
+/backend/main
+/backend/mcp-server
+/backend/mock_admin_server
+/backend/notifications-service
+/backend/query-rewrite-demo
+/backend/screen-builder-service
+/backend/security-sync-worker
+/backend/semanticmatch
+/backend/stream_loader
+/backend/temporal-ops/mock_admin_server
+/backend/temporal-ops/temporal-ops
+/backend/test
+/backend/test_dax_engine
+/backend/test_websocket_integration
+/backend/testbin
+/backend/websocket_client
+/bin/api-gateway
+/bin/cube-gonja
+/bin/triggers
+/calendar-service/bin/jwt_gen
+/cube-gonja/bin/cube-gonja
+/cube-gonja/cube-gonja
+/cube-gonja/gonja-service
+/cube-gonja/gonja-service-1.22
+/cube-gonja/main
+/cube-gonja/test-binary
+/cube-gonja/test-server
+/docs/archives/AAAWealth_TRANSFER.md
+/docs/project_history/AAAWealth_TRANSFER.md
+/portfolio-management/backend/bin/portfolio-service
+/scripts/generate_anomaly_measures
+/scripts/generate_dynamic_measures
+/scripts/validate_dynamic_measures
+/seed_data_values_v2
+/services/fabric-builder/fabric-builder
+/services/fabric-builder/fabric-builder-service
+/services/fabric-builder/semlayer-fabric-builder
+/services/governance/main
+/services/semantic-engine/main
+/services/wealth-management/wealth-management-service
