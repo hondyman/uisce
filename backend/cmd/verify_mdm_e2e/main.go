@@ -73,6 +73,12 @@ func main() {
 		fmt.Println("-tenant must not be the gold-copy tenant")
 		os.Exit(2)
 	}
+	// The backend applies uisce.gold_tenant for every tenant transaction (db.WithTenantGoldTransaction); the
+	// gold-aware policies on business_object_fields and catalog_edge read it. Mirror that here.
+	if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.gold_tenant', $1, false)`, gold); err != nil {
+		fmt.Println("set gold tenant context:", err)
+		os.Exit(2)
+	}
 	fmt.Printf("acting as regular tenant %s (gold-copy tenant %s)\n", tenant, gold)
 
 	head("0. role")
