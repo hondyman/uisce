@@ -359,7 +359,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       return { tier: 'STARROCKS', reason: 'Explicit User Selection: Vectorized StarRocks MPP Engine', label: 'StarRocks (Hot OLAP)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'ICEBERG') {
-      return { tier: 'STARROCKS', reason: 'Explicit User Selection: StarRocks for all analytics (Trino/Iceberg removed)', label: 'StarRocks (Analytics)', dialect: 'StarRocks SQL' };
+      return { tier: 'STARROCKS', reason: 'Explicit User Selection: StarRocks/DataFusion for all analytics', label: 'StarRocks (Analytics)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'POSTGRES') {
       return { tier: 'POSTGRES', reason: 'Explicit User Selection: Primary PostgreSQL 16 OLTP', label: 'PostgreSQL 16 (Hot OLTP)', dialect: 'PostgreSQL 16' };

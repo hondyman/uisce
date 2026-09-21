@@ -5,10 +5,6 @@ on: [push, pull_request]
 jobs:
   validate:
     runs-on: ubuntu-latest
-    services:
-      trino:
-        image: trinodb/trino:latest
-        ports: ['8080:8080']
 
     steps:
       - uses: actions/checkout@v4

@@ -2191,7 +2191,7 @@ export interface DiscoveryConfig {
   S3Buckets: string[];
   ScanInterval: any;
   ScoringWeights: Record<string, float64>;
-  TrinoDatabases: string[];
+  StarRocksDatabases: string[];
 }
 
 /** DiscoveryResult represents output of a discovery run */

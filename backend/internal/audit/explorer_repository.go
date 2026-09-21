@@ -38,18 +38,18 @@ type Repository interface {
 	GetTenantOpsDashboard(ctx context.Context, tenantID string, from, to time.Time) (*TenantOpsDashboard, error)
 }
 
-// TrinoRepository implements Repository using Trino queries
-type TrinoRepository struct {
+// LakehouseRepository implements Repository using StarRocks / Apache DataFusion queries
+type LakehouseRepository struct {
 	db *sql.DB
 }
 
-// NewTrinoRepository creates a new Trino-backed repository
-func NewTrinoRepository(db *sql.DB) *TrinoRepository {
-	return &TrinoRepository{db: db}
+// NewLakehouseRepository creates a new lakehouse-backed repository
+func NewLakehouseRepository(db *sql.DB) *LakehouseRepository {
+	return &LakehouseRepository{db: db}
 }
 
 // ListEvents queries audit events from all tables
-func (tr *TrinoRepository) ListEvents(ctx context.Context, scope TenantScope, filters QueryFilters) ([]AuditEvent, int, error) {
+func (tr *LakehouseRepository) ListEvents(ctx context.Context, scope TenantScope, filters QueryFilters) ([]AuditEvent, int, error) {
 	query, args := buildListEventsQuery(scope, filters)
 
 	rows, err := tr.db.QueryContext(ctx, query, args...)
@@ -82,7 +82,7 @@ func (tr *TrinoRepository) ListEvents(ctx context.Context, scope TenantScope, fi
 }
 
 // GetEntityAudit retrieves all audit events related to an entity
-func (tr *TrinoRepository) GetEntityAudit(ctx context.Context, scope TenantScope, entityType, entityID string, from, to time.Time, limit, offset int) (*EntityAudit, error) {
+func (tr *LakehouseRepository) GetEntityAudit(ctx context.Context, scope TenantScope, entityType, entityID string, from, to time.Time, limit, offset int) (*EntityAudit, error) {
 	query := buildEntityAuditQuery(entityType, entityID, scope, from, to, limit, offset)
 
 	rows, err := tr.db.QueryContext(ctx, query)
@@ -124,7 +124,7 @@ func (tr *TrinoRepository) GetEntityAudit(ctx context.Context, scope TenantScope
 }
 
 // ListIncidents retrieves incident clusters
-func (tr *TrinoRepository) ListIncidents(ctx context.Context, scope TenantScope, from, to time.Time, limit, offset int) ([]IncidentCluster, error) {
+func (tr *LakehouseRepository) ListIncidents(ctx context.Context, scope TenantScope, from, to time.Time, limit, offset int) ([]IncidentCluster, error) {
 	query := buildIncidentsQuery(scope, from, to, limit, offset)
 
 	rows, err := tr.db.QueryContext(ctx, query)
@@ -149,7 +149,7 @@ func (tr *TrinoRepository) ListIncidents(ctx context.Context, scope TenantScope,
 }
 
 // GetIncident retrieves a single incident with full details
-func (tr *TrinoRepository) GetIncident(ctx context.Context, scope TenantScope, incidentID string) (*IncidentCluster, error) {
+func (tr *LakehouseRepository) GetIncident(ctx context.Context, scope TenantScope, incidentID string) (*IncidentCluster, error) {
 	query := buildIncidentDetailQuery(incidentID, scope)
 
 	var ic IncidentCluster
@@ -165,7 +165,7 @@ func (tr *TrinoRepository) GetIncident(ctx context.Context, scope TenantScope, i
 }
 
 // ListComplianceEvents retrieves compliance-related audit events
-func (tr *TrinoRepository) ListComplianceEvents(ctx context.Context, scope TenantScope, from, to time.Time, violationTypes []string, limit, offset int) ([]ComplianceEvent, error) {
+func (tr *LakehouseRepository) ListComplianceEvents(ctx context.Context, scope TenantScope, from, to time.Time, violationTypes []string, limit, offset int) ([]ComplianceEvent, error) {
 	query := buildComplianceEventsQuery(scope, from, to, violationTypes, limit, offset)
 
 	rows, err := tr.db.QueryContext(ctx, query)
@@ -191,7 +191,7 @@ func (tr *TrinoRepository) ListComplianceEvents(ctx context.Context, scope Tenan
 }
 
 // GetGlobalAdminDashboard returns platform-wide metrics
-func (tr *TrinoRepository) GetGlobalAdminDashboard(ctx context.Context, from, to time.Time) (*GlobalAdminDashboard, error) {
+func (tr *LakehouseRepository) GetGlobalAdminDashboard(ctx context.Context, from, to time.Time) (*GlobalAdminDashboard, error) {
 	dashboard := &GlobalAdminDashboard{
 		FailedRunsLastDay:    make(map[string]int),
 		ComplianceViolations: make(map[string]int),
@@ -281,7 +281,7 @@ func (tr *TrinoRepository) GetGlobalAdminDashboard(ctx context.Context, from, to
 }
 
 // GetGlobalOpsDashboard returns multi-tenant ops metrics
-func (tr *TrinoRepository) GetGlobalOpsDashboard(ctx context.Context, scope TenantScope, from, to time.Time) (*GlobalOpsDashboard, error) {
+func (tr *LakehouseRepository) GetGlobalOpsDashboard(ctx context.Context, scope TenantScope, from, to time.Time) (*GlobalOpsDashboard, error) {
 	dashboard := &GlobalOpsDashboard{
 		AssignedTenants:          scope,
 		IncidentClustersByTenant: make(map[string]int),
@@ -349,7 +349,7 @@ func (tr *TrinoRepository) GetGlobalOpsDashboard(ctx context.Context, scope Tena
 }
 
 // GetTenantAdminDashboard returns tenant-specific metrics
-func (tr *TrinoRepository) GetTenantAdminDashboard(ctx context.Context, tenantID string, from, to time.Time) (*TenantAdminDashboard, error) {
+func (tr *LakehouseRepository) GetTenantAdminDashboard(ctx context.Context, tenantID string, from, to time.Time) (*TenantAdminDashboard, error) {
 	dashboard := &TenantAdminDashboard{
 		TenantID:     tenantID,
 		TenantHealth: make(map[string]interface{}),
@@ -432,7 +432,7 @@ func (tr *TrinoRepository) GetTenantAdminDashboard(ctx context.Context, tenantID
 }
 
 // GetTenantOpsDashboard returns tenant ops metrics
-func (tr *TrinoRepository) GetTenantOpsDashboard(ctx context.Context, tenantID string, from, to time.Time) (*TenantOpsDashboard, error) {
+func (tr *LakehouseRepository) GetTenantOpsDashboard(ctx context.Context, tenantID string, from, to time.Time) (*TenantOpsDashboard, error) {
 	dashboard := &TenantOpsDashboard{
 		TenantID:          tenantID,
 		OperationalHealth: make(map[string]interface{}),

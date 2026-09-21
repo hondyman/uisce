@@ -1207,7 +1207,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
 
 	// --- Audit & History Wiring ---
-	// Trino audit chain removed - auditHistoryHandler remains nil
+	// Legacy audit chain decommissioned - auditHistoryHandler remains nil
 	var auditHistoryHandler *handlers.AuditHistoryHandler
 
 	srv.CalculationHandler = handlers.NewCalculationHandler(semanticCalculationSvc)

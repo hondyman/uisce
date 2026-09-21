@@ -50,19 +50,5 @@ jobs:
         chmod +x scripts/deploy_remote_password.sh
         ./scripts/deploy_remote_password.sh "$REMOTE_SSH_HOST" "$REMOTE_SSH_PASSWORD" "$REMOTE_SSH_USER" "$REMOTE_SSH_PATH" "$REMOTE_SSH_PORT"
 
-    - name: Trigger Verify Snapshot Backfill (post-deploy)
-      if: ${{ (secrets.TRINO_USER != '' && secrets.TRINO_PASSWORD != '') || secrets.REMOTE_TRINO_HOST != '' }}
-      uses: actions/github-script@v6
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        script: |
-          await github.actions.createWorkflowDispatch({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            workflow_id: 'verify-snapshot-backfill.yml',
-            ref: 'main'
-          });
-          core.info('Triggered verify-snapshot-backfill workflow.');
-
     - name: Success
-      run: echo "Remote deploy + optional verification trigger completed"
+      run: echo "Remote deploy completed"

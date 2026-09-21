@@ -13,7 +13,6 @@ const (
 	DialectIceberg    PolyglotDialect = "ICEBERG"
 	DialectStarRocks  PolyglotDialect = "STARROCKS"
 	DialectPostgres   PolyglotDialect = "POSTGRES"
-	DialectTrino      PolyglotDialect = "TRINO"
 	DialectDataFusion PolyglotDialect = "DATAFUSION"
 )
 
@@ -88,7 +87,7 @@ func CompilePolyglotQuery(req PolyglotQueryRequest) (*PolyglotQueryResult, error
 	switch req.Dialect {
 	case DialectIceberg, DialectDataFusion:
 		result.SQL = compileIcebergQuery(req, cols, result)
-	case DialectStarRocks, DialectTrino:
+	case DialectStarRocks:
 		result.SQL = compileStarRocksQuery(req, cols, result)
 	case DialectPostgres:
 		result.SQL = compilePostgresQuery(req, cols, result)

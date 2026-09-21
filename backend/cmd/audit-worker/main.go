@@ -49,9 +49,9 @@ func main() {
 	})
 	defer reader.Close()
 
-	// Trino configuration (Placeholder for now)
-	// trinoDSN := os.Getenv("TRINO_DSN")
-	// For MVP, we will just log the audit events. Real implementation would write to Iceberg via Trino.
+	// Lakehouse configuration (Placeholder for now)
+	// starrocksDSN := os.Getenv("STARROCKS_DSN")
+	// For MVP, we will just log the audit events. Real implementation writes to Iceberg via StarRocks/DataFusion.
 
 	log.Println("Audit Worker ready to process events")
 
@@ -92,7 +92,7 @@ func processAuditEvent(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	// Logic to write to Trino/Iceberg would go here.
+	// Logic to write to StarRocks/DataFusion Iceberg would go here.
 	// For now, we simulate by logging structured data.
 	log.Printf("[AUDIT] Tenant: %s | User: %s | Action: %s | Resource: %s/%s",
 		event.TenantID, event.ActorID, event.Action, event.ResourceType, event.ResourceID)

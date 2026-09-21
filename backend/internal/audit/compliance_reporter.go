@@ -8,7 +8,7 @@ import (
 )
 
 // ComplianceReporter generates regulator-ready compliance reports
-// Deprecated: Trino audit chain has been removed
+// Deprecated: Replaced by StarRocks/Lakehouse compliance reporting
 type ComplianceReporter struct {
 	aiService *AIAuditNarrativeService
 }
@@ -100,9 +100,9 @@ type AuditTrailSummary struct {
 }
 
 // GenerateComplianceReport generates a comprehensive compliance report for a tenant
-// Deprecated: Trino audit chain has been removed
+// Deprecated: Legacy audit pipeline has been decommissioned
 func (r *ComplianceReporter) GenerateComplianceReport(ctx context.Context, tenantID string, startDate, endDate time.Time) (*ComplianceReport, error) {
-	return nil, fmt.Errorf("compliance reporting is disabled: Trino audit chain removed")
+	return nil, fmt.Errorf("compliance reporting is disabled: legacy audit pipeline decommissioned")
 }
 
 // buildViolationSummary constructs violation summary from raw data

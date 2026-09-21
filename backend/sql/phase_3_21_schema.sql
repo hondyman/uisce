@@ -500,7 +500,7 @@ CREATE TABLE feature_computations (
     -- Job info
     job_type TEXT NOT NULL,                         -- 'materialization' | 'drift' | 'importance'
     job_id TEXT NOT NULL,                           -- e.g., Spark job ID, Temporal run ID
-    compute_engine TEXT,                            -- 'spark' | 'trino' | 'python' | 'temporal'
+    compute_engine TEXT,                            -- 'spark' | 'starrocks' | 'datafusion' | 'python' | 'temporal'
     
     -- Execution
     started_at TIMESTAMPTZ NOT NULL,

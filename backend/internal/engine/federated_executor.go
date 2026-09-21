@@ -8,13 +8,13 @@ import (
 	"github.com/hondyman/uisce/backend/internal/domain"
 )
 
-// FederatedExecutor routes queries to the appropriate database pool (PostgreSQL vs StarRocks/Trino)
+// FederatedExecutor routes queries to the appropriate database pool (PostgreSQL vs StarRocks/DataFusion)
 type FederatedExecutor struct {
 	postgresPool  *sql.DB
 	starRocksPool *sql.DB
 }
 
-// NewFederatedExecutor constructs a FederatedExecutor given Postgres and StarRocks/Trino connections
+// NewFederatedExecutor constructs a FederatedExecutor given Postgres and StarRocks connections
 func NewFederatedExecutor(pg *sql.DB, sr *sql.DB) *FederatedExecutor {
 	return &FederatedExecutor{
 		postgresPool:  pg,
@@ -70,7 +70,7 @@ func (e *FederatedExecutor) Explain(ctx context.Context, req domain.ExecutionReq
 }
 
 func (e *FederatedExecutor) getPool(engineType string) *sql.DB {
-	if engineType == "STARROCKS_FEDERATED" || engineType == "TRINO_COLD" {
+	if engineType == "STARROCKS_FEDERATED" || engineType == "DATAFUSION_COLD" {
 		if e.starRocksPool != nil {
 			return e.starRocksPool
 		}

@@ -31880,7 +31880,7 @@ ALTER TABLE ONLY public.outbox REPLICA IDENTITY FULL;
 -- Name: TABLE outbox; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.outbox IS 'Transactional outbox for async event publishing to Kafka/Trino/Iceberg';
+COMMENT ON TABLE public.outbox IS 'Transactional outbox for async event publishing to Kafka/StarRocks/Iceberg';
 
 
 --
@@ -32193,7 +32193,7 @@ ALTER TABLE ONLY public.physical_backend REPLICA IDENTITY FULL;
 -- Name: TABLE physical_backend; Type: COMMENT; Schema: public; Owner: -
 --
 
-COMMENT ON TABLE public.physical_backend IS 'Physical backend templates (PG, StarRocks, Iceberg/Trino, ClickHouse). Each backend exposes a SQL dialect and a storage_tier classification.';
+COMMENT ON TABLE public.physical_backend IS 'Physical backend templates (PG, StarRocks, Iceberg/DataFusion, ClickHouse). Each backend exposes a SQL dialect and a storage_tier classification.';
 
 
 --

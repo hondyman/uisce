@@ -17,12 +17,12 @@ ALTER TABLE IF EXISTS semantic_pre_aggregations_v2
 CREATE INDEX IF NOT EXISTS idx_semantic_pre_aggs_region ON semantic_pre_aggregations_v2(region);
 
 -- 3) Snapshot (Iceberg) guidance (manual ops required)
--- NOTE: Iceberg/Trino/Starburst installations differ. Perform the following on your data platform:
+-- NOTE: Iceberg installations differ. Perform the following on your data platform:
 --   a) Backfill the region column for all rows (see backend/scripts/backfill_snapshot_region.sh template)
 --   b) Create a new table or CTAS that includes the region column as NOT NULL
 --   c) Validate row counts and sanity checks
 --   d) Swap the tables or use your platform's atomic rename/swap method
--- Example Trino/Starburst step (template only):
+-- Example StarRocks step (template only):
 -- CREATE TABLE audit.semantic_snapshots_new AS
 -- SELECT ss.snapshot_id, ss.semantic_term_id, ss.version, ss.timestamp, ss.definition,
 --        ss.business_term_id, ss.tenant_id, COALESCE(n.region, 'unknown') AS region,

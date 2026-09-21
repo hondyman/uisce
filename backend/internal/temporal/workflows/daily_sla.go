@@ -42,12 +42,12 @@ func DailySLAWorkflow(ctx workflow.Context, input DailySLAInput) error {
 		GROUP BY tenant_id, chain_id, region
 	`, input.Date, input.Date)
 
-	var trinoResult string
-	if err := workflow.ExecuteActivity(ctx, "RunTrinoQueryActivity", input.RunID, "global", sql).Get(ctx, &trinoResult); err != nil {
+	var srResult string
+	if err := workflow.ExecuteActivity(ctx, "RunStarRocksQueryActivity", input.RunID, "global", sql).Get(ctx, &srResult); err != nil {
 		logger.Error("daily SLA computation failed", "error", err)
 		return err
 	}
-	logger.Info("daily SLA computation completed", "result", trinoResult)
+	logger.Info("daily SLA computation completed", "result", srResult)
 
 	// Step 2: Update chain health reports based on SLA metrics
 	healthSQL := fmt.Sprintf(`
@@ -78,7 +78,7 @@ func DailySLAWorkflow(ctx workflow.Context, input DailySLAInput) error {
 	`, input.Date)
 
 	var healthResult string
-	if err := workflow.ExecuteActivity(ctx, "RunTrinoQueryActivity", input.RunID, "global", healthSQL).Get(ctx, &healthResult); err != nil {
+	if err := workflow.ExecuteActivity(ctx, "RunStarRocksQueryActivity", input.RunID, "global", healthSQL).Get(ctx, &healthResult); err != nil {
 		logger.Warn("health report update failed, continuing", "error", err)
 	} else {
 		logger.Info("health reports updated", "result", healthResult)

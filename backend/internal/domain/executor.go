@@ -10,7 +10,7 @@ type ExecutionRequest struct {
 	BOID          string        `json:"boId"`
 	GeneratedSQL  string        `json:"generatedSql"`
 	Args          []interface{} `json:"args,omitempty"`
-	TargetEngine  string        `json:"targetEngine"` // e.g., "POSTGRES_HOT", "STARROCKS_FEDERATED", "TRINO_COLD"
+	TargetEngine  string        `json:"targetEngine"` // e.g., "POSTGRES_HOT", "STARROCKS_FEDERATED", "DATAFUSION_COLD"
 	EffectiveTime string        `json:"effectiveTime,omitempty"`
 }
 

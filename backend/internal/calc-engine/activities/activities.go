@@ -73,7 +73,7 @@ func UpsertRunStatus(ctx context.Context, req ComputeRequest, status string) err
 	return nil
 }
 
-// ComputeAndMergePoP orchestrates PoP calculation via Trino
+// ComputeAndMergePoP orchestrates PoP calculation via StarRocks/DataFusion
 func ComputeAndMergePoP(ctx context.Context, req ComputeRequest) error {
 	if globalConfig == nil || globalConfig.DB == nil {
 		return fmt.Errorf("dependencies not initialized")
@@ -95,7 +95,7 @@ func ComputeAndMergePoP(ctx context.Context, req ComputeRequest) error {
 	mergeSQL := generatePopMergeSQL(req.TenantID, req.MetricID, req.PeriodLabel,
 		req.PeriodStart, req.PeriodEnd, req.RunID)
 
-	// 3) Execute MERGE against Trino/Iceberg
+	// 3) Execute MERGE against StarRocks/DataFusion
 	// For now, log the SQL and simulate execution
 	fmt.Printf("Executing PoP MERGE SQL:\n%s\n", mergeSQL)
 
@@ -173,7 +173,7 @@ func generatePopMergeSQL(tenantID, metricID, periodLabel string, start, end time
 		start.Format("2006-01-02"), end.Format("2006-01-02"), runID)
 }
 
-// ComputeAndMergeAnomalies orchestrates z-score anomaly detection via Trino
+// ComputeAndMergeAnomalies orchestrates z-score anomaly detection via StarRocks/DataFusion
 func ComputeAndMergeAnomalies(ctx context.Context, req ComputeRequest) error {
 	if globalConfig == nil || globalConfig.DB == nil {
 		return fmt.Errorf("dependencies not initialized")

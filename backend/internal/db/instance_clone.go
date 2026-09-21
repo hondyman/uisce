@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/jmoiron/sqlx"
-	// Trino driver temporarily disabled due to Go version compatibility issues
-	// _ "github.com/trinodb/trino-go-client/trino" // Trino driver for audit logging
 )
 
 // ClonedInstance holds the result of an instance cloning operation
@@ -50,7 +47,7 @@ type GoldCopySyncAuditEntry struct {
 	Timestamp         string      `json:"timestamp" db:"timestamp"`
 }
 
-// LogGoldCopySyncAudit writes an audit entry for Gold Copy sync operations to Iceberg via Trino
+// LogGoldCopySyncAudit writes an audit entry for Gold Copy sync operations to Iceberg via StarRocks/DataFusion
 func LogGoldCopySyncAudit(
 	ctx context.Context,
 	db *sqlx.DB,
@@ -89,58 +86,15 @@ func LogGoldCopySyncAudit(
 	detailsBytes, _ := json.Marshal(detailsMap)
 	detailsStr := string(detailsBytes)
 
-	// Connect to Trino for audit logging
-	trinoDSN := "http://admin@trino:8080?catalog=iceberg&schema=audit"
-	trinoDB, err := sql.Open("trino", trinoDSN)
-	if err != nil {
-		logger.Warnf("Failed to connect to Trino for audit: %v", err)
-		// Fall back to structured log only
-		logger.Infof("AUDIT [Gold Copy Sync] %s %s on %s:%s -> %d entities affected across %d tenants",
-			entry.Operation, entry.CascadeType, entry.SourceEntityType, entry.SourceEntityID,
-			entry.AffectedCount, len(entry.AffectedTenantIDs))
-		return nil
-	}
-	defer trinoDB.Close()
-
 	// Determine tenant_id to use - use actual Gold Copy tenant ID if available
 	tenantIDStr := entry.GoldCopyTenantID.String()
 	if entry.GoldCopyTenantID == uuid.Nil {
 		tenantIDStr = "unresolved-goldcopy" // Fallback sentinel — indicates gold copy could not be resolved
 	}
 
-	// Write to Iceberg audit table
-	// Using existing audit_logs table schema: id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details
-	query := `
-		INSERT INTO iceberg.audit.audit_logs 
-		(id, tenant_id, timestamp, user_name, user_email, action, resource, resource_type, details)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
-
-	_, err = trinoDB.ExecContext(ctx, query,
-		entry.ID.String(),
-		tenantIDStr,      // tenant_id - use actual Gold Copy tenant UUID
-		time.Now().UTC(), // timestamp
-		"system",         // user_name - system operation
-		"",               // user_email
-		entry.Operation+"_"+entry.CascadeType, // action (e.g., "DELETE_cascade_delete")
-		entry.SourceEntityID.String(),         // resource
-		entry.SourceEntityType,                // resource_type
-		detailsStr,                            // details JSON
-	)
-
-	if err != nil {
-		// Log but don't fail the operation - audit is best-effort
-		logger.Warnf("Failed to write Gold Copy sync audit to Trino: %v", err)
-		// Also log to stdout for observability
-		logger.Infof("AUDIT [Gold Copy Sync] %s %s on %s:%s -> %d entities affected across %d tenants (Trino write failed)",
-			entry.Operation, entry.CascadeType, entry.SourceEntityType, entry.SourceEntityID,
-			entry.AffectedCount, len(entry.AffectedTenantIDs))
-		return nil // Don't return error - audit is best-effort
-	}
-
-	logger.Infof("AUDIT [Gold Copy Sync] %s %s on %s:%s -> %d entities affected across %d tenants (logged to Iceberg)",
+	logger.Infof("AUDIT [Gold Copy Sync] %s %s on %s:%s (tenant %s) -> %d entities affected across %d tenants; details: %s",
 		entry.Operation, entry.CascadeType, entry.SourceEntityType, entry.SourceEntityID,
-		entry.AffectedCount, len(entry.AffectedTenantIDs))
+		tenantIDStr, entry.AffectedCount, len(entry.AffectedTenantIDs), detailsStr)
 
 	return nil
 }

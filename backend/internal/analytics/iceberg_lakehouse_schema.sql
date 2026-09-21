@@ -1,9 +1,9 @@
 -- Iceberg Schema for StarRocks Lakehouse
--- These tables are created via Trino or Spark SQL against the Nessie catalog
+-- These tables are created via StarRocks, DataFusion, or Spark SQL against the Lakekeeper/Nessie catalog
 -- StarRocks queries them directly via the external Iceberg catalog
 
 -- ============================================
--- Create Iceberg Database (via Trino/Spark)
+-- Create Iceberg Database (via StarRocks/Spark)
 -- ============================================
 -- CREATE SCHEMA IF NOT EXISTS iceberg.wealth;
 
@@ -247,7 +247,7 @@ WITH (
 );
 
 -- ============================================
--- Maintenance Procedures (run via Spark/Trino)
+-- Maintenance Procedures (run via Spark/StarRocks)
 -- ============================================
 
 -- Compact small files (run daily)

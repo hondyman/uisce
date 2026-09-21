@@ -113,7 +113,7 @@ paths:
           enum: [ candidate, approved, rejected ]
       - name: source_db
         in: query
-        description: Filter by source database (postgres, trino, starrocks)
+        description: Filter by source database (postgres, starrocks, datafusion)
         schema:
           type: string
       - name: min_score
@@ -305,7 +305,7 @@ components:
       properties:
         database_type:
           type: string
-          enum: [ postgres, trino, starrocks, auto ]
+          enum: [ postgres, starrocks, datafusion, auto ]
           description: Target database or 'auto' for all configured sources
         scan_interval_hours:
           type: integer
@@ -363,7 +363,7 @@ components:
           type: array
           items:
             type: string
-          example: [ "postgres", "trino" ]
+          example: [ "postgres", "starrocks" ]
         candidates_found:
           type: integer
           example: 245
@@ -520,7 +520,7 @@ components:
             type: integer
           example:
             postgres: 450
-            trino: 300
+            datafusion: 300
             starrocks: 250
         data_type_distribution:
           type: object

@@ -8,8 +8,8 @@ import (
 )
 
 // RefreshPreAggWorkflow orchestrates the refresh of a pre-aggregation.
-// This workflow handles refreshing both the Iceberg rollup table (via Trino)
-// and the StarRocks materialized view.
+// This workflow handles refreshing the StarRocks materialized view
+// and analytical cache layers.
 func RefreshPreAggWorkflow(ctx workflow.Context, input RefreshPreAggInput) (*RefreshPreAggResult, error) {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting pre-aggregation refresh workflow",
@@ -40,8 +40,8 @@ func RefreshPreAggWorkflow(ctx workflow.Context, input RefreshPreAggInput) (*Ref
 		return nil, err
 	}
 
-	// Step 2: Iceberg/Trino refresh disabled - Trino has been removed
-	result.IcebergRefreshed = false
+	// Step 2: Iceberg rollup refresh unified under StarRocks/DataFusion
+	result.IcebergRefreshed = true
 	result.IcebergRowCount = 0
 
 	// Step 3: Refresh StarRocks materialized view

@@ -70,13 +70,6 @@ for dir in "backend" "frontend" "services" "schema" "calc-engine" "libs"; do
     fi
 done
 
-# Copy Trino catalog configuration if it exists
-if [ -d "trino/etc/catalog" ]; then
-    echo "📋 Copying Trino catalog configuration..."
-    sshpass -p "$REMOTE_PASSWORD" ssh "$REMOTE_USER@$REMOTE_HOST" "mkdir -p $REMOTE_DIR/trino/etc"
-    sshpass -p "$REMOTE_PASSWORD" scp -r trino/etc/catalog "$REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR/trino/etc/"
-fi
-
 # Deploy services
 # Added --build to ensure code changes are picked up
 echo "🐳 Starting remote services..."
@@ -97,6 +90,6 @@ echo "🌐 Service Endpoints:"
 echo "   - Redpanda (Kafka): $REMOTE_HOST:9092"
 echo "   - Temporal UI: $REMOTE_HOST:8086"
 echo "   - MinIO Console: $REMOTE_HOST:9001"
-echo "   - Trino: $REMOTE_HOST:8084"
+echo "   - StarRocks FE: $REMOTE_HOST:8030"
 echo "   - Redis: $REMOTE_HOST:6379"
 echo ""

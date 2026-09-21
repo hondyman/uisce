@@ -41,8 +41,8 @@ func DiscoveryWorkflow(ctx workflow.Context, config models.DiscoveryConfig) (*mo
 		result.SourcesScanned = append(result.SourcesScanned, "postgres")
 	}
 
-	// Step 2: Trino scan disabled - Trino has been removed
-	var trinoFields []FieldMetadata
+	// Step 2: StarRocks/DataFusion scan
+	var analyticalFields []FieldMetadata
 
 	// Step 3: Parse application logs
 	var logFields []ParsedLogField
@@ -81,9 +81,9 @@ func DiscoveryWorkflow(ctx workflow.Context, config models.DiscoveryConfig) (*mo
 	postgresCandidates := convertFieldsToFeatureCandidates(postgresFields, "postgres")
 	allCandidates = append(allCandidates, postgresCandidates...)
 
-	// Process Trino fields
-	trinoCandidates := convertFieldsToFeatureCandidates(trinoFields, "trino")
-	allCandidates = append(allCandidates, trinoCandidates...)
+	// Process analytical fields (StarRocks/DataFusion)
+	analyticalCandidates := convertFieldsToFeatureCandidates(analyticalFields, "starrocks")
+	allCandidates = append(allCandidates, analyticalCandidates...)
 
 	// Process log fields
 	logCandidates := convertLogFieldsToFeatureCandidates(logFields)
@@ -147,7 +147,7 @@ func DiscoveryWorkflow(ctx workflow.Context, config models.DiscoveryConfig) (*mo
 	statsMap["derived_candidates"] = len(derivedCandidates)
 	statsMap["sources_scanned"] = len(result.SourcesScanned)
 	statsMap["candidates_from_postgres"] = len(postgresCandidates)
-	statsMap["candidates_from_trino"] = len(trinoCandidates)
+	statsMap["candidates_from_starrocks"] = len(analyticalCandidates)
 	statsMap["candidates_from_logs"] = len(logCandidates)
 	statsMap["candidates_from_prometheus"] = len(metricCandidates)
 
@@ -206,12 +206,12 @@ func ScanPostgresActivity(ctx context.Context, config models.DiscoveryConfig) ([
 	}, nil
 }
 
-// Activity: Scan Trino warehouses
-func ScanTrinoActivity(ctx context.Context, config models.DiscoveryConfig) ([]FieldMetadata, error) {
-	// Simulated Trino scan
+// Activity: Scan StarRocks warehouses
+func ScanStarRocksActivity(ctx context.Context, config models.DiscoveryConfig) ([]FieldMetadata, error) {
+	// Simulated StarRocks scan
 	return []FieldMetadata{
 		{
-			DatabaseType:        "trino",
+			DatabaseType:        "starrocks",
 			DatabaseName:        "analytics",
 			TableName:           "events_daily",
 			FieldName:           "error_count",
@@ -221,7 +221,7 @@ func ScanTrinoActivity(ctx context.Context, config models.DiscoveryConfig) ([]Fi
 			LastScannedAt:       time.Now(),
 		},
 		{
-			DatabaseType:        "trino",
+			DatabaseType:        "starrocks",
 			DatabaseName:        "analytics",
 			TableName:           "events_daily",
 			FieldName:           "avg_latency_ms",

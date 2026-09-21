@@ -65,7 +65,7 @@ Provide the thinking process in a comment, followed by ONLY the Cypher query.
 	PromptSQLGenerator = `
 ### ROLE: ANALYTICAL SQL ENGINE
 
-You generate precision SQL for Trino/Postgres, targeting the SemLayer internal metadata schemas.
+You generate precision SQL for StarRocks/Postgres, targeting the SemLayer internal metadata schemas.
 
 ### TABLES:
 - **semantic.api_endpoints**: API definitions and health.

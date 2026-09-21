@@ -38,12 +38,3 @@ services:
       - '9083:9083'
     depends_on:
       - ci_postgres
-
-  trino:
-    image: trinodb/trino:latest
-    volumes:
-      - ./trino/catalog:/etc/trino/catalog
-    ports:
-      - '8080:8080'
-    depends_on:
-      - hive-metastore

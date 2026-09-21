@@ -31,7 +31,7 @@ func (s *LakehouseMaintenanceService) RunTenantLakehouseCompaction(ctx context.C
     options => map('max-file-size-bytes', '536870912', 'min-file-size-bytes', '67108864')
 )`, tenantSchema, table)
 
-	_ = compactionSQL // Executed via Iceberg catalog connector / Trino engine
+	_ = compactionSQL // Executed via Iceberg catalog connector / StarRocks or DataFusion engine
 
 	return &models.LakehouseMaintenanceReport{
 		TenantID:            secCtx.TenantID,

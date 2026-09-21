@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS discovery_runs (
     status VARCHAR(50) NOT NULL, -- pending, running, success, failed, partial
     started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMPTZ,
-    sources_scanned JSONB, -- ["postgres", "trino", "logs", "prometheus"]
+    sources_scanned JSONB, -- ["postgres", "starrocks", "logs", "prometheus"]
     candidates_found INT DEFAULT 0,
     error_message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS discovery_candidates (
     candidate_id VARCHAR(255) UNIQUE NOT NULL,
     run_id VARCHAR(255) NOT NULL REFERENCES discovery_runs(run_id),
     name VARCHAR(255) NOT NULL,
-    source_database VARCHAR(50) NOT NULL, -- postgres, trino, logs, prometheus, derived
+    source_database VARCHAR(50) NOT NULL, -- postgres, starrocks, datafusion, logs, prometheus, derived
     source_schema VARCHAR(255),
     source_table VARCHAR(255),
     source_field VARCHAR(255) NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS discovery_statistics (
     rejected_count INT,
     avg_score FLOAT,
     median_score FLOAT,
-    source_distribution JSONB, -- {"postgres": 35, "trino": 12, "logs": 18, "prometheus": 28}
+    source_distribution JSONB, -- {"postgres": 35, "starrocks": 12, "logs": 18, "prometheus": 28}
     data_type_distribution JSONB,
     score_distribution JSONB, -- {"0.0-0.2": 7, "0.2-0.4": 35, "0.4-0.6": 45, "0.6-0.8": 30, "0.8-1.0": 18}
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS discovery_logs (
     id SERIAL PRIMARY KEY,
     run_id VARCHAR(255) NOT NULL REFERENCES discovery_runs(run_id),
     timestamp TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    source VARCHAR(100), -- postgres_scanner, trino_scanner, log_parser, metric_extractor, ranker, generator
+    source VARCHAR(100), -- postgres_scanner, starrocks_scanner, log_parser, metric_extractor, ranker, generator
     action VARCHAR(100), -- scan_start, scan_complete, parse_start, parse_complete, etc
     details TEXT,
     status VARCHAR(50), -- info, warning, error
@@ -140,7 +140,7 @@ CREATE INDEX idx_feature_metadata_created_at ON feature_metadata(created_at DESC
 
 -- Insert default discovery run entry for testing
 INSERT INTO discovery_runs (run_id, status, sources_scanned, candidates_found)
-VALUES ('discovery-2026-02-09-001', 'success', '["postgres", "trino", "logs", "prometheus"]', 127)
+VALUES ('discovery-2026-02-09-001', 'success', '["postgres", "starrocks", "logs", "prometheus"]', 127)
 ON CONFLICT (run_id) DO NOTHING;
 
 -- Update statistics table
@@ -161,7 +161,7 @@ INSERT INTO discovery_statistics (
     5,
     0.62,
     0.61,
-    '{"postgres": 35, "trino": 12, "logs": 18, "prometheus": 28, "derived": 34}',
+    '{"postgres": 35, "starrocks": 12, "logs": 18, "prometheus": 28, "derived": 34}',
     '{"float": 65, "string": 35, "integer": 15, "categorical": 12}',
     '{"0.0-0.2": 7, "0.2-0.4": 35, "0.4-0.6": 45, "0.6-0.8": 30, "0.8-1.0": 18}'
 ) ON CONFLICT (date) DO NOTHING;

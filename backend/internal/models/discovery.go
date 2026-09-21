@@ -6,7 +6,7 @@ import "time"
 type FeatureCandidate struct {
 	ID              string    // Unique identifier
 	Name            string    // Feature name (e.g., "http_request_duration_p99")
-	SourceDatabase  string    // Where it came from: postgres, logs, prometheus, trino, s3, derived
+	SourceDatabase  string    // Where it came from: postgres, logs, prometheus, starrocks, datafusion, s3, derived
 	SourceSchema    string    // Schema/database name
 	SourceTable     string    // Table name (if applicable)
 	SourceField     string    // Original field name
@@ -61,7 +61,7 @@ type FeatureCatalog struct {
 type DiscoveryConfig struct {
 	ScanInterval        time.Duration      // How often to scan for new features
 	PostgresDatabases   []string           // Postgres DBs to scan
-	TrinoDatabases      []string           // Trino warehouses to scan
+	StarRocksDatabases  []string           // StarRocks/DataFusion warehouses to scan
 	S3Buckets           []string           // S3 buckets with data
 	PrometheusURL       string             // Prometheus endpoint
 	MinCardinalityScore float64            // Minimum cardinality score to consider

@@ -5,7 +5,7 @@ POSTGRES_CONN="postgresql://ops:ops_pass@localhost:5432/ops"
 MINIO_ALIAS=local
 MINIO_BUCKET=iceberg-staging
 COMMIT_URL=http://localhost:8081/commit
-TRINO_URL=http://localhost:8080
+DATAFUSION_URL=http://localhost:8555
 
 # Wait helper
 wait_for_port() {
@@ -31,8 +31,8 @@ SQL
 mc alias set $MINIO_ALIAS http://localhost:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD || true
 mc mb $MINIO_ALIAS/$MINIO_BUCKET || true
 
-# Create an Iceberg schema/table via Trino
-echo "Creating Iceberg schema and table via Trino"
+# Create an Iceberg schema/table via DataFusion
+echo "Creating Iceberg schema and table via DataFusion"
 SQL_CREATE_SCHEMA="CREATE SCHEMA IF NOT EXISTS iceberg.ops;"
 SQL_CREATE_TABLE="CREATE TABLE IF NOT EXISTS iceberg.ops.incidents (
   incident_id varchar,
@@ -41,23 +41,16 @@ SQL_CREATE_TABLE="CREATE TABLE IF NOT EXISTS iceberg.ops.incidents (
   status varchar,
   severity varchar,
   created_at timestamp
-) WITH (format = 'PARQUET');"
+);"
 
-# Submit SQL via Trino HTTP API
-submit_trino_sql() {
+# Submit SQL via DataFusion HTTP API
+submit_datafusion_sql() {
   local sql="$1"
-  # POST SQL, then follow nextUri to get completion
-  local resp=$(curl -s -X POST --data "$sql" $TRINO_URL/v1/statement)
-  local next=$(echo "$resp" | jq -r '.nextUri // empty')
-  while [ -n "$next" ]; do
-    resp=$(curl -s "$next")
-    next=$(echo "$resp" | jq -r '.nextUri // empty')
-    sleep 0.2
-  done
+  curl -s -X POST -H "Content-Type: application/json" -d "{\"query\": \"$sql\"}" $DATAFUSION_URL/api/sql
 }
 
-submit_trino_sql "$SQL_CREATE_SCHEMA"
-submit_trino_sql "$SQL_CREATE_TABLE"
+submit_datafusion_sql "$SQL_CREATE_SCHEMA"
+submit_datafusion_sql "$SQL_CREATE_TABLE"
 
 # Generate a test Parquet file
 PARQUET_FILE=/tmp/test-$(date +%s).parquet
@@ -101,28 +94,18 @@ for i in {1..10}; do
   fi
 done
 
-# Poll Trino until the row is visible
-echo "Polling Trino for committed row"
-SQL_COUNT="SELECT count(*) FROM iceberg.ops.incidents WHERE incident_id = 'inc_test';"
+# Poll DataFusion until the row is visible
+echo "Polling DataFusion for committed row"
+SQL_COUNT="SELECT count(*) as cnt FROM iceberg.ops.incidents WHERE incident_id = 'inc_test';"
 for i in {1..30}; do
-  resp=$(curl -s -X POST --data "$SQL_COUNT" $TRINO_URL/v1/statement)
-  next=$(echo "$resp" | jq -r '.nextUri // empty')
-  data=''
-  while [ -n "$next" ]; do
-    resp=$(curl -s "$next")
-    next=$(echo "$resp" | jq -r '.nextUri // empty')
-    data=$(echo "$resp" | jq -r '.data // empty')
-    if [ -n "$data" ] && [ "$data" != "null" ]; then
-      count=$(echo "$data" | jq -r '.[0][0]')
-      if [ "$count" = "1" ]; then
-        echo "Success: row found"
-        exit 0
-      fi
-    fi
-    sleep 1
-  done
+  resp=$(submit_datafusion_sql "$SQL_COUNT")
+  count=$(echo "$resp" | jq -r '.[0].cnt // empty')
+  if [ "$count" = "1" ]; then
+    echo "Success: row found"
+    exit 0
+  fi
   sleep 2
 done
 
-echo "ERROR: row not found in Trino after timeout"
+echo "ERROR: row not found in DataFusion after timeout"
 exit 1

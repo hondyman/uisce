@@ -60,7 +60,6 @@ type PreAggRefreshActivities struct {
 	preAggSvc        *analytics.PreAggregationService
 	lifecycleSvc     *analytics.PreAggLifecycleService
 	templateRenderer *analytics.PreAggTemplateRenderer
-	trinoConn        *sqlx.DB // Trino connection for Iceberg
 	starrocksConn    *sqlx.DB // StarRocks connection
 }
 
@@ -69,7 +68,7 @@ func NewPreAggRefreshActivities(
 	db *sqlx.DB,
 	preAggSvc *analytics.PreAggregationService,
 	lifecycleSvc *analytics.PreAggLifecycleService,
-	trinoConn, starrocksConn *sqlx.DB,
+	starrocksConn *sqlx.DB,
 ) *PreAggRefreshActivities {
 	renderer, _ := analytics.NewPreAggTemplateRenderer()
 	return &PreAggRefreshActivities{
@@ -77,7 +76,6 @@ func NewPreAggRefreshActivities(
 		preAggSvc:        preAggSvc,
 		lifecycleSvc:     lifecycleSvc,
 		templateRenderer: renderer,
-		trinoConn:        trinoConn,
 		starrocksConn:    starrocksConn,
 	}
 }
@@ -91,10 +89,9 @@ func (a *PreAggRefreshActivities) MarkPreAggRefreshingActivity(ctx context.Conte
 	return a.lifecycleSvc.MarkRefreshing(ctx, id)
 }
 
-// RefreshIcebergRollupActivity refreshes the Iceberg rollup table via Trino.
-// Deprecated: Trino/Iceberg has been removed
+// RefreshIcebergRollupActivity refreshes the Iceberg rollup table via StarRocks.
 func (a *PreAggRefreshActivities) RefreshIcebergRollupActivity(ctx context.Context, input RefreshLayerInput) (*RefreshLayerResult, error) {
-	return nil, fmt.Errorf("Iceberg/Trino refresh is disabled: Trino audit chain removed")
+	return a.RefreshStarRocksMVActivity(ctx, input)
 }
 
 // RefreshStarRocksMVActivity refreshes the StarRocks materialized view.

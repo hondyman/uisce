@@ -21,7 +21,6 @@ jobs:
       POSTGRES_USER: ops
       POSTGRES_PASSWORD: ops_pass
       POSTGRES_DB: ops
-      TRINO_CATALOG_DIR: .github/ci/trino_catalog
     steps:
     - name: Checkout
       uses: actions/checkout@v4

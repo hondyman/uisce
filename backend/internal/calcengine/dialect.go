@@ -13,7 +13,7 @@ type QueryDialect interface {
 	BindPlaceholder(index int) string
 	QuoteIdentifier(name string) string
 	// RequiresOrderByForLimit reports whether the dialect requires an ORDER BY
-	// clause whenever LIMIT is used (e.g., Trino/Iceberg).
+	// clause whenever LIMIT is used (e.g., StarRocks/DataFusion/Iceberg).
 	RequiresOrderByForLimit() bool
 }
 
@@ -35,23 +35,27 @@ func (PostgresQueryDialect) QuoteIdentifier(name string) string {
 	return strings.Join(parts, ".")
 }
 
-// TrinoQueryDialect produces positional '?' placeholders and double-quoted
-// identifiers for Trino/Iceberg/StarRocks execution paths.
-type TrinoQueryDialect struct{}
+// StarRocksQueryDialect produces positional '?' placeholders and double-quoted
+// identifiers for StarRocks/Apache DataFusion execution paths.
+type StarRocksQueryDialect struct{}
 
-func (TrinoQueryDialect) BindPlaceholder(index int) string {
+func (StarRocksQueryDialect) BindPlaceholder(index int) string {
 	return "?"
 }
 
-func (TrinoQueryDialect) RequiresOrderByForLimit() bool { return true }
+func (StarRocksQueryDialect) RequiresOrderByForLimit() bool { return true }
 
-func (TrinoQueryDialect) QuoteIdentifier(name string) string {
+func (StarRocksQueryDialect) QuoteIdentifier(name string) string {
 	parts := strings.Split(name, ".")
 	for i, p := range parts {
 		parts[i] = `"` + p + `"`
 	}
 	return strings.Join(parts, ".")
 }
+
+// DataFusionQueryDialect produces positional '?' placeholders and double-quoted
+// identifiers for Apache DataFusion execution paths.
+type DataFusionQueryDialect = StarRocksQueryDialect
 
 // SQLServerQueryDialect produces '@pN' placeholders and bracket-quoted
 // identifiers for SQL Server execution paths.
