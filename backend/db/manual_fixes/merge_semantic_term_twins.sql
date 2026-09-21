@@ -138,7 +138,7 @@ JOIN public.catalog_node o ON o.node_type_id = ft.id AND o.node_name = f.old_nam
      AND o.tenant_id = (SELECT tenant_id FROM _scope) AND o.tenant_datasource_id = (SELECT ds FROM _scope)
      AND o.created_at >= (SELECT since FROM _scope)
 JOIN public.catalog_node tgt ON tgt.node_type_id = ft.id AND tgt.node_name = f.new_name
-     AND tgt.tenant_id = o.tenant_id AND tgt.tenant_datasource_id = o.tenant_datasource_id
+     AND tgt.tenant_id = o.tenant_id AND tgt.id <> o.id
 ON CONFLICT (loser_id) DO NOTHING;
 
 \echo
@@ -198,16 +198,16 @@ TRUNCATE _merge;
 INSERT INTO _merge
 SELECT loser_id, survivor_id, kind, loser_name, survivor_name, 'same meaning'
 FROM (
-  SELECT n.id AS loser_id, t.catalog_type_name AS kind, n.node_name AS loser_name, n.created_at AS loser_created,
+  SELECT n.id AS loser_id, t.catalog_type_name AS kind, n.node_name AS loser_name, n.created_at AS loser_created, n.tenant_datasource_id AS loser_ds,
          first_value(n.id) OVER w AS survivor_id, first_value(n.node_name) OVER w AS survivor_name,
          row_number() OVER w AS rn
   FROM public.catalog_node n JOIN public.catalog_node_type t ON t.id = n.node_type_id AND t.catalog_type_name IN ('semantic_term', 'business_term')
-  WHERE n.tenant_id = (SELECT tenant_id FROM _scope) AND n.tenant_datasource_id = (SELECT ds FROM _scope)
+  WHERE n.tenant_id = (SELECT tenant_id FROM _scope)
   -- the survivor is an older term when there is one (then the one with the most edges, then the oldest)
   WINDOW w AS (PARTITION BY t.catalog_type_name, pg_temp.term_key(n.node_name)
                ORDER BY (n.created_at >= (SELECT since FROM _scope)),
                         (SELECT count(*) FROM public.catalog_edge e WHERE e.source_node_id = n.id OR e.target_node_id = n.id) DESC, n.created_at ASC, n.node_name)
-) x WHERE rn > 1 AND loser_created >= (SELECT since FROM _scope);
+) x WHERE rn > 1 AND loser_created >= (SELECT since FROM _scope) AND loser_ds = (SELECT ds FROM _scope);
 
 \echo
 \echo '== 3. twins from the generator run merged into the existing term with the same meaning'
@@ -256,9 +256,9 @@ DECLARE remaining bigint; dangling bigint; before_m bigint; after_m bigint;
 BEGIN
   SELECT count(*) INTO remaining FROM (
     SELECT 1 FROM public.catalog_node n JOIN public.catalog_node_type t ON t.id = n.node_type_id AND t.catalog_type_name IN ('semantic_term', 'business_term')
-    WHERE n.tenant_id = (SELECT tenant_id FROM _scope) AND n.tenant_datasource_id = (SELECT ds FROM _scope)
+    WHERE n.tenant_id = (SELECT tenant_id FROM _scope)
     GROUP BY t.catalog_type_name, pg_temp.term_key(n.node_name)
-    HAVING count(*) > 1 AND bool_or(n.created_at >= (SELECT since FROM _scope))) g;
+    HAVING count(*) > 1 AND bool_or(n.created_at >= (SELECT since FROM _scope) AND n.tenant_datasource_id = (SELECT ds FROM _scope))) g;
   IF remaining > 0 THEN RAISE EXCEPTION 'CHECK FAILED: % groups of same-meaning terms still include one from the generator run', remaining; END IF;
 
   SELECT count(*) INTO dangling FROM public.catalog_edge e
