@@ -1,4 +1,4 @@
--- 20261024_002_bob_gold_copy_read_policy.up.sql
+-- 20261024_004_bob_gold_copy_read_policy.up.sql
 --
 -- Regular tenants inherit gold-copy metadata read-only. business_object_bindings (plural), which had
 -- no RLS, let every tenant read the gold-copy tenant's bindings for inherited BOs; the singular table
