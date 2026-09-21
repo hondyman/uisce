@@ -1,67 +1,57 @@
-# orm-oms-connector setup
+# orm-oms-connector setup (live state as of 2026-09-20)
 
-Registers the Debezium Postgres connector that feeds the OMS CDC hot-tier
-pipeline (`orm.*` tables -> Kafka -> `cmd/stream_loader` -> StarRocks
-`oms.*`). These are one-time, host-side setup steps against the shared
-`crims` database and the running `semlayer-debezium` Kafka Connect
-instance - not something `docker compose up` recreates on its own, since
-they touch data outside this compose stack.
+This file documents the **live** registered Debezium connector, NOT the original
+setup steps. The original AGENTS.md narrative about a crims-targeted connector
+was wrong — the live connector reads from the **alpha** database's `orm` schema.
 
-## 1. Create the CDC publication (once, on `crims`)
+## Live config (verified 2026-09-20 via `GET /connectors/orm-oms-connector/config`)
 
-```sql
-CREATE PUBLICATION orm_cdc_publication FOR TABLES IN SCHEMA orm;
-```
+- `connector.class`: `io.debezium.connector.postgresql.PostgresConnector`
+- `database.hostname`: `100.84.50.65` (the remote Postgres at `100.84.50.65`, NOT
+  `host.docker.internal` — that was a leftover from the original setup doc)
+- `database.dbname`: `alpha` (NOT crims)
+- `database.user`: `postgres`, `database.password`: `postgres` (dev)
+- `database.sslmode`: `verify-full` with the .pk8 cert dance per AGENTS.md
+- `topic.prefix`: `orm_oms`
+- `schema.include.list`: `orm`
+- `table.include.list`: `orm.execution, orm."order", orm.placement, orm.order_allocation, orm.execution_allocation` (5 of 7 orm.* tables; excludes `account` and `broker`)
+- `publication.name`: `orm_cdc_publication` (on alpha, NOT crims)
+- `slot.name`: `orm_oms_slot`
+- `snapshot.mode`: `initial`
+- `tombstones.on.delete`: `false`
 
-## 2. Copy the mTLS client cert material into the connector container
+## Where the mTLS certs live (live state)
 
-`crims` requires client-cert auth from the Docker bridge gateway IP.
-The cert/key live in `tenant_product_datasource.config` (in the `alpha`
-database) for the ORM datasource. The connector's bundled pgjdbc needs
-the private key as **PKCS#8 DER** (not PEM) - see
-`backend/cmd/stream_loader/main.go`'s header comment for the matching
-Decimal-decoding note on the consumer side.
+The certs are mounted into the `uisce-debezium` container (the Kafka Connect
+worker in `docker-compose.remote.yml`) at:
 
-```bash
-psql -U postgres -h localhost -d alpha -t -A \
-  -c "SELECT config->>'ca_cert' FROM tenant_product_datasource WHERE id='441f62c9-aad1-481d-9aab-62943fa11cd3';" \
-  > /tmp/orm_ca.crt
-psql -U postgres -h localhost -d alpha -t -A \
-  -c "SELECT config->>'client_cert' FROM tenant_product_datasource WHERE id='441f62c9-aad1-481d-9aab-62943fa11cd3';" \
-  > /tmp/orm_client.crt
-psql -U postgres -h localhost -d alpha -t -A \
-  -c "SELECT config->>'private_key' FROM tenant_product_datasource WHERE id='441f62c9-aad1-481d-9aab-62943fa11cd3';" \
-  > /tmp/orm_client.key
+- `/tmp/orm_ca.crt` — host `/home/eganpj/.uisce/certs/ca.crt`
+- `/tmp/orm_client.crt` — host `/home/eganpj/.uisce/certs/postgres-client.crt`
+- `/tmp/orm_client_der.pk8` — host `/tmp/orm_client_der.pk8` (copied because
+  the original at `~/.uisce/certs/postgres-client.pk8` is owned by uid 1000
+  but the Connect JVM runs as uid 1001 — see AGENTS.md operational notes)
 
-openssl pkcs8 -topk8 -nocrypt -in /tmp/orm_client.key -outform DER -out /tmp/orm_client_der.pk8
+**Operational landmine:** these certs live in the container's `/tmp/`, so they
+vanish on container recreation. Re-mount from the host paths after any
+`docker compose up -d --force-recreate uisce-debezium`.
 
-docker cp /tmp/orm_ca.crt semlayer-debezium:/tmp/orm_ca.crt
-docker cp /tmp/orm_client.crt semlayer-debezium:/tmp/orm_client.crt
-docker cp /tmp/orm_client_der.pk8 semlayer-debezium:/tmp/orm_client_der.pk8
+## Register a new (or replacement) connector
 
-# The Connect worker JVM runs as uid 1001 (kafka), not the uid docker cp
-# leaves the files owned as - fix ownership or the connector fails with
-# "Could not read SSL key file".
-docker exec -u root semlayer-debezium chown kafka:kafka /tmp/orm_ca.crt /tmp/orm_client.crt /tmp/orm_client_der.pk8
-docker exec -u root semlayer-debezium chmod 600 /tmp/orm_client_der.pk8
-
-shred -u /tmp/orm_client.key /tmp/orm_client_der.pk8
-```
-
-## 3. Register the connector
-
-`orm-oms-connector.json` ships with `database.password` as a placeholder -
-substitute the real dev value (see `tenant_product_datasource.config` in
-`alpha`, or `.env`) before posting, e.g.:
+The config is now in sync with the live state in `debezium/orm-oms-connector.json`.
+To re-register:
 
 ```bash
-sed 's/REPLACE_WITH_POSTGRES_PASSWORD/postgres/' orm-oms-connector.json | \
-  curl -X POST http://localhost:8083/connectors -H 'Content-Type: application/json' -d @-
+curl -X POST http://100.84.50.65:8083/connectors \
+  -H 'Content-Type: application/json' \
+  -d @debezium/orm-oms-connector.json
 ```
 
-## 4. Verify
+## Verify
 
 ```bash
-curl -s http://localhost:8083/connectors/orm-oms-connector/status
-docker exec semlayer-redpanda rpk topic list | grep orm_oms
+curl -s http://100.84.50.65:8083/connectors/orm-oms-connector/status
+curl -s http://100.84.50.65:8083/connectors/orm-oms-connector/config | jq .
 ```
+
+Status `tasks[].state` must be `"RUNNING"` (not `FAILED`) — see the
+2026-09-13 incident in AGENTS.md for the original registration failure mode.

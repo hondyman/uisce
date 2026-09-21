@@ -654,6 +654,396 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # ---------------------------------------------------------
+  # Stream Loaders — for trigger-derived CDC events feeding the
+  # `agg` StarRocks database. One stream-loader per (topic, table)
+  # pair, mirroring the pattern above. See migrations/starrocks/
+  # 002_agg_layer.sql for the destination schema.
+  # ---------------------------------------------------------
+  uisce-stream-loader-alpha-template-ratings:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-template-ratings
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.template_ratings
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_template_ratings
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-semantic-query-templates:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-semantic-query-templates
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.semantic_query_templates
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_semantic_query_templates
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-cube-custom-models:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-cube-custom-models
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.cube_custom_models
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_cube_custom_models
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-cube-security-policies:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-cube-security-policies
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.cube_security_policies
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_cube_security_policies
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-investment-opportunities:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-investment-opportunities
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.investment_opportunities
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_investment_opportunities
+      PRIMARY_KEY_COLUMN: opportunity_id
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-process-execution-metrics:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-process-execution-metrics
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.process_execution_metrics
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_process_execution_metrics
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-security-user-fund-access:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-security-user-fund-access
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.security_user_fund_access
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_security_user_fund_access
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-metrics-registry:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-metrics-registry
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.metrics_registry
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_metrics_registry
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-crypto-transactions:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-crypto-transactions
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.crypto_transactions
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_crypto_transactions
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-crypto-market-data:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-crypto-market-data
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.crypto_market_data
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_crypto_market_data
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-crypto-prices:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-crypto-prices
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.crypto_prices
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_crypto_prices
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-uma-accounts:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-uma-accounts
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.uma_accounts
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_uma_accounts
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-uma-rebalance-requests:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-uma-rebalance-requests
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.uma_rebalance_requests
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_uma_rebalance_requests
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-alpha-validation-patterns:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-alpha-validation-patterns
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: alpha_trg.public.validation_patterns
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: alpha_validation_patterns
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-stream-loader-crims-security-identifier:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.loader
+    image: uisce-stream-loader:local
+    container_name: uisce-stream-loader-crims-security-identifier
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      CDC_TOPIC: crims_trg.orm.security_identifier
+      STARROCKS_HTTP: http://starrocks-fe:8030
+      STARROCKS_USER: root
+      STARROCKS_PASSWORD: ""
+      STARROCKS_DB: agg
+      STARROCKS_TABLE: crims_security_identifier
+    networks:
+      - remote-net
+    depends_on:
+      starrocks-fe:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ---------------------------------------------------------
+  # Aggregate Consumer — replaces the dropped Postgres triggers
+  # (see backend/db/migrations/20260920_002*.sql). Consumes CDC
+  # events from the alpha-trg / crims-trg connectors and runs the
+  # same aggregate-maintenance / RBAC-seeding / versioning logic
+  # the triggers used to perform.
+  #
+  # HANDLERS_TOPICS is a comma-separated list of source topics.
+  # Each topic registers a handler (see buildHandlers in main.go).
+  # DATABASE_URL is the target DB the consumer writes aggregates to.
+  #
+  # Two instances for database isolation:
+  #   - aggregate-consumer-alpha → alpha DB, alpha_trg.* topics
+  #   - aggregate-consumer-crims → crims DB, crims_trg.* topics
+  # ---------------------------------------------------------
+  uisce-aggregate-consumer-alpha:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.aggregate_consumer
+    image: uisce-aggregate-consumer:local
+    container_name: uisce-aggregate-consumer-alpha
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      KAFKA_GROUP_ID: aggregate-consumer-alpha
+      DLQ_TOPIC: dlq.alpha_trg
+      DATABASE_URL: ${ALPHA_DATABASE_URL}
+      HANDLERS_TOPICS: >-
+        alpha_trg.public.template_ratings,
+        alpha_trg.public.cube_custom_models,
+        alpha_trg.public.cube_security_policies,
+        alpha_trg.public.semantic_query_templates,
+        alpha_trg.public.investment_opportunities,
+        alpha_trg.public.security_user_fund_access,
+        alpha_trg.public.metrics_registry
+    volumes:
+      - /home/eganpj/.uisce/certs/ca.crt:/tmp/orm_ca.crt:ro
+      - /home/eganpj/.uisce/certs/postgres-client.crt:/tmp/orm_client.crt:ro
+      - /home/eganpj/.uisce/certs-shared/orm_client_der.pk8:/tmp/orm_client_der.pk8:ro
+    networks:
+      - remote-net
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
+  uisce-aggregate-consumer-crims:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile.aggregate_consumer
+    image: uisce-aggregate-consumer:local
+    container_name: uisce-aggregate-consumer-crims
+    environment:
+      KAFKA_BROKERS: uisce-redpanda:9092
+      KAFKA_GROUP_ID: aggregate-consumer-crims
+      DLQ_TOPIC: dlq.crims_trg
+      DATABASE_URL: ${CRIMS_DATABASE_URL}
+      HANDLERS_TOPICS: crims_trg.orm.security_identifier
+    volumes:
+      - /home/eganpj/.uisce/certs/ca.crt:/tmp/orm_ca.crt:ro
+      - /home/eganpj/.uisce/certs/postgres-client.crt:/tmp/orm_client.crt:ro
+      - /home/eganpj/.uisce/certs-shared/orm_client_der.pk8:/tmp/orm_client_der.pk8:ro
+    networks:
+      - remote-net
+    depends_on:
+      uisce-redpanda:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   remote-net:
     driver: bridge
