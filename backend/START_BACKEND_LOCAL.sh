@@ -18,6 +18,13 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 source .env 2>/dev/null || true
 
+# Bare `export NAME` only exports names .env actually defined (no empty-string
+# false positives). Without this, `source` leaves them as shell-local vars and
+# the server silently loads no JWKS keys, rejecting every Keycloak token.
+# Deliberately NOT `set -a`: that would export all of .env, including flags
+# (e.g. tenant-header fallbacks) that must stay opt-in.
+export KEYCLOAK_JWKS_URL KEYCLOAK_JWKS_REFRESH_INTERVAL
+
 export DATABASE_URL="${DATABASE_URL:?DATABASE_URL missing — set it in backend/.env}"
 export JWT_SECRET="${JWT_SECRET:?JWT_SECRET missing from backend/.env}"
 export API_TOKEN_ENCRYPTION_KEY="${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY missing}"

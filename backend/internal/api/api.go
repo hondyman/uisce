@@ -865,6 +865,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				}
 			}
 		}()
+	} else {
+		log.Printf("[WARN] KEYCLOAK_JWKS_URL not set — skipping JWKS load; Keycloak-issued tokens will be REJECTED")
 	}
 
 	// Development helper: optionally seed an API key for a test user so local
