@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -196,12 +197,18 @@ func (h *ValidationRuleHandler) handleListByBO(w http.ResponseWriter, r *http.Re
 }
 
 func (h *ValidationRuleHandler) handleGetByID(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	desc, err := h.svc.GetByID(r.Context(), id)
+	// Tenant-scoped: another tenant's rule is indistinguishable from a missing one.
+	desc, err := h.svc.GetByIDForTenant(r.Context(), tenantID.String(), id)
 	if err != nil {
 		http.Error(w, "validation rule not found", http.StatusNotFound)
 		return
@@ -216,6 +223,11 @@ func (h *ValidationRuleHandler) handleGetByID(w http.ResponseWriter, r *http.Req
 // the editor and for the oracle-rule verification against a live DB
 // constraint.
 func (h *ValidationRuleHandler) handleEvaluate(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -226,8 +238,13 @@ func (h *ValidationRuleHandler) handleEvaluate(w http.ResponseWriter, r *http.Re
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	result, err := h.svc.Evaluate(r.Context(), id, data)
+	result, err := h.svc.EvaluateForTenant(r.Context(), tenantID.String(), id, data)
 	if err != nil {
+		// A rule the tenant may not see is reported as not found, like a missing one.
+		if strings.Contains(err.Error(), "validation rule not found") {
+			http.Error(w, "validation rule not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "evaluation failed: "+err.Error(), http.StatusBadRequest)
 		return
 	}

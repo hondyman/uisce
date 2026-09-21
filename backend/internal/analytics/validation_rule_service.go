@@ -219,8 +219,26 @@ func (s *ValidationRuleService) ensureGovernedByRuleEdge(ctx context.Context, ru
 	return err
 }
 
-// GetByID loads a single validation rule by its catalog_node id.
+// GetByID loads a single validation rule by its catalog_node id. It is NOT tenant-scoped: it is for
+// internal callers that already hold a trusted id (UpsertValidationRule's return value, the verify_*
+// commands). Anything reachable from an HTTP request must use GetByIDForTenant.
 func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*models.ValidationRuleDescriptor, error) {
+	return s.getByID(ctx, id, nil)
+}
+
+// GetByIDForTenant loads a rule only if the tenant may see it: one of its own, or a core rule from the
+// gold-copy tenant. Any other rule is reported as not found, exactly like a missing one, so the caller
+// cannot tell another tenant's rule exists.
+func (s *ValidationRuleService) GetByIDForTenant(ctx context.Context, tenantID string, id uuid.UUID) (*models.ValidationRuleDescriptor, error) {
+	gold, err := goldCopyTenantID(ctx, s.db)
+	if err != nil {
+		return nil, err
+	}
+	return s.getByID(ctx, id, visibleTenants(tenantID, gold))
+}
+
+// getByID: visible == nil means no tenant filter.
+func (s *ValidationRuleService) getByID(ctx context.Context, id uuid.UUID, visible []string) (*models.ValidationRuleDescriptor, error) {
 	var node struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -228,17 +246,20 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		Properties  json.RawMessage `db:"properties"`
 		Config      json.RawMessage `db:"config"`
 		IsActive    bool            `db:"is_active"`
+		TenantID    string          `db:"tenant_id"`
 		CreatedAt   string          `db:"created_at"`
 		UpdatedAt   string          `db:"updated_at"`
 	}
 
 	err := s.db.GetContext(ctx, &node, `
-		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active, n.created_at, n.updated_at
+		SELECT n.id, n.node_name, COALESCE(n.description, '') as description, n.properties, n.config, n.is_active,
+		       n.tenant_id::text AS tenant_id, n.created_at, n.updated_at
 		FROM catalog_node n
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.id = $1
-	`, id)
+		  AND ($2::uuid[] IS NULL OR n.tenant_id = ANY($2::uuid[]))
+	`, id, pq.Array(visible))
 	if err != nil {
 		return nil, fmt.Errorf("validation rule not found: %w", err)
 	}
@@ -248,7 +269,7 @@ func (s *ValidationRuleService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		return nil, err
 	}
 	if gold, gerr := goldCopyTenantID(ctx, s.db); gerr == nil {
-		desc.Origin = originOf(desc.TenantID, gold)
+		desc.Origin = originOf(node.TenantID, gold)
 	}
 	return desc, nil
 }
@@ -360,9 +381,23 @@ func (s *ValidationRuleService) Evaluate(ctx context.Context, id uuid.UUID, data
 	if err != nil {
 		return false, err
 	}
+	return evaluateDescriptor(desc, data)
+}
+
+// EvaluateForTenant is Evaluate for a request on behalf of a tenant: it only evaluates a rule that
+// tenant may see (GetByIDForTenant), and otherwise fails as "not found".
+func (s *ValidationRuleService) EvaluateForTenant(ctx context.Context, tenantID string, id uuid.UUID, data map[string]interface{}) (bool, error) {
+	desc, err := s.GetByIDForTenant(ctx, tenantID, id)
+	if err != nil {
+		return false, err
+	}
+	return evaluateDescriptor(desc, data)
+}
+
+func evaluateDescriptor(desc *models.ValidationRuleDescriptor, data map[string]interface{}) (bool, error) {
 	var node vm.RuleNode
 	if err := json.Unmarshal(desc.RuleAST, &node); err != nil {
-		return false, fmt.Errorf("stored rule_ast for %s did not parse: %w", id, err)
+		return false, fmt.Errorf("stored rule_ast for %s did not parse: %w", desc.ID, err)
 	}
 	ae := vm.NewAdvancedEvaluator()
 	return ae.Evaluate(node, data)
