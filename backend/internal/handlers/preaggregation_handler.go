@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -76,12 +77,18 @@ func (h *PreAggregationHandler) handleListByBO(w http.ResponseWriter, r *http.Re
 }
 
 func (h *PreAggregationHandler) handleGetByID(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	desc, err := h.svc.GetByID(r.Context(), id)
+	// Tenant-scoped: another tenant's pre-aggregation is indistinguishable from a missing one.
+	desc, err := h.svc.GetByIDForTenant(r.Context(), tenantID.String(), id)
 	if err != nil {
 		http.Error(w, "pre-aggregation not found", http.StatusNotFound)
 		return
@@ -109,6 +116,10 @@ func (h *PreAggregationHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 	req.TenantID = tenantID.String()
 
 	desc, err := h.svc.Update(r.Context(), id, req)
+	if errors.Is(err, analytics.ErrPreAggNotFound) {
+		http.Error(w, "pre-aggregation not found", http.StatusNotFound)
+		return
+	}
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("preaggregation: update failed: %v", err)
 		http.Error(w, "failed to update pre-aggregation", http.StatusInternalServerError)
@@ -119,12 +130,21 @@ func (h *PreAggregationHandler) handleUpdate(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *PreAggregationHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	if err := h.svc.Delete(r.Context(), id); err != nil {
+	if err := h.svc.Delete(r.Context(), tenantID.String(), id); err != nil {
+		if errors.Is(err, analytics.ErrPreAggNotFound) {
+			http.Error(w, "pre-aggregation not found", http.StatusNotFound)
+			return
+		}
 		logging.GetLogger().Sugar().Errorf("preaggregation: delete failed: %v", err)
 		http.Error(w, "failed to delete pre-aggregation", http.StatusInternalServerError)
 		return
@@ -133,6 +153,11 @@ func (h *PreAggregationHandler) handleDelete(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *PreAggregationHandler) handleGenerateDDL(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
@@ -142,8 +167,12 @@ func (h *PreAggregationHandler) handleGenerateDDL(w http.ResponseWriter, r *http
 	if dialect == "" {
 		dialect = "starrocks"
 	}
-	ddl, err := h.svc.GenerateDDL(r.Context(), id, dialect)
+	ddl, err := h.svc.GenerateDDLForTenant(r.Context(), tenantID.String(), id, dialect)
 	if err != nil {
+		if errors.Is(err, analytics.ErrPreAggNotFound) {
+			http.Error(w, "pre-aggregation not found", http.StatusNotFound)
+			return
+		}
 		logging.GetLogger().Sugar().Errorf("preaggregation: generate DDL failed: %v", err)
 		http.Error(w, "failed to generate DDL", http.StatusInternalServerError)
 		return
@@ -153,12 +182,21 @@ func (h *PreAggregationHandler) handleGenerateDDL(w http.ResponseWriter, r *http
 }
 
 func (h *PreAggregationHandler) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	if err := h.svc.Refresh(r.Context(), id); err != nil {
+	if err := h.svc.RefreshForTenant(r.Context(), tenantID.String(), id); err != nil {
+		if errors.Is(err, analytics.ErrPreAggNotFound) {
+			http.Error(w, "pre-aggregation not found", http.StatusNotFound)
+			return
+		}
 		logging.GetLogger().Sugar().Errorf("preaggregation: refresh failed: %v", err)
 		http.Error(w, "failed to refresh pre-aggregation", http.StatusInternalServerError)
 		return
