@@ -67,7 +67,7 @@ func expectGold(mock sqlmock.Sqlmock, gold string) {
 	if gold != "" {
 		rows.AddRow(gold)
 	}
-	mock.ExpectQuery(`FROM public.tenants`).WillReturnRows(rows)
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(rows)
 }
 
 func TestValidateBindingScope(t *testing.T) {

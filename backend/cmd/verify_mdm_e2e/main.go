@@ -64,11 +64,10 @@ func main() {
 		fmt.Println("set tenant context:", err)
 		os.Exit(2)
 	}
-	if err := db.GetContext(ctx, &gold, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`); err != nil {
-		// Under RLS the tenants policy only shows a tenant its own row, so the gold-copy tenant is invisible here.
-		// Policies that resolve the gold tenant through public.tenants would then match nothing for regular tenants.
+	// public.tenants is under RLS (a tenant sees only its own row); the SECURITY DEFINER function returns just the gold id.
+	if err := db.GetContext(ctx, &gold, `SELECT COALESCE(public.uisce_gold_copy_tenant_id()::text, '')`); err != nil || gold == "" {
 		gold = "99e99e99-99e9-49e9-89e9-99e99e99e999"
-		fmt.Printf("FINDING: a regular tenant cannot read the gold-copy tenant from public.tenants (%v); assuming %s\n", err, gold)
+		fmt.Printf("FINDING: uisce_gold_copy_tenant_id() gave no gold-copy tenant (%v); assuming %s (migration 20261024_006 not applied?)\n", err, gold)
 	}
 	if tenant == gold {
 		fmt.Println("-tenant must not be the gold-copy tenant")

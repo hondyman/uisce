@@ -19,15 +19,17 @@ import (
 
 // goldCopyTenantID returns the gold-copy tenant's id, or "" if there is none.
 func goldCopyTenantID(ctx context.Context, db sqlx.QueryerContext) (string, error) {
-	var id string
-	err := sqlx.GetContext(ctx, db, &id, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	// public.tenants is under RLS and shows a tenant only its own row, so it cannot be read to find the
+	// gold-copy tenant; the SECURITY DEFINER function returns just that id (migration 20261024_006).
+	var id sql.NullString
+	err := sqlx.GetContext(ctx, db, &id, `SELECT public.uisce_gold_copy_tenant_id()::text`)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
 		return "", fmt.Errorf("resolve gold-copy tenant: %w", err)
 	}
-	return id, nil
+	return id.String, nil
 }
 
 // visibleTenants is the set of tenants whose rules and bindings a tenant sees: itself and the

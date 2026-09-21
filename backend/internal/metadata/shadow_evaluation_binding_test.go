@@ -29,7 +29,7 @@ func TestEvaluateAndEnforceRules_BindingScope(t *testing.T) {
 	ruleRow := func(name, scope string) []interface{} { return ruleRowFor(name, scope, tenant, true) }
 	const gold = "99e99e99-99e9-49e9-89e9-99e99e99e999"
 	expectGold := func(m sqlmock.Sqlmock) {
-		m.ExpectQuery(`FROM public.tenants`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
+		m.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	}
 	run := func(t *testing.T, rules [][]interface{}, expectBinding func(sqlmock.Sqlmock)) []ruleViolation {
 		t.Helper()
