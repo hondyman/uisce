@@ -1,0 +1,31 @@
+# Migration parity allowlist (see backend/scripts/check_migration_parity.py).
+# filename<TAB>kind<TAB>reason     kind: missing | different | modified
+# A reason is REQUIRED. This list should shrink; STALE entries are reported.
+
+# --- applied-but-missing: no SQL exists in any ref or worktree ---------------------
+20260824_001_catalog_sti_unique_constraints.up.sql	missing	SQL unrecoverable (no ref or worktree holds it). Reconstruction from live schema planned; see docs/migrations/MIGRATION_LOSS_RECORD.md
+20261020_004_gold_copy_sync_datasource_grants.up.sql	missing	SQL unrecoverable. Reconstruction from live grants planned; see docs/migrations/MIGRATION_LOSS_RECORD.md
+20261001_012_swift_inbound_channel.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
+20261001_013_swift_webhook_inbox.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
+20261001_014_swift_refund_reversal_rows.up.sql	missing	swift_* feature migration applied 2026-09-18; SQL unrecoverable, recorded and accepted in docs/migrations/MIGRATION_LOSS_RECORD.md
+20261019_workflow_definitions.up.sql	missing	A ref holds this filename but with different content than was applied; needs comparison against the live schema (follow-up)
+
+# --- applied-but-different: disk content differs from the hash the runner recorded ---
+20261021_001_catalog_node_tenant_path_unique.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the object, which was then created manually. Disk is authoritative
+20261021_002_semantic_term_rejections.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the table, which was then created manually. Disk is authoritative
+000063_fix_identity_profile_mappings.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260730_bitemporal_crud_bindings.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260730_maker_checker_governance.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260731_calc_fields.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260829_001_bo_row_event_trigger_types.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260914_013_remove_mislabeled_excel_npv_from_execution_bo.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260914_014_seed_order_validation_trigger.up.sql	different	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 so the runner's transaction-control guard accepts it (applied 2026-09-14 with them, via psql). Behaviour-preserving; disk is authoritative
+20260916_fix_dev_user_password_hashes.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20261001_003_swift_field_map_seed.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20261001_009_swift_settlement_unique_txn_ref.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20261016_002a_seed_gold_copy_tenant.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+
+# --- modified (git-base mode): shipped migrations legitimately edited ---------------
+20261021_001_catalog_node_tenant_path_unique.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
+20261021_002_semantic_term_rejections.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
+20260914_014_seed_order_validation_trigger.up.sql	modified	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 (runner rejects COMMIT in migration files); behaviour-preserving

@@ -31,6 +31,10 @@ export API_TOKEN_ENCRYPTION_KEY="${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTIO
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
 
+# Non-fatal drift report: disk vs oms.migration_log (backend/scripts/check_migration_parity.py).
+# Advisory locally so a dev can still start the server; CI enforces the git-based check.
+python3 scripts/check_migration_parity.py --db || echo "⚠️  migration parity check reported findings (non-fatal locally, see above)"
+
 # Kill anything already on 8080 — SIGKILL the compiled binary directly.
 # (SIGTERM alone doesn't reliably kill a Go http.Server in reasonable time.)
 pkill -9 -f "/tmp/uisce-server" 2>/dev/null || true

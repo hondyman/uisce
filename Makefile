@@ -92,5 +92,14 @@ logs:
 migrate-runner:
 	@./scripts/migrate.sh
 
+# Migration parity guard (see backend/scripts/check_migration_parity.py).
+# check-migrations     : disk vs oms.migration_log; needs DATABASE_URL (shared dev DB).
+# check-migrations-git : DB-free; fails if a shipped migration was edited since origin/main.
+check-migrations:
+	@python3 backend/scripts/check_migration_parity.py --db
+
+check-migrations-git:
+	@python3 backend/scripts/check_migration_parity.py --git-base origin/main
+
 shell:
 	@docker compose -f $(COMPOSE_FILE) run --rm runner "sh"
