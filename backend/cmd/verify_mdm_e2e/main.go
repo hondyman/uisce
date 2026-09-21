@@ -53,10 +53,6 @@ func main() {
 	db.SetMaxOpenConns(1) // the tenant GUC is per-connection
 
 	var gold string
-	if err := db.GetContext(ctx, &gold, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`); err != nil {
-		fmt.Println("no gold-copy tenant:", err)
-		os.Exit(2)
-	}
 	tenant := *tenantFlag
 	if tenant == "" {
 		if err := db.GetContext(ctx, &tenant, `SELECT id::text FROM public.tenants WHERE gold_copy IS NOT TRUE ORDER BY id LIMIT 1`); err != nil {
@@ -64,12 +60,18 @@ func main() {
 			os.Exit(2)
 		}
 	}
-	if tenant == gold {
-		fmt.Println("-tenant must not be the gold-copy tenant")
+	if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false), set_config('hasura.tenant_id', $1, false)`, tenant); err != nil {
+		fmt.Println("set tenant context:", err)
 		os.Exit(2)
 	}
-	if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false)`, tenant); err != nil {
-		fmt.Println("set tenant context:", err)
+	if err := db.GetContext(ctx, &gold, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`); err != nil {
+		// Under RLS the tenants policy only shows a tenant its own row, so the gold-copy tenant is invisible here.
+		// Policies that resolve the gold tenant through public.tenants would then match nothing for regular tenants.
+		gold = "99e99e99-99e9-49e9-89e9-99e99e99e999"
+		fmt.Printf("FINDING: a regular tenant cannot read the gold-copy tenant from public.tenants (%v); assuming %s\n", err, gold)
+	}
+	if tenant == gold {
+		fmt.Println("-tenant must not be the gold-copy tenant")
 		os.Exit(2)
 	}
 	fmt.Printf("acting as regular tenant %s (gold-copy tenant %s)\n", tenant, gold)
@@ -305,7 +307,7 @@ func main() {
 			if err := db.GetContext(ctx, &other, `SELECT id::text FROM public.tenants WHERE gold_copy IS NOT TRUE AND id <> $1::uuid ORDER BY id LIMIT 1`, tenant); err != nil {
 				skip("no second regular tenant to check isolation against")
 			} else if rlsMeaningful {
-				if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false)`, other); err == nil {
+				if _, err := db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false), set_config('hasura.tenant_id', $1, false)`, other); err == nil {
 					l2, _ := svc.ListByBO(ctx, other, "party", "")
 					leaked := false
 					for _, d := range l2 {
@@ -318,7 +320,7 @@ func main() {
 					} else {
 						ok("another tenant cannot see this tenant's custom rule")
 					}
-					db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false)`, tenant)
+					db.ExecContext(ctx, `SELECT set_config('uisce.current_tenant', $1, false), set_config('app.current_tenant', $1, false), set_config('hasura.tenant_id', $1, false)`, tenant)
 				}
 			} else {
 				skip("isolation between tenants needs a role subject to RLS")
