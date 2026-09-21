@@ -20,9 +20,9 @@
 20260914_013_remove_mislabeled_excel_npv_from_execution_bo.up.sql	different	COSMETIC (verified): file-scope BEGIN;/COMMIT; stripped after apply (runner rejects COMMIT); executable SQL identical. Disk authoritative
 20260914_014_seed_order_validation_trigger.up.sql	different	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 so the runner's transaction-control guard accepts it (applied 2026-09-14 with them, via psql). Behaviour-preserving; disk is authoritative
 20260916_fix_dev_user_password_hashes.up.sql	different	DELIBERATE (verified): superseded 2026-09-17 and converted to a documented no-op so a rebuild cannot reinstate a stale hash; the canonical hash lives in 20260916_regenerate_dev_user_password. Disk is authoritative
-20261001_003_swift_field_map_seed.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare live swift_field_map rows against disk if it matters
-20261001_009_swift_settlement_unique_txn_ref.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare the live constraint against disk if it matters
-20261016_002a_seed_gold_copy_tenant.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare the live gold-copy tenant row against disk (gold-copy model, prioritise)
+20261001_003_swift_field_map_seed.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: the 26 seeded rows (MT541 8, MT543 8, MT548 3, pacs.008 7) match vend.swift_field_map exactly. The unqualified table name resolves via search_path (vend, public); on another search_path it would seed public instead
+20261001_009_swift_settlement_unique_txn_ref.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: settlement_transaction_ref_tenant_uniq exists live exactly as on disk. The old non-unique index that disk drops (settlement_transaction_ref_tenant_idx) still exists live: redundant, harmless
+20261016_002a_seed_gold_copy_tenant.up.sql	different	BASELINE UNRECOVERABLE, EFFECT VERIFIED: idx_tenants_gold_copy exists live and the seed insert is a no-op because a gold-copy tenant (northwind) already exists. Separate finding: tenants.gold_copy and tenants.is_gold_copy disagree live (t vs f) and 14 code sites use is_gold_copy
 
 # --- modified (git-base mode): shipped migrations legitimately edited ---------------
 20261021_001_catalog_node_tenant_path_unique.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
