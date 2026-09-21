@@ -46,7 +46,11 @@ func (h *WriteHandler) HandleGenericWrite(w http.ResponseWriter, r *http.Request
 	}
 	tenantID := claims.TenantID
 	if tenantID == "" {
-		tenantID = "default" // Fallback or Error
+		// Fail closed: there is no shared "default" tenant. tenant_id columns
+		// are uuid, so the old fallback only produced a misleading 500 from
+		// the metadata lookup.
+		http.Error(w, `{"error":"tenant context required"}`, http.StatusForbidden)
+		return
 	}
 
 	// 1. Parse Payload

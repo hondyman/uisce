@@ -51,7 +51,7 @@ func (s *Server) issueWsTicket(w http.ResponseWriter, r *http.Request) {
 			}
 			if userID == "" && s.DB != nil {
 				_ = s.DB.QueryRowContext(r.Context(), `
-					SELECT u.id, COALESCE(u.tenant_id, '')
+					SELECT u.id, COALESCE(u.tenant_id::text, '')
 					FROM private_markets_sessions s
 					JOIN public.users u ON s.user_id = u.id
 					WHERE s.session_token = $1 AND s.expires_at > now() AND s.is_active = true
