@@ -19,17 +19,17 @@ const (
 
 type Job struct {
 	mu           sync.Mutex
-	ID           string
-	TenantID     string
-	DatasourceID string
-	Status       string
-	Total        int
-	Done         int
-	Failed       int
-	Results      []generateTermResult
-	Errors       []string
-	StartedAt    time.Time
-	FinishedAt   time.Time
+	ID           string               `json:"id"`
+	TenantID     string               `json:"tenant_id"`
+	DatasourceID string               `json:"datasource_id"`
+	Status       string               `json:"status"`
+	Total        int                  `json:"total"`
+	Done         int                  `json:"done"`
+	Failed       int                  `json:"failed"`
+	Results      []generateTermResult `json:"results"`
+	Errors       []string             `json:"errors"`
+	StartedAt    time.Time            `json:"started_at"`
+	FinishedAt   time.Time            `json:"finished_at"`
 }
 
 func (j *Job) snapshot() Job {
