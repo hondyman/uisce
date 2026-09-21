@@ -34,6 +34,12 @@ type AnsiScanner struct {
 	goldCopyNodes      map[string]db.GoldCopyNodeInfo
 	isGoldCopy         bool
 	schemaWhitelist    []string
+
+	// progress reporting (see scan_progress.go); all optional
+	progress    func(models.ScanProgress)
+	lastReport  time.Time
+	tablesDone  int
+	tablesTotal int
 }
 
 // NewAnsiScanner creates a new scanner instance
@@ -689,6 +695,7 @@ func (s *AnsiScanner) processTables(schemaName string, schemaID uuid.UUID) error
 		if err := s.processColumns(schemaName, tableName, tableID); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error processing columns for table %s.%s: %v", schemaName, tableName, err)
 		}
+		s.tableProgress(schemaName, tableName)
 	}
 	return nil
 }
@@ -879,31 +886,42 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query schemas: %w", err)
 	}
-	defer rows.Close()
-
+	var schemas []string
 	for rows.Next() {
 		var schemaName string
 		if err := rows.Scan(&schemaName); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error scanning schema name: %v", err)
 			continue
 		}
+		schemas = append(schemas, schemaName)
+	}
+	rows.Close()
+
+	s.tablesTotal = s.countTables(schemas)
+	s.report(true, 0, "", fmt.Sprintf("Found %d schemas and %d tables to read", len(schemas), s.tablesTotal), 0, s.tablesTotal)
+	for i, schemaName := range schemas {
 		logging.GetLogger().Sugar().Infof("Processing schema: %s", schemaName)
+		s.report(true, s.tablesPercent(), schemaName, fmt.Sprintf("Reading schema %s (%d of %d)", schemaName, i+1, len(schemas)), s.tablesDone, s.tablesTotal)
 		if err := s.processSchema(schemaName); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error processing schema %s: %v", schemaName, err)
 		}
 	}
 
+	s.report(true, 50, "", "Reading primary keys...", s.tablesDone, s.tablesTotal)
 	if err := s.processPrimaryKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing primary keys: %v", err)
 	}
+	s.report(true, 55, "", "Reading unique keys...", s.tablesDone, s.tablesTotal)
 	if err := s.processUniqueKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing unique keys: %v", err)
 	}
+	s.report(true, 60, "", "Reading foreign keys...", s.tablesDone, s.tablesTotal)
 	if err := s.processForeignKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing foreign keys: %v", err)
 	}
 
 	// Process data profiling (unique counts, sample values)
+	s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
 	if err := s.processDataProfile(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
 	}
@@ -923,7 +941,13 @@ func (s *AnsiScanner) processDataProfile() error {
 	logger.Info("Starting data profiling for columns...")
 
 	profiledCount := 0
+	visited := 0
 	for colID, colNode := range s.columnMap {
+		visited++
+		if total := len(s.columnMap); total > 0 {
+			s.report(false, 65+35*float64(visited)/float64(total), colNode.QualifiedPath,
+				fmt.Sprintf("Profiling columns: %d of %d", visited, total), visited, total)
+		}
 		// Parse existing properties
 		var propsMap map[string]interface{}
 		if err := json.Unmarshal(colNode.Properties, &propsMap); err != nil {
