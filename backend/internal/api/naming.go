@@ -287,3 +287,20 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 		source:          source,
 	}
 }
+
+// sanitizeExpansion makes an abbreviation expansion safe to build a term name from. An LLM may answer with
+// several words or with separators ("Service_level_agreement"), which ended up verbatim inside term names
+// ("Service_level_agreementMet"). Split on anything that is not a letter or digit and title-case each word, so
+// the name is plain PascalCase. A single clean word is returned as it was given.
+func sanitizeExpansion(full string) string {
+	words := strings.FieldsFunc(full, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9')
+	})
+	if len(words) == 0 {
+		return ""
+	}
+	if len(words) == 1 {
+		return words[0]
+	}
+	return pascalCase(words)
+}

@@ -83,7 +83,8 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 		} else {
 			for _, idx := range unresolvedIdx {
 				upper := strings.ToUpper(tokens[idx])
-				if full, ok := suggestions[upper]; ok && full != "" {
+				if full, ok := suggestions[upper]; ok && sanitizeExpansion(full) != "" {
+					full = sanitizeExpansion(full)
 					resolved[idx] = full
 					if addErr := s.abbrevSvc.AddAbbreviation(svcCtx, upper, full, "auto-learned via semantic term generation"); addErr != nil {
 						log.Printf("[deriveTermNames] failed to persist learned abbreviation %s=%s: %v", upper, full, addErr)
@@ -332,6 +333,15 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 	if semanticName == "" {
 		return nil, fmt.Errorf("could not derive a semantic term name")
 	}
+	// A derived name is mapped onto an existing term with the same meaning (TenantIdentifier -> TenantId) so one
+	// concept is not split over twins. A name the user typed is kept verbatim.
+	if item.Name == "" || strings.Contains(item.Name, "/") {
+		if existing := s.reuseExistingTerm(ctx, tenantID, semanticName, cache); existing != semanticName {
+			log.Printf("[GenerateSemanticTerms] reusing existing term %q for derived name %q", existing, semanticName)
+			semanticName = existing
+			names.BusinessName = titleCase(pascalCaseToWords(existing))
+		}
+	}
 	businessName := names.BusinessName
 	if businessName == "" {
 		businessName = semanticName
@@ -360,6 +370,9 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 		}
 		if cache != nil {
 			cache.store(termCacheKey{nodeTypeID: semanticNodeTypeID, name: semanticName}, semanticTermID)
+			if !semanticReused {
+				cache.noteNewTerm(semanticName)
+			}
 		}
 	}
 
@@ -604,6 +617,9 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 		abbrevLookup = abbreviationSvcAdapter{real: s.abbrevSvc}
 	}
 	abbrMap := buildAbbreviationMap(ctx, abbrevLookup, tenantID)
+	// Existing terms by meaning, loaded once: a proposed name that means the same as an existing term is shown as
+	// that term, so the wizard does not offer TenantIdentifier when TenantId already exists.
+	existingTerms := s.loadTermIndex(ctx, tenantID, abbrMap)
 
 	results := make([]PreviewResult, 0, len(columnIDs))
 	for _, colID := range columnIDs {
@@ -625,6 +641,10 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 		var businessName string
 		if len(candidates) > 0 {
 			businessName = titleCase(pascalCaseToWords(candidates[0].Name))
+		}
+		if existing, ok := existingTerms.reuse(semanticName, abbrMap); ok && existing != semanticName {
+			semanticName, source = existing, "existing_term"
+			businessName = titleCase(pascalCaseToWords(existing))
 		}
 
 		results = append(results, PreviewResult{

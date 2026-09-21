@@ -16,6 +16,10 @@ type termCacheKey struct {
 type termCache struct {
 	mu  sync.Mutex
 	mem map[termCacheKey]string
+
+	// existing terms by meaning, loaded once per batch (see term_reuse.go)
+	index *termIndex
+	abbr  map[string]string
 }
 
 func newTermCache() *termCache {
