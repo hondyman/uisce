@@ -494,8 +494,9 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 		Schema string `json:"schema"`
 	}
 	if err := json.Unmarshal([]byte(ds.ConnectionDetails), &connConfig); err == nil && connConfig.Schema != "" {
-		schemaWhitelist = []string{connConfig.Schema}
-		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %v", schemaWhitelist)
+		// The schema setting is a comma-separated list; treating it as one name matched no schema at all.
+		schemaWhitelist = parseSchemaWhitelist(connConfig.Schema)
+		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %q", schemaWhitelist)
 	}
 
 	// Create scanner via overrideable constructor for testing
