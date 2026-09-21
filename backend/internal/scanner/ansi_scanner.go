@@ -236,38 +236,39 @@ func (s *AnsiScanner) processUniqueKeys() error {
 
 // FINAL FIX: processForeignKeys - deduplicates by relationship, not constraint name
 func (s *AnsiScanner) processForeignKeys() error {
+	// Read foreign keys from pg_constraint. The information_schema views this used to join match constraints by
+	// name only (names are unique per table, not per schema), and each view runs privilege checks per row, so
+	// the query multiplied out and ran for many minutes once several schemas were in scope. Joining by OID is
+	// exact and takes milliseconds. Output columns, their order and their value formats are unchanged.
 	query := `
-        SELECT DISTINCT
-            rc.constraint_name,
-            rc.constraint_schema,
-            kcu.table_schema AS source_schema,
-            kcu.table_name AS source_table,
-            kcu.column_name AS source_column,
-            pku.table_schema AS target_schema,
-            pku.table_name AS target_table,
-            pku.column_name AS target_column,
-            rc.update_rule AS on_update,
-            rc.delete_rule AS on_delete,
-            tc.is_deferrable,
-            tc.initially_deferred,
-            kcu.ordinal_position
-        FROM
-            information_schema.referential_constraints AS rc
-        JOIN
-            information_schema.table_constraints AS tc
-                ON rc.constraint_name = tc.constraint_name
-                AND rc.constraint_schema = tc.constraint_schema
-        JOIN
-            information_schema.key_column_usage AS kcu
-                ON rc.constraint_name = kcu.constraint_name
-                AND rc.constraint_schema = kcu.constraint_schema
-        JOIN
-            information_schema.key_column_usage AS pku
-                ON rc.unique_constraint_name = pku.constraint_name
-                AND rc.unique_constraint_schema = pku.constraint_schema
-                AND kcu.ordinal_position = pku.ordinal_position
+        SELECT
+            con.conname AS constraint_name,
+            cns.nspname AS constraint_schema,
+            sn.nspname AS source_schema,
+            sc.relname AS source_table,
+            sa.attname AS source_column,
+            tn.nspname AS target_schema,
+            tc.relname AS target_table,
+            ta.attname AS target_column,
+            CASE con.confupdtype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE'
+                                 WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' END AS on_update,
+            CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE'
+                                 WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' END AS on_delete,
+            CASE WHEN con.condeferrable THEN 'YES' ELSE 'NO' END AS is_deferrable,
+            CASE WHEN con.condeferred THEN 'YES' ELSE 'NO' END AS initially_deferred,
+            k.ord::int AS ordinal_position
+        FROM pg_catalog.pg_constraint con
+        JOIN pg_catalog.pg_namespace cns ON cns.oid = con.connamespace
+        JOIN pg_catalog.pg_class sc ON sc.oid = con.conrelid
+        JOIN pg_catalog.pg_namespace sn ON sn.oid = sc.relnamespace
+        JOIN pg_catalog.pg_class tc ON tc.oid = con.confrelid
+        JOIN pg_catalog.pg_namespace tn ON tn.oid = tc.relnamespace
+        CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(src_attnum, tgt_attnum, ord)
+        JOIN pg_catalog.pg_attribute sa ON sa.attrelid = con.conrelid AND sa.attnum = k.src_attnum
+        JOIN pg_catalog.pg_attribute ta ON ta.attrelid = con.confrelid AND ta.attnum = k.tgt_attnum
         WHERE
-            kcu.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+            con.contype = 'f'
+            AND sn.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
     `
 
 	var args []interface{}
@@ -280,12 +281,12 @@ func (s *AnsiScanner) processForeignKeys() error {
 		// Apply filter to both source (kcu) and target (pku) schemas to be safe,
 		// though typically we only care about edges where at least one side is in our whitelist.
 		// For now, let's restrict edges where the SOURCE table is in our whitelist.
-		query += fmt.Sprintf(" AND kcu.table_schema IN (%s)", strings.Join(placeholders, ", "))
+		query += fmt.Sprintf(" AND sn.nspname IN (%s)", strings.Join(placeholders, ", "))
 	}
 
 	query += `
         ORDER BY
-            rc.constraint_schema, rc.constraint_name, kcu.ordinal_position;
+            cns.nspname, con.conname, k.ord;
     `
 
 	logging.GetLogger().Sugar().Infof("Querying foreign keys...")
