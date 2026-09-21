@@ -13,17 +13,17 @@
 20260824_001_catalog_sti_unique_constraints.up.sql	different	RECONSTRUCTION: original SQL lost, file rebuilt from live state (catalog_node_unique constraint); original hash unrecoverable. See MIGRATION_LOSS_RECORD.md
 20261021_001_catalog_node_tenant_path_unique.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the object, which was then created manually. Disk is authoritative
 20261021_002_semantic_term_rejections.up.sql	different	Trailing DOWN block stripped in 55e262aa4; the applied version executed its own DOWN and dropped the table, which was then created manually. Disk is authoritative
-000063_fix_identity_profile_mappings.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20260730_bitemporal_crud_bindings.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20260730_maker_checker_governance.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20260731_calc_fields.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20260829_001_bo_row_event_trigger_types.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20260914_013_remove_mislabeled_excel_npv_from_execution_bo.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+000063_fix_identity_profile_mappings.up.sql	different	COSMETIC (verified): applied variant carried a 15-line STATUS header comment from docs commit 3113e3d5f (not an ancestor of this branch); executable SQL identical. Disk authoritative
+20260730_bitemporal_crud_bindings.up.sql	different	NEEDS REVIEW: substantive rewrite (+16/-26 lines) since applied version 216e53086 (make bitemporal migration idempotent); confirm live schema matches disk before trusting a fresh build
+20260730_maker_checker_governance.up.sql	different	COSMETIC (verified): file-scope BEGIN;/COMMIT; and whitespace stripped after apply; executable SQL identical. Disk authoritative
+20260731_calc_fields.up.sql	different	COSMETIC (verified): one comment line added after apply; executable SQL identical. Disk authoritative
+20260829_001_bo_row_event_trigger_types.up.sql	different	NEEDS REVIEW: seed values changed after apply (3 rows: an attribute changed from a data_* value to a bo_* value). Live rows hold the applied values, so fresh environments seed differently from live
+20260914_013_remove_mislabeled_excel_npv_from_execution_bo.up.sql	different	COSMETIC (verified): file-scope BEGIN;/COMMIT; stripped after apply (runner rejects COMMIT); executable SQL identical. Disk authoritative
 20260914_014_seed_order_validation_trigger.up.sql	different	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 so the runner's transaction-control guard accepts it (applied 2026-09-14 with them, via psql). Behaviour-preserving; disk is authoritative
-20260916_fix_dev_user_password_hashes.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20261001_003_swift_field_map_seed.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20261001_009_swift_settlement_unique_txn_ref.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
-20261016_002a_seed_gold_copy_tenant.up.sql	different	UNTRIAGED pre-existing drift: disk edited after apply; tracked in the 13-file drift triage follow-up
+20260916_fix_dev_user_password_hashes.up.sql	different	NEEDS REVIEW: dev-user seed rewritten (+31/-17) since applied version ab4e17b32; security-adjacent, review without printing hashes
+20261001_003_swift_field_map_seed.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare live swift_field_map rows against disk if it matters
+20261001_009_swift_settlement_unique_txn_ref.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare the live constraint against disk if it matters
+20261016_002a_seed_gold_copy_tenant.up.sql	different	BASELINE UNRECOVERABLE: the applied version exists in no git commit, so it cannot be diffed. Compare the live gold-copy tenant row against disk (gold-copy model, prioritise)
 
 # --- modified (git-base mode): shipped migrations legitimately edited ---------------
 20261021_001_catalog_node_tenant_path_unique.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
