@@ -346,10 +346,15 @@ export default function GlossaryExplorer() {
   // Columns that already have a MAPS_TO edge to a semantic term - these are
   // excluded from the "Generate from Columns" wizard below, since they're
   // already mapped and re-offering them just invites accidental duplicates.
-  const { data: allEdges } = useQuery<any[]>({
+  // gcTime/staleTime 0: never reuse a previous open's edges. A stale set (from before a create)
+  // re-offers columns that were just mapped, and an absent one (first open) offers every column.
+  // The wizard list below is only built once THIS open's edges have loaded (`edgesLoaded`).
+  const { data: allEdges, isSuccess: edgesLoaded } = useQuery<any[]>({
     queryKey: ['glossary-all-edges', tenantId, isGenModalOpen],
     queryFn: () => apiClient<any[]>(`/api/glossary/edges?tenant_id=${tenantId}`),
     enabled: !!tenantId && isGenModalOpen,
+    gcTime: 0,
+    staleTime: 0,
   });
   const mappedColumnIds = useMemo(() => {
     const list = Array.isArray(allEdges) ? allEdges : (allEdges as any)?.data ?? [];
@@ -560,8 +565,10 @@ export default function GlossaryExplorer() {
       if (updated) {
         setGenColumns(prev => prev.map(c => c.id === col.id ? { ...c, suggestedName: updated.semantic_name, source: updated.source } : c));
       }
+      setGenNotice(null);
     } catch (e) {
       console.error('[handleRejectSuggestion]', e);
+      setGenNotice(`Couldn't reject that suggestion: ${e instanceof Error ? e.message : 'request failed'}. The name is unchanged.`);
     }
   };
 
@@ -650,6 +657,17 @@ export default function GlossaryExplorer() {
   const [selectedGenColumns, setSelectedGenColumns] = useState<Set<string>>(new Set());
   const dirtyColumns = useRef<Set<string>>(new Set());
   const [genSearchTerm, setGenSearchTerm] = useState('');
+  // Name-suggestion (preview) state. Until 'ready' or 'basic' the names on screen are the naive
+  // client-side PascalCase placeholders, so Create is disabled: creating from them produces
+  // wrong-name terms (e.g. AccountId instead of AccountIdentifier).
+  const [genPreviewStatus, setGenPreviewStatus] = useState<'idle' | 'loading' | 'ready' | 'error' | 'basic'>('idle');
+  const [genPreviewError, setGenPreviewError] = useState<string | null>(null);
+  const [genNotice, setGenNotice] = useState<string | null>(null);
+  const previewReqId = useRef(0);
+
+  // Create is blocked while names are placeholders (loading) or their load failed and the user
+  // has neither retried successfully nor explicitly chosen "Continue with basic names".
+  const namesNotReady = genPreviewStatus === 'loading' || genPreviewStatus === 'error';
 
   const filteredGenColumns = useMemo(() => {
     if (!genSearchTerm) return genColumns;
@@ -674,8 +692,47 @@ export default function GlossaryExplorer() {
   // observable difference is that genColumns is not recalculated when mappedColumnIds
   // changes mid-session — which is correct, since the user can just close/reopen
   // the modal to get a fresh column list.
+  // Requests server-side name suggestions for the listed columns. The list first shows naive
+  // client-side PascalCase placeholders; Create stays disabled until this settles, and a failure is
+  // surfaced (with Retry) instead of silently leaving the placeholders in place.
+  const runPreview = useCallback((cols: any[]) => {
+    const reqId = ++previewReqId.current;
+    setGenPreviewStatus('loading');
+    setGenPreviewError(null);
+    apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
+      `/api/glossary/preview-semantic-terms`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ column_ids: cols.map((c: any) => c.id) }),
+      }
+    ).then(r => {
+      if (reqId !== previewReqId.current) return; // modal closed or superseded by a newer request
+      const byId = new Map((r.suggestions ?? []).map(s => [s.column_id, s]));
+      setGenColumns(prev => prev.map(c => {
+        if (dirtyColumns.current.has(c.id)) return { ...c, resolved: true };
+        const sugg = byId.get(c.id);
+        return sugg
+          ? { ...c, suggestedName: sugg.semantic_name, source: sugg.source, resolved: true }
+          : { ...c, resolved: true };
+      }));
+      setGenPreviewStatus('ready');
+    }).catch((e: unknown) => {
+      if (reqId !== previewReqId.current) return;
+      setGenPreviewStatus('error');
+      setGenPreviewError(e instanceof Error ? e.message : 'Name suggestions could not be loaded');
+    });
+  }, []);
+
   useEffect(() => {
-    if (!isGenModalOpen || !allColumns) return;
+    if (!isGenModalOpen) {
+      previewReqId.current++; // drop any in-flight preview belonging to the closed modal
+      setGenPreviewStatus('idle');
+      setGenPreviewError(null);
+      setGenNotice(null);
+      return;
+    }
+    // Wait for BOTH the columns and THIS open's edges; building earlier lists mapped columns.
+    if (!allColumns || !edgesLoaded) return;
     dirtyColumns.current.clear();
     setGenSearchTerm('');
 
@@ -684,6 +741,7 @@ export default function GlossaryExplorer() {
     if (colList.length === 0) {
       setGenColumns([]);
       setSelectedGenColumns(new Set());
+      setGenPreviewStatus('idle');
       return;
     }
 
@@ -697,28 +755,19 @@ export default function GlossaryExplorer() {
           .filter(Boolean)
           .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
           .join('');
-        return { id: c.id, qualifiedPath: c.qualified_path, suggestedName: pascalName, source: 'pascal' };
+        return { id: c.id, qualifiedPath: c.qualified_path, suggestedName: pascalName, source: 'pascal', resolved: false };
       });
 
     setGenColumns(cols);
     setSelectedGenColumns(new Set());
 
-    if (cols.length === 0) return;
-    apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
-      `/api/glossary/preview-semantic-terms`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ column_ids: cols.map((c: any) => c.id) }),
-      }
-    ).then(r => {
-      const byId = new Map(r.suggestions.map(s => [s.column_id, s]));
-      setGenColumns(prev => prev.map(c => {
-        if (dirtyColumns.current.has(c.id)) return c;
-        const sugg = byId.get(c.id);
-        return sugg ? { ...c, suggestedName: sugg.semantic_name, source: sugg.source } : c;
-      }));
-    }).catch(() => { /* silent fallback to naive PascalCase */ });
-  }, [allColumns, isGenModalOpen]);
+    if (cols.length === 0) {
+      setGenPreviewStatus('idle');
+      return;
+    }
+    runPreview(cols);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mappedColumnIds intentionally omitted (see note above)
+  }, [allColumns, isGenModalOpen, edgesLoaded, runPreview]);
 
   const inputStyle = {
     background: '#1E2130', border: `1px solid ${C.border}`, color: C.text,
@@ -780,9 +829,25 @@ export default function GlossaryExplorer() {
                 onChange={e => setGenSearchTerm(e.target.value)}
                 style={{ ...inputStyle, marginBottom: 0 }}
               />
+              {genPreviewStatus === 'loading' && (
+                <div role="status" style={{ marginTop: 8, fontSize: 12, color: C.textMuted, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Spinner size={12} />
+                  <span>Resolving suggested names… the names shown are placeholders and Create is disabled until they are ready.</span>
+                </div>
+              )}
+              {genPreviewStatus === 'error' && (
+                <div role="alert" style={{ marginTop: 8, fontSize: 12, color: C.danger, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <span>Couldn't load name suggestions ({genPreviewError}). The names shown are basic placeholders.</span>
+                  <button onClick={() => runPreview(genColumns)} style={{ background: 'transparent', color: C.text, border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Retry</button>
+                  <button onClick={() => setGenPreviewStatus('basic')} style={{ background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Continue with basic names</button>
+                </div>
+              )}
+              {genNotice && (
+                <div role="alert" style={{ marginTop: 8, fontSize: 12, color: C.danger }}>{genNotice}</div>
+              )}
             </div>
             <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '0 24px', minHeight: 0 }}>
-              {columnsLoading ? <Spinner /> : filteredGenColumns.length === 0 ? (
+              {(columnsLoading || !edgesLoaded) ? <Spinner /> : filteredGenColumns.length === 0 ? (
                 <Empty
                   icon="🔍"
                   title={genColumns.length === 0 ? "All columns already mapped" : `No columns match "${genSearchTerm}"`}
@@ -821,7 +886,8 @@ export default function GlossaryExplorer() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                               <input
                                 disabled={isGenerating}
-                                style={{ ...inputStyle, marginBottom: 0, width: 'auto' }}
+                                title={genPreviewStatus === 'loading' && !col.resolved ? 'Placeholder name: resolving…' : undefined}
+                                style={{ ...inputStyle, marginBottom: 0, width: 'auto', opacity: genPreviewStatus === 'loading' && !col.resolved ? 0.5 : 1 }}
                                 value={col.suggestedName}
                                 onChange={e => {
                                   dirtyColumns.current.add(col.id);
@@ -865,7 +931,8 @@ export default function GlossaryExplorer() {
               <div style={{ display: 'flex', gap: 12 }}>
                 <button disabled={isGenerating} onClick={() => setIsGenModalOpen(false)} style={{ background: 'transparent', color: C.text, border: 'none', cursor: isGenerating ? 'default' : 'pointer', opacity: isGenerating ? 0.5 : 1 }}>Cancel</button>
                 <button
-                  disabled={isGenerating || selectedGenColumns.size === 0}
+                  disabled={isGenerating || selectedGenColumns.size === 0 || namesNotReady}
+                  title={namesNotReady ? 'Waiting for suggested names' : undefined}
                   onClick={() => {
                     const selected = genColumns.filter(c => selectedGenColumns.has(c.id));
                     // Build items grouped by suggestedName (one term per unique name, all column_ids under it)
@@ -877,10 +944,10 @@ export default function GlossaryExplorer() {
                     const items = Object.entries(nameToCols).map(([name, column_ids]) => ({ name, column_ids }));
                     generateColumns(items);
                   }}
-                  style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: (isGenerating || selectedGenColumns.size === 0) ? 'default' : 'pointer', opacity: (isGenerating || selectedGenColumns.size === 0) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}
+                  style={{ background: C.accent, color: '#fff', border: 'none', padding: '6px 16px', borderRadius: 6, cursor: (isGenerating || selectedGenColumns.size === 0 || namesNotReady) ? 'default' : 'pointer', opacity: (isGenerating || selectedGenColumns.size === 0 || namesNotReady) ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: 8 }}
                 >
-                  {isGenerating && <Spinner size={14} />}
-                  {isGenerating ? 'Creating…' : `Create Selected (${selectedGenColumns.size})`}
+                  {(isGenerating || genPreviewStatus === 'loading') && <Spinner size={14} />}
+                  {isGenerating ? 'Creating…' : genPreviewStatus === 'loading' ? 'Resolving names…' : `Create Selected (${selectedGenColumns.size})`}
                 </button>
               </div>
             </div>
