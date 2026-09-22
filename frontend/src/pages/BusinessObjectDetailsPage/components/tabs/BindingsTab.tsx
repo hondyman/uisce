@@ -145,54 +145,57 @@ export function BindingsTab({ bindings, businessObject }: BindingsTabProps) {
             </Card>
           )}
 
-          <Grid container spacing={2}>
-            {(multiBackend?.bindings || [
-              {
-                storageTier: 'TIER_1_POSTGRES',
-                backendName: 'PostgreSQL (Control Plane / OLTP)',
-                physicalTarget: `public.${businessObject?.driverTableName || 'driver_table'}`,
-                requirement: 'REQUIRED',
-                coveragePercentage: 100,
-              },
-              {
-                storageTier: 'TIER_2_STARROCKS',
-                backendName: 'StarRocks (Hot Analytical Data Plane)',
-                physicalTarget: `olap.${businessObject?.driverTableName || 'driver_table'}_hot`,
-                requirement: 'OPTIONAL',
-                coveragePercentage: 90,
-              },
-              {
-                storageTier: 'TIER_3_ICEBERG',
-                backendName: 'Apache Iceberg (Cold Historical Archival)',
-                physicalTarget: `iceberg.catalog.${businessObject?.driverTableName || 'driver_table'}_historical`,
-                requirement: 'OPTIONAL',
-                coveragePercentage: 100,
-              },
-            ]).map((b: any, idx: number) => (
-              <Grid size={{ xs: 12, md: 4 }} key={idx}>
-                <Card variant="outlined" sx={{ height: '100%' }}>
-                  <CardHeader
-                    avatar={<CloudIcon color="primary" />}
-                    title={<Typography variant="subtitle2" sx={{ fontWeight: 700 }}>{b.backendName}</Typography>}
-                    subheader={<Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{b.physicalTarget}</Typography>}
-                  />
-                  <Divider />
-                  <CardContent sx={{ p: 2 }}>
-                    <Stack spacing={1}>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="caption" color="text.secondary">Requirement</Typography>
-                        <Chip label={b.requirement} size="small" variant="outlined" sx={{ fontSize: '0.65rem', height: 20 }} />
+          {bindings.length === 0 ? (
+            <Alert severity="info">No physical bindings are configured for this business object yet.</Alert>
+          ) : (
+            <Grid container spacing={2}>
+              {bindings.map((b: any, idx: number) => (
+                <Grid size={{ xs: 12, md: 4 }} key={b.boBindingId || idx}>
+                  <Card variant="outlined" sx={{ height: '100%' }}>
+                    <CardHeader
+                      avatar={<CloudIcon color="primary" />}
+                      title={
+                        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                            {b.backendType || 'Backend'}
+                          </Typography>
+                          {b.isDefault && (
+                            <Chip label="DEFAULT" size="small" color="primary" sx={{ fontSize: '0.6rem', height: 18 }} />
+                          )}
+                        </Stack>
+                      }
+                      subheader={
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                          {b.drivingNodeName || b.nodeName || 'unmapped'}
+                        </Typography>
+                      }
+                    />
+                    <Divider />
+                    <CardContent sx={{ p: 2 }}>
+                      <Stack spacing={1}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Driving Table</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 700 }}>{b.nodeName || '-'}</Typography>
+                        </Stack>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Temporal Mode</Typography>
+                          <Typography variant="caption" sx={{ fontWeight: 700 }}>{b.temporalOverride || 'NONE'}</Typography>
+                        </Stack>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="caption" color="text.secondary">Binding ID</Typography>
+                          <Tooltip title={b.boBindingId || ''}>
+                            <Typography variant="caption" sx={{ fontFamily: 'monospace', maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {b.boBindingId || '-'}
+                            </Typography>
+                          </Tooltip>
+                        </Stack>
                       </Stack>
-                      <Stack direction="row" justifyContent="space-between">
-                        <Typography variant="caption" color="text.secondary">Field Coverage</Typography>
-                        <Typography variant="caption" sx={{ fontWeight: 700 }}>{b.coveragePercentage}%</Typography>
-                      </Stack>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              ))}
+            </Grid>
+          )}
         </Stack>
       )}
 
