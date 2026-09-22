@@ -30,6 +30,7 @@ import apiClient from '../../../../utils/apiClient';
 // rather than this tab needing to be split into two later.
 interface ValidationsAndTriggersTabProps {
   businessObject: any;
+  bindings?: any[];
 }
 
 interface RuleRow {
@@ -39,6 +40,14 @@ interface RuleRow {
   severity: string;
   timing: string;
   is_active: boolean;
+  // Which binding's underlying table this rule was fetched for. Rules are
+  // authored per bo_name (see the backend note below), so a BO with
+  // multiple bindings (e.g. an ORM source plus an MDM golden-record
+  // source registered as its own BO) can have validations that only show
+  // up under the OTHER bo_name -- this labels which source a row came
+  // from so they're not presented as if they all target the same table.
+  sourceBoName: string;
+  sourceLabel: string;
 }
 
 interface HealthRow {
@@ -55,7 +64,7 @@ interface HealthRow {
   suspect_reason?: string;
 }
 
-export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTriggersTabProps) {
+export function ValidationsAndTriggersTab({ businessObject, bindings = [] }: ValidationsAndTriggersTabProps) {
   const navigate = useNavigate();
   const boKey: string | undefined = businessObject?.key;
   const editorPath = boKey ? `/core/validation-rules/editor?bo_name=${encodeURIComponent(boKey)}` : '#';
@@ -65,21 +74,59 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
   const [error, setError] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
+  // Validation rules are authored per bo_name against ONE BO's vocabulary.
+  // A binding whose driving table happens to be another BO's own driving
+  // table (e.g. Security's MDM binding to /mdm/security_golden_record,
+  // which is also the driving table of the standalone security_golden_record
+  // BO) means that BO's rules are relevant here too, even though they'll
+  // never show up under boKey. Best-effort heuristic: a non-default
+  // binding's nodeName often equals another BO's key directly (true for
+  // every MDM-generated BO in this catalog); fetch that bo_name as well
+  // when it differs from this BO's own key.
+  const extraBoNames = Array.from(
+    new Set(
+      bindings
+        .map((b) => b?.nodeName)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0 && n !== boKey)
+    )
+  );
+
   const load = useCallback(async () => {
     if (!boKey) return;
     setLoading(true);
     setError(null);
     try {
-      const [ruleRes, healthRes] = await Promise.all([
-        apiClient<{ validationRules: RuleRow[] }>(
-          `/validation-rule-nodes?bo_name=${encodeURIComponent(boKey)}`
+      const boNames = [boKey, ...extraBoNames];
+      const [ruleResults, healthRes] = await Promise.all([
+        Promise.all(
+          boNames.map((name) =>
+            apiClient<{ validationRules: Omit<RuleRow, 'sourceBoName' | 'sourceLabel'>[] }>(
+              `/validation-rule-nodes?bo_name=${encodeURIComponent(name)}`
+            ).catch(() => ({ validationRules: [] }))
+          )
         ),
         apiClient<{ health: HealthRow[] }>('/validation-rule-nodes/health'),
       ]);
-      setRules(ruleRes.validationRules || []);
+      const merged: RuleRow[] = [];
+      boNames.forEach((name, i) => {
+        const isPrimary = name === boKey;
+        for (const r of ruleResults[i].validationRules || []) {
+          merged.push({
+            ...r,
+            sourceBoName: name,
+            sourceLabel: isPrimary
+              ? 'This BO'
+              : bindings.find((b) => b.nodeName === name)?.backendType
+                ? `Binding: ${name}`
+                : name,
+          });
+        }
+      });
+      setRules(merged);
+      const relevantBoKeys = new Set(boNames);
       const byRuleId: Record<string, HealthRow> = {};
       for (const h of healthRes.health || []) {
-        if (h.bo_key === boKey) byRuleId[h.rule_id] = h;
+        if (relevantBoKeys.has(h.bo_key)) byRuleId[h.rule_id] = h;
       }
       setHealth(byRuleId);
     } catch (err: any) {
@@ -87,7 +134,10 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
     } finally {
       setLoading(false);
     }
-  }, [boKey]);
+    // extraBoNames is derived from bindings each render; stringify so the
+    // effect doesn't loop on a new-array-identity every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boKey, extraBoNames.join(',')]);
 
   useEffect(() => {
     load();
@@ -118,8 +168,12 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
         <Box>
           <Typography variant="h6">Validations</Typography>
           <Typography variant="body2" color="text.secondary">
-            Rules governing writes to <code>{boKey}</code> - evaluated on every create/update. A rule
-            producing violations or rule errors on nearly every recent write is flagged as suspect below.
+            Rules governing writes to <code>{boKey}</code>
+            {extraBoNames.length > 0 && (
+              <> and its other bindings (<code>{extraBoNames.join(', ')}</code>)</>
+            )}
+            {' '}- evaluated on every create/update. A rule producing violations or rule errors on
+            nearly every recent write is flagged as suspect below.
           </Typography>
         </Box>
         <MuiLink
@@ -149,6 +203,7 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
             <TableHead>
               <TableRow>
                 <TableCell>Rule</TableCell>
+                <TableCell>Source</TableCell>
                 <TableCell>Severity</TableCell>
                 <TableCell>Timing</TableCell>
                 <TableCell>Active</TableCell>
@@ -166,6 +221,14 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
                 return (
                   <TableRow key={rule.id} hover>
                     <TableCell>{rule.name}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={rule.sourceLabel}
+                        size="small"
+                        variant="outlined"
+                        color={rule.sourceBoName === boKey ? 'default' : 'info'}
+                      />
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={rule.severity}
@@ -215,7 +278,7 @@ export function ValidationsAndTriggersTab({ businessObject }: ValidationsAndTrig
                     <TableCell>
                       <MuiLink
                         component="button"
-                        onClick={() => navigate(editorPath)}
+                        onClick={() => navigate(`/core/validation-rules/editor?bo_name=${encodeURIComponent(rule.sourceBoName)}`)}
                         underline="hover"
                         sx={{ fontSize: '0.8rem' }}
                       >

@@ -1843,7 +1843,7 @@ export default function BusinessObjectDetailsPage() {
 
               {/* Validations & Triggers Tab */}
               {activeTab === 7 && (
-                <ValidationsAndTriggersTab businessObject={businessObject} />
+                <ValidationsAndTriggersTab businessObject={businessObject} bindings={bindings} />
               )}
 
             </Paper>
