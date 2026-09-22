@@ -10,7 +10,7 @@ import (
 )
 
 func expectTenantTx(mock sqlmock.Sqlmock, tenant, gold uuid.UUID) {
-	mock.ExpectQuery("FROM public.tenants").
+	mock.ExpectQuery("uisce_gold_copy_tenant_id").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	mock.ExpectBegin()
 	mock.ExpectExec("uisce\\.current_tenant").WithArgs(tenant.String()).WillReturnResult(sqlmock.NewResult(0, 0))

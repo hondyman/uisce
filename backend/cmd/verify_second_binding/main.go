@@ -5,7 +5,7 @@
 //
 // MAPS_TO remains the canonical binding (alpha.orm.order, proven live
 // throughout this session). A second binding was populated for this
-// proof via business_object_bindings/field_bindings (real tables, empty
+// proof via business_object_binding/field_bindings (real tables, empty
 // everywhere in the system before this - see
 // docs/unified-rule-engine-handoff.md) pointing the Order BO's
 // TargetQuantity/LimitPrice/ExecutedQuantity/LeavesQuantity terms at
@@ -85,7 +85,7 @@ func main() {
 	fmt.Println("\n=== Binding 2: field_bindings -> alpha.oms.orders ===")
 	var bindingID string
 	if err := db.GetContext(ctx, &bindingID, `
-		SELECT id FROM business_object_bindings WHERE bo_id = $1::uuid AND is_default = false LIMIT 1
+		SELECT bo_binding_id FROM business_object_binding WHERE bo_id = $1::uuid AND is_default = false LIMIT 1
 	`, orderBOID); err != nil {
 		log.Fatalf("find second binding: %v", err)
 	}

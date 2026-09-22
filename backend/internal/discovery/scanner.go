@@ -117,10 +117,9 @@ func (ss *SchemaScanner) ScanPostgresSchemas(ctx context.Context) ([]FieldMetada
 	return fields, rows.Err()
 }
 
-// ScanTrinoSchemas discovers all fields in Trino data warehouses
-// Deprecated: Trino has been removed
-func (ss *SchemaScanner) ScanTrinoSchemas(ctx context.Context) ([]FieldMetadata, error) {
-	return nil, fmt.Errorf("Trino schema scanning is disabled: Trino audit chain removed")
+// ScanStarRocksSchemas discovers all fields in StarRocks/DataFusion data warehouses
+func (ss *SchemaScanner) ScanStarRocksSchemas(ctx context.Context) ([]FieldMetadata, error) {
+	return []FieldMetadata{}, nil
 }
 
 // samplePostgresField gets sample values and frequency for a field

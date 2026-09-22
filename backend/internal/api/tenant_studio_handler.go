@@ -61,7 +61,7 @@ func (h *TenantStudioHandler) getTenantID(r *http.Request) (uuid.UUID, error) {
 // touching a per-tenant row.
 func (h *TenantStudioHandler) writeScopeTenantID(ctx context.Context, tenantID uuid.UUID) *uuid.UUID {
 	var goldCopyID uuid.NullUUID
-	if err := h.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyID); err != nil {
+	if err := h.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyID); err != nil {
 		return &tenantID
 	}
 	if goldCopyID.Valid && goldCopyID.UUID == tenantID {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,8 +45,12 @@ func TestCommitMetricsV1Handler(t *testing.T) {
 
 	t.Setenv("PROMETHEUS_URL", mock.URL)
 
-	server := &Server{}
-	req := httptest.NewRequest("GET", "/api/v1/metrics/commit?window=5m", nil)
+	// commitMetricsV1Handler resolves the caller's security context (auth + datasource +
+	// region) and scopes the Prometheus query to that tenant, so the test supplies all three.
+	server := &Server{SecurityContextDeps: handlers.SecurityContextDeps{Resolver: &testMockResolver{}}}
+	req := withAuthContext(httptest.NewRequest("GET", "/api/v1/metrics/commit?window=5m", nil), "test-tenant")
+	req.Header.Set("X-Datasource-Id", "ds-1")
+	req.Header.Set("X-Region", "us-east-1")
 	w := httptest.NewRecorder()
 
 	server.commitMetricsV1Handler(w, req)

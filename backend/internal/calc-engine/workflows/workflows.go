@@ -88,12 +88,12 @@ func UpsertRunStatus(ctx context.Context, req ComputeRequest, status string) err
 	return nil // Implementation in activities.go
 }
 
-// ComputeAndMergePoP orchestrates PoP calculation via Trino
+// ComputeAndMergePoP orchestrates PoP calculation via StarRocks/DataFusion
 func ComputeAndMergePoP(ctx context.Context, req ComputeRequest) error {
 	return nil // Implementation in activities.go
 }
 
-// ComputeAndMergeAnomalies orchestrates z-score anomaly detection via Trino
+// ComputeAndMergeAnomalies orchestrates z-score anomaly detection via StarRocks/DataFusion
 func ComputeAndMergeAnomalies(ctx context.Context, req ComputeRequest) error {
 	return nil // Implementation in activities.go
 }

@@ -20,7 +20,7 @@ jobs:
 
     - name: Install root deps (if present)
       run: |
-        if [ -f package.json ]; then npm ci; fi
+        if [ -f package.json ]; then npm install; fi
 
     - name: Install frontend deps
       working-directory: frontend

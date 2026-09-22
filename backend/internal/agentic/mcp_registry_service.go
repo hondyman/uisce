@@ -80,7 +80,7 @@ func (s *MCPRegistryService) resolveGoldCopyID(ctx context.Context) (uuid.UUID, 
 		return s.goldcopyResolver.Resolve(ctx)
 	}
 	var id string
-	err := s.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	err := s.db.GetContext(ctx, &id, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return uuid.Nil, goldcopy.ErrGoldCopyNotFound

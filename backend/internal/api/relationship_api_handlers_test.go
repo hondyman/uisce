@@ -20,6 +20,9 @@ func TestPostDiscoverRelationships(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
+	_, err := db.Exec(`INSERT INTO public.business_objects (id, tenant_id, bo_key, bo_name) VALUES ('22222222-2222-2222-2222-222222222222', 'tenant-123', 'customer', 'Customer')`)
+	require.NoError(t, err)
+
 	srv := &Server{
 		DB: db,
 	}
@@ -39,18 +42,20 @@ func TestPostDiscoverRelationships(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 		req.Header.Set("Content-Type", "application/json")
 
 		w := httptest.NewRecorder()
 		srv.postDiscoverRelationships(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
+		assert.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
 
 		var response map[string]interface{}
-		err := json.NewDecoder(w.Body).Decode(&response)
+		err := json.NewDecoder(bytes.NewReader(w.Body.Bytes())).Decode(&response)
 		require.NoError(t, err)
 		assert.NotNil(t, response)
+		assert.Contains(t, w.Body.String(), "Customer", "the seeded business object should be offered as a relationship target")
 	})
 
 	t.Run("should return error without tenant context", func(t *testing.T) {
@@ -80,6 +85,7 @@ func TestPostDiscoverRelationships(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 
 		w := httptest.NewRecorder()
@@ -101,6 +107,7 @@ func TestPostDiscoverRelationships(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 		req.Header.Set("Content-Type", "application/json")
 
@@ -140,6 +147,7 @@ func TestPostApplyRelationship(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 		req.Header.Set("Content-Type", "application/json")
 
@@ -179,6 +187,7 @@ func TestPostApplyRelationship(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 
 		w := httptest.NewRecorder()
@@ -212,6 +221,7 @@ func TestPostTriggerModelRegeneration(t *testing.T) {
 			bytes.NewReader(bodyBytes),
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 		req.Header.Set("Content-Type", "application/json")
 
@@ -251,6 +261,7 @@ func TestGetModelVersion(t *testing.T) {
 			nil,
 		)
 		req.Header.Set("X-Tenant-ID", "tenant-123")
+		req = withAuthClaims(req, "user1", "tenant-123") // the tenant comes from validated claims, not the header
 		req.Header.Set("X-Tenant-Datasource-ID", "ds-456")
 
 		w := httptest.NewRecorder()
@@ -293,6 +304,7 @@ func TestMultiTenantIsolation(t *testing.T) {
 		bytes.NewReader(bodyBytes),
 	)
 	req1.Header.Set("X-Tenant-ID", "tenant-A")
+	req1 = withAuthClaims(req1, "user1", "tenant-A") // the tenant comes from validated claims, not the header
 	req1.Header.Set("X-Tenant-Datasource-ID", "ds-A")
 	req1.Header.Set("Content-Type", "application/json")
 
@@ -306,6 +318,7 @@ func TestMultiTenantIsolation(t *testing.T) {
 		bytes.NewReader(bodyBytes),
 	)
 	req2.Header.Set("X-Tenant-ID", "tenant-B")
+	req2 = withAuthClaims(req2, "user1", "tenant-B") // the tenant comes from validated claims, not the header
 	req2.Header.Set("X-Tenant-Datasource-ID", "ds-B")
 	req2.Header.Set("Content-Type", "application/json")
 
@@ -322,13 +335,21 @@ func setupTestDB(t *testing.T) *sql.DB {
 	// Create in-memory SQLite database for testing
 	db, err := sql.Open("sqlite3", ":memory:")
 	require.NoError(t, err)
+	// The handlers query the schema-qualified public.business_objects. SQLite only understands
+	// that prefix for an attached database, and ATTACH is per connection, so pin the pool to one
+	// connection and attach an in-memory database named "public".
+	db.SetMaxOpenConns(1)
+	_, err = db.Exec(`ATTACH DATABASE ':memory:' AS public`)
+	require.NoError(t, err)
 
 	// Create necessary tables for testing
 	schema := `
-	CREATE TABLE IF NOT EXISTS business_objects (
+	-- Mirrors the live business_objects columns the discovery fallback reads (id, bo_name).
+	CREATE TABLE IF NOT EXISTS public.business_objects (
 		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		display_name TEXT NOT NULL
+		tenant_id TEXT,
+		bo_key TEXT,
+		bo_name TEXT NOT NULL
 	);
 
 	CREATE TABLE IF NOT EXISTS relationship_suggestions (
@@ -411,11 +432,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 	_, err = db.Exec(schema)
 	require.NoError(t, err)
 
-	// Seed a few business objects for the simple discovery fallback.
+	// Seed the source business object; tests add the discovery targets they assert on.
 	_, err = db.Exec(
-		`INSERT INTO business_objects (id, name, display_name) VALUES (?, ?, ?), (?, ?, ?);`,
-		"11111111-1111-1111-1111-111111111111", "source", "Source",
-		"22222222-2222-2222-2222-222222222222", "target", "Target",
+		`INSERT INTO public.business_objects (id, tenant_id, bo_key, bo_name) VALUES (?, ?, ?, ?);`,
+		"11111111-1111-1111-1111-111111111111", "tenant-123", "source", "Source",
 	)
 	require.NoError(t, err)
 

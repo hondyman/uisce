@@ -207,6 +207,20 @@ jobs:
         working-directory: backend
         run: go build -o bin/migrate ./cmd/migrate
 
+      - name: Seed gold-copy tenant
+        # Seed BEFORE migrations run — 20260914_014 creates a validation_trigger
+        # that references public.tenants (northwind), and that tenant must exist
+        # before migrate up processes any migration that inserts into a table with
+        # a tenant_id FK to public.tenants.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
+            INSERT INTO public.tenants (id, name, display_name, gold_copy)
+            VALUES ('99e99e99-99e9-49e9-89e9-99e99e99e999', 'northwind', 'Northwind Traders', true)
+            ON CONFLICT (id) DO NOTHING;
+          "
+
       - name: Apply migrations not yet covered by the snapshot
         working-directory: backend
         run: ./bin/migrate up
@@ -220,20 +234,6 @@ jobs:
         # finding worth fixing.
         working-directory: backend
         run: ./bin/migrate verify || true
-
-      - name: Seed gold-copy tenant
-        # Fixed UUID matched by backend/cmd/register_oms_preagg,
-        # verify_shadow_context, verify_second_binding, and test fixtures that
-        # assume a gold-copy tenant exists. Row values match the real
-        # gold-copy row on alpha (id, name, display_name, gold_copy).
-        env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h localhost -U postgres -d alpha -v ON_ERROR_STOP=1 -c "
-            INSERT INTO public.tenants (id, name, display_name, gold_copy)
-            VALUES ('99e99e99-99e9-49e9-89e9-99e99e99e999', 'northwind', 'Northwind Traders', true)
-            ON CONFLICT (id) DO NOTHING;
-          "
 
       - name: Verify prerequisites
         # Explicit, named checks so "tests skipped because a prerequisite is

@@ -11,6 +11,7 @@ import AddCircleIcon from '@mui/icons-material/AddCircle';
 import RemoveCircleIcon from '@mui/icons-material/RemoveCircle';
 import UpdateIcon from '@mui/icons-material/Update';
 import { resolveApiUrl } from '../../../utils/resolveApiUrl';
+import { scanLiveness } from './scanLiveness';
 
 export interface ScanResultDetail {
   tenant_instance_id: string;
@@ -35,6 +36,8 @@ interface ScanProgress {
   total: number;
   completed: number;
   message: string;
+  heartbeat?: boolean; // a repeat of the latest status while a long step is still running
+  elapsed_seconds?: number;
 }
 
 interface ScanProgressModalProps {
@@ -60,6 +63,10 @@ export default function ScanProgressModal({
   const [streamError, setStreamError] = useState<string | null>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
+  // When the scan started and when the server last said anything, so a stuck scan is visible.
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [lastEventAt, setLastEventAt] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const MAX_RETRIES = 2;
   const CONNECTION_TIMEOUT = 30000; // 30 seconds
 
@@ -70,6 +77,8 @@ export default function ScanProgressModal({
     if (connectionAttempts === 0) {
       setProgress(null);
       setStreamError(null);
+      setStartedAt(null);
+      setLastEventAt(null);
     }
 
     console.log('[SSE] Opening connection for datasource:', datasourceId, `(attempt ${connectionAttempts + 1})`);
@@ -110,6 +119,9 @@ export default function ScanProgressModal({
       try {
         const data = JSON.parse(event.data) as ScanProgress;
         setProgress(data);
+        const t = Date.now();
+        setStartedAt((prev) => prev ?? t);
+        setLastEventAt(t);
 
         if (data.phase === 'complete' || data.phase === 'error') {
           console.log('[SSE] Scan complete, closing connection');
@@ -155,6 +167,15 @@ export default function ScanProgressModal({
       eventSource.close();
     };
   }, [open, datasourceId, useStreaming, connectionAttempts]);
+
+  // Tick once a second while streaming so elapsed time and time since the last update stay live.
+  useEffect(() => {
+    if (!isStreaming) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [isStreaming]);
+
+  const liveness = startedAt !== null && lastEventAt !== null ? scanLiveness(startedAt, lastEventAt, now) : null;
 
   const getPhaseLabel = (phase: string): string => {
     switch (phase) {
@@ -224,9 +245,23 @@ export default function ScanProgressModal({
             )}
             
             {progress.total > 0 && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 {progress.completed} of {progress.total} items
               </Typography>
+            )}
+
+            {liveness && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }} data-testid="scan-liveness">
+                Running for {liveness.elapsed} · last update {liveness.sinceLastUpdate} ago
+                {progress.heartbeat && !liveness.stalled ? ' · still working on this step' : ''}
+              </Typography>
+            )}
+
+            {liveness?.stalled && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                No update from the server for {liveness.sinceLastUpdate}. The scan may be stuck, or the connection to the
+                server dropped. Progress is checked every few seconds, so this is not just a slow step.
+              </Alert>
             )}
           </Box>
         )}

@@ -137,7 +137,7 @@ func (e *DynamicComplianceEngine) LoadRuleFromGraph(
 	err := e.db.QueryRowContext(ctx, `
 		SELECT node_name, COALESCE(catalog_type, ''), properties::text
 		FROM catalog_node
-		WHERE id = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		WHERE id = $1 AND (tenant_id = $2 OR tenant_id = public.uisce_gold_copy_tenant_id())
 		LIMIT 1
 	`, ruleNodeID, tenantID).Scan(&nodeName, &nodeType, &propertiesJSON)
 
@@ -166,7 +166,7 @@ func (e *DynamicComplianceEngine) LoadRuleFromGraph(
 		FROM catalog_edge e
 		JOIN catalog_node t ON e.object_node_id = t.id
 		WHERE e.subject_node_id = $1
-		  AND (e.tenant_id = $2 OR e.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (e.tenant_id = $2 OR e.tenant_id = public.uisce_gold_copy_tenant_id())
 	`, ruleNodeID, tenantID)
 
 	if err == nil {

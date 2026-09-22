@@ -17,7 +17,7 @@ func (s *MultiTenantSafety) ValidateSQL(sql string, tenantScope []string) error 
 	}
 
 	// Simple check: does it contain tenant_id?
-	// In production, use an SQL parser (e.g., pg_query_go or trino parser)
+	// In production, use an SQL parser (e.g., pg_query_go or datafusion SQL parser)
 	lowerSQL := strings.ToLower(sql)
 	if !strings.Contains(lowerSQL, "tenant_id") {
 		return fmt.Errorf("generated SQL missing tenant_id filter")

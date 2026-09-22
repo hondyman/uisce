@@ -44,7 +44,7 @@ func TestPageStudio_GoldCopyID_ReturnsResolvedGold(t *testing.T) {
 	}
 	defer db.Close()
 	gold := uuid.MustParse("99999999-9999-4999-8999-999999999999")
-	mock.ExpectQuery("FROM public.tenants").
+	mock.ExpectQuery("uisce_gold_copy_tenant_id").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	h := &PageStudioHandler{db: sqlx.NewDb(db, "sqlmock")}
 	got := h.goldCopyID(context.Background())

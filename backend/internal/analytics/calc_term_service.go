@@ -112,8 +112,24 @@ func (s *CalcTermService) UpsertCalcTerm(ctx context.Context, req models.UpsertC
 	return s.GetByID(ctx, nodeID)
 }
 
-// GetByID loads a single calc term by its catalog_node id.
+// GetByID loads a single calc term by its catalog_node id. It is NOT tenant-scoped: it is for internal
+// callers that already hold a trusted id. Anything reachable from an HTTP request must use
+// GetByIDForTenant.
 func (s *CalcTermService) GetByID(ctx context.Context, id uuid.UUID) (*models.CalcTermDescriptor, error) {
+	return s.getByID(ctx, "", id)
+}
+
+// GetByIDForTenant loads a calc term only if it belongs to tenantID; another tenant's is reported as
+// not found, indistinguishable from a missing id.
+func (s *CalcTermService) GetByIDForTenant(ctx context.Context, tenantID string, id uuid.UUID) (*models.CalcTermDescriptor, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("calc term not found: tenant required")
+	}
+	return s.getByID(ctx, tenantID, id)
+}
+
+// getByID: tenantID == "" means no tenant filter.
+func (s *CalcTermService) getByID(ctx context.Context, tenantID string, id uuid.UUID) (*models.CalcTermDescriptor, error) {
 	var node struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -127,7 +143,8 @@ func (s *CalcTermService) GetByID(ctx context.Context, id uuid.UUID) (*models.Ca
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'calculation_term'
 		  AND n.id = $1
-	`, id)
+		  AND ($2 = '' OR n.tenant_id = $2::uuid)
+	`, id, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("calc term not found: %w", err)
 	}

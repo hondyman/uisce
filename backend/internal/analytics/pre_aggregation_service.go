@@ -560,7 +560,25 @@ func (s *PreAggregationService) GenerateCubeSchema(ctx context.Context, tenantID
 }
 
 // GetByID returns a single pre-aggregation by its ID.
+//
+// GetByID is NOT tenant-scoped: it is for internal callers that already hold a trusted id (the lifecycle
+// job, the verify_* / register_* commands). Anything reachable from an HTTP request must use
+// GetByIDForTenant.
 func (s *PreAggregationService) GetByID(ctx context.Context, id uuid.UUID) (*models.PreAggDescriptor, error) {
+	return s.getByID(ctx, "", id)
+}
+
+// GetByIDForTenant loads a pre-aggregation only if it belongs to tenantID. Any other tenant's is reported
+// as not found, indistinguishable from a missing id.
+func (s *PreAggregationService) GetByIDForTenant(ctx context.Context, tenantID string, id uuid.UUID) (*models.PreAggDescriptor, error) {
+	if tenantID == "" {
+		return nil, fmt.Errorf("pre-aggregation not found: tenant required")
+	}
+	return s.getByID(ctx, tenantID, id)
+}
+
+// getByID: tenantID == "" means no tenant filter.
+func (s *PreAggregationService) getByID(ctx context.Context, tenantID string, id uuid.UUID) (*models.PreAggDescriptor, error) {
 	var node struct {
 		ID          uuid.UUID       `db:"id"`
 		NodeName    string          `db:"node_name"`
@@ -577,7 +595,8 @@ func (s *PreAggregationService) GetByID(ctx context.Context, id uuid.UUID) (*mod
 		JOIN catalog_node_type nt ON n.node_type_id = nt.id
 		WHERE nt.catalog_type_name = 'pre_aggregation'
 		  AND n.id = $1
-	`, id)
+		  AND ($2 = '' OR n.tenant_id = $2::uuid)
+	`, id, tenantID)
 	if err != nil {
 		return nil, fmt.Errorf("pre-aggregation not found: %w", err)
 	}
@@ -685,8 +704,11 @@ func (s *PreAggregationService) ListByDatasource(ctx context.Context, tenantID, 
 	return result, nil
 }
 
-// Update updates an existing pre-aggregation.
+// Update updates an existing pre-aggregation owned by req.TenantID.
 func (s *PreAggregationService) Update(ctx context.Context, id uuid.UUID, req models.UpsertPreAggRequest) (*models.PreAggDescriptor, error) {
+	if req.TenantID == "" {
+		return nil, fmt.Errorf("update pre-aggregation: tenant required")
+	}
 	// Build updated properties
 	props := models.PreAggProperties{
 		BOName:                 req.BOName,
@@ -709,45 +731,96 @@ func (s *PreAggregationService) Update(ctx context.Context, id uuid.UUID, req mo
 	}
 	cfgJSON, _ := json.Marshal(cfg)
 
-	_, err := s.db.ExecContext(ctx, `
+	// Scoped to the owning tenant. Before this the WHERE was `id = $1` alone and the properties above
+	// were rewritten with the caller's tenant, so any tenant could overwrite and take over another
+	// tenant's pre-aggregation by id.
+	res, err := s.db.ExecContext(ctx, `
 		UPDATE catalog_node SET
 			description = $2,
 			properties = $3,
 			config = $4,
 			updated_at = NOW()
-		WHERE id = $1
-	`, id, req.Description, propsJSON, cfgJSON)
+		WHERE id = $1 AND tenant_id = $5::uuid
+	`, id, req.Description, propsJSON, cfgJSON, req.TenantID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update pre-aggregation: %w", err)
 	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, ErrPreAggNotFound
+	}
 
-	return s.GetByID(ctx, id)
+	return s.GetByIDForTenant(ctx, req.TenantID, id)
 }
 
-// Delete removes a pre-aggregation from the catalog.
-func (s *PreAggregationService) Delete(ctx context.Context, id uuid.UUID) error {
-	// First, delete related edges
-	_, err := s.db.ExecContext(ctx, `
-		DELETE FROM catalog_edge WHERE source_node_id = $1 OR target_node_id = $1
-	`, id)
+// ErrPreAggNotFound means no pre-aggregation with that id belongs to the tenant.
+var ErrPreAggNotFound = fmt.Errorf("pre-aggregation not found")
+
+// Delete removes a pre-aggregation owned by tenantID from the catalog, with its edges, atomically. A
+// pre-aggregation that is another tenant's is ErrPreAggNotFound and nothing is touched: previously both
+// deletes were by id alone, so a tenant could delete another tenant's node and any edge on it.
+func (s *PreAggregationService) Delete(ctx context.Context, tenantID string, id uuid.UUID) error {
+	if tenantID == "" {
+		return ErrPreAggNotFound
+	}
+	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("begin delete: %w", err)
+	}
+	defer tx.Rollback()
+
+	var owned bool
+	if err := tx.GetContext(ctx, &owned, `
+		SELECT EXISTS (SELECT 1 FROM catalog_node n JOIN catalog_node_type nt ON n.node_type_id = nt.id
+		               WHERE n.id = $1 AND n.tenant_id = $2::uuid AND nt.catalog_type_name = 'pre_aggregation')
+	`, id, tenantID); err != nil {
+		return fmt.Errorf("check pre-aggregation ownership: %w", err)
+	}
+	if !owned {
+		return ErrPreAggNotFound
+	}
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM catalog_edge WHERE source_node_id = $1 OR target_node_id = $1`, id); err != nil {
 		return fmt.Errorf("failed to delete pre-aggregation edges: %w", err)
 	}
-
-	// Then delete the node
-	result, err := s.db.ExecContext(ctx, `
-		DELETE FROM catalog_node WHERE id = $1
-	`, id)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM catalog_node WHERE id = $1 AND tenant_id = $2::uuid`, id, tenantID); err != nil {
 		return fmt.Errorf("failed to delete pre-aggregation: %w", err)
 	}
+	return tx.Commit()
+}
 
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("pre-aggregation not found")
+// assertOwned returns ErrPreAggNotFound unless the pre-aggregation belongs to tenantID.
+func (s *PreAggregationService) assertOwned(ctx context.Context, tenantID string, id uuid.UUID) error {
+	if tenantID == "" {
+		return ErrPreAggNotFound
 	}
-
+	var owned bool
+	if err := s.db.GetContext(ctx, &owned, `
+		SELECT EXISTS (SELECT 1 FROM catalog_node n JOIN catalog_node_type nt ON n.node_type_id = nt.id
+		               WHERE n.id = $1 AND n.tenant_id = $2::uuid AND nt.catalog_type_name = 'pre_aggregation')
+	`, id, tenantID); err != nil {
+		return fmt.Errorf("check pre-aggregation ownership: %w", err)
+	}
+	if !owned {
+		return ErrPreAggNotFound
+	}
 	return nil
+}
+
+// GenerateDDLForTenant is GenerateDDL for a request on behalf of a tenant: it only runs for a
+// pre-aggregation that tenant owns.
+func (s *PreAggregationService) GenerateDDLForTenant(ctx context.Context, tenantID string, preAggID uuid.UUID, dialect string) (string, error) {
+	if err := s.assertOwned(ctx, tenantID, preAggID); err != nil {
+		return "", err
+	}
+	return s.GenerateDDL(ctx, preAggID, dialect)
+}
+
+// RefreshForTenant is Refresh for a request on behalf of a tenant.
+func (s *PreAggregationService) RefreshForTenant(ctx context.Context, tenantID string, preAggID uuid.UUID) error {
+	if err := s.assertOwned(ctx, tenantID, preAggID); err != nil {
+		return err
+	}
+	return s.Refresh(ctx, preAggID)
 }
 
 // Disable marks a pre-aggregation as disabled without deleting it.

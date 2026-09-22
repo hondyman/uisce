@@ -45,7 +45,7 @@ type HistoryFilters struct {
 }
 
 // BitemporalTracker manages bitemporal audit tracking
-// Deprecated: Trino audit chain has been removed. All methods return empty results.
+// Deprecated: Replaced by StarRocks/Lakehouse bitemporal audit tracking.
 type BitemporalTracker struct{}
 
 // NewBitemporalTracker creates a new bitemporal tracker
@@ -75,7 +75,7 @@ func (bt *BitemporalTracker) GetEntityHistory(ctx context.Context, entityType, e
 // RestoreEntityToTime restores an entity to a previous state
 // Deprecated: Always returns an error indicating feature is disabled
 func (bt *BitemporalTracker) RestoreEntityToTime(ctx context.Context, entityType, entityID string, restoreToTime time.Time, reason string) error {
-	return fmt.Errorf("bitemporal restore is disabled: Trino audit chain removed")
+	return fmt.Errorf("bitemporal restore is disabled: legacy audit pipeline decommissioned")
 }
 
 // GetRecentChanges returns recent changes for an entity type

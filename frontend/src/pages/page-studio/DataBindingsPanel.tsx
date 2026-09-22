@@ -19,10 +19,11 @@ import {
     ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import { useDraggable } from '@dnd-kit/core';
-import { apiClient } from '../../utils/apiClient';
 import { CorePageDefinition, DataSourceDefinition, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
-import { fetchBusinessObjectBindings, fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
-import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
+import {
+    listBusinessObjects, fetchBORelationships, fetchBusinessObjectBindings, fetchBOTerms,
+    type BusinessObjectOption, type BORelationship, type SemanticTermView,
+} from '../../studio-core/binding/businessObjectApi';
 import { buildBODataSource } from './generatePageDraft';
 import { fkColumnFromJoinCondition } from '../../studio-core/binding/boRelationships';
 
@@ -37,24 +38,6 @@ export interface FieldDragPayload {
     termKey: string;
     displayName: string;
     role: string;
-}
-
-interface BusinessObjectOption {
-    id: string;
-    /** bo_key - the technical name every bo-scoped endpoint actually expects. */
-    key: string;
-    name: string;
-    display_name: string;
-}
-
-interface RelatedBusinessObject {
-    id: string;
-    relatedObjectName: string;
-    targetObjectId: string;
-    relationshipType: string;
-    cardinality: string;
-    joinCondition: string;
-    kind?: 'bo' | 'relatedTable';
 }
 
 type FieldsStatus = 'loading' | 'ready' | 'error';
@@ -98,33 +81,15 @@ const boCfg = (ds: DataSourceDefinition): BusinessObjectDataSourceConfig =>
 const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, tenantId }) => {
     const [businessObjects, setBusinessObjects] = useState<BusinessObjectOption[]>([]);
     const [selectedBOId, setSelectedBOId] = useState('');
-    const [relatedByBO, setRelatedByBO] = useState<Record<string, RelatedBusinessObject[]>>({});
+    const [relatedByBO, setRelatedByBO] = useState<Record<string, BORelationship[]>>({});
     const [fieldsByBO, setFieldsByBO] = useState<Record<string, SemanticTermView[]>>({});
     const [fieldsStatusByBO, setFieldsStatusByBO] = useState<Record<string, FieldsStatus>>({});
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
-        apiClient<unknown>('/business-objects', {
-            headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined,
-        })
-            .then((data) => {
-                if (cancelled) return;
-                const rawList = Array.isArray(data)
-                    ? data
-                    : data && typeof data === 'object'
-                        ? Object.values(data as Record<string, unknown>)
-                        : [];
-                const normalized = rawList
-                    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
-                    .map((item) => ({
-                        id: String(item.id ?? item.name),
-                        key: String(item.key ?? item.technicalName ?? item.technical_name ?? item.name ?? ''),
-                        name: String(item.name ?? ''),
-                        display_name: String(item.displayName ?? item.display_name ?? item.name ?? ''),
-                    }));
-                setBusinessObjects(normalized);
-            })
+        listBusinessObjects()
+            .then((list) => { if (!cancelled) setBusinessObjects(list); })
             .catch(() => setBusinessObjects([]));
         return () => {
             cancelled = true;
@@ -139,11 +104,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
     const fetchRelated = async (boId: string) => {
         if (relatedByBO[boId]) return relatedByBO[boId];
         try {
-            const data = await apiClient<{ relatedObjects?: RelatedBusinessObject[] }>(
-                `/business-objects/${boId}/relationships`,
-                { headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined }
-            );
-            const related = data?.relatedObjects || [];
+            const related = await fetchBORelationships(boId);
             setRelatedByBO((prev) => ({ ...prev, [boId]: related }));
             return related;
         } catch {
@@ -196,7 +157,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                 boId: bo.id,
                 boKey: bo.key,
                 bindingId: defaultBinding?.bindingId || '',
-                displayName: bo.display_name,
+                displayName: bo.displayName,
                 relatedBoIds: [],
             };
             const newSource: DataSourceDefinition = {
@@ -219,7 +180,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
         setDraft((prev) => ({ ...prev, dataSources: (prev.dataSources || []).filter((d) => d.id !== id) }));
     };
 
-    const toggleRelated = async (source: DataSourceDefinition, rel: RelatedBusinessObject) => {
+    const toggleRelated = async (source: DataSourceDefinition, rel: BORelationship) => {
         const cfg = boCfg(source);
         const current = cfg.relatedBoIds || [];
         const including = current.includes(rel.targetObjectId) ||
@@ -254,7 +215,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
     const relatedOfPrimary = (primaryCfg ? relatedByBO[primaryCfg.boId] : []) || [];
     const relatedBOs = relatedOfPrimary.filter((rel) => rel.kind !== 'relatedTable');
     const includedBoIds = new Set(boDataSources.map((ds) => boCfg(ds).boId));
-    const isRelatedIncluded = (rel: RelatedBusinessObject) =>
+    const isRelatedIncluded = (rel: BORelationship) =>
         (primaryCfg?.relatedBoIds || []).includes(rel.targetObjectId) || includedBoIds.has(rel.targetObjectId);
     const onPage = relatedBOs.filter(isRelatedIncluded);
     const notYet = relatedBOs.filter((rel) => !isRelatedIncluded(rel));
@@ -306,7 +267,7 @@ const DataBindingsPanel: React.FC<DataBindingsPanelProps> = ({ draft, setDraft, 
                         .filter((bo) => !boDataSources.some((ds) => ds.id === `bo_${bo.id}`))
                         .map((bo) => (
                             <option key={bo.id} value={bo.id}>
-                                {bo.display_name}
+                                {bo.displayName}
                             </option>
                         ))}
                 </TextField>

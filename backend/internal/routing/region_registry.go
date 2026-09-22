@@ -16,8 +16,8 @@ type RegionContext struct {
 	RegionName           string
 	TemporalNamespace    string
 	TemporalAddress      string
-	TrinoCatalog         string
-	TrinoEndpoint        string
+	LakehouseCatalog     string
+	LakehouseEndpoint    string
 	IcebergCatalog       string
 	IcebergS3Bucket      string
 	IcebergWarehousePath string
@@ -65,7 +65,8 @@ func (r *RegionRegistry) GetRegion(ctx context.Context, regionCode string) (*Reg
 
 	row := r.db.QueryRowContext(ctx,
 		`SELECT region_code, region_name, temporal_namespace, temporal_address,
-                trino_catalog, trino_endpoint, iceberg_catalog, iceberg_s3_bucket,
+                lakehouse_catalog, lakehouse_endpoint,
+                iceberg_catalog, iceberg_s3_bucket,
                 iceberg_warehouse_path, api_endpoint, api_port, mTLS_ca_cert,
                 mTLS_client_cert, mTLS_client_key
          FROM region_registry WHERE region_code = $1 AND is_active = TRUE`,
@@ -73,7 +74,7 @@ func (r *RegionRegistry) GetRegion(ctx context.Context, regionCode string) (*Reg
 	)
 
 	if err := row.Scan(&regCtx.RegionCode, &regCtx.RegionName, &regCtx.TemporalNamespace,
-		&regCtx.TemporalAddress, &regCtx.TrinoCatalog, &regCtx.TrinoEndpoint,
+		&regCtx.TemporalAddress, &regCtx.LakehouseCatalog, &regCtx.LakehouseEndpoint,
 		&regCtx.IcebergCatalog, &regCtx.IcebergS3Bucket, &regCtx.IcebergWarehousePath,
 		&regCtx.APIEndpoint, &regCtx.APIPort, &mtlsCACert, &mtlsClientCert, &mtlsClientKey); err != nil {
 		return nil, fmt.Errorf("failed to retrieve region %s: %w", regionCode, err)

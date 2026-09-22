@@ -103,7 +103,7 @@ func (s *TermRelationshipService) GetGoldTenantID(ctx context.Context) (string, 
 		return "", nil
 	}
 	var goldID string
-	err := s.db.GetContext(ctx, &goldID, "SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1")
+	err := s.db.GetContext(ctx, &goldID, "SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL")
 	if err != nil || goldID == "" {
 		// Fallback to earliest created tenant
 		_ = s.db.GetContext(ctx, &goldID, "SELECT id FROM public.tenants ORDER BY created_at LIMIT 1")

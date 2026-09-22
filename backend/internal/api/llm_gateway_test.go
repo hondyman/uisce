@@ -19,8 +19,8 @@ func TestLoadSemanticBundle_RegionMatch(t *testing.T) {
 	srv := &Server{DB: db}
 	gw := &LLMGateway{server: srv}
 
-	rows := sqlmock.NewRows([]string{"id", "name", "datasource_id", "driving_table", "coalesce"}).AddRow("bo-1", "customers", "ds-1", "customers", 1)
-	mock.ExpectQuery("(?s)SELECT .* FROM business_objects bo").WithArgs("customers", "tenant-1", "eu-west").WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"id", "bo_name", "driver_table_name"}).AddRow("bo-1", "customers", "customers")
+	mock.ExpectQuery("(?s)SELECT .* FROM public.business_objects bo").WithArgs("customers", "tenant-1").WillReturnRows(rows)
 
 	fieldRows := sqlmock.NewRows([]string{"id", "name", "display_name", "semantic_term", "datasource_id", "table_name", "column_name"}).
 		AddRow("field-1", "id", "ID", "Customer ID", "ds-1", "customers", "id")
@@ -55,8 +55,8 @@ func TestProcessQuery_RejectsMissingRegionFromPlanner(t *testing.T) {
 	gw := &LLMGateway{server: &Server{DB: db, GeminiClient: tp}}
 
 	// Expectations for loadSemanticBundle
-	rows := sqlmock.NewRows([]string{"id", "name", "datasource_id", "driving_table", "coalesce"}).AddRow("bo-1", "customers", "ds-1", "customers", 1)
-	mock.ExpectQuery("(?s)SELECT .* FROM business_objects bo").WithArgs("customers", "tenant-1", "eu-west").WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"id", "bo_name", "driver_table_name"}).AddRow("bo-1", "customers", "customers")
+	mock.ExpectQuery("(?s)SELECT .* FROM public.business_objects bo").WithArgs("customers", "tenant-1").WillReturnRows(rows)
 
 	fieldRows := sqlmock.NewRows([]string{"id", "name", "display_name", "semantic_term", "datasource_id", "table_name", "column_name"}).
 		AddRow("field-1", "id", "ID", "Customer ID", "ds-1", "customers", "id")
@@ -83,8 +83,8 @@ func TestLoadSemanticBundle_MissingSnapshotForRegion(t *testing.T) {
 	gw := &LLMGateway{server: srv}
 
 	// Expect BO query
-	rows := sqlmock.NewRows([]string{"id", "name", "datasource_id", "driving_table", "coalesce"}).AddRow("bo-1", "customers", "ds-1", "customers", 1)
-	mock.ExpectQuery("(?s)SELECT .* FROM business_objects bo").WithArgs("customers", "tenant-1", "eu-west").WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"id", "bo_name", "driver_table_name"}).AddRow("bo-1", "customers", "customers")
+	mock.ExpectQuery("(?s)SELECT .* FROM public.business_objects bo").WithArgs("customers", "tenant-1").WillReturnRows(rows)
 
 	fieldRows := sqlmock.NewRows([]string{"id", "name", "display_name", "semantic_term", "datasource_id", "table_name", "column_name"}).
 		AddRow("field-1", "id", "ID", "Customer ID", "ds-1", "customers", "id")
@@ -114,8 +114,8 @@ func TestLoadSemanticBundle_WithSnapshot(t *testing.T) {
 	gw := &LLMGateway{server: srv}
 
 	// Business object query
-	rows := sqlmock.NewRows([]string{"id", "name", "datasource_id", "driving_table", "coalesce"}).AddRow("bo-1", "customers", "ds-1", "customers", 1)
-	mock.ExpectQuery("(?s)SELECT .* FROM business_objects bo").WithArgs("customers", "tenant-1", "eu-west").WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"id", "bo_name", "driver_table_name"}).AddRow("bo-1", "customers", "customers")
+	mock.ExpectQuery("(?s)SELECT .* FROM public.business_objects bo").WithArgs("customers", "tenant-1").WillReturnRows(rows)
 
 	fieldRows := sqlmock.NewRows([]string{"id", "name", "display_name", "semantic_term", "datasource_id", "table_name", "column_name"}).
 		AddRow("field-1", "id", "ID", "Customer ID", "ds-1", "customers", "id")

@@ -130,8 +130,8 @@ type boBindingMetadata struct {
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
 	var boMeta boBindingMetadata
 
-	// 1. Try public.business_objects + business_object_bindings.
-	// business_object_bindings has no driving_table/key_column columns (it
+	// 1. Try public.business_objects + business_object_binding.
+	// business_object_binding has no driving_table/key_column columns (it
 	// tracks the driving physical table only indirectly, via
 	// driving_node_id -> catalog_node) - this query used to reference both
 	// as bob.driving_table/bob.key_column, which don't exist, so this whole
@@ -630,7 +630,7 @@ type boSchemaField struct {
 // was never implemented backend-wide - which broke every Form widget bound to
 // a Business Object, not just orders. /bo/{boKey}/schema is the same shape
 // served from the same handler package as the rest of the BO CRUD surface,
-// so the resolution logic (business_objects -> business_object_bindings ->
+// so the resolution logic (business_objects -> business_object_binding ->
 // catalog_node) is one place, not three.
 func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)

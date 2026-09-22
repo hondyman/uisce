@@ -8,7 +8,7 @@ import (
 )
 
 // AuditAPIHandler provides HTTP endpoints for querying audit data
-// Deprecated: Trino audit chain has been removed. All endpoints return empty results.
+// Deprecated: Legacy audit chain has been removed. All endpoints return empty results.
 type AuditAPIHandler struct{}
 
 // NewAuditAPIHandler creates a new audit API handler
@@ -79,7 +79,7 @@ func (h *AuditAPIHandler) GetAINarratives(c *gin.Context) {
 }
 
 func (h *AuditAPIHandler) GenerateAINarrative(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"narrative": "AI narrative generation is disabled: Trino audit chain removed"})
+	c.JSON(http.StatusOK, gin.H{"narrative": "AI narrative generation is disabled: legacy audit pipeline decommissioned"})
 }
 
 func (h *AuditAPIHandler) GetSLODashboard(c *gin.Context) {

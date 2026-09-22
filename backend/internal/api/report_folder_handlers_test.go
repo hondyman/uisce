@@ -419,7 +419,7 @@ func TestReportFolderAPI_FolderItems(t *testing.T) {
 		templateID := uuid.New()
 
 		// Resolve gold copy tenant
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Step 1: Visibility predicate check
@@ -447,7 +447,7 @@ func TestReportFolderAPI_FolderItems(t *testing.T) {
 		templateID := uuid.New()
 
 		// Resolve gold copy tenant
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Step 1: Visibility matches
@@ -475,7 +475,7 @@ func TestReportFolderAPI_FolderItems(t *testing.T) {
 		folderID := uuid.New()
 		foreignTemplateID := uuid.New()
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Template predicate fails: folder_ok = true, but template_ok = false
@@ -520,7 +520,7 @@ func TestReportFolderAPI_FolderItems(t *testing.T) {
 		template1 := uuid.New()
 		template2 := uuid.New()
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// 1. Verify folder exists and belongs to caller

@@ -489,18 +489,19 @@ func (r *PostgresBORepository) getBODefinitionLegacy(boID string) (*BODefinition
 }
 
 // GetBusinessObjectBinding resolves the binding context for a BO. It prefers
-// a real business_object_bindings row (bindingID if given, else the
+// a real business_object_binding row (bindingID if given, else the
 // tenant's is_default row) and falls back to driver_table_name/bo_key on the
 // business_objects row itself when no binding has been authored yet (true
-// for every BO today - business_object_bindings has zero rows in this
+// for every BO today - business_object_binding has zero rows in this
 // environment; see the backfill note in the SQL generator plan).
 func (r *PostgresBORepository) GetBusinessObjectBinding(boID, bindingID string) (*BOBinding, error) {
 	var binding BOBinding
 	bindingQuery := `
-		SELECT id::text AS binding_id, backend_type AS dialect_name
-		FROM public.business_object_bindings
-		WHERE bo_id = $1::uuid AND ($2 = '' OR id::text = $2)
-		ORDER BY is_default DESC
+		SELECT b.bo_binding_id::text AS binding_id, COALESCE(upper(pb.dialect_name), '') AS dialect_name
+		FROM public.business_object_binding b
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = b.backend_id
+		WHERE b.bo_id = $1::uuid AND ($2 = '' OR b.bo_binding_id::text = $2)
+		ORDER BY b.is_default DESC
 		LIMIT 1
 	`
 	if err := r.DB.Get(&binding, bindingQuery, boID, bindingID); err == nil {
@@ -615,7 +616,7 @@ func (r *PostgresBORepository) GetBOByTechnicalName(technicalName, tenantID, dat
 	query := `
 		SELECT id FROM business_objects
 		WHERE bo_key = $1
-		  AND (tenant_id = $2::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (tenant_id = $2::uuid OR tenant_id = public.uisce_gold_copy_tenant_id())
 		ORDER BY (tenant_id = $2::uuid) DESC
 		LIMIT 1
 	`

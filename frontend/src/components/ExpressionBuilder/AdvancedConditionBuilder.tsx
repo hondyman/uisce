@@ -108,6 +108,15 @@ const OPERATORS_BY_TYPE: Record<string, OperatorDefinition[]> = {
     { value: 'not_in', label: 'Not In List', description: 'Not one of values', requiresValue: true, valueType: 'multiple' },
     { value: 'is_empty', label: 'Is Empty', description: 'Null or empty string', requiresValue: false, valueType: 'none' },
     { value: 'is_not_empty', label: 'Is Not Empty', description: 'Has value', requiresValue: false, valueType: 'none' },
+    // Distinct from is_empty/is_not_empty (NULL vs empty string), and
+    // what backend-authored rules actually use for a required-field check
+    // (see internal/mdmrules/catalog.go's notNull()/required()) - without
+    // these, loading such a rule into the builder left the operator
+    // dropdown blank (the value was real, just not offered as an option
+    // for a string-typed field) even though the condition itself was
+    // intact.
+    { value: 'is_null', label: 'Is Null', description: 'No value', requiresValue: false, valueType: 'none' },
+    { value: 'is_not_null', label: 'Is Not Null', description: 'Has a value', requiresValue: false, valueType: 'none' },
     { value: 'length_equals', label: 'Length Equals', description: 'String length equals', requiresValue: true, valueType: 'single' },
     { value: 'length_greater', label: 'Length Greater Than', description: 'String length >', requiresValue: true, valueType: 'single' },
     { value: 'length_less', label: 'Length Less Than', description: 'String length <', requiresValue: true, valueType: 'single' }
@@ -1158,7 +1167,12 @@ export const evaluateCondition = (node: ConditionNode, data: any): boolean => {
       }
     case 'is_empty': return actualValue === '' || (Array.isArray(actualValue) && actualValue.length === 0);
     case 'is_not_empty': return actualValue !== '' && (!Array.isArray(actualValue) || actualValue.length > 0);
-    
+    // actualValue is non-null/undefined here (the null/undefined case is
+    // handled above, before this switch) - so a non-null value always
+    // satisfies is_not_null and never satisfies is_null.
+    case 'is_null': return false;
+    case 'is_not_null': return true;
+
     // --- String Length ---
     case 'length_equals': return String(actualValue).length === Number(value);
     case 'length_greater': return String(actualValue).length > Number(value);

@@ -127,7 +127,7 @@ func (l *DBTagMappingLoader) LoadMappings(ctx context.Context, tenantID, swiftVe
 	query := `
 SELECT field_tag, semantic_field, required, default_value, transform_fn
 FROM swift_field_map
-WHERE (tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+WHERE (tenant_id = $1 OR tenant_id = public.uisce_gold_copy_tenant_id())
   AND swift_version = $2
   AND msg_type = $3
 ORDER BY (tenant_id = $1) DESC NULLS LAST, semantic_field

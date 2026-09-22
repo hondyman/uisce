@@ -286,11 +286,10 @@ export async function createBusinessObject(
 }
 
 // ─── Binding API ──────────────────────────────────────────────────────────────
-
-export async function fetchBindings(boId: string): Promise<any[]> {
-  const data = await fetchAPI<any>(`/business-objects/${boId}/bindings`);
-  return Array.isArray(data) ? data : data?.bindings || [];
-}
+// A binding list fetcher used to live here too (fetchBindings), duplicating
+// studio-core/binding/businessObjectApi.ts's fetchBusinessObjectBindings -
+// removed as dead code (zero callers) rather than kept "just in case";
+// use the shared one if a binding list is ever needed from this module.
 
 export async function createBinding(
   boId: string,
@@ -302,12 +301,42 @@ export async function createBinding(
     temporalMode?: string;
     isCore?: boolean;
     coreReferenceBindingId?: string;
+    isDefault?: boolean;
   }
 ): Promise<any> {
   return fetchAPI(`/business-objects/${boId}/bindings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  });
+}
+
+// backendId/drivingNodeId are deliberately not editable here - repointing
+// a binding at a different physical table is a re-create, not an edit
+// (see backend/internal/api/business_object_handlers.go's
+// UpdateBusinessObjectBinding for why).
+export async function updateBinding(
+  boId: string,
+  bindingId: string,
+  payload: {
+    bindingName?: string;
+    temporalMode?: string;
+    isActive?: boolean;
+    isDefault?: boolean;
+  }
+): Promise<any> {
+  return fetchAPI(`/business-objects/${boId}/bindings/${bindingId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// The backend refuses to delete a BO's only remaining binding (409); a
+// BO must always have at least one physical source.
+export async function deleteBinding(boId: string, bindingId: string): Promise<any> {
+  return fetchAPI(`/business-objects/${boId}/bindings/${bindingId}`, {
+    method: 'DELETE',
   });
 }
 

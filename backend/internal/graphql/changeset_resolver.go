@@ -224,18 +224,17 @@ func (r *ChangeSetResolver) ListChangeSets(
 		return []*audit.ChangeSet{}, 0, nil
 	}
 
-	// Query Trino for ChangeSets via Trino JDBC/REST client
+	// Query StarRocks/DataFusion for ChangeSets
 	// Uses audit.changeset_impact view for optimized queries
-	// Note: This requires Trino client integration (trinodriver or similar)
 
-	r.logger.Info("listing changesets from Trino",
+	r.logger.Info("listing changesets from Lakehouse",
 		zap.Strings("tenantScope", tenantScope),
 		zap.Strings("statusFilter", statusFilter),
 		zap.Int("limit", limit),
 		zap.Int("offset", offset),
 	)
 
-	// PRODUCTION: Implement Trino query:
+	// PRODUCTION: Implement StarRocks/DataFusion query:
 	// SELECT cs.id, cs.title, cs.status, cs.source, ...
 	// FROM audit.changeset_impact cs
 	// WHERE cs.tenant_id IN (?, ?, ...)
@@ -247,8 +246,8 @@ func (r *ChangeSetResolver) ListChangeSets(
 	changeSets := []*audit.ChangeSet{}
 	var totalCount int
 
-	// TODO: Wire Trino client connection here
-	// trinoConn := r.trinoClient.QueryContext(ctx, query, args...)
+	// TODO: Wire StarRocks/DataFusion client connection here
+	// lakehouseConn := r.client.QueryContext(ctx, query, args...)
 	// Process results and map to []audit.ChangeSet
 
 	return changeSets, totalCount, nil

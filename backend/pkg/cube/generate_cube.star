@@ -1,7 +1,7 @@
 def generate_cube(bo):
     cube = {
         "cube": bo["name"],
-        "sql_table": bo.get("sql_table", "iceberg.analytics.%s" % bo["name"]), # Trino/Iceberg naming convention
+        "sql_table": bo.get("sql_table", "iceberg.analytics.%s" % bo["name"]), # StarRocks/Iceberg naming convention
         "measures": {},
         "dimensions": {}
     }

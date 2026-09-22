@@ -109,7 +109,7 @@ func (h *QueryBuilderHandler) decodeAndAuthorize(w http.ResponseWriter, r *http.
 	// Resolve tenant/datasource from the request headers/JWT (the same
 	// authoritative path every other endpoint uses) - NOT from
 	// qd.Context.BindingID. BindingID identifies a specific BO's physical
-	// backend binding (business_object_bindings.id); it lives in a
+	// backend binding (business_object_binding.bo_binding_id); it lives in a
 	// different ID space than a tenant's provisioned datasource
 	// (tenant_product_datasource.id) that SecurityContextFromRequest
 	// resolves. Passing it in as an override made every widget/report

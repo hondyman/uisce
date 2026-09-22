@@ -57,7 +57,6 @@ import {
   Layers as SubtypeIcon,
   Apps as AppsIcon,
   TableChart as TableChartIcon,
-  AccountTree as AccountTreeIcon,
   AddLink as AddLinkIcon,
   Functions as FunctionsIcon,
   ImportExport as ImportExportIcon,
@@ -74,15 +73,12 @@ import { TableSortLabel } from '@mui/material';
 import { useTenant } from '../contexts/TenantContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNotification } from '../hooks/useNotification';
-import { useBusinessEntitySemanticLayer } from '../hooks/useBusinessEntitySemanticLayer';
-import SemanticAssetsTab from '../components/entity/SemanticAssetsTab';
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import { FieldSelectionWizard } from '../components/BusinessObjectManager/FieldSelectionWizard';
 import { semanticTermToField, EnhancedSemanticTerm, useEnhancedSemanticTerms } from '../hooks/useEnhancedSemanticTerms';
 
 import { BusinessObjectRelationshipWizard } from '../components/BusinessObjectManager/BusinessObjectRelationshipWizard';
 import { CalcFieldModal } from '../components/CalcFieldModal';
-import { BOLineageGraphTab } from '../components/BusinessObjectManager/BOLineageGraphTab';
 import { BOPendingBanner } from '../components/BusinessObjectManager/BOPendingBanner';
 import { BOExportImportWizard } from '../components/BusinessObjectManager/BOExportImportWizard';
 import { type AnnotatedValidationRule } from '../utils/validationRules';
@@ -91,7 +87,6 @@ import { normalizeName } from '../utils/nameFormatting';
 import { dedupeFields } from '../utils/dedupeFields';
 import apiClient from '../utils/apiClient';
 import type { Field, HierarchyNode } from '../types/entity-schema';
-import { UnifiedLineageTab } from '../features/impact-analysis/components/UnifiedLineageTab';
 import {
   FieldDeleteConfirmDialog,
   DeleteObjectConfirmDialog,
@@ -298,16 +293,6 @@ export default function BusinessObjectDetailsPage() {
   // Field addition wizard state
   const [fieldWizardOpen, setFieldWizardOpen] = useState(false);
   const [addingFields, setAddingFields] = useState(false);
-
-  // Initialize semantic layer
-  const semanticLayer = useBusinessEntitySemanticLayer({
-    tenantId,
-    datasourceId,
-    businessEntityId: businessObject?.id || '',
-    businessEntityName: businessObject?.name || '',
-    semanticTermIds: [],
-    sourceTableNames: [],
-  });
 
   // Helper to build headers with authentication
   const getAuthHeaders = (additionalHeaders: Record<string, string> = {}): Record<string, string> => {
@@ -1732,9 +1717,6 @@ export default function BusinessObjectDetailsPage() {
             <Tab label="Workday Delta" icon={<CompareIcon />} iconPosition="start" />
             <Tab label="Governance & Workflows" icon={<WorkflowIcon />} iconPosition="start" />
             <Tab label="Related Objects" />
-            <Tab label="Graph" icon={<AccountTreeIcon />} iconPosition="start" />
-            <Tab label="Semantic Model" />
-            <Tab label="Lineage" icon={<AccountTreeIcon />} iconPosition="start" />
             <Tab label="Validations & Triggers" />
           </Tabs>
 
@@ -1825,13 +1807,13 @@ export default function BusinessObjectDetailsPage() {
 
               {/* Bindings Tab */}
               {activeTab === 1 && (
-                <BindingsTab bindings={bindings} businessObject={businessObject} />
+                <BindingsTab bindings={bindings} businessObject={businessObject} onBindingsChanged={fetchBusinessObject} />
               )}
 
 
               {/* Live Query Explorer Tab */}
               {activeTab === 2 && (
-                <LiveQueryTab businessObject={businessObject} />
+                <LiveQueryTab businessObject={businessObject} bindings={bindings} />
               )}
 
               {/* Records & ORM CRUD Tab */}
@@ -1849,13 +1831,8 @@ export default function BusinessObjectDetailsPage() {
                 <WorkflowTab businessObject={businessObject} />
               )}
 
-              {/* Validations & Triggers Tab */}
-              {activeTab === 6 && (
-                <ValidationsAndTriggersTab businessObject={businessObject} />
-              )}
-
               {/* Related Objects Tab */}
-              {activeTab === 7 && (
+              {activeTab === 6 && (
                 <RelatedObjectsTab
                   relatedObjectsView={relatedObjectsView}
                   relatedObjects={relatedObjects}
@@ -1864,50 +1841,9 @@ export default function BusinessObjectDetailsPage() {
                 />
               )}
 
-              {/* Graph Tab */}
-              {activeTab === 8 && (
-                <Box sx={{ height: '70vh', p: 2 }}>
-                  <BOLineageGraphTab boId={id || ''} />
-                </Box>
-              )}
-
-              {/* Semantic Model Tab */}
-              {activeTab === 9 && (
-                <Box sx={{ p: 3 }}>
-                  <SemanticAssetsTab
-                    boId={id}
-                    semanticAssets={semanticLayer.semanticAssets}
-                    isLoading={semanticLayer.assetsLoading || semanticLayer.modelGenerationLoading}
-                    error={semanticLayer.modelError}
-                    onGenerateCoreModel={async () => { await semanticLayer.generateCoreModel(); }}
-                    onCreateCustomModel={async (name) => { await semanticLayer.createCustomModel(name); }}
-                    onGenerateCoreView={async () => { await semanticLayer.generateCoreView(); }}
-                    onCreateCustomView={async (name) => { await semanticLayer.createCustomView(name); }}
-                    businessEntityName={selectedNode?.type === 'subtype' ? (businessObject?.subtypes?.[selectedNode.subtypeKey!]?.displayName || selectedNode.subtypeKey || '') : (businessObject?.displayName || 'Business Object')}
-                    selectedNodeType={selectedNode?.type}
-                    selectedNodeName={selectedNode?.type === 'subtype' ? selectedNode.subtypeKey : businessObject?.key}
-                    hierarchyNodes={[]}
-                  />
-                </Box>
-              )}
-
-              {/* Lineage & Impact Tab */}
-              {activeTab === 10 && (
-
-                <Box sx={{ p: 3 }}>
-                   <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                     Lineage
-                   </Typography>
-                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                     Visualize upstream dependencies and downstream impact using dynamic analysis.
-                   </Typography>
-                   
-                   <UnifiedLineageTab
-                      nodeType="business_object"
-                      nodeId={businessObject?.id || id || ''}
-                      initialDirection="both"
-                   />
-                </Box>
+              {/* Validations & Triggers Tab */}
+              {activeTab === 7 && (
+                <ValidationsAndTriggersTab businessObject={businessObject} bindings={bindings} />
               )}
 
             </Paper>

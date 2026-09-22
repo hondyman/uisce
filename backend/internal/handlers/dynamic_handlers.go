@@ -222,7 +222,17 @@ func (h *DynamicMeasureHandler) GenerateDynamicMeasures(w http.ResponseWriter, r
 		return
 	}
 
-	measures, err := h.generateMeasuresFromEnum(sourceTable, sourceColumn)
+	qualified, column, err := dynamic.NormalizeAndValidateSource(sourceTable, sourceColumn)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": err.Error(),
+		})
+		return
+	}
+
+	measures, err := h.generateMeasuresFromEnum(qualified, column)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -235,14 +245,14 @@ func (h *DynamicMeasureHandler) GenerateDynamicMeasures(w http.ResponseWriter, r
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"source":   fmt.Sprintf("%s.%s", sourceTable, sourceColumn),
+		"source":   qualified + "." + column,
 		"measures": measures,
 	})
 }
 
 // generateMeasuresFromEnum generates measures based on distinct values in a column
 func (h *DynamicMeasureHandler) generateMeasuresFromEnum(table, column string) ([]dynamic.DynamicMeasure, error) {
-	// Get distinct values from the source column
+	// table and column are pre-validated by dynamic.NormalizeAndValidateSource.
 	query := fmt.Sprintf("SELECT DISTINCT %s FROM %s WHERE %s IS NOT NULL ORDER BY %s", column, table, column, column)
 	rows, err := h.db.Query(query)
 	if err != nil {
@@ -1306,6 +1316,39 @@ func (h *DynamicUnionHandler) CreateDynamicUnion(w http.ResponseWriter, r *http.
 		request.UnionType = "UNION ALL"
 	}
 
+	if err := dynamic.InSet(request.UnionType, "union_type", dynamic.AllowedUnionTypes); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	for i, t := range request.SourceTables {
+		qualified, err := dynamic.ValidateTable(t)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		request.SourceTables[i] = qualified
+	}
+
+	for tableKey, aliasVal := range request.TableAliases {
+		if _, err := dynamic.ValidateTable(tableKey); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		if _, err := dynamic.NormalizeAndValidateAlias(aliasVal); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+	}
+
 	nodeID := fmt.Sprintf("union_%s_%d", strings.ToLower(strings.ReplaceAll(request.Name, " ", "_")), time.Now().Unix())
 
 	// Generate union SQL
@@ -1483,6 +1526,49 @@ func (h *StringTimeDimensionHandler) CreateStringTimeDimension(w http.ResponseWr
 		request.ParsingFunction = "TO_TIMESTAMP"
 	}
 
+	if err := dynamic.SafeIdentifier(strings.ToLower(request.SourceColumn)); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if _, err := dynamic.ValidateTable(request.SourceTable); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.InSet(request.ParsingFunction, "parsing_function", dynamic.AllowedEnumParsingFunction); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.SafeFormatString(request.DateFormat); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.SafeFormatString(request.TimeFormat); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.InSet(request.Timezone, "timezone", dynamic.AllowedEnumTimezone); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.SafeLiteral(request.FallbackValue); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
 	nodeID := fmt.Sprintf("time_dim_%s_%d", strings.ToLower(strings.ReplaceAll(request.Name, " ", "_")), time.Now().Unix())
 
 	// Generate parsing SQL
@@ -1626,6 +1712,31 @@ func (h *CustomGranularityHandler) CreateCustomGranularity(w http.ResponseWriter
 	}
 	if request.WeekStartDay == "" {
 		request.WeekStartDay = "monday"
+	}
+
+	if err := dynamic.SafeIdentifier(strings.ToLower(request.Dimension)); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.InSet(request.Interval, "interval", dynamic.AllowedEnumInterval); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.InSet(request.CalendarType, "calendar_type", dynamic.AllowedEnumCalendarType); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	if err := dynamic.InSet(request.WeekStartDay, "week_start_day", dynamic.AllowedEnumWeekStartDay); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
 	}
 
 	nodeID := fmt.Sprintf("gran_%s_%d", strings.ToLower(strings.ReplaceAll(request.Name, " ", "_")), time.Now().Unix())

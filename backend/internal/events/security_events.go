@@ -108,7 +108,7 @@ func PublishSecuritySnapshotEvent(ctx context.Context, tx *sqlx.Tx, event Securi
 	return nil
 }
 
-// KafkaSecurityPublisher publishes security events to Kafka for Trino/Iceberg ingestion.
+// KafkaSecurityPublisher publishes security events to Kafka for StarRocks/Iceberg ingestion.
 type KafkaSecurityPublisher struct {
 	kafkaPublisher *KafkaPublisher
 }

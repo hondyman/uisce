@@ -158,7 +158,7 @@ func TestMCP_TenantMismatch_MatchNonDefaultTenant(t *testing.T) {
 	defer sqlxDB.Close()
 
 	gold := uuid.MustParse("99999999-9999-4999-8999-999999999999")
-	mock.ExpectQuery("FROM public.tenants").
+	mock.ExpectQuery("uisce_gold_copy_tenant_id").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
 	rows := sqlmock.NewRows([]string{"id", "name", "slug", "status"})
 	mock.ExpectQuery("FROM public.page_definitions").

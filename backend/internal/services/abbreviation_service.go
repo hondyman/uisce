@@ -22,7 +22,7 @@ type AbbreviationService struct {
 // getGoldCopyTenantID retrieves the tenant_id of the gold copy tenant
 func (s *AbbreviationService) getGoldCopyTenantID(ctx context.Context) (string, error) {
 	var tenantID string
-	query := `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`
+	query := `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`
 	err := s.db.GetContext(ctx, &tenantID, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get gold copy tenant: %w", err)

@@ -116,7 +116,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 				  COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
+				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = public.uisce_gold_copy_tenant_id()
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
 		rows, err = h.db.Query(query, tenantID)
@@ -128,7 +128,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 					   COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = public.uisce_gold_copy_tenant_id())
 				  AND (cnt.catalog_type_name ILIKE $2 OR COALESCE(cnt.description, '') ILIKE $2)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
@@ -195,13 +195,19 @@ func (h *NodeTypesHandler) handleCreateNodeType(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if nt.TenantID == "" {
-		var ok bool
-		if nt.TenantID, ok = TenantIDFromRequest(r); !ok {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
-			return
-		}
+	// The tenant comes from the validated claims only. A tenant_id in the body is not trusted: catalog_node_type
+	// has no row-level security, so honouring it would let one tenant create node types in another tenant,
+	// including the gold copy.
+	callerTenant, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
 	}
+	if nt.TenantID != "" && nt.TenantID != callerTenant {
+		http.Error(w, "tenant_id does not match the authenticated tenant", http.StatusForbidden)
+		return
+	}
+	nt.TenantID = callerTenant
 
 	if nt.IsActive == nil {
 		active := true
@@ -703,7 +709,7 @@ func (h *NodeTypesHandler) handleGetNodesForType(w http.ResponseWriter, r *http.
 	query := `
 			SELECT id, node_name, description, node_type_id, tenant_id, tenant_datasource_id, properties, config, created_at, updated_at
 			FROM catalog_node
-			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 	args := []interface{}{id, tenantID}
 

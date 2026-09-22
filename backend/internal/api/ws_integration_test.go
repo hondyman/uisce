@@ -14,6 +14,8 @@ import (
 )
 
 func TestWebSocketEndToEndProfiler(t *testing.T) {
+	// runProfile log.Fatals without ALPHA_DB_URL, which kills the whole test binary.
+	t.Setenv("SEMLAYER_TEST_SKIP_ALPHA_POOL", "1")
 	// Setup server and hub
 	srv := &Server{WsHub: newWebSocketHub()}
 	go srv.WsHub.run()

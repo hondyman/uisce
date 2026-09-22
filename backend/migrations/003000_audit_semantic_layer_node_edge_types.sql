@@ -210,4 +210,4 @@ END$$;
 
 -- Phase 5: Create audit event materialized view base
 -- This view unifies all audit events for efficient querying
--- (Created separately in Trino for cross-tenant performance)
+-- (Created separately in StarRocks for cross-tenant performance)

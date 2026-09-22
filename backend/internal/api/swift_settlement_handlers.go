@@ -252,7 +252,7 @@ func (h *SWIFTSettlementHandler) ListReconciliationReports(w http.ResponseWriter
 		SELECT id::text, custodian_id::text, lookback_start, lookback_end,
 		       instructions_scanned, mismatches_count, generated_at
 		FROM swift_reconciliation_report
-		WHERE (tenant_id = $1 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		WHERE (tenant_id = $1 OR tenant_id = public.uisce_gold_copy_tenant_id())
 		ORDER BY generated_at DESC
 		LIMIT 50
 	`, tenantID)

@@ -1,0 +1,27 @@
+name: migration-parity
+
+# Fails a PR that edits, renames or deletes an already-shipped migration
+# (*.up.sql that exists on the base branch). Editing shipped migrations is what
+# creates "content has changed since it was applied" drift. Legitimate edits go
+# in backend/db/PARITY_ALLOWLIST.tsv with a required reason.
+#
+# DB-free on purpose: CI databases are ephemeral, so the applied-but-missing /
+# applied-but-different checks (--db) only mean something against the shared dev
+# DB and run locally (make check-migrations, and on every START_BACKEND_LOCAL.sh).
+
+on:
+  pull_request:
+    paths:
+      - 'backend/db/migrations/**'
+      - 'backend/db/PARITY_ALLOWLIST.tsv'
+      - 'backend/scripts/check_migration_parity.py'
+
+jobs:
+  parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Shipped migrations must not change
+        run: python3 backend/scripts/check_migration_parity.py --git-base "origin/${{ github.base_ref }}"

@@ -46,6 +46,7 @@ func TestHandleValidateField_Pass(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/validate/field", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-ID", "910638ba-a459-4a3f-bb2d-78391b0595f6")
+	req = withAuthClaims(req, "user1", "910638ba-a459-4a3f-bb2d-78391b0595f6") // tenant comes from the authenticated claims, not the header
 
 	w := httptest.NewRecorder()
 	handler.HandleValidateField(w, req)
@@ -94,6 +95,7 @@ func TestHandleValidateField_Fail(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/validate/field", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tenant-ID", "910638ba-a459-4a3f-bb2d-78391b0595f6")
+	req = withAuthClaims(req, "user1", "910638ba-a459-4a3f-bb2d-78391b0595f6") // tenant comes from the authenticated claims, not the header
 
 	w := httptest.NewRecorder()
 	handler.HandleValidateField(w, req)
@@ -128,12 +130,36 @@ func TestHandleValidateField_MissingHeaders(t *testing.T) {
 	req := httptest.NewRequest("POST", "/api/validate/field", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	// Missing X-Tenant-ID
+	req = withAuthClaims(req, "user1", "") // authenticated, but the claims carry no tenant
 
 	w := httptest.NewRecorder()
 	handler.HandleValidateField(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status 400 when tenant ID missing, got %d", w.Code)
+	}
+}
+
+// A request with no authenticated claims must be rejected outright. The tenant is taken from
+// the claims, never from the X-Tenant-ID header, so a header alone cannot select a tenant.
+func TestHandleValidateField_Unauthenticated(t *testing.T) {
+	db, _, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	handler := NewValidationTriggersHandler(db, nil)
+
+	body, _ := json.Marshal(map[string]interface{}{"entity": "orders", "field": "total", "value": 100})
+	req := httptest.NewRequest("POST", "/api/validate/field", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", "910638ba-a459-4a3f-bb2d-78391b0595f6") // header only: must not authorise
+
+	w := httptest.NewRecorder()
+	handler.HandleValidateField(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 without claims even with an X-Tenant-ID header, got %d", w.Code)
 	}
 }
 

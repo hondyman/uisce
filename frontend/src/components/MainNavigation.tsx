@@ -248,7 +248,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Business Objects', path: '/business-objects', icon: <BusinessIcon />, description: 'Core entities' },
-          { label: 'Query Builder', path: '/query-builder', icon: <QueryStatsIcon />, description: 'Alpha Query Builder' },
           { label: 'Views Catalog', path: '/views', icon: <AssessmentIcon />, description: 'Semantic views' },
           { label: 'Bundles', path: '/fabric/bundles', icon: <CategoryIcon />, description: 'Curated bundles', badge: { label: 'AI', color: 'info' } },
         ]
@@ -453,7 +452,7 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Report Library', path: '/reports/library', icon: <AssessmentIcon />, description: 'Saved reports' },
           { label: 'Report Builder', path: '/reports/builder', icon: <BuildIcon />, description: 'Create reports' },
-          { label: 'Data Explorer', path: '/reports/queries', icon: <StorageIcon />, description: 'Query builder', badge: { label: 'New', color: 'success' } },
+          { label: 'Query Builder', path: '/reports/queries', icon: <StorageIcon />, description: 'Build and run saved queries' },
           { label: 'Semantic Models', path: '/reports/models', icon: <CategoryIcon />, description: 'Data models' },
         ]
       },

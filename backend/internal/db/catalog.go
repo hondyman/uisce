@@ -317,9 +317,12 @@ func MergeCatalogData(tx *sqlx.Tx, datasourceID uuid.UUID) (int64, int64, int64,
 			  AND target_map.final_id IS NOT NULL
 			  AND source_map.final_id != target_map.final_id
 		) AS source
+		-- Match by the relationship's own id (a stable hash of source table, target table and columns), not by the
+		-- table pair: a table can have several foreign keys to the same table (e.g. source_system_id_a and _b), and
+		-- matching on the pair made two source rows hit the same stored row, which Postgres rejects ('MERGE command
+		-- cannot affect row a second time'), rolling back the whole scan.
 		ON target.tenant_datasource_id = source.tenant_datasource_id::text 
-		   AND target.source_node_id = source.final_source_id 
-		   AND target.target_node_id = source.final_target_id 
+		   AND target.id = source.id 
 		WHEN MATCHED THEN
 			UPDATE SET
 				edge_type_id = source.edge_type_id,

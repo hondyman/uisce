@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     POSTGRES_PASSWORD: str = "secret"
     POSTGRES_DB: str = "semlayer"
     
-    # Iceberg / Trino
-    TRINO_HOST: str = "localhost"
-    TRINO_PORT: int = 8080
-    TRINO_CATALOG: str = "iceberg"
-    TRINO_SCHEMA: str = "features"
+    # Iceberg / Lakekeeper / DataFusion
+    DATAFUSION_HOST: str = "localhost"
+    DATAFUSION_PORT: int = 8555
+    DATAFUSION_CATALOG: str = "iceberg"
+    DATAFUSION_SCHEMA: str = "features"
     
     # Drift detection
     KS_THRESHOLD: float = 0.05

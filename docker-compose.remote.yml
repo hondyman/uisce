@@ -282,7 +282,7 @@ services:
   #     environment:
       # PostgreSQL — the semantic metadata graph
   #       POSTGRES_DSN: "${LPS_POSTGRES_DSN:-postgresql://postgres:postgres@host.docker.internal:5432/alpha?sslmode=disable}"
-      # DataFusion REST SQL endpoint (Arrow Flight + REST) — replaces Trino in this stack
+      # DataFusion REST SQL endpoint (Arrow Flight + REST)
   #       DATAFUSION_URL: "${LPS_DATAFUSION_URL:-http://uisce-datafusion:8555}"
       # Flight SQL endpoint (gRPC, optional)
   #       DATAFUSION_FLIGHT_URL: "${LPS_DATAFUSION_FLIGHT_URL:-grpc://uisce-datafusion:8554}"
@@ -353,7 +353,7 @@ services:
 
   # ---------------------------------------------------------
   # DataFusion Arrow Flight SQL Server (Iceberg query engine)
-  # Replaces Trino in this stack. Provides:
+  # Native cold tier Iceberg query engine. Provides:
   #   - REST SQL endpoint on :8555
   #   - Arrow Flight SQL on :8554 (reserved for future Flight clients)
   #   - Native PyIceberg integration for the Iceberg cold store

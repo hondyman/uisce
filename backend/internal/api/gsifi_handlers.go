@@ -49,7 +49,7 @@ func (h *RBACHandlers) listGSIFIEventRegistry(w http.ResponseWriter, r *http.Req
 	}
 	tenantID := secCtx.TenantID
 
-	query := `SELECT id, COALESCE(tenant_id, ''), event_key, category, COALESCE(description, ''), COALESCE(schema_json, ''), is_active, created_at FROM gsifi_event_registry WHERE is_active = true`
+	query := `SELECT id, COALESCE(tenant_id::text, ''), event_key, category, COALESCE(description, ''), COALESCE(schema_json, ''), is_active, created_at FROM gsifi_event_registry WHERE is_active = true`
 	args := []interface{}{}
 
 	if tenantID != "" {
@@ -153,7 +153,7 @@ func (h *RBACHandlers) listTAMRules(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantID := secCtx.TenantID
 
-	query := `SELECT id, COALESCE(tenant_id, ''), asset_class, currency, min_amount, COALESCE(max_amount, 0), required_approvers, requires_senior_manager, time_limit_hours FROM transaction_authorization_matrix WHERE 1=1`
+	query := `SELECT id, COALESCE(tenant_id::text, ''), asset_class, currency, min_amount, COALESCE(max_amount, 0), required_approvers, requires_senior_manager, time_limit_hours FROM transaction_authorization_matrix WHERE 1=1`
 	args := []interface{}{}
 
 	if tenantID != "" {
@@ -247,7 +247,7 @@ func (h *RBACHandlers) listSoDRules(w http.ResponseWriter, r *http.Request) {
 	}
 	tenantID := secCtx.TenantID
 
-	query := `SELECT id, COALESCE(tenant_id, ''), role_key_a, role_key_b, conflict_type FROM role_conflict_rules WHERE 1=1`
+	query := `SELECT id, COALESCE(tenant_id::text, ''), role_key_a, role_key_b, conflict_type FROM role_conflict_rules WHERE 1=1`
 	args := []interface{}{}
 
 	if tenantID != "" {

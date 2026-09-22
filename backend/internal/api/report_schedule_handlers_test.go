@@ -125,7 +125,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 
 	t.Run("CreateSchedule - Success (201 Created)", func(t *testing.T) {
 		// Mock gold copy resolution
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// Mock template visibility check
@@ -171,7 +171,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 	})
 
 	t.Run("CreateSchedule - Template Invisible / Non-Owner Personal (404 Not Found)", func(t *testing.T) {
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// Template query returns sql.ErrNoRows
@@ -225,7 +225,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 
 	t.Run("ListSchedulesForTemplate - Success (200 OK)", func(t *testing.T) {
 		// Mock gold copy query
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// Mock template visibility query
@@ -266,7 +266,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 
 	t.Run("ListSchedulesForTemplate - Template Invisible / 404", func(t *testing.T) {
 		// Mock gold copy query
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// Mock template query returns sql.ErrNoRows
@@ -306,7 +306,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 				AddRow(schedID, tenantID, tmplID, "template-creator"))
 
 		// Gold copy query
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// Query linked template

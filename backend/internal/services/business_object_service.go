@@ -1049,7 +1049,7 @@ func (s *BusinessObjectService) getInstanceBusinessObjectID(ctx context.Context,
 // getGoldCopyTenantID retrieves the ID of the gold copy (core) tenant
 func (s *BusinessObjectService) getGoldCopyTenantID(ctx context.Context) (string, error) {
 	var goldCopyTenantID string
-	query := `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`
+	query := `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`
 	err := s.db.QueryRowContext(ctx, query).Scan(&goldCopyTenantID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get gold copy tenant: %w", err)

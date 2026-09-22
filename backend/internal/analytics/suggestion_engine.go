@@ -12,7 +12,7 @@ import (
 
 // PreAggSuggestionService analyzes semantic query patterns and suggests pre-aggregations.
 type PreAggSuggestionService struct {
-	db     *sql.DB // Trino/Postgres connection for querying semantic_events
+	db     *sql.DB // StarRocks/Postgres connection for querying semantic_events
 	config SuggestionConfig
 }
 
@@ -54,7 +54,7 @@ func (s *PreAggSuggestionService) ListSuggestions(ctx context.Context, tenantID 
 	}
 
 	// Query for heavy patterns from semantic_events
-	// This query works with Trino against an Iceberg table or Postgres
+	// This query works with StarRocks against an Iceberg table or Postgres
 	query := `
 		WITH heavy AS (
 			SELECT

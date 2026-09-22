@@ -34,6 +34,12 @@ type AnsiScanner struct {
 	goldCopyNodes      map[string]db.GoldCopyNodeInfo
 	isGoldCopy         bool
 	schemaWhitelist    []string
+
+	// progress reporting (see scan_progress.go); all optional
+	progress    func(models.ScanProgress)
+	lastReport  time.Time
+	tablesDone  int
+	tablesTotal int
 }
 
 // NewAnsiScanner creates a new scanner instance
@@ -145,40 +151,130 @@ func (s *AnsiScanner) processPrimaryKeys() error {
 	return nil
 }
 
+// processUniqueKeys records UNIQUE constraints on the column nodes. Business objects need a
+// business key, and the primary key is usually a surrogate uuid; the natural key is the
+// unique constraint (typically (tenant_id, <x>_cd)). Each member column gets
+//
+//	is_unique_key: true
+//	unique_key_groups: [{"name": "party_cd_key", "columns": ["tenant_id","party_cd"], "position": 2}]
+//
+// A column in several unique constraints gets one group entry per constraint. ANSI
+// information_schema only: unique indexes that are not constraints (including expression
+// indexes) are not reported.
+func (s *AnsiScanner) processUniqueKeys() error {
+	query := `
+        SELECT kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.column_name, kcu.ordinal_position
+        FROM information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+            AND tc.table_name = kcu.table_name
+        WHERE tc.constraint_type = 'UNIQUE' AND tc.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+    `
+	var args []interface{}
+	if len(s.schemaWhitelist) > 0 {
+		placeholders := make([]string, len(s.schemaWhitelist))
+		for i, v := range s.schemaWhitelist {
+			placeholders[i] = fmt.Sprintf("$%d", i+1)
+			args = append(args, v)
+		}
+		query += fmt.Sprintf(" AND tc.table_schema IN (%s)", strings.Join(placeholders, ", "))
+	}
+	query += " ORDER BY kcu.table_schema, kcu.table_name, kcu.constraint_name, kcu.ordinal_position"
+
+	rows, err := s.sourceDB.Query(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to query unique constraints: %w", err)
+	}
+	defer rows.Close()
+
+	type uniqueKey struct {
+		schema, table, name string
+		columns             []string
+	}
+	keys := map[string]*uniqueKey{}
+	var order []string
+	for rows.Next() {
+		var schema, table, name, column string
+		var pos int
+		if err := rows.Scan(&schema, &table, &name, &column, &pos); err != nil {
+			logging.GetLogger().Sugar().Warnf("Error scanning unique constraint details: %v", err)
+			continue
+		}
+		k := schema + "/" + table + "/" + name
+		if keys[k] == nil {
+			keys[k] = &uniqueKey{schema: schema, table: table, name: name}
+			order = append(order, k)
+		}
+		keys[k].columns = append(keys[k].columns, column)
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating unique constraints: %w", err)
+	}
+
+	for _, k := range order {
+		uk := keys[k]
+		for i, column := range uk.columns {
+			colAssetPath := fmt.Sprintf("/%s/%s/%s", uk.schema, uk.table, column)
+			colID := generateID(s.tenantDatasourceId.String(), s.sourceSystem, NODE_TYPE_COLUMN.String(), colAssetPath)
+			col, ok := s.columnMap[colID]
+			if !ok {
+				continue
+			}
+			var propsMap map[string]interface{}
+			if err := json.Unmarshal(col.Properties, &propsMap); err != nil {
+				logging.GetLogger().Sugar().Warnf("Error unmarshaling properties for column %s: %v", col.QualifiedPath, err)
+				continue
+			}
+			groups, _ := propsMap["unique_key_groups"].([]interface{})
+			groups = append(groups, map[string]interface{}{"name": uk.name, "columns": uk.columns, "position": i + 1})
+			propsMap["is_unique_key"] = true
+			propsMap["unique_key_groups"] = groups
+			propsJSON, err := json.Marshal(propsMap)
+			if err != nil {
+				logging.GetLogger().Sugar().Warnf("Error marshaling updated properties for column %s: %v", col.QualifiedPath, err)
+				continue
+			}
+			col.Properties = propsJSON
+		}
+	}
+	return nil
+}
+
 // FINAL FIX: processForeignKeys - deduplicates by relationship, not constraint name
 func (s *AnsiScanner) processForeignKeys() error {
+	// Read foreign keys from pg_constraint. The information_schema views this used to join match constraints by
+	// name only (names are unique per table, not per schema), and each view runs privilege checks per row, so
+	// the query multiplied out and ran for many minutes once several schemas were in scope. Joining by OID is
+	// exact and takes milliseconds. Output columns, their order and their value formats are unchanged.
 	query := `
-        SELECT DISTINCT
-            rc.constraint_name,
-            rc.constraint_schema,
-            kcu.table_schema AS source_schema,
-            kcu.table_name AS source_table,
-            kcu.column_name AS source_column,
-            pku.table_schema AS target_schema,
-            pku.table_name AS target_table,
-            pku.column_name AS target_column,
-            rc.update_rule AS on_update,
-            rc.delete_rule AS on_delete,
-            tc.is_deferrable,
-            tc.initially_deferred,
-            kcu.ordinal_position
-        FROM
-            information_schema.referential_constraints AS rc
-        JOIN
-            information_schema.table_constraints AS tc
-                ON rc.constraint_name = tc.constraint_name
-                AND rc.constraint_schema = tc.constraint_schema
-        JOIN
-            information_schema.key_column_usage AS kcu
-                ON rc.constraint_name = kcu.constraint_name
-                AND rc.constraint_schema = kcu.constraint_schema
-        JOIN
-            information_schema.key_column_usage AS pku
-                ON rc.unique_constraint_name = pku.constraint_name
-                AND rc.unique_constraint_schema = pku.constraint_schema
-                AND kcu.ordinal_position = pku.ordinal_position
+        SELECT
+            con.conname AS constraint_name,
+            cns.nspname AS constraint_schema,
+            sn.nspname AS source_schema,
+            sc.relname AS source_table,
+            sa.attname AS source_column,
+            tn.nspname AS target_schema,
+            tc.relname AS target_table,
+            ta.attname AS target_column,
+            CASE con.confupdtype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE'
+                                 WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' END AS on_update,
+            CASE con.confdeltype WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT' WHEN 'c' THEN 'CASCADE'
+                                 WHEN 'n' THEN 'SET NULL' WHEN 'd' THEN 'SET DEFAULT' END AS on_delete,
+            CASE WHEN con.condeferrable THEN 'YES' ELSE 'NO' END AS is_deferrable,
+            CASE WHEN con.condeferred THEN 'YES' ELSE 'NO' END AS initially_deferred,
+            k.ord::int AS ordinal_position
+        FROM pg_catalog.pg_constraint con
+        JOIN pg_catalog.pg_namespace cns ON cns.oid = con.connamespace
+        JOIN pg_catalog.pg_class sc ON sc.oid = con.conrelid
+        JOIN pg_catalog.pg_namespace sn ON sn.oid = sc.relnamespace
+        JOIN pg_catalog.pg_class tc ON tc.oid = con.confrelid
+        JOIN pg_catalog.pg_namespace tn ON tn.oid = tc.relnamespace
+        CROSS JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(src_attnum, tgt_attnum, ord)
+        JOIN pg_catalog.pg_attribute sa ON sa.attrelid = con.conrelid AND sa.attnum = k.src_attnum
+        JOIN pg_catalog.pg_attribute ta ON ta.attrelid = con.confrelid AND ta.attnum = k.tgt_attnum
         WHERE
-            kcu.table_schema NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+            con.contype = 'f'
+            AND sn.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
     `
 
 	var args []interface{}
@@ -191,12 +287,12 @@ func (s *AnsiScanner) processForeignKeys() error {
 		// Apply filter to both source (kcu) and target (pku) schemas to be safe,
 		// though typically we only care about edges where at least one side is in our whitelist.
 		// For now, let's restrict edges where the SOURCE table is in our whitelist.
-		query += fmt.Sprintf(" AND kcu.table_schema IN (%s)", strings.Join(placeholders, ", "))
+		query += fmt.Sprintf(" AND sn.nspname IN (%s)", strings.Join(placeholders, ", "))
 	}
 
 	query += `
         ORDER BY
-            rc.constraint_schema, rc.constraint_name, kcu.ordinal_position;
+            cns.nspname, con.conname, k.ord;
     `
 
 	logging.GetLogger().Sugar().Infof("Querying foreign keys...")
@@ -599,6 +695,7 @@ func (s *AnsiScanner) processTables(schemaName string, schemaID uuid.UUID) error
 		if err := s.processColumns(schemaName, tableName, tableID); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error processing columns for table %s.%s: %v", schemaName, tableName, err)
 		}
+		s.tableProgress(schemaName, tableName)
 	}
 	return nil
 }
@@ -789,28 +886,42 @@ func (s *AnsiScanner) ExtractMetadata() ([]*models.CatalogNode, []models.Catalog
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to query schemas: %w", err)
 	}
-	defer rows.Close()
-
+	var schemas []string
 	for rows.Next() {
 		var schemaName string
 		if err := rows.Scan(&schemaName); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error scanning schema name: %v", err)
 			continue
 		}
+		schemas = append(schemas, schemaName)
+	}
+	rows.Close()
+
+	s.tablesTotal = s.countTables(schemas)
+	s.report(true, 0, "", fmt.Sprintf("Found %d schemas and %d tables to read", len(schemas), s.tablesTotal), 0, s.tablesTotal)
+	for i, schemaName := range schemas {
 		logging.GetLogger().Sugar().Infof("Processing schema: %s", schemaName)
+		s.report(true, s.tablesPercent(), schemaName, fmt.Sprintf("Reading schema %s (%d of %d)", schemaName, i+1, len(schemas)), s.tablesDone, s.tablesTotal)
 		if err := s.processSchema(schemaName); err != nil {
 			logging.GetLogger().Sugar().Warnf("Error processing schema %s: %v", schemaName, err)
 		}
 	}
 
+	s.report(true, 50, "", "Reading primary keys...", s.tablesDone, s.tablesTotal)
 	if err := s.processPrimaryKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing primary keys: %v", err)
 	}
+	s.report(true, 55, "", "Reading unique keys...", s.tablesDone, s.tablesTotal)
+	if err := s.processUniqueKeys(); err != nil {
+		logging.GetLogger().Sugar().Warnf("Error processing unique keys: %v", err)
+	}
+	s.report(true, 60, "", "Reading foreign keys...", s.tablesDone, s.tablesTotal)
 	if err := s.processForeignKeys(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing foreign keys: %v", err)
 	}
 
 	// Process data profiling (unique counts, sample values)
+	s.report(true, 65, "", fmt.Sprintf("Profiling %d columns (row counts and samples)...", len(s.columnMap)), 0, len(s.columnMap))
 	if err := s.processDataProfile(); err != nil {
 		logging.GetLogger().Sugar().Warnf("Error processing data profile: %v", err)
 	}
@@ -830,7 +941,13 @@ func (s *AnsiScanner) processDataProfile() error {
 	logger.Info("Starting data profiling for columns...")
 
 	profiledCount := 0
+	visited := 0
 	for colID, colNode := range s.columnMap {
+		visited++
+		if total := len(s.columnMap); total > 0 {
+			s.report(false, 65+35*float64(visited)/float64(total), colNode.QualifiedPath,
+				fmt.Sprintf("Profiling columns: %d of %d", visited, total), visited, total)
+		}
 		// Parse existing properties
 		var propsMap map[string]interface{}
 		if err := json.Unmarshal(colNode.Properties, &propsMap); err != nil {

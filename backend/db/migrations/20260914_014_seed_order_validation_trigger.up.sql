@@ -22,8 +22,6 @@
 -- risking a real outbound call). Swap webhook_url for a real endpoint
 -- when the rule graduates from "demonstration" to "production."
 
-BEGIN;
-
 INSERT INTO public.validation_triggers (
     id,
     tenant_id,
@@ -81,5 +79,3 @@ BEGIN
 
     RAISE NOTICE 'Seeded order_inserted_new_status trigger (northwind tenant, order BO)';
 END $$;
-
-COMMIT;

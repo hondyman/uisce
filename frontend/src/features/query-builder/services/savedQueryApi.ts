@@ -7,7 +7,7 @@
  */
 
 import { apiFetch } from '../../../lib/apiClient';
-import type { SavedQuery, SavedQueryChartType, SavedQueryState } from '../types/queryDef';
+import type { SavedQuery, SavedQueryChartType, SavedQueryState, SavedQueryFolder } from '../types/queryDef';
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, {
@@ -35,13 +35,20 @@ export interface SavedQueryInput {
   description?: string;
   boId: string;
   bindingId?: string;
+  /** Editable after creation. boId/bindingId are locked once the query
+   * exists and are ignored by the backend on update. */
+  relatedBoIds?: string[];
   chartType: SavedQueryChartType;
   state: SavedQueryState;
   tags?: string[];
+  folderId?: string;
 }
 
-export async function listSavedQueries(boId?: string): Promise<SavedQuery[]> {
-  const qs = boId ? `?boId=${encodeURIComponent(boId)}` : '';
+export async function listSavedQueries(opts?: { boId?: string; folderId?: string }): Promise<SavedQuery[]> {
+  const params = new URLSearchParams();
+  if (opts?.boId) params.set('boId', opts.boId);
+  if (opts?.folderId) params.set('folderId', opts.folderId);
+  const qs = params.toString() ? `?${params.toString()}` : '';
   const data = await fetchJSON<{ savedQueries: SavedQuery[] }>(`/api/explorer/saved-queries${qs}`);
   return data.savedQueries || [];
 }
@@ -66,6 +73,49 @@ export async function updateSavedQuery(id: string, input: SavedQueryInput): Prom
 
 export async function deleteSavedQuery(id: string): Promise<void> {
   await fetchJSON<void>(`/api/explorer/saved-queries/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function cloneSavedQuery(id: string): Promise<SavedQuery> {
+  return fetchJSON<SavedQuery>(`/api/explorer/saved-queries/${encodeURIComponent(id)}/clone`, { method: 'POST' });
+}
+
+export async function setSavedQueryFavorite(id: string, isFavorite: boolean): Promise<SavedQuery> {
+  return fetchJSON<SavedQuery>(`/api/explorer/saved-queries/${encodeURIComponent(id)}/favorite`, {
+    method: 'PUT',
+    body: JSON.stringify({ isFavorite }),
+  });
+}
+
+export async function setSavedQueryVisibility(id: string, visibility: 'private' | 'shared'): Promise<SavedQuery> {
+  return fetchJSON<SavedQuery>(`/api/explorer/saved-queries/${encodeURIComponent(id)}/share`, {
+    method: 'POST',
+    body: JSON.stringify({ visibility }),
+  });
+}
+
+// --- Folders ---
+
+export async function listSavedQueryFolders(): Promise<SavedQueryFolder[]> {
+  const data = await fetchJSON<{ folders: SavedQueryFolder[] }>('/api/explorer/saved-query-folders');
+  return data.folders || [];
+}
+
+export async function createSavedQueryFolder(name: string, parentId?: string): Promise<SavedQueryFolder> {
+  return fetchJSON<SavedQueryFolder>('/api/explorer/saved-query-folders', {
+    method: 'POST',
+    body: JSON.stringify({ name, parentId }),
+  });
+}
+
+export async function renameSavedQueryFolder(id: string, name: string, parentId?: string): Promise<SavedQueryFolder> {
+  return fetchJSON<SavedQueryFolder>(`/api/explorer/saved-query-folders/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, parentId }),
+  });
+}
+
+export async function deleteSavedQueryFolder(id: string): Promise<void> {
+  await fetchJSON<void>(`/api/explorer/saved-query-folders/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 
 export interface SavedQueryRunResult {

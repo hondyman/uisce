@@ -72,8 +72,8 @@ func RegionHourlyRollupWorkflow(ctx workflow.Context, region string, runID strin
 	}
 	ctx = workflow.WithActivityOptions(ctx, ao)
 
-	// Step 1: Execute Trino query to compute or refresh hourly_chain_rollup
-	// This calls a Trino stored procedure or INSERT INTO with aggregated metrics
+	// Step 1: Execute StarRocks query to compute or refresh hourly_chain_rollup
+	// This executes against StarRocks with aggregated metrics
 	sql := fmt.Sprintf(`
 		INSERT INTO iceberg.ops.hourly_chain_rollup 
 		SELECT 
@@ -91,12 +91,12 @@ func RegionHourlyRollupWorkflow(ctx workflow.Context, region string, runID strin
 		GROUP BY tenant_id, chain_id, region
 	`, region, region)
 
-	var trinoResult string
-	if err := workflow.ExecuteActivity(ctx, "RunTrinoQueryActivity", runID, region, sql).Get(ctx, &trinoResult); err != nil {
-		logger.Error("Trino rollup query failed", "region", region, "error", err)
+	var srResult string
+	if err := workflow.ExecuteActivity(ctx, "RunStarRocksQueryActivity", runID, region, sql).Get(ctx, &srResult); err != nil {
+		logger.Error("StarRocks rollup query failed", "region", region, "error", err)
 		return err
 	}
-	logger.Info("Trino hourly rollup completed", "region", region, "result", trinoResult)
+	logger.Info("StarRocks hourly rollup completed", "region", region, "result", srResult)
 
 	// Step 2: Validate rollup completeness (optional)
 	validationSQL := fmt.Sprintf(`
@@ -107,7 +107,7 @@ func RegionHourlyRollupWorkflow(ctx workflow.Context, region string, runID strin
 	`, region)
 
 	var validationResult string
-	if err := workflow.ExecuteActivity(ctx, "RunTrinoQueryActivity", runID, region, validationSQL).Get(ctx, &validationResult); err != nil {
+	if err := workflow.ExecuteActivity(ctx, "RunStarRocksQueryActivity", runID, region, validationSQL).Get(ctx, &validationResult); err != nil {
 		logger.Warn("validation query failed, continuing", "region", region, "error", err)
 	} else {
 		logger.Info("validation passed", "region", region, "result", validationResult)

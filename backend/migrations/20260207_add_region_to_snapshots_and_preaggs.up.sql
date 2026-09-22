@@ -17,11 +17,11 @@ CREATE INDEX IF NOT EXISTS idx_semantic_pre_aggs_region ON semantic_pre_aggregat
 -- ), sp.region);
 
 -- 2) Add region column to Iceberg audit semantic_snapshots
--- Note: Altering Iceberg tables depends on the engine. For Trino/Starburst/ICEBERG you can use:
+-- Note: Altering Iceberg tables depends on the engine. For StarRocks/DataFusion/ICEBERG you can use:
 -- ALTER TABLE iceberg.audit.semantic_snapshots ADD COLUMN IF NOT EXISTS region VARCHAR;
 -- Depending on your environment you may also want to re-partition by region; that's an operational task and not performed here.
 
--- Backfill for snapshots (example Trino SQL):
+-- Backfill for snapshots (example StarRocks SQL):
 -- -- This reads region from catalog_node properties which the catalog ingestion worker already populated when ingesting snapshots
 -- INSERT INTO iceberg.audit.semantic_snapshots /* or UPDATE via CTAS/INSERT-OVERWRITE depending on engine support */
 -- SELECT ss.*, coalesce(n.properties->>'region', 'unknown') AS region
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_semantic_pre_aggs_region ON semantic_pre_aggregat
 --   WHERE properties->>'snapshot_id' IS NOT NULL
 -- ) n ON n.snapshot_id = ss.snapshot_id;
 
--- NOTE: Because Iceberg/Trino semantics vary across installations, perform the snapshot backfill using your platform's recommended method (CTAS with new column, then swap).
+-- NOTE: Because Iceberg semantics vary across installations, perform the snapshot backfill using your platform's recommended method (CTAS with new column, then swap).
 
 -- 3) Migration verification queries (Postgres)
 -- SELECT COUNT(*) FROM semantic_pre_aggregations_v2 WHERE region IS NULL;
@@ -41,5 +41,5 @@ CREATE INDEX IF NOT EXISTS idx_semantic_pre_aggs_region ON semantic_pre_aggregat
 -- 4) Rollout plan
 -- - Run this migration (adds nullable region columns)
 -- - Backfill semantic_pre_aggregations_v2 using the UPDATE shown above
--- - Backfill iceberg.audit.semantic_snapshots using your Trino/CTAS procedure
+-- - Backfill iceberg.audit.semantic_snapshots using your StarRocks/CTAS procedure
 -- - After verification (and acceptance tests), change columns to NOT NULL in a follow-up migration if desired

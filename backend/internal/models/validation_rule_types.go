@@ -28,6 +28,13 @@ type ValidationRuleProperties struct {
 	// it explicitly rather than leaving new rows blank too, so "domain"
 	// is unambiguous for anything written from this point forward.
 	Domain string `json:"domain,omitempty"`
+	// BindingIDs scopes the rule to specific bindings of the BO
+	// (business_object_binding.bo_binding_id). Empty means the rule applies to every
+	// binding, which is what every rule written before this field existed
+	// means, so they are unchanged. The rule's field references stay
+	// semantic terms either way; scoping only decides whether the rule runs
+	// for a write that arrived through a given binding.
+	BindingIDs []string `json:"binding_ids,omitempty"`
 }
 
 const (
@@ -40,6 +47,12 @@ const (
 	ValidationRuleDomainDefault    = "validation"
 	ValidationRuleDomainMDM        = "mdm"
 	ValidationRuleDomainCompliance = "compliance"
+
+	// Origin of a rule as seen by a tenant. A rule authored in the gold-copy tenant is "core": every
+	// tenant inherits it read-only. A rule authored in the tenant itself is "custom" and applies to
+	// that tenant only.
+	ValidationRuleOriginCore   = "core"
+	ValidationRuleOriginCustom = "custom"
 )
 
 // ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
@@ -66,6 +79,10 @@ type UpsertValidationRuleRequest struct {
 	// ("validation") in the service layer.
 	Domain  string          `json:"domain,omitempty"`
 	RuleAST json.RawMessage `json:"rule_ast"`
+	// BindingIDs optionally scopes the rule to specific bindings of the BO;
+	// see ValidationRuleProperties.BindingIDs. Each must be a binding of
+	// BOName in this tenant.
+	BindingIDs []string `json:"binding_ids,omitempty"`
 }
 
 // ValidationRuleDescriptor is the API response shape.
@@ -79,6 +96,8 @@ type ValidationRuleDescriptor struct {
 	Timing           string          `json:"timing"`
 	Category         string          `json:"category,omitempty"`
 	Domain           string          `json:"domain"`
+	BindingIDs       []string        `json:"binding_ids,omitempty"`
+	Origin           string          `json:"origin,omitempty"` // "core" | "custom", relative to the requesting tenant
 	RuleAST          json.RawMessage `json:"rule_ast"`
 	GovernanceStatus string          `json:"governance_status"`
 	IsActive         bool            `json:"is_active"`

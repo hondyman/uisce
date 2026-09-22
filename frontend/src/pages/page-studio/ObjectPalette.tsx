@@ -11,12 +11,10 @@ import {
 import { useDraggable } from '@dnd-kit/core';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import { apiClient } from '../../utils/apiClient';
 import type { CorePageDefinition, BusinessObjectDataSourceConfig, DataSourceDefinition } from '../../types/pageStudio';
-import type { BORelationship, RelatedObjectDragPayload } from '../../studio-core/binding/boRelationships';
+import type { RelatedObjectDragPayload } from '../../studio-core/binding/boRelationships';
 import { widgetTypeForCardinality } from '../../studio-core/binding/boRelationships';
-import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
-import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
+import { fetchBOTerms, fetchBORelationships, type BORelationship, type SemanticTermView } from '../../studio-core/binding/businessObjectApi';
 import { FieldChip } from './DataBindingsPanel';
 
 type FieldsStatus = 'loading' | 'ready' | 'error';
@@ -89,11 +87,9 @@ const ObjectPalette: React.FC<ObjectPaletteProps> = ({ draft, tenantId }) => {
   useEffect(() => {
     let cancelled = false;
     if (!primaryCfg?.boId || relatedByBO[primaryCfg.boId]) return;
-    apiClient<{ relatedObjects?: BORelationship[] }>(`/business-objects/${primaryCfg.boId}/relationships`, {
-      headers: tenantId ? { 'X-Tenant-ID': tenantId } : undefined,
-    })
-      .then((data) => {
-        if (!cancelled) setRelatedByBO((prev) => ({ ...prev, [primaryCfg.boId]: data?.relatedObjects || [] }));
+    fetchBORelationships(primaryCfg.boId)
+      .then((rels) => {
+        if (!cancelled) setRelatedByBO((prev) => ({ ...prev, [primaryCfg.boId]: rels }));
       })
       .catch(() => {
         if (!cancelled) setRelatedByBO((prev) => ({ ...prev, [primaryCfg.boId]: [] }));

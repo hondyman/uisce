@@ -39,17 +39,20 @@ type SavedQueryFilter struct {
 	Operator   string      `json:"operator"`
 	Value      interface{} `json:"value,omitempty"`
 	ParamRef   string      `json:"paramRef,omitempty"`
+	BOID       string      `json:"boId,omitempty"`
 }
 
 type SavedQueryDimension struct {
 	TermNodeID string `json:"termNodeId"`
 	Alias      string `json:"alias"`
+	BOID       string `json:"boId,omitempty"`
 }
 
 type SavedQueryMeasure struct {
 	TermNodeID  string `json:"termNodeId"`
 	Alias       string `json:"alias"`
 	Aggregation string `json:"agg"`
+	BOID        string `json:"boId,omitempty"`
 }
 
 // SavedQueryState is the shape persisted in data_explorer.saved_query.query_state.
@@ -64,51 +67,72 @@ type SavedQueryState struct {
 // SavedQuery is one row of data_explorer.saved_query, with QueryState
 // decoded for JSON responses instead of the raw jsonb bytes.
 type SavedQuery struct {
-	ID          string          `json:"id"`
-	TenantID    string          `json:"tenantId"`
-	UserID      string          `json:"userId"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	BOID        string          `json:"boId"`
-	BindingID   string          `json:"bindingId"`
-	ChartType   string          `json:"chartType"`
-	State       SavedQueryState `json:"state"`
-	Tags        []string        `json:"tags"`
-	CreatedAt   time.Time       `json:"createdAt"`
-	UpdatedAt   time.Time       `json:"updatedAt"`
+	ID           string          `json:"id"`
+	TenantID     string          `json:"tenantId"`
+	UserID       string          `json:"userId"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	BOID         string          `json:"boId"`
+	BindingID    string          `json:"bindingId"`
+	RelatedBOIDs []string        `json:"relatedBoIds"`
+	ChartType    string          `json:"chartType"`
+	State        SavedQueryState `json:"state"`
+	Tags         []string        `json:"tags"`
+	FolderID     string          `json:"folderId,omitempty"`
+	IsFavorite   bool            `json:"isFavorite"`
+	Visibility   string          `json:"visibility"`
+	IsCore       bool            `json:"isCore"`
+	CreatedBy    string          `json:"createdBy,omitempty"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	UpdatedAt    time.Time       `json:"updatedAt"`
 }
 
 type savedQueryRow struct {
-	ID          string         `db:"id"`
-	TenantID    string         `db:"tenant_id"`
-	UserID      string         `db:"user_id"`
-	Name        string         `db:"name"`
-	Description string         `db:"description"`
-	SourceID    string         `db:"source_id"`
-	BindingID   sql.NullString `db:"binding_id"`
-	ChartType   string         `db:"chart_type"`
-	QueryState  []byte         `db:"query_state"`
-	Tags        pq.StringArray `db:"tags"`
-	CreatedAt   time.Time      `db:"created_at"`
-	UpdatedAt   time.Time      `db:"updated_at"`
+	ID           string         `db:"id"`
+	TenantID     string         `db:"tenant_id"`
+	UserID       string         `db:"user_id"`
+	Name         string         `db:"name"`
+	Description  string         `db:"description"`
+	SourceID     string         `db:"source_id"`
+	BindingID    sql.NullString `db:"binding_id"`
+	RelatedBOIDs pq.StringArray `db:"related_bo_ids"`
+	ChartType    string         `db:"chart_type"`
+	QueryState   []byte         `db:"query_state"`
+	Tags         pq.StringArray `db:"tags"`
+	FolderID     sql.NullString `db:"folder_id"`
+	IsFavorite   bool           `db:"is_favorite"`
+	Visibility   string         `db:"visibility"`
+	IsCore       bool           `db:"is_core"`
+	CreatedBy    sql.NullString `db:"created_by"`
+	CreatedAt    time.Time      `db:"created_at"`
+	UpdatedAt    time.Time      `db:"updated_at"`
 }
+
+const savedQuerySelectCols = `id, tenant_id, user_id, name, description, source_id, binding_id, related_bo_ids,
+	chart_type, query_state, tags, folder_id, is_favorite, visibility, is_core, created_by, created_at, updated_at`
 
 func (r savedQueryRow) toSavedQuery() SavedQuery {
 	var state SavedQueryState
 	_ = json.Unmarshal(r.QueryState, &state)
 	return SavedQuery{
-		ID:          r.ID,
-		TenantID:    r.TenantID,
-		UserID:      r.UserID,
-		Name:        r.Name,
-		Description: r.Description,
-		BOID:        r.SourceID,
-		BindingID:   r.BindingID.String,
-		ChartType:   r.ChartType,
-		State:       state,
-		Tags:        []string(r.Tags),
-		CreatedAt:   r.CreatedAt,
-		UpdatedAt:   r.UpdatedAt,
+		ID:           r.ID,
+		TenantID:     r.TenantID,
+		UserID:       r.UserID,
+		Name:         r.Name,
+		Description:  r.Description,
+		BOID:         r.SourceID,
+		BindingID:    r.BindingID.String,
+		RelatedBOIDs: []string(r.RelatedBOIDs),
+		ChartType:    r.ChartType,
+		State:        state,
+		Tags:         []string(r.Tags),
+		FolderID:     r.FolderID.String,
+		IsFavorite:   r.IsFavorite,
+		Visibility:   r.Visibility,
+		IsCore:       r.IsCore,
+		CreatedBy:    r.CreatedBy.String,
+		CreatedAt:    r.CreatedAt,
+		UpdatedAt:    r.UpdatedAt,
 	}
 }
 
@@ -164,14 +188,24 @@ func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *htt
 	}
 
 	boID := r.URL.Query().Get("boId")
-	query := `SELECT id, tenant_id, user_id, name, description, source_id, binding_id, chart_type, query_state, tags, created_at, updated_at
-	          FROM data_explorer.saved_query WHERE tenant_id = $1`
-	args := []interface{}{secCtx.TenantID}
+	folderID := r.URL.Query().Get("folderId")
+	// Visibility: a caller sees their own private queries plus every
+	// 'shared' query in the tenant (report-builder's is_public/is_personal
+	// pattern, collapsed to one flag - see the visibility-model decision
+	// in this feature's planning).
+	query := `SELECT ` + savedQuerySelectCols + `
+	          FROM data_explorer.saved_query
+	          WHERE tenant_id = $1 AND (visibility = 'shared' OR user_id = $2)`
+	args := []interface{}{secCtx.TenantID, secCtx.UserID}
 	if boID != "" {
-		query += " AND source_id = $2"
 		args = append(args, boID)
+		query += fmt.Sprintf(" AND source_id = $%d", len(args))
 	}
-	query += " ORDER BY updated_at DESC"
+	if folderID != "" {
+		args = append(args, folderID)
+		query += fmt.Sprintf(" AND folder_id = $%d", len(args))
+	}
+	query += " ORDER BY is_favorite DESC, updated_at DESC"
 
 	var rows []savedQueryRow
 	if err := h.db.Select(&rows, query, args...); err != nil {
@@ -186,13 +220,15 @@ func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *htt
 }
 
 type savedQueryCreateRequest struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	BOID        string          `json:"boId"`
-	BindingID   string          `json:"bindingId"`
-	ChartType   string          `json:"chartType"`
-	State       SavedQueryState `json:"state"`
-	Tags        []string        `json:"tags"`
+	Name         string          `json:"name"`
+	Description  string          `json:"description"`
+	BOID         string          `json:"boId"`
+	BindingID    string          `json:"bindingId"`
+	RelatedBOIDs []string        `json:"relatedBoIds"`
+	ChartType    string          `json:"chartType"`
+	State        SavedQueryState `json:"state"`
+	Tags         []string        `json:"tags"`
+	FolderID     string          `json:"folderId"`
 }
 
 // HandleCreateSavedQuery handles POST /api/explorer/saved-queries.
@@ -229,13 +265,19 @@ func (h *SavedQueryHandler) HandleCreateSavedQuery(w http.ResponseWriter, r *htt
 		return
 	}
 
+	var folderID interface{}
+	if req.FolderID != "" {
+		folderID = req.FolderID
+	}
+
 	id := uuid.NewString()
 	var row savedQueryRow
 	err = h.db.QueryRowx(`
-		INSERT INTO data_explorer.saved_query (id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, chart_type, query_state, tags)
-		VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10)
-		RETURNING id, tenant_id, user_id, name, description, source_id, binding_id, chart_type, query_state, tags, created_at, updated_at
-	`, id, secCtx.TenantID, secCtx.UserID, req.Name, req.Description, req.BOID, req.BindingID, req.ChartType, stateBytes, pq.Array(req.Tags)).StructScan(&row)
+		INSERT INTO data_explorer.saved_query
+			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, created_by)
+		VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10, $11, $12, $13)
+		RETURNING `+savedQuerySelectCols+`
+	`, id, secCtx.TenantID, secCtx.UserID, req.Name, req.Description, req.BOID, req.BindingID, pq.Array(req.RelatedBOIDs), req.ChartType, stateBytes, pq.Array(req.Tags), folderID, secCtx.UserID).StructScan(&row)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to save query: %w", err), http.StatusInternalServerError)
 		return
@@ -251,8 +293,10 @@ func (h *SavedQueryHandler) loadOwned(w http.ResponseWriter, r *http.Request) (*
 	}
 	id := chi.URLParam(r, "id")
 	var row savedQueryRow
-	err = h.db.Get(&row, `SELECT id, tenant_id, user_id, name, description, source_id, binding_id, chart_type, query_state, tags, created_at, updated_at
-	                      FROM data_explorer.saved_query WHERE id = $1 AND tenant_id = $2`, id, secCtx.TenantID)
+	err = h.db.Get(&row, `SELECT `+savedQuerySelectCols+`
+	                      FROM data_explorer.saved_query
+	                      WHERE id = $1 AND tenant_id = $2 AND (visibility = 'shared' OR user_id = $3)`,
+		id, secCtx.TenantID, secCtx.UserID)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("saved query not found: %w", err), http.StatusNotFound)
 		return nil, "", false
@@ -270,6 +314,14 @@ func (h *SavedQueryHandler) HandleGetSavedQuery(w http.ResponseWriter, r *http.R
 }
 
 // HandleUpdateSavedQuery handles PUT /api/explorer/saved-queries/{id}.
+//
+// The primary Business Object and its binding are locked at creation time
+// (by design - "the primary BO and binding are static and cannot be
+// changed" once a query exists, same as a report template's data source).
+// Any boId/bindingId the request body carries is silently ignored rather
+// than rejected, so a client that round-trips the full SavedQuery it just
+// fetched (harmless) doesn't get a 400 for echoing back the same values.
+// RelatedBOIDs, by contrast, is exactly what's meant to stay editable.
 func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *http.Request) {
 	row, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
@@ -291,15 +343,50 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 		h.writeError(w, err, http.StatusBadRequest)
 		return
 	}
+	var folderID interface{}
+	if req.FolderID != "" {
+		folderID = req.FolderID
+	}
 	var out savedQueryRow
 	err = h.db.QueryRowx(`
 		UPDATE data_explorer.saved_query
-		SET name = $1, description = $2, chart_type = $3, query_state = $4, tags = $5, binding_id = $6, updated_at = NOW()
-		WHERE id = $7 AND tenant_id = $8
-		RETURNING id, tenant_id, user_id, name, description, source_id, binding_id, chart_type, query_state, tags, created_at, updated_at
-	`, req.Name, req.Description, req.ChartType, stateBytes, pq.Array(req.Tags), req.BindingID, row.ID, tenantID).StructScan(&out)
+		SET name = $1, description = $2, chart_type = $3, query_state = $4, tags = $5,
+		    related_bo_ids = $6, folder_id = $7, updated_at = NOW()
+		WHERE id = $8 AND tenant_id = $9
+		RETURNING `+savedQuerySelectCols+`
+	`, req.Name, req.Description, req.ChartType, stateBytes, pq.Array(req.Tags),
+		pq.Array(req.RelatedBOIDs), folderID, row.ID, tenantID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to update saved query: %w", err), http.StatusInternalServerError)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, out.toSavedQuery())
+}
+
+// HandleSetFavorite handles PUT /api/explorer/saved-queries/{id}/favorite,
+// body {"isFavorite": true|false}. Favoriting is per-user, not per-query
+// visibility, so it's a separate small mutation rather than folded into
+// the general update (which a 'shared' query's non-owner can't call).
+func (h *SavedQueryHandler) HandleSetFavorite(w http.ResponseWriter, r *http.Request) {
+	row, tenantID, ok := h.loadOwned(w, r)
+	if !ok {
+		return
+	}
+	var req struct {
+		IsFavorite bool `json:"isFavorite"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, fmt.Errorf("invalid request body: %w", err), http.StatusBadRequest)
+		return
+	}
+	var out savedQueryRow
+	err := h.db.QueryRowx(`
+		UPDATE data_explorer.saved_query SET is_favorite = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+		RETURNING `+savedQuerySelectCols+`
+	`, req.IsFavorite, row.ID, tenantID).StructScan(&out)
+	if err != nil {
+		h.writeError(w, fmt.Errorf("failed to update favorite: %w", err), http.StatusInternalServerError)
 		return
 	}
 	h.writeJSON(w, http.StatusOK, out.toSavedQuery())
@@ -329,10 +416,11 @@ func (h *SavedQueryHandler) HandleCloneSavedQuery(w http.ResponseWriter, r *http
 	newID := uuid.NewString()
 	var out savedQueryRow
 	err := h.db.QueryRowx(`
-		INSERT INTO data_explorer.saved_query (id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, chart_type, query_state, tags)
-		SELECT $1, $2, $3, name || ' (copy)', description, source_kind, source_id, binding_id, chart_type, query_state, tags
+		INSERT INTO data_explorer.saved_query
+			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, created_by)
+		SELECT $1, $2, $3, name || ' (copy)', description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, $3
 		FROM data_explorer.saved_query WHERE id = $4 AND tenant_id = $2
-		RETURNING id, tenant_id, user_id, name, description, source_id, binding_id, chart_type, query_state, tags, created_at, updated_at
+		RETURNING `+savedQuerySelectCols+`
 	`, newID, tenantID, secCtx.UserID, row.ID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to clone saved query: %w", err), http.StatusInternalServerError)
@@ -357,7 +445,7 @@ func resolveParams(state SavedQueryState, values map[string][]string) ([]boresol
 
 	resolved := make([]boresolver.FilterDef, 0, len(state.Filters))
 	for _, f := range state.Filters {
-		fd := boresolver.FilterDef{TermNodeID: f.TermNodeID, Operator: f.Operator, Value: f.Value}
+		fd := boresolver.FilterDef{TermNodeID: f.TermNodeID, Operator: f.Operator, Value: f.Value, BOID: f.BOID}
 		if f.ParamRef == "" {
 			resolved = append(resolved, fd)
 			continue
@@ -415,7 +503,7 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 	}
 
 	qd := &boresolver.QueryDef{
-		Context: boresolver.QueryContext{BOID: sq.BOID, BindingID: sq.BindingID, TenantID: tenantID},
+		Context: boresolver.QueryContext{BOID: sq.BOID, BindingID: sq.BindingID, TenantID: tenantID, RelatedBOIDs: sq.RelatedBOIDs},
 		Query: boresolver.QueryRequest{
 			Dimensions: make([]boresolver.DimensionDef, len(sq.State.Dimensions)),
 			Measures:   make([]boresolver.MeasureDef, len(sq.State.Measures)),
@@ -424,10 +512,10 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		},
 	}
 	for i, d := range sq.State.Dimensions {
-		qd.Query.Dimensions[i] = boresolver.DimensionDef{TermNodeID: d.TermNodeID, Alias: d.Alias}
+		qd.Query.Dimensions[i] = boresolver.DimensionDef{TermNodeID: d.TermNodeID, Alias: d.Alias, BOID: d.BOID}
 	}
 	for i, m := range sq.State.Measures {
-		qd.Query.Measures[i] = boresolver.MeasureDef{TermNodeID: m.TermNodeID, Alias: m.Alias, Aggregation: m.Aggregation}
+		qd.Query.Measures[i] = boresolver.MeasureDef{TermNodeID: m.TermNodeID, Alias: m.Alias, Aggregation: m.Aggregation, BOID: m.BOID}
 	}
 
 	db := h.executor.QueryDB(secCtx.DatasourceID)
@@ -458,12 +546,54 @@ func (h *SavedQueryHandler) HandleGetDuplicates(w http.ResponseWriter, r *http.R
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"duplicates": []SavedQuery{}})
 }
 
-// HandleShareQuery and HandleGetDiff are out of scope for this pass (sharing
-// permissions and version diffing) - explicitly not implemented rather than
-// faked, so a caller sees a clear "not built yet" instead of a silent no-op.
+// HandleShareQuery handles POST /api/explorer/saved-queries/{id}/share,
+// body {"visibility": "private"|"shared"} - toggles between private-to-owner
+// and shared-with-the-whole-tenant (the visibility model chosen for this
+// feature; a per-user/group ACL was considered and explicitly not built).
+// Only the owner may change it - a non-owner can only ever have loaded this
+// row via loadOwned's `visibility = 'shared'` branch, so row.UserID is
+// checked explicitly rather than relying on that alone.
 func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Request) {
-	h.writeError(w, errors.New("sharing saved queries is not implemented yet"), http.StatusNotImplemented)
+	row, tenantID, ok := h.loadOwned(w, r)
+	if !ok {
+		return
+	}
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
+	if err != nil {
+		h.writeError(w, err, http.StatusBadRequest)
+		return
+	}
+	if row.UserID != secCtx.UserID {
+		h.writeError(w, errors.New("only the owner can change sharing"), http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Visibility string `json:"visibility"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.writeError(w, fmt.Errorf("invalid request body: %w", err), http.StatusBadRequest)
+		return
+	}
+	if req.Visibility != "private" && req.Visibility != "shared" {
+		h.writeError(w, errors.New(`visibility must be "private" or "shared"`), http.StatusBadRequest)
+		return
+	}
+	var out savedQueryRow
+	err = h.db.QueryRowx(`
+		UPDATE data_explorer.saved_query SET visibility = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+		RETURNING `+savedQuerySelectCols+`
+	`, req.Visibility, row.ID, tenantID).StructScan(&out)
+	if err != nil {
+		h.writeError(w, fmt.Errorf("failed to update visibility: %w", err), http.StatusInternalServerError)
+		return
+	}
+	h.writeJSON(w, http.StatusOK, out.toSavedQuery())
 }
+
+// HandleGetDiff (version diffing) is out of scope for this pass - explicitly
+// not implemented rather than faked, so a caller sees a clear "not built
+// yet" instead of a silent no-op.
 
 func (h *SavedQueryHandler) HandleGetDiff(w http.ResponseWriter, r *http.Request) {
 	h.writeError(w, errors.New("saved query version history is not implemented yet"), http.StatusNotImplemented)

@@ -47,7 +47,7 @@ func TestTier0_IDOR_ParameterizationAudit(t *testing.T) {
 
 	goldID := uuid.MustParse("99999999-9999-4999-8999-999999999999")
 	expectGold := func(mock sqlmock.Sqlmock) {
-		mock.ExpectQuery("FROM public.tenants").
+		mock.ExpectQuery("uisce_gold_copy_tenant_id").
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldID))
 	}
 	// pagestudio/boread withTenant: ResolveTenantID → Begin → ApplyTenantGUCs → query → Commit

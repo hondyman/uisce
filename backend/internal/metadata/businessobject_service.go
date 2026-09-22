@@ -93,6 +93,63 @@ type BusinessObjectService struct {
 	tenantManager  *platform.TenantDBManager
 	auditPublisher *events.AuditEventPublisher
 	lineageRepo    lineage.LineageRepository
+
+	// backendDBCache pools live *sqlx.DB connections to a binding's physical
+	// backend (keyed by business_object_binding.backend_id / equivalently
+	// tenant_product_datasource.id), so record reads/writes hit the database
+	// the binding's driving table actually lives in instead of always using
+	// the alpha metadata DB. Populated lazily by resolveRecordsDB.
+	backendDBCache sync.Map // string (backend id) -> *sqlx.DB
+}
+
+// resolveRecordsDB returns the *sqlx.DB that live record queries/writes for
+// this Business Object should run against: the physical database behind its
+// default (or first) binding's backend, falling back to the alpha metadata
+// DB (s.db) when the BO has no binding, the backend has no connection
+// config, or the connection can't be established. A BO whose driving table
+// happens to live in alpha resolves back to s.db too, so this is safe to
+// call unconditionally.
+func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID string) *sqlx.DB {
+	var backendID string
+	err := s.db.GetContext(ctx, &backendID, `
+		SELECT backend_id::text FROM public.business_object_binding
+		WHERE bo_id = $1::uuid AND backend_id IS NOT NULL
+		ORDER BY is_default DESC, created_at ASC
+		LIMIT 1
+	`, boID)
+	if err != nil || backendID == "" {
+		return s.db
+	}
+
+	if cached, ok := s.backendDBCache.Load(backendID); ok {
+		return cached.(*sqlx.DB)
+	}
+
+	var connectionDetails string
+	if err := s.db.GetContext(ctx, &connectionDetails, `
+		SELECT config::text FROM public.tenant_product_datasource WHERE id = $1::uuid
+	`, backendID); err != nil || connectionDetails == "" {
+		// No datasource-level connection config for this backend (e.g. an
+		// orphan/placeholder backend row) -- degrade to the metadata DB
+		// rather than failing the read outright.
+		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: no connection_details for backend %s, falling back to alpha DB", backendID)
+		return s.db
+	}
+
+	targetDB, err := connectToDatabaseFromDetails(ctx, connectionDetails)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: failed to connect to backend %s, falling back to alpha DB: %v", backendID, err)
+		return s.db
+	}
+
+	sqlxDB := sqlx.NewDb(targetDB, "pgx")
+	// Another goroutine may have raced us to populate the cache; keep
+	// whichever won and close the loser to avoid leaking a connection pool.
+	actual, loaded := s.backendDBCache.LoadOrStore(backendID, sqlxDB)
+	if loaded {
+		_ = sqlxDB.Close()
+	}
+	return actual.(*sqlx.DB)
 }
 
 var boFieldsColumnCache sync.Map
@@ -503,7 +560,7 @@ func (s *BusinessObjectService) GetBusinessObject(
 
 	// Fallback: Check Gold Copy Tenant if not found in User Tenant
 	var goldCopyTenantID string
-	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	gcErr := s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 
 	if gcErr == nil && goldCopyTenantID != "" && goldCopyTenantID != tenantID {
 		err = s.db.GetContext(ctx, bo, oldQuery, goldCopyTenantID, boKey, isUUID)
@@ -601,7 +658,7 @@ func (s *BusinessObjectService) ListBusinessObjectsComposed(
 	datasourceID := secCtx.DatasourceID
 	// 1. Get gold copy tenant ID
 	var goldCopyTenantID string
-	err := s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 	if err != nil {
 		// If no gold copy tenant, fall back to regular listing
 		logging.GetLogger().Sugar().Warnf("No gold copy tenant found, falling back to regular listing: %v", err)
@@ -791,10 +848,10 @@ func (s *BusinessObjectService) ListBusinessObjectsLegacy(
 	query := `
 		SELECT bo.id, bo.name, bo.display_name, COALESCE(bo.description, '') as description, COALESCE(bo.icon, '') as icon, 
 		       COALESCE(bo.config, '{}'::jsonb) as config_json, bo.tenant_id, 
-		       (SELECT gold_copy FROM public.tenants t WHERE t.id = bo.tenant_id) as owner_is_gold_copy
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id()) as owner_is_gold_copy
 		FROM public.business_objects bo
 		WHERE (bo.tenant_id = $1::uuid OR 
-		       EXISTS(SELECT 1 FROM public.tenants t WHERE t.id = bo.tenant_id AND t.gold_copy = TRUE AND bo.tenant_id != $1::uuid))
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id() AND bo.tenant_id != $1::uuid))
 		  AND bo.parent_id IS NULL
 	`
 	args := []interface{}{tenantID}
@@ -875,13 +932,13 @@ func (s *BusinessObjectService) ListBusinessObjectsLegacy(
 			}
 		}
 
-		// Fallback to bo_fields table
+		// Fallback to business_object_fields table
 		if len(fieldsOut) == 0 {
 			fRows, err := tx.QueryContext(ctx, `
-				SELECT field_name, field_type, COALESCE(display_label, field_name), COALESCE(column_name, field_name)
-				FROM public.bo_fields
-				WHERE tenant_id = $1 AND business_object_id = $2
-				ORDER BY display_order
+				SELECT field_name, COALESCE(data_type, 'string'), COALESCE(display_name, field_name), COALESCE(technical_name, field_name)
+				FROM public.business_object_fields
+				WHERE tenant_id = $1::uuid AND bo_id = $2::uuid
+				ORDER BY display_order, created_at
 			`, tenantID, id)
 			if err == nil {
 				for fRows.Next() {
@@ -928,11 +985,11 @@ func (s *BusinessObjectService) GetBusinessObjectLegacy(
 		SELECT bo.id, bo.name, bo.display_name, COALESCE(bo.description, '') as description, 
 		       COALESCE(bo.icon, '') as icon, COALESCE(bo.config, '{}'::jsonb) as config_json,
 		       bo.tenant_id, 
-		       (SELECT gold_copy FROM public.tenants t WHERE t.id = bo.tenant_id) as owner_is_gold_copy
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id()) as owner_is_gold_copy
 		FROM public.business_objects bo
 		WHERE bo.id = $1::uuid
 		  AND (bo.tenant_id = $2::uuid OR 
-		       EXISTS(SELECT 1 FROM public.tenants t WHERE t.id = bo.tenant_id AND t.gold_copy = TRUE AND bo.tenant_id != $2::uuid))
+		       (bo.tenant_id = public.uisce_gold_copy_tenant_id() AND bo.tenant_id != $2::uuid))
 	`
 
 	var id, name, displayName, description, icon string
@@ -996,10 +1053,10 @@ func (s *BusinessObjectService) GetBusinessObjectLegacy(
 
 	if len(fieldsOut) == 0 {
 		fRows, err := s.db.QueryContext(ctx, `
-			SELECT field_name, field_type, COALESCE(display_label, field_name), COALESCE(column_name, field_name)
-			FROM public.bo_fields
-			WHERE tenant_id = $1 AND bo_id = $2
-			ORDER BY display_order
+			SELECT field_name, COALESCE(data_type, 'string'), COALESCE(display_name, field_name), COALESCE(technical_name, field_name)
+			FROM public.business_object_fields
+			WHERE tenant_id = $1::uuid AND bo_id = $2::uuid
+			ORDER BY display_order, created_at
 		`, tenantID, id)
 		if err == nil {
 			defer fRows.Close()
@@ -1166,7 +1223,7 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 						}
 
 						if err := tx.Commit(); err != nil {
-							logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to commit bo_fields transaction for bo_id=%s: %v", current.ID, err)
+							logging.GetLogger().Sugar().Errorf("[FIELD_UPDATE] FAILED to commit business_object_fields transaction for bo_id=%s: %v", current.ID, err)
 						} else {
 							logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] Successfully committed %d fields for bo_id=%s", len(newFields), current.ID)
 							// Transaction committed successfully - emit catalog sync event
@@ -1401,10 +1458,10 @@ func (s *BusinessObjectService) UpdateBusinessObject(
 	}
 	s.logAuditByKey(ctx, tenantID, "business_object", current.Key, "update", changes, userID)
 
-	// Debug: check bo_fields count for this BO
+	// Debug: check business_object_fields count for this BO
 	var bfCount int
-	_ = s.db.GetContext(ctx, &bfCount, "SELECT COUNT(*) FROM bo_fields WHERE business_object_id = $1::uuid", current.ID)
-	logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] bo_fields count for bo_id=%s -> %d (before GetBusinessObject)", current.ID, bfCount)
+	_ = s.db.GetContext(ctx, &bfCount, "SELECT COUNT(*) FROM public.business_object_fields WHERE bo_id = $1::uuid", current.ID)
+	logging.GetLogger().Sugar().Infof("[FIELD_UPDATE] business_object_fields count for bo_id=%s -> %d (before GetBusinessObject)", current.ID, bfCount)
 
 	return s.GetBusinessObject(ctx, secCtx, current.Key)
 }
@@ -1759,15 +1816,17 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	for _, child := range childBOs {
 		// Load fields for this child BO
 		fieldQuery := `
-			SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
-			       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
+			SELECT id, COALESCE(field_name, '') AS key, COALESCE(field_name, '') AS name,
+			       COALESCE(display_name, field_name) AS display_name, COALESCE(technical_name, '') AS technical_name,
+			       COALESCE(data_type, 'text') AS type,
+			       false AS is_core, COALESCE(is_required, false) AS is_required,
 			       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
-			       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
+			       COALESCE(reference_entity, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
 			       created_at, '' AS created_by,
-			       created_at AS last_modified_at, '' AS last_modified_by
-			FROM bo_fields
-			WHERE business_object_id::text = $1 AND (tenant_id::text = $2 OR tenant_id::text = $3) AND subtype_id IS NULL
-			ORDER BY sequence
+			       updated_at AS last_modified_at, '' AS last_modified_by
+			FROM public.business_object_fields
+			WHERE bo_id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id = $3::uuid)
+			ORDER BY display_order, created_at
 		`
 
 		var fields []models.FieldDefinition
@@ -1828,63 +1887,26 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 
 	// Load fields for legacy subtypes
 	for i := range legacySubtypes {
-		displayNameExpr := s.boFieldsDisplayNameExpr(ctx, "")
-		fieldQuery := fmt.Sprintf(`
-			SELECT id, key, name, %s AS display_name, COALESCE(technical_name, '') AS technical_name, field_type,
-			       is_core, is_required, is_readonly AS is_system, COALESCE(description, '') AS description,
-			       COALESCE(reference_entity, '') AS reference_entity, sequence,
-			       created_at, COALESCE(created_by, '') AS created_by, last_modified_at, 
-			       COALESCE(last_modified_by, '') AS last_modified_by
-			FROM bo_fields
-			WHERE subtype_id = $1
-			ORDER BY sequence
-		`, displayNameExpr)
+		fieldQuery := `
+			SELECT id, COALESCE(field_name, '') AS key, COALESCE(field_name, '') AS name,
+			       COALESCE(display_name, field_name) AS display_name,
+			       COALESCE(technical_name, '') AS technical_name,
+			       COALESCE(data_type, 'text') AS type,
+			       false AS is_core, COALESCE(is_required, false) AS is_required,
+			       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
+			       COALESCE(reference_entity, '') AS reference_entity,
+			       COALESCE(display_order, 0) AS sequence,
+			       created_at, '' AS created_by, updated_at AS last_modified_at, 
+			       '' AS last_modified_by
+			FROM public.business_object_fields
+			WHERE bo_id = $1::uuid
+			ORDER BY display_order, created_at
+		`
 
 		var fields []models.FieldDefinition
 		if err := s.db.SelectContext(ctx, &fields, fieldQuery, legacySubtypes[i].ID); err != nil {
 			logging.GetLogger().Sugar().Warnf("Warning: failed to load subtype fields: %v", err)
-
-			// Try old schema fallback (subtype-based fields stored in bo_fields with subtype_id)
-			oldFieldQuery := `
-				SELECT id, business_object_id, field_name, display_label, field_type, is_required, is_readonly, is_searchable, is_sortable, display_order
-				FROM bo_fields
-				WHERE subtype_id = $1
-				ORDER BY display_order
-			`
-			type OldField struct {
-				ID           string `db:"id"`
-				BoID         string `db:"business_object_id"`
-				FieldName    string `db:"field_name"`
-				DisplayLabel string `db:"display_label"`
-				FieldType    string `db:"field_type"`
-				IsRequired   bool   `db:"is_required"`
-				IsReadOnly   bool   `db:"is_readonly"`
-				IsSearchable bool   `db:"is_searchable"`
-				IsSortable   bool   `db:"is_sortable"`
-				Sequence     int    `db:"display_order"`
-			}
-
-			var oldFields []OldField
-			if err2 := s.db.SelectContext(ctx, &oldFields, oldFieldQuery, legacySubtypes[i].ID); err2 != nil {
-				logging.GetLogger().Sugar().Warnf("Warning: failed to load subtype fields (old schema): %v", err2)
-				continue
-			}
-
-			fields = make([]models.FieldDefinition, 0, len(oldFields))
-			for _, of := range oldFields {
-				f := models.FieldDefinition{
-					ID:          of.ID,
-					Key:         of.FieldName,
-					Name:        of.FieldName,
-					DisplayName: of.DisplayLabel,
-					Type:        of.FieldType,
-					IsCore:      false,
-					IsRequired:  of.IsRequired,
-					IsSystem:    of.IsReadOnly,
-					Sequence:    of.Sequence,
-				}
-				fields = append(fields, f)
-			}
+			fields = []models.FieldDefinition{}
 		}
 
 		legacySubtypes[i].SubtypeFields = fields
@@ -1922,27 +1944,30 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 
 	fieldQuery := `
-		SELECT id, key, name, COALESCE(display_name, name) AS display_name, COALESCE(technical_name, '') AS technical_name, type AS type,
-		       COALESCE(is_core, false) AS is_core, COALESCE(is_required, false) AS is_required,
+		SELECT id, COALESCE(field_name, '') AS key, COALESCE(field_name, '') AS name,
+		       COALESCE(display_name, field_name) AS display_name,
+		       COALESCE(technical_name, field_name) AS technical_name,
+		       COALESCE(data_type, 'text') AS type,
+		       false AS is_core, COALESCE(is_required, false) AS is_required,
 		       COALESCE(is_system, false) AS is_system, COALESCE(description, '') AS description,
-		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(sequence, 0) AS sequence,
-		       created_at, '' AS created_by, created_at AS last_modified_at,
+		       COALESCE(reference_entity, '') AS reference_entity, COALESCE(display_order, 0) AS sequence,
+		       created_at, '' AS created_by, updated_at AS last_modified_at,
 		       '' AS last_modified_by
-		FROM bo_fields
-		WHERE business_object_id::text = $1 AND tenant_id::text = $2 AND subtype_id IS NULL
-		ORDER BY sequence
+		FROM public.business_object_fields
+		WHERE bo_id = $1::uuid AND tenant_id = $2::uuid
+		ORDER BY display_order, created_at
 	`
 
-	// Query bo_fields table for viewTenantID (user tenant context) or bo.TenantID (master BO tenant context)
+	// Query business_object_fields table for viewTenantID (user tenant context) or bo.TenantID (master BO tenant context)
 	if len(entityFields) == 0 {
 		if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, viewTenantID); err != nil || len(entityFields) == 0 {
 			if err := s.db.SelectContext(ctx, &entityFields, fieldQuery, bo.ID, bo.TenantID); err != nil {
-				logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields (new schema): %v", err)
+				logging.GetLogger().Sugar().Warnf("Warning: failed to load entity fields from business_object_fields: %v", err)
 			}
 		}
 	}
 
-	// MIGRATION STRATEGY: Load fields from Config JSONB if bo_fields returned nothing
+	// MIGRATION STRATEGY: Load fields from Config JSONB if business_object_fields returned nothing
 	if len(entityFields) == 0 && len(bo.Config) > 0 {
 		var configMap map[string]interface{}
 		if err := json.Unmarshal(bo.Config, &configMap); err == nil {
@@ -1951,49 +1976,6 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 					_ = json.Unmarshal(fieldsJSON, &entityFields)
 				}
 			}
-		}
-	}
-
-	// Try old schema fallback where bo_fields stores field info differently
-	if len(entityFields) == 0 {
-		oldFieldQuery := `
-			SELECT id, business_object_id, field_name, display_label, field_type, is_required, is_readonly, is_searchable, is_sortable, display_order
-			FROM bo_fields
-			WHERE business_object_id = $1
-			ORDER BY display_order
-		`
-		type OldField struct {
-			ID           string `db:"id"`
-			BoID         string `db:"business_object_id"`
-			FieldName    string `db:"field_name"`
-			DisplayLabel string `db:"display_label"`
-			FieldType    string `db:"field_type"`
-			IsRequired   bool   `db:"is_required"`
-			IsReadOnly   bool   `db:"is_readonly"`
-			IsSearchable bool   `db:"is_searchable"`
-			IsSortable   bool   `db:"is_sortable"`
-			Sequence     int    `db:"display_order"`
-		}
-
-		var oldFields []OldField
-		if err2 := s.db.SelectContext(ctx, &oldFields, oldFieldQuery, bo.ID); err2 != nil {
-			return fmt.Errorf("failed to load entity fields (old schema): %w", err2)
-		}
-
-		entityFields = make([]models.FieldDefinition, 0, len(oldFields))
-		for _, of := range oldFields {
-			f := models.FieldDefinition{
-				ID:          of.ID,
-				Key:         of.FieldName,
-				Name:        of.FieldName,
-				DisplayName: of.DisplayLabel,
-				Type:        of.FieldType,
-				IsCore:      false,
-				IsRequired:  of.IsRequired,
-				IsSystem:    of.IsReadOnly,
-				Sequence:    of.Sequence,
-			}
-			entityFields = append(entityFields, f)
 		}
 	}
 
@@ -2022,11 +2004,12 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	var bRows []bindingRow
 	bindingQuery := `
-		SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
-		       bob.backend_type AS backend_type,
+		SELECT bob.bo_binding_id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+		       COALESCE(upper(pb.dialect_name), '') AS backend_type,
 		       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-		       bob.is_default AS is_default, bob.temporal_override AS temporal_override
-		FROM business_object_bindings bob
+		       bob.is_default AS is_default, COALESCE(bob.temporal_override, 'NONE') AS temporal_override
+		FROM public.business_object_binding bob
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = bob.backend_id
 		LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 		WHERE bob.bo_id::text = $1 AND (bob.tenant_id::text = $2 OR bob.tenant_id::text = $3)
 	`
@@ -2035,11 +2018,12 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	}
 	if len(bRows) == 0 {
 		fallbackBindingQuery := `
-			SELECT bob.id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
-			       bob.backend_type AS backend_type,
+			SELECT bob.bo_binding_id AS bo_binding_id, COALESCE(bob.backend_id::text, '') AS backend_id,
+			       COALESCE(upper(pb.dialect_name), '') AS backend_type,
 			       COALESCE(cn.node_name, '') AS node_name, COALESCE(cn.qualified_path, '') AS qualified_path,
-			       bob.is_default AS is_default, bob.temporal_override AS temporal_override
-			FROM business_object_bindings bob
+			       bob.is_default AS is_default, COALESCE(bob.temporal_override, 'NONE') AS temporal_override
+			FROM public.business_object_binding bob
+			LEFT JOIN public.physical_backend pb ON pb.backend_id = bob.backend_id
 			LEFT JOIN catalog_node cn ON bob.driving_node_id = cn.id
 			WHERE bob.bo_id::text = $1
 		`
@@ -3001,7 +2985,7 @@ func (s *BusinessObjectService) ListCatalogNodes(
 	// to the scoped tenant only (no merge, no error).
 	var goldCopyID string
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`,
+		`SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`,
 	).Scan(&goldCopyID); err != nil {
 		devLogGoldCopyWarn(err)
 	}
@@ -3477,6 +3461,12 @@ func (s *BusinessObjectService) QueryBORecords(
 		return nil, fmt.Errorf("business object not found: %w", err)
 	}
 
+	// Physical record data lives wherever this BO's binding says it does,
+	// which is not necessarily the alpha metadata DB (e.g. CRIMS ORM/MDM
+	// tables live in the crims database). Metadata lookups below (catalog
+	// nodes, semantic term graph) still use s.db.
+	recordsDB := s.resolveRecordsDB(ctx, bo.ID)
+
 	// 2. Resolve Driver Table
 	drivingTable := bo.DriverTableName
 	if drivingTable == "" && bo.DriverTableID.Valid && bo.DriverTableID.String != "" {
@@ -3548,7 +3538,7 @@ func (s *BusinessObjectService) QueryBORecords(
 	if len(columnNames) > 0 {
 		schemaName, tableName := resolveQualifiedTable(drivingTable)
 		var realCols []string
-		if err := s.db.SelectContext(ctx, &realCols, `
+		if err := recordsDB.SelectContext(ctx, &realCols, `
 			SELECT column_name FROM information_schema.columns
 			WHERE table_schema = $1 AND table_name = $2
 		`, schemaName, tableName); err == nil && len(realCols) > 0 {
@@ -3657,7 +3647,7 @@ func (s *BusinessObjectService) QueryBORecords(
 	// 5. Total count query
 	countSQL := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", quotedTable, whereSQL)
 	var total int
-	if err := s.db.GetContext(ctx, &total, countSQL, args...); err != nil {
+	if err := recordsDB.GetContext(ctx, &total, countSQL, args...); err != nil {
 		logging.GetLogger().Sugar().Warnf("Count query failed: %v", err)
 		total = 0
 	}
@@ -3687,7 +3677,7 @@ func (s *BusinessObjectService) QueryBORecords(
 		selectCols, quotedTable, whereSQL, orderSQL, limit, offset,
 	)
 
-	rows, err := s.db.QueryxContext(ctx, querySQL, args...)
+	rows, err := recordsDB.QueryxContext(ctx, querySQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query records from %s: %w", rawTable, err)
 	}
@@ -3738,6 +3728,17 @@ func normalizeEmptyStringsToNull(rec map[string]interface{}) {
 }
 
 // CreateBORecord creates a new physical database record via the Business Object definition.
+// NOTE: unlike QueryBORecords/DeleteBORecord, this still writes through
+// s.db (via writeAndEnforce's transaction) rather than resolveRecordsDB.
+// Validation-rule enforcement needs the write and the rule evaluation to
+// share one transaction so a BLOCK rule can roll the write back; the rule
+// definitions live in alpha, but for a BO whose driving table lives in a
+// different physical database (resolveRecordsDB would pick a different
+// connection), that transaction can't span both without a real
+// cross-database write protocol. Left as-is rather than silently writing
+// to the wrong database or half-fixing the transactional guarantee -- BOs
+// whose table isn't in alpha will still fail to create/update records
+// until this is designed properly.
 func (s *BusinessObjectService) CreateBORecord(
 	ctx context.Context,
 	secCtx *security.Context,
@@ -3926,7 +3927,7 @@ func (s *BusinessObjectService) DeleteBORecord(
 	quotedTable := quotedQualifiedTable(table)
 
 	deleteSQL := fmt.Sprintf("DELETE FROM %s WHERE id = $1", quotedTable)
-	_, err = s.db.ExecContext(ctx, deleteSQL, recordID)
+	_, err = s.resolveRecordsDB(ctx, bo.ID).ExecContext(ctx, deleteSQL, recordID)
 	if err != nil {
 		return fmt.Errorf("failed to delete record from %s: %w", table, err)
 	}
@@ -3949,7 +3950,7 @@ func (s *BusinessObjectService) GetBODelta(
 
 	// Get Gold Copy tenant ID
 	var goldCopyTenantID string
-	_ = s.db.QueryRowContext(ctx, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+	_ = s.db.QueryRowContext(ctx, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 
 	var coreBO *models.BusinessObjectDefinition
 	if goldCopyTenantID != "" && goldCopyTenantID != secCtx.TenantID {

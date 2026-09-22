@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Container, Typography, Paper, Button, TextField,
   MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip,
-  Divider, CircularProgress,
+  Divider, CircularProgress, Breadcrumbs, Link as MuiLink,
   ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails,
   Avatar, Tooltip, IconButton,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RuleIcon from '@mui/icons-material/Rule';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CodeIcon from '@mui/icons-material/Code';
@@ -86,6 +88,62 @@ function toRuleNode(node: ConditionNode): unknown {
   };
 }
 
+// The builder's operator vocabulary (e.g. "greater_equal") doesn't match
+// every wire-format operator token rules can be saved with (e.g. ">=",
+// "==") - rules authored directly against internal/rules/vm (the mdmrules
+// catalog, seeded via cmd/seed_mdm_rules) use the raw comparison tokens,
+// while the builder itself only ever produces its own vocabulary. Maps a
+// wire token to its builder equivalent when they differ; tokens already in
+// the builder's vocabulary (is_null, is_not_null, in, ...) pass through
+// unchanged via the `|| op` fallback in fromRuleNode.
+const WIRE_TO_BUILDER_OPERATOR: Record<string, string> = {
+  '=': 'equals', '==': 'equals',
+  '!=': 'not_equals', '<>': 'not_equals',
+  '>': 'greater_than', '>=': 'greater_equal',
+  '<': 'less_than', '<=': 'less_equal',
+};
+
+// Thrown by fromRuleNode when a node can't be represented in the
+// structured builder at all (an "expression" node - a field-to-field or
+// arithmetic comparison, e.g. geField()'s output in catalog.go's
+// ordered()/chain3() rule shapes). Caught by the loader so the rest of the
+// rule's metadata (name/severity/timing/category) still populates instead
+// of the whole load silently failing.
+class UnsupportedRuleNodeError extends Error {}
+
+// Reverses toRuleNode: wire format -> the builder's ConditionNode shape,
+// for populating the editor when opening an existing rule (see the
+// ?rule_id= loader below). Structural discrimination on node.type, mirroring
+// toRuleNode's own comment about why 'conditions' in node isn't trusted
+// for the forward direction - here type is exactly what the backend wrote,
+// so it's the more precise signal.
+let fromRuleNodeIdCounter = 0;
+function fromRuleNode(node: any): ConditionNode {
+  if (!node || typeof node !== 'object') throw new UnsupportedRuleNodeError('empty node');
+  if (node.type === 'group') {
+    const operator: ConditionGroup['operator'] =
+      node.operator === 'OR' ? 'OR' : node.operator === 'NOT' ? 'NOT' : 'AND';
+    return {
+      id: node.id || `loaded-group-${fromRuleNodeIdCounter++}`,
+      type: 'group',
+      operator,
+      conditions: (node.conditions || []).map(fromRuleNode),
+    };
+  }
+  if (node.type === 'condition') {
+    return {
+      id: node.id || `loaded-cond-${fromRuleNodeIdCounter++}`,
+      type: 'condition',
+      field: node.field || node.fieldPath || '',
+      fieldPath: node.fieldPath || undefined,
+      operator: WIRE_TO_BUILDER_OPERATOR[node.operator] || node.operator || 'equals',
+      value: node.value ?? '',
+      secondValue: node.secondValue ?? undefined,
+    };
+  }
+  throw new UnsupportedRuleNodeError(`node type ${node.type ?? '(unknown)'} has no builder equivalent`);
+}
+
 const INITIAL_RULE: ConditionGroup = {
   id: 'root',
   type: 'group',
@@ -135,6 +193,7 @@ interface ViolationRow {
 const SAMPLE_EXPRESSION = 'SUM(ExecQuantity * ExecPrice)';
 
 const AdvancedRuleBuilderPage: React.FC = () => {
+  const navigate = useNavigate();
   const [rule, setRule] = useState<ConditionGroup>(INITIAL_RULE);
   const [contextJson, setContextJson] = useState(JSON.stringify(SAMPLE_CONTEXT, null, 2));
   const [evalResult, setEvalResult] = useState<{ result?: boolean | number; resultType?: string; error?: string } | null>(null);
@@ -177,6 +236,31 @@ const AdvancedRuleBuilderPage: React.FC = () => {
 
   const [savedRules, setSavedRules] = useState<SavedRule[]>([]);
   const [violations, setViolations] = useState<ViolationRow[]>([]);
+
+  // ?rule_id= support: the Validations tab's per-row "Edit" link (see
+  // BusinessObjectDetailsPage/components/tabs/ValidationsAndTriggersTab.tsx)
+  // lands here naming a specific rule, but this page previously only ever
+  // opened scoped to a BO with a blank/default rule in the builder - the
+  // saved-rules list below was read-only, nothing populated the editor
+  // from it. loadedRuleId tracks which rule (if any) is currently loaded,
+  // so the header/save button can say so; ruleLoadUnsupported flags a rule
+  // whose AST contains a node the structured builder can't represent (an
+  // "expression" node - field-to-field/arithmetic comparisons), so Save
+  // stays disabled rather than silently overwriting it with a truncated
+  // rule.
+  const [loadedRuleId, setLoadedRuleId] = useState<string | null>(null);
+  const [ruleLoadError, setRuleLoadError] = useState<string | null>(null);
+  const [ruleLoadUnsupported, setRuleLoadUnsupported] = useState(false);
+  // ?return_to=: where the "Edit" link was opened from, so this page can
+  // offer a breadcrumb back instead of leaving the user stranded (there
+  // was previously no way back to the BO details page other than browser
+  // back, which loses the tab they were on if this page replaced history).
+  const [returnTo] = useState(() => {
+    const raw = new URLSearchParams(window.location.search).get('return_to');
+    // Only ever navigate to a same-origin relative path from this param -
+    // never trust it as an absolute/external URL.
+    return raw && raw.startsWith('/') ? raw : null;
+  });
 
   const entities: EntityDefinition[] = selectedBOKey
     ? [{ name: selectedBOKey, label: selectedBOKey, fields, relationships: [] }]
@@ -237,6 +321,49 @@ const AdvancedRuleBuilderPage: React.FC = () => {
   useEffect(() => {
     loadFieldsAndRules();
   }, [loadFieldsAndRules]);
+
+  // Populate the editor from ?rule_id= (once, on mount) - fetches the full
+  // rule (including rule_ast, which the list endpoint above also returns
+  // but this reads independently so the load isn't dependent on
+  // loadFieldsAndRules' timing/BO-selection race) and translates its AST
+  // back into the structured builder's shape.
+  useEffect(() => {
+    const ruleId = new URLSearchParams(window.location.search).get('rule_id');
+    if (!ruleId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const desc = await apiClient<{
+          id: string; bo_name: string; name: string; severity: string; timing: string;
+          category?: string; domain?: string; rule_ast: unknown;
+        }>(`/validation-rule-nodes/${encodeURIComponent(ruleId)}`);
+        if (cancelled) return;
+        setSelectedBOKey(desc.bo_name);
+        setRuleName(desc.name);
+        setSeverity(desc.severity);
+        setTiming(desc.timing);
+        setCategory(desc.category || '');
+        setDomain(desc.domain || 'validation');
+        setMode('structured');
+        try {
+          const converted = fromRuleNode(desc.rule_ast);
+          const asGroup: ConditionGroup = converted.type === 'group'
+            ? (converted as ConditionGroup)
+            : { id: 'root', type: 'group', operator: 'AND', conditions: [converted] };
+          setRule(asGroup);
+          setRuleLoadUnsupported(false);
+        } catch (convErr) {
+          // Metadata (name/severity/timing/category) is still populated
+          // above; only the condition tree itself couldn't be translated.
+          setRuleLoadUnsupported(true);
+        }
+        setLoadedRuleId(desc.id);
+      } catch (err) {
+        if (!cancelled) setRuleLoadError(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Keep the expression editor's field-completion source in sync with
   // the BO's real fields (dot notation: "client.risk_score" would need
@@ -416,6 +543,29 @@ const AdvancedRuleBuilderPage: React.FC = () => {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', pb: 6 }}>
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      {/* Breadcrumb back to wherever this page was opened from (e.g. the BO
+          details page's Validations tab) - previously the only way back was
+          browser back, which loses that page's tab selection. Only shown
+          when ?return_to= was actually passed (a same-origin relative path;
+          see the returnTo state above), never a bare/guessed link. */}
+      {returnTo && (
+        <Breadcrumbs sx={{ mb: 2 }}>
+          <MuiLink
+            component="button"
+            onClick={() => navigate(returnTo)}
+            underline="hover"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+          >
+            {/* Deliberately not "Back to {selectedBOKey}" - selectedBOKey can
+                change after landing here (e.g. opening a rule that belongs to
+                a different bo_name than the one the link was clicked from,
+                such as a binding's own BO), which would misname the page
+                this actually returns to. */}
+            <ArrowBackIcon fontSize="inherit" /> Back
+          </MuiLink>
+        </Breadcrumbs>
+      )}
+
       {/* Page header - matches the icon+title+subtitle language used by
           BusinessObjectDetailsPage/components/PageHeader.tsx elsewhere in
           the app, plus the BO badge so it's always visible which object
@@ -429,6 +579,7 @@ const AdvancedRuleBuilderPage: React.FC = () => {
             <Stack direction="row" spacing={1.5} alignItems="center">
               <Typography variant="h4" sx={{ fontWeight: 900 }}>Rule Builder</Typography>
               {selectedBOKey && <Chip label={selectedBOKey} size="small" color="primary" variant="outlined" />}
+              {loadedRuleId && <Chip label={`Editing: ${ruleName}`} size="small" color="secondary" variant="outlined" />}
             </Stack>
             <Typography variant="body2" color="text.secondary">
               Author validation rules and calc terms with nested conditions, cross-entity traversal, and type-aware operators.
@@ -436,6 +587,20 @@ const AdvancedRuleBuilderPage: React.FC = () => {
           </Box>
         </Stack>
       </Stack>
+
+      {ruleLoadError && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setRuleLoadError(null)}>
+          Failed to load the requested rule: {ruleLoadError}
+        </Alert>
+      )}
+      {ruleLoadUnsupported && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          This rule's name, severity, timing and category loaded, but its condition tree uses a
+          field-to-field or arithmetic comparison the visual builder can't represent yet - the tree
+          below is a blank default, not this rule's actual logic. Saving is disabled to avoid
+          overwriting it; edit it directly via the API for now.
+        </Alert>
+      )}
 
       {/* Primary authoring card - the one thing on this page that isn't
           secondary/supporting, so it gets a visible border instead of
@@ -582,9 +747,9 @@ const AdvancedRuleBuilderPage: React.FC = () => {
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
             onClick={handleSave}
-            disabled={saving || !ruleName || !selectedBOKey}
+            disabled={saving || !ruleName || !selectedBOKey || ruleLoadUnsupported}
           >
-            {saving ? 'Saving...' : 'Save Rule'}
+            {saving ? 'Saving...' : loadedRuleId ? 'Save Changes' : 'Save Rule'}
           </Button>
         )}
 

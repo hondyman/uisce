@@ -138,7 +138,7 @@ func (h *InstrumentSearchHandler) searchSecurities(
 		FROM oms.security s
 		WHERE (
 			s.tenant_id = $1 
-			OR s.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
+			OR s.tenant_id = public.uisce_gold_copy_tenant_id()
 		)
 		AND (s.valid_from <= NOW())
 		AND (s.valid_to IS NULL OR s.valid_to > NOW())

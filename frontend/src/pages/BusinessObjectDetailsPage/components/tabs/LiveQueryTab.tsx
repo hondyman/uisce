@@ -82,6 +82,7 @@ import { dedupeFields } from '../../../../utils/dedupeFields';
 
 interface LiveQueryTabProps {
   businessObject: any;
+  bindings?: any[];
 }
 
 export type AggFunc = 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT' | 'COUNT DISTINCT' | 'STDDEV' | 'VALUE';
@@ -189,10 +190,30 @@ function sanitizeDriverTableName(rawTable?: string): string {
   return `public."${clean.replace(/"/g, '')}"`;
 }
 
-export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
+export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProps) {
   const { tenant } = useTenant();
   const tenantId = tenant?.id || 'master-gold-copy';
   const notification = useNotification();
+
+  // Which physical binding (source) this query should run against.
+  // A Business Object can have more than one binding (e.g. an ORM source
+  // and an MDM golden-record source) -- default to the one marked
+  // isDefault, falling back to businessObject.datasourceId for BOs whose
+  // bindings haven't loaded yet.
+  const defaultBindingId = useMemo(() => {
+    const def = bindings.find((b) => b.isDefault) || bindings[0];
+    return def?.boBindingId || businessObject?.datasourceId || '';
+  }, [bindings, businessObject?.datasourceId]);
+  const [selectedBindingId, setSelectedBindingId] = useState<string>(defaultBindingId);
+
+  useEffect(() => {
+    setSelectedBindingId(defaultBindingId);
+  }, [defaultBindingId]);
+
+  const selectedBinding = useMemo(
+    () => bindings.find((b) => b.boBindingId === selectedBindingId),
+    [bindings, selectedBindingId]
+  );
 
   // Query State
   const [dimensions, setDimensions] = useState<DimensionItem[]>([]);
@@ -359,7 +380,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       return { tier: 'STARROCKS', reason: 'Explicit User Selection: Vectorized StarRocks MPP Engine', label: 'StarRocks (Hot OLAP)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'ICEBERG') {
-      return { tier: 'STARROCKS', reason: 'Explicit User Selection: StarRocks for all analytics (Trino/Iceberg removed)', label: 'StarRocks (Analytics)', dialect: 'StarRocks SQL' };
+      return { tier: 'STARROCKS', reason: 'Explicit User Selection: StarRocks/DataFusion for all analytics', label: 'StarRocks (Analytics)', dialect: 'StarRocks SQL' };
     }
     if (engineRouting === 'POSTGRES') {
       return { tier: 'POSTGRES', reason: 'Explicit User Selection: Primary PostgreSQL 16 OLTP', label: 'PostgreSQL 16 (Hot OLTP)', dialect: 'PostgreSQL 16' };
@@ -546,7 +567,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
     const qd: QueryDef = {
       context: {
         boId: businessObject.id,
-        bindingId: businessObject.datasourceId || '',
+        bindingId: selectedBindingId || businessObject.datasourceId || '',
         tenantId,
       },
       query: {
@@ -572,7 +593,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       setPreviewSql(generatePostgresSQL());
       evaluateCost();
     }
-  }, [businessObject, dimensions, measures, timeDimensions, filters, limit, tenantId, evaluateCost, generatePostgresSQL]);
+  }, [businessObject, selectedBindingId, dimensions, measures, timeDimensions, filters, limit, tenantId, evaluateCost, generatePostgresSQL]);
 
   useEffect(() => {
     updatePreview();
@@ -702,7 +723,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
       const qd: QueryDef = {
         context: {
           boId: businessObject.id,
-          bindingId: businessObject.datasourceId || '',
+          bindingId: selectedBindingId || businessObject.datasourceId || '',
           tenantId,
         },
         query: {
@@ -990,7 +1011,7 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
               Live ORM Query Builder & CBO Pushdown Engine
             </Typography>
             <Chip
-              label={businessObject?.driverTableName || 'Active Driver Table'}
+              label={selectedBinding?.drivingNodeName || selectedBinding?.nodeName || businessObject?.driverTableName || 'Active Driver Table'}
               size="small"
               variant="outlined"
               color="primary"
@@ -1011,6 +1032,23 @@ export function LiveQueryTab({ businessObject }: LiveQueryTabProps) {
 
         {/* Engine Routing & Limits Controls */}
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+          {bindings.length > 1 && (
+            <TextField
+              select
+              size="small"
+              label="Source Binding"
+              value={selectedBindingId}
+              onChange={(e) => setSelectedBindingId(e.target.value)}
+              sx={{ width: 220 }}
+            >
+              {bindings.map((b) => (
+                <MenuItem key={b.boBindingId} value={b.boBindingId}>
+                  {(b.backendType || 'Backend')}{b.isDefault ? ' (default)' : ''} · {b.nodeName || b.drivingNodeName || 'unmapped'}
+                </MenuItem>
+              ))}
+            </TextField>
+          )}
+
           <TextField
             select
             size="small"

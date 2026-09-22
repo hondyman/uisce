@@ -41,7 +41,7 @@ func NewEnrichTransform(cfg EnrichConfig, db *sql.DB) TileFunc {
 					lookupKey = spec.SourceField
 				}
 
-				query := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)) ORDER BY (tenant_id = $2) DESC NULLS LAST LIMIT 1`, spec.TargetField, spec.TargetTable, lookupKey)
+				query := fmt.Sprintf(`SELECT %s FROM %s WHERE %s = $1 AND (tenant_id = $2 OR tenant_id = public.uisce_gold_copy_tenant_id()) ORDER BY (tenant_id = $2) DESC NULLS LAST LIMIT 1`, spec.TargetField, spec.TargetTable, lookupKey)
 
 				var result string
 				err := db.QueryRowContext(ctx, query, val, tctx.TenantID).Scan(&result)

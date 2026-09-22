@@ -142,7 +142,7 @@ func (s *GoldCopyRebaseService) RebaseTenantNode(
 	err = tx.QueryRowContext(ctx, `
 		SELECT COALESCE(version_id, 1), node_name, COALESCE(properties, '{}'::jsonb)
 		FROM catalog_node 
-		WHERE id = $1 AND (tenant_id = '00000000-0000-0000-0000-000000000000' OR tenant_id = (SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		WHERE id = $1 AND (tenant_id = '00000000-0000-0000-0000-000000000000' OR tenant_id = public.uisce_gold_copy_tenant_id()::text)
 	`, goldCopyNodeID.String()).Scan(&gcVersion, &gcName, &gcPropsRaw)
 	if err != nil {
 		return nil, fmt.Errorf("failed fetching gold copy node %s: %w", goldCopyNodeID, err)
@@ -280,7 +280,7 @@ func (s *GoldCopyRebaseService) executeBatchRebase(ctx context.Context, tenantID
 		FROM catalog_node tn
 		JOIN catalog_node gc ON (UPPER(tn.node_name) = UPPER(gc.node_name) OR tn.properties->>'core_reference_id' = gc.id::text)
 		WHERE tn.tenant_id = $1
-		  AND (gc.tenant_id = '00000000-0000-0000-0000-000000000000' OR gc.tenant_id = (SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1))
+		  AND (gc.tenant_id = '00000000-0000-0000-0000-000000000000' OR gc.tenant_id = public.uisce_gold_copy_tenant_id()::text)
 		  AND COALESCE(tn.derived_from_version_id, 1) < COALESCE(gc.version_id, 1)
 	`
 	var pairs []struct {

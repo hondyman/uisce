@@ -318,7 +318,7 @@ func TestDiscoveryStartWithDifferentDatabaseTypes(t *testing.T) {
 		logger: testLoggerExt,
 	}
 
-	dbTypes := []string{"postgres", "trino", "auto", "starrocks"}
+	dbTypes := []string{"postgres", "datafusion", "auto", "starrocks"}
 
 	for _, dbType := range dbTypes {
 		req := StartDiscoveryRequest{

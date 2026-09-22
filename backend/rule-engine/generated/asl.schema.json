@@ -6409,14 +6409,14 @@
         "ScoringWeights": {
           "$ref": "#/definitions/Record\u003cstring, float64\u003e"
         },
-        "TrinoDatabases": {
+        "StarRocksDatabases": {
           "$ref": "#/definitions/string[]"
         }
       },
       "required": [
         "ScanInterval",
         "PostgresDatabases",
-        "TrinoDatabases",
+        "StarRocksDatabases",
         "S3Buckets",
         "PrometheusURL",
         "MinCardinalityScore",

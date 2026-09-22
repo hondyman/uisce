@@ -494,8 +494,9 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 		Schema string `json:"schema"`
 	}
 	if err := json.Unmarshal([]byte(ds.ConnectionDetails), &connConfig); err == nil && connConfig.Schema != "" {
-		schemaWhitelist = []string{connConfig.Schema}
-		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %v", schemaWhitelist)
+		// The schema setting is a comma-separated list; treating it as one name matched no schema at all.
+		schemaWhitelist = parseSchemaWhitelist(connConfig.Schema)
+		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %q", schemaWhitelist)
 	}
 
 	// Create scanner via overrideable constructor for testing
@@ -508,6 +509,16 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 
 	if progress != nil {
 		progress <- models.ScanProgress{Phase: "scanning", Percent: 0, Message: "Extracting metadata (tables, columns, keys)..."}
+		// The extraction is the long part: let the scanner report tables read, key steps and column profiling.
+		if pr, ok := ansiScanner.(interface {
+			SetProgressFunc(func(models.ScanProgress))
+		}); ok {
+			pr.SetProgressFunc(func(p models.ScanProgress) {
+				p.Phase = "scanning"
+				p.CurrentItem = firstNonEmpty(p.CurrentItem, ds.Name)
+				progress <- p
+			})
+		}
 	}
 	// Extract metadata from the TARGET database
 	nodes, edges, err := ansiScanner.ExtractMetadata()
@@ -643,16 +654,24 @@ func (s *CatalogScanService) ScanSingleDatasourceForTest(ctx context.Context, ds
 
 // scanSingleDatasourceWithProgress runs scan with progress updates
 func (s *CatalogScanService) scanSingleDatasourceWithProgress(ctx context.Context, ds DatasourceConfig, goldCopyNodes map[string]db.GoldCopyNodeInfo, progress chan<- models.ScanProgress, basePercent, weight float64) (*ScanResult, error) {
-	// UPDATE STATUS: Running phase progress
-	progress <- models.ScanProgress{
+	// Every phase reports its own 0-100; the forwarder maps them into this datasource's slice of the bar, keeps
+	// it moving forward and sends a heartbeat while a long step runs.
+	inner := make(chan models.ScanProgress, 64)
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		forwardScanProgress(ctx, inner, progress, basePercent, weight, scanHeartbeatInterval)
+	}()
+	inner <- models.ScanProgress{
 		Phase:       "scanning",
-		Percent:     basePercent + weight*0.2,
 		CurrentItem: ds.Name,
 		Message:     fmt.Sprintf("Extracting metadata from %s...", ds.Name),
 	}
 
 	// Delegate to the modified scan method that supports granular progress
-	result, err := s.scanSingleDatasource(ctx, ds, goldCopyNodes, progress)
+	result, err := s.scanSingleDatasource(ctx, ds, goldCopyNodes, inner)
+	close(inner)
+	<-forwarded
 
 	if err != nil {
 		progress <- models.ScanProgress{
@@ -662,10 +681,10 @@ func (s *CatalogScanService) scanSingleDatasourceWithProgress(ctx context.Contex
 		}
 		return nil, err
 	}
-	// Emit storing phase progress
+	// Emit the result of this datasource; its whole slice of the bar is done (never move the bar backwards)
 	progress <- models.ScanProgress{
 		Phase:       "storing",
-		Percent:     basePercent + weight*0.2,
+		Percent:     basePercent + weight,
 		CurrentItem: ds.Name,
 		Message:     fmt.Sprintf("Stored %d tables, %d updated for %s", result.Added, result.Updated, ds.Name),
 	}
@@ -713,6 +732,18 @@ func (s *CatalogScanService) TestConnectionByID(ctx context.Context, datasourceI
 
 // connectToTargetDatabase establishes connection to a target database
 func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connectionDetails string) (*sql.DB, error) {
+	return connectToDatabaseFromDetails(ctx, connectionDetails)
+}
+
+// connectToDatabaseFromDetails opens (and pings) a *sql.DB for the given
+// connection-details JSON, supporting the same shapes as the scan pipeline:
+// flat host/port/database/username/password, a DSN string, or key_pair
+// (mTLS) auth. Extracted from CatalogScanService.connectToTargetDatabase so
+// other callers in this package (e.g. BusinessObjectService, to run live
+// record queries against a binding's actual physical backend instead of
+// always using the alpha DB) can reuse the exact same, already-proven
+// connection logic rather than re-deriving DSN/TLS handling.
+func connectToDatabaseFromDetails(ctx context.Context, connectionDetails string) (*sql.DB, error) {
 	// This struct is updated to match the nested JSON structure from the database
 	// AND the flat structure from the frontend ConnectionForm.
 	type ConnectionConfig struct {
@@ -917,4 +948,13 @@ func (s *CatalogScanService) storeCatalogData(ctx context.Context, datasourceID 
 
 	logging.GetLogger().Sugar().Infof("Successfully stored catalog data for datasource %s", datasourceID)
 	return added, updated, removed, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

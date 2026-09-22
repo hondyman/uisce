@@ -6,16 +6,16 @@ This document outlines the phased rollout strategy for migrating from RabbitMQ/P
 ## Phased Rollout
 ### 1. Sandbox POC (Current Phase)
 - **Environment**: Local Docker Compose.
-- **Goal**: Validate connectivity and end-to-end data flow (Postgres -> Debezium -> Redpanda -> RisingWave -> Iceberg -> Trino).
+- **Goal**: Validate connectivity and end-to-end data flow (Postgres -> Debezium -> Redpanda -> RisingWave -> Iceberg -> StarRocks/DataFusion).
 - **Validation**:
   - Insert row in Postgres.
   - Verify pointer event in Redpanda.
   - Verify payload in MinIO.
   - Verify canonical row in RisingWave MV.
-  - Verify row queryable in Trino.
+  - Verify row queryable in StarRocks/DataFusion.
 
 ### 2. Staging Deployment
-- **Infrastructure**: Deploy Redpanda (3-node), RisingWave Cluster, Iceberg (AWS Glue/S3), Trino Cluster.
+- **Infrastructure**: Deploy Redpanda (3-node), RisingWave Cluster, Iceberg (AWS Glue/S3), StarRocks/DataFusion Cluster.
 - **Data**: Seed with anonymized production dump.
 - **Testing**:
   - Run `dryrun-diff.js` to compare legacy semantic resolver output vs new stack output for top 100 accounts.

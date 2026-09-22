@@ -5,7 +5,6 @@ on:
     branches:
       - main
     paths:
-      - 'trino/**'
       - 'docker-compose.remote.yml'
       - 'scripts/deploy*'
       - 'backend/migrations/**'

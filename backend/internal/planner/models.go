@@ -25,7 +25,7 @@ type TimeRange struct {
 
 // EngineRoute describes how to reach a specific engine for a query execution
 type EngineRoute struct {
-	EngineType string `json:"engine_type"` // trino|ts_service|drift_service|discovery_service
+	EngineType string `json:"engine_type"` // starrocks|datafusion|ts_service|drift_service|discovery_service
 	Region     string `json:"region"`
 	Endpoint   string `json:"endpoint"`
 	Catalog    string `json:"catalog,omitempty"`

@@ -17,7 +17,7 @@ type DataTier string
 const (
 	// HotTier uses StarRocks for real-time analytics (< 90 days default)
 	HotTier DataTier = "hot"
-	// ColdTier is deprecated - Trino/Iceberg removed
+	// ColdTier historical queries (routed to StarRocks / DataFusion)
 	ColdTier DataTier = "cold"
 	// AutoTier automatically routes based on date range
 	AutoTier DataTier = "auto"
@@ -35,8 +35,7 @@ type MultiSourceConfig struct {
 	HotColdBoundaryDays int `yaml:"hot_cold_boundary_days" json:"hot_cold_boundary_days"`
 }
 
-// MultiSourceCalcEngine routes queries to StarRocks (hot) or cold tier
-// Deprecated: Cold tier (Trino/Iceberg) has been removed
+// MultiSourceCalcEngine routes queries to StarRocks (hot tier) or DataFusion (cold tier)
 type MultiSourceCalcEngine struct {
 	// Hot tier: StarRocks for real-time analytics
 	starrocks *StarRocksClient
@@ -67,7 +66,7 @@ func NewMultiSourceCalcEngine(cfg *MultiSourceConfig, pricingProvider pricing.Pr
 		engine.starrocks = sr
 	}
 
-	// Cold tier (Trino) has been removed
+	// Cold tier queries route to StarRocks/Apache DataFusion
 
 	// Initialize metadata tier (PostgreSQL)
 	if cfg.PostgresDSN != "" {
@@ -119,10 +118,9 @@ func (e *MultiSourceCalcEngine) RunFast(ctx context.Context, metric string, inpu
 	return e.Run(ctx, metric, withTier(inputs, HotTier))
 }
 
-// RunHistorical executes a query against cold tier for historical analysis
-// Deprecated: Trino/Iceberg has been removed
+// RunHistorical executes a query against cold tier for historical analysis via StarRocks
 func (e *MultiSourceCalcEngine) RunHistorical(ctx context.Context, metric string, inputs map[string]interface{}) (*CalcResult, error) {
-	return nil, fmt.Errorf("historical queries disabled: Trino/Iceberg audit chain removed")
+	return e.Run(ctx, metric, withTier(inputs, ColdTier))
 }
 
 // determineTier decides which data tier to query based on inputs
@@ -189,12 +187,10 @@ func (e *MultiSourceCalcEngine) calculateNAV(ctx context.Context, inputs map[str
 	var err error
 
 	switch tier {
-	case HotTier:
+	case HotTier, ColdTier:
 		holdings, err = e.fetchHoldingsFromStarRocks(ctx, tenantID, datasourceID, portfolioID, asOfDate)
-	case ColdTier:
-		return nil, fmt.Errorf("cold tier disabled: Trino/Iceberg removed")
 	default:
-		// Auto: use StarRocks only
+		// Auto: use StarRocks
 		holdings, err = e.fetchHoldingsFromStarRocks(ctx, tenantID, datasourceID, portfolioID, asOfDate)
 	}
 
@@ -260,13 +256,6 @@ func (e *MultiSourceCalcEngine) fetchHoldingsFromStarRocks(ctx context.Context,
 	}
 
 	return holdings, rows.Err()
-}
-
-// fetchHoldingsFromTrino queries cold tier for historical holdings
-// Deprecated: Trino/Iceberg has been removed
-func (e *MultiSourceCalcEngine) fetchHoldingsFromTrino(ctx context.Context,
-	tenantID, datasourceID, portfolioID string, asOfDate time.Time) ([]HoldingData, error) {
-	return nil, fmt.Errorf("Trino queries disabled: Trino/Iceberg audit chain removed")
 }
 
 // computeNAVFromHoldings calculates NAV from holding data
@@ -439,14 +428,12 @@ func (e *MultiSourceCalcEngine) calculatePoP(ctx context.Context, inputs map[str
 	`
 
 	switch tier {
-	case HotTier:
+	case HotTier, ColdTier:
 		if e.starrocks == nil {
 			return nil, fmt.Errorf("StarRocks not configured")
 		}
 		query = popQuery
 		rows, err = e.starrocks.Query(ctx, query, tenantID, datasourceID, metricID, periodLabel)
-	case ColdTier:
-		return nil, fmt.Errorf("cold tier disabled: Trino/Iceberg removed")
 	default:
 		return nil, fmt.Errorf("invalid tier")
 	}

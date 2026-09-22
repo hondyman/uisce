@@ -1,4 +1,4 @@
-"""Iceberg/Trino feature value loader"""
+"""Iceberg/DataFusion feature value loader"""
 
 import logging
 from datetime import datetime
@@ -34,9 +34,9 @@ async def load_feature_values(
         
         table_name = f"features.{namespace}.{name}"
         
-        # Load from Iceberg using Trino/PyArrow
+        # Load from Iceberg using DataFusion/PyArrow
         dataset = ds.dataset(
-            f"iceberg://{settings.TRINO_CATALOG}/{table_name}",
+            f"iceberg://{settings.DATAFUSION_CATALOG}/{table_name}",
             format="parquet"
         )
         

@@ -1019,7 +1019,7 @@ export async function previewExplorerPlan(
   }
 }
 
-export type SQLDialect = 'postgres' | 'snowflake' | 'bigquery' | 'clickhouse' | 'duckdb' | 'trino';
+export type SQLDialect = 'postgres' | 'snowflake' | 'bigquery' | 'clickhouse' | 'duckdb' | 'starrocks' | 'datafusion';
 
 /**
  * Generate dialect-specific SQL string for the current query state.
