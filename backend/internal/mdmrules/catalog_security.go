@@ -77,17 +77,17 @@ func securityRules() []Rule {
 			"AssetClassCode", "StatusField", "SourceSystemIdentifier", "AuthorityLevel"),
 		// identifiers, matching and golden record
 		required("security_identifier_issuance", "An issued identifier needs the security, the type, the value and the source.", ScopeAll, catIntegrity,
-			"SecurityIdentifier", "IdentifierType", "IdentifierValue", "SourceSystemIdentifier"),
+			"SecurityId", "IdentifierType", "IdentifierValue", "SourceSystemIdentifier"),
 		required("security_identifier_conflict", "An identifier conflict needs the identifier, both sources, the conflict type and a severity.", ScopeAll, catIntegrity,
 			"IdentifierType", "IdentifierValue", "SourceSystemIdentifierA", "SourceSystemIdentifierB", "ConflictType", "Severity"),
 		required("security_match_candidate", "A match candidate needs the rule, both securities and the score.", ScopeAll, catIntegrity,
-			"MatchRuleId", "SecurityIdentifierA", "SecurityIdentifierB", "OverallScore"),
+			"MatchRuleId", "SecurityIdA", "SecurityIdB", "OverallScore"),
 		required("security_golden_record", "A golden record needs the security, its classification, the effective date and its attributes and winning sources.", ScopeAll, catIntegrity,
-			"SecurityIdentifier", "AssetClassCode", "SecTypCd", "SecSubTypeCode", "EffectiveDate", "GoldenAttributes", "WinningSources"),
+			"SecurityId", "AssetClassCode", "SecTypCd", "SecSubTypeCode", "EffectiveDate", "GoldenAttributes", "WinningSources"),
 		required("security_golden_field", "A golden field needs its golden record and the field name.", ScopeAll, catIntegrity, "GoldenRecordId", "FieldName"),
 		// documents, reconciliation and governance
 		required("security_term_sheet", "A term sheet needs the security, the document type and the document name.", ScopeAll, catIntegrity,
-			"SecurityIdentifier", "DocumentType", "DocumentName"),
+			"SecurityId", "DocumentType", "DocumentName"),
 		required("security_term_extraction_field", "An extracted value needs its job and the field name.", ScopeAll, catIntegrity, "JobIdentifier", "FieldName"),
 		required("security_reconciliation_result", "A reconciliation result needs its reconciliation, the field and a severity.", ScopeAll, catIntegrity,
 			"ReconciliationId", "FieldName", "Severity"),
@@ -97,7 +97,7 @@ func securityRules() []Rule {
 		required("security_change_request", "A change request needs a reference, a type, the requested changes and the requester.", ScopeAll, catIntegrity,
 			"RequestReference", "ChangeType", "RequestedChanges", "RequestedBy"),
 		required("security_ca_linkage", "A corporate-action link needs the security, the corporate action and the link type.", ScopeAll, catIntegrity,
-			"SecurityIdentifier", "CorporateActionID", "LinkageType"),
+			"SecurityId", "CorporateActionID", "LinkageType"),
 	)
 
 	// ---- numeric: scores and confidences are 0-100 (numeric(5,2)); counts and durations are positive ------
