@@ -298,6 +298,11 @@ func Catalog() []Rule {
 			"ParentIssuerId", "ChildIssuerId", "ChangeType"),
 		inRange("issuer_hierarchy_review", "Confidence", 0, 100),
 	)
+	// ---- core ORM: security master identity ------------------------------------------------
+	add(
+		required("security", "A security needs an id, a name and a type.", ScopeAll, catIntegrity,
+			"SecId", "SecName", "SecTypCd"),
+	)
 	return append(r, securityRules()...)
 }
 

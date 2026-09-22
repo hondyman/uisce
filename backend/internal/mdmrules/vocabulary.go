@@ -34,6 +34,7 @@ var Vocabulary = map[string][]string{
 	"party":                       terms("PartyId PartyCode LegalName PartyType Segment TaxId Domicile CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"portfolio":                   terms("PortfolioId PortfolioCode PortfolioName PortfolioType ManagerID PortfolioDescription Status CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"portfolio_composite":         terms("PortfolioId CompositeCode PortfolioName PortfolioDescription Status CustomAttributes CreatedAt UpdatedAt TenantId"),
+	"security":                    terms("ID SecId SecName SecTypCd Isin Cusip Ticker IssuerId AssetCrrncyCd CustomAttributes CreatedAt UpdatedAt"),
 	"source_system":               terms("SourceId SourceCode SourceName SystemType Vendor ConnectionInfo Priority SourceIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"steward":                     terms("StewardId StewardName StewardEmail Team Role StewardIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"survivorship_rule":           terms("SurvivorshipId EntityType AttributeName Strategy PriorityVendors AnomalyTolerancePercent StalenessMaxAgeSec SurvivorshipIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),
