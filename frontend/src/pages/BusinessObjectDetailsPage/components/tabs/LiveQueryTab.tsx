@@ -1612,8 +1612,7 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
                   <Alert severity="error" sx={{ bgcolor: 'background.paper' }}>{sqlError}</Alert>
                 ) : (
                   <>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                      <Box /> {/* spacer — chips removed: see handoff doc A3 + commit `1ef260574` */}
+                    <Stack direction="row" justifyContent="flex-end" alignItems="center" sx={{ mb: 1 }}>
                       <Button size="small" variant="outlined" startIcon={<CopyIcon />} onClick={handleCopySql} sx={{ color: 'white', borderColor: 'grey.700' }}>
                         Copy SQL
                       </Button>

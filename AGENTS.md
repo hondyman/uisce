@@ -550,5 +550,5 @@ See `docs/query-results-phase-handoff.md` for settled decisions, phase plan, and
 - `QueryResultsPanel` v2 API (`resultSet` / `extraTabs` / `initialTabId`); consumers own their own run/compile calls.
 - `FilterBuilderPanel` fragment assembly (`buildSQL`/`buildGroupSQL`) is invisible to Layer 2 by design — Phase 3 work list is the operator switch, not lint output.
 - Three forced renames: `compileSql`→`fetchCompiledSql`, `generateSQL`→`requestGeneratedSQL`, `formatSQL`→`prettyPrintSql` (all renamed, not exempted).
-- LiveQueryTab residue landed in `#112` / `1ef260574`: `generatePostgresSQL` deleted, mock-row fallback deleted, two false-claim chips (`Engine: ${engine}`, `Two-Pass CTE Compilation Active`) deleted. Failed `execute` now surfaces errors via `friendlyQueryError`; no fabricated rows or fake timing.
+- LiveQueryTab residue landed in two PR #112 commits: the mock-removal commit (deleted `generatePostgresSQL`, mock-row fallback, and `queryBuilderMock.ts` dead code; failures now surface as real errors via `friendlyQueryError`) and the correction commit (deleted the two false-claim chips `Engine: ${engine}` and `Two-Pass CTE Compilation Active`; corrected ledger arithmetic). SHAs `1ef260574` / `79173671b` are date-anchors, not durable references.
 - Baseline revert tag: `baseline/query-results-panel` at `b258de304`.
