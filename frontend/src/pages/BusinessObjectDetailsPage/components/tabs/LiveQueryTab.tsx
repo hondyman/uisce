@@ -77,6 +77,7 @@ import { useTenant } from '../../../../contexts/TenantContext';
 import { useNotification } from '../../../../hooks/useNotification';
 import { previewQuery, executeQuery } from '../../../../features/query-builder/services/queryBuilderApi';
 import type { QueryDef, PreviewResult, QueryExecuteResult } from '../../../../features/query-builder/types/queryDef';
+import { friendlyQueryError } from '../../../../features/query-execution';
 import { DrillDownGridModal } from '../../../../components/LiveQuery/DrillDownGridModal';
 import { dedupeFields } from '../../../../utils/dedupeFields';
 
@@ -253,6 +254,7 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
 
   // Execution & SQL state
   const [previewSql, setPreviewSql] = useState<string>('-- Select dimensions or measures to generate SQL');
+  const [sqlError, setSqlError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [executeResult, setExecuteResult] = useState<QueryExecuteResult | null>(null);
@@ -415,120 +417,6 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
     };
   }, [engineRouting, filters, measures.length, limit, timeDimensions]);
 
-  // Two-Pass SQL Generator with Layer_0 CTE, Dynamic ABAC Masking & Engine Dialect Formatting
-  const generatePostgresSQL = useCallback((): string => {
-    if (!dimensions.length && !measures.length && !timeDimensions.length) {
-      return '-- Select dimensions, measures, or governed calculations from the palette to generate SQL';
-    }
-
-    const driverTable = sanitizeDriverTableName(businessObject?.driverTableName || businessObject?.technicalName);
-
-    // Check if any projected measure is a governed calculation requiring a CTE layer
-    const calcMeasures = measures.filter(m => m.isCalculated && m.formula);
-    const hasCalculations = calcMeasures.length > 0;
-    const isMaskedPersona = userRole === 'analyst' && enableDynamicMasking;
-
-    // 1. SELECT Columns (Outer Query)
-    const outerSelectClauses: string[] = [];
-
-    dimensions.forEach(d => {
-      outerSelectClauses.push(`t0."${d.name}" AS "${d.alias}"`);
-    });
-
-    timeDimensions.forEach(td => {
-      if (td.granularity === 'raw') {
-        outerSelectClauses.push(`t0."${td.name}" AS "${td.alias}"`);
-      } else {
-        outerSelectClauses.push(`DATE_TRUNC('${td.granularity}', t0."${td.name}") AS "${td.alias}"`);
-      }
-    });
-
-    measures.forEach(m => {
-      if (m.agg === 'VALUE') {
-        outerSelectClauses.push(`t0."${m.name}" AS "${m.alias}"`);
-      } else if (m.agg === 'COUNT DISTINCT') {
-        outerSelectClauses.push(`COUNT(DISTINCT t0."${m.name}") AS "${m.alias}"`);
-      } else {
-        outerSelectClauses.push(`${m.agg}(t0."${m.name}") AS "${m.alias}"`);
-      }
-    });
-
-    // 2. WHERE Clauses (with ABAC Tenant Isolation Guardrail)
-    const whereClauses: string[] = [];
-    if (tenantId) {
-      whereClauses.push(`t0."tenant_id" = '${tenantId}'`);
-    }
-
-    filters.forEach(f => {
-      const col = `t0."${f.fieldName}"`;
-      const op = f.op;
-      const val = (f.val || '').trim();
-
-      if (op === 'IS NULL') {
-        whereClauses.push(`${col} IS NULL`);
-      } else if (op === 'IS NOT NULL') {
-        whereClauses.push(`${col} IS NOT NULL`);
-      } else if (op === 'BETWEEN' && val) {
-        const val2 = (f.val2 || '').trim();
-        whereClauses.push(`${col} BETWEEN '${val.replace(/'/g, "''")}' AND '${val2.replace(/'/g, "''")}'`);
-      } else if (op === 'CONTAINS' && val) {
-        whereClauses.push(`${col} ILIKE '%${val.replace(/'/g, "''")}%'`);
-      } else if (op === 'STARTS WITH' && val) {
-        whereClauses.push(`${col} ILIKE '${val.replace(/'/g, "''")}%'`);
-      } else if (op === 'ENDS WITH' && val) {
-        whereClauses.push(`${col} ILIKE '%${val.replace(/'/g, "''")}'`);
-      } else if ((op === 'IN' || op === 'NOT IN') && val) {
-        const items = val.split(',').map(v => `'${v.trim().replace(/'/g, "''")}'`).filter(v => v !== "''");
-        if (items.length > 0) {
-          whereClauses.push(`${col} ${op} (${items.join(', ')})`);
-        }
-      } else if (val) {
-        const isNum = f.fieldType === 'number';
-        const formattedVal = isNum && !isNaN(Number(val)) ? val : `'${val.replace(/'/g, "''")}'`;
-        whereClauses.push(`${col} ${op} ${formattedVal}`);
-      }
-    });
-
-    // 3. GROUP BY Clause
-    let groupBySQL = '';
-    const nonMeasureCount = dimensions.length + timeDimensions.length;
-    if (measures.length > 0 && nonMeasureCount > 0) {
-      const groupIndexes = Array.from({ length: nonMeasureCount }, (_, idx) => (idx + 1).toString());
-      groupBySQL = `\nGROUP BY ${groupIndexes.join(', ')}`;
-    }
-
-    // 4. ORDER BY Clause
-    let orderBySQL = '';
-    if (sorts.length > 0) {
-      const sortParts = sorts.map(s => `"${s.alias}" ${s.direction}`);
-      orderBySQL = `\nORDER BY ${sortParts.join(', ')}`;
-    }
-
-    const whereSQL = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join(' AND ')}` : '';
-
-    const engineComment = `-- [Engine: ${resolvedEngineTier.label}] [Dialect: ${resolvedEngineTier.dialect}]\n-- [CBO Routing: ${resolvedEngineTier.reason}]\n-- [ABAC Persona: ${userRole.toUpperCase()} | Dynamic Masking: ${isMaskedPersona ? 'ACTIVE (PII Redacted)' : 'UNMASKED (Full Clearance)'}]\n\n`;
-
-    // Two-Pass CTE Compilation if Governed Calculations are present or Masking is active
-    if (hasCalculations || isMaskedPersona) {
-      const cteSelectCols: string[] = [
-        't0.*',
-        ...calcMeasures.map(cm => {
-          const sqlExpr = (cm.formula || '').replace(/\$\{([a-zA-Z0-9_]+)\}/g, 't0."$1"');
-          return `${sqlExpr} AS "${cm.name}"`;
-        }),
-      ];
-
-      if (isMaskedPersona) {
-        cteSelectCols.push(`CAST('ACC-****-' || RIGHT(t0."account_number", 4) AS VARCHAR) AS "account_number_masked"`);
-      }
-
-      return `${engineComment}WITH layer_0 AS (\n    -- Pass 1: Compile Governed Semantic Calculation AST & ABAC Masking Policies\n    SELECT\n        ${cteSelectCols.join(',\n        ')}\n    FROM ${driverTable} t0\n    WHERE t0."tenant_id" = '${tenantId}'\n)\n-- Pass 2: Wrap with Ad-hoc Exploratory Dimensions, Rollups & Aggregations\nSELECT\n    ${outerSelectClauses.join(',\n    ')}\nFROM layer_0 t0${whereSQL.replace(`t0."tenant_id" = '${tenantId}' AND `, '').replace(`\nWHERE t0."tenant_id" = '${tenantId}'`, '')}${groupBySQL}${orderBySQL}\nLIMIT ${limit};`;
-    }
-
-    // Single-Pass SQL Pushdown
-    return `${engineComment}SELECT\n    ${outerSelectClauses.join(',\n    ')}\nFROM ${driverTable} t0${whereSQL}${groupBySQL}${orderBySQL}\nLIMIT ${limit};`;
-  }, [dimensions, measures, timeDimensions, filters, sorts, limit, businessObject, tenantId, resolvedEngineTier, userRole, enableDynamicMasking]);
-
   const evaluateCost = useCallback(async () => {
     if (!businessObject?.id || (!dimensions.length && !measures.length && !timeDimensions.length)) {
       setCostEval(null);
@@ -561,6 +449,7 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
   const updatePreview = useCallback(async () => {
     if (!businessObject?.id || (!dimensions.length && !measures.length && !timeDimensions.length)) {
       setPreviewSql('-- Select dimensions, measures, or governed calculations from the palette to generate SQL');
+      setSqlError(null);
       return;
     }
 
@@ -585,15 +474,18 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
       const res: PreviewResult = await previewQuery(qd);
       if (res && res.sql && res.sql.trim()) {
         setPreviewSql(res.sql);
+        setSqlError(null);
       } else {
-        setPreviewSql(generatePostgresSQL());
+        setSqlError('Backend returned no SQL. Check field selections and binding.');
+        setPreviewSql('');
       }
       evaluateCost();
-    } catch {
-      setPreviewSql(generatePostgresSQL());
-      evaluateCost();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSqlError(friendlyQueryError(msg));
+      setPreviewSql('');
     }
-  }, [businessObject, selectedBindingId, dimensions, measures, timeDimensions, filters, limit, tenantId, evaluateCost, generatePostgresSQL]);
+  }, [businessObject, selectedBindingId, dimensions, measures, timeDimensions, filters, limit, tenantId, evaluateCost]);
 
   useEffect(() => {
     updatePreview();
@@ -737,63 +629,15 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
         },
       };
 
-      let res: QueryExecuteResult;
-      try {
-        res = await executeQuery(qd);
-      } catch {
-        const isMasked = userRole === 'analyst' && enableDynamicMasking;
-        const cols = [
-          ...dimensions.map(d => d.alias),
-          ...timeDimensions.map(td => td.alias),
-          ...measures.map(m => m.alias),
-        ];
-        const mockRows: any[] = [];
-        for (let i = 1; i <= Math.min(limit, 15); i++) {
-          const row: any = {};
-          dimensions.forEach(d => {
-            if (d.type === 'uuid') {
-              row[d.alias] = `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`;
-            } else if (d.name.includes('number')) {
-              row[d.alias] = isMasked ? `ACC-****-${4900 + i}` : `ACC-98214-${4900 + i}`;
-            } else if (d.name.includes('name') && isMasked && d.isSensitive) {
-              row[d.alias] = `Client Account ***${i}`;
-            } else if (d.name.includes('name')) {
-              row[d.alias] = `Global Wealth Account ${i}`;
-            } else if (d.name.includes('type')) {
-              row[d.alias] = i % 2 === 0 ? 'Individual' : 'Corporate Trust';
-            } else if (d.name.includes('status')) {
-              row[d.alias] = 'Active';
-            } else {
-              row[d.alias] = `${d.alias} ${i}`;
-            }
-          });
-          timeDimensions.forEach(td => {
-            const date = new Date(Date.now() - i * 86400000 * 5);
-            row[td.alias] = date.toISOString().split('T')[0];
-          });
-          measures.forEach(m => {
-            if (m.name.includes('yield') || m.name.includes('margin') || m.name.includes('pct')) row[m.alias] = (4.25 + i * 0.35).toFixed(2) + '%';
-            else if (m.name.includes('cash') || m.name.includes('balance') || m.name.includes('cost')) row[m.alias] = (150000 + i * 12450.50).toFixed(2);
-            else if (m.name.includes('asset') || m.name.includes('nav')) row[m.alias] = (1200000 + i * 45200.75).toFixed(2);
-            else row[m.alias] = (i * 24.5).toFixed(2);
-          });
-          mockRows.push(row);
-        }
-        res = {
-          sql: previewSql,
-          columns: cols.map(c => ({ name: c, type: 'string' })),
-          rows: mockRows,
-          rowCount: mockRows.length,
-          executionTimeMs: resolvedEngineTier.tier === 'STARROCKS' ? 6 : resolvedEngineTier.tier === 'ICEBERG' ? 42 : 14,
-        };
-      }
-
+      const res: QueryExecuteResult = await executeQuery(qd);
       setExecuteResult(res);
       setResultTab(0);
-      notification.success(`Query executed via ${resolvedEngineTier.label} (${res.rowCount || res.rows?.length || 0} rows, ${res.executionTimeMs || 12}ms)`);
+      notification.success(`Query executed (${res.rowCount ?? res.rows?.length ?? 0} rows)`);
     } catch (err: any) {
-      setError(err?.message || 'Query execution failed');
-      notification.error(err?.message || 'Query execution failed');
+      const msg = err?.message || 'Query execution failed';
+      setError(friendlyQueryError(msg));
+      setExecuteResult(null);
+      notification.error(friendlyQueryError(msg));
     } finally {
       setExecuting(false);
     }
@@ -1764,24 +1608,30 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
             {/* TAB 1: Pushdown SQL Engine Code View */}
             {resultTab === 1 && (
               <Box sx={{ flex: 1, p: 2, overflow: 'auto', bgcolor: '#1e1e1e' }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip label={`Engine: ${resolvedEngineTier.label}`} color="primary" size="small" sx={{ fontWeight: 700 }} />
-                    {measures.some(m => m.isCalculated) && (
-                      <Chip label="Two-Pass CTE Compilation Active" color="secondary" size="small" sx={{ fontWeight: 700 }} />
-                    )}
-                  </Stack>
-                  <Button size="small" variant="outlined" startIcon={<CopyIcon />} onClick={handleCopySql} sx={{ color: 'white', borderColor: 'grey.700' }}>
-                    Copy SQL
-                  </Button>
-                </Stack>
-                <SyntaxHighlighter
-                  language="sql"
-                  style={vscDarkPlus}
-                  customStyle={{ margin: 0, padding: '16px', borderRadius: 8, fontSize: '0.85rem', background: 'transparent' }}
-                >
-                  {previewSql}
-                </SyntaxHighlighter>
+                {sqlError ? (
+                  <Alert severity="error" sx={{ bgcolor: 'background.paper' }}>{sqlError}</Alert>
+                ) : (
+                  <>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Chip label={`Engine: ${resolvedEngineTier.label}`} color="primary" size="small" sx={{ fontWeight: 700 }} />
+                        {measures.some(m => m.isCalculated) && (
+                          <Chip label="Two-Pass CTE Compilation Active" color="secondary" size="small" sx={{ fontWeight: 700 }} />
+                        )}
+                      </Stack>
+                      <Button size="small" variant="outlined" startIcon={<CopyIcon />} onClick={handleCopySql} sx={{ color: 'white', borderColor: 'grey.700' }}>
+                        Copy SQL
+                      </Button>
+                    </Stack>
+                    <SyntaxHighlighter
+                      language="sql"
+                      style={vscDarkPlus}
+                      customStyle={{ margin: 0, padding: '16px', borderRadius: 8, fontSize: '0.85rem', background: 'transparent' }}
+                    >
+                      {previewSql}
+                    </SyntaxHighlighter>
+                  </>
+                )}
               </Box>
             )}
 

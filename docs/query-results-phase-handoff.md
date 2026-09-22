@@ -48,7 +48,7 @@ endpoints) adds a ~15-line adapter — not a fork of the panel.
 | 3 | Two-layer ESLint guardrail | Layer 1 = naming convention ban (hard error); Layer 2 = AST structural detection (warn) | `eslint.config.cjs`, `eslint-rules/no-sql-fabrication.cjs` |
 | 4 | `QueryResultsPanel` accepts `extraTabs` registry, not a single `executionPlan` slot | Real ABAC/Sentinel diagnostics, when they exist, plug in without touching the panel | `components/shared/QueryResultsPanel.tsx` |
 | 5 | `initialTabId` is uncontrolled view state (defaults to `resultSet ? 'results' : 'sql'`) | Simpler consumer API; future state-restoration should add a controlled `activeTabId` prop with explicit unknown-id semantics | `QueryResultsPanel.tsx` |
-| 6 | **No fabricated SQL anywhere.** LiveQueryTab's `generatePostgresSQL` removed in Phase 2. FilterBuilderPanel's `buildSQL`/`buildGroupSQL` removed in Phase 3. Mock-row fallbacks in any `handleRun*` removed. | The whole point of this workstream | enforced by guardrail Layer 1 |
+| 6 | **No fabricated SQL anywhere.** LiveQueryTab's `generatePostgresSQL` removed in `<PR #112>` (Layer 1 violation in the guardrail's own tree — first demanded deletion; see "Known violations ledger"). FilterBuilderPanel's `buildSQL`/`buildGroupSQL` removed in Phase 3. Mock-row fallbacks in any `handleRun*` removed in the same commit as `generatePostgresSQL`. | The whole point of this workstream | enforced by guardrail Layer 1 |
 
 ---
 
@@ -223,11 +223,11 @@ This **changes Phase 3's scope from "delete `buildSQL`" to "delete `buildSQL`, d
 
 Concrete items to remove from `LiveQueryTab.tsx`:
 
-- `generatePostgresSQL` function (lines 418–530, ~113 lines)
-- The `generatePostgresSQL` fallback branches in `updatePreview` (lines 589, 593)
-- The mock-row fallback in `handleRunQuery` (lines 740–789, ~50 lines)
+- ~~`generatePostgresSQL` function (lines 418–530, ~113 lines)~~ **landed in `<PR #112>`** (Layer 1 violation in the guardrail's own tree; deletion enforced the rule, not a config change)
+- ~~The `generatePostgresSQL` fallback branches in `updatePreview` (lines 589, 593)~~ **landed in `<PR #112>`**
+- ~~The mock-row fallback in `handleRunQuery` (lines 740–789, ~50 lines)~~ **landed in `<PR #112>`** — `setExecuteResult(null)` on failure + the `|| 12` and `via ${engine}` fabricated-timing toast also die with this block
 - The ABAC Persona/Masking toolbar (lines 1986–2015, ~30 lines)
-- The "Dynamic ABAC Masking Active" chip on Tab 0 (lines 1661–1669)
+- The "Dynamic ABAC Masking Active" chip on Tab 0 (lines 1661–1669) — decorative; claims masking on data that was never masked. Confirmed by `displayRows` read (line 745): pure search-filter memo, no `userRole`/`enableDynamicMasking` deps, no cell transformation.
 - The DAG subtree on Tab 3 (lines 1967–2141, ~175 lines) — replaced with `extraTabs` placeholder or omitted entirely
 - `userRole` / `enableDynamicMasking` state (lines 230–231) — orphaned by toolbar removal
 - `selectedDAGNodeId` state (line 247) — orphaned by DAG removal
@@ -235,7 +235,17 @@ Concrete items to remove from `LiveQueryTab.tsx`:
 - `tableSearchFilter` / `tablePage` / `tableRowsPerPage` (lines 242–244) — move into QueryResultsPanel when `enableSearch`/`enablePagination` land
 - All bespoke grid / SVG chart / SyntaxHighlighter JSX (lines 1637–1762, 1788–1965) — replaced with `<QueryResultsPanel>`
 
-Net: LiveQueryTab shrinks meaningfully (target ~1200–1300 lines from ~2250), and the builder core (drag-and-drop field picker, ABAC-aware field picker if it survived) stays untouched.
+Net: LiveQueryTab shrinks meaningfully (target ~1200–1300 lines from ~2250; first ~163 lines removed by the `<PR #112>` commit), and the builder core (drag-and-drop field picker, ABAC-aware field picker if it survived) stays untouched.
+
+### A3 addendum — `displayRows` re-read (2026-09-22, post `<PR #112>`)
+
+The A3 verdict (no cell-level masking, toolbar drops safely) was re-verified by reading the `displayRows` memo and `isMasked` reference lines as one block. Findings:
+
+- `displayRows` (line 745) is a `useMemo` with deps `[executeResult, tableSearchFilter]`. It applies only a client-side search filter — `rows.filter(r => Object.values(r).some(...))`. No `userRole`/`enableDynamicMasking` deps, no transformation of cell values.
+- The `isMasked` reference at line 762 lives inside the `explainPlanDAGNodes` memo (lines 759–840). It feeds only the DAG's hardcoded display strings ("Masking Policy", "Masked Columns"), which die with the DAG in Phase 2.
+- The "Dynamic ABAC Masking Active" chip on Tab 0 (line 1503) is decorative — bound to `userRole === 'analyst' && enableDynamicMasking` but does not mask any cell value displayed in the table.
+
+**Verdict confirmed: toolbar drops safely; no real functionality lost.** The chip is the only remaining "false claim" surface (it claims masking that never existed). Removed in Phase 2 with the toolbar.
 
 ### Phase 2 — out of scope, deferred past PR #112
 
@@ -260,5 +270,67 @@ merge commit that contains `bab336a69` (QueryResultsPanel extraction) and
   `useQueryExecution` hook + adapters, two-layer guardrail, three forced
   renames. SavedQueryEditor migrated; LiveQueryTab and FilterBuilderPanel
   untouched.
+- `<PR #112>` follow-on — `LiveQueryTab.generatePostgresSQL` removed (the
+  guardrail's first demanded deletion; Layer 1 violation caught by a
+  full-repo eslint run that PR #112's pre-flight missed because it only
+  linted touched files), plus the mock-row fallback in `handleRunQuery`
+  (the more serious data-integrity violation — fabricated rows + fake
+  `executionTimeMs` toast) and the `|| 12` / `via ${engine}` fabricated
+  claims in the success notification. `queryBuilderMock.ts` (dead code,
+  gated behind `if (false)`) deleted to clear 4 stale Layer 1 hits.
 - Phase 2 — pending. LiveQueryTab display migration onto the new panel.
 - Phase 3 — pending. FilterBuilderPanel → `previewQuery`.
+
+---
+
+## Known violations ledger
+
+Full-repo eslint is now a **standing pre-flight step** (added in `<PR #112>`
+follow-on). Every Layer 1/2 hit outside the quarantine gets one of four
+dispositions: **deleted now**, **renamed** (false positive, the new name
+better describes what the function does), **quarantined** (`reporting/`),
+or **listed here with a phase assignment**. No hit stays "decorative" — the
+guardrail's error level is only honest if every violation has a destination.
+
+Populated from the post-`<PR #112>` follow-on full-repo eslint run. Add new
+hits here as they appear; do not silence them with `// eslint-disable` unless
+the violation is intrinsic to a legitimate pattern (none so far).
+
+### Layer 1 errors — naming convention ban
+
+| File | Symbol | Disposition | Phase / SHA |
+|---|---|---|---|
+| `pages/.../LiveQueryTab.tsx:419` | `generatePostgresSQL` (defn + 2 calls) | **Deleted** | `<PR #112>` follow-on |
+| `features/query-builder/services/queryBuilderMock.ts` | `generateMockSQL` + `installQueryBuilderMock` (whole file) | **Deleted** — gated behind `if (false)`, dead code | `<PR #112>` follow-on |
+| `features/business-objects/StreamingBindingPanel.tsx:19` | `generatePreviewSQL` (local) | **Ledger** — Flink CEP streaming surface, separate workstream. Decision needed: backend compile endpoint for streaming SQL, or relabel "preview" honestly. | Phase 2 / 3 — separate workstream |
+| `features/data-explorer/services/dataExplorerApi.ts:1027` + callers (`PlaygroundDeveloperDrawer.tsx:33,65`, `dataExplorerApi.test.ts:5,141,145`) | `generateDialectSQL` (real fabricator with test coverage) | **Ledger** — Data Explorer surface, not Query Builder migration scope. Three files involved. Test must be updated or replaced. | Out of scope (separate workstream) |
+
+### Layer 2 warnings — AST structural detection
+
+Mostly false positives or out-of-scope. None block the workstream. Listed
+here so a future session knows they're expected, not regressions.
+
+| File | Line | Disposition |
+|---|---|---|
+| `components/BusinessObjectManager/PreAggregationWizard.tsx` | 168 | **Ledger** — likely UI copy / mock; not a real fabricator. Verify in-place if Phase 2 expands scope. |
+| `components/reporting/SSRSReportBuilder.tsx` | 752 | **Ledger** — Phase 3 work list (SSRS preview migration). |
+| `components/semantic-mapper/__tests__/ReportingServerUI.tsx` | 384 | **Ledger** — test file, gated. |
+| `features/api-builder/pages/APIBuilderPage.tsx` | 299, 332 | **Ledger** — API Builder surface, separate workstream. |
+| `features/tenants/components/BYOBIConfigTab.tsx` | 59 | **Ledger** — likely UI string, not a fabricator. |
+| `hooks/useUnifiedSemanticBuilder.tsx` | 491 | **Ledger** — Semantic Builder surface, separate workstream. |
+| `pages/.../LiveQueryTab.tsx` | 525, 975 | **Ledger** — die with the ABAC toolbar + DAG in Phase 2. |
+| `pages/DataExplorerPage.tsx` | 103 | **Ledger** — Data Explorer surface, separate workstream. |
+| `pages/ModelGeneratorPage.tsx` | 250 | **Ledger** — Model Generator surface, separate workstream. |
+
+### Renames — false-positive Layer 1 hits, renamed rather than exempted
+
+The naming ban fires on these despite them being legitimate backend-call
+wrappers or pretty-printers, because their names matched the convention.
+Each was renamed rather than exempted (the new name better describes what
+the function does):
+
+| Old name | New name | File |
+|---|---|---|
+| `compileSql` | `fetchCompiledSql` | `features/query-execution/queryExecutionApi.ts` |
+| `generateSQL` | `requestGeneratedSQL` | `hooks/useReportBuilder.ts` (+ test file) |
+| `formatSQL` | `prettyPrintSql` | `pages/semantic-playground/components/SQLViewer.tsx` |
