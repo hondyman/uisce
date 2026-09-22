@@ -286,11 +286,10 @@ export async function createBusinessObject(
 }
 
 // ─── Binding API ──────────────────────────────────────────────────────────────
-
-export async function fetchBindings(boId: string): Promise<any[]> {
-  const data = await fetchAPI<any>(`/business-objects/${boId}/bindings`);
-  return Array.isArray(data) ? data : data?.bindings || [];
-}
+// A binding list fetcher used to live here too (fetchBindings), duplicating
+// studio-core/binding/businessObjectApi.ts's fetchBusinessObjectBindings -
+// removed as dead code (zero callers) rather than kept "just in case";
+// use the shared one if a binding list is ever needed from this module.
 
 export async function createBinding(
   boId: string,

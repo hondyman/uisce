@@ -114,9 +114,29 @@ export interface SavedQuery {
   description: string;
   boId: string;
   bindingId: string;
+  /** Additional Business Objects joined into this query. Editable after
+   * creation; boId/bindingId are not (see saved_query_handler.go). */
+  relatedBoIds: string[];
   chartType: SavedQueryChartType;
   state: SavedQueryState;
   tags: string[];
+  folderId?: string;
+  isFavorite: boolean;
+  visibility: 'private' | 'shared';
+  isCore: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A folder in the saved-query library tree, mirroring report_folders. */
+export interface SavedQueryFolder {
+  id: string;
+  tenantId: string;
+  userId: string;
+  parentId?: string;
+  name: string;
+  itemCount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,6 +170,10 @@ export interface SemanticTermView {
   bindingStatus: BindingStatus;
   /** Default aggregation suggested for MEASURE terms. */
   defaultAggregation?: AggregateFunction;
+  /** UI-only: whether this term is checked in the SavedQueryEditor's field
+   * picker. Not part of the wire contract - stripped out when building the
+   * SavedQueryState to persist (see SavedQueryEditor.buildState). */
+  selected?: boolean;
   /**
    * Term node ids of successive drill-down levels, configured once on this
    * term in the semantic layer and inherited by every BO field bound to it

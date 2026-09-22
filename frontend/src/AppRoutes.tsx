@@ -62,7 +62,12 @@ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
-import BusinessObjectQueryBuilder from "./features/query-builder/pages/BusinessObjectQueryBuilder";
+import QueryLibrary from "./features/query-builder/pages/QueryLibrary";
+import SavedQueryEditor from "./features/query-builder/pages/SavedQueryEditor";
+import SqlStudioPage from "./pages/analytical/SqlStudioPage";
+import SemanticCatalogDetailPage from "./pages/analytical/SemanticCatalogDetailPage";
+import PipelinesPage from "./pages/analytical/PipelinesPage";
+import ReportsPage from "./pages/analytical/ReportsPage";
 // Metrics Console imports
 import MetricsConsolePage from "./pages/MetricsConsolePage";
 import MetricDetailPage from "./pages/MetricDetailPage";
@@ -115,7 +120,6 @@ import BPConsolePage from "./features/bp-console/pages/BPConsolePage";
 import { ReportLibrary } from "./features/reporting/components/ReportLibrary";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import { DataExplorer } from './components/reporting/DataExplorer';
-import { QueryLibraryDashboard } from './components/reporting/QueryLibraryDashboard';
 import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
 import { ExpressionLibrary } from "./features/expressions/components/ExpressionLibrary";
 
@@ -306,7 +310,11 @@ function ProtectedApp() {
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
-        <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
+        <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
+        <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
+        <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />
+        <Route path="pipelines" element={<ProtectedRoute><PipelinesPage /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
         <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
         <Route path="marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
@@ -445,7 +453,7 @@ function ProtectedApp() {
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="reports/library" element={<ProtectedRoute><ReportLibrary /></ProtectedRoute>} />
         <Route path="reports/builder" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
-        <Route path="reports/queries" element={<ProtectedRoute><QueryLibraryDashboard /></ProtectedRoute>} />
+        <Route path="reports/queries" element={<ProtectedRoute><QueryLibrary /></ProtectedRoute>} />
         <Route path="reports/:reportId/edit" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
         <Route path="reports/models" element={<ProtectedRoute><SemanticModelManager /></ProtectedRoute>} />
         

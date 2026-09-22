@@ -220,6 +220,7 @@ type Server struct {
 	BOStatusHandler         *handlers.BOStatusHandler
 	DrillDownResolver       *optimizer.DrillDownResolver
 	SavedQueryHandler       *querybuilder.SavedQueryHandler
+	SavedQueryFolderHandler *querybuilder.SavedQueryFolderHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -529,10 +530,13 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 
 	// Query all fields for this business object
 	fRows, err := tx.QueryContext(r.Context(),
-		`SELECT id, field_name, display_label, column_name, field_type, field_description
-		 FROM public.bo_fields
-		 WHERE tenant_id = $1 AND bo_id = $2
-		 ORDER BY display_order`,
+		`SELECT id, field_name, COALESCE(display_name, field_name) AS display_label,
+		        COALESCE(technical_name, field_name) AS column_name,
+		        COALESCE(data_type, 'string') AS field_type,
+		        COALESCE(description, '') AS field_description
+		 FROM public.business_object_fields
+		 WHERE tenant_id = $1::uuid AND bo_id = $2::uuid
+		 ORDER BY display_order, created_at`,
 		tenantID, boID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch fields: %v", err), http.StatusInternalServerError)
@@ -1147,6 +1151,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// alongside QueryHandler above (qbService/qbExecutor don't exist yet
 		// at that point in NewServer).
 		srv.SavedQueryHandler = querybuilder.NewSavedQueryHandler(sqlxDB, qbService, qbExecutor, securityDeps)
+		srv.SavedQueryFolderHandler = querybuilder.NewSavedQueryFolderHandler(sqlxDB, securityDeps)
 	}
 
 	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
@@ -3425,8 +3430,16 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 			r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
 			r.Post("/{id}/clone", s.SavedQueryHandler.HandleCloneSavedQuery)
 			r.Post("/{id}/share", s.SavedQueryHandler.HandleShareQuery)
+			r.Put("/{id}/favorite", s.SavedQueryHandler.HandleSetFavorite)
 			r.Get("/{id}/preview", s.SavedQueryHandler.HandleGetPreview)
 			r.Get("/{id}/diff", s.SavedQueryHandler.HandleGetDiff)
+		})
+
+		r.Route("/saved-query-folders", func(r chi.Router) {
+			r.Get("/", s.SavedQueryFolderHandler.HandleListFolders)
+			r.Post("/", s.SavedQueryFolderHandler.HandleCreateFolder)
+			r.Put("/{id}", s.SavedQueryFolderHandler.HandleUpdateFolder)
+			r.Delete("/{id}", s.SavedQueryFolderHandler.HandleDeleteFolder)
 		})
 	})
 
