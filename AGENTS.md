@@ -546,8 +546,9 @@ Dev users: `testuser@example.com` / `testuser2@example.com` (tenant `99e99e99-99
 
 See `docs/query-results-phase-handoff.md` for settled decisions, phase plan, and the Phase 3 completion criterion. Key facts:
 
-- **No client-side SQL generation** (enforced by ESLint Layer 1 naming ban + Layer 2 AST detection; `frontend/eslint-rules/no-sql-fabrication.cjs`).
+- **No client-side SQL generation in the Query Builder / Reporting / Live Query migration path** (enforced by ESLint Layer 1 naming ban + Layer 2 AST detection; `frontend/eslint-rules/no-sql-fabrication.cjs`). Other workstreams (Data Explorer, CEP, Semantic Builder) have open TBD owners recorded in the doc's Known violations ledger — they are not gated by this workstream's guardrail.
 - `QueryResultsPanel` v2 API (`resultSet` / `extraTabs` / `initialTabId`); consumers own their own run/compile calls.
 - `FilterBuilderPanel` fragment assembly (`buildSQL`/`buildGroupSQL`) is invisible to Layer 2 by design — Phase 3 work list is the operator switch, not lint output.
 - Three forced renames: `compileSql`→`fetchCompiledSql`, `generateSQL`→`requestGeneratedSQL`, `formatSQL`→`prettyPrintSql` (all renamed, not exempted).
+- LiveQueryTab residue landed in `#112` / `1ef260574`: `generatePostgresSQL` deleted, mock-row fallback deleted, two false-claim chips (`Engine: ${engine}`, `Two-Pass CTE Compilation Active`) deleted. Failed `execute` now surfaces errors via `friendlyQueryError`; no fabricated rows or fake timing.
 - Baseline revert tag: `baseline/query-results-panel` at `b258de304`.

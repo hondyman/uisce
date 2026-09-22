@@ -1613,12 +1613,7 @@ export function LiveQueryTab({ businessObject, bindings = [] }: LiveQueryTabProp
                 ) : (
                   <>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Chip label={`Engine: ${resolvedEngineTier.label}`} color="primary" size="small" sx={{ fontWeight: 700 }} />
-                        {measures.some(m => m.isCalculated) && (
-                          <Chip label="Two-Pass CTE Compilation Active" color="secondary" size="small" sx={{ fontWeight: 700 }} />
-                        )}
-                      </Stack>
+                      <Box /> {/* spacer — chips removed: see handoff doc A3 + commit `1ef260574` */}
                       <Button size="small" variant="outlined" startIcon={<CopyIcon />} onClick={handleCopySql} sx={{ color: 'white', borderColor: 'grey.700' }}>
                         Copy SQL
                       </Button>
