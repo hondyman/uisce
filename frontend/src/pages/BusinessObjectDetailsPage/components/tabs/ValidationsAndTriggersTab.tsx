@@ -67,7 +67,9 @@ interface HealthRow {
 export function ValidationsAndTriggersTab({ businessObject, bindings = [] }: ValidationsAndTriggersTabProps) {
   const navigate = useNavigate();
   const boKey: string | undefined = businessObject?.key;
-  const editorPath = boKey ? `/core/validation-rules/editor?bo_name=${encodeURIComponent(boKey)}` : '#';
+  const editorPath = boKey
+    ? `/core/validation-rules/editor?bo_name=${encodeURIComponent(boKey)}&return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`
+    : '#';
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [health, setHealth] = useState<Record<string, HealthRow>>({});
   const [loading, setLoading] = useState(false);
@@ -278,7 +280,11 @@ export function ValidationsAndTriggersTab({ businessObject, bindings = [] }: Val
                     <TableCell>
                       <MuiLink
                         component="button"
-                        onClick={() => navigate(`/core/validation-rules/editor?bo_name=${encodeURIComponent(rule.sourceBoName)}`)}
+                        onClick={() => navigate(
+                          `/core/validation-rules/editor?bo_name=${encodeURIComponent(rule.sourceBoName)}` +
+                          `&rule_id=${encodeURIComponent(rule.id)}` +
+                          `&return_to=${encodeURIComponent(window.location.pathname + window.location.search)}`
+                        )}
                         underline="hover"
                         sx={{ fontSize: '0.8rem' }}
                       >
