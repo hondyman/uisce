@@ -1,16 +1,9 @@
 package swift
 
 import (
-	"errors"
 	"strings"
 
-	"github.com/lib/pq"
-)
-
-// PostgreSQL SQLSTATE codes used by the SWIFT gateway.
-const (
-	// pgCodeUniqueViolation is SQLSTATE 23505.
-	pgCodeUniqueViolation = "23505"
+	"github.com/hondyman/uisce/backend/internal/dberrors"
 )
 
 // Constraint names on SWIFT tables.
@@ -23,20 +16,11 @@ const (
 // IsUniqueViolation returns true if err is a PostgreSQL 23505 unique-constraint
 // violation on any constraint. Use IsUETRDuplicate for the UETR-specific check.
 //
-// Driver note: cmd/worker and cmd/server blank-import "github.com/lib/pq" with
-// sql.Open("postgres",...), so runtime errors surface as *pq.Error.
-// The pgconn/pgx-native paths are included as belt-and-suspenders for future
-// driver migration or any path that uses pgx stdlib.OpenDB directly.
+// Kept as a thin wrapper (rather than switching every SWIFT call site to
+// dberrors directly) so this package's public API doesn't churn - the
+// classification logic itself now lives in one place, internal/dberrors.
 func IsUniqueViolation(err error) bool {
-	if err == nil {
-		return false
-	}
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return string(pqErr.Code) == pgCodeUniqueViolation
-	}
-	// Fallback: check error message for any driver that embeds SQLSTATE.
-	return strings.Contains(err.Error(), pgCodeUniqueViolation)
+	return dberrors.IsUniqueViolation(err)
 }
 
 // IsUETRDuplicate returns true if err is a 23505 specifically on the UETR
@@ -52,11 +36,13 @@ func IsUETRDuplicate(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Primary check: lib/pq with exact constraint name.
-	var pqErr *pq.Error
-	if errors.As(err, &pqErr) {
-		return string(pqErr.Code) == pgCodeUniqueViolation &&
-			pqErr.Constraint == ConstraintUETRUniq // empty name → not a match
+	if dberrors.IsUniqueViolation(err) {
+		// Primary check: exact constraint name, when the driver reports one.
+		// An empty constraint name intentionally falls through to the
+		// string fallback below rather than matching here.
+		if name := dberrors.ConstraintName(err); name != "" {
+			return name == ConstraintUETRUniq
+		}
 	}
 	// Belt-and-suspenders: constraint name present in error string.
 	// Only matches if the exact constraint name is visible (pgx native, future drivers).

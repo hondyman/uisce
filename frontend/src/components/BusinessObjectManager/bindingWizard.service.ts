@@ -302,12 +302,42 @@ export async function createBinding(
     temporalMode?: string;
     isCore?: boolean;
     coreReferenceBindingId?: string;
+    isDefault?: boolean;
   }
 ): Promise<any> {
   return fetchAPI(`/business-objects/${boId}/bindings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  });
+}
+
+// backendId/drivingNodeId are deliberately not editable here - repointing
+// a binding at a different physical table is a re-create, not an edit
+// (see backend/internal/api/business_object_handlers.go's
+// UpdateBusinessObjectBinding for why).
+export async function updateBinding(
+  boId: string,
+  bindingId: string,
+  payload: {
+    bindingName?: string;
+    temporalMode?: string;
+    isActive?: boolean;
+    isDefault?: boolean;
+  }
+): Promise<any> {
+  return fetchAPI(`/business-objects/${boId}/bindings/${bindingId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+// The backend refuses to delete a BO's only remaining binding (409); a
+// BO must always have at least one physical source.
+export async function deleteBinding(boId: string, bindingId: string): Promise<any> {
+  return fetchAPI(`/business-objects/${boId}/bindings/${bindingId}`, {
+    method: 'DELETE',
   });
 }
 

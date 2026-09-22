@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hondyman/uisce/backend/internal/dberrors"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
@@ -16,7 +17,6 @@ import (
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/jmoiron/sqlx"
 )
-
 
 // BOService defines the subset of BusinessObject service methods used by handlers
 type BOService interface {
@@ -70,6 +70,12 @@ func NewBusinessObjectHandler(service BOService, datasourceResolver security.Dat
 }
 
 func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
+	// frontend/src/components/BusinessObjectManager/bindingWizard.service.ts's
+	// fetchPhysicalBackends()/createPhysicalBackend() have called this path
+	// since they were written; nothing served it, so the binding wizard's
+	// backend picker was always empty.
+	r.Get("/backends", h.ListPhysicalBackends)
+	r.Post("/backends", h.CreatePhysicalBackend)
 	r.Route("/business-objects", func(r chi.Router) {
 		r.Get("/", h.ListBusinessObjects)
 		r.Post("/", h.CreateBusinessObject)
@@ -86,6 +92,9 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 
 		r.Get("/{id}/with_bindings", h.GetBusinessObjectWithBindings)
 		r.Get("/{id}/bindings", h.GetBusinessObjectBindings)
+		r.Post("/{id}/bindings", h.CreateBusinessObjectBinding)
+		r.Put("/{id}/bindings/{bindingId}", h.UpdateBusinessObjectBinding)
+		r.Delete("/{id}/bindings/{bindingId}", h.DeleteBusinessObjectBinding)
 		r.Get("/{id}", h.GetBusinessObject)
 		r.Get("/{id}/fields", h.GetBusinessObjectFields)
 		r.Get("/{id}/relationships", h.GetBusinessObjectRelationships)
@@ -116,9 +125,6 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}", h.DeleteBusinessObject)
 	})
 }
-
-
-
 
 // GetBusinessObjectFields returns the list of fields (core + custom) for a BO
 func (h *BusinessObjectHandler) GetBusinessObjectFields(w http.ResponseWriter, r *http.Request) {
@@ -551,12 +557,12 @@ func (h *BusinessObjectHandler) CreateBusinessObjectRelationship(w http.Response
 	}
 
 	var req struct {
-		TargetObjectID   string `json:"targetObjectId"`
-		TargetObjectIDSnake string `json:"target_object_id"`
-		RelationshipType string `json:"relationshipType"`
+		TargetObjectID        string `json:"targetObjectId"`
+		TargetObjectIDSnake   string `json:"target_object_id"`
+		RelationshipType      string `json:"relationshipType"`
 		RelationshipTypeSnake string `json:"relationship_type"`
-		Cardinality      string `json:"cardinality"`
-		Description      string `json:"description"`
+		Cardinality           string `json:"cardinality"`
+		Description           string `json:"description"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -778,6 +784,301 @@ func (h *BusinessObjectHandler) GetBusinessObjectBindings(w http.ResponseWriter,
 	json.NewEncoder(w).Encode(out)
 }
 
+// CreateBusinessObjectBinding adds a binding (a physical backend + driving
+// table pair) to a BO. This route previously did not exist at all -
+// frontend/src/components/BusinessObjectManager/bindingWizard.service.ts's
+// createBinding() has been POSTing here since it was written, silently
+// failing every call (caught by its own try/catch and surfaced as "BO
+// created but binding could not be saved"), and there was no way to add a
+// second binding to an existing BO (e.g. an MDM source alongside an ORM
+// one) from the UI at all - every prior binding change this session had
+// to go through a one-off SQL script instead.
+func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	boID := chi.URLParam(r, "id")
+	if boID == "" {
+		http.Error(w, "business object id is required", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		BackendID              string `json:"backendId"`
+		DrivingNodeID          string `json:"drivingNodeId"`
+		BindingName            string `json:"bindingName"`
+		BaseSQL                string `json:"baseSql"`
+		TemporalMode           string `json:"temporalMode"`
+		IsCore                 bool   `json:"isCore"`
+		CoreReferenceBindingID string `json:"coreReferenceBindingId"`
+		IsDefault              *bool  `json:"isDefault"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.BackendID == "" {
+		http.Error(w, "backendId is required", http.StatusBadRequest)
+		return
+	}
+	if req.DrivingNodeID == "" {
+		http.Error(w, "drivingNodeId is required", http.StatusBadRequest)
+		return
+	}
+	if req.TemporalMode == "" {
+		req.TemporalMode = "NONE"
+	}
+
+	if h.db == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var boExists bool
+	if err := h.db.GetContext(ctx, &boExists, `SELECT EXISTS(SELECT 1 FROM public.business_objects WHERE id = $1::uuid AND tenant_id = $2::uuid)`, boID, secCtx.TenantID); err != nil || !boExists {
+		http.Error(w, "business object not found", http.StatusNotFound)
+		return
+	}
+	var backendExists bool
+	if err := h.db.GetContext(ctx, &backendExists, `SELECT EXISTS(SELECT 1 FROM public.physical_backend WHERE backend_id = $1::uuid)`, req.BackendID); err != nil || !backendExists {
+		http.Error(w, "backend not found", http.StatusBadRequest)
+		return
+	}
+	var drivingNodeName string
+	if err := h.db.GetContext(ctx, &drivingNodeName, `SELECT node_name FROM public.catalog_node WHERE id = $1::uuid`, req.DrivingNodeID); err != nil {
+		http.Error(w, "driving table not found", http.StatusBadRequest)
+		return
+	}
+
+	bindingName := req.BindingName
+	if bindingName == "" {
+		bindingName = fmt.Sprintf("%s Binding", drivingNodeName)
+	}
+
+	// A BO's very first binding is its default; every one after that is
+	// explicit opt-in via isDefault (defaults to false) so adding a second
+	// source never silently steals default-ness from the first.
+	isDefault := false
+	if req.IsDefault != nil {
+		isDefault = *req.IsDefault
+	} else {
+		var existingCount int
+		_ = h.db.GetContext(ctx, &existingCount, `SELECT count(*) FROM public.business_object_binding WHERE bo_id = $1::uuid AND tenant_id = $2::uuid`, boID, secCtx.TenantID)
+		isDefault = existingCount == 0
+	}
+
+	tx, err := h.db.BeginTxx(ctx, nil)
+	if err != nil {
+		http.Error(w, "failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if isDefault {
+		if _, err := tx.ExecContext(ctx, `UPDATE public.business_object_binding SET is_default = false WHERE bo_id = $1::uuid AND tenant_id = $2::uuid`, boID, secCtx.TenantID); err != nil {
+			http.Error(w, "failed to clear previous default binding: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var coreRefID sql.NullString
+	if req.CoreReferenceBindingID != "" {
+		coreRefID = sql.NullString{String: req.CoreReferenceBindingID, Valid: true}
+	}
+	var baseSQL sql.NullString
+	if req.BaseSQL != "" {
+		baseSQL = sql.NullString{String: req.BaseSQL, Valid: true}
+	}
+
+	var newBindingID string
+	insertErr := tx.QueryRowContext(ctx, `
+		INSERT INTO public.business_object_binding
+			(bo_binding_id, tenant_id, bo_id, backend_id, driving_node_id,
+			 binding_name, base_sql, temporal_mode, temporal_type, is_default, is_active, is_core, core_reference_binding_id)
+		VALUES
+			(gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::uuid,
+			 $5, $6, $7, $7, $8, true, $9, $10::uuid)
+		RETURNING bo_binding_id
+	`, secCtx.TenantID, boID, req.BackendID, req.DrivingNodeID, bindingName, baseSQL, req.TemporalMode, isDefault, req.IsCore, coreRefID).Scan(&newBindingID)
+	if insertErr != nil {
+		if dberrors.IsUniqueViolation(insertErr) {
+			http.Error(w, "a binding to this backend already exists for this business object", http.StatusConflict)
+			return
+		}
+		http.Error(w, "failed to create binding: "+insertErr.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "failed to commit: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"boBindingId": newBindingID,
+		"bindingName": bindingName,
+		"isDefault":   isDefault,
+	})
+}
+
+// UpdateBusinessObjectBinding edits an existing binding's name, temporal
+// mode, active flag, or default status. backendId/drivingNodeId are
+// intentionally not editable here - repointing a binding at a different
+// physical table is a re-create, not an edit (see the plan/apply scripts
+// this session used for that, e.g. fix_order_binding_driving_node.sql).
+func (h *BusinessObjectHandler) UpdateBusinessObjectBinding(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	boID := chi.URLParam(r, "id")
+	bindingID := chi.URLParam(r, "bindingId")
+
+	var req struct {
+		BindingName  *string `json:"bindingName"`
+		TemporalMode *string `json:"temporalMode"`
+		IsActive     *bool   `json:"isActive"`
+		IsDefault    *bool   `json:"isDefault"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if h.db == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var exists bool
+	if err := h.db.GetContext(ctx, &exists, `SELECT EXISTS(SELECT 1 FROM public.business_object_binding WHERE bo_binding_id = $1::uuid AND bo_id = $2::uuid AND tenant_id = $3::uuid)`, bindingID, boID, secCtx.TenantID); err != nil || !exists {
+		http.Error(w, "binding not found", http.StatusNotFound)
+		return
+	}
+
+	tx, err := h.db.BeginTxx(ctx, nil)
+	if err != nil {
+		http.Error(w, "failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if req.IsDefault != nil && *req.IsDefault {
+		if _, err := tx.ExecContext(ctx, `UPDATE public.business_object_binding SET is_default = false WHERE bo_id = $1::uuid AND tenant_id = $2::uuid AND bo_binding_id != $3::uuid`, boID, secCtx.TenantID, bindingID); err != nil {
+			http.Error(w, "failed to clear previous default binding: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE public.business_object_binding SET
+			binding_name = COALESCE($1, binding_name),
+			temporal_mode = COALESCE($2, temporal_mode),
+			temporal_type = COALESCE($2, temporal_type),
+			is_active = COALESCE($3, is_active),
+			is_default = COALESCE($4, is_default),
+			updated_at = NOW()
+		WHERE bo_binding_id = $5::uuid AND bo_id = $6::uuid AND tenant_id = $7::uuid
+	`, req.BindingName, req.TemporalMode, req.IsActive, req.IsDefault, bindingID, boID, secCtx.TenantID)
+	if err != nil {
+		http.Error(w, "failed to update binding: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "failed to commit: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "boBindingId": bindingID})
+}
+
+// DeleteBusinessObjectBinding removes a binding. Refuses to delete a BO's
+// only remaining binding (a BO with zero bindings has no physical source
+// at all, which every read/write path assumes exists); deleting the
+// default binding while others remain promotes the oldest survivor to
+// default instead of leaving the BO with none.
+func (h *BusinessObjectHandler) DeleteBusinessObjectBinding(w http.ResponseWriter, r *http.Request) {
+	secCtx, ctx, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	boID := chi.URLParam(r, "id")
+	bindingID := chi.URLParam(r, "bindingId")
+
+	if h.db == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var totalCount int
+	if err := h.db.GetContext(ctx, &totalCount, `SELECT count(*) FROM public.business_object_binding WHERE bo_id = $1::uuid AND tenant_id = $2::uuid`, boID, secCtx.TenantID); err != nil {
+		http.Error(w, "failed to check bindings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if totalCount <= 1 {
+		http.Error(w, "cannot delete the only binding on a business object; add a replacement binding first", http.StatusConflict)
+		return
+	}
+
+	var wasDefault bool
+	if err := h.db.GetContext(ctx, &wasDefault, `SELECT is_default FROM public.business_object_binding WHERE bo_binding_id = $1::uuid AND bo_id = $2::uuid AND tenant_id = $3::uuid`, bindingID, boID, secCtx.TenantID); err != nil {
+		http.Error(w, "binding not found", http.StatusNotFound)
+		return
+	}
+
+	tx, err := h.db.BeginTxx(ctx, nil)
+	if err != nil {
+		http.Error(w, "failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM public.business_object_binding WHERE bo_binding_id = $1::uuid AND bo_id = $2::uuid AND tenant_id = $3::uuid`, bindingID, boID, secCtx.TenantID); err != nil {
+		http.Error(w, "failed to delete binding: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if wasDefault {
+		if _, err := tx.ExecContext(ctx, `
+			UPDATE public.business_object_binding
+			SET is_default = true
+			WHERE bo_binding_id = (
+				SELECT bo_binding_id FROM public.business_object_binding
+				WHERE bo_id = $1::uuid AND tenant_id = $2::uuid
+				ORDER BY created_at ASC LIMIT 1
+			)
+		`, boID, secCtx.TenantID); err != nil {
+			http.Error(w, "failed to promote a replacement default binding: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, "failed to commit: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "deleted": bindingID})
+}
+
 // GetBusinessObjectWithBindings returns the full BO view:
 // { bo, fields[], calc_fields[], bindings[], related_bos[] }
 func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWriter, r *http.Request) {
@@ -892,8 +1193,8 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	if relationships != nil {
 		for _, rel := range relationships.RelatedObjects {
 			relatedBOs = append(relatedBOs, map[string]interface{}{
-				"bo_name": rel.RelatedObjectName,
-				"edge":    rel.RelationshipType,
+				"bo_name":     rel.RelatedObjectName,
+				"edge":        rel.RelationshipType,
 				"description": rel.Description,
 			})
 		}
@@ -907,15 +1208,15 @@ func (h *BusinessObjectHandler) GetBusinessObjectWithBindings(w http.ResponseWri
 	for _, f := range bo.CoreFields {
 		fields = append(fields, map[string]interface{}{
 			"name":             f.Name,
-			"technical_name":  f.TechnicalName,
+			"technical_name":   f.TechnicalName,
 			"semantic_term_id": f.SemanticTermID,
-			"field_type":      f.Type,
+			"field_type":       f.Type,
 		})
 	}
 	for _, f := range bo.CustomFields {
 		fields = append(fields, map[string]interface{}{
 			"name":             f.Name,
-			"technical_name":  f.TechnicalName,
+			"technical_name":   f.TechnicalName,
 			"semantic_term_id": f.SemanticTermID,
 			"field_type":       f.Type,
 		})
@@ -1566,7 +1867,99 @@ func (h *BusinessObjectHandler) RunLakehouseCompaction(w http.ResponseWriter, r 
 	json.NewEncoder(w).Encode(resp)
 }
 
+// ListPhysicalBackends returns the physical_backend catalog for the
+// binding wizard's backend picker (see RegisterRoutes' comment on why this
+// route didn't previously exist). Not tenant-scoped: physical_backend rows
+// aren't tenant-owned (see the orphan-backend fix earlier this project --
+// backend_id doubles as public.connections.id and, for scanned
+// datasources, public.tenant_product_datasource.id), so any authenticated
+// caller can see which backends exist to bind against.
+func (h *BusinessObjectHandler) ListPhysicalBackends(w http.ResponseWriter, r *http.Request) {
+	if _, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if h.db == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
 
+	type backendRow struct {
+		BackendID   string `db:"backend_id"`
+		BackendName string `db:"backend_name"`
+		DialectName string `db:"dialect_name"`
+		StorageTier string `db:"storage_tier"`
+	}
+	var rows []backendRow
+	if err := h.db.SelectContext(r.Context(), &rows, `
+		SELECT backend_id, backend_name, dialect_name, storage_tier
+		FROM public.physical_backend
+		ORDER BY backend_name
+	`); err != nil {
+		http.Error(w, "failed to list backends: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
+	out := make([]map[string]interface{}, 0, len(rows))
+	for _, b := range rows {
+		out = append(out, map[string]interface{}{
+			"backendId":   b.BackendID,
+			"backendName": b.BackendName,
+			"description": fmt.Sprintf("%s / %s", b.DialectName, b.StorageTier),
+			"dialectName": b.DialectName,
+			"storageTier": b.StorageTier,
+		})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{"backends": out})
+}
 
+// CreatePhysicalBackend registers a new (bare, connection-less) backend row
+// for the wizard to bind against later. It does not configure a live
+// connection (see fix_orphan_orm_backend_datasource.sql for what a real
+// one needs) - naming this out explicitly rather than let a caller assume
+// a freshly-created backend is query-ready.
+func (h *BusinessObjectHandler) CreatePhysicalBackend(w http.ResponseWriter, r *http.Request) {
+	if _, _, err := handlers.SecurityContextFromRequest(r, "", "", handlers.SecurityContextDeps{
+		Resolver: h.datasourceResolver,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
+	var req struct {
+		BackendName string `json:"backendName"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.BackendName == "" {
+		http.Error(w, "backendName is required", http.StatusBadRequest)
+		return
+	}
+	if h.db == nil {
+		http.Error(w, "database unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var backendID string
+	if err := h.db.GetContext(r.Context(), &backendID, `
+		INSERT INTO public.physical_backend (backend_id, backend_name, description, storage_tier, dialect_name, is_system)
+		VALUES (gen_random_uuid(), $1, $2, 'oltp', 'postgres', false)
+		RETURNING backend_id
+	`, req.BackendName, req.Description); err != nil {
+		http.Error(w, "failed to create backend: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"backendId":   backendID,
+		"backendName": req.BackendName,
+	})
+}

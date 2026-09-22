@@ -1807,7 +1807,7 @@ export default function BusinessObjectDetailsPage() {
 
               {/* Bindings Tab */}
               {activeTab === 1 && (
-                <BindingsTab bindings={bindings} businessObject={businessObject} />
+                <BindingsTab bindings={bindings} businessObject={businessObject} onBindingsChanged={fetchBusinessObject} />
               )}
 
 
