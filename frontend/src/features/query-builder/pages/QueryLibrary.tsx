@@ -299,7 +299,7 @@ export default function QueryLibrary() {
       <Dialog open={newFolderOpen} onClose={() => setNewFolderOpen(false)}>
         <DialogTitle>New Folder</DialogTitle>
         <DialogContent>
-          <TextField autoFocus fullWidth label="Folder name" value={newFolderName}
+          <TextField fullWidth label="Folder name" value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)} sx={{ mt: 1 }} />
         </DialogContent>
         <DialogActions>
@@ -311,7 +311,7 @@ export default function QueryLibrary() {
       <Dialog open={renameOpen} onClose={() => setRenameOpen(false)}>
         <DialogTitle>Rename Query</DialogTitle>
         <DialogContent>
-          <TextField autoFocus fullWidth label="Name" value={renameValue}
+          <TextField fullWidth label="Name" value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)} sx={{ mt: 1 }} />
         </DialogContent>
         <DialogActions>

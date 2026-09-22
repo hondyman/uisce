@@ -15,7 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   listBusinessObjects, fetchBORelationships, fetchBusinessObjectBindings, fetchBOTerms,
-  type BusinessObjectOption, type BORelationship, type BindingView, type SemanticTermView,
+  type BusinessObjectOption, type BORelationship, type SemanticTermView,
 } from './businessObjectApi';
 
 export interface SelectedObject {

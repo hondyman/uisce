@@ -238,7 +238,7 @@ function ParametersRow({ parameters, onAdd, onRemove }: {
       </Stack>
       <Popover open={!!anchor} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
         <Stack spacing={1} sx={{ p: 1.5, minWidth: 220 }}>
-          <TextField size="small" autoFocus label="Parameter name" value={name} onChange={(e) => setName(e.target.value)} />
+          <TextField size="small" label="Parameter name" value={name} onChange={(e) => setName(e.target.value)} />
           <Select size="small" value={type} onChange={(e) => setType(e.target.value as SavedQueryParameter['type'])}>
             <MenuItem value="string">string</MenuItem>
             <MenuItem value="number">number</MenuItem>
@@ -302,7 +302,7 @@ function FilterChip({ filter, label, parameters, onChange, onDelete }: {
             </Select>
           ) : needsValue && (
             <TextField
-              size="small" autoFocus label="Value" value={filter.value}
+              size="small" label="Value" value={filter.value}
               onChange={(e) => onChange({ value: e.target.value })}
             />
           )}

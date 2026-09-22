@@ -60,8 +60,6 @@ export default function QueryResultsPanel({
   const [chartDim, setChartDim] = useState('');
   const [chartMeasure, setChartMeasure] = useState('');
 
-  const tabs = ['Table Results', 'Compiled SQL', 'Visual Charts', ...(executionPlan !== undefined ? ['Execution Plan'] : [])];
-
   return (
     <Paper variant="outlined" sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 300 }}>
       <Tabs

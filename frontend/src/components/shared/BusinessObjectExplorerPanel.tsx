@@ -18,7 +18,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, TextField, InputAdornment, Chip, Stack, Button,
-  List, ListItemButton, ListItemText, Badge, CircularProgress, Alert, Tooltip, IconButton,
+  List, ListItemButton, ListItemText, CircularProgress, Alert, Tooltip, IconButton,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator';
@@ -66,7 +66,7 @@ export interface BusinessObjectExplorerPanelProps {
 export default function BusinessObjectExplorerPanel({
   selector, activeBoId, onSelectActive, onToggleField, onAddFilter,
 }: BusinessObjectExplorerPanelProps) {
-  const { primary, related, objects } = selector;
+  const { primary, objects } = selector;
   if (!primary) return null;
 
   const active = objects.find((o) => o.boId === activeBoId) || primary;
@@ -74,7 +74,7 @@ export default function BusinessObjectExplorerPanel({
   return (
     <Stack direction="row" spacing={1.5} sx={{ height: '100%', minHeight: 0 }}>
       <NavigatorPane selector={selector} activeBoId={activeBoId} onSelectActive={onSelectActive} />
-      <FieldsPane active={active} objectCount={objects.length} onToggleField={onToggleField} onAddFilter={onAddFilter} />
+      <FieldsPane active={active} onToggleField={onToggleField} onAddFilter={onAddFilter} />
     </Stack>
   );
 }
@@ -172,9 +172,8 @@ function BoNavItem({ name, sub, active, locked, onClick, onRemove }: {
 
 // ---------- Pane 2: BO Fields ----------
 
-function FieldsPane({ active, objectCount, onToggleField, onAddFilter }: {
+function FieldsPane({ active, onToggleField, onAddFilter }: {
   active: { boId: string; boName: string; terms: SemanticTermView[]; termsLoading: boolean; termsError: string | null };
-  objectCount: number;
   onToggleField: (boId: string, termNodeId: string) => void;
   onAddFilter?: (boId: string, term: SemanticTermView) => void;
 }) {
