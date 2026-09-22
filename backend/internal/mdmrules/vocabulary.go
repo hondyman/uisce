@@ -10,6 +10,7 @@ import "strings"
 //
 // attribute_def is absent on purpose: it has no mapped terms, so no rule can reference it yet.
 var Vocabulary = map[string][]string{
+	"account":                     terms("ID AcctCd Name AcctTypCd BaseCurrency CustodianId ManagerId Status CustomAttributes CreatedAt UpdatedAt"),
 	"benchmark":                   terms("BenchmarkId BenchmarkCode BenchmarkName BenchmarkType Currency RebalanceFrequency Source BenchmarkIsActive CustomAttributes CreatedAt UpdatedAt TenantId BasketSecurityId"),
 	"change_request":              terms("ChangeId EntityId EntityType ChangeType ProposedChanges Status SubmittedBy ReviewedBy ReviewedAt ReviewNotes CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"dq_issue":                    terms("DqId EntityId EntityType RuleId IssueDescription Severity Status AssignedTo ResolvedAt ResolutionNotes CustomAttributes CreatedAt UpdatedAt TenantId"),
@@ -31,9 +32,11 @@ var Vocabulary = map[string][]string{
 	"mandate":                     terms("MandateId MandateCode PortfolioId StrategyType BenchmarkId TargetReturn RiskTolerance InceptionDate MandateDescription Status CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"match_candidate":             terms("MatchId MatchRuleId EntityId1 EntityId2 Score Status ReviewedBy ReviewedAt ReviewNotes CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"match_rule":                  terms("MatchId RuleName EntityType MatchFields MatchAlgorithm Threshold AutoMergeThreshold ReviewThreshold MatchIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),
+	"order":                       terms("ID SecuritiesID Side OrderType TargetQuantity ExecutedQuantity LeavesQuantity LimitPrice AveragePrice Status TimeInForce TradeDate CreatedAt UpdatedAt"),
 	"party":                       terms("PartyId PartyCode LegalName PartyType Segment TaxId Domicile CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"portfolio":                   terms("PortfolioId PortfolioCode PortfolioName PortfolioType ManagerID PortfolioDescription Status CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"portfolio_composite":         terms("PortfolioId CompositeCode PortfolioName PortfolioDescription Status CustomAttributes CreatedAt UpdatedAt TenantId"),
+	"position":                    terms("ID AccountId SecId SecurityId Qty BaseCost AsOfDate LongShortCd CustomAttributes CreatedAt UpdatedAt"),
 	"security":                    terms("ID SecId SecName SecTypCd Isin Cusip Ticker IssuerId AssetCrrncyCd CustomAttributes CreatedAt UpdatedAt"),
 	"source_system":               terms("SourceId SourceCode SourceName SystemType Vendor ConnectionInfo Priority SourceIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),
 	"steward":                     terms("StewardId StewardName StewardEmail Team Role StewardIsActive CustomAttributes CreatedAt UpdatedAt TenantId"),

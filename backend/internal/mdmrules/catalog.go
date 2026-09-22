@@ -303,6 +303,15 @@ func Catalog() []Rule {
 		required("security", "A security needs an id, a name and a type.", ScopeAll, catIntegrity,
 			"SecId", "SecName", "SecTypCd"),
 	)
+	// ---- core ORM: account/order/position identity ----------------------------------------
+	add(
+		required("account", "An account needs a code, a name and a type.", ScopeAll, catIntegrity,
+			"AcctCd", "Name", "AcctTypCd"),
+		required("order", "An order needs a security, a side and a target quantity.", ScopeAll, catIntegrity,
+			"SecuritiesID", "Side", "TargetQuantity"),
+		required("position", "A position needs an account, a security and a quantity.", ScopeAll, catIntegrity,
+			"AccountId", "SecId", "Qty"),
+	)
 	return append(r, securityRules()...)
 }
 
