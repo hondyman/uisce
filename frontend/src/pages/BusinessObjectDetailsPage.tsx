@@ -1831,7 +1831,7 @@ export default function BusinessObjectDetailsPage() {
 
               {/* Live Query Explorer Tab */}
               {activeTab === 2 && (
-                <LiveQueryTab businessObject={businessObject} />
+                <LiveQueryTab businessObject={businessObject} bindings={bindings} />
               )}
 
               {/* Records & ORM CRUD Tab */}
@@ -1849,13 +1849,8 @@ export default function BusinessObjectDetailsPage() {
                 <WorkflowTab businessObject={businessObject} />
               )}
 
-              {/* Validations & Triggers Tab */}
-              {activeTab === 6 && (
-                <ValidationsAndTriggersTab businessObject={businessObject} />
-              )}
-
               {/* Related Objects Tab */}
-              {activeTab === 7 && (
+              {activeTab === 6 && (
                 <RelatedObjectsTab
                   relatedObjectsView={relatedObjectsView}
                   relatedObjects={relatedObjects}
@@ -1865,14 +1860,14 @@ export default function BusinessObjectDetailsPage() {
               )}
 
               {/* Graph Tab */}
-              {activeTab === 8 && (
+              {activeTab === 7 && (
                 <Box sx={{ height: '70vh', p: 2 }}>
                   <BOLineageGraphTab boId={id || ''} />
                 </Box>
               )}
 
               {/* Semantic Model Tab */}
-              {activeTab === 9 && (
+              {activeTab === 8 && (
                 <Box sx={{ p: 3 }}>
                   <SemanticAssetsTab
                     boId={id}
@@ -1892,7 +1887,7 @@ export default function BusinessObjectDetailsPage() {
               )}
 
               {/* Lineage & Impact Tab */}
-              {activeTab === 10 && (
+              {activeTab === 9 && (
 
                 <Box sx={{ p: 3 }}>
                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
@@ -1901,13 +1896,18 @@ export default function BusinessObjectDetailsPage() {
                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                      Visualize upstream dependencies and downstream impact using dynamic analysis.
                    </Typography>
-                   
+
                    <UnifiedLineageTab
                       nodeType="business_object"
                       nodeId={businessObject?.id || id || ''}
                       initialDirection="both"
                    />
                 </Box>
+              )}
+
+              {/* Validations & Triggers Tab */}
+              {activeTab === 10 && (
+                <ValidationsAndTriggersTab businessObject={businessObject} />
               )}
 
             </Paper>
