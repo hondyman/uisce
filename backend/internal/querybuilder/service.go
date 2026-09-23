@@ -86,10 +86,56 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 		return nil, fmt.Errorf("sql generation failed: %w", err)
 	}
 
+	// Wire-side Columns for single-BO queries. Every selected field
+	// trivially belongs to the root BO (no related-BO joins), so BOID is
+	// uniform. Aggregation stays empty — single-BO SQL is row-grain
+	// (SELECT field FROM table WHERE ... LIMIT n, with no SUM/AVG/COUNT
+	// wrap and no GROUP BY); stamping Aggregation:"sum" on row-grain
+	// output would let isAdditiveSafe vouch for linearity the SQL never
+	// performed. The empty-omitted default preserves the gate's
+	// fail-safe polarity: missing aggregation ⇒ "Needs review" on a
+	// gauge widget, which is the truthful verdict for row-grain
+	// output. (β — generator gains real aggregation support — is the
+	// fix that removes "Needs review" for genuinely-aggregated
+	// single-BO measures; not in scope here.)
+	//
+	// Column Name matches what the driver returns. The mapper's
+	// SemanticField.Label is dropped at ResolveSemanticRequest (line
+	// 839 — only the field ID survives), so the label the SQL
+	// emits is computed by BOSQLGenerator.ResolvePathWithLabel as
+	// `field.DisplayName || field.Name`. We mirror that here so
+	// applyColumnMetadata's name-match lookup lands.
+	rootDef, err := s.resolver.GetBODefinition(qd.Context.BOID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load BO definition for column wiring: %w", err)
+	}
+	fieldsByName := make(map[string]*boresolver.BOField, len(rootDef.Fields))
+	for i := range rootDef.Fields {
+		f := &rootDef.Fields[i]
+		fieldsByName[f.Name] = f
+	}
+	columns := make([]boresolver.QueryResultColumn, 0, len(semanticReq.Select))
+	for _, sf := range semanticReq.Select {
+		f, ok := fieldsByName[sf.Term]
+		if !ok {
+			continue // unresolvable terms: GenerateSQL already errored if fatal
+		}
+		wireName := f.DisplayName
+		if wireName == "" {
+			wireName = f.Name
+		}
+		columns = append(columns, boresolver.QueryResultColumn{
+			Name: wireName,
+			Type: "unknown", // driver-emitted type isn't known at Preview time; Execute's scanColumns fills it
+			BOID: rootDef.ID,
+		})
+	}
+
 	return &boresolver.QueryPreviewResponse{
 		SQL:        sql,
 		Dialect:    dialectName(s.generator.Dialect),
 		Parameters: args,
+		Columns:    columns,
 	}, nil
 }
 

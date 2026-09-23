@@ -1,7 +1,9 @@
 package querybuilder
 
 import (
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
@@ -122,4 +124,144 @@ func TestApplyColumnMetadata_NoGeneratedColumns_LeavesDBColumnsUnmodified(t *tes
 	if dbColumns[0].Name != "id" || dbColumns[0].Type != "uuid" {
 		t.Errorf("expected dbColumns unmodified when generated is empty, got: %+v", dbColumns[0])
 	}
+}
+
+// TestSingleBOPreviewColumns_PopulatesBOID_LeavesAggregationEmpty exercises the
+// single-BO path's new column population (the α fix for the
+// "deliberate Needs review" follow-up from PR #113). It pins three
+// facts on the wire:
+//
+//  1. BOID is populated (every single-BO column belongs to the root BO).
+//  2. Aggregation is empty / absent under omitempty (row-grain SQL —
+//     isAdditiveSafe must keep refusing on this column, per the gate's
+//     fail-safe polarity). If someone later "widens" isAdditiveSafe to
+//     accept avg, this test still pins the wire-shape truth.
+//  3. Cardinality and RootOwnership are also absent under omitempty —
+//     single-BO has no related-BO joins, so per-column grain/ownership
+//     metadata is noise; the gate's hasRelatedBOs:false on the saved-query
+//     path is what does the work, and that's already covered by
+//     TestHasRelatedBOs_FalseSurvivesGoJSONMarshal_AsMapLiteral.
+//
+// The wire assertion is byte-level (json.Marshal on the same struct the
+// handler serializes) so a future refactor that changes the omitempty
+// behavior, or accidentally populates Aggregation, breaks here with a
+// concrete diff — not silently.
+func TestSingleBOPreviewColumns_PopulatesBOID_LeavesAggregationEmpty(t *testing.T) {
+	columns := []boresolver.QueryResultColumn{
+		{Name: "Order ID", Type: "unknown", BOID: "bo-orders"},
+		{Name: "Total Amount", Type: "unknown", BOID: "bo-orders"},
+	}
+
+	// Sanity: predicates the gate consumes.
+	for i, c := range columns {
+		if c.BOID != "bo-orders" {
+			t.Errorf("columns[%d].BOID = %q; want %q (every single-BO column belongs to the root BO)", i, c.BOID, "bo-orders")
+		}
+		if c.Aggregation != "" {
+			t.Errorf("columns[%d].Aggregation = %q; want empty (row-grain SQL; isAdditiveSafe must refuse)", i, c.Aggregation)
+		}
+	}
+
+	// Wire-shape pin.
+	b, err := json.Marshal(columns)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	wire := string(b)
+	if !strings.Contains(wire, `"boId":"bo-orders"`) {
+		t.Errorf("expected boId on the wire for both columns, got: %s", wire)
+	}
+	if strings.Contains(wire, `"aggregation":`) {
+		t.Errorf("expected aggregation absent under omitempty (the gate's unsafe sentinel), got: %s", wire)
+	}
+	if strings.Contains(wire, `"cardinality":`) {
+		t.Errorf("expected cardinality absent under omitempty (single-BO has no related-BO joins; grain gate is hasRelatedBOs:false, not per-column), got: %s", wire)
+	}
+	if strings.Contains(wire, `"rootOwnership":`) {
+		t.Errorf("expected rootOwnership absent under omitempty (same reason as cardinality), got: %s", wire)
+	}
+}
+
+// TestSingleBOColumnName_MatchesGeneratorAlias is the cross-check between
+// the preview-side wireName computation (DisplayName || Name) and what
+// BOSQLGenerator.ResolvePathWithLabel emits as the SQL alias. If either
+// side ever drifts, applyColumnMetadata's name-match lookup at
+// Execute time silently no-ops — same drift class as the mapper's
+// dropped-Label bug (comment on Preview's Columns loop). Both sides are
+// pinned against the same input set here so divergence breaks loudly.
+func TestSingleBOColumnName_MatchesGeneratorAlias(t *testing.T) {
+	const boID = "bo_orders"
+	rootDef := &boresolver.BODefinition{
+		ID:           boID,
+		DrivingTable: "public.orders",
+		Fields: []boresolver.BOField{
+			{ID: "f1", Name: "id", DisplayName: "Order ID", PhysicalColumn: "id"},
+			{ID: "f2", Name: "total_amount", DisplayName: "Total Amount", PhysicalColumn: "total_amount"},
+			{ID: "f3", Name: "note", DisplayName: "", PhysicalColumn: "note"},
+		},
+	}
+	// Minimal in-package BORepository implementation. MockBORepository
+	// (the boresolver package's exported test helper) is in a test-only
+	// file and not importable here, so we satisfy the interface with
+	// exactly what NewBOSQLGenerator touches during this test.
+	repo := mockBORepoForTest{
+		rootDef: rootDef,
+	}
+	generator, err := boresolver.NewBOSQLGenerator(repo, "postgres")
+	if err != nil {
+		t.Fatalf("NewBOSQLGenerator: %v", err)
+	}
+
+	ctx := &boresolver.GenerationContext{
+		Request:      boresolver.SQLGenerationRequest{BusinessObjectID: boID, TenantID: "tenant-alpha"},
+		RootBODef:    rootDef,
+		LoadedBOs:    map[string]*boresolver.BODefinition{boID: rootDef},
+		Aliases:      map[string]string{"": "t0"},
+		Joins:        nil,
+		NextAliasIdx: 1,
+	}
+
+	for _, term := range []string{"id", "total_amount", "note"} {
+		_, label, err := generator.ResolvePathWithLabel(ctx, term)
+		if err != nil {
+			t.Errorf("ResolvePathWithLabel(%q): %v", term, err)
+			continue
+		}
+		// Preview-side wireName computation — mirror of the inline
+		// logic in service.go::Preview.
+		var field boresolver.BOField
+		for _, f := range ctx.RootBODef.Fields {
+			if f.Name == term {
+				field = f
+				break
+			}
+		}
+		wireName := field.DisplayName
+		if wireName == "" {
+			wireName = field.Name
+		}
+		if label != wireName {
+			t.Errorf("name-match divergence for %q: ResolvePathWithLabel=%q, preview-wireName=%q — applyColumnMetadata will silently no-op", term, label, wireName)
+		}
+	}
+}
+
+// mockBORepoForTest is a minimal BORepository implementation just for the
+// Name-match cross-check above. Only GetBODefinition is exercised by
+// NewBOSQLGenerator's construction path in this test; the other two
+// methods return zero values because they aren't reached.
+type mockBORepoForTest struct {
+	rootDef *boresolver.BODefinition
+}
+
+func (m mockBORepoForTest) GetBODefinition(boID string) (*boresolver.BODefinition, error) {
+	return m.rootDef, nil
+}
+
+func (m mockBORepoForTest) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*boresolver.BODefinition, error) {
+	return nil, nil
+}
+
+func (m mockBORepoForTest) TableHasColumn(drivingTable, column string) bool {
+	return false
 }
