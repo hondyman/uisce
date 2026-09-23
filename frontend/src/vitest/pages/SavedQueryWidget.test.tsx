@@ -167,4 +167,31 @@ describe('SavedQueryWidget - rollup-safety gate composition', () => {
       expect(screen.getByText('Needs review')).toBeInTheDocument();
     });
   });
+
+  // β gate-open proof: aggregation:"sum" on a single-BO column (hasRelatedBOs:false)
+  // passes both isSafeToRollUpAcrossRows and isAdditiveSafe, so the gauge renders
+  // the summed value instead of "Needs review". This is a gate-predicate proof with
+  // a mock shape; the actual end-to-end claim (backend emits aggregation:"sum" →
+  // widget renders) is proven by the combination of querybuilder wire tests
+  // (TestSingleBOAggregatedMeasure_WireShape) + this test.
+  it('renders the sum for an aggregated single-BO column with hasRelatedBOs:false and aggregation sum', async () => {
+    const result: SavedQueryRunResult = {
+      columns: [
+        { name: 'Total Amount', type: 'number', boId: 'bo-orders', aggregation: 'sum' },
+      ],
+      rows: [{ 'Total Amount': 300 }],
+      rowCount: 1,
+      chartType: 'gauge',
+      name: 'aggregated-single-bo',
+      hasRelatedBOs: false,
+    };
+    mockRunSavedQuery.mockResolvedValueOnce(result);
+
+    render(<SavedQueryWidget savedQueryId="q1" widgetType="gauge" />);
+
+    await waitFor(() => {
+      expect(screen.getByText('300')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Needs review')).not.toBeInTheDocument();
+  });
 });
