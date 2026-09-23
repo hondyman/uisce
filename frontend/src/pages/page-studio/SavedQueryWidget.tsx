@@ -88,7 +88,6 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({ savedQueryId, widge
 
   if (widgetType === 'gauge') {
     const measureColDef = result.columns.find((c) => typeof result.rows[0][c.name] === 'string' && !isNaN(Number(result.rows[0][c.name]))) || result.columns[result.columns.length - 1];
-    const measureCol = measureColDef?.name;
 
     // Fail-safe, not wait-and-see: this re-sums measureCol across EVERY
     // returned row, client-side, independent of whatever grouping/
@@ -126,7 +125,13 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({ savedQueryId, widge
       );
     }
 
-    const total = result.rows.reduce((sum, r) => sum + (Number(r[measureCol]) || 0), 0);
+    // measureColDef is narrowed non-undefined by the guard above; using
+    // its .name here directly (rather than a pre-computed measureCol
+    // captured before that guard ran) lets that narrowing actually reach
+    // the value used as the row-index key, instead of a separately-typed
+    // `string | undefined` that happened to be safe in practice but
+    // wasn't provably so at its own point of use.
+    const total = result.rows.reduce((sum, r) => sum + (Number(r[measureColDef.name]) || 0), 0);
     return (
       <Box sx={{ textAlign: 'center', p: 1 }}>
         <Typography variant="h4" fontWeight={700} sx={{ color: style?.valueColor, fontSize: style?.valueFontSize ? `${style.valueFontSize}px` : undefined }}>

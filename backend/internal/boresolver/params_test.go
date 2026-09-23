@@ -69,15 +69,22 @@ func TestRenumberParams_QuestionMarkDialect_NoSwap(t *testing.T) {
 	}
 }
 
-// TestRenumberParams_ForgedSentinelWrongNonce_NotTreatedAsParam is the F13
-// regression test: text that is byte-for-byte a well-formed sentinel EXCEPT
-// for the nonce must not be recognized as a parameter placeholder. Without
-// the nonce, any code path that concatenates attacker-influenced text
-// containing "\x00p<n>\x00" into the assembled SQL (a NUL byte is trivial
-// to put in a Go string) could forge a placeholder and desynchronize Args
-// from a later, real sentinel - this is what makes the nonce load-bearing
-// rather than decorative.
-func TestRenumberParams_ForgedSentinelWrongNonce_NotTreatedAsParam(t *testing.T) {
+// TestRenumberParams_ForgedSentinelWrongNonce_FailsLoud is the F13
+// regression test: text that is byte-for-byte a well-formed sentinel
+// EXCEPT for the nonce must never be recognized as THIS call's parameter
+// placeholder - but it must also never silently ride through into the
+// final SQL either, because it still contains a raw NUL byte from a
+// source this function cannot identify (a sentinel from a different
+// generation, or a genuine forgery - indistinguishable from here). An
+// earlier version of this test accepted the wrong-nonce sentinel surviving
+// untouched as "plain text" and asserted only that it wasn't misbound;
+// that's the wrong bar. Per this file's own fail-loud discipline (verified
+// in this same review round: the stray-NUL check that would have caught
+// this was accidentally dropped when the nonce was added, then restored),
+// an unexplained NUL reaching the output is refused outright, not passed
+// through - the safe response to "I can't tell what this is" is to
+// refuse, not to shrug and forward it to the driver.
+func TestRenumberParams_ForgedSentinelWrongNonce_FailsLoud(t *testing.T) {
 	realNonce := newParamNonce()
 	forgedNonce := newParamNonce()
 	if realNonce == forgedNonce {
@@ -92,21 +99,28 @@ func TestRenumberParams_ForgedSentinelWrongNonce_NotTreatedAsParam(t *testing.T)
 
 	sql := "WHERE forged = " + forged + " AND real = " + real
 
-	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, pending, realNonce)
+	_, _, err := renumberParams(sql, PostgresDialect{}, pending, realNonce)
+	if err == nil {
+		t.Fatal("expected renumberParams to refuse to produce SQL when a foreign NUL-bearing sequence survives - it must not silently forward an unrecognized sentinel's raw bytes to the driver")
+	}
+}
+
+// TestRenumberParams_NoSentinelsAtAll_PassesThroughUnchanged is the
+// legitimate case the stray-NUL guard must NOT catch: ordinary SQL text
+// with no sentinels and no NUL bytes of any kind must return unchanged,
+// with a nil args slice - proving the guard is scoped to actual NUL
+// bytes, not to "any call where expected == 0."
+func TestRenumberParams_NoSentinelsAtAll_PassesThroughUnchanged(t *testing.T) {
+	sql := "SELECT t0.id FROM orders AS t0 LIMIT 10"
+	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, nil, newParamNonce())
 	if err != nil {
-		t.Fatalf("renumberParams failed: %v", err)
+		t.Fatalf("renumberParams failed on plain SQL with no sentinels: %v", err)
 	}
-	// Exactly one real placeholder was consumed; the forged one passes
-	// through as ordinary (if odd) text, never as a second $N stealing a
-	// value that doesn't exist for it.
-	if len(gotArgs) != 1 || gotArgs[0] != "real-value" {
-		t.Fatalf("expected exactly the one real arg, got: %#v", gotArgs)
+	if gotSQL != sql {
+		t.Fatalf("expected unchanged SQL, got: %q", gotSQL)
 	}
-	if !strings.Contains(gotSQL, forged) {
-		t.Fatalf("expected the wrong-nonce sentinel to survive untouched as plain text, got: %q", gotSQL)
-	}
-	if !strings.Contains(gotSQL, "real = $1") {
-		t.Fatalf("expected the real sentinel to become $1, got: %q", gotSQL)
+	if gotArgs != nil {
+		t.Fatalf("expected nil args, got: %#v", gotArgs)
 	}
 }
 

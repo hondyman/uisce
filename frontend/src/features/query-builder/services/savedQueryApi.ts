@@ -184,10 +184,17 @@ export interface SavedQueryRunResult {
  * UNKNOWN, hence unsafe - unless hasRelatedBOs is explicitly false, which
  * proves safety by construction (zero joins, nothing to fan out) without
  * needing per-column metadata Preview's single-BO branch doesn't produce.
+ *
+ * An empty columns array is NOT treated as intact, even though
+ * `[].every(...)` is vacuously true in JS - "no columns to check" is not
+ * the same claim as "every column checked out fine," and a caller other
+ * than the gauge (which never reaches this with zero columns, since it
+ * bails out on a missing measure column first) could otherwise read a
+ * malformed/empty response as a green light.
  */
 export function isRowGrainIntact(result: Pick<SavedQueryRunResult, 'columns' | 'hasRelatedBOs'>): boolean {
   if (result.hasRelatedBOs === false) return true;
-  return result.columns.every((c) => c.cardinality === 'one');
+  return result.columns.length > 0 && result.columns.every((c) => c.cardinality === 'one');
 }
 
 /**
@@ -216,6 +223,15 @@ export function isRowGrainIntact(result: Pick<SavedQueryRunResult, 'columns' | '
  * "true" from here as "any `+`-based rollup of this column is fine."
  * See the backend's OwnershipFinding.AtRisk doc comment for the same
  * three-way split on the scanner side.
+ *
+ * hasRelatedBOs === false short-circuits past the rootOwnership check
+ * entirely, and that's intentional, not a gap: "zero related-BO joins"
+ * IMPLIES every column is root-owned - ownership can only become "shared"
+ * via a join to another BO (see the backend's RootOwnership doc comment;
+ * an M:1 hop is what produces a shared terminal, and there's no hop at
+ * all here), so requiring an explicit rootOwnership: "unique" that
+ * Preview's single-BO branch never populates would make this permanently
+ * false for the majority of saved queries instead of correctly true.
  */
 export function isSafeToRollUpAcrossRows(
   result: Pick<SavedQueryRunResult, 'columns' | 'hasRelatedBOs'>,

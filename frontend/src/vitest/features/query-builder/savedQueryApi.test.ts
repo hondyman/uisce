@@ -104,3 +104,38 @@ describe('isSafeToRollUpAcrossRows', () => {
     expect(isSafeToRollUpAcrossRows(result, result.columns[0])).toBe(false);
   });
 });
+
+// The polarity of hasRelatedBOs is deliberately asymmetric: absent is
+// strict (treated as unsafe), explicit false is permissive (treated as
+// safe-by-construction). That only holds if the two survive as distinct
+// values across the actual wire transport, not just as distinct object
+// literals built by hand in the tests above - a "sparse object builder"
+// on either the backend or a future frontend refactor could collapse
+// "key omitted" and "key present with value false" into the same thing,
+// which would either silently disable the single-BO fast path (false
+// read as absent) or silently open the permissive branch on real
+// exposure (absent read as false) depending on which direction it drifts.
+// This goes through actual JSON.stringify/JSON.parse, the same
+// serialization boundary the real fetchJSON response crosses, rather
+// than asserting on the object literal directly.
+describe('hasRelatedBOs survives JSON round-trip as distinct from absence', () => {
+  it('explicit false survives JSON.stringify/parse as false, not becoming undefined', () => {
+    const wire = JSON.stringify({ columns: [{ name: 'x', type: 'number' }], hasRelatedBOs: false });
+    const parsed = JSON.parse(wire) as SavedQueryRunResult;
+    expect(parsed.hasRelatedBOs).toBe(false);
+    expect(isRowGrainIntact(parsed)).toBe(true);
+  });
+
+  it('an omitted key survives JSON.stringify/parse as undefined, not becoming false', () => {
+    const wire = JSON.stringify({ columns: [{ name: 'x', type: 'number' }] });
+    const parsed = JSON.parse(wire) as SavedQueryRunResult;
+    expect(parsed.hasRelatedBOs).toBeUndefined();
+    expect(isRowGrainIntact(parsed)).toBe(false);
+  });
+
+  it('the two parsed results disagree on isRowGrainIntact - proving they were not collapsed to the same value', () => {
+    const withFalse = JSON.parse(JSON.stringify({ columns: [{ name: 'x', type: 'number' }], hasRelatedBOs: false })) as SavedQueryRunResult;
+    const omitted = JSON.parse(JSON.stringify({ columns: [{ name: 'x', type: 'number' }] })) as SavedQueryRunResult;
+    expect(isRowGrainIntact(withFalse)).not.toBe(isRowGrainIntact(omitted));
+  });
+});

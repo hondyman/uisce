@@ -84,12 +84,22 @@ func NewParamNonce() string { return newParamNonce() }
 // ensureParamNonce guarantee by storing it on ctx itself.
 func EnsureParamNonce(ctx *GenerationContext) string { return ensureParamNonce(ctx) }
 
-// ensureParamNonce returns ctx's nonce, minting one on first use. Every
-// call site that emits a sentinel for this ctx must go through this (not
-// newParamNonce directly), or different call sites within the same
-// generation would scope their sentinels to different nonces and
-// renumberParams - which only knows one nonce per call - would silently
-// treat the others as ordinary text instead of parameters.
+// ensureParamNonce returns ctx's nonce, minting one on first use - scoped
+// to this *GenerationContext instance, not to any broader notion of "one
+// generation": if the same ctx pointer were ever reused across two
+// separate query generations, both would share its nonce. That's not a
+// cryptographic weakness (the nonce is unforgeable either way, since
+// nothing outside this package's own callers can produce or observe it
+// between the two uses), but it is a reason the name says "param nonce
+// for this ctx," not "nonce for this generation" - the two happen to
+// coincide in every caller today (GenerateSQL constructs a fresh
+// *GenerationContext per call; buildMultiBOSQL constructs a fresh
+// *GenerationContext per call), but that's a property of the callers, not
+// of this function. Every call site that emits a sentinel for this ctx
+// must go through this (not newParamNonce directly), or different call
+// sites sharing one ctx would scope their sentinels to different nonces
+// and renumberParams - which only knows one nonce per call - would
+// silently treat the others as ordinary text instead of parameters.
 func ensureParamNonce(ctx *GenerationContext) string {
 	if ctx.ParamNonce == "" {
 		ctx.ParamNonce = newParamNonce()
@@ -144,6 +154,22 @@ func renumberParams(sql string, dialect Dialect, pending []interface{}, nonce st
 	prefix := sentinelPrefix + nonce + ":"
 	expected := strings.Count(sql, prefix)
 	if expected == 0 {
+		// A NUL reaching here with no sentinel under THIS nonce is still
+		// an internal-invariant violation, not evidence of safety: it
+		// could be a sentinel minted under a DIFFERENT nonce (the exact
+		// mis-wiring case this file's nonce design exists to catch - see
+		// the package doc comment above) reaching the wrong renumberParams
+		// call, which would otherwise pass through as inert-looking text
+		// and leave that placeholder's value silently missing from args
+		// while the raw sentinel bytes ride into the SQL sent to the
+		// driver. Dropping this check (an earlier revision did, briefly)
+		// converts that from a loud, caught-here failure into a confusing
+		// database-level one - strictly worse for debugging, though not a
+		// binding bug, since the mismatched value never gets silently
+		// bound to the wrong placeholder either way.
+		if strings.ContainsRune(sql, 0) {
+			return "", nil, fmt.Errorf("internal error: stray NUL byte in generated SQL with no recognizable parameter sentinel under this nonce")
+		}
 		return sql, nil, nil
 	}
 
@@ -189,8 +215,15 @@ func renumberParams(sql string, dialect Dialect, pending []interface{}, nonce st
 	if len(args) != expected {
 		return "", nil, fmt.Errorf("internal error: parameter sentinel count mismatch: found %d occurrences, bound %d args", expected, len(args))
 	}
-	if strings.Contains(final, prefix) {
-		return "", nil, fmt.Errorf("internal error: parameter sentinel survived renumbering")
+	// Checking for a stray NUL, not just a surviving `prefix`: the loop
+	// above only ever consumes text matching THIS nonce's prefix, so a
+	// sentinel minted under a different nonce - or any other stray NUL -
+	// would pass straight through into `final` without tripping the
+	// narrower `prefix` check. NUL strictly subsumes it: anything
+	// containing `prefix` also contains a NUL, so this catches every case
+	// the narrower check would plus the cross-nonce one it would miss.
+	if strings.ContainsRune(final, 0) {
+		return "", nil, fmt.Errorf("internal error: stray NUL byte survived parameter renumbering")
 	}
 
 	return final, args, nil
