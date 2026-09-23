@@ -42,6 +42,15 @@ export function liveQueryResultToSet(res: QueryExecuteResult): QueryResultSet {
 export interface SavedQueryRunShape {
   columns: { name: string; type?: string }[];
   rows: Record<string, unknown>[];
+  /**
+   * Total row count as reported by the saved-query `execute` endpoint. The
+   * assumption is that the API returns the complete result set inline — i.e.
+   * `rows.length` always equals `rowCount`. If the API ever switches to
+   * pagination with truncated `rows`, this interface must change and the
+   * adapter must fall back to `rows.length` (with a comment explaining the
+   * silent misreport). Marked optional because older response shapes
+   * predated the field.
+   */
   rowCount?: number;
   /** Optional - older saved-query responses may not carry an execution time. */
   executionTimeMs?: number;

@@ -40,7 +40,7 @@ import {
   getSavedQuery, createSavedQuery, updateSavedQuery, runSavedQuery,
 } from '../services/savedQueryApi';
 import type { SavedQuery, SavedQueryState, QueryDef } from '../types/queryDef';
-import { friendlyQueryError, savedQueryResultToSet } from '../../query-execution';
+import { friendlyQueryError, savedQueryResultToSet, type SavedQueryRunShape } from '../../query-execution';
 
 function useLoadedSavedQuery(id: string | undefined, isNew: boolean) {
   const [savedQuery, setSavedQuery] = useState<SavedQuery | null>(null);
@@ -74,7 +74,7 @@ export default function SavedQueryEditor() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [runResult, setRunResult] = useState<{ columns: { name: string; type?: string }[]; rows: Record<string, unknown>[]; rowCount?: number; executionTimeMs?: number } | null>(null);
+  const [runResult, setRunResult] = useState<SavedQueryRunShape | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 

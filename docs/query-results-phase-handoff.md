@@ -379,25 +379,52 @@ change.**
 
 ---
 
-## Build status — wrong-depth import, fixed in this branch
+## Build status — wrong-depth import fixed; tailwind-merge real defect dispositioned separately
 
-`npm run build` **succeeds** on the final state of this branch. The intermediate failure and its resolution:
+**Two distinct build failures. Two distinct root causes. Two distinct dispositions.**
 
-**The failure.** Build failed with:
+### Failure #1 (fixed in this branch) — wrong-depth import in `SavedQueryEditor.tsx`
+
+The failure surfaced as:
 ```
 Could not resolve "../query-execution" from "src/features/query-builder/pages/SavedQueryEditor.tsx"
 ```
 
-**Root cause: wrong relative depth.** `SavedQueryEditor.tsx` lives at `src/features/query-builder/pages/`. The import `'../query-execution'` resolves to `src/features/query-builder/query-execution/` (one level up from `pages/` lands in `query-builder/`, then `query-execution/` — which doesn't exist). The canonical lib is `src/features/query-execution/` (one level up from `pages/` is `query-builder/`; **two** levels up is `features/`, where `query-execution/` lives). Correct specifier: `'../../query-execution'`.
+**Root cause:** wrong relative depth. `SavedQueryEditor.tsx` lives at `src/features/query-builder/pages/`. The import `'../query-execution'` resolves to `src/features/query-builder/query-execution/` (one level up from `pages/` lands in `query-builder/`, then `query-execution/` — which doesn't exist). The canonical lib is `src/features/query-execution/` (one level up from `pages/` is `query-builder/`; **two** levels up is `features/`, where `query-execution/` lives). Correct specifier: `'../../query-execution'`.
 
-`tsc --noEmit` didn't surface this because `moduleResolution: "bundler"` is more lenient — it likely matched a different file or shadowed the path. Vite/Rollup's resolver is stricter; the path either resolves to a real file or it doesn't, no shadow.
+`tsc --noEmit` didn't surface this because `moduleResolution: "bundler"` is more lenient — Vite/Rollup's resolver is stricter; the path either resolves to a real file or it doesn't.
+
+**Fix:** one extra `../` in `SavedQueryEditor.tsx:43` — one dot-segment, three characters (`'../query-execution'` → `'../../query-execution'`). LiveQueryTab's path (`'../../../../features/query-execution'` from `pages/.../tabs/`) was depth-correct — four levels up to `src/` — and did not need changing. Build re-verified with the wrong-depth fix alone: `Could not resolve "../query-execution"` no longer present.
 
 **Earlier attempts during this PR's review cycle** (recorded because the chain matters): changing to `'../query-execution/index'`, `'../query-execution/index.ts'`, and `'../query-execution/errorMessage'` (direct file) all failed with errors naming the *changed* specifier — confirming each attempt's error was generated against that specific path, not stale output. All four attempts inherited the same too-shallow base, which is exactly why the error shape never changed: every variant was one level short of `features/`.
 
 **Misdiagnosis in earlier disclosure:** bold-claimed "Vite/Rollup's stricter ESM resolution rejects the directory import." That claim was refuted by the direct-file attempt's identical error, and by a minimal-repro showing directory imports work in a fresh Vite project. The bold claim was generated *after* the theory failed its own tests, not before.
 
-**The "tailwind-merge" phantom.** During the failed-attempt iteration, the build also surfaced `Could not resolve "tailwind-merge"` — interpreted in earlier disclosures as a pre-existing baseline issue making the build "doubly broken." The `tailwind-merge` error was a phantom from the same wrong-path iteration; once the depth is correct, Vite reaches modules that don't reference `tailwind-merge` at all (the `tailwind-merge` importer is `lib/utils.ts`, unrelated to query-execution). Confirmed: `ls src/features/query-execution` shows no `tailwind-merge` import; the build passes cleanly. The pre-existing-baseline claim was wrong.
+### Failure #2 (NOT in this PR's scope) — `tailwind-merge` is real, dispositioned separately
 
-**Disposition.** Fixed in this branch by changing `SavedQueryEditor.tsx:43` from `'../query-execution'` to `'../../query-execution'`. LiveQueryTab's path (`'../../../../features/query-execution'` from `pages/.../tabs/`) was depth-correct — four levels up to `src/` — and did not need changing. Build re-verified: `✓ built in 20.86s`, exit 0.
+After the wrong-depth fix, the build still fails — this time with:
+```
+[vite]: Rollup failed to resolve import "tailwind-merge" from "/Users/eganpj/GitHub/uisce/frontend/src/lib/utils.ts".
+```
 
-**Tracker issue (now moot, recorded for traceability):** the title proposed in the previous disclosure ("Vite build regression: `../query-execution` directory import unresolved") embedded the wrong theory. Renamed to neutral: "Vite build failure on query-execution imports — root cause pending" (now resolved as wrong-depth, issue can be closed without code change).
+**Provenance, not phantom.** Verified via `grep -n '"tailwind-merge"' frontend/package.json frontend/package-lock.json`:
+- `package.json`: **NOT declared** (`tailwind-merge` does not appear)
+- `package-lock.json`: **declared at line 244** with spec `"^3.3.1"`
+- `node_modules/tailwind-merge`: **NOT installed** (`npm ls tailwind-merge` returns `(empty)`)
+
+So `tailwind-merge` is in the lockfile but undeclared in `package.json` and not actually installed. `lib/utils.ts:3` imports `twMerge` from `tailwind-merge`, but the package isn't available locally. This is **undeclared-dependency residue** — same class of defect as the `fetchAPI` rename residue in `LiveQueryTab.tsx`, but rooted in `package.json`/lockfile state rather than in source.
+
+Earlier disclosure's claim "the tailwind-merge error was a phantom from the same wrong-path iteration" was wrong: the `tailwind-merge` error reproduces **on baseline `b258de304`** (before this PR's commits ever touched the tree — `git checkout b258de304` + `npm install` + `npm run build` reproduces it). The CI log grep `grep -nE "tailwind-merge|Could not resolve" /tmp/ci-pr106/*.log` confirms `tailwind-merge` appears in `35771443877.log:4333` as part of a package.json-vs-lockfile spec mismatch error (the lockfile says `^3.3.1`; `package.json` says `^3.6.0`). The CI attribution method (`grep QueryResultsPanel|SavedQueryEditor|query-execution`) couldn't catch this — it looks for this PR's filenames, not for undeclared-dep failures.
+
+**Direction decision: MUI-only going forward.** The MUI direction means `cn()` and `tailwind-merge` go: the codebase uses MUI for class composition, and `tailwind-merge`'s job (resolving Tailwind class conflicts) is moot in an MUI-only codebase. The cleanup of `lib/utils.ts` is baseline-code, not this PR's tree — it stays out under the same branch-purity rule that keeps `dataExplorerApi.generateDialectSQL` and `StreamingBindingPanel.generatePreviewSQL` out of this PR. Tracked below as a dispositioned item, not absorbed.
+
+### Tracker items — out of scope for #112
+
+| Tracker row | Owner | Status |
+|---|---|---|
+| Drop `tailwind-merge` / `cn` residue in `frontend/src/lib/utils.ts` (MUI-only direction) | TBD | **Open issue status:** not filed in this PR; scheduled post-merge. Scope check required: `cn()` has **44 caller files / 196 invocations** in `src/` (`grep -rln 'cn(' src` minus `lib/utils.ts`). Disposition options: (a) replace `cn` implementation with plain `clsx`-only or template-string join, with call sites unchanged; (b) bulk-rewrite call sites to inline `clsx(...)`. Option (a) is the smaller change. If the CI grep on `npm ci` surfaces the same `tailwind-merge` failure mode on a clean environment, this row graduates to its own tiny chore PR — it may flip a red check green and slightly narrow the "systemic red" umbrella. |
+| (resolved) "Vite build failure on `../query-execution` imports — root cause pending" | — | Closed: root cause was wrong-depth import; fixed in this branch by changing `'../query-execution'` to `'../../query-execution'` (one extra `../`, one dot-segment, three characters). |
+
+## Direction note
+
+**MUI-only going forward.** All future ledger rows resolve toward backend compile or honest relabel — not toward Tailwind-era shims. The MUI direction means `tailwind-merge`/`cn` (Tailwind-only class composition utilities) become residue, MUI is the composition primitive.
