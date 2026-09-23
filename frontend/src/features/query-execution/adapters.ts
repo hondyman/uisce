@@ -40,9 +40,9 @@ export function liveQueryResultToSet(res: QueryExecuteResult): QueryResultSet {
 }
 
 export interface SavedQueryRunShape {
-  columns: { name: string; type: string }[];
+  columns: { name: string; type?: string }[];
   rows: Record<string, unknown>[];
-  rowCount: number;
+  rowCount?: number;
   /** Optional - older saved-query responses may not carry an execution time. */
   executionTimeMs?: number;
 }

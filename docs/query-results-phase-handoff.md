@@ -48,7 +48,7 @@ endpoints) adds a ~15-line adapter — not a fork of the panel.
 | 3 | Two-layer ESLint guardrail | Layer 1 = naming convention ban (hard error); Layer 2 = AST structural detection (warn) | `eslint.config.cjs`, `eslint-rules/no-sql-fabrication.cjs` |
 | 4 | `QueryResultsPanel` accepts `extraTabs` registry, not a single `executionPlan` slot | Real ABAC/Sentinel diagnostics, when they exist, plug in without touching the panel | `components/shared/QueryResultsPanel.tsx` |
 | 5 | `initialTabId` is uncontrolled view state (defaults to `resultSet ? 'results' : 'sql'`) | Simpler consumer API; future state-restoration should add a controlled `activeTabId` prop with explicit unknown-id semantics | `QueryResultsPanel.tsx` |
-| 6 | **No client-side SQL generation in the Query Builder / Reporting / Live Query migration path.** LiveQueryTab's `generatePostgresSQL` removed in the mock-removal commit (Layer 1 violation in the guardrail's own tree — first demanded deletion; see "Known violations ledger"). FilterBuilderPanel's `buildSQL`/`buildGroupSQL` removed in Phase 3. Mock-row fallbacks in any `handleRun*` removed in the same commit. Other workstreams (Data Explorer's `generateDialectSQL`, CEP's `generatePreviewSQL`) have TBD owners and aren't gated by this workstream's guardrail — see ledger. **Build caveat:** `npm run build` fails on this branch — see "Build regression introduced by `#112`" below. tsc baseline holds. | The whole point of this workstream (scoped) | enforced by guardrail Layer 1 + standing pre-flight |
+| 6 | **No client-side SQL generation in the Query Builder / Reporting / Live Query migration path.** LiveQueryTab's `generatePostgresSQL` removed in the mock-removal commit (Layer 1 violation in the guardrail's own tree — first demanded deletion; see "Known violations ledger"). FilterBuilderPanel's `buildSQL`/`buildGroupSQL` removed in Phase 3. Mock-row fallbacks in any `handleRun*` removed in the same commit. Other workstreams (Data Explorer's `generateDialectSQL`, CEP's `generatePreviewSQL`) have TBD owners and aren't gated by this workstream's guardrail — see ledger. | The whole point of this workstream (scoped) | enforced by guardrail Layer 1 + standing pre-flight |
 
 ---
 
@@ -379,20 +379,25 @@ change.**
 
 ---
 
-## Build regression introduced by `#112` (honest disclosure)
+## Build status — wrong-depth import, fixed in this branch
 
-`npm run build` fails on this branch with `Could not resolve "../query-execution" from src/features/query-builder/pages/SavedQueryEditor.tsx` (and the equivalent from LiveQueryTab). The barrel `index.ts` exists, the underlying files exist, and `tsc --noEmit` resolves the same imports cleanly via `moduleResolution: "bundler"`. **Vite/Rollup's stricter ESM resolution rejects the directory import** — the project is `"type": "module"` and the directory lacks `package.json` metadata.
+`npm run build` **succeeds** on the final state of this branch. The intermediate failure and its resolution:
 
-**This is a regression introduced by `#112`.** Before the panel v2 commit (`5a5a8eaa3`), the SavedQueryEditor/LiveQueryTab files imported from sibling paths differently (no directory-barrel pattern). The panel v2 commit added `from '../query-execution'` (the barrel pattern) and `from '../../../../features/query-execution'` respectively; tsc passes (so typecheck baseline holds at 705), but Vite build does not.
+**The failure.** Build failed with:
+```
+Could not resolve "../query-execution" from "src/features/query-builder/pages/SavedQueryEditor.tsx"
+```
 
-**The build was also already broken on baseline `b258de304`** due to a missing `tailwind-merge` dependency referenced from `lib/utils.ts` (pre-existing, unrelated to this PR). So the build is doubly broken on this branch: pre-existing baseline issue + new `#112` regression. Neither is exercised by CI because CI lint is systemically red.
+**Root cause: wrong relative depth.** `SavedQueryEditor.tsx` lives at `src/features/query-builder/pages/`. The import `'../query-execution'` resolves to `src/features/query-builder/query-execution/` (one level up from `pages/` lands in `query-builder/`, then `query-execution/` — which doesn't exist). The canonical lib is `src/features/query-execution/` (one level up from `pages/` is `query-builder/`; **two** levels up is `features/`, where `query-execution/` lives). Correct specifier: `'../../query-execution'`.
 
-**Attempts during this PR to fix:**
-- Change to `from '../query-execution/index'` — same error.
-- Change to `from '../query-execution/index.ts'` — same error.
-- Change to `from '../query-execution/errorMessage'` (direct file) — same error.
-- Verified minimal repro with a fresh Vite project, directory import works: the issue is specific to this project's `vite.config.ts` / Rollup config.
+`tsc --noEmit` didn't surface this because `moduleResolution: "bundler"` is more lenient — it likely matched a different file or shadowed the path. Vite/Rollup's resolver is stricter; the path either resolves to a real file or it doesn't, no shadow.
 
-**Disposition:** revert to the barrel import (the panel v2 idiom); the build regression stays. **Open issue status:** not filed in this PR; scheduled post-merge (issue title proposed: "Vite build regression: `../query-execution` directory import unresolved"). **Owner: TBD.** Two likely fix paths: (a) add a `package.json` with `"name"`/`"main": "index.ts"` to `frontend/src/features/query-execution/`; (b) configure `resolve.extensions` / alias in `vite.config.ts`. Option (a) is the smaller change and follows the directory-as-package pattern. **Not a #112 change** — but recorded here because `#112`'s barrel-import idiom introduced the regression.
+**Earlier attempts during this PR's review cycle** (recorded because the chain matters): changing to `'../query-execution/index'`, `'../query-execution/index.ts'`, and `'../query-execution/errorMessage'` (direct file) all failed with errors naming the *changed* specifier — confirming each attempt's error was generated against that specific path, not stale output. All four attempts inherited the same too-shallow base, which is exactly why the error shape never changed: every variant was one level short of `features/`.
 
-**Reviewer note:** `tsc --noEmit` exit code and the 705-error baseline are unchanged. ESLint on touched files exits 0. The build failure is a new category that prior turns didn't witness; this is the first PR review where `npm run build` was actually run.
+**Misdiagnosis in earlier disclosure:** bold-claimed "Vite/Rollup's stricter ESM resolution rejects the directory import." That claim was refuted by the direct-file attempt's identical error, and by a minimal-repro showing directory imports work in a fresh Vite project. The bold claim was generated *after* the theory failed its own tests, not before.
+
+**The "tailwind-merge" phantom.** During the failed-attempt iteration, the build also surfaced `Could not resolve "tailwind-merge"` — interpreted in earlier disclosures as a pre-existing baseline issue making the build "doubly broken." The `tailwind-merge` error was a phantom from the same wrong-path iteration; once the depth is correct, Vite reaches modules that don't reference `tailwind-merge` at all (the `tailwind-merge` importer is `lib/utils.ts`, unrelated to query-execution). Confirmed: `ls src/features/query-execution` shows no `tailwind-merge` import; the build passes cleanly. The pre-existing-baseline claim was wrong.
+
+**Disposition.** Fixed in this branch by changing `SavedQueryEditor.tsx:43` from `'../query-execution'` to `'../../query-execution'`. LiveQueryTab's path (`'../../../../features/query-execution'` from `pages/.../tabs/`) was depth-correct — four levels up to `src/` — and did not need changing. Build re-verified: `✓ built in 20.86s`, exit 0.
+
+**Tracker issue (now moot, recorded for traceability):** the title proposed in the previous disclosure ("Vite build regression: `../query-execution` directory import unresolved") embedded the wrong theory. Renamed to neutral: "Vite build failure on query-execution imports — root cause pending" (now resolved as wrong-depth, issue can be closed without code change).
