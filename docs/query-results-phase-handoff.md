@@ -392,9 +392,9 @@ Could not resolve "../query-execution" from "src/features/query-builder/pages/Sa
 
 **Root cause:** wrong relative depth. `SavedQueryEditor.tsx` lives at `src/features/query-builder/pages/`. The import `'../query-execution'` resolves to `src/features/query-builder/query-execution/` (one level up from `pages/` lands in `query-builder/`, then `query-execution/` — which doesn't exist). The canonical lib is `src/features/query-execution/` (one level up from `pages/` is `query-builder/`; **two** levels up is `features/`, where `query-execution/` lives). Correct specifier: `'../../query-execution'`.
 
-`tsc --noEmit` didn't surface this because `moduleResolution: "bundler"` is more lenient — Vite/Rollup's resolver is stricter; the path either resolves to a real file or it doesn't.
+`tsc --noEmit` didn't surface this — mechanism *unverified*; speculation (tsc's `moduleResolution: "bundler"` is more lenient than Vite's stricter ESM resolution) is consistent with the observed behavior but not proven.
 
-**Fix:** one extra `../` in `SavedQueryEditor.tsx:43` — one dot-segment, three characters (`'../query-execution'` → `'../../query-execution'`). LiveQueryTab's path (`'../../../../features/query-execution'` from `pages/.../tabs/`) was depth-correct — four levels up to `src/` — and did not need changing. Build re-verified with the wrong-depth fix alone: `Could not resolve "../query-execution"` no longer present.
+**Fix:** one extra `../` in `SavedQueryEditor.tsx:43` — one dot-segment, three characters (`'../query-execution'` → `'../../query-execution'`). LiveQueryTab's path (`'../../../../features/query-execution'` from `pages/.../tabs/`) was depth-correct — four levels up to `src/` — and did not need changing.
 
 **Earlier attempts during this PR's review cycle** (recorded because the chain matters): changing to `'../query-execution/index'`, `'../query-execution/index.ts'`, and `'../query-execution/errorMessage'` (direct file) all failed with errors naming the *changed* specifier — confirming each attempt's error was generated against that specific path, not stale output. All four attempts inherited the same too-shallow base, which is exactly why the error shape never changed: every variant was one level short of `features/`.
 
@@ -402,27 +402,31 @@ Could not resolve "../query-execution" from "src/features/query-builder/pages/Sa
 
 ### Failure #2 (NOT in this PR's scope) — `tailwind-merge` is real, dispositioned separately
 
-After the wrong-depth fix, the build still fails — this time with:
+After the wrong-depth fix alone, the build still fails. With **both** fixes — wrong-depth in `SavedQueryEditor.tsx` AND the `tailwind-merge` import removed from `lib/utils.ts` — the build passes. The second fix is disposition option (a) from the tracker table; the user already chose it locally, the working tree shows it applied. On HEAD (this PR's actual merge state), only the first fix is present, and the build fails as below.
+
+The failure on HEAD:
 ```
 [vite]: Rollup failed to resolve import "tailwind-merge" from "/Users/eganpj/GitHub/uisce/frontend/src/lib/utils.ts".
 ```
 
-**Provenance, not phantom.** Verified via `grep -n '"tailwind-merge"' frontend/package.json frontend/package-lock.json`:
-- `package.json`: **NOT declared** (`tailwind-merge` does not appear)
-- `package-lock.json`: **declared at line 244** with spec `"^3.3.1"`
-- `node_modules/tailwind-merge`: **NOT installed** (`npm ls tailwind-merge` returns `(empty)`)
+**Provenance (sufficient, honest).** `git log -S 'tailwind-merge' -- frontend/src/lib/utils.ts` shows the import arrived with the frontend's **initial commit `b9fc5e129`** — and `git log -- frontend/src/lib/utils.ts` shows that's the only commit ever to touch the file. So `tailwind-merge` is in this codebase's source from the very first frontend commit; it's not a #112 regression. The same `git log -S` on `package.json` shows `tailwind-merge: ^3.3.1` added in `173457e54` (BusinessObjectTree component) and bumped to `^3.6.0` in `17db58257` (chore PR).
 
-So `tailwind-merge` is in the lockfile but undeclared in `package.json` and not actually installed. `lib/utils.ts:3` imports `twMerge` from `tailwind-merge`, but the package isn't available locally. This is **undeclared-dependency residue** — same class of defect as the `fetchAPI` rename residue in `LiveQueryTab.tsx`, but rooted in `package.json`/lockfile state rather than in source.
+**Current `package.json` state (working tree, NOT HEAD):** the user has removed `tailwind-merge`, `tailwindcss`, `@tailwindcss/postcss`, and `autoprefixer` from `package.json` as part of the MUI-only direction (per `git diff HEAD -- frontend/package.json`). So:
 
-Earlier disclosure's claim "the tailwind-merge error was a phantom from the same wrong-path iteration" was wrong: the `tailwind-merge` error reproduces **on baseline `b258de304`** (before this PR's commits ever touched the tree — `git checkout b258de304` + `npm install` + `npm run build` reproduces it). The CI log grep `grep -nE "tailwind-merge|Could not resolve" /tmp/ci-pr106/*.log` confirms `tailwind-merge` appears in `35771443877.log:4333` as part of a package.json-vs-lockfile spec mismatch error (the lockfile says `^3.3.1`; `package.json` says `^3.6.0`). The CI attribution method (`grep QueryResultsPanel|SavedQueryEditor|query-execution`) couldn't catch this — it looks for this PR's filenames, not for undeclared-dep failures.
+- HEAD `package.json`: declares `tailwind-merge: ^3.6.0` (line 119), `tailwindcss: ^4.1.11` (line 120), `@tailwindcss/postcss: ^4.1.18`, `autoprefixer: ^10.4.24`
+- Working tree `package.json`: those four lines removed
 
-**Direction decision: MUI-only going forward.** The MUI direction means `cn()` and `tailwind-merge` go: the codebase uses MUI for class composition, and `tailwind-merge`'s job (resolving Tailwind class conflicts) is moot in an MUI-only codebase. The cleanup of `lib/utils.ts` is baseline-code, not this PR's tree — it stays out under the same branch-purity rule that keeps `dataExplorerApi.generateDialectSQL` and `StreamingBindingPanel.generatePreviewSQL` out of this PR. Tracked below as a dispositioned item, not absorbed.
+**CI log evidence.** The Build Frontend red check on `35771443877.log:4333` is a `pnpm install` lockfile-spec mismatch — `specifiers in the lockfile (...) don't match specs in package.json (...)` — listing ~100 packages. Both lists are dumps of full spec maps, not isolated per-package errors; my earlier disclosure attributed `"tailwind-merge":"^3.6.0"` to "package.json says" and `"^3.3.1"` to "lockfile says," but those strings come from the package.json *spec list* and the lockfile's *spec list* respectively in the CI run, not from the current working tree. The CI log captures a historical state; current `package.json` working tree differs (MUI direction work in progress). The CI attribution method (`grep QueryResultsPanel|SavedQueryEditor|query-execution`) cannot catch undeclared-dep failures by construction — those failures don't mention any of this PR's filenames.
+
+**Direct local evidence.** `npm ls tailwind-merge` returns `(empty)` — `node_modules/tailwind-merge` is not installed locally. `lib/utils.ts:3` (HEAD) imports `twMerge` from `tailwind-merge`. So the build fails on HEAD because `tailwind-merge` isn't installed despite being in the lockfile and (on HEAD) in `package.json`.
+
+**Direction decision: MUI-only going forward.** The MUI direction means `cn()` and `tailwind-merge` go: the codebase uses MUI for class composition, and `tailwind-merge`'s job (resolving Tailwind class conflicts) is moot in an MUI-only codebase. The cleanup of `lib/utils.ts` is baseline-code, not this PR's tree — it stays out under the same branch-purity rule that keeps `dataExplorerApi.generateDialectSQL` and `StreamingBindingPanel.generatePreviewSQL` out of this PR. **Note:** the user's local working tree has already implemented disposition option (a) — `lib/utils.ts` is clsx-only in the working tree. That edit was destroyed by `git checkout HEAD -- frontend/src/lib/utils.ts` in an earlier turn of this conversation; this commit restores it. Whether the cleanup rides #112, a `chore/mui-only-cn` branch, or stays local until the MUI-direction chore PR lands, is a review-decision item — see the tracker row.
 
 ### Tracker items — out of scope for #112
 
 | Tracker row | Owner | Status |
 |---|---|---|
-| Drop `tailwind-merge` / `cn` residue in `frontend/src/lib/utils.ts` (MUI-only direction) | TBD | **Open issue status:** not filed in this PR; scheduled post-merge. Scope check required: `cn()` has **44 caller files / 196 invocations** in `src/` (`grep -rln 'cn(' src` minus `lib/utils.ts`). Disposition options: (a) replace `cn` implementation with plain `clsx`-only or template-string join, with call sites unchanged; (b) bulk-rewrite call sites to inline `clsx(...)`. Option (a) is the smaller change. If the CI grep on `npm ci` surfaces the same `tailwind-merge` failure mode on a clean environment, this row graduates to its own tiny chore PR — it may flip a red check green and slightly narrow the "systemic red" umbrella. |
+| Drop `tailwind-merge` / `cn` residue in `frontend/src/lib/utils.ts` (MUI-only direction) | TBD | **Open issue status:** not filed in this PR; the user's local working tree has already implemented disposition option (a) (clsx-only `cn`) — `git diff HEAD -- frontend/src/lib/utils.ts` shows the import removed. Rides #112, a separate `chore/mui-only-cn` branch, or stays local until the MUI-direction chore PR lands — review decision. Scope check: `cn()` has **44 caller files / 196 invocations** in `src/` (`grep -rln 'cn(' src` minus `lib/utils.ts`); `tailwindcss` removal touches `frontend/src/index.css` (work in progress in working tree). If the CI grep on `npm ci` surfaces the same `tailwind-merge` failure mode on a clean environment, this row graduates to its own chore PR — it may flip a red check green and slightly narrow the "systemic red" umbrella. |
 | (resolved) "Vite build failure on `../query-execution` imports — root cause pending" | — | Closed: root cause was wrong-depth import; fixed in this branch by changing `'../query-execution'` to `'../../query-execution'` (one extra `../`, one dot-segment, three characters). |
 
 ## Direction note
