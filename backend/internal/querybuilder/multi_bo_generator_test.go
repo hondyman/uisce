@@ -384,6 +384,36 @@ func TestBuildMultiBOSQL_TagsSharedOwnership_WireJSON(t *testing.T) {
 	}
 }
 
+// TestHasRelatedBOs_FalseSurvivesGoJSONMarshal_AsMapLiteral proves the
+// other half of the wire seam TestBuildMultiBOSQL_TagsSharedOwnership_WireJSON
+// pins for the true case: encoding/json's `omitempty` drops a plain `bool`
+// struct field when its value is false, which would silently disable the
+// single-BO fast path (isRowGrainIntact's hasRelatedBOs===false branch) by
+// having the key vanish from the wire instead of arriving as false. That
+// bug can't happen here because HandleGetPreview never puts this value in
+// a struct - it's a map[string]interface{} literal (see
+// saved_query_handler.go's HandleGetPreview), and json.Marshal on a map
+// always emits every key present in the map regardless of its value; there
+// is no `omitempty` concept for map entries. This test marshals that exact
+// shape with a false value and asserts the byte sequence, rather than
+// asserting on the Go value before marshaling, so a future refactor that
+// moved this onto a tagged struct field would have to break this test to
+// reintroduce the bug.
+func TestHasRelatedBOs_FalseSurvivesGoJSONMarshal_AsMapLiteral(t *testing.T) {
+	resp := map[string]interface{}{
+		"columns":       []boresolver.QueryResultColumn{},
+		"hasRelatedBOs": false,
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshaling response: %v", err)
+	}
+	wire := string(b)
+	if !strings.Contains(wire, `"hasRelatedBOs":false`) {
+		t.Fatalf("expected \"hasRelatedBOs\":false to survive on the wire, got: %s", wire)
+	}
+}
+
 // TestBuildMultiBOSQL_UnresolvedHop_DoesNotBecomeUnique is the negative
 // test Finding 1 called for: nothing in buildMultiBOSQL's own plumbing
 // (boOwnership map, ownershipOrDefault, QueryResultColumn construction)

@@ -224,6 +224,39 @@ func TestRenumberParams_MixedNonce_ForeignNULFailsLoud_PostLoop(t *testing.T) {
 	}
 }
 
+// TestRenumberParams_HighIndex_Base36RoundTrip pins the encode/decode base
+// agreement across paramSentinel (encodes with strconv.FormatInt(idx, 36))
+// and renumberParams (decodes with strconv.ParseInt(idxStr, 36, 64)). A
+// low-index fixture (idx < 10) can't distinguish base 10 from base 36 -
+// "9" means the same value in both. idx=11 does: base 36 "b" only round-
+// trips correctly if both sides agree it's base 36; misread as base 10 it
+// would fail to parse at all ("b" isn't a decimal digit), and a mismatch
+// in the other direction (encode decimal, decode base 36) would silently
+// land on the wrong pending[] slot once indices reach two digits. This
+// test uses 12 pending values so idx=11 is real, in-bounds data, not an
+// out-of-range probe.
+func TestRenumberParams_HighIndex_Base36RoundTrip(t *testing.T) {
+	nonce := newParamNonce()
+	pending := make([]interface{}, 12)
+	for i := range pending {
+		pending[i] = i
+	}
+	sentinelForIdx11 := paramSentinel(nonce, 11)
+
+	sql := "WHERE x = " + sentinelForIdx11
+
+	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, pending, nonce)
+	if err != nil {
+		t.Fatalf("renumberParams failed: %v", err)
+	}
+	if gotSQL != "WHERE x = $1" {
+		t.Fatalf("unexpected SQL: %q", gotSQL)
+	}
+	if len(gotArgs) != 1 || gotArgs[0] != 11 {
+		t.Fatalf("expected pending[11] (=11) bound, got: %#v (base mismatch between encode and decode)", gotArgs)
+	}
+}
+
 // TestRenumberParams_MalformedIndex_NeverReachesPendingLookup is the F13
 // invariant's other half: strconv.ParseInt failing on a corrupted index
 // must short-circuit the `||` before `pending[idx]` is ever evaluated -
