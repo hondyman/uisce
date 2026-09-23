@@ -173,24 +173,152 @@ func (r *JoinPathResolver) ResolveJoinPath(
 	return nil, fmt.Errorf("no join path found between %s and %s within %d hops", fromTableName, toTableName, maxDepth)
 }
 
+// PathAnalysis is the single fold over a JoinPath's steps that both
+// TraversalCardinality and RootOwnership used to compute separately, with
+// two different ad-hoc unknown-hop policies between them (a bug: see
+// TraversalCardinality's own doc comment). There is exactly one fold over
+// JoinPathStep.Cardinality data in this package now; both facts come out
+// of it together, sharing one "what does an unrecognized hop mean" rule,
+// so the next fact anyone needs from a JoinPath (and there will be one)
+// has one place to be added rather than a third ad-hoc loop with a third
+// policy.
+//
+//   - Cardinality is TraversalCardinality's own value: "one", "many", or
+//     "unresolved" - does the path fan out in the traversal (FROM-to-
+//     target, i.e. "down") direction.
+//   - Ownership is RootOwnership's own value: "unique", "shared", or
+//     "unresolved" - is the target row reachable from more than one FROM
+//     row, reading the same steps' UP-cardinality.
+//
+// These are independent axes, not two spellings of the same fact - see
+// RootOwnership's doc comment for why "M:1" is "one"/"shared" at once,
+// and why a consumer fix for one axis does not fix the other.
+type PathAnalysis struct {
+	Cardinality string
+	Ownership   string
+}
+
+// Analyze runs the single fold. A definite "many" (down) or "shared" (up)
+// verdict from a recognized hop always wins over "unresolved" from an
+// unrecognized one elsewhere in the same path, on both axes
+// independently - a known-bad hop is already at least as bad as anything
+// an unknown hop could turn out to be, on whichever axis it was bad on.
+func (p *JoinPath) Analyze() PathAnalysis {
+	if p == nil {
+		return PathAnalysis{Cardinality: "one", Ownership: "unique"}
+	}
+	cardinality := "one"
+	ownership := "unique"
+	unresolvedCardinality := false
+	unresolvedOwnership := false
+	for _, step := range p.Steps {
+		switch step.Cardinality {
+		case "1:1":
+			// No fan-out either direction; nothing to update.
+		case "1:M":
+			cardinality = "many"
+		case "M:1":
+			ownership = "shared"
+		case "M:M":
+			cardinality = "many"
+			ownership = "shared"
+		default:
+			unresolvedCardinality = true
+			unresolvedOwnership = true
+		}
+	}
+	if unresolvedCardinality && cardinality != "many" {
+		cardinality = "unresolved"
+	}
+	if unresolvedOwnership && ownership != "shared" {
+		ownership = "unresolved"
+	}
+	return PathAnalysis{Cardinality: cardinality, Ownership: ownership}
+}
+
 // TraversalCardinality classifies a join path relative to its FROM table:
 // "one" means every hop is 1:1 or M:1, so following the path from a single
 // FROM row lands on at most one row — a lookup, safe to flatten into the
 // same result row. "many" means at least one hop is 1:M or M:M, so a single
 // FROM row can fan out into multiple joined rows — a detail/child collection
 // (PeopleSoft calls this a "scroll level") that callers must not silently
-// flatten without either aggregating or nesting the result.
+// flatten without either aggregating or nesting the result. "unresolved"
+// means at least one hop's Cardinality couldn't be classified and no OTHER
+// hop already proved "many" on its own - treated as NOT safely "one",
+// since an unrecognized hop might be a fan-out hop the resolver simply
+// couldn't name.
+//
+// Existing callers that only ever check `== "many"` are unaffected by
+// "unresolved" existing as a third value: they were already treating an
+// unrecognized hop the same as "one" (silently) before this value existed
+// to say otherwise. A caller that wants the older, stricter true/false
+// question should compare `!= "one"` instead of relying on "not many".
 func (p *JoinPath) TraversalCardinality() string {
-	if p == nil {
-		return "one"
-	}
-	for _, step := range p.Steps {
-		switch step.Cardinality {
-		case "1:M", "M:M":
-			return "many"
-		}
-	}
-	return "one"
+	return p.Analyze().Cardinality
+}
+
+// RootOwnership classifies a join path by whether the TARGET row (the far
+// end of the path) has exactly one owning FROM row, or is reachable from
+// more than one. It is TraversalCardinality's mirror over the SAME fold
+// (see Analyze): that reads each step's DOWN-cardinality (does one
+// FROM row expand to many target rows); this reads the same steps'
+// UP-cardinality (does one target row trace back to many FROM rows).
+//
+// "unique" means every hop's up-cardinality is at most one - no "M:1" or
+// "M:M" step anywhere, and every step's cardinality is one of the known
+// values - so the target row has exactly one owning root and nothing can
+// inflate it. "shared" means at least one hop has up-cardinality greater
+// than one (an "M:1" step: many FROM-side rows map to one target row,
+// e.g. many orders to one customer; or "M:M"), so the SAME target row is
+// reachable from more than one root row. "unresolved" means at least one
+// step's Cardinality is empty or not one of "1:1"/"1:M"/"M:1"/"M:M" - the
+// resolver couldn't classify that hop - and no OTHER step already proved
+// "shared" on its own.
+//
+// "unresolved" exists because the alternative is worse: falling through
+// an unrecognized cardinality string to "unique" would tell a caller a
+// column is safe to sum across rows when the truth is simply unknown.
+// Absence of information must never read as evidence of safety - the
+// cost of a false "unresolved" (one unnecessary pin, or a consumer that
+// declines to roll up a column that was actually fine) is far smaller
+// than the cost of a false "unique" (a silently inflated total). A
+// definite "shared" step still wins over an unresolved one elsewhere in
+// the same path, since "shared" is already at least as bad as anything
+// "unresolved" could turn out to be.
+//
+// This is independent of TraversalCardinality/down-cardinality and of
+// whether the path involves any related-BO join planning at all - a path
+// with a single "M:1" hop and nothing else (customer -> region, say) is
+// "one" under TraversalCardinality (no fan-out, never triggers aggregation
+// logic) and "shared" under RootOwnership at the same time. TWO DIFFERENT
+// ROOTS attached to the same "M:1" target both correctly show that target's
+// value, so per-row output is fine; the hazard is downstream, in a caller
+// that sums or averages the returned column ACROSS rows, since the shared
+// target's value would then be counted once per owning root rather than
+// once.
+//
+// A caveat for whatever eventually builds the consumer-side rule this
+// field feeds: "M:1" and "M:M" are NOT interchangeable there. "M:1"
+// leaves the join correct at root grain - only a roll-up PAST root grain
+// is unsafe. "M:M" duplicates the ROOT's own attributes within the flat
+// join itself, corrupting the join at root grain before any rollup is
+// even considered. Both currently return "shared" from this function -
+// that's correct, since both mean "reachable from more than one root" -
+// but a consumer must not apply the same fix to both.
+//
+// CRITICAL for any consumer deciding whether to roll a column up ACROSS
+// RETURNED ROWS: RootOwnership (and TraversalCardinality) are properties
+// of ONE column's path. Whether summing a query's results across rows
+// reconstructs a real total is a property of the QUERY - if ANY other
+// selected column's path fans out (TraversalCardinality "many" or
+// "unresolved"), every row this query returns is duplicated relative to
+// root by THAT join, regardless of how clean this column's own path is.
+// A per-column "unique"+"one" verdict is necessary, not sufficient, for
+// roll-up safety; the sufficient condition folds every column's path in
+// the query, not just the one being summed. See
+// savedQueryApi.ts's isRowGrainIntact for where that fold has to live.
+func (p *JoinPath) RootOwnership() string {
+	return p.Analyze().Ownership
 }
 
 func (r *JoinPathResolver) buildJoinPath(edges []TableEdge) *JoinPath {

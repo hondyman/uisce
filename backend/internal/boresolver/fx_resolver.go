@@ -50,19 +50,19 @@ func (f *FXResolver) InjectFXConversionJoin(ctx *GenerationContext, dialect Dial
 	} else {
 		ctx.Aliases[fxAlias] = fxAlias
 
-		if dialect == nil {
-			dialect = PostgresDialect{}
-		}
-
+		// Sentinels, not dialect tokens - see params.go. The final token
+		// (and which dialect renders it) is decided once, at the end of
+		// generation, from g.Dialect - not from this method's own dialect
+		// argument, which historically could drift from it.
+		fromIdx := len(ctx.Args)
 		ctx.ParamCounter++
-		fromCurrToken := paramToken(dialect, ctx.ParamCounter)
 		ctx.Args = append(ctx.Args, termCurrency)
 
+		toIdx := len(ctx.Args)
 		ctx.ParamCounter++
-		toCurrToken := paramToken(dialect, ctx.ParamCounter)
 		ctx.Args = append(ctx.Args, f.Config.TargetCurrency)
 
-		joinCond := fmt.Sprintf("%s.from_currency = %s AND %s.to_currency = %s", fxAlias, fromCurrToken, fxAlias, toCurrToken)
+		joinCond := fmt.Sprintf("%s.from_currency = %s AND %s.to_currency = %s", fxAlias, paramSentinel(fromIdx), fxAlias, paramSentinel(toIdx))
 
 		ctx.Joins = append(ctx.Joins, JoinStep{
 			FromTable: "t0",

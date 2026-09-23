@@ -3,6 +3,7 @@ package querybuilder
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
@@ -122,6 +123,10 @@ func buildMultiBOSQL(
 
 	boAlias := map[string]string{qd.Context.BOID: baseAlias}
 	boCardinality := map[string]string{qd.Context.BOID: ""}
+	// boOwnership mirrors boCardinality but reads RootOwnership instead
+	// of TraversalCardinality - see analytics.JoinPath.RootOwnership.
+	// The primary BO's own rows are trivially their own unique owner.
+	boOwnership := map[string]string{qd.Context.BOID: "unique"}
 	boDefByID := map[string]*boresolver.BODefinition{qd.Context.BOID: primary}
 
 	var joinClauses []multiBOJoinClause
@@ -129,6 +134,7 @@ func buildMultiBOSQL(
 	for _, rel := range related {
 		boDefByID[rel.BOID] = rel.BODef
 		boCardinality[rel.BOID] = rel.Cardinality
+		boOwnership[rel.BOID] = rel.Path.RootOwnership()
 
 		if rel.Path == nil || len(rel.Path.Steps) == 0 {
 			// Same driving table as primary (join path resolver returns an
@@ -236,6 +242,7 @@ func buildMultiBOSQL(
 			outLabel = field.Name
 		}
 		cardinality := cardinalityOrDefault(boCardinality, boID)
+		ownership := ownershipOrDefault(boOwnership, boID)
 		expr := fmt.Sprintf("%s.%s", alias, col)
 		if aggWrap != "" {
 			expr = fmt.Sprintf("%s(%s)", aggWrap, expr)
@@ -246,6 +253,7 @@ func buildMultiBOSQL(
 		})
 		columns = append(columns, boresolver.QueryResultColumn{
 			Name: outLabel, Type: field.Type, BOID: boID, Cardinality: cardinality,
+			RootOwnership: ownership,
 		})
 		return nil
 	}
@@ -285,14 +293,39 @@ func buildMultiBOSQL(
 	// many-side attribute at the one-side grain).
 	hasOneSide := false
 	hasManySide := false
+	manyBOIDSet := map[string]bool{}
 	for _, c := range selected {
 		if c.cardinality == "many" {
 			hasManySide = true
+			manyBOIDSet[c.boID] = true
 		} else {
 			hasOneSide = true
 		}
 	}
 	needsAggregation := hasOneSide && hasManySide
+
+	// Containment for the case this generator cannot yet handle correctly:
+	// selecting from two or more INDEPENDENTLY "many"-cardinality related
+	// BOs at once. The GROUP BY + auto-aggregate approach below is only
+	// correct when there is at most one expanding branch - it assumes the
+	// flat JOIN produces one row per (root, many-side-child), so summing
+	// or counting within a GROUP BY on the root key recovers the right
+	// total. With two expanding branches joined in the same flat query,
+	// that assumption breaks: order O with 3 line_items and 2 shipments
+	// joined together produces 3*2=6 rows for O before any aggregation
+	// runs, so SUM(line_items.amount) counts every line item once per
+	// shipment (double- or triple-counted) instead of once. There is no
+	// single flat SELECT that computes both branches correctly; emitting
+	// one anyway would be a wrong number with nothing to show it's wrong.
+	// See ErrUnsupportedFanOut.
+	if len(manyBOIDSet) >= 2 {
+		names := make([]string, 0, len(manyBOIDSet))
+		for id := range manyBOIDSet {
+			names = append(names, id)
+		}
+		sort.Strings(names)
+		return "", nil, nil, &ErrUnsupportedFanOut{BOIDs: names}
+	}
 
 	var selectClauses []string
 	var groupByExprs []string
@@ -337,12 +370,20 @@ func buildMultiBOSQL(
 		whereClauses = append(whereClauses, predicate)
 	}
 
-	args := append([]interface{}{}, genCtx.Args...)
-	paramN := genCtx.ParamCounter
+	// nextParam records a value into genCtx.Args (the SAME pending slice
+	// CompileFilterPredicate above appended into) and returns a sentinel,
+	// never a rendered token - see boresolver/params.go. CompileFilterPredicate
+	// already emits sentinels internally (via its own nextParam), so this
+	// generator's own params must use the identical mechanism: rendering a
+	// literal "$N" here, as before, would (a) hardcode Postgres regardless
+	// of the target dialect and (b) not match the textual position its
+	// value ends up at once tenant scoping is spliced in front of the
+	// filter clause below, which silently swaps args under any
+	// positional ("?") dialect.
 	nextParam := func(v interface{}) string {
-		paramN++
-		args = append(args, v)
-		return fmt.Sprintf("$%d", paramN)
+		idx := len(genCtx.Args)
+		genCtx.Args = append(genCtx.Args, v)
+		return boresolver.ParamSentinel(idx)
 	}
 
 	// Tenant scoping on every joined table, mirroring
@@ -372,10 +413,48 @@ func buildMultiBOSQL(
 		fmt.Fprintf(&sb, "\nLIMIT %d", qd.Query.Limit)
 	}
 
-	return sb.String(), args, columns, nil
+	// One final pass turns every sentinel (from CompileFilterPredicate and
+	// nextParam above) into this dialect's real placeholder, numbered by
+	// where it actually lands in the assembled text - see
+	// boresolver/params.go for why creation order and textual order can
+	// differ here (tenant scoping is spliced in front of the filter
+	// clause it was compiled after).
+	finalSQL, finalArgs, err := boresolver.RenumberParams(sb.String(), generator.Dialect, genCtx.Args)
+	if err != nil {
+		return "", nil, nil, err
+	}
+	return finalSQL, finalArgs, columns, nil
+}
+
+// ErrUnsupportedFanOut is returned when a multi-BO query selects measures
+// or dimensions from two or more independently "many"-cardinality related
+// BOs at once. See the containment check in buildMultiBOSQL for why: there
+// is no single flat query that combines them without cross-multiplying
+// rows first. Callers must issue one request per business object instead.
+type ErrUnsupportedFanOut struct {
+	BOIDs []string
+}
+
+func (e *ErrUnsupportedFanOut) Error() string {
+	return fmt.Sprintf(
+		"query selects measures/dimensions from multiple independently-expanding related business objects (%s) in one request - combining them would double-count; issue separate requests per business object instead",
+		strings.Join(e.BOIDs, ", "),
+	)
 }
 
 func cardinalityOrDefault(m map[string]string, boID string) string {
+	if boID == "" {
+		return ""
+	}
+	return m[boID]
+}
+
+// ownershipOrDefault mirrors cardinalityOrDefault, reading boOwnership
+// instead of boCardinality. An empty boID (the primary BO's own column)
+// returns "" - QueryResultColumn.RootOwnership documents empty as
+// "unique" by convention, matching Cardinality's own empty-means-primary
+// convention.
+func ownershipOrDefault(m map[string]string, boID string) string {
 	if boID == "" {
 		return ""
 	}

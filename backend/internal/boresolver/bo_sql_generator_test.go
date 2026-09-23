@@ -69,7 +69,13 @@ func TestSimpleSQLGeneration(t *testing.T) {
 	assert.Contains(t, sql, "SELECT")
 	assert.Contains(t, sql, "FROM orders")
 	assert.Contains(t, sql, "LIMIT 10")
-	assert.Nil(t, args)
+	// The filter value is bound, never inlined as a literal - this
+	// assertion used to be assert.Nil(t, args), which only held because
+	// nothing here checked the WHERE clause: the filter's value has
+	// always gone through CompileFilterPredicate/nextParam, never string
+	// concatenation, so args was never actually nil once a filter existed.
+	assert.Contains(t, sql, "total_amount > $1")
+	assert.Equal(t, []interface{}{100}, args)
 }
 
 func TestJoinInference(t *testing.T) {

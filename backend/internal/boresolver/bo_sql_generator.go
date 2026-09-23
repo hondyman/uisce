@@ -508,7 +508,16 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 		query += fmt.Sprintf("\nLIMIT %d", req.Limit)
 	}
 
-	return query, ctx.Args, nil
+	// Every parameter above was recorded as a sentinel, not a rendered
+	// token (see params.go) - the query text may reference tenant/
+	// bitemporal predicates before the filter values they textually
+	// precede. This is the one point where sentinels become real
+	// placeholders, numbered by where they actually land in the string.
+	finalQuery, finalArgs, err := renumberParams(query, g.Dialect, ctx.Args)
+	if err != nil {
+		return "", nil, err
+	}
+	return finalQuery, finalArgs, nil
 }
 
 // paramToken returns the dialect-specific placeholder token for the nth parameter.
@@ -547,10 +556,10 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 	// SQL error ("column t0.tenant_id does not exist") that a table lacking
 	// the column can never satisfy anyway.
 	if ctx.RootBODef == nil || g.BORepository.TableHasColumn(ctx.RootBODef.DrivingTable, "tenant_id") {
+		idx := len(ctx.Args)
 		ctx.ParamCounter++
-		rootParamToken := paramToken(g.Dialect, ctx.ParamCounter)
 		ctx.Args = append(ctx.Args, tenantID)
-		ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, rootParamToken)
+		ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, paramSentinel(idx))
 	}
 
 	// 2. Relationship traversal boundaries - same per-table check.
@@ -567,11 +576,11 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 			stepAlias = fmt.Sprintf("t%d", i+1)
 		}
 
+		idx := len(ctx.Args)
 		ctx.ParamCounter++
-		joinParamToken := paramToken(g.Dialect, ctx.ParamCounter)
 		ctx.Args = append(ctx.Args, tenantID)
 
-		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, joinParamToken)
+		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, paramSentinel(idx))
 		if step.Condition == "" {
 			step.Condition = tenantCondition
 		} else {
@@ -587,12 +596,21 @@ func (g *BOSQLGenerator) InjectBitemporalScoping(ctx *GenerationContext, knowled
 		ctx.Args = make([]interface{}, 0)
 	}
 
+	// The AS-OF bound is used twice in the predicate below. Each occurrence
+	// gets its own sentinel/arg entry rather than reusing one token, because
+	// a positional ("?") dialect binds each placeholder occurrence to its
+	// own Args slot - reusing one token there would under-supply Args by
+	// one. For a self-indexing dialect ($N) this costs one extra bound
+	// param of the same value; harmless.
+	idx1 := len(ctx.Args)
 	ctx.ParamCounter++
-	pToken := paramToken(g.Dialect, ctx.ParamCounter)
+	ctx.Args = append(ctx.Args, knowledgeDate.Format(time.RFC3339))
+	idx2 := len(ctx.Args)
+	ctx.ParamCounter++
 	ctx.Args = append(ctx.Args, knowledgeDate.Format(time.RFC3339))
 
 	bitemporalPredicate := fmt.Sprintf("(%s.system_valid_from <= %s AND (%s.system_valid_to IS NULL OR %s.system_valid_to > %s))",
-		rootAlias, pToken, rootAlias, rootAlias, pToken)
+		rootAlias, paramSentinel(idx1), rootAlias, rootAlias, paramSentinel(idx2))
 
 	if ctx.RootTenantPredicate != "" {
 		ctx.RootTenantPredicate = ctx.RootTenantPredicate + " AND " + bitemporalPredicate

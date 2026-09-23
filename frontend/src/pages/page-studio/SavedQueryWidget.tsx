@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Chip, CircularProgress, Alert } from '@mui/material';
 import ReactECharts from 'echarts-for-react';
-import { runSavedQuery } from '../../features/query-builder/services/savedQueryApi';
+import { runSavedQuery, isSafeToRollUpAcrossRows } from '../../features/query-builder/services/savedQueryApi';
 import { buildChartOption } from '../../features/query-builder/utils/chartOption';
 import type { SavedQueryRunResult } from '../../features/query-builder/services/savedQueryApi';
 import { useSelection } from './SelectionContext';
@@ -87,7 +87,45 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({ savedQueryId, widge
   }
 
   if (widgetType === 'gauge') {
-    const measureCol = result.columns.find((c) => typeof result.rows[0][c.name] === 'string' && !isNaN(Number(result.rows[0][c.name])))?.name || result.columns[result.columns.length - 1]?.name;
+    const measureColDef = result.columns.find((c) => typeof result.rows[0][c.name] === 'string' && !isNaN(Number(result.rows[0][c.name]))) || result.columns[result.columns.length - 1];
+    const measureCol = measureColDef?.name;
+
+    // Fail-safe, not wait-and-see: this re-sums measureCol across EVERY
+    // returned row, client-side, independent of whatever grouping/
+    // aggregation the saved query itself already applied. isSafeToRollUpAcrossRows
+    // checks TWO things, both required - the query's row grain is intact
+    // (no join ANYWHERE in the result fans out, not just on measureCol's
+    // own path - a clean column can ride next to a fanning-out one in
+    // the same query), and measureCol's own ownership is unique. A
+    // single-BO query (hasRelatedBOs: false) passes both by construction,
+    // with no per-column metadata needed. Absence of a positive signal -
+    // any related-BO query the backend hasn't fully classified - must
+    // read as "can't establish it's safe," not as "probably fine."
+    //
+    // NOT covered: whether `+` is even a meaningful way to combine
+    // measureCol's values across rows at all (aggregation linearity - a
+    // MIN or COUNT(DISTINCT) column summed with `+` is wrong regardless
+    // of grain/ownership). This widget has no access to the underlying
+    // aggregation to check that yet. See isSafeToRollUpAcrossRows's doc
+    // comment for the full three-way split.
+    //
+    // Also NOT covered: a second, independent way this widget can show a
+    // wrong number - measureColDef itself is a heuristic guess (first
+    // numeric-looking column, or just the last column) that can land on
+    // a dimension or an id rather than an intended measure. That needs
+    // its own fix, tracked separately - this check only answers "IF this
+    // is the right column, is summing it across rows safe."
+    if (!measureColDef || !isSafeToRollUpAcrossRows(result, measureColDef)) {
+      return (
+        <Box sx={{ textAlign: 'center', p: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Needs review
+          </Typography>
+          {style?.label && <Typography variant="caption" color="text.secondary">{style.label}</Typography>}
+        </Box>
+      );
+    }
+
     const total = result.rows.reduce((sum, r) => sum + (Number(r[measureCol]) || 0), 0);
     return (
       <Box sx={{ textAlign: 'center', p: 1 }}>

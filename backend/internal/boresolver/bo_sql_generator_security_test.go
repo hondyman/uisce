@@ -82,14 +82,22 @@ func TestTenantScoping_MultiJoin(t *testing.T) {
 	sql, args, err := generator.GenerateSQL(req)
 	require.NoError(t, err)
 
-	// Every alias in the join graph must be isolated.
-	assert.Contains(t, sql, "t0.tenant_id = $1")
-	assert.Contains(t, sql, "t1.tenant_id = $2")
-	assert.Contains(t, sql, "t2.tenant_id = $3")
+	// Every alias in the join graph must be isolated. Placeholders are
+	// numbered by TEXTUAL order of appearance, not by the order the tenant
+	// predicates were built in: the two JOIN conditions (t1, t2) are
+	// written before the root's WHERE predicate (t0) in the assembled
+	// SQL, even though the root predicate is built first - see params.go.
+	// For $N this is only a numbering difference, never a binding bug
+	// (each $N is self-indexing) - but the numbering itself must still be
+	// deterministic and match the text, since a positional ("?") dialect
+	// depends on exactly this ordering to bind correctly.
+	assert.Contains(t, sql, "t1.tenant_id = $1")
+	assert.Contains(t, sql, "t2.tenant_id = $2")
+	assert.Contains(t, sql, "t0.tenant_id = $3")
 
 	// Each JOIN condition must have the tenant check structurally ANDed.
-	assert.Contains(t, sql, "ON (t0.customer_id = t1.id) AND t1.tenant_id = $2")
-	assert.Contains(t, sql, "ON (t1.region_id = t2.id) AND t2.tenant_id = $3")
+	assert.Contains(t, sql, "ON (t0.customer_id = t1.id) AND t1.tenant_id = $1")
+	assert.Contains(t, sql, "ON (t1.region_id = t2.id) AND t2.tenant_id = $2")
 
 	// Args must align 1:1 with placeholders.
 	require.Len(t, args, 3)
@@ -118,12 +126,22 @@ func TestTenantScoping_CombinesWithExistingFilters(t *testing.T) {
 	sql, args, err := generator.GenerateSQL(req)
 	require.NoError(t, err)
 
+	// The filter's value (100) is bound, never inlined - this test used
+	// to assert "t0.total_amount > 100" as a literal with args of length
+	// 1, which was stale even before params.go: CompileFilterPredicate
+	// has always parameterized filter values regardless of type, so a
+	// numeric filter combined with tenant scoping was always 2 args, not
+	// 1. Root tenant scoping (built in GenerateSQL step 6) is spliced to
+	// appear before the filter clause (built in step 5) in the text, so
+	// it gets $1 and the filter gets $2 - textual order, not creation
+	// order; see params.go.
 	where := extractWhere(sql)
 	assert.True(t, strings.HasPrefix(where, "t0.tenant_id = $1"))
 	assert.Contains(t, where, " AND ")
-	assert.Contains(t, sql, "t0.total_amount > 100")
-	require.Len(t, args, 1)
+	assert.Contains(t, sql, "t0.total_amount > $2")
+	require.Len(t, args, 2)
 	assert.Equal(t, "tenant-alpha", args[0])
+	assert.Equal(t, 100, args[1])
 }
 
 func TestTenantScoping_NoTenantID_NoScoping(t *testing.T) {
