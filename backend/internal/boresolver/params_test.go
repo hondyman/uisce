@@ -16,12 +16,13 @@ func TestRenumberParams_TextualOrder(t *testing.T) {
 	// FIRST placeholder in the text ("a") is recorded SECOND (mirrors the
 	// tenant predicate being spliced in front of the filter clause).
 	pending := []interface{}{"creation-order-first-value-b", "creation-order-second-value-a"}
-	sentinelForB := paramSentinel(0)
-	sentinelForA := paramSentinel(1)
+	nonce := newParamNonce()
+	sentinelForB := paramSentinel(nonce, 0)
+	sentinelForA := paramSentinel(nonce, 1)
 
 	sql := "WHERE a = " + sentinelForA + " AND b = " + sentinelForB
 
-	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, pending)
+	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, pending, nonce)
 	if err != nil {
 		t.Fatalf("renumberParams failed: %v", err)
 	}
@@ -47,12 +48,13 @@ func TestRenumberParams_QuestionMarkDialect_NoSwap(t *testing.T) {
 	// would) - but the tenant predicate is spliced to appear FIRST in the
 	// text, exactly as GenerateSQL's WHERE assembly does.
 	pending := []interface{}{"filter-value", "tenant-id-value"}
-	filterSentinel := paramSentinel(0)
-	tenantSentinel := paramSentinel(1)
+	nonce := newParamNonce()
+	filterSentinel := paramSentinel(nonce, 0)
+	tenantSentinel := paramSentinel(nonce, 1)
 
 	sql := "WHERE t0.tenant_id = " + tenantSentinel + " AND t0.name = " + filterSentinel
 
-	gotSQL, gotArgs, err := renumberParams(sql, SnowflakeDialect{}, pending)
+	gotSQL, gotArgs, err := renumberParams(sql, SnowflakeDialect{}, pending, nonce)
 	if err != nil {
 		t.Fatalf("renumberParams failed: %v", err)
 	}
@@ -64,6 +66,47 @@ func TestRenumberParams_QuestionMarkDialect_NoSwap(t *testing.T) {
 	// appear in the string, not the order they were allocated in code.
 	if len(gotArgs) != 2 || gotArgs[0] != "tenant-id-value" || gotArgs[1] != "filter-value" {
 		t.Fatalf("tenant id and filter value swapped: got %#v", gotArgs)
+	}
+}
+
+// TestRenumberParams_ForgedSentinelWrongNonce_NotTreatedAsParam is the F13
+// regression test: text that is byte-for-byte a well-formed sentinel EXCEPT
+// for the nonce must not be recognized as a parameter placeholder. Without
+// the nonce, any code path that concatenates attacker-influenced text
+// containing "\x00p<n>\x00" into the assembled SQL (a NUL byte is trivial
+// to put in a Go string) could forge a placeholder and desynchronize Args
+// from a later, real sentinel - this is what makes the nonce load-bearing
+// rather than decorative.
+func TestRenumberParams_ForgedSentinelWrongNonce_NotTreatedAsParam(t *testing.T) {
+	realNonce := newParamNonce()
+	forgedNonce := newParamNonce()
+	if realNonce == forgedNonce {
+		t.Fatal("test setup: nonces collided, cannot demonstrate isolation")
+	}
+
+	pending := []interface{}{"real-value"}
+	real := paramSentinel(realNonce, 0)
+	// Forged: same shape (prefix, a valid base-36 index, suffix) but under
+	// a nonce this call to renumberParams does not know.
+	forged := paramSentinel(forgedNonce, 0)
+
+	sql := "WHERE forged = " + forged + " AND real = " + real
+
+	gotSQL, gotArgs, err := renumberParams(sql, PostgresDialect{}, pending, realNonce)
+	if err != nil {
+		t.Fatalf("renumberParams failed: %v", err)
+	}
+	// Exactly one real placeholder was consumed; the forged one passes
+	// through as ordinary (if odd) text, never as a second $N stealing a
+	// value that doesn't exist for it.
+	if len(gotArgs) != 1 || gotArgs[0] != "real-value" {
+		t.Fatalf("expected exactly the one real arg, got: %#v", gotArgs)
+	}
+	if !strings.Contains(gotSQL, forged) {
+		t.Fatalf("expected the wrong-nonce sentinel to survive untouched as plain text, got: %q", gotSQL)
+	}
+	if !strings.Contains(gotSQL, "real = $1") {
+		t.Fatalf("expected the real sentinel to become $1, got: %q", gotSQL)
 	}
 }
 

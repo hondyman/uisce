@@ -34,7 +34,7 @@ func nextParam(g *BOSQLGenerator, ctx *GenerationContext, value interface{}) str
 	idx := len(ctx.Args)
 	ctx.ParamCounter++
 	ctx.Args = append(ctx.Args, value)
-	return paramSentinel(idx)
+	return paramSentinel(ensureParamNonce(ctx), idx)
 }
 
 // CompileFilterPredicate compiles one filter clause into a parameterized SQL

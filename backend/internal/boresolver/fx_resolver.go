@@ -62,7 +62,7 @@ func (f *FXResolver) InjectFXConversionJoin(ctx *GenerationContext, dialect Dial
 		ctx.ParamCounter++
 		ctx.Args = append(ctx.Args, f.Config.TargetCurrency)
 
-		joinCond := fmt.Sprintf("%s.from_currency = %s AND %s.to_currency = %s", fxAlias, paramSentinel(fromIdx), fxAlias, paramSentinel(toIdx))
+		joinCond := fmt.Sprintf("%s.from_currency = %s AND %s.to_currency = %s", fxAlias, paramSentinel(ensureParamNonce(ctx), fromIdx), fxAlias, paramSentinel(ensureParamNonce(ctx), toIdx))
 
 		ctx.Joins = append(ctx.Joins, JoinStep{
 			FromTable: "t0",

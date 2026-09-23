@@ -383,7 +383,7 @@ func buildMultiBOSQL(
 	nextParam := func(v interface{}) string {
 		idx := len(genCtx.Args)
 		genCtx.Args = append(genCtx.Args, v)
-		return boresolver.ParamSentinel(idx)
+		return boresolver.ParamSentinel(boresolver.EnsureParamNonce(genCtx), idx)
 	}
 
 	// Tenant scoping on every joined table, mirroring
@@ -419,7 +419,7 @@ func buildMultiBOSQL(
 	// boresolver/params.go for why creation order and textual order can
 	// differ here (tenant scoping is spliced in front of the filter
 	// clause it was compiled after).
-	finalSQL, finalArgs, err := boresolver.RenumberParams(sb.String(), generator.Dialect, genCtx.Args)
+	finalSQL, finalArgs, err := boresolver.RenumberParams(sb.String(), generator.Dialect, genCtx.Args, boresolver.EnsureParamNonce(genCtx))
 	if err != nil {
 		return "", nil, nil, err
 	}

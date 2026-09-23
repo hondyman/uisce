@@ -420,6 +420,7 @@ type GenerationContext struct {
 	// Parameter tracking for dialect-neutral prepared-statement generation.
 	Args         []interface{} // Parameter values passed to the database driver
 	ParamCounter int           // Monotonic placeholder counter ($1, $2, ...)
+	ParamNonce   string        // Per-generation nonce scoping this context's sentinels; see params.go
 
 	// RootTenantPredicate is the pre-built root table tenant boundary condition.
 	RootTenantPredicate string
@@ -513,7 +514,7 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 	// bitemporal predicates before the filter values they textually
 	// precede. This is the one point where sentinels become real
 	// placeholders, numbered by where they actually land in the string.
-	finalQuery, finalArgs, err := renumberParams(query, g.Dialect, ctx.Args)
+	finalQuery, finalArgs, err := renumberParams(query, g.Dialect, ctx.Args, ensureParamNonce(ctx))
 	if err != nil {
 		return "", nil, err
 	}
@@ -559,7 +560,7 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 		idx := len(ctx.Args)
 		ctx.ParamCounter++
 		ctx.Args = append(ctx.Args, tenantID)
-		ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, paramSentinel(idx))
+		ctx.RootTenantPredicate = fmt.Sprintf("%s.tenant_id = %s", rootAlias, paramSentinel(ensureParamNonce(ctx), idx))
 	}
 
 	// 2. Relationship traversal boundaries - same per-table check.
@@ -580,7 +581,7 @@ func (g *BOSQLGenerator) InjectTenantScopingToGraph(ctx *GenerationContext, tena
 		ctx.ParamCounter++
 		ctx.Args = append(ctx.Args, tenantID)
 
-		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, paramSentinel(idx))
+		tenantCondition := fmt.Sprintf("%s.tenant_id = %s", stepAlias, paramSentinel(ensureParamNonce(ctx), idx))
 		if step.Condition == "" {
 			step.Condition = tenantCondition
 		} else {
@@ -610,7 +611,7 @@ func (g *BOSQLGenerator) InjectBitemporalScoping(ctx *GenerationContext, knowled
 	ctx.Args = append(ctx.Args, knowledgeDate.Format(time.RFC3339))
 
 	bitemporalPredicate := fmt.Sprintf("(%s.system_valid_from <= %s AND (%s.system_valid_to IS NULL OR %s.system_valid_to > %s))",
-		rootAlias, paramSentinel(idx1), rootAlias, rootAlias, paramSentinel(idx2))
+		rootAlias, paramSentinel(ensureParamNonce(ctx), idx1), rootAlias, rootAlias, paramSentinel(ensureParamNonce(ctx), idx2))
 
 	if ctx.RootTenantPredicate != "" {
 		ctx.RootTenantPredicate = ctx.RootTenantPredicate + " AND " + bitemporalPredicate
