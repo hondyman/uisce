@@ -284,7 +284,12 @@ func dialectName(d boresolver.Dialect) string {
 // TestApplyColumnMetadata_CopiesRootOwnership (that specific field) and
 // TestApplyColumnMetadata_CopiesEveryMetadataField (a reflection-based
 // completeness check that will catch the NEXT field too, not just this
-// one), not by inspection.
+// one), not by inspection. Aggregation was added with this hand-copy
+// in place from day one (the reflection test caught it before it could
+// drift the way RootOwnership once did), and the field is the second of
+// two independent wire signals for the frontend roll-up-safety gate
+// (the first being RootOwnership - see QueryResultColumn.RootOwnership
+// for the grain-vs-linearity split).
 func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []boresolver.QueryResultColumn) {
 	if len(generated) == 0 {
 		return
@@ -298,6 +303,7 @@ func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []b
 			dbColumns[i].BOID = meta.BOID
 			dbColumns[i].Cardinality = meta.Cardinality
 			dbColumns[i].RootOwnership = meta.RootOwnership
+			dbColumns[i].Aggregation = meta.Aggregation
 		}
 	}
 }

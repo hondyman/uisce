@@ -251,9 +251,20 @@ func buildMultiBOSQL(
 			expr: expr, outLabel: outLabel, fieldType: field.Type,
 			boID: boID, cardinality: cardinality, hasAgg: aggWrap != "",
 		})
+		// Aggregation is the SQL wrapper the generator already applied to
+		// this column's expression (SUM/AVG/MIN/MAX/COUNT/COUNT_DISTINCT
+		// upper-cased for SQL, "" for dimensions). Lowercased and
+		// emitted here, at construction, so the wire field is a
+		// column-fact: the frontend's isAdditiveSafe signal reads it
+		// verbatim without a mapping layer. Empty stays empty -
+		// QueryResultColumn's `json:"aggregation,omitempty"` is what
+		// keeps dimensions and unaggregated measures serializing as
+		// absent rather than as a placeholder string, which is the
+		// unsafe sentinel on the consumer side. Do not introduce a
+		// "none" string; empty == "this column isn't aggregated."
 		columns = append(columns, boresolver.QueryResultColumn{
 			Name: outLabel, Type: field.Type, BOID: boID, Cardinality: cardinality,
-			RootOwnership: ownership,
+			RootOwnership: ownership, Aggregation: strings.ToLower(aggWrap),
 		})
 		return nil
 	}

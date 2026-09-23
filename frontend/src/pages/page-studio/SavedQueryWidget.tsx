@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Chip, CircularProgress, Alert } from '@mui/material';
 import ReactECharts from 'echarts-for-react';
-import { runSavedQuery, isSafeToRollUpAcrossRows } from '../../features/query-builder/services/savedQueryApi';
+import { runSavedQuery, isSafeToRollUpAcrossRows, isAdditiveSafe } from '../../features/query-builder/services/savedQueryApi';
 import { buildChartOption } from '../../features/query-builder/utils/chartOption';
 import type { SavedQueryRunResult } from '../../features/query-builder/services/savedQueryApi';
 import { useSelection } from './SelectionContext';
@@ -101,20 +101,45 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({ savedQueryId, widge
     // any related-BO query the backend hasn't fully classified - must
     // read as "can't establish it's safe," not as "probably fine."
     //
-    // NOT covered: whether `+` is even a meaningful way to combine
-    // measureCol's values across rows at all (aggregation linearity - a
-    // MIN or COUNT(DISTINCT) column summed with `+` is wrong regardless
-    // of grain/ownership). This widget has no access to the underlying
-    // aggregation to check that yet. See isSafeToRollUpAcrossRows's doc
-    // comment for the full three-way split.
+    // Two independent safety signals, both required, AND-composed here
+    // at the call site (NOT merged into one predicate at the source -
+    // see isSafeToRollUpAcrossRows and isAdditiveSafe for why the
+    // two failures stay distinct for downstream error copy):
     //
-    // Also NOT covered: a second, independent way this widget can show a
-    // wrong number - measureColDef itself is a heuristic guess (first
-    // numeric-looking column, or just the last column) that can land on
-    // a dimension or an id rather than an intended measure. That needs
-    // its own fix, tracked separately - this check only answers "IF this
-    // is the right column, is summing it across rows safe."
-    if (!measureColDef || !isSafeToRollUpAcrossRows(result, measureColDef)) {
+    //   1. isSafeToRollUpAcrossRows: grain is intact (no join fan-out)
+    //      AND measureCol's own ownership is unique. Answers "is every
+    //      row's value representable once at this grain?"
+    //   2. isAdditiveSafe: measureCol's underlying aggregation is the
+    //      one aggregation whose row values are themselves additive
+    //      under `+` (currently just "sum"). Answers "is `+` a
+    //      meaningful way to combine these values across rows at all?"
+    //
+    // Both must pass. A clean SUM column on a one-side grain is safe
+    // (both true); an AVG column on a one-side grain is NOT safe, even
+    // though grain/ownership are clean, because a sum of averages is
+    // not the average of sums.
+    //
+    // Default-fail polarity carries through: missing aggregation
+    // (single-BO today, where the backend's GenerateSQLFromSemantic
+    // branch does not populate columns), unrecognized aggregation, and
+    // non-additive aggregations ALL read as unsafe here, surfacing
+    // "Needs review" until the row-grain and additivity signals both
+    // resolve positively.
+    //
+    // The inline guard preserves TS narrowing of measureColDef past the
+    // early-return into the reduce below - hoisting the conjunction
+    // into a `const safe: boolean` would lose that narrowing and force
+    // either an `!`/`!== undefined` re-check or a non-null assertion
+    // at the use site, so the conjunction stays inline even though
+    // it's three terms now.
+    //
+    // Also NOT covered (separate, tracked): measureColDef itself is a
+    // heuristic guess (first numeric-looking column, or just the last
+    // column) that can land on a dimension or an id rather than an
+    // intended measure. That needs its own fix - this check only
+    // answers "IF this is the right column, is summing it across rows
+    // safe."
+    if (!measureColDef || !isSafeToRollUpAcrossRows(result, measureColDef) || !isAdditiveSafe(measureColDef)) {
       return (
         <Box sx={{ textAlign: 'center', p: 1 }}>
           <Typography variant="body2" color="text.secondary">

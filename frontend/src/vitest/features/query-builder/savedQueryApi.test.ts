@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   isRowGrainIntact,
   isSafeToRollUpAcrossRows,
+  isAdditiveSafe,
   type SavedQueryRunResult,
 } from '../../../features/query-builder/services/savedQueryApi';
 
@@ -102,6 +103,70 @@ describe('isSafeToRollUpAcrossRows', () => {
   it('is false when both cardinality and rootOwnership are entirely absent (single-BO metadata gap without hasRelatedBOs stated)', () => {
     const result = resultWith([{ name: 'x', type: 'number' }], undefined);
     expect(isSafeToRollUpAcrossRows(result, result.columns[0])).toBe(false);
+  });
+});
+
+// isAdditiveSafe is the SECOND of two independent signals (LINEARITY, not
+// grain/ownership). Same fail-safe polarity as the row-grain tests above:
+// every non-"sum" value, missing field, and unrecognized string must read
+// false. If any of these ever return true, the gate has silently accepted
+// an aggregation whose row values don't add up under `+`.
+describe('isAdditiveSafe', () => {
+  it('is true only for the single recognized additive aggregation: "sum"', () => {
+    expect(isAdditiveSafe({ aggregation: 'sum' })).toBe(true);
+  });
+
+  // "avg" looks aggregate-y but a sum of averages is NOT the average of
+  // sums unless every contributing group is the same size, which a
+  // client-side widget cannot verify from column metadata alone.
+  it('is false for "avg" - sum of averages is not additive unless groups are equipopulated', () => {
+    expect(isAdditiveSafe({ aggregation: 'avg' })).toBe(false);
+  });
+
+  // The one that looks most intuitive to sum but isn't: COUNT-of-rows
+  // summed across groups double-counts every row that contributes to
+  // multiple groups (which is the common case once any related-BO
+  // join fans out). The widget cannot verify group disjointness; the
+  // gate must refuse by default.
+  it('is false for "count" - summed counts double-count rows under any non-disjoint partitioning', () => {
+    expect(isAdditiveSafe({ aggregation: 'count' })).toBe(false);
+  });
+
+  it('is false for "count_distinct" - distinct counts are not additive across overlapping groups', () => {
+    expect(isAdditiveSafe({ aggregation: 'count_distinct' })).toBe(false);
+  });
+
+  it('is false for "min" and "max" - sums of minimums / maximums have no natural meaning', () => {
+    expect(isAdditiveSafe({ aggregation: 'min' })).toBe(false);
+    expect(isAdditiveSafe({ aggregation: 'max' })).toBe(false);
+  });
+
+  // QueryResultColumn's `json:"aggregation,omitempty"` drops the field
+  // entirely for dimensions (Go marshals "" + omitempty as no key), so
+  // an omitted-on-the-wire column arrives here as aggregation: undefined,
+  // not as aggregation: "". The empty-string case is tested below as
+  // defense-in-depth for any producer that emits the key with an empty
+  // value rather than omitting it.
+  it('is false for empty aggregation string - the "this column is not aggregated" sentinel', () => {
+    expect(isAdditiveSafe({ aggregation: '' })).toBe(false);
+  });
+
+  it('is false when the aggregation field is missing entirely (undefined)', () => {
+    expect(isAdditiveSafe({})).toBe(false);
+  });
+
+  // Unknown is unsafe, NOT lenient. A future backend field value the
+  // frontend doesn't yet recognize must read as unsafe, not silently
+  // permissive. This is the same fail-safe polarity rule as the
+  // row-grain gate ("absence/missing ⇒ unsafe"): the day someone adds
+  // an aggregation to the backend without teaching the frontend about
+  // it, the gate stays defensive until they do.
+  it('is false for unrecognized aggregation strings - unknown is unsafe, not lenient', () => {
+    expect(isAdditiveSafe({ aggregation: 'median' })).toBe(false);
+    expect(isAdditiveSafe({ aggregation: 'percentile_95' })).toBe(false);
+    // And "none" - not a recognized aggregation string on this tree.
+    // Same fail-safe polarity as the cases above.
+    expect(isAdditiveSafe({ aggregation: 'none' })).toBe(false);
   });
 });
 

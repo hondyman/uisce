@@ -141,6 +141,21 @@ export interface SavedQueryRunResultColumn {
    * necessary, not sufficient, for that.
    */
   rootOwnership?: string;
+  /**
+   * "sum" | "avg" | "count" | "count_distinct" | "min" | "max" | "" -
+   * the SQL aggregation the generator wrapped around this column's
+   * expression, lowercased at backend construction so the wire field is
+   * a column-fact (see boresolver.QueryResultColumn.Aggregation). Empty
+   * means NOT aggregated: a dimension or a non-aggregated measure.
+   *
+   * Distinct from rootOwnership: that asks "is every row's value
+   * representable once at this grain?" (fan-out / duplicate-row
+   * question); this asks "is `+` a meaningful way to combine these
+   * values across rows at all?" (linearity question). The two signals
+   * fail for different reasons and are AND-composed at the call site
+   * by isSafeToRollUpAcrossRows's caller - see isAdditiveSafe below.
+   */
+  aggregation?: string;
 }
 
 export interface SavedQueryRunResult {
@@ -240,6 +255,67 @@ export function isSafeToRollUpAcrossRows(
   if (!isRowGrainIntact(result)) return false;
   if (result.hasRelatedBOs === false) return true;
   return column.rootOwnership === 'unique';
+}
+
+/**
+ * True iff `+` is a meaningful way to combine THIS column's values
+ * across a saved query's returned rows (aggregation LINEARITY) - the
+ * second of two independent signals, NOT a third condition folded into
+ * isSafeToRollUpAcrossRows.
+ *
+ * Different question from isRowGrainIntact / isSafeToRollUpAcrossRows:
+ * those ask "is every row's value representable once at this grain?"
+ * (a duplicate-row / fan-out question). This asks "is `+` a meaningful
+ * way to combine these row values at all?" (a linearity question).
+ * Even with intact grain and unique ownership, summing MIN(cost)
+ * across rows yields a meaningless number, and summing COUNT(DISTINCT
+ * sku) across rows double-counts. Both shapes have perfectly correct
+ * per-row values and broken summed totals - the two signals fail for
+ * different reasons and the consumer (currently SavedQueryWidget's
+ * gauge) needs to be able to surface distinct error copy eventually,
+ * which is why the two booleans stay separate at the source and are
+ * AND-composed at the call site rather than merged into one predicate
+ * here.
+ *
+ * Recognition set is intentionally narrow:
+ *   - "sum"             true  - the only aggregation whose row values
+ *                                are themselves additive under `+`. The
+ *                                sum of group-level sums is the sum of
+ *                                the underlying rows.
+ *   - "avg"             false - a sum of averages is NOT the average
+ *                                of sums unless groups are
+ *                                equipopulated, which the widget
+ *                                cannot verify.
+ *   - "count"           false - summed counts double-count rows that
+ *                                contribute to multiple groups; safe
+ *                                only under disjoint partitioning,
+ *                                which the widget cannot verify.
+ *   - "count_distinct"  false - a sum of distinct counts double-counts
+ *                                every distinct value that touches
+ *                                more than one group.
+ *   - "min" | "max"     false - a sum of minimums / maximums has no
+ *                                natural interpretation.
+ *   - "" | undefined    false - missing aggregation is the unsafe
+ *                                sentinel. This also fires for any
+ *                                non-aggregated column (a dimension
+ *                                or a measure held at row grain) and
+ *                                for the single-BO case where the
+ *                                backend's GenerateSQLFromSemantic
+ *                                branch does not populate columns -
+ *                                see the empty QueryResultColumn
+ *                                contract in boresolver.query_def.
+ *                                Wiring single-BO column population
+ *                                is a separate follow-up; this gate
+ *                                correctly stays defensive until then.
+ *   - any other string   false - unknown is unsafe, same fail-safe
+ *                                polarity as the row-grain gate.
+ *                                No pass-through default: a future
+ *                                backend field value the frontend
+ *                                doesn't yet recognize is treated as
+ *                                unsafe, not silently permissive.
+ */
+export function isAdditiveSafe(column: { aggregation?: string }): boolean {
+  return column.aggregation === 'sum';
 }
 
 /**
