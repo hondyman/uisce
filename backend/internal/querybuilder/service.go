@@ -125,9 +125,10 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 			wireName = f.Name
 		}
 		columns = append(columns, boresolver.QueryResultColumn{
-			Name: wireName,
-			Type: "unknown", // driver-emitted type isn't known at Preview time; Execute's scanColumns fills it
-			BOID: rootDef.ID,
+			Name:        wireName,
+			Type:        "unknown", // driver-emitted type isn't known at Preview time; Execute's scanColumns fills it
+			BOID:        rootDef.ID,
+			Aggregation: strings.ToLower(sf.Aggregation),
 		})
 	}
 

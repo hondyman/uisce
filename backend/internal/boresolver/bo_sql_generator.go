@@ -18,8 +18,9 @@ import (
 type SQLGenerationRequest struct {
 	TenantID         string         `json:"tenantId"` // Updated to match frontend (or handle both)
 	BusinessObjectID string         `json:"businessObjectId"`
-	SelectedFields   []string       `json:"selectedFields"` // Field UUIDs (NOT names or semantic term codes)
-	Filters          []FilterClause `json:"filters"`
+	SelectedFields    []string       `json:"selectedFields"` // Field UUIDs (NOT names or semantic term codes)
+	FieldAggregations []string       `json:"fieldAggregations,omitempty"` // parallel to SelectedFields; "" = dimension
+	Filters           []FilterClause `json:"filters"`
 	// FilterTree is an optional nested AND/OR predicate tree. When present it
 	// is compiled instead of (not in addition to) Filters, so a caller that
 	// needs boolean grouping ("A AND (B OR C)") isn't limited to a flat
@@ -55,8 +56,9 @@ type SemanticSQLGenerationRequest struct {
 
 // SemanticField represents a field selection with semantic term and optional label
 type SemanticField struct {
-	Term  string `json:"term"`            // Semantic term name (e.g., "id", "address")
-	Label string `json:"label,omitempty"` // Optional display label (defaults to term)
+	Term        string `json:"term"`                          // Semantic term name (e.g., "id", "address")
+	Label       string `json:"label,omitempty"`               // Optional display label (defaults to term)
+	Aggregation string `json:"aggregation,omitempty"`         // "sum", "avg", "count", "count_distinct", "min", "max"
 }
 
 // SemanticFilter represents a filter using semantic terms
@@ -448,7 +450,7 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 	ctx.Aliases[""] = "t0" // Root alias (empty path)
 
 	// 3. Resolve Selected Fields (infers joins required for selected columns)
-	selectColumns, err := g.ResolveSelectedFields(ctx)
+	selectColumns, groupByColumns, err := g.ResolveSelectedFields(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to resolve fields: %w", err)
 	}
@@ -503,6 +505,13 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 
 	if whereClause != "" {
 		query += fmt.Sprintf("\nWHERE %s", whereClause)
+	}
+
+	// GROUP BY: emitted only for the mixed case (at least one dimension
+	// AND at least one aggregate). Aggregate-only queries (groupBy empty)
+	// and no-agg queries (groupBy == columns) both skip this.
+	if len(groupByColumns) > 0 && len(groupByColumns) < len(selectColumns) {
+		query += fmt.Sprintf("\nGROUP BY %s", strings.Join(groupByColumns, ", "))
 	}
 
 	if req.Limit > 0 {
@@ -621,18 +630,44 @@ func (g *BOSQLGenerator) InjectBitemporalScoping(ctx *GenerationContext, knowled
 }
 
 
-// ResolveSelectedFields resolves paths to physical columns and infers joins
-func (g *BOSQLGenerator) ResolveSelectedFields(ctx *GenerationContext) ([]string, error) {
+// ResolveSelectedFields resolves paths to physical columns and infers joins.
+// It returns the SELECT expressions (aliased for the wire) and a parallel
+// list of GROUP BY expressions (the non-aggregated raw column references).
+// When at least one field is aggregated, the caller must emit GROUP BY over
+// the returned groupByColumns; when no field is aggregated, groupByColumns
+// equals columns (no GROUP BY needed).
+func (g *BOSQLGenerator) ResolveSelectedFields(ctx *GenerationContext) ([]string, []string, error) {
+	var allowedAggs = map[string]bool{
+		"SUM": true, "AVG": true, "COUNT": true,
+		"MIN": true, "MAX": true, "COUNT_DISTINCT": true,
+	}
 	var columns []string
-	for _, fieldPath := range ctx.Request.SelectedFields {
+	var groupByColumns []string
+	for i, fieldPath := range ctx.Request.SelectedFields {
 		sqlExpr, fieldLabel, err := g.ResolvePathWithLabel(ctx, fieldPath)
 		if err != nil {
-			return nil, fmt.Errorf("error resolving path %s: %w", fieldPath, err)
+			return nil, nil, fmt.Errorf("error resolving path %s: %w", fieldPath, err)
 		}
-		// Alias the column with the field's display name or label
+		agg := ""
+		if ctx.Request.FieldAggregations != nil && i < len(ctx.Request.FieldAggregations) {
+			agg = ctx.Request.FieldAggregations[i]
+		}
+		if agg != "" {
+			upper := strings.ToUpper(agg)
+			if !allowedAggs[upper] {
+				return nil, nil, fmt.Errorf("unsupported aggregation %q for field %s", agg, fieldLabel)
+			}
+			if upper == "COUNT_DISTINCT" {
+				sqlExpr = fmt.Sprintf("COUNT(DISTINCT %s)", sqlExpr)
+			} else {
+				sqlExpr = fmt.Sprintf("%s(%s)", upper, sqlExpr)
+			}
+		} else {
+			groupByColumns = append(groupByColumns, sqlExpr)
+		}
 		columns = append(columns, fmt.Sprintf("%s AS \"%s\"", sqlExpr, fieldLabel))
 	}
-	return columns, nil
+	return columns, groupByColumns, nil
 }
 
 // ResolvePathWithLabel walks the path, adds joins if needed, and returns "alias.column" plus a human-friendly label
@@ -850,12 +885,14 @@ func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerati
 
 	// Step 2: Resolve semantic field terms to field UUIDs
 	selectedFieldIDs := make([]string, len(semanticReq.Select))
+	selectedAggregations := make([]string, len(semanticReq.Select))
 	for i, semanticField := range semanticReq.Select {
 		field, err := g.findFieldBySemanticTerm(boDef, semanticField.Term)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve field '%s': %w", semanticField.Term, err)
 		}
 		selectedFieldIDs[i] = field.ID
+		selectedAggregations[i] = semanticField.Aggregation
 	}
 
 	// Step 3: Convert semantic filters to UUID-based filters
@@ -875,11 +912,12 @@ func (g *BOSQLGenerator) ResolveSemanticRequest(semanticReq *SemanticSQLGenerati
 	}
 
 	return &SQLGenerationRequest{
-		TenantID:         tenantID,
-		BusinessObjectID: boDef.ID,
-		SelectedFields:   selectedFieldIDs,
-		Filters:          filters,
-		Limit:            semanticReq.Limit,
+		TenantID:          tenantID,
+		BusinessObjectID:  boDef.ID,
+		SelectedFields:    selectedFieldIDs,
+		FieldAggregations: selectedAggregations,
+		Filters:           filters,
+		Limit:             semanticReq.Limit,
 	}, nil
 }
 
