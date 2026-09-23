@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **uisce** (398909 symbols, 570702 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **uisce** (394013 symbols, 567869 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -541,3 +541,14 @@ The pattern to break is: **secrets flowing through prose.** The fix is: secrets 
 ## Dev Credentials (2026-09-16)
 
 Dev users: `testuser@example.com` / `testuser2@example.com` (tenant `99e99e99-99e9-49e9-89e9-99e99e99e999`; password in the dev env/secrets store — see the 2026-09-13 credential-hygiene note *above*). `admin@uisce.com` does not exist in the dev DB.
+
+## Query results centralization — phase state (do not relitigate)
+
+See `docs/query-results-phase-handoff.md` for settled decisions, phase plan, and the Phase 3 completion criterion. Key facts:
+
+- **No client-side SQL generation in the Query Builder / Reporting / Live Query migration path** (enforced by ESLint Layer 1 naming ban + Layer 2 AST detection; `frontend/eslint-rules/no-sql-fabrication.cjs`). Other workstreams (Data Explorer, CEP, Semantic Builder) have open TBD owners recorded in the doc's Known violations ledger — they are not gated by this workstream's guardrail.
+- `QueryResultsPanel` v2 API (`resultSet` / `extraTabs` / `initialTabId`); consumers own their own run/compile calls.
+- `FilterBuilderPanel` fragment assembly (`buildSQL`/`buildGroupSQL`) is invisible to Layer 2 by design — Phase 3 work list is the operator switch, not lint output.
+- Three forced renames: `compileSql`→`fetchCompiledSql`, `generateSQL`→`requestGeneratedSQL`, `formatSQL`→`prettyPrintSql` (all renamed, not exempted).
+- LiveQueryTab residue landed in two PR #112 commits: the mock-removal commit (deleted `generatePostgresSQL`, mock-row fallback, and `queryBuilderMock.ts` dead code; failures now surface as real errors via `friendlyQueryError`) and the correction commit (deleted the two false-claim chips `Engine: ${engine}` and `Two-Pass CTE Compilation Active`; corrected ledger arithmetic). SHAs `1ef260574` / `79173671b` are date-anchors, not durable references.
+- Baseline revert tag: `baseline/query-results-panel` at `b258de304`.

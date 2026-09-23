@@ -15,13 +15,6 @@ import type {
   QueryExecuteResult,
   BOSchema,
 } from '../types/queryDef';
-import { installQueryBuilderMock } from './queryBuilderMock';
-
-// In development, install a lightweight mock so the feature is demoable
-// without the backend endpoints being live.
-if (false && import.meta.env.DEV) {
-  installQueryBuilderMock();
-}
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, {

@@ -41,7 +41,7 @@ export const useReportBuilder = (tenantId: string, datasourceId: string) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generateSQL = useCallback(
+  const requestGeneratedSQL = useCallback(
     async (config: GenerateSQLRequest): Promise<string | null> => {
       setLoading(true);
       setError(null);
@@ -157,7 +157,7 @@ export const useReportBuilder = (tenantId: string, datasourceId: string) => {
   );
 
   return {
-    generateSQL,
+    requestGeneratedSQL,
     executeReport,
     exportReport,
     loading,

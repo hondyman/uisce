@@ -40,25 +40,7 @@ import {
   getSavedQuery, createSavedQuery, updateSavedQuery, runSavedQuery,
 } from '../services/savedQueryApi';
 import type { SavedQuery, SavedQueryState, QueryDef } from '../types/queryDef';
-
-/**
- * The multi-BO join resolver (boresolver / multi_bo_generator.go) speaks a
- * different relationship graph than the BO CRUD `/relationships` endpoint
- * this editor's "+ Join" uses to populate related-object candidates - a
- * related table can be legitimately joinable for a Page Studio widget but
- * still have no resolvable path for the query engine's SQL generator. That
- * mismatch surfaces as a raw Go error ("no relationship path from X to Y:
- * failed to resolve driving table..."); this turns it into something a
- * user can actually act on instead of a stack-trace-shaped string.
- */
-function friendlyQueryError(message: string): string {
-  if (/no relationship path|failed to resolve driving table/i.test(message)) {
-    return 'One of the joined related objects can’t be resolved into SQL by the query engine ' +
-      '(it may only support drag-and-drop placement, not filtering/grouping). Remove it from the ' +
-      'query and try again, or ask for it to be added to the query engine’s join graph.';
-  }
-  return message;
-}
+import { friendlyQueryError, savedQueryResultToSet, type SavedQueryRunShape } from '../../query-execution';
 
 function useLoadedSavedQuery(id: string | undefined, isNew: boolean) {
   const [savedQuery, setSavedQuery] = useState<SavedQuery | null>(null);
@@ -92,7 +74,7 @@ export default function SavedQueryEditor() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [runResult, setRunResult] = useState<{ columns: { name: string }[]; rows: Record<string, unknown>[] } | null>(null);
+  const [runResult, setRunResult] = useState<SavedQueryRunShape | null>(null);
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
 
@@ -362,15 +344,20 @@ export default function SavedQueryEditor() {
           </Box>
 
           <QueryResultsPanel
-            runResult={runResult} running={running} runError={runError}
-            compiledSql={compiledSql} sqlLoading={sqlLoading} sqlError={sqlError}
+            resultSet={runResult ? savedQueryResultToSet(runResult) : null}
+            running={running} runError={runError}
+            sql={compiledSql} sqlLoading={sqlLoading} sqlError={sqlError}
             onRequestCompileSql={handleCompileSql}
-            executionPlan={
-              <Typography variant="body2" color="text.secondary">
-                Execution plan / diagnostics aren't exposed by the query API yet - /api/query/preview returns
-                the compiled SQL only, not an EXPLAIN plan or timing breakdown.
-              </Typography>
-            }
+            extraTabs={[{
+              id: 'execution-plan',
+              label: 'Execution Plan',
+              content: (
+                <Typography variant="body2" color="text.secondary">
+                  Execution plan / diagnostics aren't exposed by the query API yet - /api/query/preview returns
+                  the compiled SQL only, not an EXPLAIN plan or timing breakdown.
+                </Typography>
+              ),
+            }]}
           />
         </Box>
       </Stack>
