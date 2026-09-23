@@ -1,6 +1,7 @@
 package querybuilder
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -314,6 +315,72 @@ func TestBuildMultiBOSQL_TagsSharedOwnership(t *testing.T) {
 	// The primary BO's own column is trivially its own unique owner.
 	if columns[0].RootOwnership != "unique" && columns[0].RootOwnership != "" {
 		t.Fatalf("expected the primary column's ownership to be unique (or the empty-means-unique default), got: %q", columns[0].RootOwnership)
+	}
+}
+
+// TestBuildMultiBOSQL_TagsSharedOwnership_WireJSON pins the same shape-A
+// scenario above through the ACTUAL serialization boundary a caller would
+// see - the exact map literal HandleGetPreview builds - rather than
+// asserting on the Go struct fields alone. A previous round demonstrated
+// this via a temporary, uncommitted scratch test; this is that
+// demonstration made permanent and reproducible, since "I ran it once and
+// it printed the right JSON" is not evidence once the file is deleted.
+func TestBuildMultiBOSQL_TagsSharedOwnership_WireJSON(t *testing.T) {
+	primary := &boresolver.BODefinition{
+		ID:           "bo-order",
+		DrivingTable: "orders",
+		Fields:       []boresolver.BOField{{ID: "f1", Name: "order_id", Type: "string", PhysicalColumn: "orders.id"}},
+	}
+	warehouse := &boresolver.BODefinition{
+		ID:           "bo-warehouse-zone",
+		DrivingTable: "zones",
+		Fields:       []boresolver.BOField{{ID: "f2", Name: "zone_name", Type: "string", PhysicalColumn: "zones.name"}},
+	}
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{BOID: "bo-order", RelatedBOIDs: []string{"bo-warehouse-zone"}},
+		Query: boresolver.QueryRequest{
+			Dimensions: []boresolver.DimensionDef{
+				{TermNodeID: "order_id", Alias: "OrderID", BOID: "bo-order"},
+				{TermNodeID: "zone_name", Alias: "ZoneName", BOID: "bo-warehouse-zone"},
+			},
+		},
+	}
+	path := &analytics.JoinPath{Steps: []analytics.JoinPathStep{
+		{LeftTable: "orders", LeftAlias: "t0", LeftColumn: "warehouse_id", RightTable: "warehouses", RightAlias: "t1", RightColumn: "id", JoinType: "LEFT", Cardinality: "M:1"},
+		{LeftTable: "warehouses", LeftAlias: "t1", LeftColumn: "zone_id", RightTable: "zones", RightAlias: "t2", RightColumn: "id", JoinType: "LEFT", Cardinality: "M:1"},
+	}}
+
+	gen, _ := boresolver.NewBOSQLGenerator(nil, "postgres")
+	_, _, columns, err := buildMultiBOSQL(gen, primary, []joinedBO{
+		{BOID: "bo-warehouse-zone", BODef: warehouse, Path: path, Cardinality: path.TraversalCardinality()},
+	}, qd, "tenant-123")
+	if err != nil {
+		t.Fatalf("buildMultiBOSQL failed: %v", err)
+	}
+
+	// The exact map literal HandleGetPreview builds around resp.Columns -
+	// see saved_query_handler.go's HandleGetPreview.
+	resp := map[string]interface{}{
+		"columns":       columns,
+		"hasRelatedBOs": len(qd.Context.RelatedBOIDs) > 0,
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshaling response: %v", err)
+	}
+	wire := string(b)
+
+	if !strings.Contains(wire, `"name":"ZoneName"`) {
+		t.Fatalf("expected ZoneName column in wire JSON, got: %s", wire)
+	}
+	if !strings.Contains(wire, `"cardinality":"one"`) {
+		t.Fatalf("expected cardinality:one on the wire - the gate's grain signal - got: %s", wire)
+	}
+	if !strings.Contains(wire, `"rootOwnership":"shared"`) {
+		t.Fatalf("expected rootOwnership:shared on the wire - the gate's ownership signal - got: %s", wire)
+	}
+	if !strings.Contains(wire, `"hasRelatedBOs":true`) {
+		t.Fatalf("expected hasRelatedBOs:true (this query has a related BO) on the wire, got: %s", wire)
 	}
 }
 

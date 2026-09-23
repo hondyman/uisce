@@ -192,3 +192,61 @@ func TestGenerateSQL_SnowflakeDialect_TenantAndFilterDoNotSwap(t *testing.T) {
 		t.Fatalf("filter predicate bound to wrong value: args[1] = %#v, want 100", args[1])
 	}
 }
+
+// TestRenumberParams_MixedNonce_ForeignNULFailsLoud_PostLoop is the case
+// TestRenumberParams_ForgedSentinelWrongNonce_FailsLoud does NOT cover:
+// that test has zero sentinels matching the call's own nonce, so it only
+// exercises the PRE-loop guard (expected == 0). This test mixes one
+// real sentinel (under ctx's nonce) with one foreign one (under a fresh,
+// different nonce) in the same string, so expected > 0, the loop runs,
+// consumes only the real one, and the foreign sentinel's raw NUL bytes
+// are what the POST-loop guard (`strings.ContainsRune(final, 0)`) has to
+// catch after the loop exits. This is also the shape of the half-mis-
+// wired call site the exported ParamSentinel/EnsureParamNonce footgun
+// (tracked separately) would actually produce: one call site using the
+// ctx's nonce correctly, another minting its own fresh one by mistake.
+func TestRenumberParams_MixedNonce_ForeignNULFailsLoud_PostLoop(t *testing.T) {
+	realNonce := newParamNonce()
+	foreignNonce := newParamNonce()
+	if realNonce == foreignNonce {
+		t.Fatal("test setup: nonces collided, cannot demonstrate isolation")
+	}
+
+	pending := []interface{}{"real-value"}
+	real := paramSentinel(realNonce, 0)
+	foreign := paramSentinel(foreignNonce, 0)
+
+	sql := "WHERE real = " + real + " AND foreign = " + foreign
+
+	_, _, err := renumberParams(sql, PostgresDialect{}, pending, realNonce)
+	if err == nil {
+		t.Fatal("expected renumberParams to refuse to produce SQL: the foreign sentinel's NUL bytes survive the loop (which only consumes matches for realNonce) and must be caught by the POST-loop guard, not silently forwarded")
+	}
+}
+
+// TestRenumberParams_MalformedIndex_NeverReachesPendingLookup is the F13
+// invariant's other half: strconv.ParseInt failing on a corrupted index
+// must short-circuit the `||` before `pending[idx]` is ever evaluated -
+// not fall through with idx left at its zero value and silently bind
+// pending[0]. Proven by using a pending slice whose index 0 holds a
+// value distinguishable from "no real parameter here" - if the bug this
+// test guards against were reintroduced, this test would observe
+// "sentinel-value-at-index-0" bound to a placeholder that was never a
+// real parameter at all, instead of the expected error.
+func TestRenumberParams_MalformedIndex_NeverReachesPendingLookup(t *testing.T) {
+	nonce := newParamNonce()
+	pending := []interface{}{"sentinel-value-at-index-0"}
+	// A hand-built sentinel with a non-base36 index ("!!" is not valid
+	// base-36) - strconv.ParseInt must fail on this, not silently decode
+	// to 0.
+	malformed := sentinelPrefix + nonce + ":!!" + sentinelSuffix
+	sql := "WHERE x = " + malformed
+
+	_, _, err := renumberParams(sql, PostgresDialect{}, pending, nonce)
+	if err == nil {
+		t.Fatal("expected renumberParams to refuse a malformed index rather than silently decode it to 0 and bind pending[0]")
+	}
+	if !strings.Contains(err.Error(), "invalid index") {
+		t.Fatalf("expected the invalid-index error, got: %v", err)
+	}
+}
