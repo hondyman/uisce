@@ -166,6 +166,39 @@ the edits in those are removal of commented-out code only.
   on the mounted `/validation-rules` handlers. Slice 4 must retire both, and
   `cuelang.org/go` leaves `go.mod` then.
 
+### Slice 4 — CUE retired, PR #128 (2026-09-24)
+
+- In-process CUE (`services.CueEngine`, `CueSchemaGenerator`) removed; the
+  mounted `/validation-rules/{schema, {id}/execute, {id}/simulate-with-instance}`
+  endpoints — which could only ever evaluate the retired, all-inactive
+  `catalog_validation_rules` corpus — now return 410 `endpoint_retired`.
+- Standalone `backend/services/compliance-engine` + `Dockerfile.compliance-engine`
+  + 3 compose entries + `docker-start.sh` entries deleted. The root
+  `services/compliance-engine` (workflow ABAC, k8s port 8082) is a different
+  service and is untouched.
+- Dead `CubeGenerator` removed (owner: "cube generator is also dead").
+- `cuelang.org/go` + CUE-only indirect deps removed from `go.mod`/`go.sum`.
+- Proof: build/vet/dependency resolution clean; new test pins all three
+  endpoints to 410 with zero DB queries. `detect_changes` HIGH by reach
+  (`SetupRouter`).
+
+### Items added to the plan after Slice 4
+
+- **Slice 4b — frontend legacy rule UIs.** 15 files still author CUE/Starlark
+  (`ValidationRuleCreator`, `ValidationRuleWizard`, `ValidationRuleScriptEditor`,
+  `RuleJsonViewer`, `UisceRuleBuilder`, `ExpressionEditor`/`ExpressionLibrary`,
+  fabric `ValidationRulesPage`, `UisceBuilderPage`, …). With no backend engine
+  behind them they are dead weight; replace entry points with
+  `AdvancedRuleBuilderPage` and delete.
+- **E14 — `boresolver` filter-group SQL compiler** (`CompileFilterGroup`,
+  reached by `/validation-rules/execute-binding` and `bo_sql_generator.go`)
+  compiles the old condition format to SQL — overlaps `vm.CompileToSQL`.
+  Assess in Slice 5.
+- **Cube removal** (owner: "remove any cube items we are not using it ever") —
+  separate cleanup branch, same verify-then-delete discipline.
+- **Whole-backend dead code:** `deadcode ./...` reports ~10,300 unreachable
+  functions. Out of scope here; worth its own staged program.
+
 ---
 
 ## §6 — Closing claim
