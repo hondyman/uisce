@@ -170,7 +170,7 @@ export default function SavedQueryEditor() {
       for (const t of obj.terms) {
         if (!t.selected) continue;
         if (t.role === 'MEASURE') {
-          measures.push({ termNodeId: t.termNodeId, alias: t.termKey, agg: t.defaultAggregation || 'NONE', boId });
+          measures.push({ termNodeId: t.termNodeId, alias: t.termKey, agg: t.termType === 'calculated' ? 'NONE' : (t.defaultAggregation || 'NONE'), boId });
         } else {
           dimensions.push({ termNodeId: t.termNodeId, alias: t.termKey, boId });
         }
