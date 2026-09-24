@@ -462,6 +462,11 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 	ctx.LoadedBOs[rootBO.ID] = rootBO
 	ctx.Aliases[""] = "t0" // Root alias (empty path)
 
+	// 2b. Preload calc-term expressions (batched, avoids N+1 catalog queries).
+	if err := g.preloadCalcTerms(ctx, rootBO); err != nil {
+		return "", nil, fmt.Errorf("failed to preload calc terms: %w", err)
+	}
+
 	// 3. Resolve Selected Fields (infers joins required for selected columns)
 	selectColumns, err := g.ResolveSelectedFields(ctx)
 	if err != nil {
@@ -672,6 +677,45 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 
 		// If this is the last part, we are done
 		if i == len(parts)-1 {
+			// Calc term: no PhysicalColumn, no TransformationSQL — compile
+			// the preloaded vm.Expression to SQL instead of failing.
+			if foundField.TermType == "calculated" {
+				if ctx.CalcTermConfigs == nil {
+					return "", "", fmt.Errorf("calc term %q has no preloaded expression — run preloadCalcTerms first", foundField.Name)
+				}
+				expr, ok := ctx.CalcTermConfigs[foundField.SemanticTermID]
+				if !ok {
+					return "", "", fmt.Errorf("calc term %q (node %s) not found in preloaded configs", foundField.Name, foundField.SemanticTermID)
+				}
+
+				resolveCol := func(fieldPath string) (string, error) {
+					// Look up the referenced field in the BO definition
+					for _, f := range currentBO.Fields {
+						if f.Name == fieldPath || f.ID == fieldPath {
+							if f.PhysicalColumn == "" {
+								return "", fmt.Errorf("calc term references field %q which has no physical column", fieldPath)
+							}
+							// Return bare column name — resolveCalcTermToSQL
+							// will prefix with the alias.
+							parts := strings.Split(f.PhysicalColumn, ".")
+							return parts[len(parts)-1], nil
+						}
+					}
+					return "", fmt.Errorf("field %q not found in BO %q", fieldPath, currentBO.ID)
+				}
+
+				sqlExpr, err := g.resolveCalcTermToSQL(expr, currentAlias, resolveCol)
+				if err != nil {
+					return "", "", fmt.Errorf("compile calc term %q: %w", foundField.Name, err)
+				}
+
+				label := foundField.DisplayName
+				if label == "" {
+					label = foundField.Name
+				}
+				return sqlExpr, label, nil
+			}
+
 			if foundField.PhysicalColumn == "" && foundField.TransformationSQL == "" {
 				return "", "", fmt.Errorf("no physical column mapping for field '%s'", foundField.ID)
 			}
@@ -809,6 +853,15 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 
 	for _, filter := range ctx.Request.Filters {
 		fieldPath := filter.FieldID
+
+		// Calc-term filter rejection: calc terms compile to SQL expressions
+		// that may contain aggregates (SUM, etc.) which are invalid in WHERE
+		// clauses. WHERE-clause compilation for calc terms is future scope.
+		for _, f := range ctx.RootBODef.Fields {
+			if f.ID == fieldPath && f.TermType == "calculated" {
+				return "", fmt.Errorf("filter on calc term %q is not supported — calc terms cannot be used in WHERE clauses", f.Name)
+			}
+		}
 
 		sqlExpr, err := g.ResolvePath(ctx, fieldPath)
 		if err != nil {
