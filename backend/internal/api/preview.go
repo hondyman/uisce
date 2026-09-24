@@ -103,9 +103,10 @@ func deriveTermNamesPreviewCandidatesWithMap(abbrMap map[string]string, rawName,
 	return deriveTermNamesCandidates(resolved, rawName, tableSchemaContext)
 }
 
-// rejectionSet is a flat set of rejected (datasourceID, qualifiedPath, rejectedName) triples
-// for efficient O(1) lookup during preview filtering.
-type rejectionSet map[string]struct{} // key = datasourceID + "\x00" + qualifiedPath + "\x00" + rejectedName
+// rejectionSet maps rejected (datasourceID, qualifiedPath, rejectedName) keys to a
+// preferred_name override. If preferred_name is non-empty, pickFirstNonRejected
+// returns it immediately — the user's replacement wins over all candidates.
+type rejectionSet map[string]string // key → preferred_name (empty = no preference)
 
 // makeRejectionKey constructs the lookup key used by rejectionSet.
 func makeRejectionKey(datasourceID, qualifiedPath, rejectedName string) string {
@@ -115,8 +116,16 @@ func makeRejectionKey(datasourceID, qualifiedPath, rejectedName string) string {
 // pickFirstNonRejected returns the first candidate not in the rejection set,
 // or the naive PascalCase fallback if all candidates are rejected.
 // The fallback always exists as the last candidate from deriveTermNamesCandidates.
-// datasourceID is used to scope the rejection lookup to the correct datasource.
+// If any rejection for this column carries a preferred_name, it wins immediately.
 func pickFirstNonRejected(candidates []CandidateTerm, rejections rejectionSet, datasourceID, qualifiedPath string) (name string, source string) {
+	// Check for a preferred_name override first — user's replacement beats everything.
+	prefix := datasourceID + "\x00" + qualifiedPath + "\x00"
+	for key, preferred := range rejections {
+		if strings.HasPrefix(key, prefix) && preferred != "" {
+			return preferred, "preferred"
+		}
+	}
+
 	for _, c := range candidates {
 		key := makeRejectionKey(datasourceID, qualifiedPath, c.Name)
 		if _, rejected := rejections[key]; !rejected {

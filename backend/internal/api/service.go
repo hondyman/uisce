@@ -48,6 +48,7 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 	}
 
 	svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
+	contextSensitive := false
 
 	abbrevs, err := s.abbrevSvc.GetAllAbbreviations(svcCtx)
 	if err != nil {
@@ -81,6 +82,7 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 		if err != nil {
 			log.Printf("[deriveTermNames] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
 		} else {
+			contextSensitive = true // LLM expansion prompt included table context
 			for _, idx := range unresolvedIdx {
 				upper := strings.ToUpper(tokens[idx])
 				if full, ok := suggestions[upper]; ok && sanitizeExpansion(full) != "" {
@@ -101,9 +103,10 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 			if qualified, qualErr := s.abbrevSvc.QualifyGenericWord(svcCtx, resolved[0], tableName, siblingColumnNames); qualErr == nil && qualified != "" {
 				log.Printf("[deriveTermNames] LLM qualified %q → semanticName=%q, businessName=%q, base=%q", rawName, qualified, titleCase(pascalCaseToWords(qualified)), strings.Title(strings.ToLower(resolved[0])))
 				return derivedTermNames{
-					SemanticName:    qualified,
-					BusinessName:    titleCase(pascalCaseToWords(qualified)),
-					BaseGenericTerm: strings.Title(strings.ToLower(resolved[0])),
+					SemanticName:     qualified,
+					BusinessName:     titleCase(pascalCaseToWords(qualified)),
+					BaseGenericTerm:  strings.Title(strings.ToLower(resolved[0])),
+					ContextSensitive: true, // LLM qualification prompt included table name
 				}
 			} else if qualErr != nil {
 				log.Printf("[deriveTermNames] LLM qualification failed for %q: %v", rawName, qualErr)
@@ -111,7 +114,9 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 		}
 	}
 
-	return deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+	result := deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+	result.ContextSensitive = result.ContextSensitive || contextSensitive
+	return result
 }
 
 func (s *GlossaryService) resolveOrCreateNodeType(tenantID, typeName string) (string, error) {
@@ -328,6 +333,13 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 				semanticName = chosen
 			}
 		}
+	}
+
+	// Cache the deterministic derivation output for this column. This is
+	// best-effort — failure is logged but does not fail the generation.
+	// The cache is read on wizard reopen and by preview-semantic-terms.
+	if item.Name == "" || strings.Contains(item.Name, "/") {
+		s.upsertSuggestion(ctx, tenantID, datasourceID, qualifiedPath, columnNodeName, names)
 	}
 
 	if semanticName == "" {
@@ -713,7 +725,7 @@ func resolveTokensWithAbbreviations(ctx context.Context, abbrevSvc *services.Abb
 func (s *GlossaryService) loadRejections(ctx context.Context, tenantID string) (rejectionSet, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT COALESCE(datasource_id, '00000000-0000-0000-0000-000000000000'::uuid)::text,
-		       qualified_path, rejected_name
+		       qualified_path, rejected_name, COALESCE(preferred_name, '')
 		FROM sml.semantic_term_rejections
 		WHERE tenant_id = $1
 	`, tenantID)
@@ -724,23 +736,24 @@ func (s *GlossaryService) loadRejections(ctx context.Context, tenantID string) (
 
 	set := make(rejectionSet)
 	for rows.Next() {
-		var dsID, qPath, name string
-		if err := rows.Scan(&dsID, &qPath, &name); err != nil {
+		var dsID, qPath, name, preferred string
+		if err := rows.Scan(&dsID, &qPath, &name, &preferred); err != nil {
 			return nil, fmt.Errorf("scanning rejection row: %w", err)
 		}
-		set[makeRejectionKey(dsID, qPath, name)] = struct{}{}
+		set[makeRejectionKey(dsID, qPath, name)] = preferred
 	}
 	return set, rows.Err()
 }
 
-// RecordRejection persists a rejection. It uses INSERT ... ON CONFLICT DO NOTHING
-// so it is idempotent under concurrent double-click or multi-tab submissions.
-func (s *GlossaryService) RecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName string) error {
+// RecordRejection persists a rejection with an optional preferred_name override.
+// Uses INSERT ... ON CONFLICT DO UPDATE so re-runs refresh the preferred_name.
+func (s *GlossaryService) RecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName, preferredName string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path, rejected_name)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (tenant_id, datasource_id, qualified_path, rejected_name) DO NOTHING
-	`, tenantID, datasourceID, qualifiedPath, rejectedName)
+		INSERT INTO sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path, rejected_name, preferred_name)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+		ON CONFLICT (tenant_id, datasource_id, qualified_path, rejected_name) DO UPDATE
+		   SET preferred_name = EXCLUDED.preferred_name
+	`, tenantID, datasourceID, qualifiedPath, rejectedName, preferredName)
 	return err
 }
 
@@ -755,4 +768,84 @@ func (s *GlossaryService) UnrecordRejection(ctx context.Context, tenantID, datas
 		  AND rejected_name = $4
 	`, tenantID, datasourceID, qualifiedPath, rejectedName)
 	return err
+}
+
+// cachedSuggestion is a row from sml.glossary_term_suggestions.
+type cachedSuggestion struct {
+	SemanticName    string
+	BusinessName    string
+	BaseGenericTerm string
+	DerivedVia      string
+}
+
+// loadSuggestion reads the cached suggestion for a column, if one exists.
+// Returns nil on cache miss (column not yet processed).
+func (s *GlossaryService) loadSuggestion(ctx context.Context, tenantID, qualifiedPath string) *cachedSuggestion {
+	var cs cachedSuggestion
+	err := s.db.QueryRowContext(ctx, `
+		SELECT semantic_name, business_name, COALESCE(base_generic_term, ''), derived_via
+		FROM sml.glossary_term_suggestions
+		WHERE tenant_id = $1 AND qualified_path = $2
+	`, tenantID, qualifiedPath).Scan(&cs.SemanticName, &cs.BusinessName, &cs.BaseGenericTerm, &cs.DerivedVia)
+	if err != nil {
+		return nil
+	}
+	return &cs
+}
+
+// upsertSuggestion persists the deterministic derivation output for a column.
+// Best-effort: failure is log-warned but does not fail the generation.
+func (s *GlossaryService) upsertSuggestion(ctx context.Context, tenantID, datasourceID, qualifiedPath, columnName string, derived derivedTermNames) {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sml.glossary_term_suggestions
+			(tenant_id, datasource_id, qualified_path, column_node_name, semantic_name, business_name, base_generic_term, derived_via, computed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		ON CONFLICT (tenant_id, qualified_path) DO UPDATE
+		   SET semantic_name = EXCLUDED.semantic_name,
+		       business_name = EXCLUDED.business_name,
+		       base_generic_term = EXCLUDED.base_generic_term,
+		       derived_via = EXCLUDED.derived_via,
+		       computed_at = now()
+	`, tenantID, datasourceID, qualifiedPath, columnName, derived.SemanticName, derived.BusinessName, derived.BaseGenericTerm, derived.source)
+	if err != nil {
+		log.Printf("[upsertSuggestion] cache write failed for %s: %v", qualifiedPath, err)
+	}
+}
+
+// cachedDefinition is a row from sml.glossary_term_definition_cache.
+type cachedDefinition struct {
+	Definition      string
+	DefinitionSource string
+}
+
+// loadDefinition reads a cached definition by cache key. Returns nil on miss.
+func (s *GlossaryService) loadDefinition(ctx context.Context, cacheKey string) *cachedDefinition {
+	var cd cachedDefinition
+	err := s.db.QueryRowContext(ctx, `
+		SELECT definition, definition_source
+		FROM sml.glossary_term_definition_cache
+		WHERE cache_key = $1
+	`, cacheKey).Scan(&cd.Definition, &cd.DefinitionSource)
+	if err != nil {
+		return nil
+	}
+	return &cd
+}
+
+// upsertDefinition persists a definition to the cache. Best-effort: failure is
+// log-warned but does not fail the generation. ON CONFLICT DO UPDATE refreshes
+// the definition if the cache key already exists.
+func (s *GlossaryService) upsertDefinition(ctx context.Context, cacheKey, semanticName, definition, source string) {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sml.glossary_term_definition_cache
+			(cache_key, semantic_name, definition, definition_source, created_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (cache_key) DO UPDATE
+		   SET definition = EXCLUDED.definition,
+		       definition_source = EXCLUDED.definition_source,
+		       created_at = now()
+	`, cacheKey, semanticName, definition, source)
+	if err != nil {
+		log.Printf("[upsertDefinition] cache write failed for %s: %v", semanticName, err)
+	}
 }

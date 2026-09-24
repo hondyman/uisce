@@ -37,6 +37,15 @@ export function useJobPolling(
     queryKey: ['glossary-bulk-job', jobId, tenantId],
     queryFn: () => apiClient<JobStatus>(`/api/glossary/jobs/${jobId}`),
     enabled: enabled && !!jobId && !!tenantId,
+    // Retry on 404 for the first 3 attempts — the job store is in-memory and
+    // the goroutine may not have called store.Create yet when the first poll
+    // arrives. After 3 retries (~4.5s), a persistent 404 is surfaced as an error.
+    retry: (failureCount, error) => {
+      if (failureCount >= 3) return false;
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.includes('404') || msg.includes('not found')) return true;
+      return false;
+    },
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (status === 'completed' || status === 'failed') return false;
