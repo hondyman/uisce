@@ -449,7 +449,7 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 			definitionSource = cached.DefinitionSource
 			log.Printf("[GenerateSemanticTerms] definition cache hit for %q (key=%s)", businessName, defCacheKey[:12])
 		} else if def, defErr := s.abbrevSvc.GenerateStandardDefinition(svcCtx, businessName, columnNodeName); defErr != nil {
-			log.Printf("[GenerateSemanticTerms] definition generation failed for %q: %v", businessName, defErr)
+			log.Printf("[GenerateSemanticTerms] definition failed for %q (col=%s): %v", businessName, columnNodeName, defErr)
 		} else {
 			definition = def.Definition
 			definitionSource = def.Source
