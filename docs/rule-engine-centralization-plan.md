@@ -220,11 +220,36 @@ Not a rule engine, but removed in the same discipline at the owner's request.
 The platform's own Cube.dev-shaped semantic model (fabric cubes/views/measures,
 `models.Cube`, semantic-term Cube properties) is live and was kept.
 
-### Remaining after Slice 5
+### Slice 6 — CI guardrail, PR #131 (2026-09-24)
 
-Slice 1 (land #74, re-land rulefabric deletion), Slice 3b (fake NAV calc engine
-→ E1), Slice 4b (frontend legacy rule UIs), Slice 6 (CI guardrail), E14
-(`boresolver` filter-group SQL compiler), RDL spin-out.
+`backend/internal/archguard/rule_engine_guard_test.go` (in CI's `go test ./...`)
+fails on any import of an embedded rule/expression/scripting/policy engine
+library, or such a module in `go.mod`, outside a shrinking allowlist whose every
+entry names the PR/slice that removes it. Mutation-checked three ways. Also
+deleted the dead `pkg/policy/rego_eval.go` and two unreferenced `.rego` files.
+
+### Slice 3b — calc terms on E1, PR #132 (stacked on #127) (2026-09-24)
+
+`mdm.ExecutionEngine` now evaluates calculation terms with `internal/rules/vm`
+(rule_ast → config.expression → legacy properties.expression) and fails loud
+instead of returning 0.0. Finding: NAV never reaches it today — term name
+mismatch (`NetAssetValue` seeded vs `"Net Asset Value"` looked up) — so no NAV
+figure changes.
+
+### E15 — live OPA/Rego engine (found in Slice 6)
+
+`pkg/governance` evaluates Rego policies for the glossary handler, pipelines
+handler and worker compliance activities: `trade_compliance.rego`,
+`pipeline_validation.rego`, `semantic_validation.rego`, `portal_authz.rego`.
+Allowlisted in the guard as "slice 7". **Owner decision needed (D5):** port the
+compliance/validation policies to E1 catalog rules; decide whether
+authorization (`portal_authz`) is in scope of "one engine".
+
+### Remaining
+
+Slice 1 (land #74, re-land rulefabric deletion), Slice 4b (frontend legacy rule
+UIs), Slice 7 / E15 (OPA), E14 (`boresolver` filter-group SQL compiler), RDL
+spin-out; after #127/#128 merge, delete their stale guard allowances.
 
 ---
 
