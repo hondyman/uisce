@@ -4330,13 +4330,21 @@ Respond with a strictly valid JSON object matching this schema:
 	}
 
 	if req.IncludeRules {
-		resp.SuggestedRules = []models.SynthesizedRule{
-			{RuleName: "ValidatePrimaryKey", Description: "Ensures primary identifier is non-empty", Severity: "ERROR", Field: "id", Script: "def validate(record):\n    return bool(record.get('id'))"},
-			{RuleName: "ValidateNonNegativeAmount", Description: "Ensures amount is not negative", Severity: "WARNING", Field: "amount", Script: "def validate(record):\n    val = record.get('amount')\n    return val is None or float(val) >= 0"},
-		}
+		// Scripts are internal/rules/vm expressions - the single rule engine
+		// (see TestSynthesizedRulesAreRuleEngineExpressions).
+		resp.SuggestedRules = synthesizedRuleSuggestions()
 	}
 
 	return resp, nil
+}
+
+// synthesizedRuleSuggestions are the starter rules offered by BO synthesis,
+// written as internal/rules/vm expressions.
+func synthesizedRuleSuggestions() []models.SynthesizedRule {
+	return []models.SynthesizedRule{
+		{RuleName: "ValidatePrimaryKey", Description: "Ensures primary identifier is non-empty", Severity: "ERROR", Field: "id", Script: "NOT_EMPTY(id)"},
+		{RuleName: "ValidateNonNegativeAmount", Description: "Ensures amount is not negative", Severity: "WARNING", Field: "amount", Script: "amount >= 0"},
+	}
 }
 
 // TranslateNLToQueryDef converts natural language queries into executable QueryDef and multi-dialect SQL
@@ -4661,7 +4669,7 @@ func (s *BusinessObjectService) DetectAnomaliesWithAI(ctx context.Context, secCt
 	summary := fmt.Sprintf("Analyzed %d records across %d fields. Detected %d data quality anomalies.", total, len(recordsResp.Columns), len(anomalies))
 	recs := []string{
 		"Add REQUIRED constraints on high-frequency null fields.",
-		"Configure Starlark validation rules for automated anomaly rejection.",
+		"Author validation rules in the rule editor for automated anomaly rejection.",
 	}
 
 	return &models.BOAIAnomalyDetectResponse{

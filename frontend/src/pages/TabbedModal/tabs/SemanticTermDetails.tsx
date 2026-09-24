@@ -53,7 +53,6 @@ import { apiFetch, getTenantHeaders } from '../../../lib/apiClient';
 import DualLineageViewer from '../Catalog/DualLineageViewer';
 import { devDebug } from '../../../utils/devLogger';
 import { Gavel as RuleIcon } from '@mui/icons-material';
-import ValidationRuleEditor from '../../../components/validation/ValidationRuleEditor';
 import { UnifiedLineageTab } from '../../../features/impact-analysis/components/UnifiedLineageTab';
 import { ImpactExplanation } from '../../../features/impact-analysis/components/ImpactExplanation';
 import { ImpactQA } from '../../../features/impact-analysis/components/ImpactQA';
@@ -1083,12 +1082,12 @@ const SemanticTermDetails: React.FC<SemanticTermDetailsProps> = ({
         {/* Validation Rules Tab */}
         <CustomTabPanel value={tabValue} index={2}>
             <Box sx={{ p: 2, height: '100%', overflow: 'auto' }}>
-                <ValidationRuleEditor 
-                    contextEntity={termData?.node_name || asset.name}
-                    // We don't restrict field, assuming rules apply to term as an entity or fields within it? 
-                    // Actually, for a term, maybe 'step_name' is typically the term if it's a leaf?
-                    // Let's pass just contextEntity for now to show all rules for this term/entity.
-                />
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Validation rules are authored and evaluated by the platform rule engine.
+                </Typography>
+                <Button variant="contained" href="/core/validation-rules/editor">
+                    Open rule editor
+                </Button>
             </Box>
         </CustomTabPanel>
 
