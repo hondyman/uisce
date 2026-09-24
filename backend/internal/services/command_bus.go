@@ -47,36 +47,6 @@ func (cp *CommandPublisher) IsEnabled() bool {
 	return cp.enabled
 }
 
-// NewCommandPublisher creates a new command publisher (Kafka/Redpanda).
-// Accepts either a Kafka brokers list or legacy AMQP URL (deprecated).
-func NewCommandPublisher(brokersOrURL string) (*CommandPublisher, error) {
-	if brokersOrURL == "" {
-		log.Println("⚠️  Command bus not configured - disabled")
-		return &CommandPublisher{enabled: false}, nil
-	}
-
-	// Detect legacy AMQP URL and disable (encourage migration)
-	if strings.HasPrefix(brokersOrURL, "amqp://") {
-		log.Printf("⚠️  Detected legacy AMQP URL %s - command bus disabled. Set KAFKA_BROKERS instead.", brokersOrURL)
-		return &CommandPublisher{enabled: false}, nil
-	}
-
-	brokers := strings.Split(brokersOrURL, ",")
-	w := &kafka.Writer{
-		Addr:     kafka.TCP(brokers...),
-		Balancer: &kafka.LeastBytes{},
-	}
-
-	log.Println("✅ Kafka-based command bus initialized")
-
-	return &CommandPublisher{
-		writer:       w,
-		commandTopic: "semlayer.commands",
-		replyTopic:   "semlayer.replies",
-		enabled:      true,
-	}, nil
-}
-
 // PublishCommand publishes a command to the command bus (Kafka). Returns the correlation ID for tracking.
 func (cp *CommandPublisher) PublishCommand(ctx context.Context, commandType CommandType, tenantID, userID string, data interface{}) (string, error) {
 	if !cp.enabled {

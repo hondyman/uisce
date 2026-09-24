@@ -86,34 +86,6 @@ scrape_configs:
     target_label: service
     replacement: 'cubejs'
 
-# Validation Service metrics
-- job_name: 'validation-service'
-  static_configs:
-  - targets: [ 'validation-service:8082' ]
-  scrape_interval: 15s
-  metrics_path: '/metrics'
-  relabel_configs:
-  - source_labels: [ __address__ ]
-    target_label: service
-    replacement: 'validation-service'
-  - source_labels: [ __address__ ]
-    target_label: port
-    replacement: '8082'
-
-# Rule Engine Service metrics
-- job_name: 'rule-engine-service'
-  static_configs:
-  - targets: [ 'rule-engine-service:8083' ]
-  scrape_interval: 15s
-  metrics_path: '/metrics'
-  relabel_configs:
-  - source_labels: [ __address__ ]
-    target_label: service
-    replacement: 'rule-engine-service'
-  - source_labels: [ __address__ ]
-    target_label: port
-    replacement: '8083'
-
 # Notifications Service metrics
 - job_name: 'notifications-service'
   static_configs:
