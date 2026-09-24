@@ -3,12 +3,14 @@ package boresolver
 import (
 	"testing"
 
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/stretchr/testify/assert"
 )
 
 // Mock Repository
 type MockBORepository struct {
-	BODefinitions map[string]*BODefinition
+	BODefinitions    map[string]*BODefinition
+	CalcTermExprs    map[string]*vm.Expression
 }
 
 func (m *MockBORepository) GetBODefinition(boID string) (*BODefinition, error) {
@@ -33,6 +35,19 @@ func (m *MockBORepository) GetBOByTechnicalName(technicalName, tenantID, datasou
 // column check and assume the predicate is always added).
 func (m *MockBORepository) TableHasColumn(drivingTable, column string) bool {
 	return true
+}
+
+func (m *MockBORepository) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	if m.CalcTermExprs == nil {
+		return nil, nil
+	}
+	result := make(map[string]*vm.Expression, len(nodeIDs))
+	for _, id := range nodeIDs {
+		if expr, ok := m.CalcTermExprs[id]; ok {
+			result[id] = expr
+		}
+	}
+	return result, nil
 }
 
 func TestSimpleSQLGeneration(t *testing.T) {

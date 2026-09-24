@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // SQLGenerationRequest defines the input for generating SQL from a Business Object.
@@ -156,6 +157,11 @@ type BORepository interface {
 	// which uses this to skip the tenant_id predicate on tables that don't
 	// have one instead of generating SQL that references a nonexistent column.
 	TableHasColumn(drivingTable, column string) bool
+	// GetCalcTermExpressions batch-fetches vm.Expression ASTs for the given
+	// catalog node IDs (which are calc-term semantic term IDs). Returns a map
+	// of nodeID → parsed Expression. Used by preloadCalcTerms to avoid N+1
+	// catalog queries.
+	GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error)
 }
 
 // BODefinition represents the metadata needed for SQL generation
@@ -180,6 +186,11 @@ type BOField struct {
 	Override          bool
 	Type              string // e.g. "reference", "string"
 	ReferenceBOID     string // if Type == "reference"
+	// TermType is "calculated" for calc-term catalog nodes (vm.Expression
+	// backed), empty for physical-column terms. The SQL generator uses this
+	// to detect calc terms and compile their expressions instead of looking
+	// up a physical column.
+	TermType string
 }
 
 
@@ -423,6 +434,11 @@ type GenerationContext struct {
 
 	// RootTenantPredicate is the pre-built root table tenant boundary condition.
 	RootTenantPredicate string
+
+	// CalcTermConfigs is a preloaded map of field ID → compiled vm.Expression
+	// for all calc-term fields in the query. Populated by preloadCalcTerms
+	// before field resolution to avoid N+1 catalog queries.
+	CalcTermConfigs map[string]*vm.Expression
 }
 
 // GenerateSQL is the main entry point. It returns the generated SQL, the
@@ -1066,4 +1082,59 @@ func (g *BOSQLGenerator) CompileValidationRuleSQL(compReq ValidationRuleCompilat
 		Args:           args,
 		PhysicalColumn: physicalCol,
 	}, nil
+}
+
+// preloadCalcTerms batch-fetches vm.Expression ASTs for all calc-term fields
+// in the BO definition. It queries catalog_node.config (which stores
+// CalcTermConfig.RuleAST) for every field with TermType == "calculated",
+// avoiding N+1 per-field catalog queries. The result is stored in
+// ctx.CalcTermConfigs keyed by field ID.
+func (g *BOSQLGenerator) preloadCalcTerms(ctx *GenerationContext, boDef *BODefinition) error {
+	var calcNodeIDs []string
+	for _, f := range boDef.Fields {
+		if f.TermType == "calculated" && f.SemanticTermID != "" {
+			calcNodeIDs = append(calcNodeIDs, f.SemanticTermID)
+		}
+	}
+	if len(calcNodeIDs) == 0 {
+		return nil
+	}
+
+	exprs, err := g.BORepository.GetCalcTermExpressions(calcNodeIDs)
+	if err != nil {
+		return fmt.Errorf("preload calc terms: %w", err)
+	}
+	ctx.CalcTermConfigs = exprs
+	return nil
+}
+
+// resolveCalcTermToSQL compiles a calc-term's vm.Expression to a SQL
+// expression string, substituting ${alias} for each resolved field reference.
+// The resolveColumn closure maps FieldRef.Path → physical column expression
+// (e.g., "t0.revenue"), so the compiled SQL references real table columns.
+//
+// Masking: for each physical column referenced by the expression, the caller
+// should verify that the column is below the masking threshold before calling
+// this function. The masking check belongs in the caller (ResolvePathWithLabel)
+// because it needs access to the tenant context.
+func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string, resolveColumn vm.ColumnResolver) (string, error) {
+	// Wrap the caller's resolveColumn to prefix columns with the table alias.
+	// The expression's FieldRef.Path values are semantic term names; the
+	// caller's resolver maps them to physical column names. We prefix with
+	// the alias to produce "t0.column_name" in the final SQL.
+	aliasedResolver := func(fieldPath string) (string, error) {
+		col, err := resolveColumn(fieldPath)
+		if err != nil {
+			return "", err
+		}
+		// If the resolver returned a bare column name (no dot), prefix
+		// with the alias. If it already has a dot (fully qualified),
+		// leave it — the caller already specified the table.
+		if !strings.Contains(col, ".") {
+			return alias + "." + col, nil
+		}
+		return col, nil
+	}
+
+	return vm.CompileToSQL(expr, aliasedResolver)
 }
