@@ -2149,6 +2149,20 @@ export interface DeFiIntegrationService {
   db: any;
 }
 
+/** DevTokenInput is the claim shape AuthContextMiddleware reads from a
+validated JWT. MintDevToken is the only approved forge helper for
+backend tests and cmd/devjwt — it builds this map and signs via
+SignToken (JWTManager). Knowing JWT_SECRET plus this helper is an
+auth-bypass kit; keep forge use in development/local/test only. */
+export interface DevTokenInput {
+  Email: string;
+  Roles: string[];
+  /** TTL defaults to 1 hour when zero or negative. */
+  TTL: any;
+  TenantIDs: string[];
+  UserID: string;
+}
+
 /** DiffReport - matches the schema structure for upgrade artifacts */
 export interface DiffReport {
   CoreVersion: string;
@@ -6376,6 +6390,10 @@ export interface UpsertPreAggRequest {
 updating a validation rule. */
 export interface UpsertValidationRuleRequest {
   BOName: string;
+  /** BindingIDs optionally scopes the rule to specific bindings of the BO;
+see ValidationRuleProperties.BindingIDs. Each must be a binding of
+BOName in this tenant. */
+  BindingIDs: string[];
   Category: string;
   Description: string;
   /** Domain: "mdm" or "compliance" for the rulefabric-consolidation
@@ -6512,13 +6530,16 @@ export interface ValidationRuleDefinition {
 /** ValidationRuleDescriptor is the API response shape. */
 export interface ValidationRuleDescriptor {
   BOName: string;
+  BindingIDs: string[];
   Category: string;
   CreatedAt: any;
   Description: string;
   Domain: string;
   GovernanceStatus: string;
   ID: any;
+  IsActive: boolean;
   Name: string;
+  Origin: string;
   RuleAST: any;
   Severity: string;
   TenantID: string;
@@ -6544,6 +6565,13 @@ return_type's role for calculated semantic terms - node metadata that
 isn't the AST itself. */
 export interface ValidationRuleProperties {
   BOName: string;
+  /** BindingIDs scopes the rule to specific bindings of the BO
+(business_object_binding.bo_binding_id). Empty means the rule applies to every
+binding, which is what every rule written before this field existed
+means, so they are unchanged. The rule's field references stay
+semantic terms either way; scoping only decides whether the rule runs
+for a write that arrived through a given binding. */
+  BindingIDs: string[];
   Category: string;
   /** Domain distinguishes which rule-authoring surface produced this
 rule - "validation" (the original BO-scoped surface), "mdm", or

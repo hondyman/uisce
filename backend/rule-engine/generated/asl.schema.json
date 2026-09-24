@@ -6267,6 +6267,34 @@
       ],
       "type": "object"
     },
+    "DevTokenInput": {
+      "description": "DevTokenInput is the claim shape AuthContextMiddleware reads from a\nvalidated JWT. MintDevToken is the only approved forge helper for\nbackend tests and cmd/devjwt — it builds this map and signs via\nSignToken (JWTManager). Knowing JWT_SECRET plus this helper is an\nauth-bypass kit; keep forge use in development/local/test only.",
+      "properties": {
+        "Email": {
+          "type": "string"
+        },
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TTL": {
+          "description": "TTL defaults to 1 hour when zero or negative."
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "UserID",
+        "Email",
+        "TenantIDs",
+        "Roles",
+        "TTL"
+      ],
+      "type": "object"
+    },
     "Dialect": {
       "enum": [
         "starrocks"
@@ -18795,6 +18823,10 @@
         "BOName": {
           "type": "string"
         },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]",
+          "description": "BindingIDs optionally scopes the rule to specific bindings of the BO;\nsee ValidationRuleProperties.BindingIDs. Each must be a binding of\nBOName in this tenant."
+        },
         "Category": {
           "type": "string"
         },
@@ -18828,7 +18860,8 @@
         "Timing",
         "Category",
         "Domain",
-        "RuleAST"
+        "RuleAST",
+        "BindingIDs"
       ],
       "type": "object"
     },
@@ -19184,6 +19217,9 @@
         "BOName": {
           "type": "string"
         },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]"
+        },
         "Category": {
           "type": "string"
         },
@@ -19198,7 +19234,13 @@
           "type": "string"
         },
         "ID": {},
+        "IsActive": {
+          "type": "boolean"
+        },
         "Name": {
+          "type": "string"
+        },
+        "Origin": {
           "type": "string"
         },
         "RuleAST": {},
@@ -19223,8 +19265,11 @@
         "Timing",
         "Category",
         "Domain",
+        "BindingIDs",
+        "Origin",
         "RuleAST",
         "GovernanceStatus",
+        "IsActive",
         "CreatedAt",
         "UpdatedAt"
       ],
@@ -19251,6 +19296,10 @@
       "properties": {
         "BOName": {
           "type": "string"
+        },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]",
+          "description": "BindingIDs scopes the rule to specific bindings of the BO\n(business_object_binding.bo_binding_id). Empty means the rule applies to every\nbinding, which is what every rule written before this field existed\nmeans, so they are unchanged. The rule's field references stay\nsemantic terms either way; scoping only decides whether the rule runs\nfor a write that arrived through a given binding."
         },
         "Category": {
           "type": "string"
@@ -19279,7 +19328,8 @@
         "Timing",
         "Category",
         "GovernanceStatus",
-        "Domain"
+        "Domain",
+        "BindingIDs"
       ],
       "type": "object"
     },

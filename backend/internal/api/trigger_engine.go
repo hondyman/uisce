@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -231,9 +232,28 @@ func (e *TriggerEngine) evaluateConditions(conditionConfig json.RawMessage, even
 	return result["met"].(bool), result, nil
 }
 
-// evaluateRule checks a single rule
+// triggerOperators maps the trigger condition vocabulary onto the single
+// rule engine's condition operators (internal/rules/vm). The hand-rolled
+// evaluator this replaces had its own semantics - including a contains that
+// never checked containment and an inList that substring-matched the list's
+// printed form.
+var triggerOperators = map[string]string{
+	"equals":             "equals",
+	"notEquals":          "not_equals",
+	"greaterThan":        ">",
+	"lessThan":           "<",
+	"greaterThanOrEqual": ">=",
+	"lessThanOrEqual":    "<=",
+	"contains":           "contains",
+	"inList":             "in",
+	"isEmpty":            "is_empty",
+	"isNotEmpty":         "is_not_empty",
+	"isTrue":             "is_true",
+	"isFalse":            "is_false",
+}
+
+// evaluateRule checks a single trigger condition with internal/rules/vm.
 func (e *TriggerEngine) evaluateRule(rule RuleCondition, data map[string]interface{}) map[string]interface{} {
-	fieldValue, exists := data[rule.Field]
 	result := map[string]interface{}{
 		"field":    rule.Field,
 		"operator": rule.Operator,
@@ -242,85 +262,27 @@ func (e *TriggerEngine) evaluateRule(rule RuleCondition, data map[string]interfa
 		"reason":   "",
 	}
 
-	if !exists {
-		result["reason"] = "field not in event data"
+	op, ok := triggerOperators[rule.Operator]
+	if !ok {
+		result["reason"] = fmt.Sprintf("unknown operator: %s", rule.Operator)
 		return result
 	}
-
-	// Operator evaluation
-	switch rule.Operator {
-	case "equals":
-		result["passed"] = fieldValue == rule.Value
-		if !result["passed"].(bool) {
-			result["reason"] = fmt.Sprintf("%v != %v", fieldValue, rule.Value)
-		}
-
-	case "notEquals":
-		result["passed"] = fieldValue != rule.Value
-
-	case "greaterThan":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv > rv
-		} else {
-			result["reason"] = "non-numeric comparison"
-		}
-
-	case "lessThan":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv < rv
-		} else {
-			result["reason"] = "non-numeric comparison"
-		}
-
-	case "greaterThanOrEqual":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv >= rv
-		}
-
-	case "lessThanOrEqual":
-		fv, ok := toFloat64(fieldValue)
-		rv, ok2 := toFloat64(rule.Value)
-		if ok && ok2 {
-			result["passed"] = fv <= rv
-		}
-
-	case "contains":
-		fvStr := fmt.Sprint(fieldValue)
-		rvStr := fmt.Sprint(rule.Value)
-		result["passed"] = len(rvStr) > 0 && contains(fvStr, rvStr)
-
-	case "inList":
-		// rule.Value should be []interface{}
-		if list, ok := rule.Value.([]interface{}); ok {
-			result["passed"] = contains(fmt.Sprint(fieldValue), fmt.Sprint(list))
-		}
-
-	case "isEmpty":
-		result["passed"] = fieldValue == nil || fieldValue == "" || fieldValue == 0
-
-	case "isNotEmpty":
-		result["passed"] = fieldValue != nil && fieldValue != "" && fieldValue != 0
-
-	case "isTrue":
-		if b, ok := fieldValue.(bool); ok {
-			result["passed"] = b
-		}
-
-	case "isFalse":
-		if b, ok := fieldValue.(bool); ok {
-			result["passed"] = !b
-		}
-
-	default:
-		result["reason"] = fmt.Sprintf("unknown operator: %s", rule.Operator)
+	node := vm.RuleNode{Type: vm.NodeTypeCondition, Condition: &vm.RuleCondition{
+		Field: rule.Field, FieldPath: rule.Field, Operator: op, Value: rule.Value,
+	}}
+	passed, err := vm.NewAdvancedEvaluator().Evaluate(node, data)
+	if err != nil {
+		result["reason"] = err.Error()
+		return result
 	}
-
+	result["passed"] = passed
+	if !passed {
+		if _, exists := data[rule.Field]; !exists {
+			result["reason"] = "field not in event data"
+		} else {
+			result["reason"] = fmt.Sprintf("%v %s %v is false", data[rule.Field], rule.Operator, rule.Value)
+		}
+	}
 	return result
 }
 
@@ -560,25 +522,6 @@ func (e *TriggerEngine) autoRejectStep(_ context.Context, bpExecutionID, stepNam
 // ============================================================================
 // UTILITY FUNCTIONS
 // ============================================================================
-
-func toFloat64(v interface{}) (float64, bool) {
-	switch val := v.(type) {
-	case float64:
-		return val, true
-	case float32:
-		return float64(val), true
-	case int:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	default:
-		return 0, false
-	}
-}
-
-func contains(str, substr string) bool {
-	return len(substr) > 0 && (str == substr || len(str) >= len(substr))
-}
 
 func renderTemplate(template string, tc *TriggerContext) string {
 	// Simple template rendering (can use text/template or mustache for production)
