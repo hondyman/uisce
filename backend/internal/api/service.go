@@ -436,11 +436,25 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 	var definition string
 	if s.abbrevSvc != nil {
 		svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
-		if def, defErr := s.abbrevSvc.GenerateStandardDefinition(svcCtx, businessName, columnNodeName); defErr != nil {
+		// Check the definition cache before calling the LLM.
+		// Cache key includes naming logic version, abbreviation version, derived tokens,
+		// and context part (when context-sensitive). Bump version constants to invalidate.
+		defCacheKey := buildDefinitionCacheKey(
+			tokenizeColumnName(columnNodeName),
+			tableSchemaContext,
+			names.ContextSensitive,
+		)
+		if cached := s.loadDefinition(ctx, defCacheKey); cached != nil {
+			definition = cached.Definition
+			definitionSource = cached.DefinitionSource
+			log.Printf("[GenerateSemanticTerms] definition cache hit for %q (key=%s)", businessName, defCacheKey[:12])
+		} else if def, defErr := s.abbrevSvc.GenerateStandardDefinition(svcCtx, businessName, columnNodeName); defErr != nil {
 			log.Printf("[GenerateSemanticTerms] definition generation failed for %q: %v", businessName, defErr)
 		} else {
 			definition = def.Definition
 			definitionSource = def.Source
+			// Cache the definition for other columns deriving the same name.
+			s.upsertDefinition(ctx, defCacheKey, semanticName, definition, definitionSource)
 		}
 	}
 	var businessTermID string
@@ -637,6 +651,22 @@ func (s *GlossaryService) PreviewSemanticTerms(ctx context.Context, tenantID str
 	for _, colID := range columnIDs {
 		node, ok := nodeMap[colID]
 		if !ok {
+			continue
+		}
+
+		// Check the suggestions cache first. On wizard reopen, cached suggestions
+		// avoid re-derivation — the same column gets the same name it had on first run.
+		if cached := s.loadSuggestion(ctx, tenantID, node.qualifiedPath); cached != nil {
+			businessName := cached.BusinessName
+			if businessName == "" {
+				businessName = titleCase(pascalCaseToWords(cached.SemanticName))
+			}
+			results = append(results, PreviewResult{
+				ColumnID:     colID,
+				SemanticName: cached.SemanticName,
+				BusinessName: businessName,
+				Source:       "cached_" + cached.DerivedVia,
+			})
 			continue
 		}
 
