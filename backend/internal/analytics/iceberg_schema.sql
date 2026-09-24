@@ -1,6 +1,6 @@
 -- Iceberg Schema for Hybrid Analytics (Cold Store)
--- These tables are typically managed by a catalog like AWS Glue, Nessie, or Hive Metastore.
--- The syntax below is generic SQL for defining Iceberg tables (e.g., via Trino or Spark SQL).
+-- These tables are typically managed by a catalog like AWS Glue, Lakekeeper/Nessie, or Hive Metastore.
+-- The syntax below is generic SQL for defining Iceberg tables (e.g., via DataFusion, StarRocks, or Spark SQL).
 
 -- 1. Trades History (Long-term Retention)
 CREATE TABLE IF NOT EXISTS trades_history (

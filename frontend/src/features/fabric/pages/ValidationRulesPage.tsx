@@ -53,6 +53,7 @@ import AuditLogDialog from '../dialogs/AuditLogDialog';
 import SettingsDialog, { ValidationSettings } from '../dialogs/SettingsDialog';
 import ExpressionBuilder from '../../../components/ExpressionBuilder/ExpressionBuilder';
 import { ConditionGroup } from '../../../components/ExpressionBuilder/AdvancedConditionBuilder';
+import { apiFetch } from '../../../lib/apiClient';
 
 // Helper to convert ConditionGroup to CUE string
 const conditionGroupToCue = (group: ConditionGroup): string => {
@@ -299,16 +300,12 @@ const ValidationRulesPage: React.FC<ValidationRulesPageProps> = ({
           params.append('target_entity', targetEntity);
         }
 
-        const response = await fetch(`/api/validation-rules?${params.toString()}`, {
+        const response = await apiFetch(`/api/validation-rules?${params.toString()}`, {
           headers: {
             'X-Tenant-ID': tenantId,
             'X-Tenant-Datasource-ID': datasourceId,
           },
         });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch validation rules');
-        }
 
         const data = await response.json();
         const rulesData = Array.isArray(data) ? data : (data.rules || []);
@@ -459,7 +456,7 @@ const ValidationRulesPage: React.FC<ValidationRulesPageProps> = ({
     try {
       if (editDialogOpen && selectedRule) {
         // Update
-        const response = await fetch(`/api/validation-rules/${selectedRule.id}?tenant_id=${tenantId}`, {
+        await apiFetch(`/api/validation-rules/${selectedRule.id}?tenant_id=${tenantId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -469,13 +466,11 @@ const ValidationRulesPage: React.FC<ValidationRulesPageProps> = ({
           body: JSON.stringify(payload)
         });
 
-        if (!response.ok) throw new Error('Failed to update rule');
-        
         notification.success('Rule updated successfully');
         setEditDialogOpen(false);
       } else {
         // Create
-        const response = await fetch(`/api/validation-rules?tenant_id=${tenantId}&datasource_id=${datasourceId}`, {
+        await apiFetch(`/api/validation-rules?tenant_id=${tenantId}&datasource_id=${datasourceId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -484,11 +479,6 @@ const ValidationRulesPage: React.FC<ValidationRulesPageProps> = ({
           },
           body: JSON.stringify(payload)
         });
-
-        if (!response.ok) {
-           const errData = await response.json();
-           throw new Error(errData.details || errData.error || 'Failed to create rule');
-        }
 
         notification.success('Rule created successfully');
         setCreateDialogOpen(false);
@@ -528,17 +518,13 @@ const ValidationRulesPage: React.FC<ValidationRulesPageProps> = ({
   const handleDeleteRule = async (rule: ValidationRule) => {
     try {
       // Call the backend API to delete the rule
-      const response = await fetch(`/api/validation-rules/${rule.id}`, {
+      await apiFetch(`/api/validation-rules/${rule.id}`, {
         method: 'DELETE',
         headers: {
           'X-Tenant-ID': tenantId,
           'X-Tenant-Datasource-ID': datasourceId,
         },
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete rule');
-      }
 
       // Update local state after successful deletion
       const updatedRules = rules.filter(r => r.id !== rule.id);

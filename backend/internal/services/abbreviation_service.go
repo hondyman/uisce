@@ -8,9 +8,43 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+// glossaryLLMCalls tracks every LLM attempt made by the glossary pipeline,
+// labelled by tenant and method (expansion, qualify, definition). The counter
+// is incremented on attempt, not on success — a 429-then-retry shows up as 2
+// calls; a failure still counts. This gives prod-level visibility into the
+// exact number PR-β's pre-grouped dispatch is expected to reduce.
+var glossaryLLMCalls = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "glossary_llm_calls_total",
+		Help: "Total LLM call attempts by glossary pipeline, labelled by tenant and method.",
+	},
+	[]string{"tenant", "method"},
+)
+
+func init() {
+	prometheus.MustRegister(glossaryLLMCalls)
+}
+
+// extractTenantFromContext reads the tenant_id value that deriveTermNames /
+// generateSingleTerm place into svcCtx via context.WithValue. Falls back to
+// "unknown" if the key is absent (should never happen in normal flow).
+func extractTenantFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value("tenant_id").(string); ok && v != "" {
+		return v
+	}
+	return "unknown"
+}
+
+// recordLLMCall increments the glossary LLM counter for the given method.
+func recordLLMCall(ctx context.Context, method string) {
+	glossaryLLMCalls.WithLabelValues(extractTenantFromContext(ctx), method).Inc()
+}
 
 // AbbreviationService handles abbreviation lookups and management
 type AbbreviationService struct {
@@ -21,7 +55,7 @@ type AbbreviationService struct {
 // getGoldCopyTenantID retrieves the tenant_id of the gold copy tenant
 func (s *AbbreviationService) getGoldCopyTenantID(ctx context.Context) (string, error) {
 	var tenantID string
-	query := `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`
+	query := `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`
 	err := s.db.GetContext(ctx, &tenantID, query)
 	if err != nil {
 		return "", fmt.Errorf("failed to get gold copy tenant: %w", err)
@@ -459,7 +493,10 @@ func (s *AbbreviationService) ScanForAbbreviations(ctx context.Context) ([]strin
 // were tokenized from, so an ambiguous token like "EX" gets expanded the way
 // it's actually used in that name ("ex-dividend date") rather than the most
 // generic reading ("exchange").
-func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string) (map[string]string, error) {
+// tableSchemaContext provides table and schema name for disambiguation; siblingColumnNames
+// provides context from other columns in the same table (capped at 40).
+func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, candidates []string, contextHint string, tableSchemaContext string, siblingColumnNames []string) (map[string]string, error) {
+	logging.GetLogger().Sugar().Infof("[SuggestExpansionsInContext] called with %d candidates: %v", len(candidates), candidates)
 	if s.llmProvider == nil {
 		return nil, fmt.Errorf("LLM provider not configured")
 	}
@@ -467,24 +504,46 @@ func (s *AbbreviationService) SuggestExpansionsInContext(ctx context.Context, ca
 		return map[string]string{}, nil
 	}
 
+	// Cap sibling columns to avoid prompt bloat
+	maxSiblings := 40
+	siblings := siblingColumnNames
+	if len(siblings) > maxSiblings {
+		siblings = siblings[:maxSiblings]
+	}
+
+	var siblingContext string
+	if len(siblings) > 0 {
+		siblingContext = fmt.Sprintf("\nOther columns in the same table (for disambiguation): %s", strings.Join(siblings, ", "))
+	} else {
+		siblingContext = ""
+	}
+
 	prompt := fmt.Sprintf(`You are a data architect expert in Wealth Management and Financial domains, grounded in
 industry-standard terminology from FINRA (Financial Industry Regulatory Authority), the
 EDM Council's Financial Industry Business Ontology (FIBO), and ISO 20022.
 
-These potential abbreviations were extracted from the database column name %q. Use that
-full context to resolve any abbreviation that has more than one common meaning (e.g. "EX" in
+These potential abbreviations were extracted from the database column name %q.%s
+Use that full context to resolve any abbreviation that has more than one common meaning (e.g. "EX" in
 "ex_date" means "ex-dividend", not "exchange"; "EX" in "exch_cd" means "exchange").
 Abbreviations to expand: %s
+
+Conventions:
+- Prefer "Identifier" over "Id" for primary/foreign keys (e.g., "AccountIdentifier" not "AccountId")
+- Prefer "Number" over "Num" for codes and identifiers
+- Use standard FIBO/ISO 20022 names when applicable
 
 Return ONLY a valid JSON object where keys are the abbreviations and values are the suggested full words (in UPPERCASE).
 If you are unsure or it looks like a full word already, exclude it from the JSON.
 Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
-`, contextHint, strings.Join(candidates, ", "))
+`, contextHint, siblingContext, strings.Join(candidates, ", "))
 
+	recordLLMCall(ctx, "expansion")
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
+		logging.GetLogger().Sugar().Errorf("[SuggestExpansionsInContext] LLM call failed for %d tokens: %v", len(candidates), err)
 		return nil, fmt.Errorf("LLM generation failed: %w", err)
 	}
+	logging.GetLogger().Sugar().Infof("[SuggestExpansionsInContext] AI expansion suggestion generated for %d tokens: %v", len(candidates), candidates)
 
 	cleanResponse := strings.TrimSpace(response)
 	cleanResponse = strings.TrimPrefix(cleanResponse, "```json")
@@ -497,6 +556,74 @@ Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 	return suggestions, nil
+}
+
+// QualifyGenericWord uses the LLM to produce a contextually-qualified term name
+// from a bare generic word (e.g. "city" + table "employees" → "EmployeeCity").
+// Returns the qualified term or an empty string if the LLM cannot help.
+func (s *AbbreviationService) QualifyGenericWord(ctx context.Context, genericWord string, tableName string, siblingColumnNames []string) (string, error) {
+	logging.GetLogger().Sugar().Infof("[QualifyGenericWord] qualifying %q using table %q", genericWord, tableName)
+	if s.llmProvider == nil {
+		return "", fmt.Errorf("LLM provider not configured")
+	}
+
+	maxSiblings := 40
+	siblings := siblingColumnNames
+	if len(siblings) > maxSiblings {
+		siblings = siblings[:maxSiblings]
+	}
+
+	var siblingContext string
+	if len(siblings) > 0 {
+		siblingContext = fmt.Sprintf("\nOther columns in the same table (for disambiguation): %s", strings.Join(siblings, ", "))
+	}
+
+	prompt := fmt.Sprintf(`You are a data architect expert in Wealth Management and Financial domains, grounded in
+industry-standard terminology from FINRA (Financial Industry Regulatory Authority), the
+EDM Council's Financial Industry Business Ontology (FIBO), and ISO 20022.
+
+A database column %q was found in the %q table.
+This column name is a generic word that is ambiguous without table context.
+Produce a qualified, contextually-specific term name by combining the table name with the column concept.
+
+Examples of qualified names this task should produce:
+- column "city" in table "employees"  → "EmployeeCity"
+- column "city" in table "issuers"    → "IssuerCity"
+- column "name" in table "brokers"    → "BrokerName"
+- column "status" in table "orders"   → "OrderStatus"
+- column "type" in table "accounts"   → "AccountType"
+- column "type" in table "securities" → "SecurityType"
+- column "amount" in table "transactions" → "TransactionAmount"
+- column "date" in table "settlements"  → "SettlementDate"
+
+Rules:
+- Always prefix with the table's business name (use the table name as-given if the business name is unknown)
+- Use PascalCase for the result
+- If the column name is already specific (e.g. "isin", "cusip", "lei"), return just the column name unchanged
+- Do NOT produce a plain generic word like "City" or "Name" — the whole point is disambiguation
+
+%s
+
+Return ONLY the qualified term name as a single PascalCase word, with no surrounding text or explanation.
+Example valid responses: EmployeeCity, OrderStatus, TransactionAmount
+`, genericWord, tableName, siblingContext)
+
+	recordLLMCall(ctx, "qualify")
+	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("[QualifyGenericWord] LLM call failed for %q: %v", genericWord, err)
+		return "", fmt.Errorf("LLM qualification failed: %w", err)
+	}
+	logging.GetLogger().Sugar().Infof("[QualifyGenericWord] AI qualified %q → %q", genericWord, strings.TrimSpace(response))
+
+	qualified := strings.TrimSpace(response)
+	qualified = strings.TrimPrefix(qualified, "```json")
+	qualified = strings.TrimPrefix(qualified, "```")
+	qualified = strings.TrimSuffix(qualified, "```")
+	qualified = strings.TrimSpace(qualified)
+	qualified = strings.Trim(qualified, "\"'")
+
+	return qualified, nil
 }
 
 // SuggestExpansions uses LLM to suggest expansions for abbreviations
@@ -597,6 +724,7 @@ Return ONLY a JSON object, no commentary, no markdown fences:
 {"definition": "one or two sentence definition", "source": "FINRA" | "EDM Council FIBO" | "ISO 20022" | "generated"}`,
 		termName, sourceContext)
 
+	recordLLMCall(ctx, "definition")
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM definition generation failed: %w", err)

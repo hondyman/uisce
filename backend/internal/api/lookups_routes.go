@@ -115,7 +115,7 @@ func handleCreateLookup(db *sql.DB) http.HandlerFunc {
 
 		// Check if this tenant is gold copy to set IsCore
 		var goldCopyTenantID string
-		err = db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err = db.QueryRow(`SELECT id FROM (SELECT uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 		if err == nil && goldCopyTenantID == tenantID {
 			l.IsCore = true
 		}
@@ -265,7 +265,7 @@ func handleCreateLookupValue(db *sql.DB) http.HandlerFunc {
 
 		// Check if this tenant is gold copy to set IsCore
 		var goldCopyTenantID string
-		err = db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err = db.QueryRow(`SELECT id FROM (SELECT uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 		if err == nil && goldCopyTenantID == tenantID {
 			v.IsCore = true
 		}
@@ -362,7 +362,7 @@ func handleListLookups(db *sql.DB) http.HandlerFunc {
 
 		// First, get the gold copy tenant ID (tenant with gold_copy = true)
 		var goldCopyTenantID sql.NullString
-		err := db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err := db.QueryRow(`SELECT id FROM (SELECT uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 		if err != nil && err != sql.ErrNoRows {
 			http.Error(w, "Failed to find gold copy tenant: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -484,7 +484,7 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 
 		// Get gold copy tenant
 		var goldCopyTenantID sql.NullString
-		err := db.QueryRow(`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyTenantID)
+		err := db.QueryRow(`SELECT id FROM (SELECT uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyTenantID)
 		if err != nil && err != sql.ErrNoRows {
 			http.Error(w, "Failed to find gold copy tenant: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -493,9 +493,9 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 		// First, check if this lookup is table-backed or lookup_values backed (lookupID can be UUID or lookup name e.g. "regions")
 		var sourceTable sql.NullString
 		var actualLookupID string
-		lookupQuery := `SELECT id, source_table FROM lookups WHERE (id::text = $1 OR LOWER(name) = LOWER($1)) AND (tenant_id = $2 OR tenant_id = $3) LIMIT 1`
+		lookupQuery := `SELECT id, source_table FROM lookups WHERE (CAST(id AS TEXT) = $1 OR LOWER(name) = LOWER($1)) AND (tenant_id = $2 OR tenant_id = $3) LIMIT 1`
 		if !goldCopyTenantID.Valid {
-			lookupQuery = `SELECT id, source_table FROM lookups WHERE (id::text = $1 OR LOWER(name) = LOWER($1)) AND tenant_id = $2 AND $3=$3 LIMIT 1`
+			lookupQuery = `SELECT id, source_table FROM lookups WHERE (CAST(id AS TEXT) = $1 OR LOWER(name) = LOWER($1)) AND tenant_id = $2 AND $3=$3 LIMIT 1`
 		}
 		err = db.QueryRow(lookupQuery, lookupID, tenantID, goldCopyTenantID.String).Scan(&actualLookupID, &sourceTable)
 		if err != nil && err != sql.ErrNoRows {
@@ -593,14 +593,14 @@ func handleGetLookupValues(db *sql.DB) http.HandlerFunc {
 				// Filter by parent_id for cascading
 				rows, err = db.Query(`SELECT id, lookup_id, tenant_id, COALESCE(value, '') as value, COALESCE(label, '') as label, parent_id, metadata, created_at 
 					FROM lookup_values 
-					WHERE (tenant_id = $1 OR tenant_id = $2) AND lookup_id::text = $3 AND parent_id = $4 
+					WHERE (tenant_id = $1 OR tenant_id = $2) AND CAST(lookup_id AS TEXT) = $3 AND parent_id = $4 
 					ORDER BY label LIMIT $5 OFFSET $6`,
 					tenantID, goldCopyTenantID.String, lookupID, parentIDFilter, limit, cursor)
 			} else {
 				// Get top-level items (where parent_id IS NULL)
 				rows, err = db.Query(`SELECT id, lookup_id, tenant_id, COALESCE(value, '') as value, COALESCE(label, '') as label, parent_id, metadata, created_at 
 					FROM lookup_values 
-					WHERE (tenant_id = $1 OR tenant_id = $2) AND lookup_id::text = $3 AND parent_id IS NULL 
+					WHERE (tenant_id = $1 OR tenant_id = $2) AND CAST(lookup_id AS TEXT) = $3 AND parent_id IS NULL 
 					ORDER BY label LIMIT $4 OFFSET $5`,
 					tenantID, goldCopyTenantID.String, lookupID, limit, cursor)
 			}

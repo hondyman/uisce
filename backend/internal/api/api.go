@@ -29,6 +29,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/altinvest/alternative_investment"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/audit"
+	"github.com/hondyman/uisce/backend/internal/auth"
 	"github.com/hondyman/uisce/backend/internal/billing"
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/bp"
@@ -38,6 +39,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/cashflow/settlement"
 	"github.com/hondyman/uisce/backend/internal/cbo"
 	"github.com/hondyman/uisce/backend/internal/data_intelligence/tiering"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	charts "github.com/hondyman/uisce/backend/internal/db/charts"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/financial"
@@ -56,6 +58,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
+	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
@@ -155,6 +158,7 @@ type Server struct {
 	AggregatesDB            *sql.DB
 	Reg                     *Registry
 	WsHub                   *WebSocketHub
+	WsVault                 *auth.WsTicketVault
 	SemanticNameResolver    *SemanticNameResolver
 	AuditSvc                *audit.Service
 	NotificationSvc         *services.EngagementNotificationService
@@ -198,7 +202,6 @@ type Server struct {
 	SuccessionService *succession.Service
 	GraphService      *catalogmeta.GraphService
 	WriteHandler      *handlers.WriteHandler
-	MCPHandler        *handlers.MCPHandler
 	IgniteClient      *infrastructure.IgniteClient
 	LineageSvc        *services.LineageService
 	CueEngine         *services.CueEngine
@@ -216,7 +219,8 @@ type Server struct {
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
 	DrillDownResolver       *optimizer.DrillDownResolver
-	SavedQueryHandler       *handlers.SavedQueryHandler
+	SavedQueryHandler       *querybuilder.SavedQueryHandler
+	SavedQueryFolderHandler *querybuilder.SavedQueryFolderHandler
 	SearchHandler           *handlers.SearchHandler
 	NLQHandler              *handlers.NLQHandler
 	AuditHistoryHandler     *handlers.AuditHistoryHandler
@@ -499,7 +503,6 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use transaction to set RLS context
 	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to start transaction: %v", err), http.StatusInternalServerError)
@@ -507,8 +510,8 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// Set RLS context for this request
-	if _, err := tx.ExecContext(r.Context(), "SELECT set_config('app.tenant_id', $1, true)", tenantID); err != nil {
+	// RLS choke point — same ApplyTenantGUCs as WithTenantTransaction (SET LOCAL).
+	if err := dbpkg.ApplyTenantGUCs(r.Context(), tx, tenantID, ""); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to set tenant context: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -527,10 +530,13 @@ func (s *Server) getSemanticBundle(w http.ResponseWriter, r *http.Request) {
 
 	// Query all fields for this business object
 	fRows, err := tx.QueryContext(r.Context(),
-		`SELECT id, field_name, display_label, column_name, field_type, field_description
-		 FROM public.bo_fields
-		 WHERE tenant_id = $1 AND bo_id = $2
-		 ORDER BY display_order`,
+		`SELECT id, field_name, COALESCE(display_name, field_name) AS display_label,
+		        COALESCE(technical_name, field_name) AS column_name,
+		        COALESCE(data_type, 'string') AS field_type,
+		        COALESCE(description, '') AS field_description
+		 FROM public.business_object_fields
+		 WHERE tenant_id = $1::uuid AND bo_id = $2::uuid
+		 ORDER BY display_order, created_at`,
 		tenantID, boID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to fetch fields: %v", err), http.StatusInternalServerError)
@@ -657,6 +663,23 @@ func (a *redisClientAdapter) Ping(ctx context.Context) error {
 	return a.client.Ping(ctx).Err()
 }
 
+// deprecatedMCPToolsCall wraps Path 6's handler on the legacy
+// POST /api/mcp/tools/call URL. Emits Deprecation + Link so shim removal
+// is data-driven. Prefer POST /api/agentic/proposals.
+//
+// Removal gate: delete the shim only after observed zero traffic on
+// /api/mcp/tools/call over a sustained window (Deprecation/log counts).
+// TestMCP_RouteTableDump asserts BOTH /api/agentic/proposals and the
+// shim remain registered until that gate trips.
+func deprecatedMCPToolsCall(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Deprecation", "true")
+		w.Header().Set("Link", `</api/agentic/proposals>; rel="successor-version"`)
+		log.Printf("[mcp] deprecated POST /api/mcp/tools/call used; prefer /api/agentic/proposals")
+		next(w, r)
+	}
+}
+
 func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService, temporalClient temporalclient.Client, qosManager *services.QoSManager, geminiClient *GeminiClient, resolver security.DatasourceResolver, redisClient *redis.Client, complianceDeps *ComplianceDeps) *chi.Mux {
 
 	// Create chi router and helper services required for setup
@@ -704,6 +727,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Moved to end of function using rootMux mounting strategy to avoid panic
 	// Development middleware: log every incoming request (method, path, headers, body)
 	// This is intentionally verbose and should only be enabled during local debugging.
+
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// Read body (if any) for logging and restore it for downstream handlers
@@ -712,13 +736,27 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				bodyBytes, _ = io.ReadAll(req.Body)
 				req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 			}
-			// Collect a subset of headers for brevity
+			// Collect a subset of headers for brevity. Authorization is
+			// redacted (see redactAuthHeader) to keep credential material
+			// out of the unrotated /tmp/uisce-server.log.
 			headersToLog := []string{"Content-Type", "Authorization", "Origin", "X-Tenant-ID", "X-Tenant-Datasource-ID"}
 			headerParts := []string{}
 			for _, h := range headersToLog {
-				headerParts = append(headerParts, fmt.Sprintf("%s=%s", h, req.Header.Get(h)))
+				val := req.Header.Get(h)
+				if h == "Authorization" {
+					val = redactAuthHeader(val)
+				}
+				headerParts = append(headerParts, fmt.Sprintf("%s=%s", h, val))
 			}
-			fmt.Fprintf(os.Stderr, "[REQ] %s %s Headers:%s Body:%s\n", req.Method, req.URL.Path, strings.Join(headerParts, ","), string(bodyBytes))
+			// Body credential fields are redacted by default. Set
+			// REQUEST_TRACE_VERBOSE=true to opt into unredacted logging
+			// for local debugging — the only context where the wire
+			// body's full fidelity is needed.
+			bodyToLog := bodyBytes
+			if os.Getenv("REQUEST_TRACE_VERBOSE") != "true" {
+				bodyToLog = redactBody(bodyBytes)
+			}
+			fmt.Fprintf(os.Stderr, "[REQ] %s %s Headers:%s Body:%s\n", req.Method, req.URL.Path, strings.Join(headerParts, ","), string(bodyToLog))
 			fmt.Fprintf(os.Stderr, "[DEBUG-MARKER] path=%s method=%s contains_bo=%v\n", req.URL.Path, req.Method, strings.Contains(req.URL.Path, "/business-objects"))
 
 			// Additional detailed logging for business-objects endpoint
@@ -831,6 +869,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				}
 			}
 		}()
+	} else {
+		log.Printf("[WARN] KEYCLOAK_JWKS_URL not set — skipping JWKS load; Keycloak-issued tokens will be REJECTED")
 	}
 
 	// Development helper: optionally seed an API key for a test user so local
@@ -940,6 +980,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		auditService:         audit.NewChannelAuditService(sqlxDB),
 		Reg:                  &Registry{DB: db}, // This needs to be adjusted based on the actual store structure
 		WsHub:                newWebSocketHub(),
+		WsVault:              auth.NewWsTicketVault(auth.DefaultWsTicketVaultConfig()),
 		SemanticNameResolver: semanticNameResolver,
 		AuditSvc:             auditSvc,
 		NotificationSvc:      notificationSvc,
@@ -1048,6 +1089,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize semantic mapping service with fuzzy logic and abbreviation support
 	// Initialize semantic mapping service with fuzzy logic, abbreviation support, and auditing
 	srv.SemanticMappingSvc = analytics.NewSemanticMappingService(sqlxDB, analytics.NewSimpleFIBOMatcher(), analyticsAbbrevSvc, llmProvider, semanticPublisher, sqlRepo)
+	if err := srv.SemanticMappingSvc.InitializeGeminiProvider(os.Getenv("GEMINI_API_KEY")); err != nil {
+		logging.GetLogger().Sugar().Warnf("⚠️ SemanticMappingSvc: Gemini provider not initialized: %v (AI semantic term suggestions will use fallback logic)", err)
+	} else {
+		logging.GetLogger().Sugar().Info("✅ SemanticMappingSvc: Gemini provider initialized for AI semantic term generation")
+	}
 	srv.SemanticMappingHandler = handlers.NewSemanticMappingHandler(srv.SemanticMappingSvc, handlers.SecurityContextDeps{
 		Resolver: srv.DatasourceResolver,
 	})
@@ -1073,8 +1119,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	queryService := analytics.NewQueryService(sqlxDB, optService, analyticsModelProvider)
 	queryHandler := handlers.NewQueryHandler(queryService, securityDeps)
 	srv.QueryHandler = queryHandler
-	savedQueryHandler := handlers.NewSavedQueryHandler(queryService, securityDeps)
-	srv.SavedQueryHandler = savedQueryHandler
 
 	// Initialize Query Builder (QueryDef compiler gateway)
 	boResolver := boresolver.NewPostgresBORepository(sqlxDB)
@@ -1090,11 +1134,24 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		qbRelationships := analytics.NewRelationshipInferenceService(sqlxDB)
 		qbService := querybuilder.NewQueryService(boGenerator, boResolver, qbRelationships)
+		// srv.SQLXDB isn't assigned until later in NewServer (line ~1464) -
+		// using it here captured a permanent nil, so QueryBuilderHandler.Execute
+		// always failed its "no database connection" check regardless of which
+		// datasource resolved correctly. sqlxDB is the same connection, already
+		// initialized at this point.
 		qbExecutor := &queryBuilderExecutor{
-			defaultDB:    srv.SQLXDB,
+			defaultDB:    sqlxDB,
 			aggregatesDB: sqlx.NewDb(srv.AggregatesDB, "postgres"),
 		}
 		srv.QueryBuilderHandler = querybuilder.NewQueryBuilderHandler(qbService, qbExecutor, securityDeps)
+		// SavedQueryHandler reuses this same qbService/qbExecutor pair so a
+		// saved query executes through the identical SQL-generation and
+		// tenant-scoping path as an ad-hoc /api/query/execute call - see
+		// saved_query_handler.go's doc comment for why it isn't constructed
+		// alongside QueryHandler above (qbService/qbExecutor don't exist yet
+		// at that point in NewServer).
+		srv.SavedQueryHandler = querybuilder.NewSavedQueryHandler(sqlxDB, qbService, qbExecutor, securityDeps)
+		srv.SavedQueryFolderHandler = querybuilder.NewSavedQueryFolderHandler(sqlxDB, securityDeps)
 	}
 
 	boStatusService := analytics.NewBOStatusService(srv.SQLXDB)
@@ -1155,7 +1212,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
 
 	// --- Audit & History Wiring ---
-	// Trino audit chain removed - auditHistoryHandler remains nil
+	// Legacy audit chain decommissioned - auditHistoryHandler remains nil
 	var auditHistoryHandler *handlers.AuditHistoryHandler
 
 	srv.CalculationHandler = handlers.NewCalculationHandler(semanticCalculationSvc)
@@ -1320,6 +1377,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	validationRuleSvc := analytics.NewValidationRuleService(sqlxDB)
 	validationRuleHandler := handlers.NewValidationRuleHandler(validationRuleSvc, sqlxDB)
 
+	// Page Studio pages (page_definitions): constructed further below, once
+	// boService (needed for related-BO-aware "Generate with AI") exists -
+	// see the block right after catalogmeta.NewBusinessObjectService.
+
+	// Navigation menu (navigation_menu_nodes) - the table, FK self-reference,
+	// and a seeded row or two already existed; nothing served or wrote it.
+	navigationMenuHandler := handlers.NewNavigationMenuHandler(sqlxDB)
+
 	// Calc terms as catalog nodes - calculated semantic terms with a real
 	// vm.Expression rule_ast (parsed server-side via vm.ParseExpression),
 	// the calc side's mirror of validation rules above. Consumed by
@@ -1403,6 +1468,60 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	boHandler := NewBusinessObjectHandler(boService, srv.DatasourceResolver, sqlxDB)
 	// boHandler.RegisterRoutes(r) - Moved below into /api group
 
+	// Page Studio pages (page_definitions) - the drag-and-drop page builder
+	// UI and its api/pageStudio.ts client existed with no backend at all;
+	// every save 404'd. CRUD-only, same pattern as the handlers above.
+	// "Generate with AI" calls out through geminiClient when configured
+	// (adapter closure here, not a shared type, because handlers can't
+	// import internal/api - see handlers.PageAIGenerateFunc); it falls back
+	// to a deterministic template inside the handler when geminiClient is
+	// nil (no GEMINI_API_KEY configured for this deployment). boService
+	// (constructed just above) grounds generation in the BO's real related
+	// Business Objects, not just its own fields.
+	var pageAIGenerate handlers.PageAIGenerateFunc
+	if geminiClient != nil {
+		pageAIGenerate = func(ctx context.Context, boName, boKey, description, pageKind string, fields []handlers.PageAIField, relatedBOs []handlers.PageAIRelatedBO) (*handlers.PageAISpec, error) {
+			apiFields := make([]PageGenerationField, len(fields))
+			for i, f := range fields {
+				apiFields[i] = PageGenerationField{Key: f.Key, DisplayName: f.DisplayName, DataType: f.DataType, Role: f.Role}
+			}
+			apiRelated := make([]RelatedBOSummary, len(relatedBOs))
+			for i, rel := range relatedBOs {
+				relFields := make([]PageGenerationField, len(rel.Fields))
+				for j, f := range rel.Fields {
+					relFields[j] = PageGenerationField{Key: f.Key, DisplayName: f.DisplayName, DataType: f.DataType, Role: f.Role}
+				}
+				apiRelated[i] = RelatedBOSummary{BOKey: rel.BOKey, DisplayName: rel.DisplayName, RelationshipType: rel.RelationshipType, Cardinality: rel.Cardinality, Fields: relFields}
+			}
+			spec, err := geminiClient.GeneratePageSpec(ctx, boName, boKey, description, pageKind, apiFields, apiRelated)
+			if err != nil {
+				return nil, err
+			}
+			sections := make([]handlers.PageAISection, len(spec.Sections))
+			for i, s := range spec.Sections {
+				sections[i] = handlers.PageAISection{BOKey: s.BOKey, Type: s.Type, Title: s.Title}
+			}
+			filterBar := make([]handlers.PageAISection, len(spec.FilterBar))
+			for i, s := range spec.FilterBar {
+				filterBar[i] = handlers.PageAISection{BOKey: s.BOKey, Type: s.Type, Title: s.Title}
+			}
+			return &handlers.PageAISpec{Title: spec.Title, LayoutTemplate: spec.LayoutTemplate, PageKind: spec.PageKind, Sections: sections, FilterBar: filterBar}, nil
+		}
+	}
+	pageStudioHandler := handlers.NewPageStudioHandler(sqlxDB, boResolver, boService, pageAIGenerate)
+
+	// Report Builder "Generate with AI" + in-editor copilot (Phase 6.1,
+	// HANDOFF_REPORT_BUILDER_SPINE_PLAN.md). A sibling of reportHandler,
+	// not an addition to it - AI generation never reads/writes
+	// report_templates, only returns a spec, so it doesn't belong on the
+	// handler whose constructor 12 existing tests already call. boResolver/
+	// boService are already in scope here (same dependencies pageStudioHandler
+	// just used above); geminiClient is nil-safe the same way pageAIGenerate
+	// is - ReportGenerationHandler falls back to a deterministic template
+	// when it's nil.
+	reportGenerationHandler := NewReportGenerationHandler(sqlxDB, boResolver, boService, geminiClient)
+	reportGenerationHandler.RegisterRoutes(r)
+
 	// Initialize Catalog Handler (Phase 18)
 	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
 	// Registration moved to /api group below
@@ -1410,7 +1529,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Semantic Terms handler for catalog_node queries
 	semanticTermsHandler := NewSemanticTermsHandler(db, schedulerSecurityDeps)
 	// Registration moved to /api group
-
 
 	// Initialize Graph-Native Lineage Service (Phase 12)
 	// sqlRepo already created above
@@ -1492,10 +1610,16 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	layoutHandler := NewLayoutHandler(sqlxDB.DB, schedulerSecurityDeps)
 	layoutHandler.RegisterRoutes(r)
 
+	// Register multi-tenant user workspace layout profile handler
+	workspaceLayoutHandler := NewWorkspaceLayoutHandler(db)
+	instrumentSearchHandler := NewInstrumentSearchHandler(db)
+
 	// API routes
 	routes := NewRoutes()
 
 	r.Route("/api", func(r chi.Router) {
+		workspaceLayoutHandler.RegisterRoutes(r)
+		r.Get("/instruments/search", instrumentSearchHandler.Search)
 		RegisterSemanticTagsRoutes(r, sqlxDB)
 
 		r.Post("/ai/generate-page", ai.NewPageCopilotService(sqlxDB).GeneratePageHandler)
@@ -1506,6 +1630,15 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Validation rules as catalog nodes (unified rule engine)
 		validationRuleHandler.RegisterRoutes(r)
+
+		// Page Studio pages
+		pageStudioHandler.RegisterRoutes(r)
+
+		handlers.NewOMSFIXCommandHandler(sqlxDB, temporalClient).RegisterRoutes(r)
+		handlers.NewBOWizardHandler(sqlxDB).RegisterRoutes(r)
+
+		// Navigation menu
+		navigationMenuHandler.RegisterRoutes(r)
 
 		// Calc terms as catalog nodes (unified rule engine, calc side)
 		calcTermHandler.RegisterRoutes(r)
@@ -1522,11 +1655,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		RegisterLookupsRoutes(r, db)
 
 		customAttrSvc := metadata.NewCustomAttributeService(sqlxDB)
-		bindingSvc := metadata.NewBindingService(sqlxDB)
 		r.Post("/tenants/custom-attributes", customAttrSvc.RegisterAttributeHandler)
 		r.Get("/tenants/custom-attributes", customAttrSvc.GetAttributesHandler)
-		r.Post("/business-objects/bindings", bindingSvc.SaveBindingHandler)
-		r.Get("/business-objects/bindings", bindingSvc.GetBindingsHandler)
 
 		upgradeSvc := upgrade.NewService(sqlxDB, handlers.SecurityContextDeps{})
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)
@@ -1556,7 +1686,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		}
 		r.Get("/agentic/tickets", mcSvc.ListTicketsHandler)
 		r.Post("/agentic/tickets/review", mcSvc.ReviewTicketHandler)
-		r.Post("/mcp/tools/call", mcpRouter.HandleToolCall)
+		// Canonical maker-checker MCP-shaped proposals endpoint (was /mcp/tools/call).
+		r.Post("/agentic/proposals", mcpRouter.HandleToolCall)
+		// Compat shim: same handler + Deprecation header for one release.
+		r.Post("/mcp/tools/call", deprecatedMCPToolsCall(mcpRouter.HandleToolCall))
 
 		// Data Contract Gateway (CI/CD schema-change validation)
 		if os.Getenv("CONTRACT_GATEWAY_ENABLED") == "true" {
@@ -1587,8 +1720,14 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Auth routes must come BEFORE middleware to avoid chicken-and-egg problem
 		registerAuthRoutes(r, srv)
 
-		// WebSocket token endpoint for short-lived signed tokens
+		// WebSocket ticket issuance endpoint for ephemeral single-use 30s tokens
+		r.Post("/ws/ticket", srv.issueWsTicket)
+
+		// WebSocket token endpoint for short-lived signed tokens (legacy)
 		r.Post("/ws/token", srv.getWsToken)
+
+		// WebSocket upgrade endpoint under /api
+		r.Get("/ws", srv.handleWebSocketTicketAndUpgrade)
 
 		// Policy Generation Requests (No auth required for prototype, but should be protected)
 		// Adding it here before middleware for simplicity if needed, but optimally after.
@@ -1657,14 +1796,32 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.GraphService = catalogmeta.NewGraphService(sqlxDB)
 		abacService := services.NewAbacService(sqlxDB)
 		srv.WriteHandler = handlers.NewWriteHandler(srv.GraphService, sqlxDB, srv.IgniteClient, abacService)
-		srv.MCPHandler = handlers.NewMCPHandler(srv.GraphService)
-
 		semanticTermsHandler.RegisterRoutes(r)
 		srv.GenAICopilotHandler.RegisterRoutes(r)
 		srv.ChartHandler.RegisterRoutes(r)
 		routes.RegisterMetadataWrite(r, srv.WriteHandler)
 
-		routes.RegisterMCP(r, srv.MCPHandler)
+		// Verb-complete MCP cutover (CutoverMarker=mcp-cutover-streamable-v1):
+		// one streamable handler owns ALL verbs on /api/mcp. Path 1
+		// RegisterRoutes and Path 5 RegisterMCP are intentionally NOT
+		// called — stacking either recreates chi last-wins fragility.
+		// Guard: TestMCP_RouteTableDump. Path 6 stays at /mcp/tools/call.
+		mcp.TraceRegister("streamable call site api.go:Server.HTTPHandler ALL /mcp [" + mcp.CutoverMarker + "]")
+		// Staged MCP-first cutover: MCP pool runs as uisce_mcp_app (SET ROLE on
+		// connect when UISCE_APP_DSN TCP is unavailable). HTTP/api keep sqlxDB/postgres.
+		mcpDB := sqlxDB
+		if parentDSN := os.Getenv("DATABASE_URL"); parentDSN != "" || os.Getenv("POSTGRES_DSN") != "" {
+			if parentDSN == "" {
+				parentDSN = os.Getenv("POSTGRES_DSN")
+			}
+			if pinned, mode, err := dbpkg.OpenMCPAppDB(parentDSN); err != nil {
+				log.Printf("[mcp-cutover] OpenMCPAppDB failed (MCP stays on shared pool): %v", err)
+			} else {
+				mcpDB = pinned
+				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
+			}
+		}
+		r.Handle("/mcp", mcp.NewServer(mcpDB).SetTemporal(temporalClient).HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
@@ -1687,7 +1844,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		if srv.SemanticMappingHandler != nil {
 			srv.SemanticMappingHandler.RegisterRoutes(r)
 		}
-		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc)
+		glossaryJobStore := NewInMemoryJobStore()
+		glossarySvc := NewGlossaryService(context.Background(), db, srv.AbbreviationSvc, glossaryJobStore)
+		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc, glossarySvc, glossaryJobStore)
 		glossaryHandler.RegisterRoutes(r)
 
 		// Semantic Relationships Handler (AI-suggested term relationships,
@@ -1824,6 +1983,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// This avoids the "middleware defined after routes" panic while still bypassing cache/buffer
 	rootMux := chi.NewRouter()
 	rootMux.Get("/api/catalog/scan/stream", srv.CatalogScanHandler.HandleScanStream)
+	rootMux.Get("/ws", srv.handleWebSocketTicketAndUpgrade)
+	rootMux.HandleFunc("/ws/profiler/*", srv.handleWebSocketTicketAndUpgrade)
 
 	// Add OPTIONS handler for CORS preflight for SSE
 	rootMux.Options("/api/catalog/scan/stream", func(w http.ResponseWriter, r *http.Request) {
@@ -3269,8 +3430,16 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 			r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
 			r.Post("/{id}/clone", s.SavedQueryHandler.HandleCloneSavedQuery)
 			r.Post("/{id}/share", s.SavedQueryHandler.HandleShareQuery)
+			r.Put("/{id}/favorite", s.SavedQueryHandler.HandleSetFavorite)
 			r.Get("/{id}/preview", s.SavedQueryHandler.HandleGetPreview)
 			r.Get("/{id}/diff", s.SavedQueryHandler.HandleGetDiff)
+		})
+
+		r.Route("/saved-query-folders", func(r chi.Router) {
+			r.Get("/", s.SavedQueryFolderHandler.HandleListFolders)
+			r.Post("/", s.SavedQueryFolderHandler.HandleCreateFolder)
+			r.Put("/{id}", s.SavedQueryFolderHandler.HandleUpdateFolder)
+			r.Delete("/{id}", s.SavedQueryFolderHandler.HandleDeleteFolder)
 		})
 	})
 
@@ -4078,7 +4247,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (cn.tenant_id = $1::uuid OR cn.tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 		args = append(args, tenantID)
 		argIndex = 2
@@ -4087,7 +4256,7 @@ func (s *Server) handleListCatalogNodes(w http.ResponseWriter, r *http.Request) 
 			SELECT cn.id, cn.node_name, COALESCE(cn.description, ''), cn.tenant_id, cn.tenant_datasource_id, cn.created_at, cn.updated_at, COALESCE(cn.properties, '{}'::jsonb) as properties, COALESCE(cn.node_type_id::text, ''), COALESCE(cn.parent_id::text, ''), COALESCE(cn.qualified_path, cn.node_name)
 			FROM catalog_node cn
 			LEFT JOIN catalog_node_type cnt ON cn.node_type_id = cnt.id
-			WHERE (cn.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+			WHERE (cn.tenant_id = public.uisce_gold_copy_tenant_id() OR 1=1)
 		`
 	}
 
@@ -4188,7 +4357,7 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 		query = `
 			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
-			WHERE (tenant_id = $1::uuid OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE (tenant_id = $1::uuid OR tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 		args = append(args, tenantID)
 		argIndex = 2
@@ -4196,7 +4365,7 @@ func (s *Server) handleListCatalogEdges(w http.ResponseWriter, r *http.Request) 
 		query = `
 			SELECT id, source_node_id, target_node_id, COALESCE(edge_type_id::text, ''), COALESCE(relationship_type, ''), COALESCE(properties, '{}'::jsonb)
 			FROM catalog_edge
-			WHERE (tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1) OR 1=1)
+			WHERE (tenant_id = public.uisce_gold_copy_tenant_id() OR 1=1)
 		`
 	}
 
@@ -4445,4 +4614,69 @@ func newCBOTelemetryRouter(sqlxDB *sqlx.DB) *cbo.TelemetryRouter {
 	}
 	tr := cbo.NewTelemetryRouter(sqlxDB, redisClient, cfg, cbo.NewNopLogger())
 	return tr
+}
+
+// redactBody returns bodyBytes with credential fields replaced by "<redacted>".
+// Returns the input unchanged if it's not valid JSON or contains no
+// credential fields.
+//
+// Limitations (documented boundaries, not bugs):
+//   - Top-level fields only. A body like {"user":{"password":"..."}} passes
+//     through unredacted. Extend to recursive redaction if a nested-
+//     credential endpoint appears; today the only credential-bearing
+//     endpoint is the flat /api/auth/login body.
+//   - json.Marshal on the parsed map may reorder/reformat the logged JSON
+//     relative to the wire body. Harmless for logs (downstream readers
+//     don't depend on field order). Documented so nobody debugs a
+//     "why did the logged body change shape" non-issue.
+//   - The sensitive list is conservative: "token" redacts any field
+//     literally named that, including non-credential pagination cursors.
+//     Over-redaction is preferred to under-redaction for log safety.
+func redactBody(body []byte) []byte {
+	if len(body) == 0 || !json.Valid(body) {
+		return body
+	}
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return body
+	}
+	sensitive := []string{
+		"password", "current_password", "new_password", "old_password",
+		"secret", "token", "api_key",
+	}
+	changed := false
+	for _, field := range sensitive {
+		if _, ok := parsed[field]; ok {
+			parsed[field] = "<redacted>"
+			changed = true
+		}
+	}
+	if !changed {
+		return body
+	}
+	out, err := json.Marshal(parsed)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+// redactAuthHeader returns the Authorization header value with the
+// credential replaced. The scheme prefix is preserved when present
+// (Bearer, Basic, ApiKey, etc.) so the log shows how the request was
+// authed — diagnostic value at zero risk. Empty values pass through.
+// Scheme-less non-empty values are redacted wholesale ("<redacted>")
+// because scheme-less raw tokens in the Authorization header are a real
+// pattern (raw API keys, signed cookies, etc.) and the helper's
+// contract is "Authorization is safe to log," not "Authorization is
+// safe to log when it has a scheme separator."
+func redactAuthHeader(v string) string {
+	if v == "" {
+		return v
+	}
+	parts := strings.SplitN(v, " ", 2)
+	if len(parts) != 2 {
+		return "<redacted>"
+	}
+	return parts[0] + " <redacted>"
 }

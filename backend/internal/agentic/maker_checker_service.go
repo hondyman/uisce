@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
@@ -45,8 +47,8 @@ func NewMakerCheckerService(db *sqlx.DB) *MakerCheckerService {
 
 // SubmitAgentProposal intercepts an AI tool action, runs compliance checks, and creates a pending ticket
 func (s *MakerCheckerService) SubmitAgentProposal(ctx context.Context, req ProposalRequest) (string, error) {
-	if req.TenantID == "" {
-		req.TenantID = "core"
+	if strings.TrimSpace(req.TenantID) == "" {
+		return "", fmt.Errorf("tenant_id is required")
 	}
 	if req.AgentID == "" {
 		req.AgentID = "AutonomousAI-Agent"
@@ -155,10 +157,16 @@ func (s *MakerCheckerService) evaluateComplianceRules(boID string, payload json.
 // HTTP Handlers
 
 func (s *MakerCheckerService) ListTicketsHandler(w http.ResponseWriter, r *http.Request) {
-	tenantID := "core"
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
-		tenantID = claims.TenantID
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || len(auth.TenantIDs) == 0 || strings.TrimSpace(auth.TenantIDs[0]) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": "auth required: JWT missing tenant_id claim",
+		})
+		return
 	}
+	tenantID := auth.TenantIDs[0]
 
 	tickets, err := s.ListTickets(r.Context(), tenantID)
 	if err != nil {

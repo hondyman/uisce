@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { DndContext, DragOverlay, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
+import { DndContext, DragOverlay, pointerWithin, useDraggable as _useDraggable, useDroppable as _useDroppable } from '@dnd-kit/core';
 import {
   Box,
   Drawer,
@@ -25,8 +25,14 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Stack
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress
 } from '@mui/material';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import useUndo from 'use-undo';
 import { getCachedGoldCopyId } from '../../utils/goldCopy';
@@ -35,6 +41,8 @@ import { apiClient } from '../../utils/apiClient';
 import { getSelectedRegion } from '../../lib/region';
 import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
 import { devError } from '../../utils/devLogger';
+import { generateReportSpec, type ReportGenerationKind } from '../../api/reporting';
+import { mergeGeneratedReportSpecIntoDraft } from './generateReportDraft';
 
 // Modular components & utils
 import ToolboxItem from './ToolboxItem';
@@ -54,13 +62,12 @@ import {
   sanitizeInput,
   exportFormatLabels,
   exportOptionDescriptions,
-  EventScripts,
-  ExportOptions
+  ExportOptions,
+  buildDataBindingForType
 } from './reportingUtils';
 import GroupsEditor from './GroupsEditor';
 import CalculatedFieldsEditor, { CalculatedFieldItem } from './CalculatedFieldsEditor';
 import ExpressionsEditor from './ExpressionsEditor';
-import EventScriptsEditor from './EventScriptsEditor';
 import { FilterGroup, buildSQL } from './FilterBuilderPanel';
 import CodeIcon from '@mui/icons-material/Code';
 import StorageIcon from '@mui/icons-material/Storage';
@@ -103,16 +110,9 @@ import { dedupeFields } from '../../utils/dedupeFields';
 import { useCreateReportTemplate, useUpdateReportTemplate, useReportTemplate } from '../../api/reporting';
 import { buildSavePayload, BOBinding } from './builderSerialization';
 import { deserializeFromBackend, needsMigration, migrateV1ToV2 } from './tableSerialization';
+import type { ParamSpec } from '../../studio-core/params/ParamSpec';
 
-type ReportParameter = {
-  id: string;
-  name: string;
-  type: 'string' | 'number' | 'date' | 'boolean';
-  prompt: string;
-  defaultValue?: string;
-  allowBlank?: boolean;
-  allowMultiple?: boolean;
-};
+type ReportParameter = ParamSpec;
 
 const SSRSReportBuilderContent: React.FC = () => {
   const { tenant, datasource } = useTenant();
@@ -240,30 +240,31 @@ const SSRSReportBuilderContent: React.FC = () => {
     '=Sum(Fields!Sales.Value, "SalesGroup")',
   ]);
 
-  const [eventScripts, setEventScripts] = useState<EventScripts>(() => ({
-    onRowRender: `// Theme-aware conditional formatting\nconst isDark = document.documentElement.classList.contains('dark') || window.matchMedia('(prefers-color-scheme: dark)').matches;\n\nif (row.Fields.Growth < 0) {\n  row.Style.Background = isDark ? "rgba(239, 68, 68, 0.2)" : "rgba(239, 68, 68, 0.1)";\n  row.Style.Color = isDark ? "#F87171" : "#B91C1C";\n} else {\n  row.Style.Background = isDark ? "rgba(16, 185, 129, 0.2)" : "rgba(16, 185, 129, 0.1)";\n  row.Style.Color = isDark ? "#34D399" : "#15803D";\n}`,
-    onCellRender: '// add tooltip\ncell.Tooltip = "{Field}: {Value}";',
-    onPageRender: '// watermark\npage.Watermark = "Internal";',
-    onExport: '// append metadata\nexportContext.Metadata.author = user.name;',
-  }));
-
   const [exportOptions, setExportOptions] = useState<ExportOptions>({
     includePrintFriendly: true,
     includeDrillThrough: true,
     includeComments: false,
   });
 
-  const [reportParameters, setReportParameters] = useState<ReportParameter[]>([
-    { id: 'param_year', name: 'Year', type: 'number', prompt: 'Enter a Year', defaultValue: String(new Date().getFullYear()) },
-  ]);
-  const [runtimeParamValues, setRuntimeParamValues] = useState<Record<string, any>>({
-    Year: String(new Date().getFullYear()),
-  });
+  const [reportParameters, setReportParameters] = useState<ReportParameter[]>([]);
+  const [runtimeParamValues, setRuntimeParamValues] = useState<Record<string, any>>({});
 
   // Report title (editable in top bar)
   const [reportTitle, setReportTitle] = useState('Untitled Report');
   const [reportTitleEdited, setReportTitleEdited] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
+
+  // AI report generation (Phase 6.1) - "Generate with AI"/"Regenerate"
+  // dialog and the always-visible in-canvas copilot bar both call the
+  // same generateReportSpec contract and merge additively via
+  // mergeGeneratedReportSpecIntoDraft; see generateReportDraft.ts.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiDescription, setAiDescription] = useState('');
+  const [aiReportKind, setAiReportKind] = useState<ReportGenerationKind>('dashboard');
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [copilot, setCopilot] = useState('');
+  const [copilotBusy, setCopilotBusy] = useState(false);
 
   const handleAddParameter = (param: Omit<ReportParameter, 'id'>) => {
     const newParam = { ...param, id: `param_${Date.now()}` };
@@ -442,13 +443,59 @@ const SSRSReportBuilderContent: React.FC = () => {
     );
     const isReadOnlyCore = isCoreTemplate && !isGoldCopyTenant;
 
-    const handleSaveReport = useCallback(async () => {
-      if (isReadOnlyCore) {
+    // Creates the tenant's own customized copy of a gold-copy-inherited
+    // report: same BO/layout/parameters, a fresh id and report_key,
+    // is_core=false. This is what lets a tenant "tweak" an inherited
+    // report without ever writing to the shared core row.
+    const handleCloneReport = useCallback(async () => {
+      try {
+        const baseName = reportTitle.replace(/\s*\(Custom\s*Copy\)/i, '').replace(/\s*\(Core\)/i, '');
+        const cloneTitle = isReadOnlyCore ? baseName : `${baseName} (Custom Copy)`;
+        const payload = buildSavePayload(
+          {
+            elements,
+            reportTitle: cloneTitle,
+            sectionConfig,
+            layoutSettings: layoutSettingsState,
+            parameters: reportParameters,
+          },
+          selectedBO as BOBinding | null,
+          undefined
+        );
+        (payload as any).is_core = false;
+        (payload as any).name = cloneTitle;
+        (payload as any).report_key = `${(loadedTemplate as any)?.report_key || 'rep'}_custom_${Date.now()}`;
+
+        const result = await createMutation.mutateAsync(payload as any);
+        const newId = (result as any)?.id || (result as any)?.report_id;
         setSnackbar({
           open: true,
-          message: 'Core templates cannot be overwritten directly by client tenants. Please click "Clone" to create your own customizable copy.',
-          severity: 'warning',
+          message: `Report saved as "${cloneTitle}"! You can now customize parameters, filters, and layout for your tenant.`,
+          severity: 'success',
         });
+        if (newId) {
+          setTimeout(() => {
+            window.location.href = `/reports/${newId}/edit`;
+          }, 800);
+        }
+      } catch (err) {
+        setSnackbar({
+          open: true,
+          message: `Failed to save your copy: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          severity: 'error',
+        });
+      }
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation, isReadOnlyCore]);
+
+    const handleSaveReport = useCallback(async () => {
+      // A gold-copy-inherited report is tweak-able but never directly
+      // overwritten by a non-gold tenant: Save transparently creates (or,
+      // on a later save, updates) the tenant's own customized copy instead
+      // of the shared core row. This is the same operation "Clone" performs
+      // explicitly — it just happens on Save so tenants don't need a
+      // separate clone step before they can keep their edits.
+      if (isReadOnlyCore) {
+        await handleCloneReport();
         return;
       }
 
@@ -486,47 +533,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       } catch (err) {
         setSnackbar({ open: true, message: `Failed to save: ${err instanceof Error ? err.message : 'Unknown error'}`, severity: 'error' });
       }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation]);
-
-    const handleCloneReport = useCallback(async () => {
-      try {
-        const baseName = reportTitle.replace(/\s*\(Custom\s*Copy\)/i, '').replace(/\s*\(Core\)/i, '');
-        const cloneTitle = `${baseName} (Custom Copy)`;
-        const payload = buildSavePayload(
-          {
-            elements,
-            reportTitle: cloneTitle,
-            sectionConfig,
-            layoutSettings: layoutSettingsState,
-            parameters: reportParameters,
-          },
-          selectedBO as BOBinding | null,
-          undefined
-        );
-        (payload as any).is_core = false;
-        (payload as any).name = cloneTitle;
-        (payload as any).report_key = `${(loadedTemplate as any)?.report_key || 'rep'}_custom_${Date.now()}`;
-
-        const result = await createMutation.mutateAsync(payload as any);
-        const newId = (result as any)?.id || (result as any)?.report_id;
-        setSnackbar({
-          open: true,
-          message: `Report cloned successfully as "${cloneTitle}"! You can now customize parameters, filters, and layout for your tenant.`,
-          severity: 'success',
-        });
-        if (newId) {
-          setTimeout(() => {
-            window.location.href = `/reports/${newId}/edit`;
-          }, 800);
-        }
-      } catch (err) {
-        setSnackbar({
-          open: true,
-          message: `Failed to clone report: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          severity: 'error',
-        });
-      }
-    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, loadedTemplate, createMutation]);
+    }, [elements, reportTitle, sectionConfig, layoutSettingsState, reportParameters, selectedBO, urlReportId, isReadOnlyCore, loadedTemplate, tenant, createMutation, updateMutation, handleCloneReport]);
 
   const handleRunReport = useCallback(async (paramOverrides?: Record<string, any>) => {
     if (!urlReportId && !loadedTemplate?.report_key) {
@@ -800,7 +807,7 @@ const SSRSReportBuilderContent: React.FC = () => {
         name: field.label || field.name,
         fontSize: 12,
         fontWeight: 500,
-        textColor: isDark ? '#E2E8F0' : '#1E293B',
+        textColor: '#000000', // reports render on white; text stays black regardless of theme
       },
     };
     setElements([...elements, newElement]);
@@ -809,8 +816,25 @@ const SSRSReportBuilderContent: React.FC = () => {
   };
 
   // Add all BO fields as a Table
-  const handleAddAllAsTable = (fields: BOField[]) => {
+  const handleAddAllAsTable = async (fields: BOField[]) => {
     const tableColumns = fields.map(f => f.name);
+    let dataBinding: Record<string, any> = {};
+    if (selectedBO?.id && selectedBindingId && tenant?.id) {
+      try {
+        const boTerms = await fetchBOTerms(selectedBO.id, selectedBindingId);
+        const dims = boTerms.filter((t) => t.role === 'DIMENSION');
+        const measures = boTerms.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
+        dataBinding = {
+          boId: selectedBO.id,
+          bindingId: selectedBindingId,
+          tenantId: tenant.id,
+          dimensions: dims.map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
+          measures: measures.map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
+        };
+      } catch (err) {
+        devError('Failed to bind "Add All as Table"', err);
+      }
+    }
     const newTable = {
       id: `table_bo_${Date.now()}`,
       type: ELEMENT_TYPES.TABLE,
@@ -823,11 +847,13 @@ const SSRSReportBuilderContent: React.FC = () => {
         fontSize: 11,
         showGridLines: true,
         alternatingRowColors: true,
+        ...dataBinding,
       },
     };
     setElements([...elements, newTable]);
     setSelectedElement(newTable.id);
-    setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}`, severity: 'success' });
+    const boundMsg = dataBinding.boId ? '' : ' (unbound - select a Business Object with an active binding first to see live values)';
+    setSnackbar({ open: true, message: `Created Table with ${fields.length} columns from ${selectedBO?.displayName || 'BO'}${boundMsg}`, severity: dataBinding.boId ? 'success' : 'warning' });
   };
 
   const handleAddToolboxItem = async (type: string, targetSection: string = REPORT_SECTIONS.BODY) => {
@@ -851,45 +877,13 @@ const SSRSReportBuilderContent: React.FC = () => {
     let dataBinding: Record<string, any> = {};
 
     if (type === ELEMENT_TYPES.FORM && selectedBO?.id && tenant?.id) {
-      dataBinding = { boId: selectedBO.id, tenantId: tenant.id };
+      dataBinding = buildDataBindingForType(type, selectedBO.id, '', tenant.id, [], []);
     } else if (dataBoundTypes.includes(type as any) && selectedBO?.id && selectedBindingId && tenant?.id) {
       try {
         const boTerms = await fetchBOTerms(selectedBO.id, selectedBindingId);
         const dims = boTerms.filter((t) => t.role === 'DIMENSION');
         const measures = boTerms.filter((t) => t.role === 'MEASURE' || t.role === 'CALCULATED');
-
-        if (type === ELEMENT_TYPES.SLICER) {
-          const d = dims[0];
-          if (d) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }] };
-        } else if (type === ELEMENT_TYPES.GAUGE) {
-          const m = measures[0] || dims[0];
-          if (m) dataBinding = { boId: selectedBO.id, bindingId: selectedBindingId, tenantId: tenant.id, measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: measures[0] ? 'SUM' : 'COUNT' }] };
-        } else if (type === ELEMENT_TYPES.CHART || type === ELEMENT_TYPES.SPARKLINE) {
-          const d = dims[0];
-          const m = measures[0];
-          if (d && m) {
-            dataBinding = {
-              boId: selectedBO.id,
-              bindingId: selectedBindingId,
-              tenantId: tenant.id,
-              dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }],
-              measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: 'SUM' }],
-              chartType: 'bar',
-            };
-          }
-        } else {
-          // table / matrix / list: first few dimensions + measures as columns
-          const picked = [...dims.slice(0, 4), ...measures.slice(0, 2)];
-          if (picked.length > 0) {
-            dataBinding = {
-              boId: selectedBO.id,
-              bindingId: selectedBindingId,
-              tenantId: tenant.id,
-              dimensions: dims.slice(0, 4).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
-              measures: measures.slice(0, 2).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
-            };
-          }
-        }
+        dataBinding = buildDataBindingForType(type, selectedBO.id, selectedBindingId, tenant.id, dims, measures);
       } catch (err) {
         devError('Failed to default-bind new report widget', err);
       }
@@ -904,7 +898,7 @@ const SSRSReportBuilderContent: React.FC = () => {
       properties: {
         name: `${type.charAt(0).toUpperCase() + type.slice(1)} 1`,
         fontSize: 12,
-        textColor: isDark ? '#E2E8F0' : '#1E293B',
+        textColor: '#000000', // reports render on white; text stays black regardless of theme
         // Empty container scaffolding: tables/matrixes initialize with NO pre-populated columns
         columns: type === ELEMENT_TYPES.TABLE || type === ELEMENT_TYPES.MATRIX || type === ELEMENT_TYPES.LIST ? [] : undefined,
         ...dataBinding,
@@ -915,6 +909,84 @@ const SSRSReportBuilderContent: React.FC = () => {
     setSelectedElement(newElement.id);
     const boundMsg = dataBinding.boId ? ` bound to ${selectedBO?.displayName || selectedBO?.name}` : '';
     setSnackbar({ open: true, message: `Added ${type}${boundMsg} to ${targetSection}`, severity: 'success' });
+  };
+
+  // "Generate with AI" / "Regenerate with AI" (Phase 6.1) - available on
+  // both new and existing reports (confirmed decision). Additive via
+  // mergeGeneratedReportSpecIntoDraft, same as the copilot bar below -
+  // never wipes existing elements, so "regenerate" doesn't mean "start
+  // over."
+  const handleGenerateReport = async () => {
+    if (!selectedBO?.id || !tenant?.id) {
+      setAiError('Select a Business Object first.');
+      return;
+    }
+    setAiGenerating(true);
+    setAiError(null);
+    try {
+      const boKey = selectedBO.key || selectedBO.technicalName || selectedBO.technical_name || '';
+      const boName = selectedBO.displayName || selectedBO.name || boKey;
+      const spec = await generateReportSpec(selectedBO.id, boKey, boName, aiDescription, aiReportKind);
+      const wasEmpty = elements.length === 0;
+      const merged = await mergeGeneratedReportSpecIntoDraft(elements, spec, {
+        boId: selectedBO.id,
+        bindingId: selectedBindingId,
+        tenantId: tenant.id,
+      });
+      setElements(merged);
+      if (wasEmpty && !reportTitleEdited && spec.title) {
+        setReportTitle(spec.title);
+      }
+      setAiOpen(false);
+      setAiDescription('');
+      setSnackbar({
+        open: true,
+        message: `Generated ${merged.length - elements.length} element(s) via ${spec.source === 'ai' ? 'AI' : 'template'}`,
+        severity: 'success',
+      });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to generate report');
+    } finally {
+      setAiGenerating(false);
+    }
+  };
+
+  // In-canvas copilot bar - identical contract to the dialog above, just
+  // taking a free-text instruction instead of a description field and
+  // using the already-bound primary BO instead of a picker (mirrors
+  // PageEditor.tsx's handleCopilot).
+  const handleCopilot = async () => {
+    const instruction = copilot.trim();
+    if (!instruction || copilotBusy) return;
+    if (!selectedBO?.id || !tenant?.id) {
+      setSnackbar({ open: true, message: 'Bind a primary Business Object first.', severity: 'error' });
+      return;
+    }
+    setCopilotBusy(true);
+    try {
+      const boKey = selectedBO.key || selectedBO.technicalName || selectedBO.technical_name || '';
+      const boName = selectedBO.displayName || selectedBO.name || boKey;
+      const spec = await generateReportSpec(selectedBO.id, boKey, boName, instruction, aiReportKind);
+      const before = elements.length;
+      const merged = await mergeGeneratedReportSpecIntoDraft(elements, spec, {
+        boId: selectedBO.id,
+        bindingId: selectedBindingId,
+        tenantId: tenant.id,
+      });
+      setElements(merged);
+      setCopilot('');
+      setSnackbar({
+        open: true,
+        message: merged.length > before
+          ? `Copilot added ${merged.length - before} element(s) via ${spec.source === 'ai' ? 'AI' : 'template'}`
+          : 'Copilot found nothing new to add',
+        severity: 'success',
+      });
+    } catch (err) {
+      setSnackbar({ open: true, message: err instanceof Error ? err.message : 'Copilot failed', severity: 'error' });
+    } finally {
+      setCopilotBusy(false);
+    }
   };
 
   const handleDragStart = (event: any) => {
@@ -1067,7 +1139,6 @@ const SSRSReportBuilderContent: React.FC = () => {
   const handleExpressionChange = (index: number, value: string) => setExpressionLibrary(prev => { const next = [...prev]; next[index] = value; return next; });
   const handleAddExpression = () => setExpressionLibrary(prev => [...prev, '=Fields!Amount.Value * 1.1']);
   const handleRemoveExpression = (index: number) => setExpressionLibrary(prev => prev.filter((_, i) => i !== index));
-  const handleEventScriptChange = (key: keyof EventScripts, value: string) => setEventScripts(prev => ({ ...prev, [key]: value }));
   const handleExportOptionToggle = (key: keyof ExportOptions, checked: boolean) => setExportOptions(prev => ({ ...prev, [key]: checked }));
   const handleExport = (key: string) => setSnackbar({ open: true, message: `Exporting report as ${exportFormatLabels[key as keyof ExportOptions]}...`, severity: 'info' });
 
@@ -1098,7 +1169,7 @@ const SSRSReportBuilderContent: React.FC = () => {
   };
 
   return (
-    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart}>
+    <DndContext onDragEnd={handleDragEnd} onDragStart={handleDragStart} collisionDetection={pointerWithin}>
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: colors.bg }}>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -1108,13 +1179,13 @@ const SSRSReportBuilderContent: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', px: 1 }}>
             {/* Left: action icons */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flex: '0 0 auto' }}>
-              <Tooltip title={isReadOnlyCore ? "Core template (read-only). Click Clone to create a custom tenant copy." : "Save (Ctrl+S)"}>
+              <Tooltip title={isReadOnlyCore ? "Save as your own tenant copy — the shared core template stays unchanged" : "Save (Ctrl+S)"}>
                 <IconButton
-                  aria-label={isReadOnlyCore ? "Core template (read-only)" : "Save (Ctrl+S)"}
+                  aria-label={isReadOnlyCore ? "Save as your own tenant copy" : "Save (Ctrl+S)"}
                   size="small"
                   onClick={handleSaveReport}
-                  disabled={createMutation.isPending || updateMutation.isPending || isReadOnlyCore}
-                  sx={{ color: isReadOnlyCore ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <SaveIcon sx={{ fontSize: 19 }} />
                 </IconButton>
@@ -1149,7 +1220,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   aria-label="Undo"
                   size="small"
                   onClick={undo}
-                  disabled={!canUndo || isReadOnlyCore}
+                  disabled={!canUndo}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <UndoIcon sx={{ fontSize: 19 }} />
@@ -1160,7 +1231,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   aria-label="Redo"
                   size="small"
                   onClick={redo}
-                  disabled={!canRedo || isReadOnlyCore}
+                  disabled={!canRedo}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}
                 >
                   <RedoIcon sx={{ fontSize: 19 }} />
@@ -1215,6 +1286,30 @@ const SSRSReportBuilderContent: React.FC = () => {
                   Parameters ({reportParameters.length})
                 </Button>
               </Tooltip>
+              <Tooltip title={elements.length > 0 ? 'Regenerate with AI (adds alongside existing elements)' : 'Generate with AI'}>
+                <span>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={!selectedBO?.id}
+                    onClick={() => { setAiError(null); setAiOpen(true); }}
+                    startIcon={<AutoAwesomeIcon sx={{ fontSize: 15 }} />}
+                    sx={{
+                      color: 'rgba(255,255,255,0.85)',
+                      borderColor: 'rgba(255,255,255,0.2)',
+                      textTransform: 'none',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      height: 28,
+                      borderRadius: 1.5,
+                      px: 1,
+                      '&:hover': { color: '#FFF', borderColor: 'rgba(255,255,255,0.4)', bgcolor: 'rgba(255,255,255,0.08)' },
+                    }}
+                  >
+                    {elements.length > 0 ? 'Regenerate with AI' : 'Generate with AI'}
+                  </Button>
+                </span>
+              </Tooltip>
               <Tooltip title="Page Layout">
                 <IconButton size="small" onClick={() => setLayoutDrawerOpen(true)}
                   sx={{ color: 'rgba(255,255,255,0.7)', '&:hover': { color: 'white', bgcolor: 'rgba(255,255,255,0.1)' } }}>
@@ -1228,7 +1323,7 @@ const SSRSReportBuilderContent: React.FC = () => {
               {isCoreTemplate && (
                 <Chip
                   size="small"
-                  label={isReadOnlyCore ? 'Core Template (Read-Only)' : 'Core Template (Master)'}
+                  label={isReadOnlyCore ? 'Core Template (Save creates your copy)' : 'Core Template (Master)'}
                   sx={{
                     height: 22,
                     fontSize: '0.65rem',
@@ -1239,7 +1334,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   }}
                 />
               )}
-              {editingTitle && !isReadOnlyCore ? (
+              {editingTitle ? (
                 <TextField
                   inputRef={(input) => input?.focus()}
                   value={reportTitle}
@@ -1259,22 +1354,22 @@ const SSRSReportBuilderContent: React.FC = () => {
                   }}
                 />
               ) : (
-                <Tooltip title={isReadOnlyCore ? "Core template (read-only)" : "Click or tap pencil to rename report"}>
+                <Tooltip title="Click or tap pencil to rename report">
                   <Box
-                    onClick={() => !isReadOnlyCore && setEditingTitle(true)}
+                    onClick={() => setEditingTitle(true)}
                     sx={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: 1,
-                      cursor: isReadOnlyCore ? 'default' : 'pointer',
+                      cursor: 'pointer',
                       px: 1.5,
                       py: 0.5,
                       borderRadius: 1,
-                      border: isReadOnlyCore ? '1px solid transparent' : '1px dashed',
+                      border: '1px dashed',
                       borderColor: 'divider',
                       bgcolor: 'action.hover',
                       transition: 'all 0.15s ease-in-out',
-                      '&:hover': isReadOnlyCore ? {} : {
+                      '&:hover': {
                         bgcolor: 'action.selected',
                         borderColor: 'primary.main',
                       },
@@ -1283,9 +1378,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                     <Typography sx={{ fontSize: '0.88rem', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.01em' }}>
                       {reportTitle}
                     </Typography>
-                    {!isReadOnlyCore && (
-                      <EditIcon sx={{ fontSize: 15, color: 'primary.main', opacity: 0.8 }} />
-                    )}
+                    <EditIcon sx={{ fontSize: 15, color: 'primary.main', opacity: 0.8 }} />
                   </Box>
                 </Tooltip>
               )}
@@ -1302,7 +1395,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                   value={selectedBOId}
                   displayEmpty
                   onChange={(e) => setSelectedBOId(e.target.value as string)}
-                  disabled={!!urlReportId || isReadOnlyCore}
+                  disabled={!!urlReportId && !!selectedBOId}
                   sx={{
                     height: 28, color: '#FFF', bgcolor: 'rgba(255,255,255,0.09)', fontSize: '0.75rem', fontWeight: 600,
                     borderRadius: 1.5, '& .MuiSvgIcon-root': { color: '#FFF' },
@@ -1322,6 +1415,38 @@ const SSRSReportBuilderContent: React.FC = () => {
             </Box>
           </Box>
         </TopAppBar>
+
+        {/* AI copilot bar - always visible once a primary BO is bound;
+            calls the same generateReportSpec contract as the "Generate
+            with AI" dialog above, merging additively into the current
+            draft (mergeGeneratedReportSpecIntoDraft never removes or
+            replaces existing elements). */}
+        {!isReadOnlyCore && (
+          <Box sx={{
+            display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75,
+            borderBottom: `1px solid ${theme.palette.divider}`, bgcolor: theme.palette.background.paper,
+          }}>
+            <AutoAwesomeIcon fontSize="small" color="primary" />
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Copilot: add a table of allocations, add a Status slicer…"
+              value={copilot}
+              onChange={(e) => setCopilot(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void handleCopilot(); }}
+              disabled={copilotBusy || !selectedBO?.id}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => void handleCopilot()}
+              disabled={copilotBusy || !copilot.trim() || !selectedBO?.id}
+              startIcon={copilotBusy ? <CircularProgress size={14} /> : undefined}
+            >
+              {copilotBusy ? 'Working…' : 'Apply'}
+            </Button>
+          </Box>
+        )}
 
         {/* ══════════════════════════════════════════════════════════════════
             BODY: Left sidebar + main area (tabs + content)
@@ -1543,6 +1668,8 @@ const SSRSReportBuilderContent: React.FC = () => {
                       selectedSection={selectedSection}
                       onSectionSelect={handleSectionSelect}
                       orientation={orientation}
+                      reportParameters={reportParameters}
+                      runtimeParamValues={runtimeParamValues}
                       isLivePreview={false}
                       availableFieldDefs={availableFieldDefs}
                     />
@@ -1707,6 +1834,8 @@ const SSRSReportBuilderContent: React.FC = () => {
                     onElementSelect={() => {}}
                     sectionConfig={sectionConfig}
                     orientation={orientation}
+                    reportParameters={reportParameters}
+                    runtimeParamValues={runtimeParamValues}
                     isLivePreview={true}
                     previewData={(() => {
                       if (!previewData || previewData.length === 0) return null;
@@ -1737,7 +1866,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                           value={selectedBOId}
                           label="Business Object"
                           onChange={(e) => setSelectedBOId(e.target.value as string)}
-                          disabled={!!urlReportId || isReadOnlyCore}
+                          disabled={!!urlReportId && !!selectedBOId}
                         >
                           <MenuItem value=""><em>Select Business Object...</em></MenuItem>
                           {businessObjects.map((bo: any) => (
@@ -1867,7 +1996,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                         onAddCalculatedField={handleAddCalculatedField}
                         onCalculatedFieldChange={handleCalculatedFieldChange}
                         onRemoveCalculatedField={(fieldId) => setCalculatedFields((prev) => prev.filter((c) => c.id !== fieldId))}
-                        boName={selectedBO?.name || 'BusinessObject'}
+                        boName={selectedBO?.key || selectedBO?.technicalName || selectedBO?.name}
                       />
                       <Divider sx={{ my: 2, borderColor: colors.border }} />
                       <ExpressionsEditor
@@ -1875,16 +2004,15 @@ const SSRSReportBuilderContent: React.FC = () => {
                         onExpressionChange={handleExpressionChange}
                         onAddExpression={handleAddExpression}
                         onRemoveExpression={handleRemoveExpression}
+                        boName={selectedBO?.key || selectedBO?.technicalName || selectedBO?.name}
                       />
                     </Paper>
                   </Grid>
 
-                  {/* Event Scripts + Export */}
+                  {/* Export */}
                   <Grid size={12}>
                     <Paper sx={{ p: 2.5, bgcolor: colors.cardBg, border: `1px solid ${colors.border}`, borderRadius: 2 }}>
-                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text, mb: 2 }}>Event Scripts</Typography>
-                      <EventScriptsEditor eventScripts={eventScripts} onEventScriptChange={handleEventScriptChange} />
-                      <Divider sx={{ my: 2, borderColor: colors.border }}>Export Options</Divider>
+                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: colors.text, mb: 2 }}>Export Options</Typography>
                       <Grid container spacing={1.5}>
                         {(Object.keys(exportOptions) as Array<keyof ExportOptions>).map((key) => (
                           <Grid size={{ xs: 12, sm: 6, md: 4 }} key={String(key)}>
@@ -1957,7 +2085,54 @@ const SSRSReportBuilderContent: React.FC = () => {
           onDelete={handleRemoveParameter}
           isReadOnly={isReadOnlyCore}
           onClone={handleCloneReport}
+          boId={selectedBO?.id}
+          boKey={selectedBO?.key || selectedBO?.technicalName || selectedBO?.technical_name}
+          bindingId={selectedBindingId}
         />
+        <Dialog open={aiOpen} onClose={() => !aiGenerating && setAiOpen(false)} maxWidth="sm" fullWidth>
+          <DialogTitle>{elements.length > 0 ? 'Regenerate with AI' : 'Generate a report with AI'}</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Widgets bind to {selectedBO?.displayName || selectedBO?.name || 'the selected Business Object'} and its related objects — never the whole catalog.
+              {elements.length > 0 && ' This adds new elements alongside what you already have — it won’t replace them.'}
+            </Typography>
+            {aiError && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setAiError(null)}>{aiError}</Alert>}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel id="ai-report-kind-label">Report kind</InputLabel>
+              <Select
+                labelId="ai-report-kind-label"
+                label="Report kind"
+                value={aiReportKind}
+                onChange={(e) => setAiReportKind(e.target.value as ReportGenerationKind)}
+              >
+                <MenuItem value="list">List — table of records (optional slicer)</MenuItem>
+                <MenuItem value="detail">Detail — form plus related tables</MenuItem>
+                <MenuItem value="master-detail">Master-detail — list then form</MenuItem>
+                <MenuItem value="dashboard">Dashboard — gauge/chart/table mix</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              fullWidth
+              multiline
+              minRows={3}
+              label="What should this report show? (optional)"
+              placeholder="e.g. A summary table of orders with region and status, plus a revenue chart"
+              value={aiDescription}
+              onChange={(e) => setAiDescription(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAiOpen(false)} disabled={aiGenerating}>Cancel</Button>
+            <Button
+              variant="contained"
+              startIcon={aiGenerating ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+              onClick={() => void handleGenerateReport()}
+              disabled={aiGenerating}
+            >
+              {aiGenerating ? 'Generating…' : 'Generate'}
+            </Button>
+          </DialogActions>
+        </Dialog>
         <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={handleCloseSnackbar} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
           <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>{snackbar.message}</Alert>
         </Snackbar>

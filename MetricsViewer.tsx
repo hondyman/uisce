@@ -227,7 +227,7 @@ const MetricsViewer: React.FC = () => {
           </Accordion>
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography>Iceberg/Trino/Spark SQL</Typography>
+              <Typography>Iceberg/StarRocks/DataFusion SQL</Typography>
             </AccordionSummary>
             <AccordionDetails>
               <Paper sx={{ p: 1, bgcolor: 'grey.100', fontFamily: 'monospace', width: '100%' }}>
@@ -361,7 +361,7 @@ const MetricsViewer: React.FC = () => {
                 <TableCell><strong>Oracle</strong></TableCell>
                 <TableCell><strong>PostgreSQL</strong></TableCell>
                 <TableCell><strong>Snowflake</strong></TableCell>
-                <TableCell><strong>Iceberg/Trino/Spark</strong></TableCell>
+                <TableCell><strong>Iceberg/StarRocks/DataFusion</strong></TableCell>
                 <TableCell><strong>Notes</strong></TableCell>
               </TableRow>
             </TableHead>

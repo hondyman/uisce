@@ -42,9 +42,6 @@ func (h *TenantAccessHandlers) RegisterRoutes(r chi.Router) {
 	r.Put("/v1/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
 	r.Get("/admin/tenants/{tenantId}/configuration", h.getTenantConfiguration)
 	r.Put("/admin/tenants/{tenantId}/configuration", h.updateTenantConfiguration)
-
-	// Connection sync handler moved to handlers.ConnectionSyncHandler
-	// r.Post("/tenants/{tenantId}/sync-connections", syncHandler.SyncConnectionsFromGoldCopy)
 }
 
 // TenantResponse represents a tenant in the API response
@@ -217,7 +214,7 @@ func (h *TenantAccessHandlers) getGoldCopyTenant(w http.ResponseWriter, r *http.
 		return
 	}
 	var id string
-	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&id)
+	err := h.DB.QueryRowContext(r.Context(), `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			w.Header().Set("Content-Type", "application/json")
@@ -731,6 +728,9 @@ func (h *TenantAccessHandlers) getAllTenantsInternal(ctx context.Context, target
 			&adsID, &ads.DatasourceName, &ads.DatasourceType, &ads.DatasourceCode); err != nil {
 			return nil, fmt.Errorf("failed to scan datasource row: %w", err)
 		}
+		// Every endpoint built on this loader returns to a browser: never send credentials
+		// (passwords, private keys, API keys) from the datasource config.
+		ds.Config = redactSecretConfig(ds.Config)
 		if adsID.Valid {
 			ads.ID = adsID.String
 			ds.AlphaDatasourceID = adsID.String

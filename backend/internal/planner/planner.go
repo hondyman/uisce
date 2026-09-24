@@ -416,13 +416,13 @@ func (p *Planner) explainRegionSelection(req *QueryRequest, regions []string) st
 func (p *Planner) explainEngineSelection(queryType string) string {
 	switch queryType {
 	case "feature", "metric":
-		return "Metric/feature queries use Trino for historical feature tables (Iceberg)."
+		return "Metric/feature queries use StarRocks for high-performance analytics."
 	case "ts":
 		return "Time-series queries use TS service (forecasting, decomposition, anomalies)."
 	case "drift":
 		return "Drift detection uses dedicated Drift service for statistical tests."
 	case "importance", "discovery":
-		return fmt.Sprintf("%s queries use Trino for federated views across regions.", queryType)
+		return fmt.Sprintf("%s queries use StarRocks for federated views across regions.", queryType)
 	default:
 		return "Default engine selection applied."
 	}

@@ -48,7 +48,7 @@ func main() {
 	})
 	defer reader.Close()
 
-	// Trino configuration would go here
+	// StarRocks / DataFusion lakehouse configuration would go here
 	// For MVP, we log the snapshot event.
 
 	log.Println("Snapshot Worker ready to process events")
@@ -90,7 +90,7 @@ func processSnapshotEvent(ctx context.Context, data []byte) error {
 		return err
 	}
 
-	// Logic to write to Trino/Iceberg Bitemporal tables goes here.
+	// Logic to write to StarRocks/Iceberg Bitemporal tables goes here.
 	// We would insert into a history table with VT (valid time) and TT (transaction time).
 
 	log.Printf("[SNAPSHOT] Tenant: %s | Entity: %s/%s | Version: %d",

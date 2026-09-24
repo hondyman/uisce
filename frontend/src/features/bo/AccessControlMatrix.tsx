@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -52,14 +53,12 @@ const AccessControlMatrix: React.FC<AccessControlMatrixProps> = ({ tenantId, boK
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/access`, { headers: headers() });
-      if (res.ok) {
-        const data: AccessPolicy[] = await res.json();
-        setPolicies(Array.isArray(data) ? data : []);
-        // Discover any additional roles from existing policies
-        const discovered = Array.from(new Set(data.map(p => p.role_key)));
-        setRoles(prev => Array.from(new Set([...prev, ...discovered])));
-      }
+      const res = await apiFetch(`/api/v1/bo/${boKey}/governance/access`, { headers: headers() });
+      const data: AccessPolicy[] = await res.json();
+      setPolicies(Array.isArray(data) ? data : []);
+      // Discover any additional roles from existing policies
+      const discovered = Array.from(new Set(data.map(p => p.role_key)));
+      setRoles(prev => Array.from(new Set([...prev, ...discovered])));
     } finally {
       setLoading(false);
     }
@@ -87,10 +86,10 @@ const AccessControlMatrix: React.FC<AccessControlMatrixProps> = ({ tenantId, boK
         row_filter_expr: existing?.row_filter_expr,
         is_core: false,
       };
-      const res = await fetch(`/api/v1/bo/${boKey}/governance/access`, {
+      await apiFetch(`/api/v1/bo/${boKey}/governance/access`, {
         method: 'POST', headers: headers(), body: JSON.stringify(payload),
       });
-      if (res.ok) await load();
+      await load();
     } finally {
       setSaving('');
     }
@@ -222,7 +221,7 @@ const AccessControlMatrix: React.FC<AccessControlMatrixProps> = ({ tenantId, boK
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="bog-btn bog-btn-primary" onClick={async () => {
               if (!selected) return;
-              await fetch(`/api/v1/bo/${boKey}/governance/access`, {
+              await apiFetch(`/api/v1/bo/${boKey}/governance/access`, {
                 method: 'POST', headers: headers(), body: JSON.stringify(selected),
               });
               setSelected(null);

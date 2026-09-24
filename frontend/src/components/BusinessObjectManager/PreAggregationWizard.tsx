@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Alert, Box, Button, Card, CardContent, Checkbox, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, FormLabel, Grid, IconButton, InputLabel, List, ListItem, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Radio, RadioGroup, Select, Step, StepLabel, Stepper, TextField, Typography } from '@mui/material';
 import { Close, Bolt, Storage, Schedule, Code, CheckCircle } from '@mui/icons-material';
+import { apiFetch } from '../../lib/apiClient';
 
 // --- Types ---
 
@@ -109,12 +110,12 @@ export const PreAggregationWizard: React.FC<PreAggregationWizardProps> = ({
     setLoading(true);
     try {
       // Fetch terms
-      const termsRes = await fetch(`/api/semantic-graph/bo/${boId}/terms`);
+      const termsRes = await apiFetch(`/api/semantic-graph/bo/${boId}/terms`);
       const termsData = await termsRes.json();
       setBOTerms(termsData.terms || []);
 
       // Fetch calculations
-      const calcsRes = await fetch(`/api/semantic-graph/bo/${boId}/calculations`);
+      const calcsRes = await apiFetch(`/api/semantic-graph/bo/${boId}/calculations`);
       const calcsData = await calcsRes.json();
       setBOCalcs(calcsData.calculations || []);
     } catch (e) {
@@ -127,9 +128,8 @@ export const PreAggregationWizard: React.FC<PreAggregationWizardProps> = ({
   const fetchSQLPreview = async () => {
     if (selectedTerms.length === 0 && selectedCalcs.length === 0) return;
     try {
-      const res = await fetch('/api/semantic-graph/preview-sql', {
+      const res = await apiFetch('/api/semantic-graph/preview-sql', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bo_id: boId,
           terms: selectedTerms,
@@ -205,24 +205,20 @@ GROUP BY ${selectedTerms.join(', ')};`;
 
     try {
       // Create the pre-aggregation definition
-      const res = await fetch('/api/pre-aggregations', {
+      const res = await apiFetch('/api/pre-aggregations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': tenantId },
+        headers: { 'X-Tenant-ID': tenantId },
         body: JSON.stringify(payload),
       });
-
-      if (!res.ok) throw new Error(await res.text());
 
       const created = await res.json();
 
       if (materialize) {
         // Apply materialization
-        const matRes = await fetch(`/api/pre-aggregations/${created.id}/materialize`, {
+        await apiFetch(`/api/pre-aggregations/${created.id}/materialize`, {
           method: 'POST',
           headers: { 'X-Tenant-ID': tenantId },
         });
-
-        if (!matRes.ok) throw new Error(await matRes.text());
       }
 
       onClose();

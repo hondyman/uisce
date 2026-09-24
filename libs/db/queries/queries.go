@@ -661,15 +661,20 @@ const (
 		INSERT INTO report_templates (
 			id, tenant_id, template_name, description, category,
 			layout_config, parameter_schema, is_active, is_public,
-			is_personal, created_by_id, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			is_personal, created_by_id, created_by,
+			bands, parameters, presentation_events, grouping,
+			primary_business_object_id, is_core
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 	`
 
 	UpdateReportTemplate = `
 		UPDATE report_templates
 		SET template_name = $1, description = $2, category = $3,
 		    layout_config = $4, parameter_schema = $5, is_active = $6,
-		    is_personal = $7, updated_at = NOW()
-		WHERE id = $8 AND tenant_id = $9
+		    is_personal = $7,
+		    bands = $8, parameters = $9, presentation_events = $10, grouping = $11,
+		    primary_business_object_id = $12, is_core = $13,
+		    updated_at = NOW()
+		WHERE id = $14 AND tenant_id = $15
 	`
 )

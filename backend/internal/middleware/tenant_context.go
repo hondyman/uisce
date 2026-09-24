@@ -8,25 +8,23 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/db"
-	"github.com/hondyman/uisce/backend/internal/identity"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 const tenantContextKey = "tenant_context"
 
 func WithTenantContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tenantIDStr := r.Header.Get("X-Tenant-Id")
-
-		if actorTenantID, ok := identity.TenantIDFromContext(r.Context()); ok && actorTenantID != "" {
-			tenantIDStr = actorTenantID
+		tenantIDStr, err := security.ResolveTenantForRequest(r)
+		if err != nil {
+			next.ServeHTTP(w, r)
+			return
 		}
 
-		if tenantIDStr != "" {
-			if _, err := uuid.Parse(tenantIDStr); err == nil {
-				ctx := db.WithTenantContextToCtx(r.Context(), tenantIDStr)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
-			}
+		if _, err := uuid.Parse(tenantIDStr); err == nil {
+			ctx := db.WithTenantContextToCtx(r.Context(), tenantIDStr)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
 		}
 
 		next.ServeHTTP(w, r)

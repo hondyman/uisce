@@ -40,7 +40,7 @@ export const SQLViewer: React.FC<SQLViewerProps> = ({
     }
   };
 
-  const formatSQL = (sqlText: string): string => {
+  const prettyPrintSql = (sqlText: string): string => {
     // Simple SQL formatting (could use a library like sql-formatter)
     return sqlText
       .replace(/\s+/g, " ")
@@ -104,7 +104,7 @@ export const SQLViewer: React.FC<SQLViewerProps> = ({
                 lineHeight: "1.6",
               }}
             >
-              {formatSQL(sql)}
+              {prettyPrintSql(sql)}
             </pre>
           </Box>
         ) : loading ? (

@@ -68,7 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_outbox_security_events
 COMMENT ON TABLE access_rule IS 'Attribute-based access control rules binding LDAP groups to business objects';
 COMMENT ON COLUMN access_rule.row_filter_dsl IS 'DSL expression for row-level filtering, e.g., "region = ''EMEA'' AND status = ''active''"';
 COMMENT ON COLUMN access_rule.column_masks IS 'Array of column masking rules as JSONB: [{"semantic_term_id": "term:ssn", "mask_type": "HIDE"}]';
-COMMENT ON TABLE outbox IS 'Transactional outbox for async event publishing to Kafka/Trino/Iceberg';
+COMMENT ON TABLE outbox IS 'Transactional outbox for async event publishing to Kafka/StarRocks/Iceberg';
 
 -- Sample data for testing (optional)
 -- INSERT INTO access_rule (

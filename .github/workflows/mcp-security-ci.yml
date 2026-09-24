@@ -1,0 +1,64 @@
+# Standing gate for the unified MCP surface (Tier 0 IDOR suite + route dump +
+# compiler identifier allowlist). Must stay green while tools still own SQL;
+# after service-layer migration the IDOR negatives remain the regression net.
+name: MCP Security CI
+
+on:
+  push:
+    paths:
+      - "backend/internal/mcp/**"
+      - "backend/internal/boresolver/**"
+      - "backend/internal/pagestudio/**"
+      - "backend/internal/boread/**"
+      - "backend/internal/semanticast/**"
+      - "backend/internal/mdmread/**"
+      - "backend/internal/driftread/**"
+      - "backend/internal/goldcopy/**"
+      - "backend/internal/agentic/**"
+      - "backend/internal/api/mcp_routes_test.go"
+      - "backend/internal/api/api.go"
+      - ".github/workflows/mcp-security-ci.yml"
+  pull_request:
+    paths:
+      - "backend/internal/mcp/**"
+      - "backend/internal/boresolver/**"
+      - "backend/internal/pagestudio/**"
+      - "backend/internal/boread/**"
+      - "backend/internal/semanticast/**"
+      - "backend/internal/mdmread/**"
+      - "backend/internal/driftread/**"
+      - "backend/internal/goldcopy/**"
+      - "backend/internal/agentic/**"
+      - "backend/internal/api/mcp_routes_test.go"
+      - "backend/internal/api/api.go"
+      - ".github/workflows/mcp-security-ci.yml"
+
+jobs:
+  mcp-tier0:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+      - name: Tier 0 IDOR + MCP package tests
+        run: go test -count=1 -timeout 120s ./internal/mcp/...
+      - name: No-direct-SQL tripwire (exception list must be 0)
+        run: go test -count=1 -timeout 30s ./internal/mcp/ -run 'TestNoDirectSQLInTools' -v
+      - name: Compiler identifier allowlist
+        run: go test -count=1 -timeout 60s ./internal/boresolver/ -run 'ValidateSQLIdentifier|CompileRangeQuery_Rejects'
+      - name: SL service package unit tests
+        run: go test -count=1 -timeout 60s ./internal/pagestudio/... ./internal/boread/... ./internal/goldcopy/... ./internal/semanticast/... ./internal/mdmread/... ./internal/driftread/... ./internal/trading/ -run 'LoadOrder|Resolve'
+      - name: HTTP FIX CRIMS unify receipt
+        run: go test -count=1 -timeout 30s ./internal/handlers/ -run 'TestOMSFIX_DelegatesCRIMSLoadToTrading'
+      - name: HTTP PageStudio gold resolver receipt
+        run: go test -count=1 -timeout 30s ./internal/handlers/ -run 'TestPageStudio_Gold'
+      - name: RLS choke-point GUCs + legacy ApplyTenantGUCs receipt
+        run: go test -count=1 -timeout 30s ./internal/db/ -run 'ApplyTenant|WithTenantGold|LegacySites|RLSPolicy|BeginTxInventory'
+      - name: Route-table dump (Path 6 dual URL + shim)
+        run: go test -count=1 -timeout 120s ./internal/api/ -run 'TestMCP_RouteTableDump|TestChi_Duplicate'
+      - name: Path 6 auth / no-core
+        run: go test -count=1 -timeout 60s ./internal/agentic/ -run 'HandleToolCall|ListTickets|SubmitAgent'

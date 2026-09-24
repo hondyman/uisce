@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Zero-Entitlement Hardened Runtime Policy for Financial Workstations.
+  This workstation requires ZERO hardware recording permissions:
+  - NO camera (com.apple.security.device.camera)
+  - NO microphone (com.apple.security.device.audio-input)
+  - NO location (com.apple.security.personal-information.location)
+  - NO address book (com.apple.security.personal-information.addressbook)
+  - NO keystroke recording / accessibility interception
+  Web content runs inside Apple's WKWebView XPC processes with Apple's own sandboxed runtime.
+-->
+<plist version="1.0">
+<dict>
+</dict>
+</plist>

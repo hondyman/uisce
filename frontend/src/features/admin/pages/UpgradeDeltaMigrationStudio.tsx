@@ -22,6 +22,7 @@ import PublishedWithChangesIcon from '@mui/icons-material/PublishedWithChanges';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useTenant } from '../../../contexts/TenantContext';
+import { apiFetch } from '../../../lib/apiClient';
 
 interface ConflictItem {
   property_path: string;
@@ -51,7 +52,7 @@ export const UpgradeDeltaMigrationStudio: React.FC = () => {
 
   const fetchDeltas = () => {
     setLoading(true);
-    fetch(`/api/admin/tenants/deltas?tenant_id=${tenantId}`)
+    apiFetch(`/api/admin/tenants/deltas?tenant_id=${tenantId}`)
       .then((res) => res.json())
       .then((data) => {
         setDelta(data);
@@ -70,7 +71,7 @@ export const UpgradeDeltaMigrationStudio: React.FC = () => {
     setConflicts([]);
 
     try {
-      const res = await fetch(`/api/admin/tenants/upgrade?tenant_id=${tenantId}&target_version=v1.3.0`, {
+      const res = await apiFetch(`/api/admin/tenants/upgrade?tenant_id=${tenantId}&target_version=v1.3.0`, {
         method: 'POST',
       });
       const data = await res.json();

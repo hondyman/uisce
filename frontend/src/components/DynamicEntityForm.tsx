@@ -3,6 +3,7 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, M
 import AddIcon from '@mui/icons-material/Add';
 import useFormStore from '../store/formStore';
 import { devDebug, devError } from '../utils/devLogger';
+import { apiFetch } from '../lib/apiClient';
 import KeyValueEditor from './KeyValueEditor';
 
 interface EntityRecord {
@@ -46,14 +47,7 @@ const DynamicEntityForm: React.FC<Props> = ({ open, onClose, onSubmit, initialVa
   useEffect(() => {
     const fetchEntities = async () => {
       try {
-        const res = await fetch('/api/entity_registry');
-
-        // If server returned an error status, capture body for diagnostics
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          devError('[DynamicEntityForm] Failed to fetch entities - non-OK status', { status: res.status, statusText: res.statusText, body: text });
-          throw new Error(`Failed to fetch entity registry: ${res.status} ${res.statusText}`);
-        }
+        const res = await apiFetch('/api/entity_registry');
 
         const contentType = res.headers.get('content-type') || '';
         if (!contentType.includes('application/json')) {

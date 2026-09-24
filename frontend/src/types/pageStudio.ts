@@ -14,10 +14,15 @@
 export interface ComponentDefinition {
   id: string;
   type: string;
-  label: string;
+  label?: string;
   icon?: string;
+  /** Palette-catalog defaults; a placed widget instance uses `props` instead. */
   defaultProps?: Record<string, unknown>;
   category?: string;
+  /** Widget instance config (data binding, text content, expression source, etc). */
+  props?: Record<string, unknown>;
+  /** Free-form CSS-ish style overrides applied to the widget's wrapper (font, color, spacing). */
+  style?: Record<string, string>;
 }
 
 /**
@@ -59,9 +64,24 @@ export interface ResponsiveOverride {
 
 export interface LayoutNode {
   id: string;
-  componentId: string;
+  /**
+   * Container kind - Row/Column stack their children horizontally/vertically.
+   * Panel is a Column that can additionally slide open/collapsed as a side
+   * region (see PanelNodeProps below, read out of `props`) - used for
+   * things like a filters/detail rail next to a page's main content.
+   */
+  type: 'Row' | 'Column' | 'Panel';
+  /** Unused by plain Row/Column containers; reserved for a future componentId-backed layout node kind. */
+  componentId?: string;
+  /** Row/Column: unused today. Panel: see PanelNodeProps. */
   props?: Record<string, unknown>;
-  children?: LayoutNode[];
+  /**
+   * Child ids, resolved against the SAME PageLayout.nodes map for a nested
+   * container or against CorePageDefinition.components for a placed widget
+   * - a flat id reference, not a nested LayoutNode tree (LayoutCanvas.tsx /
+   * PageBrowser.tsx both resolve children this way).
+   */
+  children?: string[];
   style?: Record<string, string>;
   /**
    * Sparse per-breakpoint overrides. Omitted entirely for nodes that render
@@ -93,8 +113,109 @@ export interface LayoutNode {
 export interface DataSourceDefinition {
   id: string;
   name: string;
-  type: 'api' | 'database' | 'static';
+  type: 'api' | 'database' | 'static' | 'business_object';
   config: Record<string, unknown>;
+}
+
+/** DataSourceDefinition.config shape when type === 'business_object'. */
+export interface BusinessObjectDataSourceConfig {
+  boId: string;
+  boKey: string;
+  bindingId: string;
+  displayName: string;
+  relatedBoIds: string[];
+  /**
+   * Master-detail child scoping: when set, a Table/Form bound to this data
+   * source only shows rows where `fkField` equals the record id of the
+   * page's current selection (see SelectionContext.tsx) - e.g. an
+   * "Order Allocations" data source with fkField: "order_id" only shows
+   * allocations for the Order row currently selected in a master Table
+   * elsewhere on the page (any tab). Absent for the master data source
+   * itself and for data sources not participating in master-detail at all.
+   */
+  masterFilter?: { fkField: string };
+}
+
+/**
+ * The tree of layout structure (Row/Column containers), keyed by node id.
+ * `root` names the entry node. This is the actual runtime/persisted shape
+ * (PageStudioPage.tsx, LayoutCanvas.tsx, PageBrowser.tsx all read/write it
+ * this way, and it's what the page_studio_handler.go backend round-trips
+ * as-is) - it was previously mis-declared here as a bare `LayoutNode[]`,
+ * which never matched any real caller and produced a long tail of
+ * spurious "Property 'nodes'/'root' does not exist" type errors.
+ */
+export interface PageLayout {
+  root: string;
+  nodes: Record<string, LayoutNode>;
+}
+
+/** LayoutNode.props shape when type === 'Panel'. */
+export interface PanelNodeProps {
+  side: 'left' | 'right';
+  /** When false, the panel is a fixed-width rail with no toggle. */
+  collapsible: boolean;
+  defaultOpen: boolean;
+  widthPx: number;
+  /** Shown in the panel's collapse-toggle tooltip and its collapsed-rail strip. */
+  label?: string;
+}
+
+/**
+ * One tab of a multi-tab page. Each tab owns its own layout tree, but all
+ * tabs on a page share the same `components` map (CorePageDefinition.components)
+ * and `dataSources` - a widget id is unique across the whole page, not
+ * per-tab, so switching tabs never needs to remap ids.
+ */
+export interface PageTab {
+  id: string;
+  label: string;
+  layout: PageLayout;
+}
+
+/** PeopleSoft-style page events that only change presentation. */
+export type PresentationEventKind = 'pageActivate' | 'fieldChange' | 'fieldEdit' | 'selectionChange';
+
+export type PresentationTargetKind = 'widget' | 'section' | 'field';
+
+export interface PresentationTarget {
+  kind: PresentationTargetKind;
+  /** Widget id, layout node id, or form widget id when kind is field. */
+  id: string;
+  fieldName?: string;
+}
+
+export interface PresentationAction {
+  target: PresentationTarget;
+  hidden?: boolean;
+  readOnly?: boolean;
+  collapsed?: boolean;
+  style?: Partial<Record<'color' | 'backgroundColor' | 'fontWeight' | 'borderColor', string>>;
+  /** Display caption only — does not rename the Business Object term. */
+  label?: string;
+  /**
+   * Report Studio only (Crystal/SSRS's "suppress repeated value"): when the
+   * value of this cell/field is unchanged from the previous row within
+   * `scope`, blank it instead of repeating it. Additive, optional, and
+   * deliberately unread by Page Studio's renderer (`PageComponentRenderer.tsx`
+   * only checks `hidden`/`readOnly`/`style`/`label`) — see
+   * HANDOFF_REPORT_BUILDER_SPINE_PLAN.md Phase 1 ticket 1.4. Do not add a
+   * switch/effect-type dispatch for this; the action-merge model in
+   * `applyActions` (presentationEvents.ts) stays flat and additive so new
+   * report-only fields cost nothing for Page Studio to ignore.
+   */
+  suppressRepeat?: 'band' | 'page';
+}
+
+export interface PresentationRule {
+  id: string;
+  event: PresentationEventKind;
+  label?: string;
+  /** Optional: which field/widget this rule is authored against (UI grouping + FieldEdit filter). */
+  source?: { kind: 'field' | 'widget'; id: string; termKey?: string };
+  /** ASL expression. Empty = always apply on this event. */
+  when: string;
+  actions: PresentationAction[];
 }
 
 export interface CorePageDefinition {
@@ -102,9 +223,45 @@ export interface CorePageDefinition {
   name: string;
   slug: string;
   description?: string;
-  layout: LayoutNode[];
-  components: ComponentDefinition[];
+  env?: string;
+  tenantId?: string;
+  /**
+   * The page's layout when it has no tabs. Once `tabs` is set (even to a
+   * single tab), `tabs[].layout` is authoritative and this field is a
+   * stale leftover from before the page was split into tabs - kept only
+   * so old, already-saved single-layout pages still load without a
+   * migration step.
+   */
+  layout: PageLayout;
+  /** When present, the page is multi-tab; each tab supplies its own layout. */
+  tabs?: PageTab[];
+  /**
+   * Layout tree rendered ABOVE the tab strip, shared across every tab -
+   * for page-wide filter widgets (Slicers) that should scope every tab's
+   * data, not just one. Uses the same `components`/`dataSources` maps as
+   * `tabs`/`layout`; a component id lives in exactly one tree (this one,
+   * or a tab's), never both. Optional: most pages have no page-wide
+   * filters and this is omitted entirely.
+   */
+  filterBar?: PageLayout;
+  /** Placed widget instances, keyed by id (same keys layout nodes' children reference), shared across all tabs. */
+  components: Record<string, ComponentDefinition>;
   dataSources: DataSourceDefinition[];
+  /**
+   * Presentation-only rules (PeopleSoft FieldChange analog). They hide,
+   * restyle, collapse, or relabel widgets/sections. They never save,
+   * delete, or set field values — Business Object events own CRUD.
+   */
+  presentationEvents?: PresentationRule[];
+  dataBindings?: { sources: Record<string, unknown>; bindings: unknown[] };
+  visibility?: { roles: string[] };
+  /** True for a gold-copy-authored page every tenant inherits read-only; false for an ordinary tenant-authored page. Set at creation, not editable afterward. */
+  isCore?: boolean;
+  /** False when this is an inherited gold-copy page the current tenant cannot mutate. */
+  editable?: boolean;
+  status?: 'draft' | 'published';
+  /** list | detail | master-detail | dashboard — authoring intent, not a layout id. */
+  pageKind?: 'list' | 'detail' | 'master-detail' | 'dashboard';
   createdAt: string;
   updatedAt: string;
   version?: number;

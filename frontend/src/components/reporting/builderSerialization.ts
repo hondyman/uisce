@@ -1,6 +1,17 @@
 export interface BOBinding {
   qualifiedPath: string;
   alias?: string;
+  /**
+   * The BO's real id (business_objects.id), used to populate
+   * primary_business_object_id on save so it survives reload without
+   * relying on the qualifiedPath/bo_path string-match, which is
+   * currently unreliable (see the AI report-generation feature's notes:
+   * both call sites that build a BOBinding today cast from an object that
+   * doesn't actually carry qualifiedPath/alias at runtime, so bo_path has
+   * always been undefined for reports created via the normal flow -
+   * boId is additive here, not a fix for that separate, pre-existing gap).
+   */
+  boId?: string;
 }
 
 interface BuilderDefinition {
@@ -47,6 +58,7 @@ export function buildSavePayload(
     },
     elements: def.elements,
     parameters: def.parameters || [],
+    primary_business_object_id: selectedBO?.boId,
   };
 
   return payload;

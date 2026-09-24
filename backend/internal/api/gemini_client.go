@@ -31,7 +31,13 @@ func NewGeminiClient(apiKey string) (*GeminiClient, error) {
 
 	return &GeminiClient{
 		client: client,
-		model:  "gemini-pro",
+		// "gemini-pro" (and "gemini-1.5-flash") are retired on the current
+		// Gemini API version (v1beta) - every caller (NL-to-SQL
+		// planner/executor, AI page generation) silently fell back to its
+		// deterministic path with a 404 logged, since none of them treat a
+		// Gemini failure as fatal. Confirmed available via this project's
+		// key's own ListModels response.
+		model: "gemini-2.5-flash",
 	}, nil
 }
 
@@ -215,6 +221,528 @@ func extractSQL(text string) string {
 	}
 
 	return ""
+}
+
+// PageGenerationField is one BO field made available to the model as
+// grounding for page generation - just enough for it to judge the field mix
+// (how many measures vs dimensions) without letting it invent field names
+// the page could bind to, since actual data binding is resolved separately
+// at render time (PageComponentRenderer.tsx fetches live BO terms), not
+// from anything the model outputs here.
+type PageGenerationField struct {
+	Key         string
+	DisplayName string
+	DataType    string
+	Role        string // DIMENSION, MEASURE, or CALCULATED
+}
+
+// RelatedBOSummary is one Business Object related to the page's primary BO
+// (from the already-fixed catalog_edge relationship graph -
+// GetBusinessObjectRelationships), offered to the model as a candidate to
+// pull onto the page - e.g. an "Order" page might pull in "Order
+// Allocation" or "Execution" sections, not just its own fields.
+type RelatedBOSummary struct {
+	BOKey            string
+	DisplayName      string
+	RelationshipType string
+	Cardinality      string
+	Fields           []PageGenerationField
+}
+
+// PageGenerationSection is one widget the model wants placed on the
+// generated page, and which Business Object it should be bound to.
+// BOKey == "" means the page's own primary BO; any other value must match
+// one of the RelatedBOSummary.BOKey values offered in the prompt - the
+// model can't invent a BO to bind to, only choose among ones actually
+// related to the primary. Field binding within a BO is still auto-resolved
+// at render time (PageComponentRenderer.tsx), not chosen here.
+type PageGenerationSection struct {
+	BOKey string `json:"boKey"`
+	Type  string `json:"type"`
+	Title string `json:"title"`
+}
+
+// PageGenerationSpec is the JSON shape asked of the model.
+type PageGenerationSpec struct {
+	Title    string `json:"title"`
+	PageKind string `json:"pageKind"`
+	FilterBar []PageGenerationSection `json:"filterBar,omitempty"`
+	// LayoutTemplate names one of allowedPageGenerationTemplates - the
+	// section-based body layout (frontend/src/pages/page-studio/
+	// layoutTemplates.ts) the generated sections are distributed into, in
+	// order, one per section. Restricted to plain section templates (no
+	// side panels) for this first pass - see PageStudioListPage.tsx's
+	// "Generate with AI" dialog comment.
+	LayoutTemplate string                  `json:"layoutTemplate"`
+	Sections       []PageGenerationSection `json:"sections"`
+}
+
+// allowedPageGenerationWidgetTypes are the only component types the page
+// designer's palette actually renders as data-bound widgets (see
+// COMPONENT_TO_WIDGET_TYPE and the Table/Form special cases in
+// PageComponentRenderer.tsx). Anything else the model returns is dropped
+// rather than trusted, since an unknown component type renders as an inert
+// "Component Preview" placeholder box.
+var allowedPageGenerationWidgetTypes = map[string]bool{
+	"KPIGroup":  true,
+	"LineChart": true,
+	"Table":     true,
+	"Slicer":    true,
+	"Form":      true,
+}
+
+// allowedPageGenerationTemplates mirrors the plain section-based ids in
+// layoutTemplates.ts (single-column, two-column, three-column,
+// dashboard-grid). master-detail and two-column-side-panel are deliberately
+// excluded - those bundle a side Panel as part of the template shape, and
+// AI-driven layout is scoped to body sections only for this first pass.
+var allowedPageGenerationTemplates = map[string]bool{
+	"single-column":  true,
+	"two-column":     true,
+	"three-column":   true,
+	"dashboard-grid": true,
+	"master-detail":  true,
+}
+
+var allowedPageKinds = map[string]bool{
+	"list":          true,
+	"detail":        true,
+	"master-detail": true,
+	"dashboard":     true,
+}
+
+// GeneratePageSpec asks Gemini to pick a small section mix and page title
+// for a Business Object, grounded in that BO's real fields AND its real
+// related Business Objects (relatedBOs, from the catalog relationship
+// graph) so the model can decide e.g. "this is an Order page, pull in
+// Order Allocation and Execution as their own sections" instead of only
+// ever describing the primary BO's own fields. It does not choose field
+// bindings itself - see PageGenerationSection - so a wrong or missing field
+// name in the model's reasoning can't corrupt the generated page, and it
+// can't bind to a BO that isn't actually related (validated against
+// relatedBOs below).
+func (gc *GeminiClient) GeneratePageSpec(ctx context.Context, boName, boKey, description, pageKind string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) (*PageGenerationSpec, error) {
+	if gc.client == nil {
+		return nil, fmt.Errorf("gemini client not initialized")
+	}
+
+	prompt := buildPageGenerationPrompt(boName, boKey, description, pageKind, fields, relatedBOs)
+
+	model := gc.client.GenerativeModel(gc.model)
+	model.SetTemperature(0.2)
+	// 500, then 1200, both still truncated real responses mid-JSON -
+	// gemini-2.5-flash spends part of MaxOutputTokens on internal
+	// "thinking" tokens before it ever writes the visible JSON, so the
+	// visible-text budget is smaller than the number itself suggests.
+	model.SetMaxOutputTokens(4000)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("gemini API call failed: %w", err)
+	}
+	if len(resp.Candidates) == 0 {
+		return nil, fmt.Errorf("no response from gemini")
+	}
+
+	var responseText string
+	for _, candidate := range resp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if text, ok := part.(genai.Text); ok {
+				responseText = string(text)
+				break
+			}
+		}
+		if responseText != "" {
+			break
+		}
+	}
+	if responseText == "" {
+		return nil, fmt.Errorf("empty response from gemini")
+	}
+
+	jsonStr := extractJSON(responseText)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("failed to extract JSON from response: %s", responseText)
+	}
+
+	var spec PageGenerationSpec
+	if err := json.Unmarshal([]byte(jsonStr), &spec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal page spec: %w", err)
+	}
+
+	// Every boKey the model is allowed to bind to: "" (primary) plus each
+	// offered related BO. Anything else - a hallucinated or misspelled key -
+	// gets remapped to the primary rather than trusted, since an unknown
+	// boKey would leave a section with no resolvable data source.
+	validBOKeys := map[string]bool{"": true}
+	for _, r := range relatedBOs {
+		validBOKeys[r.BOKey] = true
+	}
+
+	// Filter to section types the designer can actually render, and cap the
+	// count - a runaway or malformed response shouldn't be able to hand the
+	// caller an unbounded or unrenderable section list.
+	filtered := make([]PageGenerationSection, 0, len(spec.Sections))
+	for _, s := range spec.Sections {
+		if !allowedPageGenerationWidgetTypes[s.Type] {
+			continue
+		}
+		if !validBOKeys[s.BOKey] {
+			s.BOKey = ""
+		}
+		filtered = append(filtered, s)
+		if len(filtered) == 6 {
+			break
+		}
+	}
+	spec.Sections = filtered
+	if len(spec.Sections) == 0 {
+		return nil, fmt.Errorf("gemini returned no usable sections")
+	}
+	if spec.Title == "" {
+		spec.Title = boName
+	}
+	if !allowedPageKinds[spec.PageKind] {
+		if allowedPageKinds[pageKind] {
+			spec.PageKind = pageKind
+		} else {
+			spec.PageKind = "dashboard"
+		}
+	}
+	if !allowedPageGenerationTemplates[spec.LayoutTemplate] {
+		spec.LayoutTemplate = "single-column"
+	}
+	filteredBar := make([]PageGenerationSection, 0, len(spec.FilterBar))
+	for _, s := range spec.FilterBar {
+		if s.Type != "Slicer" {
+			continue
+		}
+		if !validBOKeys[s.BOKey] {
+			s.BOKey = ""
+		}
+		filteredBar = append(filteredBar, s)
+		if len(filteredBar) == 4 {
+			break
+		}
+	}
+	spec.FilterBar = filteredBar
+
+	return &spec, nil
+}
+
+func buildPageGenerationPrompt(boName, boKey, description, pageKind string, fields []PageGenerationField, relatedBOs []RelatedBOSummary) string {
+	if pageKind == "" {
+		pageKind = "dashboard"
+	}
+	prompt := "You are designing one page for a governed Business Object application (Salesforce Lightning / PeopleSoft analog), not a marketing site.\n\n"
+	prompt += "You MUST output only valid JSON in a markdown code block: ```json {...}```\n"
+	prompt += "The JSON shape is exactly: {\"title\": string, \"pageKind\": string, \"layoutTemplate\": string, \"filterBar\": [{\"boKey\": string, \"type\": \"Slicer\", \"title\": string}], \"sections\": [{\"boKey\": string, \"type\": string, \"title\": string}]}\n"
+	prompt += "\"pageKind\" MUST be one of: \"list\", \"detail\", \"master-detail\", \"dashboard\".\n"
+	prompt += "\"layoutTemplate\" MUST be one of: \"single-column\", \"two-column\", \"three-column\", \"dashboard-grid\", \"master-detail\".\n"
+	prompt += "\"type\" MUST be one of: \"KPIGroup\", \"LineChart\", \"Table\", \"Slicer\", \"Form\".\n"
+	prompt += fmt.Sprintf("\"boKey\" MUST be either \"\" (the primary Business Object %q) or one of the related keys listed below — never invent a Business Object or field name.\n", boKey)
+	prompt += "Cardinality rules: a one-valued object uses Form (or Table on a list page); a 1:N related object uses Table. KPIGroup/LineChart only if that object has MEASURE or CALCULATED fields.\n"
+	prompt += "list: one primary Table, optional Slicers in filterBar, no Form. detail: one primary Form plus 0-2 related Tables. master-detail: primary Table then Form (and optional child Tables), layoutTemplate master-detail. dashboard: KPI/Chart/Table mix.\n"
+	prompt += "Pick 1 to 6 body sections. Prefer 0-2 related Business Objects (children like allocations/executions, not every inbound FK). filterBar is optional and Slicer-only.\n"
+	prompt += "Do not emit Save/Delete/Create widgets. Formatting-only; CRUD lives on the Business Object.\n"
+	prompt += "Never include any text before or after the JSON block.\n\n"
+	prompt += fmt.Sprintf("Requested pageKind: %s\n", pageKind)
+	prompt += fmt.Sprintf("Primary Business Object: %s (key: %s)\n", boName, boKey)
+	if description != "" {
+		prompt += fmt.Sprintf("User's request: %s\n", description)
+	}
+	prompt += "\nPrimary Business Object's available fields:\n"
+	for _, f := range fields {
+		prompt += fmt.Sprintf("  - %s (%s, %s)\n", f.DisplayName, f.DataType, f.Role)
+	}
+	if len(relatedBOs) > 0 {
+		prompt += "\nRelated Business Objects you may optionally pull in as their own sections:\n"
+		for _, r := range relatedBOs {
+			prompt += fmt.Sprintf("  Business Object %q (key: %s) - relationship: %s, cardinality: %s\n", r.DisplayName, r.BOKey, r.RelationshipType, r.Cardinality)
+			for _, f := range r.Fields {
+				prompt += fmt.Sprintf("    - %s (%s, %s)\n", f.DisplayName, f.DataType, f.Role)
+			}
+		}
+	}
+	return prompt
+}
+
+// ReportGenerationField mirrors PageGenerationField, plus TermNodeID.
+// Report elements bake in specific dimension/measure selections at
+// creation time (SSRSReportBuilder.tsx's handleAddToolboxItem builds
+// dataBinding.dimensions[].termNodeId/measures[].termNodeId directly),
+// unlike Page Studio pages, which defer all field binding to render time
+// and never reference a term by id. TermNodeID is what the model must
+// copy verbatim into an element's Dimensions/Measures - never invent one.
+type ReportGenerationField struct {
+	TermNodeID  string
+	Key         string
+	DisplayName string
+	DataType    string
+	Role        string // DIMENSION, MEASURE, or CALCULATED
+}
+
+// ReportGenerationRelatedBO mirrors RelatedBOSummary, plus BOID (needed so
+// the frontend can re-fetch that BO's own binding/terms to resolve a
+// generated element's fields - RelatedBOSummary never needs this since
+// Page Studio widgets resolve fields at render time, not build time).
+type ReportGenerationRelatedBO struct {
+	BOID             string
+	BOKey            string
+	DisplayName      string
+	RelationshipType string
+	Cardinality      string
+	Fields           []ReportGenerationField
+}
+
+// ReportGenerationElement is one report widget the model wants placed,
+// bound to a Business Object (""=primary) and a specific set of that BO's
+// fields. BoKey/Type are validated the same way PageGenerationSection's
+// BOKey is; Dimensions/Measures (termNodeIds) are validated one level
+// deeper - see GenerateReportSpec.
+type ReportGenerationElement struct {
+	BOKey      string   `json:"boKey"`
+	Type       string   `json:"type"`
+	Title      string   `json:"title"`
+	Dimensions []string `json:"dimensions,omitempty"`
+	Measures   []string `json:"measures,omitempty"`
+}
+
+// ReportGenerationSpec is the JSON shape asked of the model. No
+// LayoutTemplate (the report canvas is free-position, no template
+// slots to choose among) and no FilterBar (a Slicer here is just an
+// ordinary element - the report builder has no separate filter-bar
+// region the way pages do).
+type ReportGenerationSpec struct {
+	Title      string                     `json:"title"`
+	ReportKind string                     `json:"reportKind"`
+	Elements   []ReportGenerationElement  `json:"elements"`
+}
+
+// allowedReportGenerationElementTypes are ELEMENT_TYPES's own data-bound
+// values (reportingUtils.ts) - lowercase, unlike Page Studio's PascalCase
+// widget types. textbox/image/subreport/rectangle/line/parameter are
+// deliberately excluded: decorative/manual-only today (not in
+// dataBoundTypes), so letting the model emit them would mean trusting
+// free-form content with no field-grounding - the same "no free-form
+// formula/script field" risk this repo's standing guardrails already
+// reject for EventScriptsEditor.
+var allowedReportGenerationElementTypes = map[string]bool{
+	"table": true, "matrix": true, "list": true, "chart": true,
+	"gauge": true, "sparkline": true, "slicer": true, "form": true,
+}
+
+// allowedReportGenerationKinds reuses Page Studio's exact four values for
+// rule-reuse symmetry (ticket 6.1). These are generation-time hints only,
+// never persisted - no collision with the future Phase 3-5 band-based
+// report-kind concepts.
+var allowedReportGenerationKinds = map[string]bool{
+	"list":          true,
+	"detail":        true,
+	"master-detail": true,
+	"dashboard":     true,
+}
+
+// reportGenerationFieldCaps returns the (maxDimensions, maxMeasures) a
+// given element type may bind, ported from handleAddToolboxItem's own
+// existing binding logic (SSRSReportBuilder.tsx) so the AI path can never
+// exceed what the manual drag-and-drop path already treats as the sane
+// ceiling for that widget type.
+func reportGenerationFieldCaps(elementType string) (maxDimensions, maxMeasures int) {
+	switch elementType {
+	case "slicer":
+		return 1, 0
+	case "gauge":
+		return 1, 1 // gauge takes one value, dimension-or-measure; capped further below
+	case "chart", "sparkline":
+		return 1, 1
+	case "table", "matrix", "list":
+		return 4, 2
+	default: // form
+		return 0, 0
+	}
+}
+
+// GenerateReportSpec asks Gemini to pick a small widget mix and specific
+// field bindings for a Business Object, grounded in that BO's real fields
+// AND its real related Business Objects - the report-side counterpart to
+// GeneratePageSpec. Unlike pages, report widgets bake in specific
+// dimension/measure selections at build time (see ReportGenerationField),
+// so this validates field choices one level deeper than GeneratePageSpec
+// does: every termNodeId the model returns is checked against the real
+// field set for whichever BO the element resolved to, and dropped (not
+// remapped - there's no sensible fallback the way "" is for BOKey) if it
+// isn't real.
+func (gc *GeminiClient) GenerateReportSpec(ctx context.Context, boName, boKey, description, reportKind string, fields []ReportGenerationField, relatedBOs []ReportGenerationRelatedBO) (*ReportGenerationSpec, error) {
+	if gc.client == nil {
+		return nil, fmt.Errorf("gemini client not initialized")
+	}
+
+	prompt := buildReportGenerationPrompt(boName, boKey, description, reportKind, fields, relatedBOs)
+
+	model := gc.client.GenerativeModel(gc.model)
+	model.SetTemperature(0.2)
+	model.SetMaxOutputTokens(4000)
+
+	resp, err := model.GenerateContent(ctx, genai.Text(prompt))
+	if err != nil {
+		return nil, fmt.Errorf("gemini API call failed: %w", err)
+	}
+	if len(resp.Candidates) == 0 {
+		return nil, fmt.Errorf("no response from gemini")
+	}
+
+	var responseText string
+	for _, candidate := range resp.Candidates {
+		for _, part := range candidate.Content.Parts {
+			if text, ok := part.(genai.Text); ok {
+				responseText = string(text)
+				break
+			}
+		}
+		if responseText != "" {
+			break
+		}
+	}
+	if responseText == "" {
+		return nil, fmt.Errorf("empty response from gemini")
+	}
+
+	jsonStr := extractJSON(responseText)
+	if jsonStr == "" {
+		return nil, fmt.Errorf("failed to extract JSON from response: %s", responseText)
+	}
+
+	var spec ReportGenerationSpec
+	if err := json.Unmarshal([]byte(jsonStr), &spec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal report spec: %w", err)
+	}
+
+	validated := validateReportGenerationSpec(&spec, boName, reportKind, fields, relatedBOs)
+	if len(validated.Elements) == 0 {
+		return nil, fmt.Errorf("gemini returned no usable elements")
+	}
+	return validated, nil
+}
+
+// validateReportGenerationSpec is GenerateReportSpec's anti-hallucination
+// pass, extracted as a pure function so it's testable without a live (or
+// mocked) Gemini call - every raw model output goes through this before
+// a caller ever sees it. Never trusts the model: unknown element types
+// are dropped, a boKey not among "" (primary) or a real related BO gets
+// remapped to primary, and dimension/measure termNodeIds not present in
+// that BO's real field set get dropped outright (no sensible fallback the
+// way "" is for BOKey). Element count is capped at 6, matching
+// GeneratePageSpec's section cap.
+func validateReportGenerationSpec(spec *ReportGenerationSpec, boName, reportKind string, fields []ReportGenerationField, relatedBOs []ReportGenerationRelatedBO) *ReportGenerationSpec {
+	validBOKeys := map[string]bool{"": true}
+	validTermsByBOKey := map[string]map[string]bool{"": {}}
+	for _, f := range fields {
+		validTermsByBOKey[""][f.TermNodeID] = true
+	}
+	for _, r := range relatedBOs {
+		validBOKeys[r.BOKey] = true
+		terms := map[string]bool{}
+		for _, f := range r.Fields {
+			terms[f.TermNodeID] = true
+		}
+		validTermsByBOKey[r.BOKey] = terms
+	}
+
+	filterTerms := func(ids []string, valid map[string]bool, max int) []string {
+		if max <= 0 {
+			return nil
+		}
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			if !valid[id] {
+				continue
+			}
+			out = append(out, id)
+			if len(out) == max {
+				break
+			}
+		}
+		return out
+	}
+
+	filtered := make([]ReportGenerationElement, 0, len(spec.Elements))
+	for _, e := range spec.Elements {
+		if !allowedReportGenerationElementTypes[e.Type] {
+			continue
+		}
+		if !validBOKeys[e.BOKey] {
+			e.BOKey = ""
+		}
+		valid := validTermsByBOKey[e.BOKey]
+		maxDims, maxMeasures := reportGenerationFieldCaps(e.Type)
+		e.Dimensions = filterTerms(e.Dimensions, valid, maxDims)
+		e.Measures = filterTerms(e.Measures, valid, maxMeasures)
+		if e.Type == "gauge" {
+			// Gauge takes exactly one value: prefer a measure, fall back
+			// to a dimension if the model gave none - mirroring
+			// handleAddToolboxItem's own measures[0] || dims[0] fallback.
+			if len(e.Measures) > 0 {
+				e.Measures = e.Measures[:1]
+				e.Dimensions = nil
+			} else if len(e.Dimensions) > 0 {
+				e.Dimensions = e.Dimensions[:1]
+			}
+		}
+		filtered = append(filtered, e)
+		if len(filtered) == 6 {
+			break
+		}
+	}
+	spec.Elements = filtered
+	if spec.Title == "" {
+		spec.Title = boName
+	}
+	if !allowedReportGenerationKinds[spec.ReportKind] {
+		if allowedReportGenerationKinds[reportKind] {
+			spec.ReportKind = reportKind
+		} else {
+			spec.ReportKind = "dashboard"
+		}
+	}
+	return spec
+}
+
+func buildReportGenerationPrompt(boName, boKey, description, reportKind string, fields []ReportGenerationField, relatedBOs []ReportGenerationRelatedBO) string {
+	if reportKind == "" {
+		reportKind = "dashboard"
+	}
+	prompt := "You are designing the widget mix for one report in a governed Business Object reporting tool (SSRS/Crystal Reports analog), not a marketing dashboard.\n\n"
+	prompt += "You MUST output only valid JSON in a markdown code block: ```json {...}```\n"
+	prompt += "The JSON shape is exactly: {\"title\": string, \"reportKind\": string, \"elements\": [{\"boKey\": string, \"type\": string, \"title\": string, \"dimensions\": [string], \"measures\": [string]}]}\n"
+	prompt += "\"reportKind\" MUST be one of: \"list\", \"detail\", \"master-detail\", \"dashboard\".\n"
+	prompt += "\"type\" MUST be one of: \"table\", \"matrix\", \"list\", \"chart\", \"gauge\", \"sparkline\", \"slicer\", \"form\".\n"
+	prompt += fmt.Sprintf("\"boKey\" MUST be either \"\" (the primary Business Object %q) or one of the related keys listed below — never invent a Business Object.\n", boKey)
+	prompt += "\"dimensions\" and \"measures\" MUST be termNodeId values copied EXACTLY from the field list below for whichever Business Object the element is bound to — never invent, rename, or guess one.\n"
+	prompt += "Field caps per type: slicer needs exactly 1 dimension, 0 measures. gauge needs exactly 1 measure (or 1 dimension if the object has no measures). chart/sparkline need exactly 1 dimension + 1 measure. table/matrix/list may use up to 4 dimensions + 2 measures. form uses no dimensions/measures (it binds the whole record).\n"
+	prompt += "Cardinality rules: a one-valued object uses form (or table on a list report); a 1:N related object uses table. chart/gauge/sparkline only if that object has MEASURE or CALCULATED fields.\n"
+	prompt += "list: one primary table, optional slicer, no form. detail: one primary form plus 0-2 related tables. master-detail: primary table then form (and optional child tables). dashboard: gauge/chart/table mix.\n"
+	prompt += "Pick 1 to 6 elements. Prefer 0-2 related Business Objects (children like allocations/executions, not every inbound FK).\n"
+	prompt += "Never include any text before or after the JSON block.\n\n"
+	prompt += fmt.Sprintf("Requested reportKind: %s\n", reportKind)
+	prompt += fmt.Sprintf("Primary Business Object: %s (key: %s)\n", boName, boKey)
+	if description != "" {
+		prompt += fmt.Sprintf("User's request: %s\n", description)
+	}
+	prompt += "\nPrimary Business Object's available fields:\n"
+	for _, f := range fields {
+		prompt += fmt.Sprintf("  - termNodeId=%s: %s (%s, %s)\n", f.TermNodeID, f.DisplayName, f.DataType, f.Role)
+	}
+	if len(relatedBOs) > 0 {
+		prompt += "\nRelated Business Objects you may optionally pull in as their own elements:\n"
+		for _, r := range relatedBOs {
+			prompt += fmt.Sprintf("  Business Object %q (key: %s) - relationship: %s, cardinality: %s\n", r.DisplayName, r.BOKey, r.RelationshipType, r.Cardinality)
+			for _, f := range r.Fields {
+				prompt += fmt.Sprintf("    - termNodeId=%s: %s (%s, %s)\n", f.TermNodeID, f.DisplayName, f.DataType, f.Role)
+			}
+		}
+	}
+	return prompt
 }
 
 // Close closes the Gemini client connection

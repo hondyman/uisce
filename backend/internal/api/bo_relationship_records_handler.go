@@ -47,7 +47,7 @@ func (h *BOCRUDHandler) resolveChildFKColumn(ctx context.Context, tenantID, relI
 	bindingQuery := `
 		SELECT rb.join_condition_sql
 		FROM relationship_bindings rb
-		JOIN business_object_bindings bob ON bob.id = rb.binding_id
+		JOIN business_object_binding bob ON bob.bo_binding_id = rb.binding_id
 		WHERE rb.tenant_id = $1 AND rb.rel_id = $2 AND bob.bo_id = $3
 		LIMIT 1;
 	`

@@ -23,6 +23,7 @@ type WebSocketClient struct {
 	conn     *websocket.Conn
 	send     chan []byte
 	userID   string
+	tenantID string
 	audience string
 	hub      *WebSocketHub
 }

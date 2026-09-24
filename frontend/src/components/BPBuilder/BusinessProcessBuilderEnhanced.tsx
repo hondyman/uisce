@@ -8,6 +8,9 @@ import {
   Calendar, Flag, Tag as TagIcon, Users, Briefcase, Shield, Wand2, Package
 } from 'lucide-react';
 import { useNotification } from '../../hooks/useNotification';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useCreateBusinessProcess, useUpdateBusinessProcess, useDeleteBusinessProcess, 
          usePublishBusinessProcess, useSimulateBusinessProcess, useDuplicateBusinessProcess,
          useFetchBusinessProcess as _useFetchBusinessProcess, BPStep, BusinessProcess } from './useBPBuilderAPI';
@@ -421,6 +424,97 @@ const StepEditor: React.FC<StepEditorProps> = ({ step, onSave, onCancel, stepOrd
   );
 };
 
+// Sortable Step Card - draggable row within the Canvas View
+const SortableStepCard: React.FC<{
+  step: BPStep;
+  onEditStep: (step: BPStep) => void;
+  onDeleteStep: (stepId: string) => void;
+}> = ({ step, onEditStep, onDeleteStep }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: step.id });
+  const stepType = STEP_TYPES.find(t => t.type === step.stepType)!;
+  const IconComponent = stepType.icon;
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`${stepType.bgColor} border-2 ${stepType.borderColor} rounded-lg p-4 cursor-move transition-all ${
+        isDragging ? 'opacity-50' : ''
+      } hover:shadow-md`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-4 flex-1">
+          <div className={`p-3 bg-gradient-to-br ${stepType.color} text-white rounded-lg flex-shrink-0`}>
+            <IconComponent size={20} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold text-gray-900">{step.stepName}</h4>
+              <span className={`${stepType.badgeColor} px-2 py-1 rounded text-xs font-semibold whitespace-nowrap`}>
+                Step {step.stepOrder}
+              </span>
+            </div>
+            <p className="text-sm text-gray-600 mt-1">{step.description}</p>
+            <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
+              {step.durationHours && (
+                <div className="flex items-center gap-1">
+                  <Clock size={14} />
+                  {step.durationHours}h
+                </div>
+              )}
+              {step.escalationThresholdHours && (
+                <div className="flex items-center gap-1 text-red-600">
+                  <AlertTriangle size={14} />
+                  Escalate: {step.escalationThresholdHours}h
+                </div>
+              )}
+              {step.assigneeRole && (
+                <div className="flex items-center gap-1">
+                  <User size={14} />
+                  {step.assigneeRole}
+                </div>
+              )}
+              {(step.validationRules?.length ?? 0) > 0 && (
+                <div className="flex items-center gap-1">
+                  <CheckCircle size={14} />
+                  {step.validationRules?.length} rules
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onEditStep(step)}
+            className="p-2 hover:bg-white hover:bg-opacity-50 rounded-lg transition-all"
+            title="Edit step"
+            aria-label="Edit step"
+          >
+            <Settings size={18} className="text-gray-600" />
+          </button>
+          <button
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={() => onDeleteStep(step.id)}
+            className="p-2 hover:bg-red-100 rounded-lg transition-all"
+            title="Delete step"
+            aria-label="Delete step"
+          >
+            <Trash2 size={18} className="text-red-600" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Canvas View - Visual Workflow Designer
 const CanvasView: React.FC<{
   steps: BPStep[];
@@ -429,12 +523,19 @@ const CanvasView: React.FC<{
   onAddStep: () => void;
   onReorderSteps: (steps: BPStep[]) => void;
 }> = ({ steps, onEditStep, onDeleteStep, onAddStep, onReorderSteps }) => {
-  const [draggedStep, setDraggedStep] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  );
 
-  const moveStep = (fromIdx: number, toIdx: number) => {
-    const newSteps = [...steps];
-    const [movedStep] = newSteps.splice(fromIdx, 1);
-    newSteps.splice(toIdx, 0, movedStep);
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const fromIdx = steps.findIndex(s => s.id === active.id);
+    const toIdx = steps.findIndex(s => s.id === over.id);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const newSteps = arrayMove(steps, fromIdx, toIdx);
     newSteps.forEach((step, idx) => step.stepOrder = idx + 1);
     onReorderSteps(newSteps);
   };
@@ -451,99 +552,23 @@ const CanvasView: React.FC<{
         </div>
       </div>
 
-      <div className="space-y-3">
-        {steps.map((step, idx) => {
-          const stepType = STEP_TYPES.find(t => t.type === step.stepType)!;
-          const IconComponent = stepType.icon;
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={steps.map(s => s.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3">
+            {steps.map((step, idx) => (
+              <React.Fragment key={step.id}>
+                <SortableStepCard step={step} onEditStep={onEditStep} onDeleteStep={onDeleteStep} />
 
-          return (
-            <React.Fragment key={step.id}>
-              <div
-                draggable
-                onDragStart={() => setDraggedStep(step.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => {
-                  const draggedIdx = steps.findIndex(s => s.id === draggedStep);
-                  if (draggedIdx !== undefined) {
-                    moveStep(draggedIdx, idx);
-                  }
-                }}
-                onDragEnd={() => setDraggedStep(null)}
-                className={`${stepType.bgColor} border-2 ${stepType.borderColor} rounded-lg p-4 cursor-move transition-all ${
-                  draggedStep === step.id ? 'opacity-50' : ''
-                } hover:shadow-md`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4 flex-1">
-                    <div className={`p-3 bg-gradient-to-br ${stepType.color} text-white rounded-lg flex-shrink-0`}>
-                      <IconComponent size={20} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-gray-900">{step.stepName}</h4>
-                        <span className={`${stepType.badgeColor} px-2 py-1 rounded text-xs font-semibold whitespace-nowrap`}>
-                          Step {step.stepOrder}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mt-1">{step.description}</p>
-                      <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
-                        {step.durationHours && (
-                          <div className="flex items-center gap-1">
-                            <Clock size={14} />
-                            {step.durationHours}h
-                          </div>
-                        )}
-                        {step.escalationThresholdHours && (
-                          <div className="flex items-center gap-1 text-red-600">
-                            <AlertTriangle size={14} />
-                            Escalate: {step.escalationThresholdHours}h
-                          </div>
-                        )}
-                        {step.assigneeRole && (
-                          <div className="flex items-center gap-1">
-                            <User size={14} />
-                            {step.assigneeRole}
-                          </div>
-                        )}
-                        {(step.validationRules?.length ?? 0) > 0 && (
-                          <div className="flex items-center gap-1">
-                            <CheckCircle size={14} />
-                            {step.validationRules?.length} rules
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                {idx < steps.length - 1 && (
+                  <div className="flex justify-center">
+                    <ArrowRight className="text-gray-400 rotate-90" size={20} />
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button
-                      onClick={() => onEditStep(step)}
-                      className="p-2 hover:bg-white hover:bg-opacity-50 rounded-lg transition-all"
-                      title="Edit step"
-                      aria-label="Edit step"
-                    >
-                      <Settings size={18} className="text-gray-600" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteStep(step.id)}
-                      className="p-2 hover:bg-red-100 rounded-lg transition-all"
-                      title="Delete step"
-                      aria-label="Delete step"
-                    >
-                      <Trash2 size={18} className="text-red-600" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {idx < steps.length - 1 && (
-                <div className="flex justify-center">
-                  <ArrowRight className="text-gray-400 rotate-90" size={20} />
-                </div>
-              )}
-            </React.Fragment>
-          );
-        })}
-      </div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <button
         onClick={onAddStep}

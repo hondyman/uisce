@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import styles from '../pages/DynamicUIGeneratorPage.module.css';
+import styles from './Toast.module.css';
 
 type Toast = { id: string; message: string; type?: 'info' | 'success' | 'error' };
 

@@ -35,6 +35,7 @@ import {
   Refresh,
   Close,
 } from '@mui/icons-material';
+import { apiFetch } from '../../lib/apiClient';
 
 interface AuditExplorerProps {
   tenantId: string;
@@ -110,7 +111,7 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
 
       switch (activeTab) {
         case 'jobs':
-          const jobsResponse = await fetch(
+          const jobsResponse = await apiFetch(
             `/api/audit/job-runs?status=${statusFilter}&limit=100`,
             { headers }
           );
@@ -119,7 +120,7 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
           break;
 
         case 'violations':
-          const violationsResponse = await fetch(
+          const violationsResponse = await apiFetch(
             `/api/audit/violations?limit=100`,
             { headers }
           );
@@ -128,7 +129,7 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
           break;
 
         case 'changesets':
-          const changesetsResponse = await fetch(
+          const changesetsResponse = await apiFetch(
             `/api/audit/changesets?limit=100`,
             { headers }
           );
@@ -145,11 +146,10 @@ export const AuditExplorer: React.FC<AuditExplorerProps> = ({ tenantId, tenantNa
 
   const explainWithAI = async (recordType: string, recordId: string) => {
     try {
-      const response = await fetch(`/api/audit/ai-narratives`, {
+      const response = await apiFetch(`/api/audit/ai-narratives`, {
         method: 'POST',
         headers: {
           'X-Tenant-ID': tenantId,
-          'Content-Type': 'application/json',
         },
         body: JSON.stringify({ record_type: recordType, record_id: recordId }),
       });
@@ -452,8 +452,8 @@ const DashboardsView: React.FC<{ tenantId: string }> = ({ tenantId }) => {
       const headers = { 'X-Tenant-ID': tenantId };
       
       const [sloResponse, complianceResponse] = await Promise.all([
-        fetch('/api/audit/dashboard/slo', { headers }),
-        fetch('/api/audit/dashboard/compliance', { headers }),
+        apiFetch('/api/audit/dashboard/slo', { headers }),
+        apiFetch('/api/audit/dashboard/compliance', { headers }),
       ]);
 
       const slo = await sloResponse.json();

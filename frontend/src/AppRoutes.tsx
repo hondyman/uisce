@@ -7,7 +7,6 @@ import { JITRequestPanelExample } from "./JITRequestPanelExample";
 import { AccessExplanationExample } from "./AccessExplanationExample";
 import ConversationalQueryPage from "./pages/ConversationalQueryPage";
 import ManagementPage from "./features/fabric/pages/preaggregations/ManagementPage";
-import FixedIncomeDashboard from "./components/FixedIncomeDashboard";
 import BundleExplorer from "./components/BundleExplorer";
 import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -40,7 +39,6 @@ import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
-import DynamicUIGeneratorPage from "./pages/DynamicUIGeneratorPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
 import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
 import Marketplace from "./pages/marketplace/Marketplace";
@@ -64,9 +62,12 @@ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
-import BusinessObjectQueryBuilder from "./features/query-builder/pages/BusinessObjectQueryBuilder";
-import ScenarioAnalysisPro from "./components/ScenarioAnalysisPro";
-import AIPortfolioRebalancer from "./components/AIPortfolioRebalancer";
+import QueryLibrary from "./features/query-builder/pages/QueryLibrary";
+import SavedQueryEditor from "./features/query-builder/pages/SavedQueryEditor";
+import SqlStudioPage from "./pages/analytical/SqlStudioPage";
+import SemanticCatalogDetailPage from "./pages/analytical/SemanticCatalogDetailPage";
+import PipelinesPage from "./pages/analytical/PipelinesPage";
+import ReportsPage from "./pages/analytical/ReportsPage";
 // Metrics Console imports
 import MetricsConsolePage from "./pages/MetricsConsolePage";
 import MetricDetailPage from "./pages/MetricDetailPage";
@@ -119,7 +120,6 @@ import BPConsolePage from "./features/bp-console/pages/BPConsolePage";
 import { ReportLibrary } from "./features/reporting/components/ReportLibrary";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import { DataExplorer } from './components/reporting/DataExplorer';
-import { QueryLibraryDashboard } from './components/reporting/QueryLibraryDashboard';
 import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
 import { ExpressionLibrary } from "./features/expressions/components/ExpressionLibrary";
 
@@ -177,8 +177,21 @@ import SLODashboard from "./pages/SLODashboard";
 import ChangeReviewPage from "./pages/ChangeReviewPage";
 import IncidentPage from "./pages/scheduler/IncidentPage";
 import APIStudioPage from './pages/api-studio/APIStudioPage';
-import PageStudioPage from './pages/page-studio/PageStudioPage';
+import PageStudioListPage from './pages/page-studio/PageStudioListPage';
+import PageStudioDetailsPage from './pages/page-studio/PageStudioDetailsPage';
+import MenuDesignerPage from './pages/menu-designer/MenuDesignerPage';
+import { StandaloneWindowWrapper } from './components/desktop';
+import { UniversalWorkspaceHub } from './components/docking/UniversalWorkspaceHub';
 import RuntimePage from './pages/PageRuntimeRenderer';
+
+// Code-split workstation components for standalone / detached popout routes
+const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
+const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
+  import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
+);
+const FixedIncomeDashboard = React.lazy(() => import('./components/FixedIncomeDashboard'));
+const AIPortfolioRebalancer = React.lazy(() => import('./components/AIPortfolioRebalancer'));
+const ScenarioAnalysisPro = React.lazy(() => import('./components/ScenarioAnalysisPro'));
 
 // Intelligence & Governance (New)
 import IntelligenceDashboard from "./pages/intelligence/IntelligenceDashboard";
@@ -223,8 +236,8 @@ function ProtectedApp() {
 
   return (
     <>
-
-      <Routes>
+      <React.Suspense fallback={<div style={{ padding: '32px', color: '#94a3b8', background: '#050d1a', height: '100%' }}>Loading view...</div>}>
+        <Routes>
         {/* ═══════════════════════════════════════════════════════════════════
             PLATFORM - Organization, security, and setup
             ═══════════════════════════════════════════════════════════════════ */}
@@ -297,7 +310,11 @@ function ProtectedApp() {
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
         <Route path="core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
-        <Route path="query-builder" element={<ProtectedRoute><BusinessObjectQueryBuilder /></ProtectedRoute>} />
+        <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
+        <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
+        <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />
+        <Route path="pipelines" element={<ProtectedRoute><PipelinesPage /></ProtectedRoute>} />
+        <Route path="reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
         <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
         <Route path="marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
@@ -305,9 +322,75 @@ function ProtectedApp() {
             STUDIO - Low-code tools
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="api-studio" element={<ProtectedRoute><APIStudioPage /></ProtectedRoute>} />
-        <Route path="page-studio" element={<ProtectedRoute><PageStudioPage /></ProtectedRoute>} />
-        <Route path="dynamic-ui" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
-        <Route path="page-designer" element={<ProtectedRoute><DynamicUIGeneratorPage /></ProtectedRoute>} />
+        <Route path="page-studio" element={<ProtectedRoute><PageStudioListPage /></ProtectedRoute>} />
+        <Route path="page-studio/:id" element={<ProtectedRoute><PageStudioDetailsPage /></ProtectedRoute>} />
+        <Route path="menu-designer" element={<ProtectedRoute><MenuDesignerPage /></ProtectedRoute>} />
+        <Route path="pages" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+        <Route path="pages/:slug" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+        <Route path="pages/:slug/:recordId" element={<ProtectedRoute><PageBrowser /></ProtectedRoute>} />
+
+        {/* ═══════════════════════════════════════════════════════════════════
+            STANDALONE / DETACHED MULTI-MONITOR VIEWS (Wails v3 & Popouts)
+            ═══════════════════════════════════════════════════════════════════ */}
+        <Route
+          path="view/page/:slug"
+          element={
+            <StandaloneWindowWrapper title="Page View">
+              <ProtectedRoute>
+                <StandalonePageRenderer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/page/:slug/:recordId"
+          element={
+            <StandaloneWindowWrapper title="Page Detail">
+              <ProtectedRoute>
+                <StandalonePageRenderer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/rebalancer"
+          element={
+            <StandaloneWindowWrapper title="AI Portfolio Rebalancer">
+              <ProtectedRoute>
+                <AIPortfolioRebalancer />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/scenario"
+          element={
+            <StandaloneWindowWrapper title="Scenario Analysis Pro">
+              <ProtectedRoute>
+                <ScenarioAnalysisPro />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="view/fixed-income"
+          element={
+            <StandaloneWindowWrapper title="Fixed Income Analytics">
+              <ProtectedRoute>
+                <FixedIncomeDashboard />
+              </ProtectedRoute>
+            </StandaloneWindowWrapper>
+          }
+        />
+        <Route
+          path="workspace"
+          element={
+            <ProtectedRoute>
+              <UniversalWorkspaceHub />
+            </ProtectedRoute>
+          }
+        />
+
         <Route path="app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
         <Route path="client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
         <Route path="client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />
@@ -370,7 +453,7 @@ function ProtectedApp() {
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="reports/library" element={<ProtectedRoute><ReportLibrary /></ProtectedRoute>} />
         <Route path="reports/builder" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
-        <Route path="reports/queries" element={<ProtectedRoute><QueryLibraryDashboard /></ProtectedRoute>} />
+        <Route path="reports/queries" element={<ProtectedRoute><QueryLibrary /></ProtectedRoute>} />
         <Route path="reports/:reportId/edit" element={<ProtectedRoute><ReportBuilderPage /></ProtectedRoute>} />
         <Route path="reports/models" element={<ProtectedRoute><SemanticModelManager /></ProtectedRoute>} />
         
@@ -425,6 +508,7 @@ function ProtectedApp() {
         <Route path="admin/entitlements/profiles/:profileKey" element={<ProtectedRoute><ProfileCustomizerRoute /></ProtectedRoute>} />
         <Route path="admin/entitlements/profiles/:profileKey/components" element={<ProtectedRoute><EntitlementMatrixRoute /></ProtectedRoute>} />
       </Routes>
+      </React.Suspense>
     </>
   );
 }

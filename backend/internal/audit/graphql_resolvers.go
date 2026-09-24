@@ -8,7 +8,7 @@ import (
 )
 
 // AuditGraphResolver handles GraphQL queries for the audit semantic graph
-// Deprecated: Trino audit chain has been removed
+// Deprecated: Replaced by StarRocks/Lakehouse resolver
 type AuditGraphResolver struct {
 	logger *zap.Logger
 }

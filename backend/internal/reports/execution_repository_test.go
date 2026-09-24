@@ -331,6 +331,7 @@ func TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Executions(t *testi
 
 	tenantID := uuid.MustParse("70a1172c-9b06-4bc3-a0ac-13f7aaefdd90")
 	templateID := uuid.MustParse("75521cf8-2dd4-49ae-a5aa-92810e1f3b70")
+	ensureGoldCopyTestFixtures(t, db, templateID, tenantID)
 	userID := "test-user-live"
 	fixedTime := time.Now().Add(1 * time.Second)
 
@@ -410,6 +411,7 @@ func TestExecutionRepository_LiveAlpha_SameTimestampTieBreak_Events(t *testing.T
 
 	tenantID := uuid.MustParse("70a1172c-9b06-4bc3-a0ac-13f7aaefdd90")
 	templateID := uuid.MustParse("75521cf8-2dd4-49ae-a5aa-92810e1f3b70")
+	ensureGoldCopyTestFixtures(t, db, templateID, tenantID)
 	userID := "test-user-live"
 	fixedTime := time.Now().Add(1 * time.Second)
 

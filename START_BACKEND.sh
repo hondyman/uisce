@@ -6,7 +6,6 @@
 
 set -e
 
-# Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -26,7 +25,6 @@ echo -e "${BLUE}║  Starting Backend Server${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Check if port is in use
 if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     echo -e "${YELLOW}ℹ️  Port 8080 is in use. Killing existing process...${NC}"
     lsof -ti:8080 | xargs kill -9 2>/dev/null || true
@@ -35,17 +33,23 @@ fi
 
 cd "$BACKEND_DIR"
 
-# Build the backend (cmd/server)
-echo -e "${YELLOW}Building backend...${NC}"
-go build -o server ./cmd/server/main.go
+echo -e "${YELLOW}Deploying pre-built server binary...${NC}"
+SERVER_BINARY="${HOME}/uisce-server-fixed"
+if [ ! -f "$SERVER_BINARY" ]; then
+    echo -e "${RED}❌ Server binary not found at $SERVER_BINARY${NC}"
+    echo -e "${RED}   Build on Mac: GOOS=linux GOARCH=amd64 go build -o uisce-server ./cmd/server/main.go${NC}"
+    echo -e "${RED}   Then copy to server: scp uisce-server eganpj@100.84.50.65:~/uisce-server-fixed${NC}"
+    exit 1
+fi
+cp "$SERVER_BINARY" ./server
+chmod +x ./server
 
-# Bootstrap secrets from Infisical if bootstrap script exists
 if [ -f "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" ] && command -v infisical &>/dev/null; then
     echo -e "${YELLOW}Bootstrapping secrets from Infisical...${NC}"
-    INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev || true
+    INFISICAL_TOKEN="${INFISICAL_TOKEN:-}" "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" -e dev \
+      || echo -e "${RED}⚠️  Infisical bootstrap FAILED — serving from stale .env files${NC}"
 fi
 
-# Load secrets from root .env, backend/.env, or .env.infisical if available
 if [ -f "$SCRIPT_DIR/.env" ]; then
     echo -e "${YELLOW}Loading environment from .env...${NC}"
     set -a
@@ -65,22 +69,21 @@ if [ -f "$SCRIPT_DIR/.env.infisical" ]; then
     set +a
 fi
 
-# Set defaults if not loaded
 export POSTGRES_DSN="${POSTGRES_DSN:-${DATABASE_URL:-postgresql://postgres:postgres@100.84.50.65:5432/alpha?sslmode=disable}}"
 export DATABASE_URL="${DATABASE_URL:-$POSTGRES_DSN}"
-export JWT_SECRET="${JWT_SECRET:-test-secret}"
+: "${JWT_SECRET:?JWT_SECRET not set — refusing to start with the test-secret default that is in git history}"
+export JWT_SECRET
 export PORT="${PORT:-8080}"
 export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
-export API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK="${API_TOKEN_ENCRYPTION_KEY_DEV_FALLBACK:-true}"
-export API_TOKEN_ENCRYPTION_KEY="${API_TOKEN_ENCRYPTION_KEY:-D+1O956T8t9zZ+w/FqK1lS9b8jJ2vR7mX4kY0uP3oN8=}"
+export ENVIRONMENT="${ENVIRONMENT:-}"
+: "${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY not set — refusing to fall back to a value that is in git history (origin/main:de336a41af)}"
 
 echo -e "${YELLOW}Starting server...${NC}"
 echo -e "${YELLOW}   POSTGRES_DSN: ${POSTGRES_DSN:0:50}...${NC}"
 echo -e "${YELLOW}   TEMPORAL_HOST: $TEMPORAL_HOST${NC}"
 
-# Start server
-./server > "$LOG_DIR/backend_${TIMESTAMP}.log" 2>&1 &
+nohup ./server > "$LOG_DIR/backend_${TIMESTAMP}.log" 2>&1 & disown
 BACKEND_PID=$!
 
 sleep 3

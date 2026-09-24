@@ -27,7 +27,7 @@ INSERT INTO public.catalog_node (
     ),
     'iceberg.analytics.sales_ledger_flat',
     'Denormalized wide table for Sales Ledger reporting in Apache Iceberg',
-    '{"engine": "trino_iceberg", "schema": "analytics", "table": "sales_ledger_flat", "partition_keys": ["tenant_id", "order_year_month"]}'::jsonb,
+    '{"engine": "starrocks_iceberg", "schema": "analytics", "table": "sales_ledger_flat", "partition_keys": ["tenant_id", "order_year_month"]}'::jsonb,
     NOW(),
     NOW()
 ) ON CONFLICT (id) DO UPDATE SET properties = EXCLUDED.properties, updated_at = NOW();

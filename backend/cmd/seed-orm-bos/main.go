@@ -57,18 +57,6 @@ func main() {
 		log.Printf("Resolved ORM Suite datasource: %s\n", datasourceID)
 	}
 
-	// Resolve CRIMS ORM alpha_datasource.id for binding records
-	var alphaDatasourceID string
-	err = db.GetContext(ctx, &alphaDatasourceID, `
-		SELECT id FROM alpha_datasource WHERE datasource_code = 'crims_orm' LIMIT 1
-	`)
-	if err != nil {
-		log.Printf("WARNING: CRIMS ORM alpha_datasource not found: %v\n", err)
-		alphaDatasourceID = ""
-	} else {
-		log.Printf("Resolved CRIMS ORM alpha_datasource: %s\n", alphaDatasourceID)
-	}
-
 	seederUUID := "113d0169-4819-42ff-968b-778f72af79e9"
 	secCtx := &security.Context{
 		TenantID:      tenantID,
@@ -77,10 +65,7 @@ func main() {
 	}
 
 	ormBOs := []struct {
-		req           models.CreateBusinessObjectRequest
-		bindingName   string
-		physicalTable string
-		bindingMode   metadata.BindingMode
+		req models.CreateBusinessObjectRequest
 	}{
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -95,9 +80,6 @@ func main() {
 				EnableHistory:   true,
 				HistoryMode:     "SCD2",
 			},
-			bindingName:   "oms_orders_primary",
-			physicalTable: "oms.orders",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -111,9 +93,6 @@ func main() {
 				DriverTableName: "oms.execution",
 				EnableHistory:   false,
 			},
-			bindingName:   "oms_execution_primary",
-			physicalTable: "oms.execution",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -128,9 +107,6 @@ func main() {
 				EnableHistory:   true,
 				HistoryMode:     "SCD2",
 			},
-			bindingName:   "oms_position_lots_primary",
-			physicalTable: "oms.position_lots",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -145,9 +121,6 @@ func main() {
 				EnableHistory:   true,
 				HistoryMode:     "SCD2",
 			},
-			bindingName:   "mds_security_master_primary",
-			physicalTable: "mds.security_master",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 		{
 			req: models.CreateBusinessObjectRequest{
@@ -162,14 +135,10 @@ func main() {
 				EnableHistory:   true,
 				HistoryMode:     "SCD2",
 			},
-			bindingName:   "mds_account_primary",
-			physicalTable: "mds.account",
-			bindingMode:   metadata.BindingModeOLTPCRUD,
 		},
 	}
 
 	boService := metadata.NewBusinessObjectService(db, nil, nil, nil)
-	bindingService := metadata.NewBindingService(db)
 
 	for _, boDef := range ormBOs {
 		var existsCount int
@@ -182,47 +151,19 @@ func main() {
 			continue
 		}
 
-		var boID string
 		if existsCount > 0 {
-			// Get existing BO ID
-			err = db.QueryRow(`
-				SELECT id FROM business_objects WHERE tenant_id = $1 AND key = $2
-			`, tenantID, boDef.req.BOKey).Scan(&boID)
-			if err != nil {
-				log.Printf("Failed to get existing BO ID for '%s': %v\n", boDef.req.Name, err)
-				continue
-			}
-			log.Printf("BO '%s' already exists (id=%s), skipping creation but updating binding.\n", boDef.req.Name, boID)
-		} else {
-			// Create new BO with DatasourceID set
-			boDef.req.DatasourceID = datasourceID
-			bo, err := boService.CreateBusinessObject(ctx, secCtx, boDef.req, seederUUID)
-			if err != nil {
-				log.Printf("Failed to create BO '%s': %v\n", boDef.req.Name, err)
-				continue
-			}
-			boID = bo.ID
-			log.Printf("Created BO '%s' (%s) with ID %s\n", bo.DisplayName, bo.Name, bo.ID)
+			log.Printf("BO '%s' already exists, skipping creation.\n", boDef.req.Name)
+			continue
 		}
 
-		// Create/update binding for this BO
-		if alphaDatasourceID != "" {
-			binding := metadata.BusinessObjectBinding{
-				TenantID:          tenantID,
-				BOID:              boID,
-				BindingName:       boDef.bindingName,
-				BindingMode:       boDef.bindingMode,
-				DatasourceID:       alphaDatasourceID,
-				PhysicalTableName: boDef.physicalTable,
-				IsPrimary:         true,
-			}
-			err = bindingService.SaveBinding(ctx, binding)
-			if err != nil {
-				log.Printf("WARNING: Failed to save binding for BO '%s': %v\n", boDef.req.Name, err)
-			} else {
-				log.Printf("  Binding '%s' -> %s saved for BO %s\n", boDef.bindingName, boDef.physicalTable, boDef.req.Name)
-			}
+		// Create new BO with DatasourceID set
+		boDef.req.DatasourceID = datasourceID
+		bo, err := boService.CreateBusinessObject(ctx, secCtx, boDef.req, seederUUID)
+		if err != nil {
+			log.Printf("Failed to create BO '%s': %v\n", boDef.req.Name, err)
+			continue
 		}
+		log.Printf("Created BO '%s' (%s) with ID %s\n", bo.DisplayName, bo.Name, bo.ID)
 	}
 
 	fmt.Println("\nORM Business Objects seeding finished successfully.")

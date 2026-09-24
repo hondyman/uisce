@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/tenant/goldcopy"
-	"github.com/hondyman/uisce/libs/jwt-middleware"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -97,16 +97,21 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	tenantID := "core"
-	functionalRole := ""
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
-		if claims.TenantID != "" {
-			tenantID = claims.TenantID
-		}
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok || len(auth.TenantIDs) == 0 || strings.TrimSpace(auth.TenantIDs[0]) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(MCPToolCallResponse{
+			JSONRPC: "2.0",
+			ID:      req.ID,
+			Error: &MCPError{
+				Code:    -32001,
+				Message: "auth required: JWT missing tenant_id claim (account may lack a tenant assignment)",
+			},
+		})
+		return
 	}
-	if authInfo, ok := security.AuthInfoFromContext(r.Context()); ok {
-		functionalRole = authInfo.FunctionalRole
-	}
+	tenantID := auth.TenantIDs[0]
+	functionalRole := auth.FunctionalRole
 
 	if err := router.checkRoleAccess(r.Context(), req.Params.Name, tenantID, functionalRole); err != nil {
 		errResp, ok := err.(*MCPError)
@@ -147,6 +152,7 @@ func (router *MCPToolRouter) HandleToolCall(w http.ResponseWriter, r *http.Reque
 		Result: map[string]interface{}{
 			"status":       "QUEUED_FOR_MAKER_CHECKER_APPROVAL",
 			"ticket_id":    ticketID,
+			"tenant_id":    tenantID,
 			"action_name":  req.Params.Name,
 			"four_eyes":    "Human Portfolio Manager review required before execution",
 			"is_compliant": err == nil,
@@ -162,7 +168,7 @@ func (r *MCPToolRouter) resolveGoldCopyID(ctx context.Context) (uuid.UUID, error
 		return r.goldcopyResolver.Resolve(ctx)
 	}
 	var id string
-	err := r.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	err := r.db.GetContext(ctx, &id, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return uuid.Nil, goldcopy.ErrGoldCopyNotFound

@@ -77,12 +77,18 @@ func (h *CalcTermHandler) handleListByBO(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *CalcTermHandler) handleGetByID(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		http.Error(w, "invalid id", http.StatusBadRequest)
 		return
 	}
-	desc, err := h.svc.GetByID(r.Context(), id)
+	// Tenant-scoped: another tenant's calc term is indistinguishable from a missing one.
+	desc, err := h.svc.GetByIDForTenant(r.Context(), tenantID.String(), id)
 	if err != nil {
 		http.Error(w, "calc term not found", http.StatusNotFound)
 		return

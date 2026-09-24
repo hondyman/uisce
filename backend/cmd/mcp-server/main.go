@@ -1,50 +1,76 @@
+// Command mcp-server is the Cursor/Claude stdio MCP proxy for Uisce.
+//
+// It speaks MCP over stdio to the IDE and forwards tools to the live API
+// via mark3labs streamable HTTP (UISCE_API_URL + UISCE_API_TOKEN).
+// Credentials: only UISCE_API_TOKEN from the environment. Stdout is the
+// protocol channel — never log the token (stderr only for errors, redacted).
 package main
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os"
+	"strings"
+	"time"
 
-	"github.com/hondyman/uisce/backend/internal/mcp"
+	"github.com/mark3labs/mcp-go/client"
+	"github.com/mark3labs/mcp-go/client/transport"
+	mcplib "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
-// MCP StdIO Protocol requires reading/writing JSON-RPC over stdin/stdout
 func main() {
-	// The User's API key is passed via the Cursor/Claude MCP configuration
-	apiToken := os.Getenv("UISCE_API_TOKEN")
-	targetURL := os.Getenv("UISCE_API_URL") // e.g., http://localhost:8080
-	functionalRole := os.Getenv("UISCE_FUNCTIONAL_ROLE") // e.g., DATA_ENGINEER
+	log.SetOutput(os.Stderr)
+	log.SetFlags(0)
 
-	if apiToken == "" {
-		log.Fatalf("FATAL: UISCE_API_TOKEN environment variable required for ABAC enforcement")
+	token := strings.TrimSpace(os.Getenv("UISCE_API_TOKEN"))
+	baseURL := strings.TrimSpace(os.Getenv("UISCE_API_URL"))
+	if token == "" {
+		log.Fatal("FATAL: UISCE_API_TOKEN required")
+	}
+	if baseURL == "" {
+		baseURL = "http://localhost:8080"
+	}
+	endpoint := strings.TrimRight(baseURL, "/") + "/api/mcp"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	remote, err := client.NewStreamableHttpClient(endpoint, transport.WithHTTPHeaders(map[string]string{
+		"Authorization": "Bearer " + token,
+	}))
+	if err != nil {
+		log.Fatalf("streamable client: %v", err)
+	}
+	if err := remote.Start(ctx); err != nil {
+		log.Fatalf("start client: %v", err)
+	}
+	defer remote.Close()
+
+	initReq := mcplib.InitializeRequest{}
+	initReq.Params.ProtocolVersion = mcplib.LATEST_PROTOCOL_VERSION
+	initReq.Params.ClientInfo = mcplib.Implementation{Name: "uisce-stdio-proxy", Version: "1.0.0"}
+	if _, err := remote.Initialize(ctx, initReq); err != nil {
+		log.Fatalf("initialize: %v", err)
 	}
 
-	var copilot *mcp.UisceCopilot
-	if functionalRole != "" {
-		copilot = mcp.NewUisceCopilotWithRole(targetURL, apiToken, functionalRole)
-	} else {
-		copilot = mcp.NewUisceCopilot(targetURL, apiToken)
+	toolsRes, err := remote.ListTools(ctx, mcplib.ListToolsRequest{})
+	if err != nil {
+		log.Fatalf("list tools: %v", err)
 	}
-	scanner := bufio.NewScanner(os.Stdin)
 
-	// Listen for MCP Tool Execution Requests from Claude/Cursor
-	for scanner.Scan() {
-		rawLine := scanner.Bytes()
-		var req mcp.JSONRPCRequest
-		if err := json.Unmarshal(rawLine, &req); err != nil {
-			mcp.SendError(req.ID, mcp.ParseError, "Invalid JSON-RPC payload")
-			continue
-		}
+	local := server.NewMCPServer("uisce-stdio-proxy", "1.0.0")
+	for _, tool := range toolsRes.Tools {
+		t := tool
+		local.AddTool(t, func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+			req.Params.Name = t.Name
+			return remote.CallTool(ctx, req)
+		})
+	}
 
-		// Route the request to the secure tool handlers
-		resp := copilot.HandleRequest(context.Background(), req)
-
-		// Send response back to the LLM
-		out, _ := json.Marshal(resp)
-		fmt.Println(string(out))
-		os.Stdout.Sync()
+	if err := server.ServeStdio(local); err != nil {
+		fmt.Fprintf(os.Stderr, "stdio server: %v\n", err)
+		os.Exit(1)
 	}
 }

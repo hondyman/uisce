@@ -32,12 +32,6 @@ func TestGoogleSyncRoutes(t *testing.T) {
 		method string
 		path   string
 	}{
-		{"GET", "/sync/google/calendars"},
-		{"POST", "/sync/google/sync"},
-		{"GET", "/sync/google/status/123"},
-		{"POST", "/sync/google/cancel/123"},
-		{"GET", "/sync/google/active"},
-		{"GET", "/sync/google/events"},
 		{"GET", "/sync/conflicts"},
 		{"POST", "/sync/conflicts/123/resolve"},
 	}

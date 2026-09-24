@@ -8,6 +8,7 @@ import {
   RefreshCw,
   FileSpreadsheet,
 } from 'lucide-react';
+import { apiFetch } from '../../lib/apiClient';
 
 export interface DriftProposal {
   proposalId: string;
@@ -30,13 +31,11 @@ export const SchemaDriftWorkbench: React.FC<{ tenantId: string }> = ({ tenantId 
 
   const fetchProposals = async () => {
     try {
-      const res = await fetch('/api/v1/catalog/drift/proposals', {
+      const res = await apiFetch('/api/v1/catalog/drift/proposals', {
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setProposals(data);
-      }
+      const data = await res.json();
+      setProposals(data);
     } catch (e) {
       console.error('Failed fetching drift proposals:', e);
     }
@@ -49,15 +48,13 @@ export const SchemaDriftWorkbench: React.FC<{ tenantId: string }> = ({ tenantId 
   const handleApplyPatch = async (proposalId: string) => {
     setIsPatching(proposalId);
     try {
-      const res = await fetch(`/api/v1/catalog/drift/proposals/${proposalId}/apply`, {
+      await apiFetch(`/api/v1/catalog/drift/proposals/${proposalId}/apply`, {
         method: 'POST',
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (res.ok) {
-        setStatusMessage('Non-breaking binding hot-swap applied successfully.');
-        setTimeout(() => setStatusMessage(null), 4000);
-        await fetchProposals();
-      }
+      setStatusMessage('Non-breaking binding hot-swap applied successfully.');
+      setTimeout(() => setStatusMessage(null), 4000);
+      await fetchProposals();
     } finally {
       setIsPatching(null);
     }

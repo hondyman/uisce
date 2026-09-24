@@ -116,7 +116,7 @@ func NewComplianceEngine() (*ComplianceEngine, error) {
 		if underlyingDB, err := db.DB(); err == nil {
 			var goldCopyID string
 			if err := underlyingDB.QueryRowContext(context.Background(),
-				`SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyID); err == nil {
+				`SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyID); err == nil {
 				demoTenantID = goldCopyID
 				logger.Infof("Using gold copy tenant for default policies: %s", demoTenantID)
 			}

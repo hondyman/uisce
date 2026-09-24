@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 import type { BOField } from './BOGovernanceStudio';
 import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setCelFields } from '../../rules/aslMonacoRegistry';
 import './BOGovernanceStudio.css';
+import { apiFetch } from '../../lib/apiClient';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -98,16 +99,14 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
   const load = useCallback(async (event: TriggerEvent = activeEvent) => {
     setLoading(true);
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/rule-fabric/bo/${boKey}/policies?event=${event}`,
         { headers: headers() }
       );
-      if (res.ok) {
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : [];
-        setPolicies(list);
-        onCountChange?.(list.length);
-      }
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      setPolicies(list);
+      onCountChange?.(list.length);
     } finally {
       setLoading(false);
     }
@@ -128,12 +127,13 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
       const url = isNew
         ? `/api/rule-fabric/bo/${boKey}/policies`
         : `/api/rule-fabric/bo/${boKey}/policies/${editing.policy_id}`;
-      const res = await fetch(url, {
+      await apiFetch(url, {
         method: isNew ? 'POST' : 'PUT',
         headers: headers(),
         body: JSON.stringify({ ...editing, bo_key: boKey }),
       });
-      if (res.ok) { setEditing(null); await load(); }
+      setEditing(null);
+      await load();
     } finally {
       setSaving(false);
     }
@@ -141,7 +141,7 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
 
   const handleDelete = async (policyId: string) => {
     if (!confirm('Delete this policy?')) return;
-    await fetch(`/api/rule-fabric/bo/${boKey}/policies/${policyId}`, {
+    await apiFetch(`/api/rule-fabric/bo/${boKey}/policies/${policyId}`, {
       method: 'DELETE', headers: headers(),
     });
     await load();
@@ -155,11 +155,11 @@ const PolicyRuleBuilder: React.FC<PolicyRuleBuilderProps> = ({
       let record: unknown, actor: unknown;
       try { record = JSON.parse(simRecord); actor = JSON.parse(simActor); }
       catch { setSimResult({ triggered: false, error: 'Invalid JSON' }); return; }
-      const res = await fetch(`/api/rule-fabric/bo/${boKey}/policies/simulate`, {
+      const res = await apiFetch(`/api/rule-fabric/bo/${boKey}/policies/simulate`, {
         method: 'POST', headers: headers(),
         body: JSON.stringify({ condition_expr: editing.condition_expr, record, actor }),
       });
-      if (res.ok) setSimResult(await res.json());
+      setSimResult(await res.json());
     } finally {
       setSimLoading(false);
     }

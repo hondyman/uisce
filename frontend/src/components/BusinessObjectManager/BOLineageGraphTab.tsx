@@ -21,6 +21,7 @@ import { TableNode } from './CustomNodes/TableNode';
 import { ColumnNode } from './CustomNodes/ColumnNode';
 import { NodeDetailDrawer } from './NodeDetailDrawer';
 import { GraphLegend } from './GraphLegend';
+import { apiFetch } from '../../lib/apiClient';
 
 const nodeTypes = {
   bo: BONode,
@@ -55,10 +56,7 @@ export const BOLineageGraphTab: React.FC<BOLineageGraphTabProps> = ({ boId }) =>
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/bo/${boId}/graph`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch graph: ${response.statusText}`);
-      }
+      const response = await apiFetch(`/api/bo/${boId}/graph`);
       const data: GraphData = await response.json();
 
       // Collect terms by BO

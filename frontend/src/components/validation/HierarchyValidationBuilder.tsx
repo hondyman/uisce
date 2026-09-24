@@ -37,6 +37,7 @@ import {
   GitBranch, Layers, Filter as _Filter, TrendingUp as _TrendingUp, HelpCircle as _HelpCircle, Play, Code, BarChart2, BrainCircuit, Link, MessageSquareText,
 } from 'lucide-react';
 import { devError, devDebug } from '../../utils/devLogger';
+import { apiFetch } from '../../lib/apiClient';
 
 // ============================================================================
 // TYPES
@@ -126,10 +127,7 @@ export const HierarchyValidationBuilder: React.FC<{
       setLoadingSchema(true);
       try {
         // Assuming an API endpoint /api/schema/:entity exists
-        const response = await fetch(`/api/schema/${entity}?include_profiling=true`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        const response = await apiFetch(`/api/schema/${entity}?include_profiling=true`);
   const _schemaData = await response.json();
         // Transform schemaData if necessary to match HierarchyField structure
         // For now, let's use a mock structure if the API isn't ready
@@ -196,11 +194,9 @@ export const HierarchyValidationBuilder: React.FC<{
       if (!entityId) return;
   _setLoadingAiSuggestions(true);
       try {
-        const response = await fetch(`/api/ai/discover-relationships/${entityId}`);
-        if (response.ok) {
-          const suggestions = await response.json();
-          setAiSuggestions(suggestions);
-        }
+        const response = await apiFetch(`/api/ai/discover-relationships/${entityId}`);
+        const suggestions = await response.json();
+        setAiSuggestions(suggestions);
       } catch (e: any) { // Explicitly type 'e' as 'any' for broader error handling
         devError("Failed to fetch AI suggestions", e);
       } finally {
@@ -333,15 +329,11 @@ export const HierarchyValidationBuilder: React.FC<{
         },
         data: JSON.parse(testData),
       };
-      const response = await fetch('/api/rules/test', {
+      const response = await apiFetch('/api/rules/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      if (!response.ok) {
-        const errorBody = await response.json();
-        throw new Error(errorBody.message || `HTTP error! status: ${response.status}`);
-      }
       const result = await response.json();
       setTestResults(result);
     } catch (e: any) {
@@ -438,7 +430,7 @@ export const HierarchyValidationBuilder: React.FC<{
     }
     setGeneratingRule(true);
     try {
-      const response = await fetch('/api/ai/generate-rule', {
+      const response = await apiFetch('/api/ai/generate-rule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -446,10 +438,6 @@ export const HierarchyValidationBuilder: React.FC<{
           entityContext: entity,
         }),
       });
-      if (!response.ok) {
-        const errorBody = await response.json();
-        throw new Error(errorBody.message || `HTTP error! status: ${response.status}`);
-      }
       const { rule } = await response.json();
       setFormState(rule); // Populate form with AI-generated rule
       setRuleType(rule.ruleType); // Update ruleType state for conditional rendering

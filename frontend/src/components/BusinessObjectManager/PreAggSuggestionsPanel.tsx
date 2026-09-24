@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { devError } from '@/utils/devLogger';
+import { apiFetch } from '../../lib/apiClient';
 import {
   Box,
   Typography,
@@ -57,15 +58,11 @@ export const PreAggSuggestionsPanel: React.FC<PreAggSuggestionsPanelProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/preaggs/suggestions`, {
+      const res = await apiFetch(`/api/preaggs/suggestions`, {
         headers: { 'X-Tenant-ID': tenantId },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSuggestions(data || []);
-      } else {
-        setError('Failed to fetch suggestions');
-      }
+      const data = await res.json();
+      setSuggestions(data || []);
     } catch (e) {
       devError('Failed to fetch suggestions', e);
       setError('Failed to fetch suggestions');

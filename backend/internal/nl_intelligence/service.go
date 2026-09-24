@@ -132,7 +132,7 @@ Explanation:
 
 func (s *NLService) executeSQL(ctx context.Context, plan *QueryPlan) (json.RawMessage, error) {
 	// TODO: Implement dialect-aware SQL execution
-	// For now, assume standard Trino/Postgres via sqlx
+	// For now, assume standard StarRocks/Postgres via sqlx
 	rows, err := s.db.QueryxContext(ctx, plan.SQL)
 	if err != nil {
 		return nil, fmt.Errorf("SQL execution failed: %w", err)

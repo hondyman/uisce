@@ -73,7 +73,7 @@ func InitializeTemporalWorker(cfg TemporalWorkerConfig) (client.Client, worker.W
 	w.RegisterActivity(activities.RefreshCubePartitions)
 
 	// Register Gold Copy Activities
-	// Audit service disabled - Trino audit chain removed
+	// Audit service disabled - legacy audit pipeline decommissioned
 	var auditSvc local_activities.AuditService
 
 	goldCopyActs := local_activities.NewGoldCopyActivities(cfg.DB, logging.GetLogger().Sugar(), auditSvc)

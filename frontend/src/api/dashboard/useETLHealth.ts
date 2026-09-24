@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { apiFetch } from '../../lib/apiClient';
 
 export interface ETLRun {
   etl_run_id: string;
@@ -22,8 +23,7 @@ export function useETLHealth() {
   return useQuery({
     queryKey: ['dashboard-etl-health'],
     queryFn: async () => {
-      const res = await fetch('/api/dashboard/etl-health');
-      if (!res.ok) throw new Error('Failed to load ETL health');
+      const res = await apiFetch('/api/dashboard/etl-health');
       const data = await res.json();
       return data as ETLHealth;
     },

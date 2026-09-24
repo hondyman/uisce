@@ -375,7 +375,7 @@ func TestRepository_CrossTenantUpdate_Forbidden(t *testing.T) {
 	assert.True(t, errors.Is(err, reports.ErrNotFound), "expected ErrNotFound, got: %v", err)
 
 	// Verify original template is untouched
-	unmodified, err := repo.GetTemplate(ctx, tmpl.ID)
+	unmodified, err := repo.GetTemplate(ctx, tmpl.ID, tmpl.TenantID)
 	require.NoError(t, err)
 	assert.Equal(t, tmpl.TemplateName, unmodified.TemplateName)
 	assert.Equal(t, tmpl.Description, unmodified.Description)
@@ -782,6 +782,129 @@ func TestSearch_favoriteJoinPreserved(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resB, 1)
 	assert.False(t, resB[0].IsFavorite, "User B should see is_favorite=false in search results")
+}
+
+// TestRepository_TypedColumnsRoundTrip_Defaults verifies the spine plan's
+// typed columns (ticket 2.1) come back with their safe defaults, not a
+// silently-dropped zero value, when a caller creates a template without
+// setting any of them. This is the exact failure shape 0.1 found for
+// is_core pre-migration (handleCloneReport's is_core=false vanishing
+// because no column existed to hold it) - this test would have caught
+// that class of bug before it shipped.
+func TestRepository_TypedColumnsRoundTrip_Defaults(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	tmpl := &reports.ReportTemplate{
+		ID:           uuid.New(),
+		TenantID:     tenantID,
+		TemplateName: fmt.Sprintf("Defaults Round-Trip %s", uuid.New().String()[:8]),
+		Category:     "test",
+		IsActive:     true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	reloaded, err := repo.GetTemplate(ctx, tmpl.ID, tenantID)
+	require.NoError(t, err)
+
+	assert.Equal(t, []interface{}{}, reloaded.Bands, "bands must default to an empty array, not nil/null")
+	assert.Equal(t, []interface{}{}, reloaded.Parameters, "parameters must default to an empty array, not nil/null")
+	assert.Equal(t, []interface{}{}, reloaded.PresentationEvents, "presentation_events must default to an empty array, not nil/null")
+	assert.Nil(t, reloaded.Grouping, "grouping must default to null when unset")
+	assert.Nil(t, reloaded.PrimaryBusinessObjectID, "primary_business_object_id must default to null when unset")
+	assert.False(t, reloaded.IsCore, "is_core must default to false when unset")
+}
+
+// TestRepository_TypedColumnsRoundTrip_CreateAndUpdate writes a real value
+// into every spine-plan typed column (2.1/2.2), reloads, and asserts
+// equality - then does it again through UpdateTemplate to prove the
+// update path persists these columns too, not just create. Per ticket
+// 2.3: this is required to land before any UI feature reads or writes
+// these columns.
+func TestRepository_TypedColumnsRoundTrip_CreateAndUpdate(t *testing.T) {
+	db := getTestDB(t)
+	repo := reports.NewRepository(db)
+	ctx := context.Background()
+
+	tenantID := uuid.New()
+	boID := uuid.New()
+
+	bands := []interface{}{
+		map[string]interface{}{"id": "band-header", "kind": "header"},
+	}
+	parameters := []interface{}{
+		map[string]interface{}{"id": "param_year", "name": "Year", "type": "number"},
+	}
+	presentationEvents := []interface{}{
+		map[string]interface{}{"event": "suppress_repeat", "field": "customer_name"},
+	}
+	grouping := map[string]interface{}{
+		"groupBy": "customer_id", "showSubtotals": true,
+	}
+
+	tmpl := &reports.ReportTemplate{
+		ID:                      uuid.New(),
+		TenantID:                tenantID,
+		TemplateName:            fmt.Sprintf("Typed Columns Round-Trip %s", uuid.New().String()[:8]),
+		Category:                "test",
+		IsActive:                true,
+		Bands:                   bands,
+		Parameters:              parameters,
+		PresentationEvents:      presentationEvents,
+		Grouping:                grouping,
+		PrimaryBusinessObjectID: &boID,
+		IsCore:                  true,
+	}
+	createTestTemplate(t, repo, db, tmpl)
+
+	reloaded, err := repo.GetTemplate(ctx, tmpl.ID, tenantID)
+	require.NoError(t, err)
+
+	assert.Equal(t, bands, reloaded.Bands, "bands must round-trip through create")
+	assert.Equal(t, parameters, reloaded.Parameters, "parameters must round-trip through create")
+	assert.Equal(t, presentationEvents, reloaded.PresentationEvents, "presentation_events must round-trip through create")
+	assert.Equal(t, grouping, reloaded.Grouping, "grouping must round-trip through create")
+	require.NotNil(t, reloaded.PrimaryBusinessObjectID, "primary_business_object_id must round-trip through create")
+	assert.Equal(t, boID, *reloaded.PrimaryBusinessObjectID)
+	assert.True(t, reloaded.IsCore, "is_core must round-trip through create")
+
+	// Now change every one of them and go through UpdateTemplate.
+	newBOID := uuid.New()
+	updatedBands := []interface{}{
+		map[string]interface{}{"id": "band-detail", "kind": "detail"},
+	}
+	updatedParameters := []interface{}{
+		map[string]interface{}{"id": "param_region", "name": "Region", "type": "string"},
+	}
+	updatedPresentationEvents := []interface{}{
+		map[string]interface{}{"event": "page_break", "field": "region"},
+	}
+	updatedGrouping := map[string]interface{}{
+		"groupBy": "region", "showSubtotals": false,
+	}
+
+	reloaded.Bands = updatedBands
+	reloaded.Parameters = updatedParameters
+	reloaded.PresentationEvents = updatedPresentationEvents
+	reloaded.Grouping = updatedGrouping
+	reloaded.PrimaryBusinessObjectID = &newBOID
+	reloaded.IsCore = false
+
+	err = repo.UpdateTemplate(ctx, reloaded)
+	require.NoError(t, err)
+
+	reReloaded, err := repo.GetTemplate(ctx, tmpl.ID, tenantID)
+	require.NoError(t, err)
+
+	assert.Equal(t, updatedBands, reReloaded.Bands, "bands must round-trip through update")
+	assert.Equal(t, updatedParameters, reReloaded.Parameters, "parameters must round-trip through update")
+	assert.Equal(t, updatedPresentationEvents, reReloaded.PresentationEvents, "presentation_events must round-trip through update")
+	assert.Equal(t, updatedGrouping, reReloaded.Grouping, "grouping must round-trip through update")
+	require.NotNil(t, reReloaded.PrimaryBusinessObjectID, "primary_business_object_id must round-trip through update")
+	assert.Equal(t, newBOID, *reReloaded.PrimaryBusinessObjectID)
+	assert.False(t, reReloaded.IsCore, "is_core must round-trip through update")
 }
 
 

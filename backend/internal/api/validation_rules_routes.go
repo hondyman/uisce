@@ -1316,7 +1316,7 @@ func (s *sqlDBBORepository) GetBODefinition(boID string) (*boresolver.BODefiniti
 		drivingTable = "target_entity"
 	}
 
-	rows, err := s.db.Query(`SELECT id::text, field_name, display_name, physical_column FROM public.bo_fields WHERE business_object_id::text = $1`, boID)
+	rows, err := s.db.Query(`SELECT id::text, field_name, COALESCE(display_name, field_name) AS display_name, COALESCE(technical_name, field_name) AS physical_column FROM public.business_object_fields WHERE bo_id = $1::uuid`, boID)
 	var fields []boresolver.BOField
 	if err == nil {
 		defer rows.Close()
@@ -1351,6 +1351,23 @@ func (s *sqlDBBORepository) GetBOByTechnicalName(technicalName, tenantID, dataso
 	return s.GetBODefinition(boID)
 }
 
+// TableHasColumn checks information_schema directly rather than the
+// catalog_node scan boresolver.PostgresBORepository uses - this repo is a
+// separate, narrower implementation (legacy bo_fields schema) for
+// validation-rule compilation only, with its own *sql.DB handle.
+func (s *sqlDBBORepository) TableHasColumn(drivingTable, column string) bool {
+	var exists bool
+	if err := s.db.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_name = $1 AND column_name = $2
+		)
+	`, drivingTable, column).Scan(&exists); err != nil {
+		return false
+	}
+	return exists
+}
+
 func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
@@ -1365,9 +1382,13 @@ func (h *validationRulesHandler) handleExecuteValidationRuleBinding() http.Handl
 			return
 		}
 
-		if req.TenantID == "" {
-			req.TenantID = secCtx.TenantID
+		// The tenant is the authenticated one. A different tenantId in the body is refused rather than honoured:
+		// the compile below reads that tenant's business-object definitions.
+		if req.TenantID != "" && req.TenantID != secCtx.TenantID {
+			writeJSONError(w, http.StatusForbidden, "tenantId does not match the authenticated tenant", "tenant_mismatch", nil)
+			return
 		}
+		req.TenantID = secCtx.TenantID
 
 		// Rule 1.3 Defense: Safe UUID validation
 		if req.BusinessObjectID != "" {

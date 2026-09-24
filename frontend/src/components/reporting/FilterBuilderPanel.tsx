@@ -16,6 +16,7 @@ import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import FunctionsIcon from '@mui/icons-material/Functions';
+import { useDroppable, useDndMonitor, DragEndEvent } from '@dnd-kit/core';
 import FunctionPickerMenu from './filter/FunctionPickerMenu';
 import ParameterCreatorPopover from './filter/ParameterCreatorPopover';
 import { getOperatorsForFieldType, needsValue, needsListValues } from './operatorMetadata';
@@ -781,8 +782,9 @@ const GroupBlock: React.FC<{
   onCreateParameter?: (param: { name: string; type: string; prompt: string; sourceType: string; defaultValue?: string }) => void;
   C: Record<string, string>;
 }> = ({ group, allFields, parameters = [], isTopLevel, onGroupChange, onDelete, onCreateParameter, C }) => {
-  const [isDragOver, setIsDragOver] = useState(false);
   const [sqlOpen, setSqlOpen] = useState(false);
+  const dropzoneId = `filter-group-${group.id}`;
+  const { setNodeRef: setGroupDropRef, isOver: isDragOver } = useDroppable({ id: dropzoneId });
 
   const sql = useMemo(() => buildGroupSQL(group), [group]);
   const activeCount = group.conditions.filter(c => c.enabled).length;
@@ -811,36 +813,38 @@ const GroupBlock: React.FC<{
     onGroupChange({ ...group, conditions: [...group.conditions, emptyCondition(field)] });
   }, [group, onGroupChange]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    try {
-      const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
-      if (!raw) return;
-      const data = JSON.parse(raw);
-      if (data?.type === 'bo-field-bundle' && Array.isArray(data.fields)) {
-        const next = data.fields.map((f: BOField) => emptyCondition(f));
-        onGroupChange({ ...group, conditions: [...group.conditions, ...next] });
-      } else if (data?.type === 'bo-field' && data.field) {
-        addCondition(data.field as BOField);
-      } else if (Array.isArray(data)) {
-        const next = data.map((f: BOField) => emptyCondition(f));
-        onGroupChange({ ...group, conditions: [...group.conditions, ...next] });
-      } else if (data && (data.name || data.technicalName)) {
-        addCondition(data as BOField);
-      }
-    } catch {}
+  const processDroppedFieldData = useCallback((data: any) => {
+    if (!data) return;
+    if (data.isBOField && data.field) {
+      addCondition(data.field as BOField);
+    } else if ((data.type === 'bo-field-bundle' || data.selectedFields) && Array.isArray(data.fields || data.selectedFields)) {
+      const fields = (data.fields || data.selectedFields) as BOField[];
+      const next = fields.map((f: BOField) => emptyCondition(f));
+      onGroupChange({ ...group, conditions: [...group.conditions, ...next] });
+    } else if (data.type === 'bo-field' && data.field) {
+      addCondition(data.field as BOField);
+    } else if (Array.isArray(data)) {
+      const next = data.map((f: BOField) => emptyCondition(f));
+      onGroupChange({ ...group, conditions: [...group.conditions, ...next] });
+    } else if (data.name || data.technicalName) {
+      addCondition(data as BOField);
+    }
   }, [group, onGroupChange, addCondition]);
+
+  useDndMonitor({
+    onDragEnd(event: DragEndEvent) {
+      const { active, over } = event;
+      if (over?.id !== dropzoneId) return;
+      processDroppedFieldData(active.data.current);
+    },
+  });
 
   const borderColor = isTopLevel ? C.border : (group.combinator === 'AND' ? C.andColor + '30' : C.orColor + '30');
   const accentColor = group.combinator === 'AND' ? C.andColor : C.orColor;
 
   return (
     <Box
-      onDragOver={e => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
-      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
-      onDrop={handleDrop}
+      ref={setGroupDropRef}
       sx={{
         border: `1px solid ${isDragOver ? accentColor : borderColor}`,
         borderRadius: '10px',
@@ -1101,7 +1105,8 @@ const FilterBuilderPanel: React.FC<FilterBuilderPanelProps> = ({
 
   const [groups, setGroups] = useState<FilterGroup[]>([emptyGroup('AND')]);
   const [showSQL, setShowSQL] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
+  const TOP_DROPZONE_ID = 'filter-panel-top';
+  const { setNodeRef: setTopDropRef, isOver: isDragOver } = useDroppable({ id: TOP_DROPZONE_ID });
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleCreateParameter = useCallback((param: { name: string; type: string; prompt: string; sourceType: string; defaultValue?: string }) => {
@@ -1214,34 +1219,32 @@ const FilterBuilderPanel: React.FC<FilterBuilderPanelProps> = ({
   const fullSQL = useMemo(() => buildSQL(groups), [groups]);
 
   // Top-level drag handler (drops onto the main panel → first group)
-  const handleTopDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    // Route to first group if it exists
-    if (groups.length === 0) return;
-    try {
-      const raw = e.dataTransfer.getData('application/json') || e.dataTransfer.getData('text/plain');
-      if (!raw) return;
-      const data = JSON.parse(raw);
+  useDndMonitor({
+    onDragEnd(event: DragEndEvent) {
+      const { active, over } = event;
+      if (over?.id !== TOP_DROPZONE_ID) return;
+      // Route to first group if it exists
+      if (groups.length === 0) return;
+      const data = active.data.current as any;
+      if (!data) return;
       let fields: BOField[] = [];
-      if (data?.type === 'bo-field-bundle' && Array.isArray(data.fields)) fields = data.fields;
-      else if (data?.type === 'bo-field' && data.field) fields = [data.field];
+      if (data.isBOField && data.field) fields = [data.field];
+      else if ((data.type === 'bo-field-bundle' || data.selectedFields) && Array.isArray(data.fields || data.selectedFields)) fields = data.fields || data.selectedFields;
+      else if (data.type === 'bo-field' && data.field) fields = [data.field];
       else if (Array.isArray(data)) fields = data;
-      else if (data?.name || data?.technicalName) fields = [data];
+      else if (data.name || data.technicalName) fields = [data];
       if (!fields.length) return;
       const newConds = fields.map(f => emptyCondition(f));
       const next = [...groups];
       next[0] = { ...next[0], conditions: [...next[0].conditions, ...newConds] };
       updateGroups(next);
-    } catch {}
-  }, [groups, updateGroups]);
+    },
+  });
 
   return (
     <Box
+      ref={setTopDropRef}
       sx={{ display: 'flex', width: '100%', height: '100%', flexDirection: 'column', overflow: 'hidden', bgcolor: C.bg }}
-      onDragOver={e => { e.preventDefault(); setIsDragOver(true); }}
-      onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
-      onDrop={handleTopDrop}
     >
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <Box sx={{

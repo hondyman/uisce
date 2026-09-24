@@ -13,7 +13,6 @@ const (
 	DialectIceberg    PolyglotDialect = "ICEBERG"
 	DialectStarRocks  PolyglotDialect = "STARROCKS"
 	DialectPostgres   PolyglotDialect = "POSTGRES"
-	DialectTrino      PolyglotDialect = "TRINO"
 	DialectDataFusion PolyglotDialect = "DATAFUSION"
 )
 
@@ -88,7 +87,7 @@ func CompilePolyglotQuery(req PolyglotQueryRequest) (*PolyglotQueryResult, error
 	switch req.Dialect {
 	case DialectIceberg, DialectDataFusion:
 		result.SQL = compileIcebergQuery(req, cols, result)
-	case DialectStarRocks, DialectTrino:
+	case DialectStarRocks:
 		result.SQL = compileStarRocksQuery(req, cols, result)
 	case DialectPostgres:
 		result.SQL = compilePostgresQuery(req, cols, result)
@@ -199,39 +198,4 @@ func compilePostgresQuery(req PolyglotQueryRequest, cols string, result *Polyglo
 		sb.WriteString(fmt.Sprintf(" LIMIT %d", req.Limit))
 	}
 	return sb.String()
-}
-
-// ResolveBindingForQuery selects the correct binding for a BO query based on whether
-// historical time-travel is requested (→ OLAP) or live data (→ OLTP)
-func ResolveBindingForQuery(bindings []BusinessObjectBinding, asOfTime string) *BusinessObjectBinding {
-	if asOfTime == "" {
-		// Live query: prefer OLTP_CRUD primary binding
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLTPCRUD && bindings[i].IsPrimary {
-				return &bindings[i]
-			}
-		}
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLTPCRUD {
-				return &bindings[i]
-			}
-		}
-	} else {
-		// Historical query: prefer BI_TEMPORAL_OLAP binding
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeBiTemporalOLAP {
-				return &bindings[i]
-			}
-		}
-		for i := range bindings {
-			if bindings[i].BindingMode == BindingModeOLAPReadOnly {
-				return &bindings[i]
-			}
-		}
-	}
-	// Fallback: first available binding
-	if len(bindings) > 0 {
-		return &bindings[0]
-	}
-	return nil
 }

@@ -164,8 +164,8 @@ func main() {
 
 	log.Println("\n📊 Next steps:")
 	log.Println("1. Check Redpanda Console: http://localhost:8080")
-	log.Println("2. Query in Trino:")
-	log.Println("   docker exec -it audit-trino trino")
+	log.Println("2. Query in StarRocks:")
+	log.Println("   docker exec -it starrocks-fe mysql -P 9030 -h 127.0.0.1 -u root")
 	log.Println("   USE iceberg.audit;")
 	log.Println("   SELECT * FROM scheduler_job_runs;")
 	log.Println("3. Test API:")

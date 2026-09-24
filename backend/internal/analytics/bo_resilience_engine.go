@@ -347,12 +347,12 @@ func (e *BOResilienceEngine) HandleSchemaDrift(ctx context.Context, tenantID, da
 	})
 
 	query := `
-		UPDATE public.bo_fields
+		UPDATE public.business_object_fields
 		SET binding_status = 'DRIFT_DEGRADED',
 		    drift_detected_at = NOW(),
 		    drift_details = $1
 		WHERE tenant_id = $2
-		  AND (source_column = $3 OR technical_name = $3)
+		  AND (technical_name = $3 OR field_name = $3)
 	`
 	res, err := e.db.ExecContext(ctx, query, driftDetails, tenantID, columnName)
 	if err != nil {

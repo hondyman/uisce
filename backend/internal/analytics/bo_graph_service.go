@@ -251,8 +251,8 @@ func (s *BOGraphService) buildBONode(boID, tenantID string) (GraphNode, error) {
 	// Count terms from business_objects first
 	err = s.db.QueryRow(`
 		SELECT COUNT(*)
-		FROM bo_fields
-		WHERE bo_id = $1::uuid AND subtype_id IS NULL
+		FROM public.business_object_fields
+		WHERE bo_id = $1::uuid
 	`, boID).Scan(&termCount)
 	if err != nil || termCount == 0 {
 		// Fallback to catalog_edge
@@ -277,26 +277,25 @@ func (s *BOGraphService) buildBONode(boID, tenantID string) (GraphNode, error) {
 }
 
 func (s *BOGraphService) fetchTerms(boID, tenantID string) ([]Term, error) {
-	// 1. Try business_objects bo_fields joined with catalog_node/catalog_edge
+	// 1. Try business_objects business_object_fields joined with catalog_node/catalog_edge
 	rows, err := s.db.Query(`
 		SELECT 
 			f.id::text,
-			COALESCE(f.display_label, f.name) as node_name,
+			COALESCE(f.display_name, f.field_name) as node_name,
 			'dimension' as term_type,
 			'string' as data_type,
 			false as is_key,
 			false as is_foreign_key,
 			'' as aggregation,
-			COALESCE(f.subtype_id::text, '') as subtype_id,
-			COALESCE(sub.name, sub.display_name, '') as subtype_name,
+			'' as subtype_id,
+			'' as subtype_name,
 			NULLIF(col.qualified_path, '') as col_path,
 			col.node_name as col_name
-		FROM bo_fields f
-		LEFT JOIN business_objects sub ON f.subtype_id = sub.id
+		FROM public.business_object_fields f
 		LEFT JOIN catalog_node st ON (
-			(st.id::text = f.field_ref
-			OR LOWER(st.node_name) = LOWER(f.name)
-			OR LOWER(st.node_name) = LOWER(f.display_label))
+			(st.id = f.term_node_id
+			OR LOWER(st.node_name) = LOWER(f.field_name)
+			OR LOWER(st.node_name) = LOWER(f.display_name))
 			AND st.tenant_id = $2
 		)
 		LEFT JOIN catalog_edge ce ON (
@@ -642,17 +641,17 @@ func (s *BOGraphService) fetchRawFieldsForBO(ctx context.Context, boID uuid.UUID
 	query := `
 		SELECT
 			id,
-			business_object_id,
-			COALESCE(field_name, name) as field_name,
-			COALESCE(semantic_term_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
-			COALESCE(field_role, type, 'DIMENSION') as field_role,
+			bo_id as business_object_id,
+			field_name,
+			COALESCE(term_node_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
+			COALESCE(field_role, 'DIMENSION') as field_role,
 			COALESCE(binding_requirement, CASE WHEN is_required THEN 'REQUIRED' ELSE 'OPTIONAL' END) as binding_requirement,
-			COALESCE(binding_status, 'RESOLVED') as binding_status,
-			parent_field_id,
-			eligibility_source,
-			is_inherited_override
-		FROM public.bo_fields
-		WHERE business_object_id = $1 AND tenant_id = $2;`
+			'RESOLVED' as binding_status,
+			NULL::uuid as parent_field_id,
+			COALESCE(eligibility_source, 'DIRECT') as eligibility_source,
+			false as is_inherited_override
+		FROM public.business_object_fields
+		WHERE bo_id = $1 AND tenant_id = $2;`
 
 	rows, err := s.db.QueryContext(ctx, query, boID, tenantID)
 	if err != nil {
@@ -695,7 +694,7 @@ func (s *BOGraphService) resolveGoldCopyID(ctx context.Context) (uuid.UUID, erro
 		return s.goldcopyResolve.Resolve(ctx)
 	}
 	var id string
-	err := s.db.GetContext(ctx, &id, `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`)
+	err := s.db.GetContext(ctx, &id, `SELECT id FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`)
 	if err != nil {
 		return uuid.Nil, err
 	}

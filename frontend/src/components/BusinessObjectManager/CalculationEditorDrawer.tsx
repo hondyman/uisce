@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import Editor, { useMonaco } from '@monaco-editor/react';
 import { useTenant } from '../../contexts/TenantContext';
+import { apiFetch } from '../../lib/apiClient';
 
 // ============================================================================
 // Types
@@ -147,7 +148,7 @@ export const CalculationEditorDrawer: React.FC<CalculationEditorDrawerProps> = (
   useEffect(() => {
     if (open && calcId) {
       setLoading(true);
-      fetch(`/api/calculation/${calcId}`, {
+      apiFetch(`/api/calculation/${calcId}`, {
         headers: { 'X-Tenant-ID': tenantId },
       })
         .then((r) => r.json())
@@ -175,7 +176,7 @@ export const CalculationEditorDrawer: React.FC<CalculationEditorDrawerProps> = (
   // Load available terms for dependencies and autocomplete
   useEffect(() => {
     if (open && boId) {
-      fetch(`/api/bo/${boId}/terms`, {
+      apiFetch(`/api/bo/${boId}/terms`, {
         headers: { 'X-Tenant-ID': tenantId },
       })
         .then((r) => r.json())
@@ -250,10 +251,9 @@ export const CalculationEditorDrawer: React.FC<CalculationEditorDrawerProps> = (
     setExplaining(true);
     setExplanation(null);
     try {
-      const response = await fetch('/api/calculation/explain', {
+      const response = await apiFetch('/api/calculation/explain', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
           'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify({
@@ -261,7 +261,6 @@ export const CalculationEditorDrawer: React.FC<CalculationEditorDrawerProps> = (
            bo_id: boId
         }),
       });
-      if (!response.ok) throw new Error('Explanation failed');
       const data = await response.json();
       setExplanation(data);
     } catch (e) {
@@ -281,33 +280,18 @@ export const CalculationEditorDrawer: React.FC<CalculationEditorDrawerProps> = (
       
       const payload = { ...calc, domain_id: boId };
 
-      const response = await fetch(url, {
+      await apiFetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
           'X-Tenant-ID': tenantId,
         },
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        try {
-          const errData = await response.json();
-          if (errData.errors && Array.isArray(errData.errors)) {
-             setError(errData.errors.join("; "));
-             return;
-          }
-           throw new Error(errData.message || 'Failed to save');
-        } catch (e) {
-           const errText = await response.text();
-           throw new Error(errText || 'Failed to save calculation');
-        }
-      }
-
       onSave?.();
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to save calculation');
     } finally {
       setSaving(false);
     }

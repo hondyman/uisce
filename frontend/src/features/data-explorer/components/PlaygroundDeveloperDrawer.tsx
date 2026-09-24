@@ -175,7 +175,8 @@ export const PlaygroundDeveloperDrawer: React.FC<PlaygroundDeveloperDrawerProps>
                   <MenuItem value="bigquery">Google BigQuery</MenuItem>
                   <MenuItem value="clickhouse">ClickHouse OLAP</MenuItem>
                   <MenuItem value="duckdb">DuckDB In-Memory</MenuItem>
-                  <MenuItem value="trino">Trino / Presto</MenuItem>
+                  <MenuItem value="starrocks">StarRocks MPP</MenuItem>
+                  <MenuItem value="datafusion">Apache DataFusion</MenuItem>
                 </Select>
               </Stack>
               <Button

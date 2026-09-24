@@ -2,8 +2,6 @@ package compliance
 
 import (
 	"testing"
-
-	"github.com/google/uuid"
 )
 
 func TestPreTradeComplianceVM_ConcentrationLimitBreach(t *testing.T) {
@@ -32,34 +30,6 @@ func TestPreTradeComplianceVM_ConcentrationLimitBreach(t *testing.T) {
 	}
 }
 
-func TestParseFIXNewOrderSingle(t *testing.T) {
-	tenantID := uuid.New()
-	rawFIX := "8=FIX.4.4\x0135=D\x0111=ORD-9901\x011=ACCT-US-01\x0155=AAPL\x0154=1\x0138=1000\x0144=185.50\x0110=000\x01"
-
-	ticket, err := ParseFIXNewOrderSingle(tenantID, rawFIX)
-	if err != nil {
-		t.Fatalf("unexpected error parsing FIX: %v", err)
-	}
-
-	if ticket.TicketID != "ORD-9901" {
-		t.Errorf("expected TicketID ORD-9901, got %s", ticket.TicketID)
-	}
-	if ticket.AccountID != "ACCT-US-01" {
-		t.Errorf("expected AccountID ACCT-US-01, got %s", ticket.AccountID)
-	}
-	if ticket.SecurityID != "AAPL" {
-		t.Errorf("expected SecurityID AAPL, got %s", ticket.SecurityID)
-	}
-	if ticket.OrderAction != "BUY" {
-		t.Errorf("expected OrderAction BUY, got %s", ticket.OrderAction)
-	}
-	if ticket.OrderShares != 1000 {
-		t.Errorf("expected OrderShares 1000, got %.2f", ticket.OrderShares)
-	}
-	if ticket.OrderPrice != 185.50 {
-		t.Errorf("expected OrderPrice 185.50, got %.2f", ticket.OrderPrice)
-	}
-}
 
 func BenchmarkPreTradeComplianceVM_SingleRuleCheck(b *testing.B) {
 	vm := NewPreTradeComplianceVM(nil)

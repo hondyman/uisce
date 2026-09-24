@@ -19,7 +19,8 @@ function App() {
   // Compare against the locale-stripped path so /en/login, /es/login, etc. all match.
   const authPaths = ['/login', '/reset-password', '/signup', '/register'];
   const stripped = stripLocale(location.pathname);
-  const hideNav = authPaths.some((p) => stripped.startsWith(p));
+  const hideNav = authPaths.some((p) => stripped.startsWith(p)) || stripped.startsWith('/view');
+
 
   return (
     <ErrorBoundary>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DndContext, useDraggable, DragStartEvent } from '@dnd-kit/core';
 import {
   Box,
   TextField,
@@ -34,6 +35,107 @@ interface SemanticCatalogProps {
   terms?: SemanticTerm[];
   onTermDrag?: (term: SemanticTerm) => void;
 }
+
+interface DraggableTermCardProps {
+  term: SemanticTerm;
+  isHovered: boolean;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+  getDataTypeIcon: (dataType: string) => string;
+  getStatusColor: (status: string) => 'success' | 'warning' | 'error' | 'default';
+}
+
+const DraggableTermCard = ({
+  term,
+  isHovered,
+  onMouseEnter,
+  onMouseLeave,
+  getDataTypeIcon,
+  getStatusColor,
+}: DraggableTermCardProps) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `semantic-term-${term.id}`,
+    data: { term },
+  });
+
+  return (
+    <Card
+      ref={setNodeRef}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      sx={{
+        cursor: 'grab',
+        opacity: isDragging ? 0.4 : 1,
+        transition: 'all 200ms',
+        '&:hover': {
+          borderColor: 'primary.light',
+          backgroundColor: 'primary.lighter',
+        },
+      }}
+      {...attributes}
+      {...listeners}
+    >
+      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="subtitle2" fontWeight="600">
+            {term.name}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ color: 'action.disabled' }}>
+              {getDataTypeIcon(term.dataType)}
+            </Typography>
+            <Chip
+              label={term.governanceStatus}
+              size="small"
+              color={getStatusColor(term.governanceStatus)}
+              variant="outlined"
+            />
+          </Box>
+        </Box>
+
+        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+          {term.businessDefinition}
+        </Typography>
+
+        {term.sampleValues && term.sampleValues.length > 0 && (
+          <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
+            {term.sampleValues.slice(0, 2).map((value, idx) => (
+              <Chip
+                key={idx}
+                label={value}
+                size="small"
+                variant="outlined"
+                sx={{ font: 'monospace' }}
+              />
+            ))}
+            {term.sampleValues.length > 2 && (
+              <Typography variant="caption" color="textSecondary">
+                +{term.sampleValues.length - 2} more
+              </Typography>
+            )}
+          </Stack>
+        )}
+
+        {isHovered && (
+          <Paper
+            sx={{
+              mt: 1.5,
+              p: 1,
+              backgroundColor: 'info.lighter',
+              border: '1px solid',
+              borderColor: 'info.light',
+            }}
+          >
+            <Typography variant="caption" color="info.dark" sx={{ display: 'flex', alignItems: 'center' }}>
+              <InfoIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
+              Drag to add to priority rule
+            </Typography>
+          </Paper>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 /**
  * SemanticCatalog Component (Material-UI)
@@ -123,7 +225,13 @@ export const SemanticCatalog = ({
     return colors[status] || 'default';
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    const term = event.active.data.current?.term as SemanticTerm | undefined;
+    if (term) onTermDrag?.(term);
+  };
+
   return (
+    <DndContext onDragStart={handleDragStart}>
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
       <Paper sx={{ p: 2, borderRadius: 0 }} elevation={0}>
@@ -184,80 +292,15 @@ export const SemanticCatalog = ({
               <Collapse in={expandedCategories.has(category)}>
                 <Stack spacing={1} sx={{ p: 1 }}>
                   {categoryTerms.map((term) => (
-                    <Card
+                    <DraggableTermCard
                       key={term.id}
-                      draggable
-                      onDragStart={() => onTermDrag?.(term)}
+                      term={term}
+                      isHovered={hoveredTerm === term.id}
                       onMouseEnter={() => setHoveredTerm(term.id)}
                       onMouseLeave={() => setHoveredTerm(null)}
-                      sx={{
-                        cursor: 'grab',
-                        transition: 'all 200ms',
-                        '&:hover': {
-                          borderColor: 'primary.light',
-                          backgroundColor: 'primary.lighter',
-                        },
-                      }}
-                    >
-                      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                          <Typography variant="subtitle2" fontWeight="600">
-                            {term.name}
-                          </Typography>
-                          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                            <Typography variant="h6" sx={{ color: 'action.disabled' }}>
-                              {getDataTypeIcon(term.dataType)}
-                            </Typography>
-                            <Chip
-                              label={term.governanceStatus}
-                              size="small"
-                              color={getStatusColor(term.governanceStatus)}
-                              variant="outlined"
-                            />
-                          </Box>
-                        </Box>
-
-                        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
-                          {term.businessDefinition}
-                        </Typography>
-
-                        {term.sampleValues && term.sampleValues.length > 0 && (
-                          <Stack direction="row" spacing={0.5} sx={{ flexWrap: 'wrap' }}>
-                            {term.sampleValues.slice(0, 2).map((value, idx) => (
-                              <Chip
-                                key={idx}
-                                label={value}
-                                size="small"
-                                variant="outlined"
-                                sx={{ font: 'monospace' }}
-                              />
-                            ))}
-                            {term.sampleValues.length > 2 && (
-                              <Typography variant="caption" color="textSecondary">
-                                +{term.sampleValues.length - 2} more
-                              </Typography>
-                            )}
-                          </Stack>
-                        )}
-
-                        {hoveredTerm === term.id && (
-                          <Paper
-                            sx={{
-                              mt: 1.5,
-                              p: 1,
-                              backgroundColor: 'info.lighter',
-                              border: '1px solid',
-                              borderColor: 'info.light',
-                            }}
-                          >
-                            <Typography variant="caption" color="info.dark" sx={{ display: 'flex', alignItems: 'center' }}>
-                              <InfoIcon sx={{ fontSize: '1rem', mr: 0.5 }} />
-                              Drag to add to priority rule
-                            </Typography>
-                          </Paper>
-                        )}
-                      </CardContent>
-                    </Card>
+                      getDataTypeIcon={getDataTypeIcon}
+                      getStatusColor={getStatusColor}
+                    />
                   ))}
                 </Stack>
               </Collapse>
@@ -281,6 +324,7 @@ export const SemanticCatalog = ({
         </Typography>
       </Paper>
     </Box>
+    </DndContext>
   );
 };
 

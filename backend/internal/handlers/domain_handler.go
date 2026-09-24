@@ -4,12 +4,39 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/hondyman/uisce/backend/models"
 )
+
+// coreAdminRoles are the roles that may modify data domains. data_domain has no tenant_id: it is one
+// global taxonomy shared by every tenant, like the gold-copy metadata tenants inherit read-only. Any
+// tenant may read it; only gold-copy (core) administrators may change it. These are the roles the
+// codebase already treats as core/global administrators (middleware/auth_context.go); global_ops and
+// helpdesk are support roles and deliberately excluded.
+var coreAdminRoles = []string{"core_admin", "is_core_admin", security.RoleGlobalAdmin}
+
+// requireCoreAdmin writes a 401/403 and returns false unless the validated caller holds a core-admin role.
+func requireCoreAdmin(w http.ResponseWriter, r *http.Request) bool {
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return false
+	}
+	for _, have := range auth.Roles {
+		for _, want := range coreAdminRoles {
+			if strings.EqualFold(have, want) {
+				return true
+			}
+		}
+	}
+	http.Error(w, "only gold-copy administrators may modify data domains", http.StatusForbidden)
+	return false
+}
 
 // DomainHandler exposes CRUD for data domains
 type DomainHandler struct {
@@ -65,6 +92,9 @@ func (h *DomainHandler) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DomainHandler) create(w http.ResponseWriter, r *http.Request) {
+	if !requireCoreAdmin(w, r) {
+		return
+	}
 	var in models.DataDomain
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		http.Error(w, "invalid payload", http.StatusBadRequest)
@@ -85,6 +115,9 @@ func (h *DomainHandler) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DomainHandler) update(w http.ResponseWriter, r *http.Request) {
+	if !requireCoreAdmin(w, r) {
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
@@ -106,6 +139,9 @@ func (h *DomainHandler) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DomainHandler) delete(w http.ResponseWriter, r *http.Request) {
+	if !requireCoreAdmin(w, r) {
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {

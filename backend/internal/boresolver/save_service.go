@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	dbpkg "github.com/hondyman/uisce/backend/internal/db"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -37,6 +38,12 @@ func (s *BOSaveService) SaveBusinessObjectAtomic(
 		return uuid.Nil, err
 	}
 	defer tx.Rollback()
+
+	// Predicate delta: none — existing SQL already binds req.TenantID; choke
+	// point only SET LOCALs GUCs for FORCE RLS (BeginTx wave quartet).
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, req.TenantID.String(), ""); err != nil {
+		return uuid.Nil, fmt.Errorf("tenant GUC: %w", err)
+	}
 
 	// 1. Upsert Business Object Header
 	boID := uuid.New()
@@ -82,20 +89,34 @@ func (s *BOSaveService) SaveBusinessObjectAtomic(
 			bindingID = *b.BindingID
 		}
 
+		// One default binding per BO (uq_bob_one_default): making this one the default demotes the others
+		// in the same transaction, so the save cannot be rejected by the index.
+		if b.IsDefault {
+			if _, err = tx.ExecContext(ctx, `
+				UPDATE public.business_object_binding
+				SET is_default = false, updated_at = NOW()
+				WHERE tenant_id = $1 AND bo_id = $2 AND backend_id <> $3 AND is_default`,
+				req.TenantID, boID, b.BackendID); err != nil {
+				return uuid.Nil, fmt.Errorf("failed demoting previous default binding: %w", err)
+			}
+		}
+
+		// RETURNING: on conflict the existing row keeps its id, and the field bindings below must
+		// reference that id, not the one generated above.
 		bindUpsertSQL := `
-			INSERT INTO public.business_object_bindings (
-				id, tenant_id, bo_id, backend_id, driving_node_id,
+			INSERT INTO public.business_object_binding (
+				bo_binding_id, tenant_id, bo_id, backend_id, driving_node_id,
 				is_default, temporal_override, is_active, updated_at
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW())
 			ON CONFLICT (tenant_id, bo_id, backend_id) DO UPDATE SET
 				driving_node_id = EXCLUDED.driving_node_id,
 				is_default = EXCLUDED.is_default,
 				temporal_override = EXCLUDED.temporal_override,
-				updated_at = NOW();
+				updated_at = NOW()
+			RETURNING bo_binding_id;
 		`
-		_, err = tx.ExecContext(ctx, bindUpsertSQL,
-			bindingID, req.TenantID, boID, b.BackendID, b.DrivingNodeID, b.IsDefault, b.TemporalOverride)
-		if err != nil {
+		if err = tx.QueryRowContext(ctx, bindUpsertSQL,
+			bindingID, req.TenantID, boID, b.BackendID, b.DrivingNodeID, b.IsDefault, b.TemporalOverride).Scan(&bindingID); err != nil {
 			return uuid.Nil, fmt.Errorf("failed saving binding: %w", err)
 		}
 

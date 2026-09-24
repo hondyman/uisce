@@ -45,7 +45,6 @@ type SyncWorkerConfig struct {
 	StarRocksURL       string
 	StarRocksUser      string
 	StarRocksPassword  string
-	TrinoDSN           string
 }
 
 func main() {
@@ -59,7 +58,6 @@ func main() {
 		StarRocksURL:       getEnv("STARROCKS_URL", "localhost:9030"),
 		StarRocksUser:      getEnv("STARROCKS_USER", "root"),
 		StarRocksPassword:  getEnv("STARROCKS_PASSWORD", ""),
-		TrinoDSN:           getEnv("TRINO_DSN", "http://user@trino:8080?catalog=iceberg&schema=audit"),
 	}
 
 	log.Println("🚀 Starting Security Sync Worker")
@@ -82,7 +80,7 @@ func main() {
 		defer starrocksWorker.Close()
 	}
 
-	// Bitemporal CDC Worker - Trino removed, worker disabled
+	// Bitemporal CDC Worker - legacy CDC worker disabled
 	var bitemporalWorker *sync.BitemporalCDCWorker
 
 	// Initialize Tenant Worker

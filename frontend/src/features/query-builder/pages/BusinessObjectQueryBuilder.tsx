@@ -93,12 +93,26 @@ import type {
   PreviewResult,
   BOSchema,
   BOSchemaField,
+  SavedQueryParameter,
+  SavedQueryChartType,
+  SavedQuery,
+  SavedQueryState,
 } from '../types/queryDef';
 import ExplainPlanVisualizer from '../components/ExplainPlanVisualizer';
 import ScrollAreaResultView from '../components/ScrollAreaResultView';
 import QueryPerformanceSummary from '../components/QueryPerformanceSummary';
 import AutoFormRenderer from '../components/AutoFormRenderer';
 import { JWTInspector } from '../../../components/BusinessObjectManager/JWTInspector';
+import { listSavedQueries, createSavedQuery, updateSavedQuery, getSavedQuery, deleteSavedQuery, runSavedQuery, savedQueryRestUrl } from '../services/savedQueryApi';
+import { buildChartOption } from '../utils/chartOption';
+import ReactECharts from 'echarts-for-react';
+import {
+  Save as SaveIcon,
+  BarChart as ChartTabIcon,
+  ContentCopy as CopyIcon,
+  FolderOpen as OpenSavedIcon,
+} from '@mui/icons-material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Switch, FormControlLabel } from '@mui/material';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -161,6 +175,7 @@ function debounce(fn: (qd: QueryDef) => void, ms: number) {
     timer = setTimeout(() => fn(qd), ms);
   };
 }
+
 
 // ─── Sortable Chip ───────────────────────────────────────────────────────────
 
@@ -230,6 +245,23 @@ const BusinessObjectQueryBuilder: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
   const [executeResult, setExecuteResult] = useState<QueryExecuteResult | null>(null);
+
+  // Saved query: parameters (named placeholders a filter can defer its
+  // value to instead of a literal - see FilterDef.paramRef), a visual, and
+  // persistence. Kept separate from `queryDef` (the ad-hoc QueryDef this
+  // page already sends to /api/query/execute) since parameters/chartType/
+  // save-identity aren't part of that wire contract at all.
+  const [parameters, setParameters] = useState<SavedQueryParameter[]>([]);
+  const [chartType, setChartType] = useState<SavedQueryChartType>('bar');
+  const [savedQueryId, setSavedQueryId] = useState<string | null>(null);
+  const [savedQueryName, setSavedQueryName] = useState('');
+  const [savedQueryDescription, setSavedQueryDescription] = useState('');
+  const [savedQueries, setSavedQueries] = useState<SavedQuery[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [chartDimTerm, setChartDimTerm] = useState<string>('');
+  const [chartMeasureTerm, setChartMeasureTerm] = useState<string>('');
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
 
   // Drag sensors
   const sensors = useSensors(
@@ -384,6 +416,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
         }));
         setPreviewResult(null);
         setExecuteResult(null);
+        // Switching BO/binding starts a fresh query, not an edit of
+        // whatever saved query happened to be loaded before.
+        setSavedQueryId(null);
+        setSavedQueryName('');
+        setSavedQueryDescription('');
+        setParameters([]);
+        setChartDimTerm('');
+        setChartMeasureTerm('');
       } catch (err) {
         devError('Failed to load terms/schema', err);
         setError('Failed to load semantic terms for the selected binding');
@@ -394,6 +434,30 @@ const BusinessObjectQueryBuilder: React.FC = () => {
 
     load();
   }, [selectedBO, selectedBindingId, tenantId]);
+
+  // Saved queries for the selected BO - the "Cube Playground"-style list of
+  // reusable queries a Page Studio widget (or an external REST caller) can
+  // already point at, shown alongside the ad-hoc builder above it.
+  const refreshSavedQueries = useCallback(() => {
+    if (!selectedBO) { setSavedQueries([]); return; }
+    listSavedQueries(selectedBO.id).then(setSavedQueries).catch(() => setSavedQueries([]));
+  }, [selectedBO]);
+  useEffect(() => { refreshSavedQueries(); }, [refreshSavedQueries]);
+
+  // Default the Chart tab's category/value pickers to the first
+  // dimension/measure whenever the query shape changes and nothing (or a
+  // now-removed field) is selected - a query with data should never open
+  // the Chart tab to an empty picker.
+  useEffect(() => {
+    if (!queryDef) return;
+    if (!queryDef.query.dimensions.some((d) => d.alias === chartDimTerm)) {
+      setChartDimTerm(queryDef.query.dimensions[0]?.alias || '');
+    }
+    if (!queryDef.query.measures.some((m) => m.alias === chartMeasureTerm)) {
+      setChartMeasureTerm(queryDef.query.measures[0]?.alias || '');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryDef?.query.dimensions, queryDef?.query.measures]);
 
   // Debounced SQL preview
   const runPreview = useCallback(async (qd: QueryDef) => {
@@ -687,6 +751,125 @@ const BusinessObjectQueryBuilder: React.FC = () => {
     }
   };
 
+  // ─── Parameters ──────────────────────────────────────────────────────────
+  // A filter's value can be deferred to one of these instead of a literal
+  // (FilterDef.paramRef) - see handleToggleFilterParam below.
+  const handleAddParameter = () => {
+    setParameters((prev) => {
+      let n = prev.length + 1;
+      while (prev.some((p) => p.name === `param${n}`)) n++;
+      return [...prev, { name: `param${n}`, label: '', type: 'string', required: false }];
+    });
+  };
+  const handleUpdateParameter = (index: number, patch: Partial<SavedQueryParameter>) => {
+    setParameters((prev) => prev.map((p, i) => (i === index ? { ...p, ...patch } : p)));
+  };
+  const handleRemoveParameter = (index: number) => {
+    const removed = parameters[index];
+    setParameters((prev) => prev.filter((_, i) => i !== index));
+    // A filter referencing a deleted parameter would silently never match -
+    // detach it back to an editable literal instead.
+    if (removed && queryDef) {
+      setQueryDef((prev) => prev && {
+        ...prev,
+        query: { ...prev.query, filters: prev.query.filters.map((f) => (f.paramRef === removed.name ? { ...f, paramRef: undefined, value: '' } : f)) },
+      });
+    }
+  };
+  // Toggling a filter to "parameterized" clears its literal value and picks
+  // (or creates) a parameter for it to reference; toggling off does the
+  // reverse. Kept as one function since the two states are mutually
+  // exclusive on FilterDef (paramRef vs value).
+  const handleToggleFilterParam = (index: number) => {
+    const filter = queryDef?.query.filters[index];
+    if (!filter) return;
+    if (filter.paramRef) {
+      handleUpdateFilter(index, { paramRef: undefined, value: '' });
+      return;
+    }
+    let param = parameters[0];
+    if (!param) {
+      param = { name: 'param1', label: '', type: 'string', required: false };
+      setParameters([param]);
+    }
+    handleUpdateFilter(index, { paramRef: param.name, value: undefined });
+  };
+
+  // ─── Save / load / run as a saved query ─────────────────────────────────
+  const currentSavedQueryState = (): SavedQueryState | null => {
+    if (!queryDef) return null;
+    return {
+      dimensions: queryDef.query.dimensions,
+      measures: queryDef.query.measures,
+      filters: queryDef.query.filters,
+      parameters,
+      limit: queryDef.query.limit,
+    };
+  };
+
+  const handleSaveQuery = async () => {
+    const state = currentSavedQueryState();
+    if (!state || !selectedBO || !savedQueryName.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const input = {
+        name: savedQueryName.trim(),
+        description: savedQueryDescription,
+        boId: selectedBO.id,
+        bindingId: selectedBindingId,
+        chartType,
+        state,
+      };
+      const saved = savedQueryId ? await updateSavedQuery(savedQueryId, input) : await createSavedQuery(input);
+      setSavedQueryId(saved.id);
+      refreshSavedQueries();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save query');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLoadSavedQuery = async (id: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const sq = await getSavedQuery(id);
+      const bo = businessObjects.find((b) => b.id === sq.boId);
+      if (bo) setSelectedBO(bo);
+      setSelectedBindingId(sq.bindingId);
+      // The BO/binding effect above resets queryDef/parameters as soon as
+      // selectedBO/selectedBindingId change, so populate the actual saved
+      // shape on the next tick once that reset has happened.
+      setTimeout(() => {
+        setQueryDef((prev) => prev && {
+          ...prev,
+          query: { ...prev.query, dimensions: sq.state.dimensions, measures: sq.state.measures, filters: sq.state.filters, limit: sq.state.limit || prev.query.limit },
+        });
+        setParameters(sq.state.parameters || []);
+        setChartType(sq.chartType);
+        setSavedQueryId(sq.id);
+        setSavedQueryName(sq.name);
+        setSavedQueryDescription(sq.description);
+      }, 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load saved query');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteSavedQueryClick = async (id: string) => {
+    try {
+      await deleteSavedQuery(id);
+      if (savedQueryId === id) setSavedQueryId(null);
+      refreshSavedQueries();
+    } catch (err) {
+      devError('Failed to delete saved query', err);
+    }
+  };
+
   // Derived state
   const visibleTerms = useMemo(() => {
     const q = searchTerm.toLowerCase();
@@ -792,6 +975,43 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 </option>
               ))}
             </TextField>
+          </Box>
+        )}
+
+        {/* Saved Queries - reusable, parameterized QueryDefs already exposed
+            as their own REST endpoint (see savedQueryApi.ts) and pickable
+            from Page Studio's Chart/Slicer/KPI "use a saved query" binding. */}
+        {selectedBO && (
+          <Box sx={{ p: 2, borderBottom: '1px solid #eee' }}>
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <OpenSavedIcon fontSize="small" /> Saved Queries
+            </Typography>
+            {savedQueries.length === 0 ? (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                None yet for this Business Object.
+              </Typography>
+            ) : (
+              <List dense disablePadding sx={{ mt: 0.5 }}>
+                {savedQueries.map((sq) => (
+                  <ListItemButton
+                    key={sq.id}
+                    selected={sq.id === savedQueryId}
+                    onClick={() => handleLoadSavedQuery(sq.id)}
+                    sx={{ borderRadius: 1 }}
+                  >
+                    <ListItemText
+                      primary={sq.name}
+                      secondary={`${sq.state.dimensions.length}d · ${sq.state.measures.length}m · ${sq.state.parameters.length} params`}
+                      primaryTypographyProps={{ variant: 'body2' }}
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                    <IconButton size="small" onClick={(e) => { e.stopPropagation(); handleDeleteSavedQueryClick(sq.id); }}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </ListItemButton>
+                ))}
+              </List>
+            )}
           </Box>
         )}
 
@@ -1029,6 +1249,14 @@ const BusinessObjectQueryBuilder: React.FC = () => {
             >
               Run Query
             </Button>
+            <Button
+              variant="outlined"
+              startIcon={<SaveIcon />}
+              onClick={() => setSaveDialogOpen(true)}
+              disabled={isRunDisabled}
+            >
+              {savedQueryId ? 'Update Saved Query' : 'Save Query'}
+            </Button>
           </Box>
         </Paper>
 
@@ -1194,13 +1422,33 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                       </Select>
                     </FormControl>
                     {!['is_null', 'is_not_null'].includes(filter.operator) && (
-                      <TextField
-                        size="small"
-                        placeholder="Value"
-                        value={filter.value ?? ''}
-                        onChange={(e) => handleUpdateFilter(index, { value: e.target.value })}
-                        sx={{ flex: 1 }}
-                      />
+                      filter.paramRef ? (
+                        <FormControl size="small" sx={{ flex: 1 }}>
+                          <Select
+                            value={filter.paramRef}
+                            onChange={(e) => handleUpdateFilter(index, { paramRef: e.target.value })}
+                          >
+                            {parameters.map((p) => (
+                              <MenuItem key={p.name} value={p.name}>{p.label || p.name}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <TextField
+                          size="small"
+                          placeholder="Value"
+                          value={filter.value ?? ''}
+                          onChange={(e) => handleUpdateFilter(index, { value: e.target.value })}
+                          sx={{ flex: 1 }}
+                        />
+                      )
+                    )}
+                    {!['is_null', 'is_not_null'].includes(filter.operator) && (
+                      <Tooltip title={filter.paramRef ? 'Using a parameter - click to use a fixed value instead' : 'Use a parameter instead of a fixed value, so this filter can vary per request (REST caller or Page Studio binding)'}>
+                        <IconButton size="small" onClick={() => handleToggleFilterParam(index)} color={filter.paramRef ? 'primary' : 'default'}>
+                          <FunctionsIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
                     )}
                     <IconButton size="small" onClick={() => handleRemoveFilter(index)}>
                       <DeleteIcon fontSize="small" />
@@ -1209,6 +1457,58 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 );
               })}
             </Stack>
+          </Paper>
+        )}
+
+        {/* Parameters - named placeholders a filter above can defer its
+            value to (click the ƒ icon on a filter) instead of a literal. */}
+        {queryDef && (
+          <Paper sx={{ p: 2, mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: parameters.length ? 2 : 0 }}>
+              <Typography variant="subtitle2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <FunctionsIcon fontSize="small" /> Parameters
+              </Typography>
+              <Button size="small" startIcon={<AddIcon />} onClick={handleAddParameter}>Add parameter</Button>
+            </Box>
+            {parameters.length > 0 && (
+              <Stack spacing={1.5}>
+                {parameters.map((p, i) => (
+                  <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      size="small" label="Name" value={p.name}
+                      onChange={(e) => handleUpdateParameter(i, { name: e.target.value })}
+                      sx={{ width: 140 }}
+                    />
+                    <TextField
+                      size="small" label="Label" value={p.label || ''}
+                      onChange={(e) => handleUpdateParameter(i, { label: e.target.value })}
+                      sx={{ flex: 1 }}
+                    />
+                    <FormControl size="small" sx={{ width: 110 }}>
+                      <InputLabel>Type</InputLabel>
+                      <Select value={p.type || 'string'} label="Type" onChange={(e) => handleUpdateParameter(i, { type: e.target.value as SavedQueryParameter['type'] })}>
+                        <MenuItem value="string">string</MenuItem>
+                        <MenuItem value="number">number</MenuItem>
+                        <MenuItem value="date">date</MenuItem>
+                        <MenuItem value="boolean">boolean</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      size="small" label="Default" value={p.default ?? ''}
+                      onChange={(e) => handleUpdateParameter(i, { default: e.target.value })}
+                      sx={{ width: 120 }}
+                    />
+                    <FormControlLabel
+                      control={<Switch size="small" checked={!!p.required} onChange={(e) => handleUpdateParameter(i, { required: e.target.checked })} />}
+                      label={<Typography variant="caption">Required</Typography>}
+                    />
+                    <IconButton size="small" onClick={() => handleRemoveParameter(i)}>
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Stack>
+            )}
           </Paper>
         )}
 
@@ -1225,6 +1525,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
               <Tab icon={<CodeIcon fontSize="small" />} label="SQL" iconPosition="start" />
               <Tab icon={<PlanIcon fontSize="small" />} label="Plan" iconPosition="start" />
               <Tab icon={<ApiIcon fontSize="small" />} label="QueryDef" iconPosition="start" />
+              <Tab icon={<ChartTabIcon fontSize="small" />} label="Chart" iconPosition="start" />
             </Tabs>
           </Box>
 
@@ -1327,6 +1628,52 @@ const BusinessObjectQueryBuilder: React.FC = () => {
                 </SyntaxHighlighter>
               </Box>
             )}
+
+            {/* Chart tab - the same visual a Page Studio Chart widget would
+                render for this query once saved (see PageComponentRenderer's
+                "use a saved query" mode), previewed here against whatever
+                the last Run Query returned. */}
+            {activeTab === 4 && (
+              <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {!executeResult || executeResult.rows.length === 0 ? (
+                  <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                    <Typography>Run the query to preview a visual.</Typography>
+                  </Box>
+                ) : (
+                  <>
+                    <Stack direction="row" spacing={2}>
+                      <FormControl size="small" sx={{ minWidth: 140 }}>
+                        <InputLabel>Visual type</InputLabel>
+                        <Select value={chartType} label="Visual type" onChange={(e) => setChartType(e.target.value as SavedQueryChartType)}>
+                          <MenuItem value="bar">Bar</MenuItem>
+                          <MenuItem value="line">Line</MenuItem>
+                          <MenuItem value="pie">Pie</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <InputLabel>Category</InputLabel>
+                        <Select value={chartDimTerm} label="Category" onChange={(e) => setChartDimTerm(e.target.value)}>
+                          {queryDef?.query.dimensions.map((d) => (
+                            <MenuItem key={d.termNodeId} value={d.alias}>{termById.get(d.termNodeId)?.displayName || d.alias}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      <FormControl size="small" sx={{ minWidth: 160 }}>
+                        <InputLabel>Value</InputLabel>
+                        <Select value={chartMeasureTerm} label="Value" onChange={(e) => setChartMeasureTerm(e.target.value)}>
+                          {queryDef?.query.measures.map((m) => (
+                            <MenuItem key={m.termNodeId} value={m.alias}>{termById.get(m.termNodeId)?.displayName || m.alias}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </Stack>
+                    <Box sx={{ flex: 1, minHeight: 0 }}>
+                      <ReactECharts style={{ height: '100%', width: '100%' }} option={buildChartOption(executeResult.rows, executeResult.columns, chartType, chartDimTerm, chartMeasureTerm)} notMerge />
+                    </Box>
+                  </>
+                )}
+              </Box>
+            )}
           </Box>
 
           {executeResult && (
@@ -1349,6 +1696,70 @@ const BusinessObjectQueryBuilder: React.FC = () => {
           )}
         </Paper>
       </Box>
+
+      {/* Save Query dialog - name/description + the parameters already
+          defined below in the Filters section, then (once saved) the
+          stable REST endpoint a Page Studio widget or external caller
+          hits to re-run this exact query. */}
+      <Dialog open={saveDialogOpen} onClose={() => setSaveDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{savedQueryId ? 'Update Saved Query' : 'Save Query'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {saveError && <Alert severity="error">{saveError}</Alert>}
+            <TextField
+              label="Name"
+              size="small"
+              fullWidth
+              value={savedQueryName}
+              onChange={(e) => setSavedQueryName(e.target.value)}
+              autoFocus
+            />
+            <TextField
+              label="Description"
+              size="small"
+              fullWidth
+              multiline
+              minRows={2}
+              value={savedQueryDescription}
+              onChange={(e) => setSavedQueryDescription(e.target.value)}
+            />
+            {parameters.length > 0 && (
+              <Alert severity="info" sx={{ fontSize: '0.8rem' }}>
+                {parameters.length} parameter{parameters.length > 1 ? 's' : ''} will be part of this
+                query's REST endpoint - a caller (or a Page Studio widget) supplies them as
+                <code> ?paramName=value</code>.
+              </Alert>
+            )}
+            {savedQueryId && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">REST endpoint</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={savedQueryRestUrl(savedQueryId)}
+                    InputProps={{ readOnly: true, sx: { fontFamily: 'monospace', fontSize: '0.8rem' } }}
+                  />
+                  <IconButton size="small" onClick={() => navigator.clipboard.writeText(savedQueryRestUrl(savedQueryId))}>
+                    <CopyIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+                {parameters.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, fontFamily: 'monospace' }}>
+                    ?{parameters.map((p) => `${p.name}=...`).join('&')}
+                  </Typography>
+                )}
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveDialogOpen(false)}>Close</Button>
+          <Button variant="contained" onClick={handleSaveQuery} disabled={!savedQueryName.trim() || saving}>
+            {saving ? 'Saving…' : savedQueryId ? 'Update' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

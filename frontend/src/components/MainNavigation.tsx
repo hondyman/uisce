@@ -74,6 +74,8 @@ import { ViewModule as ViewModuleIcon, Menu as MenuListIcon } from '@mui/icons-m
 import ScopeBadge from './ScopeBadge';
 import TenantSwitcher from './TenantSwitcher';
 import TenantTreeView from './TenantTreeView';
+import { PageStudioApi } from '../api/pageStudio';
+import DescriptionIcon from '@mui/icons-material/Description';
 import LanguageSelector from './LanguageSelector';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -246,7 +248,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Business Objects', path: '/business-objects', icon: <BusinessIcon />, description: 'Core entities' },
-          { label: 'Query Builder', path: '/query-builder', icon: <QueryStatsIcon />, description: 'Alpha Query Builder' },
           { label: 'Views Catalog', path: '/views', icon: <AssessmentIcon />, description: 'Semantic views' },
           { label: 'Bundles', path: '/fabric/bundles', icon: <CategoryIcon />, description: 'Curated bundles', badge: { label: 'AI', color: 'info' } },
         ]
@@ -270,6 +271,15 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
           { label: 'Marketplace', path: '/marketplace', icon: <StoreIcon />, description: 'Components library' },
           { label: 'UI Components', path: '/marketplace/components', icon: <CodeIcon />, description: 'Component marketplace' },
+        ]
+      },
+      {
+        label: 'Pages',
+        icon: <BuildIcon />,
+        items: [
+          { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Build CRUD pages against a Business Object' },
+          { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Arrange pages into the navigation menu' },
+          { label: 'Browse Pages', path: '/pages', icon: <ApiIcon />, description: 'View pages as a consumer would' },
         ]
       }
     ]
@@ -302,8 +312,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Page Designer',
         icon: <BuildIcon />,
         items: [
-          { label: 'Page Designer', path: '/page-designer', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Dynamic UI', path: '/dynamic-ui', icon: <BuildIcon />, description: 'Form generator' },
+          { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
           { label: 'Custom Components', path: '/fabric/custom-components', icon: <BuildIcon />, description: 'Reusable components' },
         ]
       },
@@ -443,7 +452,7 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Report Library', path: '/reports/library', icon: <AssessmentIcon />, description: 'Saved reports' },
           { label: 'Report Builder', path: '/reports/builder', icon: <BuildIcon />, description: 'Create reports' },
-          { label: 'Data Explorer', path: '/reports/queries', icon: <StorageIcon />, description: 'Query builder', badge: { label: 'New', color: 'success' } },
+          { label: 'Query Builder', path: '/reports/queries', icon: <StorageIcon />, description: 'Build and run saved queries' },
           { label: 'Semantic Models', path: '/reports/models', icon: <CategoryIcon />, description: 'Data models' },
         ]
       },
@@ -605,7 +614,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   // Platform operators (global admins) bypass the capability gate so they can
   // always navigate to admin sections; per-route access is still gated by
   // canAccess() inside the dropdown renderer.
-  const filteredCategoryConfigs = useMemo(
+  const baseCategoryConfigs = useMemo(
     () =>
       filterNavigationByCapabilities(
         categoryConfigs,
@@ -615,6 +624,40 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
       ),
     [isPlatformOperator, organizationAccess],
   );
+
+  // Real Page Studio pages, listed dynamically under Build -> Pages so a
+  // newly-authored page (e.g. "Order Management Dashboard") shows up as its
+  // own menu item without anyone having to hand-curate the separate
+  // Menu Designer nav tree first - fetched once and merged into the static
+  // categoryConfigs below rather than making the whole config data-driven.
+  const [pageStudioPages, setPageStudioPages] = useState<{ id?: string; name: string; slug: string }[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    PageStudioApi.listPages()
+      .then((pages) => { if (!cancelled) setPageStudioPages(pages.map((p) => ({ id: p.id, name: p.name, slug: p.slug }))); })
+      .catch(() => { if (!cancelled) setPageStudioPages([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const filteredCategoryConfigs = useMemo(() => {
+    if (pageStudioPages.length === 0) return baseCategoryConfigs;
+    return baseCategoryConfigs.map((cat) => {
+      if (cat.key !== 'weave') return cat;
+      return {
+        ...cat,
+        menus: cat.menus.map((menu) => {
+          if (menu.label !== 'Pages') return menu;
+          const pageItems: NavigationItem[] = pageStudioPages.map((p) => ({
+            label: p.name,
+            path: `/pages/${p.slug}`,
+            icon: <DescriptionIcon />,
+            description: 'Page Studio page',
+          }));
+          return { ...menu, items: [...menu.items, ...pageItems] };
+        }),
+      };
+    });
+  }, [baseCategoryConfigs, pageStudioPages]);
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load

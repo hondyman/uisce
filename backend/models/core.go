@@ -370,4 +370,8 @@ type ScanProgress struct {
 	Total       int     `json:"total"`
 	Completed   int     `json:"completed"`
 	Message     string  `json:"message"`
+	// Heartbeat marks a repeat of the latest status sent while a long step is still running, so a client can
+	// tell "slow" from "stuck". ElapsedSeconds is the time since the scan started.
+	Heartbeat      bool `json:"heartbeat,omitempty"`
+	ElapsedSeconds int  `json:"elapsed_seconds,omitempty"`
 }

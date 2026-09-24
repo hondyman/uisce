@@ -68,6 +68,7 @@ Return ONLY the raw JSON string, no markdown formatting.`, expandedName, col.Tab
 		GenerateContent(context.Context, string) (string, error)
 	})
 	if !ok {
+		logging.GetLogger().Sugar().Warnf("[suggestSemanticTermWithLLM] LLM provider does not implement GenerateContent method - AI suggestions disabled for column %s.%s (type: %T)", col.Schema, col.Table, s.llmProvider)
 		return emptySuggestion, fmt.Errorf("invalid LLM provider type")
 	}
 
@@ -86,10 +87,11 @@ Return ONLY the raw JSON string, no markdown formatting.`, expandedName, col.Tab
 	var suggestion SemanticSuggestion
 	if err := json.Unmarshal([]byte(result), &suggestion); err != nil {
 		// Fallback: treat entire result as term name if JSON parsing fails
-		logging.GetLogger().Sugar().Warnf("Failed to parse LLM JSON: %v. Raw: %s", err, result)
+		logging.GetLogger().Sugar().Warnf("[suggestSemanticTermWithLLM] Failed to parse LLM JSON for %s.%s: %v. Raw: %s", col.Schema, col.Table, err, result)
 		suggestion.TermName = strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(result), " ", "_"))
 	} else {
 		suggestion.TermName = strings.ToUpper(strings.ReplaceAll(suggestion.TermName, " ", "_"))
+		logging.GetLogger().Sugar().Debugf("[suggestSemanticTermWithLLM] AI suggestion generated for %s.%s: %s", col.Schema, col.Table, suggestion.TermName)
 	}
 
 	return suggestion, nil

@@ -311,8 +311,8 @@ func TestPlanType_Regional_SingleRegion(t *testing.T) {
 	assert.Equal(t, 1, len(plan.SelectedRegions))
 }
 
-// TestEngineRoute_FeatureMetricQueryUsesTrino verifies correct engine for query type
-func TestEngineRoute_FeatureMetricQueryUsesTrino(t *testing.T) {
+// TestEngineRoute_FeatureMetricQueryUsesStarRocks verifies correct engine for query type
+func TestEngineRoute_FeatureMetricQueryUsesStarRocks(t *testing.T) {
 	planner := setupTestPlanner()
 
 	req := &QueryRequest{
@@ -326,8 +326,8 @@ func TestEngineRoute_FeatureMetricQueryUsesTrino(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 1, len(plan.EngineRoutes))
-	assert.Equal(t, "trino", plan.EngineRoutes[0].EngineType)
-	assert.Contains(t, plan.EngineRoutes[0].Endpoint, "trino")
+	assert.Equal(t, "starrocks", plan.EngineRoutes[0].EngineType)
+	assert.Contains(t, plan.EngineRoutes[0].Endpoint, "starrocks")
 	assert.Contains(t, plan.EngineRoutes[0].Endpoint, plan.SelectedRegions[0])
 }
 

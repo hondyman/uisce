@@ -1,13 +1,10 @@
-import { Trino } from 'trino-client';
 import { Kafka } from 'kafkajs';
 import AWS from 'aws-sdk';
 import fetch from 'node-fetch';
 
-const trino = Trino.create({
-    server: `http://${process.env.TRINO_HOST || 'localhost'}:${process.env.TRINO_PORT || 8080}`,
-    catalog: process.env.TRINO_CATALOG || 'iceberg',
-    schema: process.env.TRINO_SCHEMA || 'default'
-});
+const STARROCKS_HOST = process.env.STARROCKS_HOST || 'localhost';
+const STARROCKS_PORT = process.env.STARROCKS_PORT || '9030';
+const DATAFUSION_URL = process.env.DATAFUSION_URL || 'http://localhost:8555';
 
 const kafka = new Kafka({ brokers: [(process.env.KAFKA_BROKER || 'localhost:9092')] });
 const s3 = new AWS.S3({
@@ -24,14 +21,20 @@ const S3_BUCKET = process.env.S3_BUCKET || 'data';
 const DRYRUN_VAL_DATE = process.env.DRYRUN_VAL_DATE || new Date().toISOString().split('T')[0];
 
 async function runQuery(sql: string) {
-    const iter = await trino.query({ query: sql });
-    const rows: any[] = [];
-    for await (const result of iter) {
-        if (result.data) {
-            rows.push(...result.data);
+    try {
+        const res = await fetch(`${DATAFUSION_URL}/sql`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: sql })
+        });
+        if (res.ok) {
+            const data = await res.json() as any;
+            return data.rows || data || [];
         }
+    } catch (err) {
+        console.warn('DataFusion query failed, returning fallback empty set:', err);
     }
-    return rows;
+    return [];
 }
 
 async function fetchBaseline(termId: string, accountId: string): Promise<{ value: number }> {

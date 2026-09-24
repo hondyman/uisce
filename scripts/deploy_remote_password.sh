@@ -47,18 +47,18 @@ fi
 # Fetch and hard reset to origin/main
 git fetch origin --prune
 git reset --hard origin/main
-# Pull and start Trino
+# Pull and start services
 if [ -f docker-compose.remote.yml ]; then
   docker compose -f docker-compose.remote.yml pull || true
-  docker compose -f docker-compose.remote.yml up -d trino || true
-  docker compose -f docker-compose.remote.yml ps trino || true
+  docker compose -f docker-compose.remote.yml up -d starrocks-fe starrocks-be uisce-datafusion || true
+  docker compose -f docker-compose.remote.yml ps starrocks-fe starrocks-be uisce-datafusion || true
 else
   echo "docker-compose.remote.yml not found"
 fi
-if curl -s -f http://localhost:8084/v1/info >/dev/null 2>&1; then
-  echo "Trino appears to be running on remote (http://localhost:8084)"
+if curl -s -f http://localhost:8030/api/bootstrap >/dev/null 2>&1; then
+  echo "StarRocks FE appears to be running on remote (http://localhost:8030)"
 else
-  echo "Trino healthcheck failed or Trino not listening on 8084"
+  echo "StarRocks FE healthcheck failed or not listening on 8030"
 fi
 CMD
 )

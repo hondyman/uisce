@@ -67,7 +67,7 @@ func NewConnectionsServiceWithEvents(db *sqlx.DB, publisher *events.KafkaPublish
 // isGoldCopyTenant reports whether tenantID is the tenant flagged gold_copy = true.
 func (s *ConnectionsService) isGoldCopyTenant(ctx context.Context, tenantID string) bool {
 	var goldCopyID sql.NullString
-	if err := s.db.QueryRowContext(ctx, `SELECT id::text FROM public.tenants WHERE gold_copy = true LIMIT 1`).Scan(&goldCopyID); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT id::text FROM (SELECT public.uisce_gold_copy_tenant_id() AS id) g WHERE id IS NOT NULL`).Scan(&goldCopyID); err != nil {
 		return false
 	}
 	return goldCopyID.Valid && goldCopyID.String == tenantID

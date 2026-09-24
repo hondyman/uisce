@@ -16,8 +16,8 @@ CREATE TABLE IF NOT EXISTS region_registry (
     is_active BOOLEAN DEFAULT TRUE,
     temporal_namespace TEXT NOT NULL,
     temporal_address TEXT NOT NULL,
-    trino_catalog TEXT NOT NULL,
-    trino_endpoint TEXT NOT NULL,
+    lakehouse_catalog TEXT NOT NULL,
+    lakehouse_endpoint TEXT NOT NULL,
     iceberg_catalog TEXT NOT NULL,
     iceberg_s3_bucket TEXT NOT NULL,
     iceberg_warehouse_path TEXT NOT NULL,
@@ -325,17 +325,17 @@ CREATE OR REPLACE FUNCTION register_region(
     p_region_name TEXT,
     p_temporal_namespace TEXT,
     p_temporal_address TEXT,
-    p_trino_endpoint TEXT,
+    p_lakehouse_endpoint TEXT,
     p_api_endpoint TEXT
 ) RETURNS BOOLEAN AS $$
 BEGIN
     INSERT INTO region_registry(
         region_code, region_name, temporal_namespace, temporal_address,
-        trino_catalog, trino_endpoint, iceberg_catalog, iceberg_s3_bucket,
+        lakehouse_catalog, lakehouse_endpoint, iceberg_catalog, iceberg_s3_bucket,
         iceberg_warehouse_path, api_endpoint
     ) VALUES(
         p_region_code, p_region_name, p_temporal_namespace, p_temporal_address,
-        'iceberg_' || p_region_code, p_trino_endpoint, 'iceberg_' || p_region_code,
+        'iceberg_' || p_region_code, p_lakehouse_endpoint, 'iceberg_' || p_region_code,
         'semlayer-' || p_region_code, 's3://semlayer-' || p_region_code || '/warehouse'
     );
     RETURN TRUE;
@@ -384,24 +384,24 @@ $$ LANGUAGE plpgsql;
 -- Insert primary regions
 INSERT INTO region_registry(
     region_code, region_name, display_name, temporal_namespace,
-    temporal_address, trino_catalog, trino_endpoint, iceberg_catalog,
+    temporal_address, lakehouse_catalog, lakehouse_endpoint, iceberg_catalog,
     iceberg_s3_bucket, iceberg_warehouse_path, api_endpoint, is_active
 ) VALUES
 ('us-east', 'US East', 'US East (Virginia)', 'us-east-namespace',
  'temporal-us-east.semlayer.internal:7233', 'iceberg_us_east',
- 'https://trino-us-east.semlayer.internal:8443', 'iceberg_us_east',
+ 'https://starrocks-us-east.semlayer.internal:9030', 'iceberg_us_east',
  'semlayer-us-east', 's3://semlayer-us-east/warehouse',
  'https://api-us-east.semlayer.internal', TRUE),
 
 ('eu-west', 'EU West', 'EU West (Ireland)', 'eu-west-namespace',
  'temporal-eu-west.semlayer.internal:7233', 'iceberg_eu_west',
- 'https://trino-eu-west.semlayer.internal:8443', 'iceberg_eu_west',
+ 'https://starrocks-eu-west.semlayer.internal:9030', 'iceberg_eu_west',
  'semlayer-eu-west', 's3://semlayer-eu-west/warehouse',
  'https://api-eu-west.semlayer.internal', TRUE),
 
 ('apac', 'APAC', 'Asia Pacific (Singapore)', 'apac-namespace',
  'temporal-apac.semlayer.internal:7233', 'iceberg_apac',
- 'https://trino-apac.semlayer.internal:8443', 'iceberg_apac',
+ 'https://starrocks-apac.semlayer.internal:9030', 'iceberg_apac',
  'semlayer-apac', 's3://semlayer-apac/warehouse',
  'https://api-apac.semlayer.internal', TRUE)
 ON CONFLICT DO NOTHING;

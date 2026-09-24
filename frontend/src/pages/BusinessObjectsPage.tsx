@@ -27,6 +27,8 @@ import {
   useTheme,
   Alert,
   Tooltip,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,6 +45,7 @@ import {
   Storage as StorageIcon,
   PlayArrow as RunIcon,
   AutoAwesome as AIIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 
 import ValidationRuleScriptEditor from '../components/ValidationRules/ValidationRuleScriptEditor';
@@ -50,7 +53,7 @@ import { ValidationRuleCreator } from '../components/ValidationRules/ValidationR
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import BusinessObjectBindingWizard from '../components/BusinessObjectManager/BusinessObjectBindingWizard';
 import BOAIAssistantModal from '../components/BusinessObjectManager/BOAIAssistantModal';
-import { GlobalBOSearch } from '../components/Search/GlobalBOSearch';
+import { filterBusinessObjectsBySearch } from '../utils/businessObjectSearch';
 
 import { useTenant } from '../contexts/TenantContext';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -114,7 +117,7 @@ export default function BusinessObjectsPage() {
   const [error, setError] = useState<string | null>(null);
   
   const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
-  const [businessObjectsSearch] = useState('');
+  const [businessObjectsSearch, setBusinessObjectsSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'draft'>('all');
   const [scopeFilter, setScopeFilter] = useState<'all' | 'core' | 'custom'>('all');
 
@@ -174,17 +177,8 @@ export default function BusinessObjectsPage() {
   const filteredBusinessObjects = useMemo(() => {
     let filtered = businessObjects;
     
-    // Search Filter
-    if (businessObjectsSearch.trim()) {
-      const searchTerm = businessObjectsSearch.toLowerCase();
-      filtered = filtered.filter(obj => 
-        obj.name.toLowerCase().includes(searchTerm) ||
-        obj.display_name.toLowerCase().includes(searchTerm) ||
-        obj.description?.toLowerCase().includes(searchTerm) ||
-        obj.driver_table_name?.toLowerCase().includes(searchTerm) ||
-        obj.category?.toLowerCase().includes(searchTerm)
-      );
-    }
+    // Search filter (type-ahead: every word must match name, display name, description, driving table or category)
+    filtered = filterBusinessObjectsBySearch(filtered, businessObjectsSearch);
 
     // Scope Filter (Core vs Custom)
     if (scopeFilter !== 'all') {
@@ -201,7 +195,7 @@ export default function BusinessObjectsPage() {
     }
     
     // Sort by name
-    return filtered.sort((a, b) => a.display_name.localeCompare(b.display_name));
+    return [...filtered].sort((a, b) => (a.display_name ?? a.name ?? '').localeCompare(b.display_name ?? b.name ?? ''));
   }, [businessObjects, businessObjectsSearch, statusFilter, scopeFilter]);
 
   // Executive KPI summary metrics
@@ -649,9 +643,35 @@ export default function BusinessObjectsPage() {
           >
             <Stack direction={{ xs: 'column', lg: 'row' }} spacing={2} alignItems={{ lg: 'center' }}>
               
-              {/* Semantic Search */}
+              {/* Type-ahead search: filters the list below as you type */}
               <Box sx={{ flex: 1 }}>
-                <GlobalBOSearch onResultClick={(boId) => navigate(`/business-objects/${boId}`)} />
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Search business objects by name, description or driving table (e.g. mdm party)"
+                  value={businessObjectsSearch}
+                  onChange={(e) => setBusinessObjectsSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') setBusinessObjectsSearch(''); }}
+                  inputProps={{ 'aria-label': 'Search business objects' }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: businessObjectsSearch ? (
+                      <InputAdornment position="end">
+                        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5, whiteSpace: 'nowrap' }}>
+                          {filteredBusinessObjects.length} of {businessObjects.length}
+                        </Typography>
+                        <IconButton size="small" aria-label="Clear search" onClick={() => setBusinessObjectsSearch('')}>
+                          <CloseIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null,
+                  }}
+                  sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                />
               </Box>
 
               {/* Filters */}

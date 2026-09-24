@@ -1,5 +1,6 @@
 const pluginImport = require('eslint-plugin-import');
 const pluginJsxA11y = require('eslint-plugin-jsx-a11y');
+const noSqlFabrication = require('./eslint-rules/no-sql-fabrication.cjs');
 
 module.exports = [
   {
@@ -13,6 +14,7 @@ module.exports = [
       "react-hooks": require("eslint-plugin-react-hooks"),
       "import": pluginImport,
       "jsx-a11y": pluginJsxA11y,
+      "local": { rules: { "no-sql-fabrication": noSqlFabrication } },
     },
     languageOptions: {
       parser: require("@typescript-eslint/parser"),
@@ -108,6 +110,36 @@ module.exports = [
       "jsx-a11y/role-supports-aria-props": "warn",
       "jsx-a11y/scope": "error",
       "jsx-a11y/tabindex-no-positive": "error",
+
+      // ── Layer 1 (error): ban client-side SQL generators by naming
+      // convention. Any function/variable whose name matches
+      // generate*SQL|build*SQL|compile*SQL|format*SQL (case-insensitive) is
+      // banned everywhere outside the reporting/ quarantine. New consumers
+      // cannot accidentally wire into a fabricated SQL pipeline; the
+      // generatePostgresSQL fall-back in LiveQueryTab.tsx and the
+      // buildSQL/buildGroupSQL builders in FilterBuilderPanel.tsx are the
+      // two known offenders this layer is designed to catch.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.name=/^(generate|build|compile|format)\\w*(SQL|Sql)$/]",
+          message: "Client-side SQL generation is banned - SQL comes from the backend (previewQuery/executeQuery in features/query-execution/)."
+        },
+        {
+          selector: "FunctionDeclaration[id.name=/^(generate|build|compile|format)\\w*(SQL|Sql)$/]",
+          message: "Client-side SQL generators are banned at the definition - same rule, at the definition."
+        },
+        {
+          selector: "VariableDeclarator[id.name=/^(generate|build|compile|format)\\w*(SQL|Sql)$/]",
+          message: "Client-side SQL generators are banned at the definition - same rule, at the definition."
+        }
+      ],
+      // ── Layer 2 (warn): AST structural detection of interpolated SQL.
+      // Catches any `SELECT ${cols} FROM ${table}` shape that slips past
+      // naming convention (e.g., a developer who calls it `composeQuery`
+      // but builds the same string). The warning surface is the Phase 3
+      // work list for FilterBuilderPanel.
+      "local/no-sql-fabrication": "warn",
     },
     settings: {
       react: {
@@ -160,5 +192,18 @@ module.exports = [
       "jsx-a11y/scope": "off",
       "jsx-a11y/tabindex-no-positive": "off",
     }
+  },
+  // ── reporting/ quarantine. FilterBuilderPanel.tsx still defines
+  // buildSQL/buildGroupSQL (Phase 3 work). Until those migrate to
+  // previewQuery, the naming-convention ban would red CI here, so we
+  // override: turn the error into a warn in this directory only.
+  // New consumers in reporting/ still get the error - the override is
+  // scoped to the directory, not a blanket allow.
+  {
+    files: ["src/components/reporting/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": "off",
+      "local/no-sql-fabrication": "warn",
+    },
   },
 ];

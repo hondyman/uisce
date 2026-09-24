@@ -412,7 +412,24 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 	}
 
 	logging.GetLogger().Sugar().Infof("[DEBUG] Executing query: %s with args: %v", query, args)
-	err := s.alphaDB.Select(&datasources, query, args...)
+	// This scans across tenant boundaries by design (a specific datasource may
+	// belong to any tenant, and "scan all" spans every tenant), so it needs
+	// the elevated cross-tenant role rather than the caller's own tenant scope.
+	err := db.WithGoldCopySync(context.Background(), s.alphaDB.DB, func(tx *sql.Tx) error {
+		rows, qErr := tx.QueryContext(context.Background(), query, args...)
+		if qErr != nil {
+			return qErr
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var ds DatasourceConfig
+			if scanErr := rows.Scan(&ds.ID, &ds.TenantID, &ds.Name, &ds.SourceSystem, &ds.ConnectionDetails, &ds.IsGoldCopy); scanErr != nil {
+				return scanErr
+			}
+			datasources = append(datasources, ds)
+		}
+		return rows.Err()
+	})
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("[DEBUG] Query error: %v", err)
 		return nil, fmt.Errorf("failed to query tenant_product_datasource: %w", err)
@@ -422,15 +439,27 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 	return datasources, nil
 }
 
-// scanSingleDatasource scans a single datasource for metadata
+// updateScanStatus records scan progress on a datasource that may belong to
+// any tenant; the caller here is a system-level scan job, not a tenant-scoped
+// request, so this needs the elevated cross-tenant role.
+func (s *CatalogScanService) updateScanStatus(ctx context.Context, id uuid.UUID, status, message string) {
+	err := db.WithGoldCopySync(ctx, s.alphaDB.DB, func(tx *sql.Tx) error {
+		_, execErr := tx.ExecContext(ctx, `
+			UPDATE public.tenant_product_datasource
+			SET last_scan_status = $2, last_scan_at = NOW(), last_scan_message = $3
+			WHERE id = $1
+		`, id, status, message)
+		return execErr
+	})
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("Failed to update scan status for datasource %s: %v", id, err)
+	}
+}
+
 // scanSingleDatasource scans a single datasource for metadata
 func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds DatasourceConfig, goldCopyNodes map[string]db.GoldCopyNodeInfo, progress chan<- models.ScanProgress) (*ScanResult, error) {
 	// UPDATE STATUS: Running
-	_, _ = s.alphaDB.ExecContext(ctx, `
-		UPDATE public.tenant_product_datasource
-		SET last_scan_status = 'running', last_scan_at = NOW(), last_scan_message = ''
-		WHERE id = $1
-	`, ds.ID)
+	s.updateScanStatus(ctx, ds.ID, "running", "")
 
 	logging.GetLogger().Sugar().Infof("Starting scan for datasource: %s (ID: %s)", ds.Name, ds.ID)
 
@@ -454,11 +483,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	}
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to connect to target database %s: %w", ds.Name, err)
 	}
 	defer targetDB.Close()
@@ -469,34 +494,37 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 		Schema string `json:"schema"`
 	}
 	if err := json.Unmarshal([]byte(ds.ConnectionDetails), &connConfig); err == nil && connConfig.Schema != "" {
-		schemaWhitelist = []string{connConfig.Schema}
-		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %v", schemaWhitelist)
+		// The schema setting is a comma-separated list; treating it as one name matched no schema at all.
+		schemaWhitelist = parseSchemaWhitelist(connConfig.Schema)
+		logging.GetLogger().Sugar().Infof("Configuring scanner with schema whitelist: %q", schemaWhitelist)
 	}
 
 	// Create scanner via overrideable constructor for testing
 	ansiScanner, err := newMetadataScanner(targetDB, ds.TenantID, ds.ID, ds.SourceSystem, goldCopyNodes, ds.IsGoldCopy, schemaWhitelist)
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to create scanner for %s: %w", ds.Name, err)
 	}
 
 	if progress != nil {
 		progress <- models.ScanProgress{Phase: "scanning", Percent: 0, Message: "Extracting metadata (tables, columns, keys)..."}
+		// The extraction is the long part: let the scanner report tables read, key steps and column profiling.
+		if pr, ok := ansiScanner.(interface {
+			SetProgressFunc(func(models.ScanProgress))
+		}); ok {
+			pr.SetProgressFunc(func(p models.ScanProgress) {
+				p.Phase = "scanning"
+				p.CurrentItem = firstNonEmpty(p.CurrentItem, ds.Name)
+				progress <- p
+			})
+		}
 	}
 	// Extract metadata from the TARGET database
 	nodes, edges, err := ansiScanner.ExtractMetadata()
 	if err != nil {
 		// UPDATE STATUS: Failed
-		_, _ = s.alphaDB.ExecContext(ctx, `
-			UPDATE public.tenant_product_datasource
-			SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-			WHERE id = $1
-		`, ds.ID, err.Error())
+		s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 		return nil, fmt.Errorf("failed to extract metadata from %s: %w", ds.Name, err)
 	}
 
@@ -511,21 +539,13 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	if s.storeFunc != nil {
 		if added, updated, removed, err = s.storeFunc(ctx, ds.ID, nodes, edges, progress); err != nil {
 			// UPDATE STATUS: Failed
-			_, _ = s.alphaDB.ExecContext(ctx, `
-				UPDATE public.tenant_product_datasource
-				SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-				WHERE id = $1
-			`, ds.ID, err.Error())
+			s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 			return nil, fmt.Errorf("failed to store catalog data for %s: %w", ds.Name, err)
 		}
 	} else {
 		if added, updated, removed, err = s.storeCatalogData(ctx, ds.ID, nodes, edges, progress); err != nil {
 			// UPDATE STATUS: Failed
-			_, _ = s.alphaDB.ExecContext(ctx, `
-				UPDATE public.tenant_product_datasource
-				SET last_scan_status = 'failure', last_scan_at = NOW(), last_scan_message = $2
-				WHERE id = $1
-			`, ds.ID, err.Error())
+			s.updateScanStatus(ctx, ds.ID, "failure", err.Error())
 			return nil, fmt.Errorf("failed to store catalog data for %s: %w", ds.Name, err)
 		}
 	}
@@ -610,11 +630,7 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	}
 
 	// UPDATE STATUS: Success
-	_, _ = s.alphaDB.ExecContext(ctx, `
-		UPDATE public.tenant_product_datasource
-		SET last_scan_status = 'success', last_scan_at = NOW(), last_scan_message = 'Scan completed successfully'
-		WHERE id = $1
-	`, ds.ID)
+	s.updateScanStatus(ctx, ds.ID, "success", "Scan completed successfully")
 
 	logging.GetLogger().Sugar().Infof("Successfully completed scan for datasource: %s (charts_rebuilt=%v)", ds.Name, result.ChartsRebuilt)
 
@@ -638,16 +654,24 @@ func (s *CatalogScanService) ScanSingleDatasourceForTest(ctx context.Context, ds
 
 // scanSingleDatasourceWithProgress runs scan with progress updates
 func (s *CatalogScanService) scanSingleDatasourceWithProgress(ctx context.Context, ds DatasourceConfig, goldCopyNodes map[string]db.GoldCopyNodeInfo, progress chan<- models.ScanProgress, basePercent, weight float64) (*ScanResult, error) {
-	// UPDATE STATUS: Running phase progress
-	progress <- models.ScanProgress{
+	// Every phase reports its own 0-100; the forwarder maps them into this datasource's slice of the bar, keeps
+	// it moving forward and sends a heartbeat while a long step runs.
+	inner := make(chan models.ScanProgress, 64)
+	forwarded := make(chan struct{})
+	go func() {
+		defer close(forwarded)
+		forwardScanProgress(ctx, inner, progress, basePercent, weight, scanHeartbeatInterval)
+	}()
+	inner <- models.ScanProgress{
 		Phase:       "scanning",
-		Percent:     basePercent + weight*0.2,
 		CurrentItem: ds.Name,
 		Message:     fmt.Sprintf("Extracting metadata from %s...", ds.Name),
 	}
 
 	// Delegate to the modified scan method that supports granular progress
-	result, err := s.scanSingleDatasource(ctx, ds, goldCopyNodes, progress)
+	result, err := s.scanSingleDatasource(ctx, ds, goldCopyNodes, inner)
+	close(inner)
+	<-forwarded
 
 	if err != nil {
 		progress <- models.ScanProgress{
@@ -657,10 +681,10 @@ func (s *CatalogScanService) scanSingleDatasourceWithProgress(ctx context.Contex
 		}
 		return nil, err
 	}
-	// Emit storing phase progress
+	// Emit the result of this datasource; its whole slice of the bar is done (never move the bar backwards)
 	progress <- models.ScanProgress{
 		Phase:       "storing",
-		Percent:     basePercent + weight*0.2,
+		Percent:     basePercent + weight,
 		CurrentItem: ds.Name,
 		Message:     fmt.Sprintf("Stored %d tables, %d updated for %s", result.Added, result.Updated, ds.Name),
 	}
@@ -708,6 +732,18 @@ func (s *CatalogScanService) TestConnectionByID(ctx context.Context, datasourceI
 
 // connectToTargetDatabase establishes connection to a target database
 func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connectionDetails string) (*sql.DB, error) {
+	return connectToDatabaseFromDetails(ctx, connectionDetails)
+}
+
+// connectToDatabaseFromDetails opens (and pings) a *sql.DB for the given
+// connection-details JSON, supporting the same shapes as the scan pipeline:
+// flat host/port/database/username/password, a DSN string, or key_pair
+// (mTLS) auth. Extracted from CatalogScanService.connectToTargetDatabase so
+// other callers in this package (e.g. BusinessObjectService, to run live
+// record queries against a binding's actual physical backend instead of
+// always using the alpha DB) can reuse the exact same, already-proven
+// connection logic rather than re-deriving DSN/TLS handling.
+func connectToDatabaseFromDetails(ctx context.Context, connectionDetails string) (*sql.DB, error) {
 	// This struct is updated to match the nested JSON structure from the database
 	// AND the flat structure from the frontend ConnectionForm.
 	type ConnectionConfig struct {
@@ -912,4 +948,13 @@ func (s *CatalogScanService) storeCatalogData(ctx context.Context, datasourceID 
 
 	logging.GetLogger().Sugar().Infof("Successfully stored catalog data for datasource %s", datasourceID)
 	return added, updated, removed, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }

@@ -27,7 +27,7 @@ SSH_OPTS="-o BatchMode=yes -o StrictHostKeyChecking=accept-new -p $SSH_PORT"
 
 echo "Deploying to $REMOTE_USER@$REMOTE_HOST:$REMOTE_PATH (port $SSH_PORT)"
 
-# Remote commands: fetch latest, reset to origin/main, pull images and bring up Trino
+# Remote commands: fetch latest, reset to origin/main, pull images and bring up services
 REMOTE_CMD=$(cat <<'CMD'
 set -euo pipefail
 cd "$REMOTE_PATH"
@@ -39,19 +39,19 @@ fi
 # Fetch and hard-reset to origin/main
 git fetch origin --prune
 git reset --hard origin/main
-# Pull docker images and restart trino service
+# Pull docker images and restart services
 if [ -f docker-compose.remote.yml ]; then
   docker compose -f docker-compose.remote.yml pull || true
-  docker compose -f docker-compose.remote.yml up -d trino || true
-  docker compose -f docker-compose.remote.yml ps trino || true
+  docker compose -f docker-compose.remote.yml up -d starrocks-fe starrocks-be uisce-datafusion || true
+  docker compose -f docker-compose.remote.yml ps starrocks-fe starrocks-be uisce-datafusion || true
 else
   echo "docker-compose.remote.yml not found in $REMOTE_PATH"
 fi
-# Quick Trino healthcheck if mapped to host port 8084 (matches repo example)
-if curl -s -f http://localhost:8084/v1/info > /dev/null 2>&1; then
-  echo "Trino appears to be running on remote (http://localhost:8084)"
+# Quick StarRocks FE healthcheck
+if curl -s -f http://localhost:8030/api/bootstrap > /dev/null 2>&1; then
+  echo "StarRocks FE appears to be running on remote (http://localhost:8030)"
 else
-  echo "Trino healthcheck failed or Trino not listening on 8084"
+  echo "StarRocks FE healthcheck failed or not listening on 8030"
 fi
 CMD
 )

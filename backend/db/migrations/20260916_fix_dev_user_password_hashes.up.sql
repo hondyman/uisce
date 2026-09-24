@@ -1,0 +1,34 @@
+-- SUPERSEDED 2026-09-17 — DO NOT REVERT TO THE PRIOR CONTENT.
+--
+-- This migration was the initial fix for the dev-user bcrypt hashes
+-- (commit ab4e17b32, "upsert seed for dev users with valid bcrypt
+-- hashes"). It was SUPERSEDED by 20260916_regenerate_dev_user_password
+-- (commit 893f4ef5a), which carried a fresh 24-char-random preimage's
+-- bcrypt hash and recorded the operator handoff.
+--
+-- Why this file is now a no-op: the runner applies *.up.sql files in
+-- sort.Strings(filename) order. This file sorts BEFORE
+-- 20260916_regenerate_dev_user_password.up.sql, so on a fresh rebuild
+-- the regen migration runs second and sets the canonical hash. The
+-- upsert below this comment was the OLD canonical hash, but if a
+-- rebuild ever runs only this file (e.g., a snapshot restore that
+-- skipped later migrations, or a reapply during an interrupted
+-- runner), the upsert would leave the DB at a stale hash with no
+-- subsequent regen to fix it. That exact failure was caught in this
+-- workstream: the DB had been reset to the stale-hash state from this
+-- migration, and the canonical migration had been skipped.
+--
+-- To prevent recurrence: this file now does nothing. Fresh rebuilds
+-- skip it; current DBs see an SHA-256 mismatch warning on next runner
+-- startup (the runner's content-changed-since-applied check at
+-- runner.go:215) and skip the file without re-applying the stale
+-- INSERT. The canonical hash lives in 20260916_regenerate_dev_user
+-- password.up.sql; drift detection is a separate script at
+-- backend/scripts/dev_password_drift_check.sh.
+--
+-- Verification:
+--   DB hash:       SELECT password_hash FROM public.app_user WHERE email = 'testuser@example.com';
+--   Migration:     grep '\$2a\$10\$' 20260916_regenerate_dev_user_password.up.sql | head -1
+--   They must match. The drift check script automates this.
+
+SELECT 1;

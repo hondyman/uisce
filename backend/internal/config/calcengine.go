@@ -12,8 +12,8 @@ type CalcEngineConfig struct {
 	// StarRocks configuration (hot tier for real-time analytics)
 	StarRocks *StarRocksConfig `yaml:"starrocks" json:"starrocks"`
 
-	// Trino configuration (cold tier for historical data)
-	Trino *TrinoConfig `yaml:"trino" json:"trino"`
+	// DataFusion configuration (cold tier / embedded Iceberg execution)
+	DataFusion *DataFusionConfig `yaml:"datafusion" json:"datafusion"`
 
 	// CubeJS configuration (semantic layer bridge)
 	Cube *CubeConfig `yaml:"cube" json:"cube"`
@@ -39,14 +39,13 @@ type StarRocksConfig struct {
 	MaxConns int           `yaml:"max_conns" json:"max_conns"`
 }
 
-// TrinoConfig configures Trino (cold tier)
-type TrinoConfig struct {
+// DataFusionConfig configures Apache DataFusion (cold tier / Iceberg query engine)
+type DataFusionConfig struct {
 	Host     string        `yaml:"host" json:"host"`
-	Port     int           `yaml:"port" json:"port"` // Default: 8090
-	User     string        `yaml:"user" json:"user"`
-	Password string        `yaml:"password" json:"password"`
-	Catalog  string        `yaml:"catalog" json:"catalog"` // e.g., "iceberg"
-	Schema   string        `yaml:"schema" json:"schema"`   // e.g., "wealth"
+	Port     int           `yaml:"port" json:"port"` // Default: 8555
+	Endpoint string        `yaml:"endpoint" json:"endpoint"` // e.g. "http://localhost:8555"
+	Catalog  string        `yaml:"catalog" json:"catalog"`   // e.g., "iceberg"
+	Schema   string        `yaml:"schema" json:"schema"`     // e.g., "wealth"
 	Timeout  time.Duration `yaml:"timeout" json:"timeout"`
 }
 
@@ -79,16 +78,23 @@ func NewCalcEngineConfigFromEnv() *CalcEngineConfig {
 		}
 	}
 
-	// Trino configuration
-	if host := os.Getenv("TRINO_HOST"); host != "" {
-		cfg.Trino = &TrinoConfig{
+	// DataFusion configuration
+	if endpoint := os.Getenv("DATAFUSION_ENDPOINT"); endpoint != "" {
+		cfg.DataFusion = &DataFusionConfig{
+			Endpoint: endpoint,
+			Catalog:  getEnvOr("DATAFUSION_CATALOG", "iceberg"),
+			Schema:   getEnvOr("DATAFUSION_SCHEMA", "wealth"),
+			Timeout:  parseDurationOr(os.Getenv("DATAFUSION_TIMEOUT"), 5*time.Minute),
+		}
+	} else if host := os.Getenv("DATAFUSION_HOST"); host != "" {
+		port := parseIntOr(os.Getenv("DATAFUSION_PORT"), 8555)
+		cfg.DataFusion = &DataFusionConfig{
 			Host:     host,
-			Port:     parseIntOr(os.Getenv("TRINO_PORT"), 8090),
-			User:     getEnvOr("TRINO_USER", "admin"),
-			Password: os.Getenv("TRINO_PASSWORD"),
-			Catalog:  getEnvOr("TRINO_CATALOG", "iceberg"),
-			Schema:   getEnvOr("TRINO_SCHEMA", "wealth"),
-			Timeout:  parseDurationOr(os.Getenv("TRINO_TIMEOUT"), 5*time.Minute),
+			Port:     port,
+			Endpoint: fmt.Sprintf("http://%s:%d", host, port),
+			Catalog:  getEnvOr("DATAFUSION_CATALOG", "iceberg"),
+			Schema:   getEnvOr("DATAFUSION_SCHEMA", "wealth"),
+			Timeout:  parseDurationOr(os.Getenv("DATAFUSION_TIMEOUT"), 5*time.Minute),
 		}
 	}
 
@@ -116,7 +122,7 @@ func (c *CalcEngineConfig) Validate() error {
 		return nil // Nothing to validate if multi-source is disabled
 	}
 
-	if c.StarRocks == nil && c.Trino == nil {
+	if c.StarRocks == nil && c.DataFusion == nil {
 		return fmt.Errorf("multi-source engine enabled but no data sources configured")
 	}
 
@@ -129,12 +135,12 @@ func (c *CalcEngineConfig) Validate() error {
 		}
 	}
 
-	if c.Trino != nil {
-		if c.Trino.Host == "" {
-			return fmt.Errorf("trino host required")
+	if c.DataFusion != nil {
+		if c.DataFusion.Endpoint == "" && c.DataFusion.Host == "" {
+			return fmt.Errorf("datafusion endpoint or host required")
 		}
-		if c.Trino.Port == 0 {
-			c.Trino.Port = 8090
+		if c.DataFusion.Port == 0 && c.DataFusion.Host != "" {
+			c.DataFusion.Port = 8555
 		}
 	}
 
@@ -152,14 +158,12 @@ func (c *StarRocksConfig) GetDSN() string {
 		c.Timeout.String())
 }
 
-// GetURI returns a Trino connection URI
-func (c *TrinoConfig) GetURI() string {
-	if c.Password != "" {
-		return fmt.Sprintf("trino://%s:%s@%s:%d/%s/%s",
-			c.User, c.Password, c.Host, c.Port, c.Catalog, c.Schema)
+// GetEndpoint returns the Apache DataFusion connection endpoint
+func (c *DataFusionConfig) GetEndpoint() string {
+	if c.Endpoint != "" {
+		return c.Endpoint
 	}
-	return fmt.Sprintf("trino://%s@%s:%d/%s/%s",
-		c.User, c.Host, c.Port, c.Catalog, c.Schema)
+	return fmt.Sprintf("http://%s:%d", c.Host, c.Port)
 }
 
 // Helper functions for parsing environment variables

@@ -3,7 +3,9 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -114,7 +116,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 				  COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1)
+				WHERE cnt.tenant_id = $1 OR cnt.tenant_id = public.uisce_gold_copy_tenant_id()
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
 		rows, err = h.db.Query(query, tenantID)
@@ -126,7 +128,7 @@ func (h *NodeTypesHandler) handleListNodeTypes(w http.ResponseWriter, r *http.Re
 					   COALESCE(t.gold_copy, false) as is_core
 				FROM catalog_node_type cnt
 				JOIN public.tenants t ON cnt.tenant_id::uuid = t.id
-				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+				WHERE (cnt.tenant_id = $1 OR cnt.tenant_id = public.uisce_gold_copy_tenant_id())
 				  AND (cnt.catalog_type_name ILIKE $2 OR COALESCE(cnt.description, '') ILIKE $2)
 				ORDER BY CASE WHEN cnt.tenant_id = $1 THEN 0 ELSE 1 END, cnt.catalog_type_name
 			`
@@ -193,13 +195,19 @@ func (h *NodeTypesHandler) handleCreateNodeType(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	if nt.TenantID == "" {
-		var ok bool
-		if nt.TenantID, ok = TenantIDFromRequest(r); !ok {
-			http.Error(w, "tenant_id is required", http.StatusBadRequest)
-			return
-		}
+	// The tenant comes from the validated claims only. A tenant_id in the body is not trusted: catalog_node_type
+	// has no row-level security, so honouring it would let one tenant create node types in another tenant,
+	// including the gold copy.
+	callerTenant, ok := TenantIDFromRequest(r)
+	if !ok {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
 	}
+	if nt.TenantID != "" && nt.TenantID != callerTenant {
+		http.Error(w, "tenant_id does not match the authenticated tenant", http.StatusForbidden)
+		return
+	}
+	nt.TenantID = callerTenant
 
 	if nt.IsActive == nil {
 		active := true
@@ -334,16 +342,51 @@ func (h *NodeTypesHandler) handleUpdateNodeType(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	query := `
-			UPDATE catalog_node_type
-			SET catalog_type_name = $1, description = $2, is_active = $3,
-				parent_type_id = $4, config = $5, updated_at = NOW()
-			WHERE id = $6 AND tenant_id = $7
-			RETURNING updated_at
-		`
+	// Partial update: only overwrite fields the caller actually sent. Callers
+	// like the properties-only save omit catalog_type_name/is_active/parent_type_id,
+	// and an unconditional SET would null/blank those columns out.
+	var updates []string
+	var args []interface{}
+	argCount := 1
 
-	err = h.db.QueryRow(query, nt.CatalogTypeName, nt.Description, nt.IsActive,
-		nt.ParentTypeID, configJSON, id, tenantID).Scan(&nt.UpdatedAt)
+	if nt.CatalogTypeName != "" {
+		updates = append(updates, fmt.Sprintf("catalog_type_name = $%d", argCount))
+		args = append(args, nt.CatalogTypeName)
+		argCount++
+	}
+
+	if nt.Description != nil || len(nt.Properties) > 0 {
+		updates = append(updates, fmt.Sprintf("description = $%d", argCount))
+		args = append(args, nt.Description)
+		argCount++
+	}
+
+	if nt.IsActive != nil {
+		updates = append(updates, fmt.Sprintf("is_active = $%d", argCount))
+		args = append(args, nt.IsActive)
+		argCount++
+	}
+
+	if nt.ParentTypeID != nil {
+		updates = append(updates, fmt.Sprintf("parent_type_id = $%d", argCount))
+		args = append(args, nt.ParentTypeID)
+		argCount++
+	}
+
+	updates = append(updates, fmt.Sprintf("config = $%d", argCount))
+	args = append(args, configJSON)
+	argCount++
+
+	updates = append(updates, "updated_at = NOW()")
+
+	args = append(args, id, tenantID)
+
+	query := fmt.Sprintf(
+		"UPDATE catalog_node_type SET %s WHERE id = $%d AND tenant_id = $%d RETURNING updated_at",
+		strings.Join(updates, ", "), argCount, argCount+1,
+	)
+
+	err = h.db.QueryRow(query, args...).Scan(&nt.UpdatedAt)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Node type not found", http.StatusNotFound)
 		return
@@ -666,7 +709,7 @@ func (h *NodeTypesHandler) handleGetNodesForType(w http.ResponseWriter, r *http.
 	query := `
 			SELECT id, node_name, description, node_type_id, tenant_id, tenant_datasource_id, properties, config, created_at, updated_at
 			FROM catalog_node
-			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = (SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1))
+			WHERE node_type_id = $1 AND (tenant_id = $2 OR tenant_id = public.uisce_gold_copy_tenant_id())
 		`
 	args := []interface{}{id, tenantID}
 

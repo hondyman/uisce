@@ -26,8 +26,8 @@ This directory contains engine-specific SQL deployment scripts for the unified f
 - **Features**: Automatic clustering, dynamic tables, multi-cluster warehouses
 - **Best For**: Cloud-native analytics, pay-per-use pricing
 
-### Iceberg (via Trino/Spark)
-- **Dialect**: Trino SQL / Spark SQL
+### Iceberg (via StarRocks/DataFusion/Spark)
+- **Dialect**: StarRocks SQL / DataFusion SQL / Spark SQL
 - **Features**: Schema evolution, time travel, ACID transactions
 - **Best For**: Data lakehouse architectures, streaming analytics
 

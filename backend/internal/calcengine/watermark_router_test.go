@@ -301,7 +301,8 @@ func TestBuildSafeQuery_Dialects(t *testing.T) {
 		expected string
 	}{
 		{"postgres", PostgresQueryDialect{}, `"as_of_date" > $3`},
-		{"trino", TrinoQueryDialect{}, `"as_of_date" > ?`},
+		{"starrocks", StarRocksQueryDialect{}, `"as_of_date" > ?`},
+		{"datafusion", DataFusionQueryDialect{}, `"as_of_date" > ?`},
 		{"sqlserver", SQLServerQueryDialect{}, `[as_of_date] > @p3`},
 	}
 
@@ -352,9 +353,9 @@ func TestOffsetPlaceholders(t *testing.T) {
 		assert.Equal(t, "tenant_id = @p4 AND as_of_date > @p5", got)
 	})
 
-	t.Run("trino positional unchanged", func(t *testing.T) {
+	t.Run("starrocks/datafusion positional unchanged", func(t *testing.T) {
 		sql := "tenant_id = ? AND as_of_date > ?"
-		got := offsetPlaceholders(sql, TrinoQueryDialect{}, 3)
+		got := offsetPlaceholders(sql, StarRocksQueryDialect{}, 3)
 		assert.Equal(t, sql, got)
 	})
 }
@@ -436,7 +437,7 @@ func TestBuildSafeQuery_LimitOffsetPushdown(t *testing.T) {
 		expectOrderByCol string
 	}{
 		{"postgres", PostgresQueryDialect{}, false, ""},
-		{"trino", TrinoQueryDialect{}, true, `"as_of_date"`},
+		{"starrocks", StarRocksQueryDialect{}, true, `"as_of_date"`},
 		{"sqlserver", SQLServerQueryDialect{}, false, ""},
 	}
 

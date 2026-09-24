@@ -8,7 +8,7 @@ import (
 
 // CoverageDashboardService provides pre-aggregation coverage metrics.
 type CoverageDashboardService struct {
-	db *sql.DB // Trino connection for querying query_telemetry
+	db *sql.DB // StarRocks connection for querying query_telemetry
 }
 
 // NewCoverageDashboardService creates a new coverage dashboard service.

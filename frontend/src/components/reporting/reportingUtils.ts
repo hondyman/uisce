@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import DOMPurify from 'dompurify';
+import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
 
 // Type definitions
 export const ELEMENT_TYPES = {
@@ -76,13 +77,6 @@ export interface LayoutSettings {
   footerTokens: string[];
   includeExecutionTime: boolean;
   includeUserName: boolean;
-}
-
-export interface EventScripts {
-  onRowRender: string;
-  onCellRender: string;
-  onPageRender: string;
-  onExport: string;
 }
 
 export interface ExportOptions {
@@ -246,12 +240,93 @@ export const exportOptionDescriptions: Record<keyof ExportOptions, string> = {
   includeComments: 'Include comment threads for collaborative document review.',
 };
 
-export const eventScriptLabels: Record<keyof EventScripts, string> = {
-  onRowRender: 'On Row Render',
-  onCellRender: 'On Cell Render',
-  onPageRender: 'On Page Render',
-  onExport: 'On Export',
+/**
+ * Dropping a BO field onto the canvas used to always produce the same
+ * plain text box regardless of the field's actual type - a date and a
+ * dollar amount landed identically formatted. This maps a field's
+ * data_type (business_object_fields.data_type: 'datetime'/'date',
+ * 'number'/'integer'/'numeric', 'boolean', everything else 'text') to a
+ * sensible default presentation: a Format label (shown in Properties and
+ * meant to drive value formatting once live evaluation reads it), a
+ * natural alignment (numbers/dates right-aligned, like every spreadsheet
+ * and report tool does), a wider default box for numbers/dates, and a
+ * placeholder sample so the canvas isn't just "[FieldName]" for every type.
+ */
+export interface FieldWidgetPreset {
+  format: 'Date' | 'Number' | 'Boolean' | 'Text';
+  textAlign: 'left' | 'right' | 'center';
+  width: number;
+  sampleText: (label: string) => string;
+}
+
+export const defaultFieldWidgetPreset = (dataType?: string): FieldWidgetPreset => {
+  const t = (dataType || '').toLowerCase();
+  if (t.includes('date') || t.includes('time')) {
+    return { format: 'Date', textAlign: 'right', width: 160, sampleText: (l) => `[${l}: MM/DD/YYYY]` };
+  }
+  if (t.includes('number') || t.includes('numeric') || t.includes('integer') || t.includes('decimal') || t.includes('float')) {
+    return { format: 'Number', textAlign: 'right', width: 140, sampleText: (l) => `[${l}: #,##0.00]` };
+  }
+  if (t.includes('bool')) {
+    return { format: 'Boolean', textAlign: 'center', width: 100, sampleText: (l) => `[${l}: Yes/No]` };
+  }
+  return { format: 'Text', textAlign: 'left', width: 220, sampleText: (l) => `[${l}]` };
 };
+
+/**
+ * Builds a data-bound element's `dataBinding` (boId/bindingId/tenantId
+ * plus per-type dimensions/measures), extracted from
+ * SSRSReportBuilder.tsx's handleAddToolboxItem so the manual toolbox-drag
+ * path and the AI report-generation feature can't silently drift on what
+ * a widget's default binding looks like - both call this with a
+ * DIMENSION/MEASURE-split field list, the manual path passing every
+ * field the BO has, the AI path passing only the fields it already
+ * chose. Per-type shape mirrors handleAddToolboxItem's original inline
+ * logic exactly: slicer takes one dimension, gauge takes one
+ * measure-or-dimension, chart/sparkline take one of each, table/matrix/
+ * list take up to 4 dimensions + 2 measures, form takes none (it binds
+ * the whole record via boId/tenantId alone).
+ */
+export function buildDataBindingForType(
+  type: string,
+  boId: string,
+  bindingId: string,
+  tenantId: string,
+  dims: SemanticTermView[],
+  measures: SemanticTermView[],
+): Record<string, any> {
+  if (type === ELEMENT_TYPES.FORM) {
+    return { boId, tenantId };
+  }
+  const base = { boId, bindingId, tenantId };
+  if (type === ELEMENT_TYPES.SLICER) {
+    const d = dims[0];
+    return d ? { ...base, dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }] } : {};
+  }
+  if (type === ELEMENT_TYPES.GAUGE) {
+    const m = measures[0] || dims[0];
+    return m ? { ...base, measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: measures[0] ? 'SUM' : 'COUNT' }] } : {};
+  }
+  if (type === ELEMENT_TYPES.CHART || type === ELEMENT_TYPES.SPARKLINE) {
+    const d = dims[0];
+    const m = measures[0];
+    if (!d || !m) return {};
+    return {
+      ...base,
+      dimensions: [{ termNodeId: d.termNodeId, alias: d.displayName }],
+      measures: [{ termNodeId: m.termNodeId, alias: m.displayName, agg: 'SUM' }],
+      chartType: 'bar',
+    };
+  }
+  // table / matrix / list: first few dimensions + measures as columns
+  const picked = [...dims.slice(0, 4), ...measures.slice(0, 2)];
+  if (picked.length === 0) return {};
+  return {
+    ...base,
+    dimensions: dims.slice(0, 4).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName })),
+    measures: measures.slice(0, 2).map((t) => ({ termNodeId: t.termNodeId, alias: t.displayName, agg: 'SUM' })),
+  };
+}
 
 // Sanitization function
 export const sanitizeInput = (value: string): string => {

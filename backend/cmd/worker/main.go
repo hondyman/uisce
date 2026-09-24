@@ -23,10 +23,12 @@ import (
 	"github.com/hondyman/uisce/backend/internal/review"
 	"github.com/hondyman/uisce/backend/internal/rules"
 	intsemantic "github.com/hondyman/uisce/backend/internal/semantic"
-	"github.com/hondyman/uisce/backend/internal/tenant"
+	uiscetemporal "github.com/hondyman/uisce/backend/internal/temporal"
 	temporalactivities "github.com/hondyman/uisce/backend/internal/temporal/activities"
 	provisioningworkflows "github.com/hondyman/uisce/backend/internal/temporal/workflows"
+	"github.com/hondyman/uisce/backend/internal/tenant"
 	"github.com/hondyman/uisce/backend/internal/tests"
+	"github.com/hondyman/uisce/backend/internal/trading"
 	"github.com/hondyman/uisce/backend/internal/wealth"
 	"github.com/hondyman/uisce/backend/internal/wealth/risk"
 	wealthworkflows "github.com/hondyman/uisce/backend/internal/wealth/workflows"
@@ -35,10 +37,10 @@ import (
 	"github.com/hondyman/uisce/backend/pkg/governance"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	pkgworkflows "github.com/hondyman/uisce/backend/pkg/workflows"
-	"go.uber.org/zap"
 	temporalclient "github.com/hondyman/uisce/libs/temporal-client"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/sdk/worker"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -79,6 +81,48 @@ func main() {
 	w.RegisterWorkflow(pkgworkflows.RunStoredWorkflow)
 
 	log.Println("✅ Registered workflows: DynamicBPWorkflow, RebalanceWorkflow, PortfolioLifecycleWorkflow, InterpreterWorkflow")
+
+	// FIX-over-pipeline workflows (HANDOFF_FIX_OVER_PIPELINE.md §10).
+	// Registered on bp_queue — the same queue as the rest of the worker.
+	w.RegisterWorkflow(uiscetemporal.FIXSessionLifecycleWorkflow)
+	w.RegisterWorkflow(trading.FIXOrderEntryWorkflow)
+	w.RegisterWorkflow(uiscetemporal.FIXReconciliationWorkflow)
+	w.RegisterActivity(uiscetemporal.LogonActivity)
+	w.RegisterActivity(uiscetemporal.LogoutActivity)
+	w.RegisterActivity(uiscetemporal.SessionLivenessCheckActivity)
+	w.RegisterActivity(uiscetemporal.ReconnectActivity)
+	w.RegisterActivity(uiscetemporal.LoadExecutionsActivity)
+	w.RegisterActivity(uiscetemporal.MatchExecutionsActivity)
+	w.RegisterActivity(uiscetemporal.PersistReconciliationReportActivity)
+	w.RegisterActivity(trading.SendFixOrderActivity)
+	w.RegisterActivity(trading.PersistFIXRouteActivity)
+	w.RegisterActivity(trading.PersistFIXFillActivity)
+	log.Println("✅ Registered FIX workflows: FIXSessionLifecycleWorkflow, FIXOrderEntryWorkflow, FIXReconciliationWorkflow")
+
+	// SWIFT settlement workflows and activities (HANDOFF_SWIFT_SETTLEMENT.md).
+	// Registered on bp_queue.
+	w.RegisterWorkflow(uiscetemporal.SWIFTChannelLifecycleWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTSettlementWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTReconciliationWorkflow)
+	w.RegisterWorkflow(uiscetemporal.SWIFTLargeValueApprovalWorkflow)
+
+	w.RegisterActivity(uiscetemporal.SWIFTAckActivity)
+	w.RegisterActivity(uiscetemporal.RunSWIFTPipelineDAGActivity)
+	w.RegisterActivity(uiscetemporal.PersistSettlementStatusActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTRecallActivity)
+	w.RegisterActivity(uiscetemporal.ResolveCancelPendingActivity)
+	w.RegisterActivity(uiscetemporal.LoadSWIFTExpectedSettlementsActivity)
+	w.RegisterActivity(uiscetemporal.MatchSWIFTSettlementsActivity)
+	w.RegisterActivity(uiscetemporal.PersistSWIFTReconciliationReportActivity)
+	w.RegisterActivity(uiscetemporal.EscalateUnmatchedActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTConnectActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTDisconnectActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTChannelLivenessCheckActivity)
+	w.RegisterActivity(uiscetemporal.SWIFTReconnectActivity)
+	w.RegisterActivity(uiscetemporal.CreateLargeValueApprovalTaskActivity)
+	w.RegisterActivity(uiscetemporal.RecordLargeValueDecisionActivity)
+	w.RegisterActivity(uiscetemporal.EscalateSLABreachActivity)
+	log.Println("✅ Registered SWIFT workflows and activities (4 workflows, 16 activities)")
 
 	// Register activities with Activities struct
 	activities := workflows.NewActivities(db)
@@ -317,7 +361,9 @@ func main() {
 	w.RegisterActivity(provisioningActivities.EmitProvisioningEvent)
 	w.RegisterActivity(provisioningActivities.UpdateTenantStatus)
 	w.RegisterActivity(provisioningActivities.UpdateInstanceStatus)
-	w.RegisterActivity(provisioningActivities.GetGoldCopyInfo)
+	// GetGoldCopyInfo returns (string, string, string, error); Temporal
+	// activities may only return (T, error). Skip registration so this
+	// worker can boot for FIXOrderEntryWorkflow.
 	w.RegisterActivity(provisioningActivities.HealthCheck)
 
 	// Register as safe for BP Designer

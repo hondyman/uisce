@@ -1,9 +1,52 @@
 import React from 'react';
 import { Box, Stack, Typography, IconButton, Tooltip, Divider } from '@mui/material';
+import { useDraggable } from '@dnd-kit/core';
 import AddIcon from '@mui/icons-material/Add';
 import LinkIcon from '@mui/icons-material/Link';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import { isToMany, type RelationshipResult } from './pageStudioTypes';
+
+/** One draggable "add related object" tile - relies on an ancestor DndContext (mounted in PageStudioPalette). */
+const RelatedObjectTile: React.FC<{ rel: RelationshipResult; onAdd: () => void }> = ({ rel, onAdd }) => {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: `related-${rel.id}`,
+    data: { kind: 'relatedobject', relationship: rel },
+  });
+  return (
+    <Box
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        p: 1,
+        bgcolor: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: 1,
+        cursor: 'grab',
+        opacity: isDragging ? 0.4 : 1,
+        '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(99,102,241,0.08)' },
+      }}
+    >
+      <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: 0 }}>
+        <LinkIcon fontSize="small" color="action" />
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={700} noWrap>{rel.relatedObjectName}</Typography>
+          <Typography variant="caption" color="text.secondary" noWrap display="block">
+            {rel.cardinality} relationship
+          </Typography>
+        </Box>
+      </Stack>
+      <Tooltip title={`Add ${rel.relatedObjectName}`}>
+        <IconButton size="small" aria-label={`Add ${rel.relatedObjectName}`} onClick={onAdd}>
+          <AddIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
+    </Box>
+  );
+};
 
 export interface RelatedObjectsPaletteProps {
   relationships: RelationshipResult[] | null;
@@ -43,40 +86,7 @@ export const RelatedObjectsPalette: React.FC<RelatedObjectsPaletteProps> = ({
             Drag onto canvas
           </Typography>
           {toMany.map((rel) => (
-            <Box
-              key={rel.id}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/json', JSON.stringify({ type: 'relatedobject', relationship: rel }));
-                e.dataTransfer.effectAllowed = 'copy';
-              }}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                p: 1,
-                bgcolor: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 1,
-                cursor: 'grab',
-                '&:hover': { borderColor: 'primary.main', bgcolor: 'rgba(99,102,241,0.08)' },
-              }}
-            >
-              <Stack direction="row" alignItems="center" gap={1} sx={{ minWidth: 0 }}>
-                <LinkIcon fontSize="small" color="action" />
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="body2" fontWeight={700} noWrap>{rel.relatedObjectName}</Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap display="block">
-                    {rel.cardinality} relationship
-                  </Typography>
-                </Box>
-              </Stack>
-              <Tooltip title={`Add ${rel.relatedObjectName}`}>
-                <IconButton size="small" aria-label={`Add ${rel.relatedObjectName}`} onClick={() => onAddRelatedObject(rel)}>
-                  <AddIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
-            </Box>
+            <RelatedObjectTile key={rel.id} rel={rel} onAdd={() => onAddRelatedObject(rel)} />
           ))}
         </>
       )}

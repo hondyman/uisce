@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../lib/apiClient';
+import { useFdc3, useIntentHandler } from '../services/fdc3/useFdc3';
+import { Fdc3InstrumentContext } from '../services/fdc3/types';
 import './ScenarioAnalysisPro.css';
 
 interface Portfolio {
@@ -54,6 +56,46 @@ const ScenarioAnalysisPro: React.FC = () => {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [analysisHistory, setAnalysisHistory] = useState<AnalysisHistoryItem[]>([]);
+  const [fdc3LinkedTicker, setFdc3LinkedTicker] = useState<string | null>(null);
+
+  // Loop guard: incoming context ONLY updates local state, never broadcasts!
+  const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
+    if (ctx?.id?.ticker) {
+      const ticker = ctx.id.ticker.toUpperCase();
+      setFdc3LinkedTicker(ticker);
+      if (['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'TSLA'].includes(ticker)) {
+        setSelectedScenario('Tech Bubble Burst (-30% on tech stocks)');
+      } else {
+        setSelectedScenario('Market Crash (-20%)');
+      }
+    }
+  });
+
+  // Register standard FDC3-compatible intent handler for ViewAnalysis
+  useIntentHandler('ViewAnalysis', 'scenario', 'Scenario Analysis Pro', (ctx) => {
+    const inst = ctx as Fdc3InstrumentContext;
+    if (inst?.id?.ticker) {
+      const ticker = inst.id.ticker.toUpperCase();
+      setFdc3LinkedTicker(ticker);
+      if (['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'TSLA'].includes(ticker)) {
+        setSelectedScenario('Tech Bubble Burst (-30% on tech stocks)');
+      } else {
+        setSelectedScenario('Market Crash (-20%)');
+      }
+    }
+  });
+
+  // Explicit user selection in UI -> broadcasts onto FDC3 bus
+  const handleUserSelectPortfolio = (portId: string) => {
+    setSelectedPortfolio(portId);
+    if (portId) {
+      broadcast({
+        type: 'fdc3.portfolio',
+        id: { portfolioId: portId },
+        name: `Portfolio ${portId}`,
+      });
+    }
+  };
 
   const scenarios = [
     'Market Crash (-20%)',
@@ -117,7 +159,15 @@ const ScenarioAnalysisPro: React.FC = () => {
     <div className="flex h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
       <div className="w-1/3 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 overflow-y-auto">
         <div className="p-8">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Scenario Analysis</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Scenario Analysis</h1>
+            {fdc3LinkedTicker && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-sky-950 border border-sky-500/40 text-xs text-sky-200">
+                <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+                <span>FDC3 ({activeChannel}): <strong>{fdc3LinkedTicker}</strong></span>
+              </span>
+            )}
+          </div>
           <p className="text-slate-500 dark:text-slate-400 text-sm mb-8">Analyze portfolio performance under various market conditions</p>
 
           <div className="bg-slate-50 dark:bg-slate-700 rounded-xl p-6 mb-6 border border-slate-200 dark:border-slate-600">
@@ -126,7 +176,7 @@ const ScenarioAnalysisPro: React.FC = () => {
               <select
                 title="Select a portfolio"
                 value={selectedPortfolio}
-                onChange={(e) => setSelectedPortfolio(e.target.value)}
+                onChange={(e) => handleUserSelectPortfolio(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border"
               >
                 <option value="">Select a portfolio</option>

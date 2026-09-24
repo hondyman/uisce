@@ -1,18 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody, IconButton, TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, TableContainer, Paper, Table, TableHead, TableRow, TableCell, TableBody, IconButton, TextField, Select, MenuItem, FormControl, InputLabel, Checkbox, FormControlLabel, FormHelperText } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
 import DeleteIcon from '@mui/icons-material/Delete';
+import type { ParamSpec } from '../../studio-core/params/ParamSpec';
+import { fetchBOTerms } from '../../features/query-builder/services/queryBuilderApi';
+import type { SemanticTermView } from '../../features/query-builder/types/queryDef';
 
-type ReportParameter = {
-  id: string;
-  name: string;
-  type: 'string' | 'number' | 'date' | 'boolean';
-  prompt: string;
-  defaultValue?: string;
-  allowBlank?: boolean;
-  allowMultiple?: boolean;
-};
+type ReportParameter = ParamSpec;
 
 type Props = {
   open: boolean;
@@ -21,21 +16,53 @@ type Props = {
   onAdd: (param: Omit<ReportParameter, 'id'>) => void;
   onUpdate: (param: ReportParameter) => void;
   onDelete: (paramId: string) => void;
+  boId?: string;
+  boKey?: string;
+  bindingId?: string;
 };
 
 const ParameterEditor: React.FC<{
   param: Partial<ReportParameter> | null;
   onSave: (param: any) => void;
   onCancel: () => void;
-}> = ({ param, onSave, onCancel }) => {
+  boId?: string;
+  boKey?: string;
+  bindingId?: string;
+}> = ({ param, onSave, onCancel, boId, boKey, bindingId }) => {
   const [formData, setFormData] = useState<Partial<ReportParameter>>({});
+  const [boFields, setBoFields] = useState<SemanticTermView[]>([]);
 
   useEffect(() => {
     setFormData(param || { name: '', type: 'string', prompt: '', defaultValue: '', allowBlank: false, allowMultiple: false });
   }, [param]);
 
+  useEffect(() => {
+    if (!param || !boId || !bindingId) {
+      setBoFields([]);
+      return;
+    }
+    let cancelled = false;
+    fetchBOTerms(boId, bindingId)
+      .then((t) => {
+        if (!cancelled) setBoFields(t);
+      })
+      .catch(() => {
+        if (!cancelled) setBoFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [param, boId, bindingId]);
+
   const handleChange = (field: keyof ReportParameter, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleFieldBindingChange = (termKey: string) => {
+    setFormData(prev => ({
+      ...prev,
+      source: termKey ? { kind: 'ref', boKey: boKey || '', termKey } : undefined,
+    }));
   };
 
   if (!param) return null;
@@ -55,6 +82,20 @@ const ParameterEditor: React.FC<{
               <MenuItem value="boolean">Boolean</MenuItem>
             </Select>
           </FormControl>
+          <FormControl fullWidth>
+            <InputLabel>Bind to Field</InputLabel>
+            <Select
+              value={(formData as any).source?.kind === 'ref' ? (formData as any).source.termKey : ''}
+              label="Bind to Field"
+              onChange={(e) => handleFieldBindingChange(e.target.value as string)}
+            >
+              <MenuItem value="">— Not bound —</MenuItem>
+              {boFields.map((f) => (
+                <MenuItem key={f.termKey} value={f.termKey}>{f.displayName || f.termName}</MenuItem>
+              ))}
+            </Select>
+            <FormHelperText>An unbound parameter has no effect on report results.</FormHelperText>
+          </FormControl>
           <TextField label="Prompt" value={formData.prompt || ''} onChange={(e) => handleChange('prompt', e.target.value)} />
           <TextField label="Default Value" value={formData.defaultValue || ''} onChange={(e) => handleChange('defaultValue', e.target.value)} />
           <FormControlLabel control={<Checkbox checked={!!formData.allowBlank} onChange={(e) => handleChange('allowBlank', e.target.checked)} />} label="Allow Blank" />
@@ -69,7 +110,7 @@ const ParameterEditor: React.FC<{
   );
 };
 
-const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, onUpdate, onDelete }) => {
+const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, onUpdate, onDelete, boId, boKey, bindingId }) => {
   const [editingParam, setEditingParam] = useState<Partial<ReportParameter> | null>(null);
 
   const handleSave = (paramData: ReportParameter) => {
@@ -95,6 +136,7 @@ const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, o
                 <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell>Type</TableCell>
+                  <TableCell>Bound Field</TableCell>
                   <TableCell>Prompt</TableCell>
                   <TableCell>Default Value</TableCell>
                   <TableCell>Actions</TableCell>
@@ -105,6 +147,11 @@ const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, o
                   <TableRow key={param.id}>
                     <TableCell>{param.name}</TableCell>
                     <TableCell>{param.type}</TableCell>
+                    <TableCell>
+                      {(param as any).source?.kind === 'ref'
+                        ? (param as any).source.termKey
+                        : <em>not bound - has no effect on results</em>}
+                    </TableCell>
                     <TableCell>{param.prompt}</TableCell>
                     <TableCell>{param.defaultValue}</TableCell>
                     <TableCell>
@@ -121,7 +168,7 @@ const ParametersDialog: React.FC<Props> = ({ open, onClose, parameters, onAdd, o
           <Button onClick={onClose}>Close</Button>
         </DialogActions>
       </Dialog>
-      <ParameterEditor param={editingParam} onSave={handleSave} onCancel={() => setEditingParam(null)} />
+      <ParameterEditor param={editingParam} onSave={handleSave} onCancel={() => setEditingParam(null)} boId={boId} boKey={boKey} bindingId={bindingId} />
     </>
   );
 };

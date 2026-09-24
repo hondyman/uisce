@@ -15,13 +15,6 @@ import type {
   QueryExecuteResult,
   BOSchema,
 } from '../types/queryDef';
-import { installQueryBuilderMock } from './queryBuilderMock';
-
-// In development, install a lightweight mock so the feature is demoable
-// without the backend endpoints being live.
-if (false && import.meta.env.DEV) {
-  installQueryBuilderMock();
-}
 
 async function fetchJSON<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await apiFetch(path, {
@@ -75,6 +68,11 @@ export async function fetchBusinessObjectBindings(boId: string): Promise<Binding
  * The backend should only return terms whose field_binding is RESOLVED for
  * the given bindingId.
  */
+function humanizeFieldLabel(raw: string): string {
+  const spaced = raw.replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export async function fetchBOTerms(
   boId: string,
   bindingId: string
@@ -89,7 +87,7 @@ export async function fetchBOTerms(
     termNodeId: t.termNodeId || t.id || t.node_id || '',
     termKey: t.termKey || t.term_key || t.key || '',
     termName: t.termName || t.term_name || t.name || t.node_name || '',
-    displayName: t.displayName || t.display_name || t.termName || t.name || t.node_name || '',
+    displayName: t.displayName || t.display_name || humanizeFieldLabel(t.termName || t.term_name || t.name || t.termKey || t.term_key || t.key || ''),
     description: t.description,
     dataType: t.dataType || t.data_type || t.type || 'text',
     role: normalizeRole(t.role),
@@ -106,11 +104,23 @@ function normalizeRole(role: unknown): SemanticTermView['role'] {
 }
 
 /**
- * Fetch the self-describing BO schema from the Meta-API.
+ * Fetch the self-describing BO schema. Served by
+ * backend/internal/api/bo_crud_handler.go::HandleGetBOSchema, which sits
+ * next to the other BO CRUD endpoints and uses the same tenant-resolution
+ * + catalog-graph resolution logic. The previous path
+ * /api/metadata/bo/{boId} was never implemented backend-wide.
+ *
+ * The `tenant_id` query parameter is accepted for backward compat with
+ * existing callers; the backend extracts the tenant from the JWT (or
+ * X-Tenant-ID header) via security.AuthInfo, so this query param is
+ * informational only. Tenant mismatch between JWT and query param still
+ * fails closed (the BO CRUD handler enforces tenant ownership).
  */
 export async function fetchBOSchema(boId: string, tenantId: string): Promise<BOSchema> {
   const params = new URLSearchParams({ tenant_id: tenantId });
-  const data = await fetchJSON<unknown>(`/api/metadata/bo/${encodeURIComponent(boId)}?${params.toString()}`);
+  const data = await fetchJSON<unknown>(
+    `/api/bo/${encodeURIComponent(boId)}/schema?${params.toString()}`
+  );
   return data as BOSchema;
 }
 

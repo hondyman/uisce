@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Button, TextField, CircularProgress, Alert, Paper, Typography, Box } from '@mui/material';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { devLog } from '../../utils/devLogger';
+import { apiFetch } from '../../lib/apiClient';
 
 interface ValidationRuleWizardProps {
   onScriptGenerated: (script: string) => void;
@@ -25,20 +26,13 @@ export const ValidationRuleWizard: React.FC<ValidationRuleWizardProps> = ({
     setLastExplanation(null);
 
     try {
-      const response = await fetch('/api/ai/generate-validation', {
+      const response = await apiFetch('/api/ai/generate-validation', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           prompt: prompt,
           entity: targetEntity
         }),
       });
-
-      if (!response.ok) {
-        throw new Error(`Generation failed: ${response.statusText}`);
-      }
 
       const data = await response.json();
       devLog('Generated script:', data);

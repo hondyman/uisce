@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useNotification } from '../hooks/useNotification';
 import styles from './AIPortfolioRebalancer.module.css';
+import { useFdc3, useIntentHandler } from '../services/fdc3/useFdc3';
+import { Fdc3InstrumentContext } from '../services/fdc3/types';
 
 interface Portfolio {
   id: string;
@@ -33,6 +35,33 @@ export const AIPortfolioRebalancer: React.FC = () => {
   const notification = useNotification();
   const [selectedModal, setSelectedModal] = useState<string | null>(null);
   const [selectedPlan, setSelectedPlan] = useState<RebalancePlan | null>(null);
+  const [highlightedTicker, setHighlightedTicker] = useState<string | null>(null);
+
+  // Loop guard: incoming context ONLY updates local state, never broadcasts!
+  const { activeChannel, broadcast } = useFdc3<Fdc3InstrumentContext>('fdc3.instrument', (ctx) => {
+    if (ctx?.id?.ticker) {
+      setHighlightedTicker(ctx.id.ticker.toUpperCase());
+    }
+  });
+
+  // Register standard FDC3-compatible intent handler for ViewAnalysis
+  useIntentHandler('ViewAnalysis', 'rebalancer', 'AI Portfolio Rebalancer', (ctx) => {
+    const inst = ctx as Fdc3InstrumentContext;
+    if (inst?.id?.ticker) {
+      setHighlightedTicker(inst.id.ticker.toUpperCase());
+    }
+  });
+
+  // Explicit user interaction -> broadcasts onto FDC3 bus
+  const handleUserSelectTrade = (symbol: string) => {
+    const upper = symbol.toUpperCase();
+    setHighlightedTicker(upper);
+    broadcast({
+      type: 'fdc3.instrument',
+      id: { ticker: upper },
+      name: `${upper} Equity`,
+    });
+  };
 
   const mockPortfolios: Portfolio[] = [
     {
@@ -205,11 +234,26 @@ export const AIPortfolioRebalancer: React.FC = () => {
       <main className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto max-w-7xl">
           {/* PageHeading */}
-          <header className="mb-8">
-            <h1 className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-4xl font-black text-transparent">
-              AI Portfolio Rebalancing Alpha
-            </h1>
-            <p className="text-[#A0A0A0] text-base">Monitor and manage client portfolios with AI-powered insights.</p>
+          <header className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-4xl font-black text-transparent">
+                AI Portfolio Rebalancing Alpha
+              </h1>
+              <p className="text-[#A0A0A0] text-base">Monitor and manage client portfolios with AI-powered insights.</p>
+            </div>
+            {highlightedTicker && (
+              <div data-testid="rebalancer-fdc3-badge" className="flex items-center gap-2 rounded-lg bg-sky-950/80 border border-sky-500/40 px-3 py-1.5 text-xs text-sky-200">
+                <span className="h-2 w-2 rounded-full bg-sky-400 animate-pulse" />
+                <span>FDC3 ({activeChannel}): <strong data-testid="rebalancer-ticker">{highlightedTicker}</strong></span>
+                <button
+                  onClick={() => setHighlightedTicker(null)}
+                  className="text-sky-400 hover:text-white ml-1 text-sm font-bold"
+                  title="Clear context"
+                >
+                  ×
+                </button>
+              </div>
+            )}
           </header>
 
           {/* Stats */}
@@ -349,20 +393,33 @@ export const AIPortfolioRebalancer: React.FC = () => {
                 <div>
                   <p className="mb-2 font-bold text-white">Proposed Trades</p>
                   <div className="space-y-2">
-                    {selectedPlan.trades.map((trade, idx) => (
-                      <div key={idx} className="grid grid-cols-4 items-center gap-4 rounded-md bg-black/20 p-2 text-sm">
-                        <div className="font-medium text-white">
-                          {trade.action} <span className="text-[#A0A0A0]">{trade.symbol}</span>
-                        </div>
-                        <div className="text-right text-[#A0A0A0]">{trade.shares} Shares</div>
-                        <div className="text-right text-[#A0A0A0]">${(trade.value / 1000).toFixed(1)}k</div>
+                    {selectedPlan.trades.map((trade, idx) => {
+                      const isMatched = highlightedTicker && trade.symbol.toUpperCase() === highlightedTicker;
+                      return (
                         <div
-                          className={`${styles.tradeAction} ${trade.action === 'SELL' ? styles.sellAction : styles.buyAction} flex items-center justify-end font-bold`}
+                          key={idx}
+                          onClick={() => handleUserSelectTrade(trade.symbol)}
+                          className={`grid grid-cols-4 items-center gap-4 rounded-md p-2 text-sm cursor-pointer transition-colors ${
+                            isMatched
+                              ? 'bg-sky-950/80 border border-sky-400/80 shadow-[0_0_10px_rgba(56,189,248,0.2)]'
+                              : 'bg-black/20 hover:bg-white/5 border border-transparent'
+                          }`}
+                          title={`Click to broadcast ${trade.symbol} via FDC3`}
                         >
-                          {trade.action === 'SELL' ? '➖' : '➕'} {trade.action}
+                          <div className="font-medium text-white flex items-center gap-1.5">
+                            {isMatched && <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />}
+                            {trade.action} <span className="text-[#A0A0A0]">{trade.symbol}</span>
+                          </div>
+                          <div className="text-right text-[#A0A0A0]">{trade.shares} Shares</div>
+                          <div className="text-right text-[#A0A0A0]">${(trade.value / 1000).toFixed(1)}k</div>
+                          <div
+                            className={`${styles.tradeAction} ${trade.action === 'SELL' ? styles.sellAction : styles.buyAction} flex items-center justify-end font-bold`}
+                          >
+                            {trade.action === 'SELL' ? '➖' : '➕'} {trade.action}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>

@@ -136,9 +136,9 @@ func (dh *DiscoveryHandler) StartDiscovery(w http.ResponseWriter, r *http.Reques
 	// Create discovery config
 	config := models.DiscoveryConfig{
 		ScanInterval:      time.Duration(req.ScanInterval) * time.Hour,
-		PostgresDatabases: []string{"semlayer", "analytics"},
-		TrinoDatabases:    []string{"warehouse"},
-		PrometheusURL:     "http://localhost:9090",
+		PostgresDatabases:  []string{"semlayer", "analytics"},
+		StarRocksDatabases: []string{"warehouse"},
+		PrometheusURL:      "http://localhost:9090",
 		ScoringWeights:    req.ScoringWeights,
 	}
 
@@ -226,7 +226,7 @@ func (dh *DiscoveryHandler) ListCandidates(w http.ResponseWriter, r *http.Reques
 	pageStr := r.URL.Query().Get("page")
 	pageSizeStr := r.URL.Query().Get("page_size")
 	status := r.URL.Query().Get("status")      // candidate, approved, rejected
-	sourceDB := r.URL.Query().Get("source_db") // postgres, trino, logs, prometheus
+	sourceDB := r.URL.Query().Get("source_db") // postgres, starrocks, datafusion, logs, prometheus
 	minScore := r.URL.Query().Get("min_score") // 0.0-1.0
 	sortBy := r.URL.Query().Get("sort_by")     // "score", "name", "discovered_at"
 
@@ -673,7 +673,7 @@ func (dh *DiscoveryHandler) generateRationale(score float64, sourceDB string, da
 
 	// Source-based reasoning
 	switch sourceDB {
-	case "postgres", "trino":
+	case "postgres", "starrocks", "datafusion":
 		reasons = append(reasons, "structured source")
 	case "logs":
 		reasons = append(reasons, "extracted from logs")

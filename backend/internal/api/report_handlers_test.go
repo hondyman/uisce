@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,26 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// jsonArrayArg is a sqlmock.Argument matcher that unmarshals a []byte
+// query arg as a JSON array and compares it against `want`, used to
+// assert on the actual derived value of a jsonb column arg rather than
+// accepting any value with sqlmock.AnyArg().
+type jsonArrayArg struct {
+	want []interface{}
+}
+
+func (j jsonArrayArg) Match(v driver.Value) bool {
+	b, ok := v.([]byte)
+	if !ok {
+		return false
+	}
+	var got []interface{}
+	if err := json.Unmarshal(b, &got); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(got, j.want)
+}
 
 func TestReportAPI(t *testing.T) {
 	t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
@@ -66,17 +88,21 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates", func(t *testing.T) {
 		// Mock resolve gold_copy tenant
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Report 1", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)
@@ -142,18 +168,21 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000001", goldCopyTenant,
 				"Core Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		payload := map[string]interface{}{
@@ -180,18 +209,21 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000002", clientTenant,
 				"Personal Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, true, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Non-author attempts to un-personalize (is_personal: false)
@@ -218,18 +250,21 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000003", clientTenant,
 				"Tenant Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
 
 		// ResolveGoldCopyTenantID
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Author attempts to share a non-personal report
@@ -256,18 +291,24 @@ func TestReportAPI(t *testing.T) {
 
 		mock.ExpectExec(`INSERT INTO report_templates`).
 			WithArgs(
-				sqlmock.AnyArg(), // 1: id
-				sqlmock.AnyArg(), // 2: tenant_id
+				sqlmock.AnyArg(),   // 1: id
+				sqlmock.AnyArg(),   // 2: tenant_id
 				"Non-Admin Report", // 3: template_name
-				"",               // 4: description
-				"",               // 5: category
-				sqlmock.AnyArg(), // 6: layout_config
-				sqlmock.AnyArg(), // 7: parameter_schema
-				true,             // 8: is_active
-				false,            // 9: is_public
-				true,             // 10: is_personal (forced to true for non-admin!)
-				sqlmock.AnyArg(), // 11: created_by_id
-				"",               // 12: created_by
+				"",                 // 4: description
+				"",                 // 5: category
+				sqlmock.AnyArg(),   // 6: layout_config
+				sqlmock.AnyArg(),   // 7: parameter_schema
+				true,               // 8: is_active
+				false,              // 9: is_public
+				true,               // 10: is_personal (forced to true for non-admin!)
+				sqlmock.AnyArg(),   // 11: created_by_id
+				"",                 // 12: created_by
+				sqlmock.AnyArg(),   // 13: bands
+				sqlmock.AnyArg(),   // 14: parameters
+				sqlmock.AnyArg(),   // 15: presentation_events
+				sqlmock.AnyArg(),   // 16: grouping
+				sqlmock.AnyArg(),   // 17: primary_business_object_id
+				sqlmock.AnyArg(),   // 18: is_core
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -321,17 +362,20 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000010", goldCopyTenant,
 				"Core Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000010", nil)
@@ -357,17 +401,20 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000020", clientTenant,
 				"Personal Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, true, authorID, "",
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		req := httptest.NewRequest("DELETE", "/api/v1/reports/00000000-0000-0000-0000-000000000020", nil)
@@ -388,17 +435,20 @@ func TestReportAPI(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "tenant_id", "template_name", "description", "category",
 				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
 				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
 				"created_at", "updated_at", "version",
 			}).AddRow(
 				"00000000-0000-0000-0000-000000000030", tenantB,
 				"Tenant B Report", "Desc", "cat",
 				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 				true, false, false, nil, "",
 				time.Now(), time.Now(), 1,
 			))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		// Admin of tenant A trying to delete tenant B's report
@@ -414,6 +464,121 @@ func TestReportAPI(t *testing.T) {
 		r.ServeHTTP(w, req)
 
 		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Get Template - 404 on Cross-Tenant Read (regression: GetTemplate previously had no tenant check at all)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+		tenantB := "22222222-2222-2222-2222-222222222222"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000031", tenantB,
+				"Tenant B Private Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		// A tenant-A user requesting tenant B's report by id must not see it.
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000031", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Get Template - 200 on Same-Tenant Read (the deny case above must not have become deny-everything)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000032", tenantA,
+				"Tenant A Own Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000032", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("Get Template - 200 on Gold-Copy Core Read from a Different Tenant (the inheritance model must survive the fix)", func(t *testing.T) {
+		tenantA := "11111111-1111-1111-1111-111111111111"
+		goldCopyTenant := "99e99e99-99e9-49e9-89e9-99e99e99e999"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000033", goldCopyTenant,
+				"Core Report", "Desc", "cat",
+				nil, []byte("{}"), []byte("{}"),
+				[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
+				true, false, false, nil, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyTenant))
+
+		// A tenant-A user (not gold-copy) reading a core report must still succeed - read-only inheritance.
+		req := httptest.NewRequest("GET", "/api/v1/reports/00000000-0000-0000-0000-000000000033", nil)
+		auth := security.AuthInfo{
+			UserID:    "tenant-a-user",
+			TenantIDs: []string{tenantA},
+			Roles:     []string{"user"},
+		}
+		req = req.WithContext(security.WithAuthInfo(req.Context(), auth))
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
 	t.Run("Create Template - Rejects Top-Level is_public", func(t *testing.T) {
@@ -467,6 +632,12 @@ func TestReportAPI(t *testing.T) {
 				true, // Forced to personal!
 				sqlmock.AnyArg(),
 				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -516,6 +687,12 @@ func TestReportAPI(t *testing.T) {
 				true,
 				"real-user-id", // Real user inserted!
 				"",
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
 			).
 			WillReturnResult(sqlmock.NewResult(1, 1))
 
@@ -559,17 +736,21 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates - Search with ?q= binds parameter", func(t *testing.T) {
 		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Portfolio Summary", "Desc 1", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)
@@ -609,17 +790,21 @@ func TestReportAPI(t *testing.T) {
 
 	t.Run("List Templates - Empty or whitespace ?q= delegates to standard listing", func(t *testing.T) {
 		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "template_name", "description", "category",
-			"layout_config", "parameter_schema", "is_active", "is_public",
+			"layout_config", "parameter_schema",
+			"bands", "parameters", "presentation_events", "grouping",
+			"primary_business_object_id", "is_core",
+			"is_active", "is_public",
 			"is_personal", "created_by_id", "created_by",
 			"created_at", "updated_at", "version", "is_favorite",
 		}).AddRow(
 			"00000000-0000-0000-0000-000000000001", "11111111-1111-1111-1111-111111111111",
 			"Standard Listing Report", "Desc", "perf", []byte("{}"), []byte("{}"),
+			[]byte("[]"), []byte("[]"), []byte("[]"), nil, nil, false,
 			true, false, false, nil, nil,
 			time.Now(), time.Now(), 1, false,
 		)
@@ -641,6 +826,127 @@ func TestReportAPI(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, templates, 1)
 		assert.Equal(t, "Standard Listing Report", templates[0]["template_name"])
+	})
+
+	t.Run("Create Template - parameters derived from parameter_schema when frontend omits top-level parameters", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+
+		dupRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
+			WillReturnRows(dupRows)
+
+		wantParams := []interface{}{
+			map[string]interface{}{"id": "param_year", "name": "Year", "type": "number"},
+		}
+
+		// buildSavePayload's real shape: parameter_schema carries the
+		// data, no top-level `parameters` key is ever sent. The INSERT's
+		// `parameters` arg must reflect the derived value, not an empty
+		// array - that's the exact bug this test exists to catch.
+		mock.ExpectExec(`INSERT INTO report_templates`).
+			WithArgs(
+				sqlmock.AnyArg(), sqlmock.AnyArg(), "Dual-Write Create Report", "", "",
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+				true, false, true, sqlmock.AnyArg(), "",
+				sqlmock.AnyArg(),
+				jsonArrayArg{want: wantParams},
+				sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		payload := map[string]interface{}{
+			"template_name": "Dual-Write Create Report",
+			"parameter_schema": map[string]interface{}{
+				"parameters": []interface{}{
+					map[string]interface{}{"id": "param_year", "name": "Year", "type": "number"},
+				},
+			},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("POST", "/api/v1/reports/", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+		req.Header.Set("X-User-ID", "user-123")
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Logf("Create dual-write report failed with code %d: %s", w.Code, w.Body.String())
+		}
+		assert.Equal(t, http.StatusCreated, w.Code)
+		assert.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("Update Template - parameters re-derived from parameter_schema, not frozen at the stale existing value", func(t *testing.T) {
+		t.Setenv("ALLOW_CLIENT_TENANT_HEADER_FALLBACK", "true")
+		clientTenant := "11111111-1111-1111-1111-111111111111"
+		authorID := "author-dual-write"
+
+		mock.ExpectQuery(`SELECT id, tenant_id, template_name`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_name", "description", "category",
+				"semantic_view_ids", "layout_config", "parameter_schema",
+				"bands", "parameters", "presentation_events", "grouping",
+				"primary_business_object_id", "is_core",
+				"is_active", "is_public", "is_personal", "created_by_id", "created_by",
+				"created_at", "updated_at", "version",
+			}).AddRow(
+				"00000000-0000-0000-0000-000000000040", clientTenant,
+				"Dual-Write Existing Report", "Desc", "cat",
+				nil, []byte("{}"), []byte(`{"parameters":[{"id":"param_old","name":"Old","type":"string"}]}`),
+				[]byte("[]"), []byte(`[{"id":"param_old","name":"Old","type":"string"}]`), []byte("[]"), nil, nil, false,
+				true, false, true, authorID, "",
+				time.Now(), time.Now(), 1,
+			))
+
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
+			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("99e99e99-99e9-49e9-89e9-99e99e99e999"))
+
+		mock.ExpectQuery(`SELECT COUNT\(\*\) FROM report_templates WHERE tenant_id = \$1 AND LOWER\(template_name\) = LOWER\(\$2\)`).
+			WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+
+		wantParams := []interface{}{
+			map[string]interface{}{"id": "param_new", "name": "New", "type": "string"},
+		}
+
+		// The stored `parameters` before this update is `param_old`;
+		// the incoming request only sends the new parameter_schema, no
+		// top-level `parameters`. The UPDATE's `parameters` arg must be
+		// `param_new` (re-derived), not `param_old` (carried over from
+		// `existing` because nothing told it to change).
+		mock.ExpectExec(`UPDATE report_templates`).
+			WithArgs(
+				sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+				sqlmock.AnyArg(),
+				jsonArrayArg{want: wantParams},
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+				sqlmock.AnyArg(), sqlmock.AnyArg(),
+			).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+
+		payload := map[string]interface{}{
+			"parameter_schema": map[string]interface{}{
+				"parameters": []interface{}{
+					map[string]interface{}{"id": "param_new", "name": "New", "type": "string"},
+				},
+			},
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest("PUT", "/api/v1/reports/00000000-0000-0000-0000-000000000040", bytes.NewBuffer(body))
+		req.Header.Set("X-Tenant-ID", clientTenant)
+		req.Header.Set("X-User-ID", authorID)
+		w := httptest.NewRecorder()
+
+		r.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Logf("Update dual-write report failed with code %d: %s", w.Code, w.Body.String())
+		}
+		assert.Equal(t, http.StatusOK, w.Code)
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
 
@@ -697,7 +1003,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 				AddRow(schedID, tenantID, tmplID, ownerID))
 
 		// 2. Gold copy resolution
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		// 3. Fetch linked template
@@ -769,7 +1075,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "report_definition_id", "owner_id"}).
 				AddRow(schedID, tenantID, tmplID, ownerID))
 
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE.*gold_copy = true`).
+		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
 
 		mock.ExpectQuery(`SELECT id, tenant_id, template_name, description, category, semantic_view_ids, layout_config, parameter_schema, is_active, is_public, is_personal, created_by_id, created_by, created_at, updated_at, version FROM public\.report_templates WHERE id = \$1 AND is_active = true AND tenant_id IN \(\$2, \$3\)`).
@@ -817,13 +1123,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		handler.RegisterRoutes(r)
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Monthly PnL", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Monthly PnL", "completed", []byte(`{}`),
 			"s3://reports/out.pdf", int64(1024), int64(50), int64(300),
 			nil, "wf-1", "run-1", ownerID, "admin-trigger",
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -869,13 +1175,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		triggerUser := "cross-tenant-caller"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Core Valuation", "pending", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Core Valuation", "pending", []byte(`{}`),
 			nil, nil, nil, nil,
 			nil, "wf-2", "run-2", ownerID, triggerUser,
 			[]byte(`{}`), time.Now(), nil,
@@ -987,13 +1293,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		ownerID := "template-owner"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Personal Holdings", "completed", []byte(`{}`),
 			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
 			nil, "wf-personal", "run-p", ownerID, ownerID,
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -1039,13 +1345,13 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		adminUserID := "tenant-admin"
 
 		execRows := sqlmock.NewRows([]string{
-			"id", "tenant_id", "template_id", "report_key", "status", "parameters",
+			"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
 			"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
 			"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
 			"metadata", "created_at", "completed_at",
 			"is_personal", "created_by_id",
 		}).AddRow(
-			execID, tenantID, tmplID, "Personal Holdings", "completed", []byte(`{}`),
+			execID, tenantID, tmplID, nil, "Personal Holdings", "completed", []byte(`{}`),
 			"s3://reports/personal.pdf", int64(512), int64(25), int64(150),
 			nil, "wf-personal", "run-p", ownerID, ownerID,
 			[]byte(`{}`), time.Now(), time.Now(),
@@ -1078,7 +1384,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 	})
 
 	t.Run("Route Specificity - GET /api/v1/reports/executions does not 400 Invalid UUID", func(t *testing.T) {
-		db, _, err := sqlmock.New()
+		db, mock, err := sqlmock.New()
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -1086,6 +1392,15 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 		handler := httpapi.NewReportHandler(service, nil, db)
 		r := chi.NewRouter()
 		handler.RegisterRoutes(r)
+
+		// The list endpoint is real: it runs one query, which returns no rows here.
+		mock.ExpectQuery(`SELECT e\.id.*FROM public\.report_executions e JOIN public\.report_templates t`).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "template_id", "schedule_id", "report_key", "status", "parameters",
+				"output_url", "output_size_bytes", "rows_processed", "execution_time_ms",
+				"error_message", "workflow_id", "run_id", "requested_by", "triggered_by",
+				"metadata", "created_at", "completed_at", "is_personal", "created_by_id",
+			}))
 
 		req := httptest.NewRequest("GET", "/api/v1/reports/executions", nil)
 		auth := security.AuthInfo{
@@ -1100,9 +1415,7 @@ func TestReportAPI_Phase3Executions(t *testing.T) {
 
 		// Assert route is not shadowed by /{id} which returns 400 "Invalid template ID"
 		assert.NotEqual(t, http.StatusBadRequest, w.Code, "GET /executions was routed to /{id} and returned 400!")
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 }
-
-
-

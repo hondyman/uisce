@@ -12,7 +12,7 @@ describe('useReportBuilder', () => {
     (global.fetch as jest.Mock).mockClear();
   });
 
-  describe('generateSQL', () => {
+  describe('requestGeneratedSQL', () => {
     it('should generate SQL successfully', async () => {
       const mockSQL = 'SELECT * FROM customers JOIN orders';
       (global.fetch as jest.Mock).mockResolvedValueOnce({
@@ -24,7 +24,7 @@ describe('useReportBuilder', () => {
         useReportBuilder(tenantId, datasourceId)
       );
 
-      const sql = await result.current.generateSQL({
+      const sql = await result.current.requestGeneratedSQL({
         baseEntityId: 'customers',
         relatedEntities: ['orders'],
         metrics: [],
@@ -56,7 +56,7 @@ describe('useReportBuilder', () => {
         useReportBuilder(tenantId, datasourceId)
       );
 
-      const sql = await result.current.generateSQL({
+      const sql = await result.current.requestGeneratedSQL({
         baseEntityId: '',
         relatedEntities: [],
         metrics: [],

@@ -95,18 +95,27 @@ func (e *TriggerEngine) EvaluateTriggers(ctx context.Context, tc *TriggerContext
 	start := time.Now()
 	results := []ExecutionResult{}
 
-	// 1. Fetch all enabled triggers for this type + entity
+	// 1. Fetch all enabled triggers for this type + entity. The live
+	//    validation_triggers schema stores the trigger key as a VARCHAR
+	//    column (vt.trigger_type) and references trigger_types via that key,
+	//    not via a UUID FK (vt.trigger_type_id). The earlier UUID-FK form
+	//    failed at runtime with "column vt.trigger_type_id does not exist",
+	//    silently swallowed by the BO CRUD handler's emitBORowEvent WARN
+	//    log, which meant no validation rule ever fired for any BO write.
 	query := `
-		SELECT vt.id, vt.trigger_type_id, vt.target_entity, 
-		       vt.event_config, vt.condition_config, vt.action_config,
-		       vt.abac_policy_id, vt.enabled, vt.priority
+		SELECT vt.id, vt.trigger_type, vt.target_entity,
+		       vt.meta->>'event_config' AS event_config,
+		       vt.meta->>'condition_config' AS condition_config,
+		       vt.meta->>'action_config' AS action_config,
+		       NULL::uuid AS abac_policy_id,
+		       vt.is_active AS enabled,
+		       0 AS priority
 		FROM validation_triggers vt
-		JOIN trigger_types tt ON vt.trigger_type_id = tt.id
-		WHERE vt.tenant_id = $1 
-		  AND tt.key = $2 
-		  AND vt.target_entity = $3 
-		  AND vt.enabled = true
-		ORDER BY vt.priority ASC`
+		WHERE vt.tenant_id = $1::uuid
+		  AND vt.trigger_type = $2
+		  AND vt.target_entity = $3
+		  AND vt.is_active = true
+		ORDER BY vt.created_at ASC`
 
 	triggers := []TriggerConfig{}
 	err := e.db.SelectContext(ctx, &triggers, query, tc.TenantID, tc.TriggerKey, tc.TargetEntity)

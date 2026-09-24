@@ -1,6 +1,6 @@
 import { Suspense, useMemo, useEffect, useCallback, useState } from 'react';
 import { devError } from './utils/devLogger';
-import { useDrag } from 'react-dnd';
+import { DndContext, useDraggable } from '@dnd-kit/core';
 import { listSavedQueries, cloneQuery, deleteQuery, getSavedQuery, getPreview } from './api';
 import { useConfirm } from './components/ConfirmProvider';
 import { useNotification } from './hooks/useNotification';
@@ -11,17 +11,13 @@ import { ItemTypes } from './FolderBrowser';
 import DuplicateQueriesPanel from './DuplicateQueriesPanel';
 
 function DraggableQueryRow({ q, children }: { q: SavedQuery; children: React.ReactNode }) {
-  const [{ isDragging }, drag] = useDrag(() => ({
-    type: ItemTypes.SAVED_ITEM,
-    item: { id: q.id, type: 'query' },
-    // narrow the monitor shape locally to avoid `any` in many call sites
-    collect: (monitor: { isDragging?: () => boolean } | undefined) => ({
-      isDragging: !!monitor?.isDragging?.(),
-    }),
-  }));
+  const { isDragging, setNodeRef, attributes, listeners } = useDraggable({
+    id: `${ItemTypes.SAVED_ITEM}_${q.id}`,
+    data: { id: q.id, type: 'query' },
+  });
 
   return (
-    <div ref={drag} className={`draggable-row ${isDragging ? 'dragging' : ''}`}>
+    <div ref={setNodeRef} {...attributes} {...listeners} className={`draggable-row ${isDragging ? 'dragging' : ''}`}>
       {children}
     </div>
   );
@@ -105,6 +101,7 @@ export default function SavedQueriesPanel({ onOpen, views }: SavedQueriesPanelPr
   };
 
   return (
+    <DndContext>
     <div className="saved-queries-panel">
       <h4>Saved Queries</h4>
       <div className="panel-controls">
@@ -171,5 +168,6 @@ export default function SavedQueriesPanel({ onOpen, views }: SavedQueriesPanelPr
         </>
       )}
     </div>
+    </DndContext>
   );
 }

@@ -184,15 +184,19 @@ func (g *GraphRAGAssembler) resolveBOFields(ctx context.Context, tenantID, boDef
 func (g *GraphRAGAssembler) resolveBindings(ctx context.Context, tenantID, boKey string, frame *GraphRAGContextFrame) error {
 	query := `
 		SELECT
-			b.binding_id,
-			b.dialect_name,
-			b.storage_mode,
-			b.table_name,
-			b.is_primary
-		FROM business_object_bindings b
-		WHERE b.tenant_id = $1
-		  AND b.bo_key = $2
+			b.bo_binding_id::text AS binding_id,
+			COALESCE(upper(pb.dialect_name), '') AS dialect_name,
+			COALESCE(pb.storage_tier, '') AS storage_mode,
+			COALESCE(cn.qualified_path, '') AS table_name,
+			b.is_default AS is_primary
+		FROM public.business_object_binding b
+		JOIN public.business_objects bo ON bo.id = b.bo_id
+		LEFT JOIN public.physical_backend pb ON pb.backend_id = b.backend_id
+		LEFT JOIN public.catalog_node cn ON cn.id = b.driving_node_id
+		WHERE b.tenant_id = $1::uuid
+		  AND bo.bo_key = $2
 		  AND b.is_active = true
+		ORDER BY b.is_default DESC
 		LIMIT 10
 	`
 	rows, err := g.db.QueryxContext(ctx, query, tenantID, boKey)
