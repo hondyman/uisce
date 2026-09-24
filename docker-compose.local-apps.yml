@@ -156,20 +156,6 @@ services:
     depends_on: []  # No local dependencies
     restart: unless-stopped
 
-  parity-checker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.parity
-    networks:
-      - local-net
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable
-      - REDIS_ADDR=100.84.126.19:6379
-      - TEMPORAL_HOSTPORT=100.84.126.19:7233
-      - KAFKA_BROKERS=100.84.126.19:9092
-    depends_on: []  # No local dependencies
-    restart: unless-stopped
-
   event-router:
     build:
       context: .
