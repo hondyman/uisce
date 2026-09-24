@@ -578,7 +578,7 @@ const BusinessObjectQueryBuilder: React.FC = () => {
               {
                 termNodeId: term.termNodeId,
                 alias,
-                agg: term.defaultAggregation || 'SUM',
+                agg: term.termType === 'calculated' ? 'NONE' : (term.defaultAggregation || 'SUM'),
                 ...(boId ? { boId } : {}),
               },
             ],

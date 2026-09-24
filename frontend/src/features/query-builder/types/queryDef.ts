@@ -168,8 +168,12 @@ export interface SemanticTermView {
   dataType?: string;
   role: QueryRole;
   bindingStatus: BindingStatus;
-  /** Default aggregation suggested for MEASURE terms. */
+  /** Default aggregation suggested for MEASURE terms. Empty for calc terms. */
   defaultAggregation?: AggregateFunction;
+  /** "calculated" for calc-term catalog nodes (vm.Expression backed),
+   *  absent/empty for physical-column terms. The frontend uses this to
+   *  avoid auto-populating aggregation for calc terms. */
+  termType?: string;
   /** UI-only: whether this term is checked in the SavedQueryEditor's field
    * picker. Not part of the wire contract - stripped out when building the
    * SavedQueryState to persist (see SavedQueryEditor.buildState). */

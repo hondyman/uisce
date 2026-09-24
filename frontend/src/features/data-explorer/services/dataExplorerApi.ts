@@ -338,6 +338,12 @@ export async function loadExplorerSource(
             type: normType,
             description: f.description || '',
             defaultAggregation: f.aggregation || f.defaultAggregation || (category === 'measure' ? 'SUM' : undefined),
+            // TODO(calc-term-routing): this path fabricates SUM on calc terms
+            // via the category==='measure' fallback. The Query Builder was fixed
+            // (GetBOTerms skips DefaultAggregation for calc terms; see
+            // bo_repository.go:592-594). This raw-schema path needs the same
+            // treatment: detect calc terms (f.role === 'CALCULATED' or
+            // f.termType === 'calculated') and skip the 'SUM' fallback.
             isCore: f.isCore ?? f.is_core ?? false,
             isCustom: f.isCustom ?? f.is_custom ?? false,
             provenanceScope: f.isCore || f.is_core ? 'core' : 'custom',
