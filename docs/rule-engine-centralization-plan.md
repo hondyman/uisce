@@ -268,13 +268,45 @@ never mounted), entry points re-pointed, flow-builder Policy Check reads E1
 rules, BO AI synthesis suggests E1 expressions, dead backend `internal/builder`
 (CUE generator) deleted. TypeScript: zero new errors.
 
+### Slice 7a — OPA governance + trigger conditions on E1, PR #136 (2026-09-24)
+
+- **Engine:** the condition operators the editor always offered but the
+  evaluator never implemented (handoff item 54) — `contains`, `starts_with`,
+  `ends_with`, `matches_regex`, `is_empty`, `length_*`, `in`, `not_in`,
+  `contains_any`, `contains_all`, `is_true/false`, `is_positive/negative/zero`
+  — with the editor's exact semantics. Additive: 0 of 160 stored rules use
+  them. Browser WASM refreshed and smoke-checked (old binary fails the check).
+- **E15 closed:** `pkg/governance` is E1 rules; `open-policy-agent/opa` and
+  its 8 exclusive modules gone. Parity table pins decisions. Finding: on
+  `main` the trade and pipeline Rego never evaluated (parse error / undefined
+  query), so `POST/PUT /api/v1/pipelines` returned 500 on every call and the
+  compliance activity errored on every trade.
+- **E16 (new, closed):** `api.TriggerEngine` had its own hand-rolled
+  condition evaluator (with a `contains` that never checked containment);
+  now E1. 0 of 7 stored triggers had conditions.
+
+### Slice 7b — dead evaluators deleted, `workflow-service` retired (2026-09-24)
+
+Systematic scan for hand-rolled operator evaluators. Deleted (all
+unreachable): BP branch evaluators (`pkg/bp`, 3 files) + never-mounted
+branching handlers, `internal/uisce/filters`, the enhanced BP workflow
+evaluator, the feed card-rule engine + dead `feed` root package, the
+"pre-trade compliance VM", 14 dead evaluator functions in
+`pkg/workflows/condition_engine.go`. `cmd/workflow-service` (own in-memory
+evaluator; secondary compose files only; no callers) retired.
+
+Left deliberately: `internal/ops` alert evaluator — unreachable, but inside
+a 27-of-30-files-dead subsystem that belongs to the dead-code program;
+`PolicyConditionActivity` is a pass-through stub, not an evaluator.
+SQL/query compilers (`QueryBORecords` filters, `querycompiler`, `boresolver`)
+translate conditions to SQL rather than evaluate them — tracked as E14.
+
 ### Remaining
 
-Slice 7 (E15: every OPA/Rego policy → E1, incl. `portal_authz`), Slice 8 (RDL
-CEL formulas → E1; removes cel-go), E14 (`boresolver` filter-group SQL compiler
-vs `vm.CompileToSQL`), `api.ABACEngine` (inventory under slice 7); after the
-stack merges, delete stale guard allowances until the allowlist is empty.
-
+Slice 8 (RDL CEL formulas → E1; removes cel-go), E14 (SQL filter compilers
+vs `vm.CompileToSQL`), expression-parser string literals (`Literal` holds
+only float64 — conditions cover strings today), then delete stale guard
+allowances until the allowlist is empty.
 ---
 
 ## §6 — Closing claim
