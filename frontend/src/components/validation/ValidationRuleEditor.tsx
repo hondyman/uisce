@@ -744,16 +744,6 @@ const ValidationRuleEditor: React.FC<ValidationRuleEditorProps> = ({
                   Condition (Visual Builder)
                 </Typography>
                 <ExpressionBuilder
-                  ruleName={formData.name}
-                  targetEntity={formData.bp_name}
-                  autosave={!!editingId}
-                  ruleId={editingId || undefined}
-                  onDraftCreated={(id, name) => {
-                    setEditingId(id);
-                    if (name) handleFormChange('name', name);
-                    setSnackbarMsg(`Draft created: ${name || id}`);
-                    setSnackbarOpen(true);
-                  }}
                   onSave={(cj) => {
                     handleFormChange('condition_json', JSON.stringify(cj));
                   }}
