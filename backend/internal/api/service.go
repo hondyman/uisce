@@ -48,6 +48,7 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 	}
 
 	svcCtx := context.WithValue(ctx, "tenant_id", tenantID)
+	contextSensitive := false
 
 	abbrevs, err := s.abbrevSvc.GetAllAbbreviations(svcCtx)
 	if err != nil {
@@ -81,6 +82,7 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 		if err != nil {
 			log.Printf("[deriveTermNames] LLM disambiguation failed for %v: %v", unresolvedTokens, err)
 		} else {
+			contextSensitive = true // LLM expansion prompt included table context
 			for _, idx := range unresolvedIdx {
 				upper := strings.ToUpper(tokens[idx])
 				if full, ok := suggestions[upper]; ok && sanitizeExpansion(full) != "" {
@@ -101,9 +103,10 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 			if qualified, qualErr := s.abbrevSvc.QualifyGenericWord(svcCtx, resolved[0], tableName, siblingColumnNames); qualErr == nil && qualified != "" {
 				log.Printf("[deriveTermNames] LLM qualified %q → semanticName=%q, businessName=%q, base=%q", rawName, qualified, titleCase(pascalCaseToWords(qualified)), strings.Title(strings.ToLower(resolved[0])))
 				return derivedTermNames{
-					SemanticName:    qualified,
-					BusinessName:    titleCase(pascalCaseToWords(qualified)),
-					BaseGenericTerm: strings.Title(strings.ToLower(resolved[0])),
+					SemanticName:     qualified,
+					BusinessName:     titleCase(pascalCaseToWords(qualified)),
+					BaseGenericTerm:  strings.Title(strings.ToLower(resolved[0])),
+					ContextSensitive: true, // LLM qualification prompt included table name
 				}
 			} else if qualErr != nil {
 				log.Printf("[deriveTermNames] LLM qualification failed for %q: %v", rawName, qualErr)
@@ -111,7 +114,9 @@ func (s *GlossaryService) deriveTermNames(ctx context.Context, tenantID, rawName
 		}
 	}
 
-	return deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+	result := deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+	result.ContextSensitive = result.ContextSensitive || contextSensitive
+	return result
 }
 
 func (s *GlossaryService) resolveOrCreateNodeType(tenantID, typeName string) (string, error) {

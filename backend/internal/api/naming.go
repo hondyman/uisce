@@ -155,6 +155,7 @@ type derivedTermNames struct {
 	SemanticName    string
 	BusinessName    string
 	BaseGenericTerm string
+	ContextSensitive bool   // true iff any derivation rule consulted table/schema context
 	source          string // one of: "pascal", "abbrev_map", "addr_line_context", "bare_generic"
 }
 
@@ -247,10 +248,12 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 	semanticName := pascalCase(resolvedTokens)
 	businessName := titleCase(resolvedTokens)
 	var baseGenericTerm string
+	contextSensitive := false
 
 	tableName := extractTableNameFromContext(tableSchemaContext)
 
 	if addrMatch := addrLineRe.FindStringSubmatch(strings.ToLower(rawName)); addrMatch != nil && tableName != "" {
+		contextSensitive = true // address-line rule consults table name
 		lineNum := addrMatch[1]
 		tableTokens := tokenizeColumnName(tableName)
 		var entityParts []string
@@ -269,6 +272,7 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 		baseGenericTerm = "Address"
 	} else if len(resolvedTokens) == 1 && strings.EqualFold(resolvedTokens[0], rawName) && isGenericWord(resolvedTokens[0]) && tableSchemaContext != "" {
 		if tableName != "" && !strings.EqualFold(tableName, rawName) {
+			contextSensitive = true // bare-generic rule consults table name
 			baseGenericTerm = strings.Title(strings.ToLower(resolvedTokens[0]))
 		}
 	}
@@ -281,10 +285,11 @@ func deriveTermNamesDeterministic(resolvedTokens []string, rawName string, table
 	}
 
 	return derivedTermNames{
-		SemanticName:    semanticName,
-		BusinessName:    businessName,
-		BaseGenericTerm: baseGenericTerm,
-		source:          source,
+		SemanticName:     semanticName,
+		BusinessName:     businessName,
+		BaseGenericTerm:  baseGenericTerm,
+		ContextSensitive: contextSensitive,
+		source:           source,
 	}
 }
 
