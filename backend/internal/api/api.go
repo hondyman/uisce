@@ -1014,6 +1014,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	r.Get("/api/tempo/traces/{traceId}", srv.proxyTempoGetTrace)
 	r.Get("/api/v1/metrics/commit", srv.commitMetricsV1Handler)
 
+	// Prometheus metrics endpoint (glossary_llm_calls_total, etc.)
+	r.Handle("/metrics", MetricsHandler())
+
 	// Observability Console endpoints
 	r.Get("/api/metrics/global", srv.globalMetricsHandler)
 	r.Get("/api/metrics/region-heatmap", srv.regionHeatmapHandler)
