@@ -79,8 +79,6 @@ require (
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/streadway/amqp v1.1.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.32.0
-	github.com/tetratelabs/wazero v1.6.0
-	go.starlark.net v0.0.0-20260210143700-b62fd896b91b
 )
 
 replace github.com/hondyman/uisce/libs/temporal-client => ../libs/temporal-client

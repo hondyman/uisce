@@ -521,7 +521,7 @@ type SynthesizedRule struct {
 	Description string `json:"description"`
 	Severity    string `json:"severity"` // ERROR, WARNING, INFO
 	Field       string `json:"field,omitempty"`
-	Script      string `json:"script"` // Starlark or expression
+	Script      string `json:"script"` // rule-engine expression
 }
 
 type BOAISynthesizeRequest struct {
