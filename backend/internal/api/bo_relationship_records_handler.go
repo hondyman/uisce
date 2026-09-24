@@ -245,6 +245,12 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 	// tampering vector where a client could target an unrelated parent record.
 	payload[fkColumn] = recordID
 
+	writableCols, err := h.resolveWritableColumns(r.Context(), childMeta.DrivingTable)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	columns := []string{"tenant_id"}
 	placeholders := []string{"$1"}
 	args := []interface{}{tenantID}
@@ -253,6 +259,12 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 		lower := strings.ToLower(fieldKey)
 		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
 			continue
+		}
+		// Column identifiers can't be bind-parameterized, so every key must be a
+		// real column on the child table before it's interpolated into SQL.
+		if !writableCols[fieldKey] {
+			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
+			return
 		}
 		columns = append(columns, fieldKey)
 		placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
@@ -339,6 +351,12 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 		return
 	}
 
+	writableCols, err := h.resolveWritableColumns(r.Context(), childMeta.DrivingTable)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	setClauses := make([]string, 0)
 	args := []interface{}{tenantID, childID, recordID}
 	argIdx := 4
@@ -346,6 +364,12 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 		lower := strings.ToLower(fieldKey)
 		if lower == "id" || lower == "tenant_id" || lower == "created_at" || lower == "created_by" || fieldKey == fkColumn {
 			continue
+		}
+		// Column identifiers can't be bind-parameterized, so every key must be a
+		// real column on the child table before it's interpolated into SQL.
+		if !writableCols[fieldKey] {
+			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
+			return
 		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", fieldKey, argIdx))
 		args = append(args, val)

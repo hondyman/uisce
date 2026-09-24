@@ -140,6 +140,8 @@ func TestHandleCreateRelatedRecord_ForcesParentFKOverridingClientPayload(t *test
 		WithArgs("oms", "trade_order", "account_id").
 		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
 
+	expectChildWritableColumns(mock, "id", "tenant_id", "account_id", "notional")
+
 	// The client tries to set account_id to a different (unrelated) account — this must be
 	// overridden server-side to "acc-123" (the parent from the URL) regardless of payload content.
 	// Column order in the generated INSERT depends on Go map iteration order, so match any args
@@ -208,4 +210,117 @@ func TestParseChildFKColumnFromJoinCondition_VariousFormats(t *testing.T) {
 			assert.Equal(t, tc.expected, got)
 		})
 	}
+}
+
+// expectRelatedChildResolution queues the lookups both related-record write
+// handlers perform before touching the child table: parent BO id, relationship,
+// child BO key, child metadata (falling back to table inference) and FK column.
+func expectRelatedChildResolution(mock sqlmock.Sqlmock) {
+	mock.ExpectQuery("SELECT id::text FROM business_objects").
+		WithArgs(sqlmock.AnyArg(), "account").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("bo-account"))
+	mock.ExpectQuery("FROM business_object_relationships").
+		WithArgs(sqlmock.AnyArg(), "allocations", "bo-account").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "from_bo_id", "to_bo_id", "rel_key"}).
+			AddRow("rel-1", "bo-tradeorder", "bo-account", "allocations"))
+	mock.ExpectQuery("SELECT bo_key FROM business_objects").
+		WithArgs("bo-tradeorder", sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"bo_key"}).AddRow("trade_order"))
+	mock.ExpectQuery("SELECT COALESCE.*FROM public.business_objects").
+		WithArgs("trade_order", sqlmock.AnyArg()).
+		WillReturnError(sqlmock.ErrCancelled)
+	mock.ExpectQuery("SELECT COALESCE.*FROM public.catalog_node").
+		WithArgs("trade_order", sqlmock.AnyArg()).
+		WillReturnError(sqlmock.ErrCancelled)
+	mock.ExpectQuery("SELECT EXISTS.*information_schema.tables").
+		WithArgs("oms", "trade_order").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+	mock.ExpectQuery("SELECT rb.join_condition_sql").
+		WithArgs(sqlmock.AnyArg(), "rel-1", "bo-tradeorder").
+		WillReturnError(sqlmock.ErrCancelled)
+	mock.ExpectQuery("SELECT EXISTS.*information_schema.columns").
+		WithArgs("oms", "trade_order", "account_id").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+}
+
+func expectChildWritableColumns(mock sqlmock.Sqlmock, cols ...string) {
+	rows := sqlmock.NewRows([]string{"column_name"})
+	for _, c := range cols {
+		rows.AddRow(c)
+	}
+	mock.ExpectQuery("SELECT column_name FROM information_schema.columns").
+		WithArgs("oms", "trade_order").
+		WillReturnRows(rows)
+}
+
+const injectionKey = "notional; DROP TABLE x --"
+
+func TestHandleCreateRelatedRecord_RejectsUnknownColumnKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	mock.MatchExpectationsInOrder(false)
+	r := newRelationshipTestRouter(NewBOCRUDHandler(sqlx.NewDb(db, "sqlmock"), nil))
+
+	expectRelatedChildResolution(mock)
+	expectChildWritableColumns(mock, "id", "tenant_id", "account_id", "notional")
+	// No INSERT is expected: sqlmock fails any unexpected query, and
+	// ExpectationsWereMet below confirms nothing else ran.
+
+	body, _ := json.Marshal(map[string]interface{}{injectionKey: 1000})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/bo/account/records/acc-123/relationships/allocations", bytes.NewBuffer(body))
+	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "unknown attribute")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestHandleUpdateRelatedRecord_RejectsUnknownColumnKey(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	mock.MatchExpectationsInOrder(false)
+	r := newRelationshipTestRouter(NewBOCRUDHandler(sqlx.NewDb(db, "sqlmock"), nil))
+
+	expectRelatedChildResolution(mock)
+	expectChildWritableColumns(mock, "id", "tenant_id", "account_id", "notional")
+
+	body, _ := json.Marshal(map[string]interface{}{injectionKey: 1000})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bo/account/records/acc-123/relationships/allocations/to-1", bytes.NewBuffer(body))
+	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), "unknown attribute")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestHandleUpdateRelatedRecord_AllowsKnownColumn(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	assert.NoError(t, err)
+	defer db.Close()
+	mock.MatchExpectationsInOrder(false)
+	r := newRelationshipTestRouter(NewBOCRUDHandler(sqlx.NewDb(db, "sqlmock"), nil))
+
+	expectRelatedChildResolution(mock)
+	expectChildWritableColumns(mock, "id", "tenant_id", "account_id", "notional")
+	mock.ExpectQuery(`UPDATE oms.trade_order\s+SET notional = \$4, updated_at = NOW\(\)\s+WHERE tenant_id = \$1 AND id = \$2 AND account_id = \$3`).
+		WithArgs(sqlmock.AnyArg(), "to-1", "acc-123", float64(2000)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "account_id", "notional"}).AddRow("to-1", "acc-123", 2000))
+
+	body, _ := json.Marshal(map[string]interface{}{"notional": 2000})
+	req := httptest.NewRequest(http.MethodPut, "/api/v1/bo/account/records/acc-123/relationships/allocations/to-1", bytes.NewBuffer(body))
+	req.Header.Set("X-Tenant-ID", "00000000-0000-0000-0000-000000000001")
+	req = withTestAuth(req, "00000000-0000-0000-0000-000000000001")
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.NoError(t, mock.ExpectationsWereMet())
 }
