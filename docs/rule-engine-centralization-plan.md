@@ -199,6 +199,33 @@ the edits in those are removal of commented-out code only.
 - **Whole-backend dead code:** `deadcode ./...` reports ~10,300 unreachable
   functions. Out of scope here; worth its own staged program.
 
+### Slice 5 — rule-engine-service and validation-service retired, PR #130 (2026-09-24)
+
+- **D3 correction:** the services were not only in old compose files — they
+  were also in the current `docker-compose.yml`/`.local.yml`/`.local-apps.yml`,
+  `START_FULL_SYSTEM.sh`, Prometheus and Grafana. Retirement still holds
+  because nothing calls them: all frontend `/api` traffic goes to the
+  monolith, and no UI code calls their routes.
+- Removed both binaries, `testeval`, their Dockerfiles, and everything only
+  they reached: `services.ValidationRuleEngine`, `AsyncValidator`,
+  `BPValidationCoordinator`, `handlers.ValidationHandler`, `rules.PathResolver`,
+  plus orphaned functions of a duplicate `services.BusinessObjectService`.
+- All deployment wiring removed (7 compose files, startup scripts, Prometheus,
+  Grafana, empty Helm chart, dev proxy route). `deadcode`: nothing newly
+  orphaned vs `main`.
+
+### Separate: Cube.js integration removed, PR #129
+
+Not a rule engine, but removed in the same discipline at the owner's request.
+The platform's own Cube.dev-shaped semantic model (fabric cubes/views/measures,
+`models.Cube`, semantic-term Cube properties) is live and was kept.
+
+### Remaining after Slice 5
+
+Slice 1 (land #74, re-land rulefabric deletion), Slice 3b (fake NAV calc engine
+→ E1), Slice 4b (frontend legacy rule UIs), Slice 6 (CI guardrail), E14
+(`boresolver` filter-group SQL compiler), RDL spin-out.
+
 ---
 
 ## §6 — Closing claim
