@@ -11,7 +11,40 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+// glossaryLLMCalls tracks every LLM attempt made by the glossary pipeline,
+// labelled by tenant and method (expansion, qualify, definition). The counter
+// is incremented on attempt, not on success — a 429-then-retry shows up as 2
+// calls; a failure still counts. This gives prod-level visibility into the
+// exact number PR-β's pre-grouped dispatch is expected to reduce.
+var glossaryLLMCalls = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "glossary_llm_calls_total",
+		Help: "Total LLM call attempts by glossary pipeline, labelled by tenant and method.",
+	},
+	[]string{"tenant", "method"},
+)
+
+func init() {
+	prometheus.MustRegister(glossaryLLMCalls)
+}
+
+// extractTenantFromContext reads the tenant_id value that deriveTermNames /
+// generateSingleTerm place into svcCtx via context.WithValue. Falls back to
+// "unknown" if the key is absent (should never happen in normal flow).
+func extractTenantFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value("tenant_id").(string); ok && v != "" {
+		return v
+	}
+	return "unknown"
+}
+
+// recordLLMCall increments the glossary LLM counter for the given method.
+func recordLLMCall(ctx context.Context, method string) {
+	glossaryLLMCalls.WithLabelValues(extractTenantFromContext(ctx), method).Inc()
+}
 
 // AbbreviationService handles abbreviation lookups and management
 type AbbreviationService struct {
@@ -504,6 +537,7 @@ If you are unsure or it looks like a full word already, exclude it from the JSON
 Example format: {"ACCT": "ACCOUNT", "VAL": "VALUE"}
 `, contextHint, siblingContext, strings.Join(candidates, ", "))
 
+	recordLLMCall(ctx, "expansion")
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("[SuggestExpansionsInContext] LLM call failed for %d tokens: %v", len(candidates), err)
@@ -574,6 +608,7 @@ Return ONLY the qualified term name as a single PascalCase word, with no surroun
 Example valid responses: EmployeeCity, OrderStatus, TransactionAmount
 `, genericWord, tableName, siblingContext)
 
+	recordLLMCall(ctx, "qualify")
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("[QualifyGenericWord] LLM call failed for %q: %v", genericWord, err)
@@ -689,6 +724,7 @@ Return ONLY a JSON object, no commentary, no markdown fences:
 {"definition": "one or two sentence definition", "source": "FINRA" | "EDM Council FIBO" | "ISO 20022" | "generated"}`,
 		termName, sourceContext)
 
+	recordLLMCall(ctx, "definition")
 	response, err := s.llmProvider.GenerateResponse(ctx, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM definition generation failed: %w", err)
