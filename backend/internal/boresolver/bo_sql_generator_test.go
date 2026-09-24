@@ -229,5 +229,266 @@ func TestResolvePolymorphicField(t *testing.T) {
 	assert.Equal(t, "get_json_string(t1.tenant_extensions, '$.loyalty_score')", coldTransExpr)
 }
 
+// --- Calc-term compilation tests ---
 
+func TestCalcTerm_PushdownCompilesToSQL(t *testing.T) {
+	// Calc term: (revenue - cogs) / revenue → pushes down to
+	// ((t0.revenue - t0.cogs) / t0.revenue)
+	expr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op: "/",
+			Left: &vm.BinaryExpr{
+				Op:    "-",
+				Left:  &vm.FieldRef{Path: "revenue"},
+				Right: &vm.FieldRef{Path: "cogs"},
+			},
+			Right: &vm.FieldRef{Path: "revenue"},
+		},
+	}
+
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "revenue", PhysicalColumn: "revenue"},
+					{ID: "f2", Name: "cogs", PhysicalColumn: "cogs"},
+					{ID: "f3", Name: "margin", TermType: "calculated", SemanticTermID: "node-margin"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-margin": expr,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f3"},
+		TenantID:         "t-1",
+	}
+
+	query, _, err := gen.GenerateSQL(req)
+	assert.NoError(t, err)
+	assert.Contains(t, query, "(t0.revenue - t0.cogs) / t0.revenue")
+}
+
+func TestCalcTerm_UnsupportedFunctionReturnsError(t *testing.T) {
+	// Calc term using XIRR (not pushdownable) → should fail
+	expr := &vm.Expression{
+		Root: &vm.FuncCall{
+			Name: "XIRR",
+			Args: []vm.ExprNode{
+				&vm.FieldRef{Path: "cash_flow"},
+				&vm.FieldRef{Path: "dates"},
+			},
+		},
+	}
+
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "trades",
+				Fields: []BOField{
+					{ID: "f1", Name: "cash_flow", PhysicalColumn: "cash_flow"},
+					{ID: "f2", Name: "dates", PhysicalColumn: "trade_dates"},
+					{ID: "f3", Name: "irr", TermType: "calculated", SemanticTermID: "node-irr"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-irr": expr,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f3"},
+		TenantID:         "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "compile calc term")
+}
+
+func TestCalcTerm_LegacyBOSkipsCalcPath(t *testing.T) {
+	// BO loaded via legacy path (TermType empty) → no calc-term compilation,
+	// PhysicalColumn must be set or it fails with the standard error.
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "total", PhysicalColumn: "total_amount"},
+				},
+			},
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+	}
+
+	query, _, err := gen.GenerateSQL(req)
+	assert.NoError(t, err)
+	assert.Contains(t, query, "t0.total_amount")
+}
+
+func TestCalcTerm_FilterRejection(t *testing.T) {
+	// Filter on a calc term → hard error. Selected field is a normal
+	// physical column so it resolves fine; only the filter triggers the error.
+	expr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "+",
+			Left:  &vm.FieldRef{Path: "a"},
+			Right: &vm.FieldRef{Path: "b"},
+		},
+	}
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "total", PhysicalColumn: "total_amount"},
+					{ID: "f2", Name: "margin", TermType: "calculated", SemanticTermID: "node-margin"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-margin": expr,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		Filters: []FilterClause{
+			{FieldID: "f2", Operator: ">", Value: 0.1},
+		},
+		TenantID: "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "filter on calc term")
+}
+
+func TestCalcTerm_NoPreloadedConfigReturnsError(t *testing.T) {
+	// Calc term with no preloaded configs → error
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "margin", TermType: "calculated", SemanticTermID: "node-margin"},
+				},
+			},
+		},
+		// CalcTermExprs is nil — nothing preloaded
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no preloaded expression")
+}
+
+func TestCalcTerm_N1Count(t *testing.T) {
+	// 3 calc-term fields → GetCalcTermExpressions called exactly once with
+	// all 3 node IDs, not once per field.
+	expr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "+",
+			Left:  &vm.FieldRef{Path: "a"},
+			Right: &vm.FieldRef{Path: "b"},
+		},
+	}
+
+	callCount := 0
+	repo := &countingRepo{
+		inner: &MockBORepository{
+			BODefinitions: map[string]*BODefinition{
+				"bo-1": {
+					ID:           "bo-1",
+					DrivingTable: "t",
+					Fields: []BOField{
+						{ID: "f1", Name: "a", PhysicalColumn: "col_a"},
+						{ID: "f2", Name: "b", PhysicalColumn: "col_b"},
+						{ID: "f3", Name: "calc1", TermType: "calculated", SemanticTermID: "n1"},
+						{ID: "f4", Name: "calc2", TermType: "calculated", SemanticTermID: "n2"},
+						{ID: "f5", Name: "calc3", TermType: "calculated", SemanticTermID: "n3"},
+					},
+				},
+			},
+			CalcTermExprs: map[string]*vm.Expression{
+				"n1": expr, "n2": expr, "n3": expr,
+			},
+		},
+		count: &callCount,
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f3", "f4", "f5"},
+		TenantID:         "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, callCount, "GetCalcTermExpressions should be called exactly once for all calc-term fields")
+}
+
+// countingRepo wraps a BORepository and counts GetCalcTermExpressions calls.
+type countingRepo struct {
+	inner BORepository
+	count *int
+}
+
+func (c *countingRepo) GetBODefinition(boID string) (*BODefinition, error) {
+	return c.inner.GetBODefinition(boID)
+}
+
+func (c *countingRepo) GetBOByTechnicalName(technicalName, tenantID, datasourceID string) (*BODefinition, error) {
+	return c.inner.GetBOByTechnicalName(technicalName, tenantID, datasourceID)
+}
+
+func (c *countingRepo) TableHasColumn(drivingTable, column string) bool {
+	return c.inner.TableHasColumn(drivingTable, column)
+}
+
+func (c *countingRepo) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	*c.count++
+	return c.inner.GetCalcTermExpressions(nodeIDs)
+}
 
