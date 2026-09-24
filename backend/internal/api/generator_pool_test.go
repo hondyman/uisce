@@ -155,3 +155,35 @@ func TestRunBulk_GroupingPreservesOriginalIndex(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildDefinitionCacheKey_Deterministic(t *testing.T) {
+	key1 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+	key2 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+	if key1 != key2 {
+		t.Errorf("deterministic: %s != %s", key1, key2)
+	}
+}
+
+func TestBuildDefinitionCacheKey_DifferentTokensProduceDifferentKeys(t *testing.T) {
+	key1 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+	key2 := buildDefinitionCacheKey([]string{"Tenant", "Identifier"}, "", false)
+	if key1 == key2 {
+		t.Error("different tokens should produce different keys")
+	}
+}
+
+func TestBuildDefinitionCacheKey_ContextSensitiveIncludesContext(t *testing.T) {
+	key1 := buildDefinitionCacheKey([]string{"Issuer", "Address", "Line", "1"}, `table "issuer_address"`, true)
+	key2 := buildDefinitionCacheKey([]string{"Issuer", "Address", "Line", "1"}, `table "customer_address"`, true)
+	if key1 == key2 {
+		t.Error("different context tables should produce different keys for context-sensitive names")
+	}
+}
+
+func TestBuildDefinitionCacheKey_NonContextSensitiveIgnoresContext(t *testing.T) {
+	key1 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, `table "orders"`, false)
+	key2 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, `table "invoices"`, false)
+	if key1 != key2 {
+		t.Error("non-context-sensitive names should ignore context")
+	}
+}

@@ -2404,7 +2404,7 @@ func (h *GlossaryHandler) RecordRejection(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := h.glossarySvc.RecordRejection(ctx, secCtx.TenantID, datasourceID, qualifiedPath, req.RejectedName); err != nil {
+	if err := h.glossarySvc.RecordRejection(ctx, secCtx.TenantID, datasourceID, qualifiedPath, req.RejectedName, req.PreferredName); err != nil {
 		http.Error(w, "failed to record rejection: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
