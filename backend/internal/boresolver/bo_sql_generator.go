@@ -35,6 +35,14 @@ type SQLGenerationRequest struct {
 	KnowledgeDate time.Time `json:"knowledgeDate,omitempty"`
 	// DialectOverride explicitly selects a dialect, bypassing watermark routing.
 	DialectOverride string `json:"dialectOverride,omitempty"`
+	// UserRole is the role of the requesting user (e.g. "platform_trader",
+	// "compliance_officer"). Used by DetermineMaskingTier to block calc-term
+	// compilation when a referenced physical column's masking tier exceeds the
+	// passthrough threshold for the given role.
+	UserRole string `json:"userRole,omitempty"`
+	// ClearanceLevel is the clearance level of the requesting user
+	// (e.g. "CONFIDENTIAL"). Used by DetermineMaskingTier.
+	ClearanceLevel string `json:"clearanceLevel,omitempty"`
 }
 
 // SemanticSQLGenerationRequest defines a human-friendly semantic query format
@@ -191,6 +199,11 @@ type BOField struct {
 	// to detect calc terms and compile their expressions instead of looking
 	// up a physical column.
 	TermType string
+	// SensitivityTag is the PII/sensitivity classification of this field's
+	// physical column (e.g. "pii", "financial:confidential"). Used by
+	// DetermineMaskingTier to block calc-term compilation when the
+	// referenced column's masking tier exceeds the passthrough threshold.
+	SensitivityTag string
 }
 
 
@@ -688,15 +701,58 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 					return "", "", fmt.Errorf("calc term %q (node %s) not found in preloaded configs", foundField.Name, foundField.SemanticTermID)
 				}
 
-				resolveCol := func(fieldPath string) (string, error) {
-					// Look up the referenced field in the BO definition
+				const maxCalcTermDepth = 1
+				// seen maps fieldPath → true when that calc term is currently being
+				// resolved. An entry already present at entry means an ancestor call
+				// is already resolving this field (cycle).
+				// depth counts how many calc-term chaining levels have been entered
+				// (incremented when entering a referenced calc term via rCTRS).
+				seenPtr := &map[string]bool{}
+				depthPtr := new(int)
+				// Add the OUTER calc term to seen BEFORE CompileToSQL starts resolving,
+				// so that if the expression references the outer term (self-cycle),
+				// it's found in seen immediately.
+				(*seenPtr)[foundField.Name] = true
+				defer func() {
+					delete(*seenPtr, foundField.Name)
+				}()
+				var resolveCol func(fieldPath string) (string, error)
+				resolveCol = func(fieldPath string) (string, error) {
 					for _, f := range currentBO.Fields {
 						if f.Name == fieldPath || f.ID == fieldPath {
+							if f.TermType == "calculated" {
+								if (*seenPtr)[fieldPath] {
+									return "", fmt.Errorf("cycle detected: calc term %q references %q which is already being resolved", foundField.Name, fieldPath)
+								}
+								(*seenPtr)[fieldPath] = true
+								*depthPtr++
+								defer func() {
+									delete(*seenPtr, fieldPath)
+									*depthPtr--
+								}()
+								if *depthPtr > maxCalcTermDepth {
+									return "", fmt.Errorf("calc term %q exceeds max chaining depth (%d); referenced term %q is a calc term", foundField.Name, maxCalcTermDepth, fieldPath)
+								}
+								chainExpr, chainOk := ctx.CalcTermConfigs[f.SemanticTermID]
+								if !chainOk {
+									return "", fmt.Errorf("calc term %q references calc term %q which has no preloaded expression", foundField.Name, fieldPath)
+								}
+								chainSQL, chainErr := g.resolveCalcTermToSQL(chainExpr, currentAlias, resolveCol, *seenPtr, *depthPtr)
+								if chainErr != nil {
+									return "", chainErr
+								}
+								return chainSQL, nil
+							}
+							// Masking check: physical column referenced by a calc term with a sensitivity tag
+							if foundField.TermType == "calculated" && f.SensitivityTag != "" {
+								tier := DetermineMaskingTier(f.SensitivityTag, ctx.Request.UserRole, ctx.Request.ClearanceLevel)
+								if tier != MaskingTierPassthrough {
+									return "", fmt.Errorf("calculated term %q references masked column %q (tier %v)", foundField.Name, f.PhysicalColumn, tier)
+								}
+							}
 							if f.PhysicalColumn == "" {
 								return "", fmt.Errorf("calc term references field %q which has no physical column", fieldPath)
 							}
-							// Return bare column name — resolveCalcTermToSQL
-							// will prefix with the alias.
 							parts := strings.Split(f.PhysicalColumn, ".")
 							return parts[len(parts)-1], nil
 						}
@@ -704,7 +760,7 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 					return "", fmt.Errorf("field %q not found in BO %q", fieldPath, currentBO.ID)
 				}
 
-				sqlExpr, err := g.resolveCalcTermToSQL(expr, currentAlias, resolveCol)
+				sqlExpr, err := g.resolveCalcTermToSQL(expr, currentAlias, resolveCol, *seenPtr, *depthPtr)
 				if err != nil {
 					return "", "", fmt.Errorf("compile calc term %q: %w", foundField.Name, err)
 				}
@@ -1170,7 +1226,7 @@ func (g *BOSQLGenerator) preloadCalcTerms(ctx *GenerationContext, boDef *BODefin
 // should verify that the column is below the masking threshold before calling
 // this function. The masking check belongs in the caller (ResolvePathWithLabel)
 // because it needs access to the tenant context.
-func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string, resolveColumn vm.ColumnResolver) (string, error) {
+func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string, resolveColumn vm.ColumnResolver, parentSeen map[string]bool, depth int) (string, error) {
 	// Wrap the caller's resolveColumn to prefix columns with the table alias.
 	// The expression's FieldRef.Path values are semantic term names; the
 	// caller's resolver maps them to physical column names. We prefix with
@@ -1189,5 +1245,6 @@ func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string,
 		return col, nil
 	}
 
-	return vm.CompileToSQL(expr, aliasedResolver)
+	sql, err := vm.CompileToSQL(expr, aliasedResolver)
+	return sql, err
 }

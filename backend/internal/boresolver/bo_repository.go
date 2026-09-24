@@ -136,13 +136,14 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 // this environment - bo_fields is an orphaned table from an earlier BO
 // metadata system and is kept below only as a legacy fallback).
 type semanticField struct {
-	ID            string `db:"id"`
-	FieldName     string `db:"field_name"`
-	TechnicalName string `db:"technical_name"`
-	DisplayName   string `db:"display_name"`
-	DataType      string `db:"data_type"`
-	TermNodeID    string `db:"term_node_id"`
-	TermType      string `db:"term_type"`
+	ID              string `db:"id"`
+	FieldName       string `db:"field_name"`
+	TechnicalName   string `db:"technical_name"`
+	DisplayName     string `db:"display_name"`
+	DataType        string `db:"data_type"`
+	TermNodeID      string `db:"term_node_id"`
+	TermType        string `db:"term_type"`
+	SensitivityTag  string `db:"sensitivity_tag"`
 }
 
 // resolveCatalogPhysicalColumn looks up a physical column for fieldName
@@ -285,7 +286,8 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 		       COALESCE(f.display_name, f.field_name) AS display_name,
 		       COALESCE(f.data_type, '') AS data_type,
 		       f.term_node_id::text,
-		       COALESCE(cn.properties->>'term_type', '') AS term_type
+		       COALESCE(cn.properties->>'term_type', '') AS term_type,
+		       COALESCE(cn.properties->>'sensitivity_tag', '') AS sensitivity_tag
 		FROM public.business_object_fields f
 		LEFT JOIN catalog_node cn ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
@@ -325,14 +327,15 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 	for _, f := range fields {
 		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
 		def.Fields = append(def.Fields, BOField{
-			ID:             f.ID,
-			Name:           f.FieldName,
-			DisplayName:    f.DisplayName,
+			ID:              f.ID,
+			Name:            f.FieldName,
+			DisplayName:     f.DisplayName,
 			Path:           f.FieldName,
-			SemanticTermID: f.TermNodeID,
-			PhysicalColumn: physicalColumn,
-			Type:           f.DataType,
-			TermType:       f.TermType,
+			SemanticTermID:  f.TermNodeID,
+			PhysicalColumn:  physicalColumn,
+			Type:            f.DataType,
+			TermType:        f.TermType,
+			SensitivityTag:  f.SensitivityTag,
 		})
 	}
 

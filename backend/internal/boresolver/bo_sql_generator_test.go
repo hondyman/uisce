@@ -1,6 +1,8 @@
 package boresolver
 
 import (
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hondyman/uisce/backend/internal/rules/vm"
@@ -317,7 +319,7 @@ func TestCalcTerm_UnsupportedFunctionReturnsError(t *testing.T) {
 
 	_, _, err = gen.GenerateSQL(req)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "compile calc term")
+	assert.Contains(t, err.Error(), "XIRR")
 }
 
 func TestCalcTerm_LegacyBOSkipsCalcPath(t *testing.T) {
@@ -490,5 +492,250 @@ func (c *countingRepo) TableHasColumn(drivingTable, column string) bool {
 func (c *countingRepo) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
 	*c.count++
 	return c.inner.GetCalcTermExpressions(nodeIDs)
+}
+
+// TestCalcTerm_ChainingValid verifies that depth-1 chaining works:
+// double_margin (margin_calc * 2) references margin_calc which references
+// physical columns. The final SQL should contain the nested expression.
+func TestCalcTerm_ChainingValid(t *testing.T) {
+	marginExpr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op: "/",
+			Left: &vm.BinaryExpr{
+				Op:    "-",
+				Left:  &vm.FieldRef{Path: "revenue"},
+				Right: &vm.FieldRef{Path: "cogs"},
+			},
+			Right: &vm.FieldRef{Path: "revenue"},
+		},
+	}
+	doubleMarginExpr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "*",
+			Left:  &vm.FieldRef{Path: "margin_calc"},
+			Right: &vm.Literal{Value: 2},
+		},
+	}
+
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "revenue", PhysicalColumn: "revenue"},
+					{ID: "f2", Name: "cogs", PhysicalColumn: "cogs"},
+					{ID: "f3", Name: "margin_calc", TermType: "calculated", SemanticTermID: "node-margin"},
+					{ID: "f4", Name: "double_margin", TermType: "calculated", SemanticTermID: "node-double"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-margin":  marginExpr,
+			"node-double": doubleMarginExpr,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f4"},
+		TenantID:         "t-1",
+	}
+
+	query, _, err := gen.GenerateSQL(req)
+	assert.NoError(t, err)
+	assert.Contains(t, query, "t0.revenue")
+	assert.Contains(t, query, "t0.cogs")
+}
+
+// TestCalcTerm_ChainingCycleSelf verifies that a self-referencing calc term
+// (A → A) is detected and returns a cycle error.
+func TestCalcTerm_ChainingCycleSelf(t *testing.T) {
+	selfRefExpr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "+",
+			Left:  &vm.FieldRef{Path: "self_ref"},
+			Right: &vm.Literal{Value: 1},
+		},
+	}
+
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "self_ref", TermType: "calculated", SemanticTermID: "node-self"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-self": selfRefExpr,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	checkCycleInChain := func(e error) bool {
+		for e != nil {
+			if strings.Contains(e.Error(), "cycle detected") {
+				return true
+			}
+			e = errors.Unwrap(e)
+		}
+		return false
+	}
+	assert.True(t, checkCycleInChain(err), "expected cycle detected in error chain; got: %v", err)
+}
+
+// TestCalcTerm_ChainingCycleMutual verifies that a mutual cycle (A → B → A)
+// is detected and returns a cycle error naming the first term.
+func TestCalcTerm_ChainingCycleMutual(t *testing.T) {
+	// A references B
+	exprA := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "+",
+			Left:  &vm.FieldRef{Path: "term_b"},
+			Right: &vm.Literal{Value: 1},
+		},
+	}
+	// B references A
+	exprB := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "*",
+			Left:  &vm.FieldRef{Path: "term_a"},
+			Right: &vm.Literal{Value: 2},
+		},
+	}
+
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "term_a", TermType: "calculated", SemanticTermID: "node-a"},
+					{ID: "f2", Name: "term_b", TermType: "calculated", SemanticTermID: "node-b"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-a": exprA,
+			"node-b": exprB,
+		},
+	}
+
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+	}
+
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	checkCycleInChain := func(e error) bool {
+		for e != nil {
+			if strings.Contains(e.Error(), "cycle detected") {
+				return true
+			}
+			e = errors.Unwrap(e)
+		}
+		return false
+	}
+	assert.True(t, checkCycleInChain(err), "expected cycle detected in error chain; got: %v", err)
+}
+
+// TestCalcTerm_MaskingBlocked verifies that a calc term referencing a physical
+// column with a PII sensitivity tag is rejected when the user lacks clearance.
+func TestCalcTerm_MaskingBlocked(t *testing.T) {
+	piiColExpr := &vm.Expression{
+		Root: &vm.BinaryExpr{
+			Op:    "+",
+			Left:  &vm.FieldRef{Path: "ssn_column"},
+			Right: &vm.Literal{Value: 0},
+		},
+	}
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "pii_sum", TermType: "calculated", SemanticTermID: "node-pii"},
+					{ID: "f2", Name: "ssn_column", PhysicalColumn: "orders.ssn", SensitivityTag: "pii"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-pii": piiColExpr,
+		},
+	}
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+		UserRole:        "analyst",
+		ClearanceLevel:  "",
+	}
+	_, _, err = gen.GenerateSQL(req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "references masked column")
+	assert.Contains(t, err.Error(), "REDACT_FULL")
+}
+
+// TestCalcTerm_AmbiguityFallback verifies that when two calc terms share the
+// same Name (but have different SemanticTermIDs), resolving by Name uses the
+// first match and its expression is used without error.
+func TestCalcTerm_AmbiguityFallback(t *testing.T) {
+	exprFirst := &vm.Expression{
+		Root: &vm.Literal{Value: 1},
+	}
+	exprSecond := &vm.Expression{
+		Root: &vm.Literal{Value: 2},
+	}
+	repo := &MockBORepository{
+		BODefinitions: map[string]*BODefinition{
+			"bo-1": {
+				ID:           "bo-1",
+				DrivingTable: "orders",
+				Fields: []BOField{
+					{ID: "f1", Name: "shared_name", TermType: "calculated", SemanticTermID: "node-first"},
+					{ID: "f2", Name: "shared_name", TermType: "calculated", SemanticTermID: "node-second"},
+				},
+			},
+		},
+		CalcTermExprs: map[string]*vm.Expression{
+			"node-first":  exprFirst,
+			"node-second": exprSecond,
+		},
+	}
+	gen, err := NewBOSQLGenerator(repo, "postgres")
+	assert.NoError(t, err)
+
+	req := SQLGenerationRequest{
+		BusinessObjectID: "bo-1",
+		SelectedFields:   []string{"f1"},
+		TenantID:         "t-1",
+	}
+	_, _, err = gen.GenerateSQL(req)
+	assert.NoError(t, err)
 }
 
