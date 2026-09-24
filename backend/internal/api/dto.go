@@ -74,6 +74,7 @@ type previewSemanticTermsResponse struct {
 type rejectRequest struct {
 	ColumnID       string `json:"column_id"`
 	RejectedName   string `json:"rejected_name"`
+	PreferredName  string `json:"preferred_name,omitempty"`
 }
 
 type unrejectRequest struct {

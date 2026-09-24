@@ -725,7 +725,7 @@ func resolveTokensWithAbbreviations(ctx context.Context, abbrevSvc *services.Abb
 func (s *GlossaryService) loadRejections(ctx context.Context, tenantID string) (rejectionSet, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT COALESCE(datasource_id, '00000000-0000-0000-0000-000000000000'::uuid)::text,
-		       qualified_path, rejected_name
+		       qualified_path, rejected_name, COALESCE(preferred_name, '')
 		FROM sml.semantic_term_rejections
 		WHERE tenant_id = $1
 	`, tenantID)
@@ -736,23 +736,24 @@ func (s *GlossaryService) loadRejections(ctx context.Context, tenantID string) (
 
 	set := make(rejectionSet)
 	for rows.Next() {
-		var dsID, qPath, name string
-		if err := rows.Scan(&dsID, &qPath, &name); err != nil {
+		var dsID, qPath, name, preferred string
+		if err := rows.Scan(&dsID, &qPath, &name, &preferred); err != nil {
 			return nil, fmt.Errorf("scanning rejection row: %w", err)
 		}
-		set[makeRejectionKey(dsID, qPath, name)] = struct{}{}
+		set[makeRejectionKey(dsID, qPath, name)] = preferred
 	}
 	return set, rows.Err()
 }
 
-// RecordRejection persists a rejection. It uses INSERT ... ON CONFLICT DO NOTHING
-// so it is idempotent under concurrent double-click or multi-tab submissions.
-func (s *GlossaryService) RecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName string) error {
+// RecordRejection persists a rejection with an optional preferred_name override.
+// Uses INSERT ... ON CONFLICT DO UPDATE so re-runs refresh the preferred_name.
+func (s *GlossaryService) RecordRejection(ctx context.Context, tenantID, datasourceID, qualifiedPath, rejectedName, preferredName string) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path, rejected_name)
-		VALUES ($1, $2, $3, $4)
-		ON CONFLICT (tenant_id, datasource_id, qualified_path, rejected_name) DO NOTHING
-	`, tenantID, datasourceID, qualifiedPath, rejectedName)
+		INSERT INTO sml.semantic_term_rejections (tenant_id, datasource_id, qualified_path, rejected_name, preferred_name)
+		VALUES ($1, $2, $3, $4, NULLIF($5, ''))
+		ON CONFLICT (tenant_id, datasource_id, qualified_path, rejected_name) DO UPDATE
+		   SET preferred_name = EXCLUDED.preferred_name
+	`, tenantID, datasourceID, qualifiedPath, rejectedName, preferredName)
 	return err
 }
 
@@ -808,5 +809,43 @@ func (s *GlossaryService) upsertSuggestion(ctx context.Context, tenantID, dataso
 	`, tenantID, datasourceID, qualifiedPath, columnName, derived.SemanticName, derived.BusinessName, derived.BaseGenericTerm, derived.source)
 	if err != nil {
 		log.Printf("[upsertSuggestion] cache write failed for %s: %v", qualifiedPath, err)
+	}
+}
+
+// cachedDefinition is a row from sml.glossary_term_definition_cache.
+type cachedDefinition struct {
+	Definition      string
+	DefinitionSource string
+}
+
+// loadDefinition reads a cached definition by cache key. Returns nil on miss.
+func (s *GlossaryService) loadDefinition(ctx context.Context, cacheKey string) *cachedDefinition {
+	var cd cachedDefinition
+	err := s.db.QueryRowContext(ctx, `
+		SELECT definition, definition_source
+		FROM sml.glossary_term_definition_cache
+		WHERE cache_key = $1
+	`, cacheKey).Scan(&cd.Definition, &cd.DefinitionSource)
+	if err != nil {
+		return nil
+	}
+	return &cd
+}
+
+// upsertDefinition persists a definition to the cache. Best-effort: failure is
+// log-warned but does not fail the generation. ON CONFLICT DO UPDATE refreshes
+// the definition if the cache key already exists.
+func (s *GlossaryService) upsertDefinition(ctx context.Context, cacheKey, semanticName, definition, source string) {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sml.glossary_term_definition_cache
+			(cache_key, semantic_name, definition, definition_source, created_at)
+		VALUES ($1, $2, $3, $4, now())
+		ON CONFLICT (cache_key) DO UPDATE
+		   SET definition = EXCLUDED.definition,
+		       definition_source = EXCLUDED.definition_source,
+		       created_at = now()
+	`, cacheKey, semanticName, definition, source)
+	if err != nil {
+		log.Printf("[upsertDefinition] cache write failed for %s: %v", semanticName, err)
 	}
 }
