@@ -508,3 +508,72 @@ func TestBuildMultiBOSQL_RejectsUnknownFilterOperator(t *testing.T) {
 		t.Fatal("expected an error for an unsupported filter operator, got nil")
 	}
 }
+
+// TestBuildMultiBOSQL_ColumnAggregationDerivedFromMeasureAgg pins that
+// QueryResultColumn.Aggregation is derived from each MeasureDef's own
+// Aggregation, not hand-set per column: every agg type is run through the
+// generator and must come back lowercased on exactly its own column, while
+// dimensions and agg-less/"NONE" measures stay empty (the unsafe sentinel).
+func TestBuildMultiBOSQL_ColumnAggregationDerivedFromMeasureAgg(t *testing.T) {
+	primary := &boresolver.BODefinition{
+		ID:           "bo-order",
+		DrivingTable: "orders",
+		Fields:       []boresolver.BOField{{ID: "f1", Name: "order_id", Type: "string", PhysicalColumn: "orders.id"}},
+	}
+	profile := &boresolver.BODefinition{
+		ID:           "bo-profile",
+		DrivingTable: "profiles",
+		Fields:       []boresolver.BOField{{ID: "f2", Name: "amount", Type: "number", PhysicalColumn: "profiles.amount"}},
+	}
+	path := &analytics.JoinPath{Steps: []analytics.JoinPathStep{
+		{LeftTable: "orders", LeftAlias: "t0", LeftColumn: "id", RightTable: "profiles", RightAlias: "t1", RightColumn: "order_id", JoinType: "LEFT", Cardinality: "1:1"},
+	}}
+
+	cases := []struct{ alias, agg, want string }{
+		{"AsSum", "SUM", "sum"},
+		{"AsAvg", "avg", "avg"},
+		{"AsCount", "COUNT", "count"},
+		{"AsMin", "MIN", "min"},
+		{"AsMax", "MAX", "max"},
+		{"AsDistinct", "COUNT_DISTINCT", "count_distinct"},
+		{"AsNone", "NONE", ""},
+		{"AsBare", "", ""},
+	}
+	var measures []boresolver.MeasureDef
+	for _, c := range cases {
+		measures = append(measures, boresolver.MeasureDef{TermNodeID: "amount", Alias: c.alias, BOID: "bo-profile", Aggregation: c.agg})
+	}
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{BOID: "bo-order", RelatedBOIDs: []string{"bo-profile"}},
+		Query: boresolver.QueryRequest{
+			Dimensions: []boresolver.DimensionDef{{TermNodeID: "order_id", Alias: "OrderID", BOID: "bo-order"}},
+			Measures:   measures,
+		},
+	}
+
+	gen, _ := boresolver.NewBOSQLGenerator(nil, "postgres")
+	_, _, columns, err := buildMultiBOSQL(gen, primary, []joinedBO{
+		{BOID: "bo-profile", BODef: profile, Path: path, Cardinality: path.TraversalCardinality()},
+	}, qd, "tenant-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, col := range columns {
+		got[col.Name] = col.Aggregation
+	}
+	if v, ok := got["OrderID"]; !ok || v != "" {
+		t.Errorf("dimension OrderID must have empty Aggregation, got %q (present=%v)", v, ok)
+	}
+	for _, c := range cases {
+		v, ok := got[c.alias]
+		if !ok {
+			t.Errorf("column %s missing from result", c.alias)
+			continue
+		}
+		if v != c.want {
+			t.Errorf("column %s (agg %q): Aggregation = %q, want %q", c.alias, c.agg, v, c.want)
+		}
+	}
+}
