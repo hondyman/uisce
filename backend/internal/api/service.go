@@ -335,6 +335,13 @@ func (s *GlossaryService) generateSingleTerm(ctx context.Context, tenantID, defa
 		}
 	}
 
+	// Cache the deterministic derivation output for this column. This is
+	// best-effort — failure is logged but does not fail the generation.
+	// The cache is read on wizard reopen and by preview-semantic-terms.
+	if item.Name == "" || strings.Contains(item.Name, "/") {
+		s.upsertSuggestion(ctx, tenantID, datasourceID, qualifiedPath, columnNodeName, names)
+	}
+
 	if semanticName == "" {
 		return nil, fmt.Errorf("could not derive a semantic term name")
 	}
@@ -760,4 +767,46 @@ func (s *GlossaryService) UnrecordRejection(ctx context.Context, tenantID, datas
 		  AND rejected_name = $4
 	`, tenantID, datasourceID, qualifiedPath, rejectedName)
 	return err
+}
+
+// cachedSuggestion is a row from sml.glossary_term_suggestions.
+type cachedSuggestion struct {
+	SemanticName    string
+	BusinessName    string
+	BaseGenericTerm string
+	DerivedVia      string
+}
+
+// loadSuggestion reads the cached suggestion for a column, if one exists.
+// Returns nil on cache miss (column not yet processed).
+func (s *GlossaryService) loadSuggestion(ctx context.Context, tenantID, qualifiedPath string) *cachedSuggestion {
+	var cs cachedSuggestion
+	err := s.db.QueryRowContext(ctx, `
+		SELECT semantic_name, business_name, COALESCE(base_generic_term, ''), derived_via
+		FROM sml.glossary_term_suggestions
+		WHERE tenant_id = $1 AND qualified_path = $2
+	`, tenantID, qualifiedPath).Scan(&cs.SemanticName, &cs.BusinessName, &cs.BaseGenericTerm, &cs.DerivedVia)
+	if err != nil {
+		return nil
+	}
+	return &cs
+}
+
+// upsertSuggestion persists the deterministic derivation output for a column.
+// Best-effort: failure is log-warned but does not fail the generation.
+func (s *GlossaryService) upsertSuggestion(ctx context.Context, tenantID, datasourceID, qualifiedPath, columnName string, derived derivedTermNames) {
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO sml.glossary_term_suggestions
+			(tenant_id, datasource_id, qualified_path, column_node_name, semantic_name, business_name, base_generic_term, derived_via, computed_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+		ON CONFLICT (tenant_id, qualified_path) DO UPDATE
+		   SET semantic_name = EXCLUDED.semantic_name,
+		       business_name = EXCLUDED.business_name,
+		       base_generic_term = EXCLUDED.base_generic_term,
+		       derived_via = EXCLUDED.derived_via,
+		       computed_at = now()
+	`, tenantID, datasourceID, qualifiedPath, columnName, derived.SemanticName, derived.BusinessName, derived.BaseGenericTerm, derived.source)
+	if err != nil {
+		log.Printf("[upsertSuggestion] cache write failed for %s: %v", qualifiedPath, err)
+	}
 }

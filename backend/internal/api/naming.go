@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -168,6 +170,41 @@ func (d derivedTermNames) GetSource() string {
 type CandidateTerm struct {
 	Name   string
 	Source string
+}
+
+// computeGroupKeyForItem returns the grouping key for pre-grouped dispatch.
+// The key is sha256(tenantID || semanticName || contextPart) where contextPart
+// is tableSchemaContext only when ContextSensitive=true. Items with the same
+// key share identical LLM inputs and can safely share one LLM call.
+//
+// Conservative default: when in doubt whether a rule consumed context,
+// ContextSensitive=true → contextPart included → separate groups. A smaller
+// dedup win is acceptable cost; a wrong shared suggestion is a bug.
+func computeGroupKeyForItem(tenantID, rawName, tableSchemaContext string, abbrMap map[string]string) string {
+	tokens := tokenizeColumnName(rawName)
+	if len(tokens) == 0 {
+		return ""
+	}
+
+	// Resolve abbreviations using the pre-loaded map (same logic as deriveTermNames)
+	resolved := make([]string, len(tokens))
+	for i, tok := range tokens {
+		if full, ok := abbrMap[strings.ToUpper(tok)]; ok {
+			resolved[i] = full
+		} else {
+			resolved[i] = tok
+		}
+	}
+
+	derived := deriveTermNamesDeterministic(resolved, rawName, tableSchemaContext)
+
+	contextPart := ""
+	if derived.ContextSensitive {
+		contextPart = tableSchemaContext
+	}
+
+	h := sha256.Sum256([]byte(tenantID + derived.SemanticName + contextPart))
+	return fmt.Sprintf("%x", h)
 }
 
 // deriveTermNamesCandidates returns a ranked list of candidate semantic term names,
