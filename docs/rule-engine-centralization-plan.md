@@ -241,15 +241,39 @@ figure changes.
 `pkg/governance` evaluates Rego policies for the glossary handler, pipelines
 handler and worker compliance activities: `trade_compliance.rego`,
 `pipeline_validation.rego`, `semantic_validation.rego`, `portal_authz.rego`.
-Allowlisted in the guard as "slice 7". **Owner decision needed (D5):** port the
-compliance/validation policies to E1 catalog rules; decide whether
-authorization (`portal_authz`) is in scope of "one engine".
+Allowlisted in the guard as "slice 7".
+
+**D5 — RESOLVED (owner, 2026-09-24): "all should use a single engine no
+exceptions."** Every Rego policy, including `portal_authz`, moves to E1, and
+RDL is not an exemption either — its CEL formulas port to E1 functions. The
+guard's allowlist must end empty.
+
+### Slice 1 — rulefabric deleted, PR #134 (stacked on #130, includes #74) (2026-09-24)
+
+- #74 brought up to date with `main` (155 commits, clean merge) and verified;
+  merge decision left to the owner per the CEL sign-off protocol.
+- `internal/rulefabric` deleted: read-only probe of every database on the host
+  — only `alpha` has its tables, all data tables at 0 rows.
+- Every frontend consumer was dead (BO Governance Studio incl. PolicyRuleBuilder
+  — unmounted, its APIs never existed; RuleFabricPage; rulefabric components)
+  or reduced (`ExpressionBuilder` lost its RuleFabric autosave). CEL completion
+  infra removed from the Monaco registry.
+- cel-go importers: `internal/rdl` only.
+
+### Slice 4b — legacy rule-authoring UIs retired, PR #135 (stacked on #134) (2026-09-24)
+
+One editor (`AdvancedRuleBuilderPage` / `/api/validation-rule-nodes`) for one
+engine. CUE/Starlark/legacy-corpus UIs deleted (all their backends retired or
+never mounted), entry points re-pointed, flow-builder Policy Check reads E1
+rules, BO AI synthesis suggests E1 expressions, dead backend `internal/builder`
+(CUE generator) deleted. TypeScript: zero new errors.
 
 ### Remaining
 
-Slice 1 (land #74, re-land rulefabric deletion), Slice 4b (frontend legacy rule
-UIs), Slice 7 / E15 (OPA), E14 (`boresolver` filter-group SQL compiler), RDL
-spin-out; after #127/#128 merge, delete their stale guard allowances.
+Slice 7 (E15: every OPA/Rego policy → E1, incl. `portal_authz`), Slice 8 (RDL
+CEL formulas → E1; removes cel-go), E14 (`boresolver` filter-group SQL compiler
+vs `vm.CompileToSQL`), `api.ABACEngine` (inventory under slice 7); after the
+stack merges, delete stale guard allowances until the allowlist is empty.
 
 ---
 
