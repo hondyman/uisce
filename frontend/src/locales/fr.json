@@ -346,5 +346,112 @@
   "search": { "placeholder": "Tapez pour rechercher...", "clear": "Effacer la recherche", "results_count": "{{count}} résultat", "results_count_plural": "{{count}} résultats", "keyboard_hint": "↑↓ pour naviguer • Entrée pour sélectionner • Échap pour fermer", "no_results": "Aucun résultat trouvé", "no_results_subtext": "Essayez d'ajuster vos termes de recherche" },
   "relationships_table": { "source": "Nœud source", "target": "Nœud cible", "relationship_type": "Type de relation", "edge_type_id": "ID du type d'arête", "created": "Créé", "none_found": "Aucune relation trouvée pour ce terme" },
   "filters": { "with_relationships": "Avec relations", "without_relationships": "Sans relations", "clear_filter": "Effacer le filtre" },
-  "back": { "to_overview": "Retour à la vue d'ensemble" }
+  "back": { "to_overview": "Retour à la vue d'ensemble" },
+  "messageCatalog": {
+    "title": "Catalogue de messages",
+    "subtitle": "Toutes les erreurs, alertes et messages que voient vos utilisateurs : un seul catalogue, dans toutes les langues, avec approbations.",
+    "newMessage": "Nouveau message",
+    "tabs": {
+      "messages": "Messages",
+      "approvals": "Approbations"
+    },
+    "allSets": "Tous les jeux de messages",
+    "messageCount_one": "{{count}} message",
+    "messageCount_many": "{{count}} messages",
+    "messageCount_other": "{{count}} messages",
+    "setSecondary_one": "{{type}} · {{count}} message",
+    "setSecondary_many": "{{type}} · {{count}} messages",
+    "setSecondary_other": "{{type}} · {{count}} messages",
+    "setTypes": {
+      "core": "Principal",
+      "custom": "Intégrateur",
+      "client": "Votre organisation"
+    },
+    "searchPlaceholder": "Rechercher par code ou texte",
+    "showIn": "Afficher le texte en",
+    "columns": {
+      "code": "Code",
+      "message": "Message",
+      "languages": "Langues"
+    },
+    "severity": "Gravité",
+    "severities": {
+      "Message": "Message",
+      "Warning": "Alerte",
+      "Error": "Erreur",
+      "Fatal": "Critique"
+    },
+    "untranslated": "Pas encore traduit en {{language}} ; les utilisateurs voient l'anglais.",
+    "overridden": "Modifié pour votre organisation",
+    "pendingCount_one": "{{count}} modification en attente d'approbation",
+    "pendingCount_many": "{{count}} modifications en attente d'approbation",
+    "pendingCount_other": "{{count}} modifications en attente d'approbation",
+    "scope": {
+      "tenant": "Votre organisation",
+      "core": "Catalogue principal"
+    },
+    "missing": "manquant",
+    "languagesCount": "{{count}}/{{total}} langues",
+    "noMatches": "Aucun message ne correspond.",
+    "close": "Fermer",
+    "errorRef": "Code {{code}} · référence {{ref}}",
+    "status": {
+      "pending": "En attente d'approbation",
+      "applied": "Appliqué",
+      "rejected": "Rejeté",
+      "withdrawn": "Retiré"
+    },
+    "editor": {
+      "newTitle": "Nouveau message",
+      "editTitle": "Modifier le message",
+      "scope": "Modifier pour",
+      "scopeTenantHelp": "Votre formulation remplace le texte principal pour votre organisation uniquement.",
+      "scopeCoreHelp": "Modifie le catalogue principal pour toutes les organisations. Un second administrateur de la plateforme doit approuver.",
+      "readOnly": "Vous pouvez consulter ce message, mais pas le modifier.",
+      "set": "Jeu de messages",
+      "number": "Numéro",
+      "englishReference": "Anglais (la langue de repli pour toutes les autres)",
+      "text": "Texte du message",
+      "paramMismatch": "Doit utiliser exactement les paramètres du texte anglais : {{params}}",
+      "textHelp": "Utilisez %1, %2 … là où le système insère des valeurs, comme un nom ou un identifiant.",
+      "userAction": "Ce que l'utilisateur peut faire",
+      "userActionHelp": "Facultatif. Affiché sous le message pour expliquer comment résoudre ou éviter le problème.",
+      "description": "Explication interne",
+      "descriptionHelp": "Réservé aux administrateurs et au support ; jamais affiché aux utilisateurs.",
+      "preview": "Aperçu",
+      "previewFooter": "Code {{code}}",
+      "reason": "Motif de la modification",
+      "reasonHelpApproval": "Aide l'approbateur. Enregistré dans l'historique des modifications.",
+      "submitted": "Soumis. La modification prendra effet quand un autre administrateur l'aura approuvée.",
+      "saved": "Enregistré. Les utilisateurs verront le nouveau texte d'ici une minute.",
+      "history": "Historique des modifications",
+      "removeOverride": "Rétablir le texte principal",
+      "removeTranslation": "Supprimer cette traduction",
+      "changedCount_one": "{{count}} langue modifiée",
+      "changedCount_many": "{{count}} langues modifiées",
+      "changedCount_other": "{{count}} langues modifiées",
+      "noChanges": "Aucune modification",
+      "approvalTooltip": "Un autre administrateur doit approuver avant que la modification prenne effet.",
+      "submitForApproval": "Soumettre pour approbation",
+      "save": "Enregistrer"
+    },
+    "approvals": {
+      "intro": "Les modifications attendent ici jusqu'à ce qu'une autre personne que leur auteur les approuve.",
+      "deleteAction": "Supprimer",
+      "newText": "Nouveau",
+      "reviewedBy": "Examiné par {{user}} · {{when}}",
+      "requestedBy": "{{user}} · {{when}}",
+      "reason": "Motif",
+      "yours": "Vous avez proposé cette modification. Un autre administrateur doit l'examiner.",
+      "withdraw": "Retirer",
+      "comment": "Commentaire (facultatif)",
+      "reject": "Rejeter",
+      "approve": "Approuver",
+      "historyTooltip": "Toutes les modifications proposées, avec qui les a approuvées",
+      "showPending": "Afficher les modifications en attente",
+      "showAll": "Afficher tout l'historique",
+      "none": "Rien n'est en attente d'approbation.",
+      "noneEver": "Aucune modification n'a encore été proposée."
+    }
+  }
 }
