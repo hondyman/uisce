@@ -3,7 +3,8 @@
 > **Status:** SIGNED 2026-09-25 via decision answers: D1 (a) rebuild the Scheduler
 > Intelligence console on the core; D2 apply additive migrations to `alpha`, engine on
 > the Docker host; D3 maker–checker per tenant, default on; D4 LLM per-tenant opt-in
-> with mandatory redaction. D5 revised below, pending confirmation.
+> with mandatory redaction; D5 gold-copy calendars inherited by tenants, tenant
+> additions layered on top (confirmed 2026-09-25).
 
 Goal (owner, 2026-09-25): one centralized, easy, visual scheduler used by reports,
 the query builder, data pipelines and workflows; one centralized error catalog and
@@ -154,15 +155,19 @@ Each slice ships with tests, a live check on the running backend, and a PR.
 * **D4 — Bot and LLM.** May redacted error context go to the configured LLM (Gemini
   today)? Per-tenant opt-in? *Recommended: per-tenant opt-in, redaction mandatory,
   bot works without the LLM (catalog explanation + rules).*
-* **D5 — Calendars (revised 2026-09-25, pending owner confirmation).** The scheduler
-  reads only **published** MDM golden calendars (`calendar_golden_record` current +
-  published, materialized `calendar_day`) through a read-only calendar service — never
-  MDM working tables. Standard market calendars are published once in the **gold-copy
-  tenant** and inherited read-only; tenants publish their own (e.g. fund dealing
-  calendars) in their tenant. Gold-copy calendars are loaded through the MDM calendar
-  pipeline fed by the data pipeline. A schedule warns when its calendar's published
-  horizon is too short. `tenant_exchange_calendars` retires. (MDM calendar tables are
-  empty today.)
+* **D5 — Calendars (confirmed 2026-09-25).** Core calendars are owned by the
+  **gold-copy tenant** and **inherited** by every tenant - never copied into tenants,
+  so a core correction (e.g. an emergency market closure) reaches everyone at once.
+  A tenant that needs more gets a child calendar linked through
+  `mdm.calendar_hierarchy`: `ADDITIVE` (add firm holidays, closures) by default;
+  `INHERIT_EXCEPT` / `OVERRIDE` (drop or change a core day) only through an approved
+  `mdm.calendar_change_request` (maker–checker). The scheduler resolves the effective
+  calendar at run time - core days, then the tenant's layer by precedence - through a
+  read-only calendar service over materialized `mdm.calendar_day`, and records the core
+  version and tenant layer each run used. A schedule warns when its calendar's horizon is
+  too short. Seeded 2026-09-25 in crims (PR #148): XNYS, XLON, TARGET2 for 2024–2030,
+  rule-derived (`is_official = false` until reconciled with the exchanges' published
+  calendars). `tenant_exchange_calendars` retires.
 
 ---
 
