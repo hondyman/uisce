@@ -100,6 +100,12 @@ CREATE TABLE IF NOT EXISTS public.message_catalog_changes (
     applied_at timestamptz
 );
 
+-- Who, readably (the token's email at the time); the *_by IDs stay the
+-- audit key.
+ALTER TABLE public.message_catalog_changes
+    ADD COLUMN IF NOT EXISTS requested_by_name text,
+    ADD COLUMN IF NOT EXISTS reviewed_by_name text;
+
 CREATE INDEX IF NOT EXISTS idx_message_catalog_changes_status
     ON public.message_catalog_changes (tenant_id, status, requested_at DESC);
 CREATE INDEX IF NOT EXISTS idx_message_catalog_changes_key

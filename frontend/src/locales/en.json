@@ -264,6 +264,7 @@
       "core": "Core catalog"
     },
     "missing": "missing",
+    "languagesCount": "{{count}}/{{total}} languages",
     "noMatches": "No messages match.",
     "close": "Close",
     "errorRef": "Code {{code}} · reference {{ref}}",
@@ -310,6 +311,7 @@
       "intro": "Changes wait here until someone other than their author approves them.",
       "deleteAction": "Delete",
       "newText": "New",
+      "reviewedBy": "Reviewed by {{user}} · {{when}}",
       "requestedBy": "{{user}} · {{when}}",
       "reason": "Reason",
       "yours": "You proposed this change. Another administrator must review it.",

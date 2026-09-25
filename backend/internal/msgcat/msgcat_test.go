@@ -87,3 +87,27 @@ func TestErrorCodeAndWrap(t *testing.T) {
 		}
 	}
 }
+
+func TestClaimString(t *testing.T) {
+	type claims struct {
+		Email string
+		Roles []string
+	}
+	var nilClaims *claims
+	cases := []struct {
+		in   any
+		want string
+	}{
+		{&claims{Email: "a@example.com"}, "a@example.com"},
+		{claims{Email: "b@example.com"}, "b@example.com"},
+		{nilClaims, ""},
+		{nil, ""},
+		{"not a struct", ""},
+		{&struct{ Roles []string }{}, ""},
+	}
+	for _, c := range cases {
+		if got := claimString(c.in, "Email"); got != c.want {
+			t.Errorf("claimString(%#v) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

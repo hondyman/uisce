@@ -56,6 +56,9 @@ export default function MessageCatalogPage() {
   const selectedSet = sets.data?.sets.find((s) => s.set_nbr === setNbr);
 
   return (
+    // The shell's canvas is dark whatever the MUI mode; paint the page's own
+    // themed surface so text contrast follows the theme.
+    <Box sx={{ bgcolor: 'background.default', color: 'text.primary', minHeight: '100%' }}>
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
       <Stack direction={{ xs: 'column', md: 'row' }} alignItems={{ md: 'center' }} spacing={2} sx={{ mb: 2 }}>
         <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1 }}>
@@ -131,7 +134,7 @@ export default function MessageCatalogPage() {
                     <TableCell sx={{ width: 110 }}>{t('messageCatalog.columns.code')}</TableCell>
                     <TableCell sx={{ width: 110 }}>{t('messageCatalog.severity')}</TableCell>
                     <TableCell>{t('messageCatalog.columns.message')}</TableCell>
-                    <TableCell sx={{ width: 220 }}>{t('messageCatalog.columns.languages')}</TableCell>
+                    <TableCell sx={{ width: 220, display: { xs: 'none', sm: 'table-cell' } }}>{t('messageCatalog.columns.languages')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -152,12 +155,14 @@ export default function MessageCatalogPage() {
                               {t('messageCatalog.untranslated', { language: langName(lang) })}
                             </Typography>
                           )}
-                          <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                          <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }} flexWrap="wrap" useFlexGap>
+                            <Chip size="small" variant="outlined" sx={{ display: { xs: 'inline-flex', sm: 'none' } }}
+                              label={t('messageCatalog.languagesCount', { count: langs.filter((l) => m.tenant[l.code] || m.core[l.code]).length, total: langs.length })} />
                             {override && <Chip size="small" color="secondary" variant="outlined" label={t('messageCatalog.overridden')} />}
                             {m.pending > 0 && <Chip size="small" color="warning" label={t('messageCatalog.pendingCount', { count: m.pending })} />}
                           </Stack>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                           <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
                             {langs.map((l) => {
                               const has = m.tenant[l.code] || m.core[l.code];
@@ -196,6 +201,7 @@ export default function MessageCatalogPage() {
           initialLanguage={editing === 'new' ? 'en' : lang}
         />
       )}
+    </Box>
     </Box>
   );
 }

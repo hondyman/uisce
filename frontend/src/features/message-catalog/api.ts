@@ -56,9 +56,11 @@ export interface Change {
   before?: { severity: Severity; text: string; description?: string; user_action?: string } | null;
   status: 'pending' | 'applied' | 'rejected' | 'withdrawn';
   requested_by: string;
+  requested_by_name?: string;
   requested_at: string;
   reason?: string;
   reviewed_by?: string;
+  reviewed_by_name?: string;
   reviewed_at?: string;
   review_comment?: string;
   applied_at?: string;
@@ -138,4 +140,13 @@ export function effective(
   if (m.core[lang]) return { entry: m.core[lang], source: 'core' };
   const en = m.tenant.en ?? m.core.en;
   return en ? { entry: en, source: 'fallback' } : { entry: undefined, source: 'none' };
+}
+
+/** A date-time in the UI language. */
+export function formatWhen(iso: string, lang: string): string {
+  try {
+    return new Intl.DateTimeFormat(lang, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+  } catch {
+    return iso;
+  }
 }

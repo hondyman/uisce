@@ -3,6 +3,7 @@ package msgcat
 import (
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,7 +50,7 @@ func actor(r *http.Request) (Actor, bool) {
 	if !ok || auth.UserID == "" {
 		return Actor{}, false
 	}
-	a := Actor{UserID: auth.UserID}
+	a := Actor{UserID: auth.UserID, Name: claimString(auth.RawClaims, "Email")}
 	if t, ok := security.ResolveTenantID(auth, strings.TrimSpace(r.Header.Get("X-Tenant-ID"))); ok {
 		a.TenantID = t
 	}
@@ -62,6 +63,25 @@ func actor(r *http.Request) (Actor, bool) {
 		}
 	}
 	return a, true
+}
+
+// claimString reads a string field from the validated token claims (their
+// concrete type lives in the services package).
+func claimString(claims any, field string) string {
+	v := reflect.ValueOf(claims)
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return ""
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return ""
+	}
+	if f := v.FieldByName(field); f.IsValid() && f.Kind() == reflect.String {
+		return f.String()
+	}
+	return ""
 }
 
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, a Actor, err error) {

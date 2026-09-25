@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Card, CardContent, Chip, LinearProgress, Stack, TextField, Tooltip, Typography,
 } from '@mui/material';
-import { Change, Me, msgcatApi } from './api';
+import { Change, formatWhen, Me, msgcatApi } from './api';
 import { CatalogErrorAlert, SeverityChip, StatusChip } from './parts';
 
 function Diff({ c }: { c: Change }) {
@@ -38,7 +38,7 @@ function Diff({ c }: { c: Change }) {
 }
 
 function ChangeCard({ c, me }: { c: Change; me: Me }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
   const mine = c.requested_by === me.user_id;
@@ -64,8 +64,16 @@ function ChangeCard({ c, me }: { c: Change; me: Me }) {
               <StatusChip status={c.status} />
             </Stack>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
-              {t('messageCatalog.approvals.requestedBy', { user: c.requested_by, when: new Date(c.requested_at).toLocaleString() })}
+              {t('messageCatalog.approvals.requestedBy', { user: c.requested_by_name || c.requested_by, when: formatWhen(c.requested_at, i18n.language) })}
             </Typography>
+            {c.status !== 'pending' && c.reviewed_at && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                {t('messageCatalog.approvals.reviewedBy', { user: c.reviewed_by_name || c.reviewed_by || '', when: formatWhen(c.reviewed_at, i18n.language) })}
+              </Typography>
+            )}
+            {c.review_comment && (
+              <Typography variant="caption" color="text.secondary" display="block">“{c.review_comment}”</Typography>
+            )}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Diff c={c} />

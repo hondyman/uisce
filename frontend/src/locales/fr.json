@@ -391,6 +391,7 @@
       "core": "Catalogue principal"
     },
     "missing": "manquant",
+    "languagesCount": "{{count}}/{{total}} langues",
     "noMatches": "Aucun message ne correspond.",
     "close": "Fermer",
     "errorRef": "Code {{code}} · référence {{ref}}",
@@ -438,6 +439,7 @@
       "intro": "Les modifications attendent ici jusqu'à ce qu'une autre personne que leur auteur les approuve.",
       "deleteAction": "Supprimer",
       "newText": "Nouveau",
+      "reviewedBy": "Examiné par {{user}} · {{when}}",
       "requestedBy": "{{user}} · {{when}}",
       "reason": "Motif",
       "yours": "Vous avez proposé cette modification. Un autre administrateur doit l'examiner.",

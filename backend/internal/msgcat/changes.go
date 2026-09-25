@@ -14,6 +14,7 @@ import (
 // working in ("" when none), and what they may administer.
 type Actor struct {
 	UserID        string
+	Name          string // readable identity (email) for the change log
 	TenantID      string
 	PlatformAdmin bool // may edit and approve the core catalog
 	TenantAdmin   bool // may edit and approve TenantID's messages
@@ -133,15 +134,15 @@ func (ed *Editor) Propose(ctx context.Context, a Actor, reqs []ChangeRequest) (*
 			}
 			var id string
 			err = tx.GetContext(ctx, &id, `INSERT INTO public.message_catalog_changes
-				(tenant_id, set_nbr, message_nbr, language_cd, action, severity, message_text, description, user_action, before, requested_by, reason)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id::text`,
+				(tenant_id, set_nbr, message_nbr, language_cd, action, severity, message_text, description, user_action, before, requested_by, reason, requested_by_name)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id::text`,
 				nullable(tenantID), r.SetNbr, r.MessageNbr, r.Language, r.Action, nullable(r.Severity), nullable(r.Text),
-				nullable(r.Description), nullable(r.UserAction), nullableJSON(imageOf(cur)), a.UserID, nullable(r.Reason))
+				nullable(r.Description), nullable(r.UserAction), nullableJSON(imageOf(cur)), a.UserID, nullable(r.Reason), nullable(a.Name))
 			if err != nil {
 				return err
 			}
 			if !required {
-				if err := ed.apply(ctx, tx, id, a.UserID, ""); err != nil {
+				if err := ed.apply(ctx, tx, id, "", "", ""); err != nil {
 					return err
 				}
 			}
@@ -316,7 +317,7 @@ func subsetPlaceholders(text, of string) bool {
 
 // apply writes a pending change to the catalog, in tx. The row must still
 // be what the proposer saw.
-func (ed *Editor) apply(ctx context.Context, tx *sqlx.Tx, id, reviewer, comment string) error {
+func (ed *Editor) apply(ctx context.Context, tx *sqlx.Tx, id, reviewer, reviewerName, comment string) error {
 	c, err := ed.store.change(ctx, tx, id)
 	if err != nil {
 		return err
@@ -399,8 +400,8 @@ func (ed *Editor) apply(ctx context.Context, tx *sqlx.Tx, id, reviewer, comment 
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE public.message_catalog_changes
 		SET status = 'applied', reviewed_by = $2, reviewed_at = CASE WHEN $2::text IS NULL THEN NULL ELSE now() END,
-			review_comment = $3, applied_at = now()
-		WHERE id::text = $1`, id, nullable(reviewer), nullable(comment))
+			review_comment = $3, reviewed_by_name = $4, applied_at = now()
+		WHERE id::text = $1`, id, nullable(reviewer), nullable(comment), nullable(reviewerName))
 	return err
 }
 
@@ -415,12 +416,12 @@ func (ed *Editor) Decide(ctx context.Context, a Actor, id string, approve bool, 
 			return msg(16).WithStatus(http.StatusForbidden)
 		}
 		if approve {
-			if err := ed.apply(ctx, tx, id, a.UserID, comment); err != nil {
+			if err := ed.apply(ctx, tx, id, a.UserID, a.Name, comment); err != nil {
 				return err
 			}
 		} else if _, err := tx.ExecContext(ctx, `UPDATE public.message_catalog_changes
-			SET status = 'rejected', reviewed_by = $2, reviewed_at = now(), review_comment = $3 WHERE id::text = $1`,
-			id, a.UserID, nullable(comment)); err != nil {
+			SET status = 'rejected', reviewed_by = $2, reviewed_at = now(), review_comment = $3, reviewed_by_name = $4 WHERE id::text = $1`,
+			id, a.UserID, nullable(comment), nullable(a.Name)); err != nil {
 			return err
 		}
 		var err error

@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import {
-  Change, ChangeRequest, Entry, formatMessage, Language, Me, MessageSet, MessageView, msgcatApi,
+  Change, ChangeRequest, Entry, formatMessage, formatWhen, Language, Me, MessageSet, MessageView, msgcatApi,
   placeholders, samePlaceholders, Scope, SEVERITIES, Severity,
 } from './api';
 import { alertSeverity, CatalogErrorAlert, SeverityChip, StatusChip } from './parts';
@@ -40,7 +40,7 @@ interface Props {
 }
 
 export default function MessageEditor({ open, onClose, message, sets, languages, me, initialSet, initialLanguage }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const isNew = !message;
   const [scope, setScope] = useState<Scope>(me.can_edit_tenant ? 'tenant' : 'core');
@@ -59,18 +59,27 @@ export default function MessageEditor({ open, onClose, message, sets, languages,
     [message, scope],
   );
 
+  // What the editor starts from, and what an edit is compared against: the
+  // scope's own row, or for a tenant without one, the core text it would
+  // replace. A language counts as changed only if it differs from this.
+  const startingRow = (code: string): Entry | undefined =>
+    scopeRows[code] ?? (scope === 'tenant' ? message?.core[code] : undefined);
+
   useEffect(() => {
     if (!open) return;
     // Start from the scope's own text; a new tenant override starts from
     // the core text it replaces.
     const d: Record<string, Draft> = {};
     for (const l of languages) {
-      d[l.code] = draftOf(scopeRows[l.code] ?? (scope === 'tenant' ? message?.core[l.code] : undefined));
+      d[l.code] = draftOf(startingRow(l.code));
     }
     setDrafts(d);
     setSeverity((scope === 'tenant' ? message?.tenant.en?.severity : undefined) ?? message?.severity ?? 'Error');
     setResult(null);
-  }, [open, scope, message, languages, scopeRows]);
+    // Reset only when a different message or scope is opened: a refetch after
+    // saving hands us a new message object and must not wipe the result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, scope, message?.code, languages.length]);
 
   useEffect(() => {
     if (open) setLang(initialLanguage);
@@ -84,11 +93,12 @@ export default function MessageEditor({ open, onClose, message, sets, languages,
 
   const english = drafts.en?.text ?? '';
   const current = drafts[lang] ?? EMPTY;
-  const baseline = (code: string) => draftOf(scopeRows[code]);
+  const baseline = (code: string) => draftOf(startingRow(code));
   const changed = languages
     .map((l) => l.code)
     .filter((code) => drafts[code] && !same(drafts[code], baseline(code)) && drafts[code].text.trim() !== '');
-  const severityChanged = !isNew && scopeRows.en && severity !== scopeRows.en.severity;
+  const startEN = startingRow('en');
+  const severityChanged = !isNew && !!startEN && severity !== startEN.severity;
   if (severityChanged && !changed.includes('en')) changed.unshift('en');
   changed.sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : 0));
 
@@ -99,6 +109,8 @@ export default function MessageEditor({ open, onClose, message, sets, languages,
   const editable = scope === 'core' ? me.can_edit_core : me.can_edit_tenant;
   const setChoices = sets.filter((s) => (scope === 'core' ? s.type !== 'client' || me.can_edit_core : s.type === 'client'));
   const params = placeholders(english);
+  // Unfilled parameters stay visible in the preview.
+  const previewParams = ['%1', '%2', '%3', '%4', '%5', '%6', '%7', '%8', '%9'].map((p, i) => sample[i] || p);
 
   const save = useMutation({
     mutationFn: (reqs: ChangeRequest[]) => msgcatApi.propose(reqs),
@@ -231,18 +243,21 @@ export default function MessageEditor({ open, onClose, message, sets, languages,
             <Typography variant="subtitle2" gutterBottom>{t('messageCatalog.editor.preview')}</Typography>
             {params.length > 0 && (
               <Stack direction="row" spacing={1} sx={{ mb: 1 }} flexWrap="wrap" useFlexGap>
-                {params.map((p, i) => (
-                  <TextField key={p} size="small" label={p} value={sample[i] ?? ''} sx={{ width: 140 }}
-                    onChange={(e) => setSample((s) => { const n = [...s]; n[i] = e.target.value; return n; })} />
-                ))}
+                {params.map((p) => {
+                  const i = Number(p[1]) - 1;
+                  return (
+                    <TextField key={p} size="small" label={p} value={sample[i] ?? ''} sx={{ width: 140 }}
+                      onChange={(e) => setSample((s) => { const n = [...s]; n[i] = e.target.value; return n; })} />
+                  );
+                })}
               </Stack>
             )}
             <Alert severity={alertSeverity(severity)}
               sx={{ '& .MuiAlert-message': { width: '100%' } }} dir={langMeta?.rtl ? 'rtl' : 'ltr'}>
-              <Typography variant="body2">{formatMessage(current.text || english, sample) || '—'}</Typography>
+              <Typography variant="body2">{formatMessage(current.text || english, previewParams) || '—'}</Typography>
               {(current.user_action || drafts.en?.user_action) && (
                 <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.85 }}>
-                  {formatMessage(current.user_action || drafts.en?.user_action || '', sample)}
+                  {formatMessage(current.user_action || drafts.en?.user_action || '', previewParams)}
                 </Typography>
               )}
               <Typography variant="caption" sx={{ mt: 0.5, display: 'block', opacity: 0.7 }}>
@@ -272,7 +287,7 @@ export default function MessageEditor({ open, onClose, message, sets, languages,
                       {c.action === 'delete' ? t('messageCatalog.approvals.deleteAction') : c.text}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap>
-                      {c.requested_by} · {new Date(c.requested_at).toLocaleString()}
+                      {c.requested_by_name || c.requested_by} · {formatWhen(c.requested_at, i18n.language)}
                     </Typography>
                   </Stack>
                 ))}

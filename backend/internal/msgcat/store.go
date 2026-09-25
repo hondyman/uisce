@@ -52,9 +52,11 @@ type Change struct {
 	Before        RawJSON        `db:"before" json:"before,omitempty"`
 	Status        string         `db:"status" json:"status"`
 	RequestedBy   string         `db:"requested_by" json:"requested_by"`
+	RequestedName sql.NullString `db:"requested_by_name" json:"-"`
 	RequestedAt   time.Time      `db:"requested_at" json:"requested_at"`
 	Reason        sql.NullString `db:"reason" json:"-"`
 	ReviewedBy    sql.NullString `db:"reviewed_by" json:"-"`
+	ReviewedName  sql.NullString `db:"reviewed_by_name" json:"-"`
 	ReviewedAt    sql.NullTime   `db:"reviewed_at" json:"-"`
 	ReviewComment sql.NullString `db:"review_comment" json:"-"`
 	AppliedAt     sql.NullTime   `db:"applied_at" json:"-"`
@@ -83,12 +85,14 @@ func (c Change) MarshalJSON() ([]byte, error) {
 		Description   string     `json:"description,omitempty"`
 		UserAction    string     `json:"user_action,omitempty"`
 		Reason        string     `json:"reason,omitempty"`
+		RequestedName string     `json:"requested_by_name,omitempty"`
 		ReviewedBy    string     `json:"reviewed_by,omitempty"`
+		ReviewedName  string     `json:"reviewed_by_name,omitempty"`
 		ReviewedAt    *time.Time `json:"reviewed_at,omitempty"`
 		ReviewComment string     `json:"review_comment,omitempty"`
 		AppliedAt     *time.Time `json:"applied_at,omitempty"`
 	}{a, c.Severity.String, c.Text.String, c.Description.String, c.UserAction.String,
-		c.Reason.String, c.ReviewedBy.String, reviewedAt, c.ReviewComment.String, appliedAt})
+		c.Reason.String, c.RequestedName.String, c.ReviewedBy.String, c.ReviewedName.String, reviewedAt, c.ReviewComment.String, appliedAt})
 }
 
 // Store is the catalog's database access. Tenant rows are read and written
@@ -167,7 +171,7 @@ func (s *Store) MakerCheckerRequired(ctx context.Context, tenantID string) (bool
 }
 
 const changeCols = `id, tenant_id, set_nbr, message_nbr, language_cd, action, severity, message_text,
-	description, user_action, before, status, requested_by, requested_at, reason, reviewed_by,
+	description, user_action, before, status, requested_by, requested_by_name, requested_at, reason, reviewed_by, reviewed_by_name,
 	reviewed_at, review_comment, applied_at`
 
 // ChangeFilter selects changes visible to a caller.

@@ -65,8 +65,8 @@ func setup(t *testing.T) (*Editor, *Catalog, *Store) {
 }
 
 var (
-	coreAdmin1 = Actor{UserID: "admin-1", PlatformAdmin: true}
-	coreAdmin2 = Actor{UserID: "admin-2", PlatformAdmin: true}
+	coreAdmin1 = Actor{UserID: "admin-1", Name: "admin1@example.com", PlatformAdmin: true}
+	coreAdmin2 = Actor{UserID: "admin-2", Name: "admin2@example.com", PlatformAdmin: true}
 	aAdmin     = Actor{UserID: "a-admin", TenantID: tenantA, TenantAdmin: true}
 	bAdmin1    = Actor{UserID: "b-admin-1", TenantID: tenantB, TenantAdmin: true}
 	bAdmin2    = Actor{UserID: "b-admin-2", TenantID: tenantB, TenantAdmin: true}
@@ -122,7 +122,8 @@ func TestCore_MakerChecker(t *testing.T) {
 	_, err = ed.Decide(ctx, aAdmin, id, true, "")
 	wantCode(t, err, "9100-14") // not the tenant admin's to see
 	c, err := ed.Decide(ctx, coreAdmin2, id, true, "ok")
-	if err != nil || c.Status != "applied" || c.ReviewedBy.String != "admin-2" {
+	if err != nil || c.Status != "applied" || c.ReviewedBy.String != "admin-2" ||
+		c.RequestedName.String != "admin1@example.com" || c.ReviewedName.String != "admin2@example.com" {
 		t.Fatalf("c=%+v err=%v", c, err)
 	}
 	if got := text(t, cat, "", "en", 1, 6); got != "We couldn't find %1." {
