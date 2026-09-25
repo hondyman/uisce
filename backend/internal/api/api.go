@@ -204,7 +204,6 @@ type Server struct {
 	WriteHandler      *handlers.WriteHandler
 	IgniteClient      *infrastructure.IgniteClient
 	LineageSvc        *services.LineageService
-	CueEngine         *services.CueEngine
 
 	PageLayoutHandler       *handlers.PageLayoutHandler
 	PipelineHandler         *handlers.PipelineHandler
@@ -1001,7 +1000,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		CalculationHandler:     nil, // Will be set after initialization
 		LineageSvc:             nil, // Will be set after initialization
 
-		CueEngine: services.NewCueEngine(),
 
 		CalcHandler: nil, // Will be set after initialization
 
@@ -1874,7 +1872,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		auditCtx, auditCancel := context.WithCancel(context.Background())
 		_ = auditCancel
 		apiDispatcherHandler.StartAuditWorker(auditCtx)
-		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
+		RegisterValidationRulesRoutes(r, db, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		// Initialize Security Profile Service and Handler
 		secProfileSvc := security.NewProfileService(db)
