@@ -22,10 +22,11 @@ import {
   platformApi,
 } from './api';
 import { downstreamSink, fieldsIn, newNodeId, SourceFieldLookup } from './fields';
-import { NODE_META, PipelineNode, PipelineNodeData } from './PipelineNode';
+import { categoryColor, NODE_META, PipelineNode, PipelineNodeData } from './PipelineNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { AssistantPanel } from './AssistantPanel';
 import { ScheduleDialog } from './ScheduleDialog';
+import { useFillHeight } from './useFillHeight';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 
 const nodeTypes = { pipeline: PipelineNode };
@@ -244,11 +245,15 @@ export default function PipelineEditorPage() {
   const selectedNode = spec.nodes.find(n => n.id === selected);
   const valid = issues.length === 0 && spec.nodes.length > 0;
 
+  const [rootRef, fillHeight] = useFillHeight();
+
   if (!isNew && def.isLoading) return <LinearProgress />;
   if (!isNew && def.isError) return <Alert severity="error" sx={{ m: 2 }}>Could not load this pipeline.</Alert>;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)' }}>
+    // Own themed surface (the shell's canvas is dark whatever the MUI mode),
+    // sized to the space below the app header.
+    <Box ref={rootRef} sx={{ display: 'flex', flexDirection: 'column', height: fillHeight ?? 'calc(100vh - 64px)', bgcolor: 'background.default', color: 'text.primary' }}>
       {/* Toolbar */}
       <Stack direction="row" alignItems="center" useFlexGap flexWrap="wrap" sx={{ gap: 1, px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
         <IconButton onClick={() => navigate('/data/pipelines')} aria-label="back"><ArrowBackIcon /></IconButton>
@@ -297,7 +302,7 @@ export default function PipelineEditorPage() {
                 <Tooltip key={p.type} placement="right" title={`${compact ? `${p.label}: ` : ''}${p.available ? p.description : `${p.description} - unavailable: ${p.unavailable_reason}`}`}>
                   <span>
                     <ListItemButton disabled={!p.available} onClick={() => addNode(p)}>
-                      <ListItemIcon sx={{ minWidth: 32 }}>{NODE_META[p.type].icon}</ListItemIcon>
+                      <ListItemIcon sx={{ minWidth: 32, color: categoryColor(theme, p.category) }}>{NODE_META[p.type].icon}</ListItemIcon>
                       {!compact && <ListItemText primary={p.label} />}
                     </ListItemButton>
                   </span>
@@ -323,7 +328,7 @@ export default function PipelineEditorPage() {
               onNodeClick={(_, n) => setSelected(n.id)} onPaneClick={() => setSelected(null)}
               fitView deleteKeyCode={['Backspace', 'Delete']}
             >
-              <Background /><Controls /><MiniMap pannable zoomable />
+              <Background /><Controls />{!compact && <MiniMap pannable zoomable />}
             </ReactFlow>
           </Box>
           <BottomPanel

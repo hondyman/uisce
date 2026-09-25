@@ -206,7 +206,7 @@ pub struct ProfileResp {
 pub async fn profile(Json(req): Json<ProfileReq>) -> Result<Json<ProfileResp>, ApiErr> {
     // Typed open: the analyst sees inferred types (int/date/...) in the preview.
     let df = open(&req.file, true).await?;
-    let columns = df
+    let mut columns: Vec<ColumnInfo> = df
         .schema()
         .fields()
         .iter()
@@ -218,10 +218,28 @@ pub async fn profile(Json(req): Json<ProfileReq>) -> Result<Json<ProfileResp>, A
         .collect();
 
     let n = req.sample_rows.min(200);
-    let batches = df.clone().limit(0, Some(n)).map_err(internal)?.collect().await.map_err(internal)?;
+    // CSV text is the truth: sample it untyped, so values show exactly as in
+    // the file (a typed read turns CUSIP 037833100 into 37833100), and scan
+    // as many rows as inference did for identifier-looking values.
+    let csv = req.file.format == "csv";
+    let sample_df = if csv { open(&req.file, false).await? } else { df.clone() };
+    let scan = if csv { n.max(1000) } else { n };
+    let batches = sample_df.limit(0, Some(scan)).map_err(internal)?.collect().await.map_err(internal)?;
     let refs: Vec<&RecordBatch> = batches.iter().collect();
     #[allow(deprecated)]
-    let sample = datafusion::arrow::json::writer::record_batches_to_json_rows(&refs).map_err(internal)?;
+    let rows = datafusion::arrow::json::writer::record_batches_to_json_rows(&refs).map_err(internal)?;
+    if csv {
+        for c in columns.iter_mut() {
+            let numeric = matches!(c.ty, "int" | "float" | "decimal");
+            if numeric
+                && (identifier_name(&c.name)
+                    || rows.iter().any(|r| r.get(&c.name).and_then(|v| v.as_str()).is_some_and(leading_zero)))
+            {
+                c.ty = "string";
+            }
+        }
+    }
+    let sample = rows.into_iter().take(n).collect();
 
     let row_count = if req.count_rows {
         Some(df.count().await.map_err(internal)?)
@@ -229,6 +247,29 @@ pub async fn profile(Json(req): Json<ProfileReq>) -> Result<Json<ProfileResp>, A
         None
     };
     Ok(Json(ProfileResp { columns, sample, row_count }))
+}
+
+/// Identifiers are text even when every value is digits: a CUSIP, an
+/// account number or a postcode is never summed, and a numeric type would
+/// drop its leading zeros.
+fn identifier_name(name: &str) -> bool {
+    const WORDS: [&str; 20] = [
+        "id", "cusip", "isin", "sedol", "figi", "lei", "ticker", "fsym", "code", "zip", "postcode",
+        "postal", "phone", "account", "acct", "iban", "bic", "swift", "ssn", "tin",
+    ];
+    let lower = name.to_ascii_lowercase();
+    if lower.split(|c: char| !c.is_ascii_alphanumeric()).any(|w| WORDS.contains(&w)) {
+        return true;
+    }
+    // camelCase: accountId, securityID
+    let b = name.as_bytes();
+    name.len() > 2 && (name.ends_with("Id") || name.ends_with("ID")) && b[b.len() - 3].is_ascii_lowercase()
+}
+
+/// "007", "-0123": a number would lose the zero. "0", "0.5" are numbers.
+fn leading_zero(v: &str) -> bool {
+    let d = v.trim().trim_start_matches(['+', '-']);
+    d.len() > 1 && d.starts_with('0') && d.as_bytes()[1].is_ascii_digit()
 }
 
 /// Stream the file as NDJSON. CSV values are strings; json/parquet keep native types.
@@ -543,6 +584,23 @@ mod tests {
         assert_eq!(cols[2], ("AUM".into(), "float"));
         assert_eq!(p.row_count, Some(2));
 
+        // Identifiers stay text: by name (CUSIP, ACCOUNT_NO, accountId) or
+        // by a leading zero in the data (REF); QTY is still a number, and
+        // the sample shows values exactly as in the file.
+        std::fs::write(
+            dir.join("t1/ids.csv"),
+            "CUSIP,ACCOUNT_NO,accountId,REF,QTY\n037833100,12345,77,0042,10\n594918104,67890,78,1001,20\n",
+        )
+        .unwrap();
+        let ids = FileSpec { uri: "t1/ids.csv".into(), format: "csv".into(), delimiter: None, has_header: true, columns: vec![] };
+        let Json(pi) = profile(Json(ProfileReq { file: ids, sample_rows: 5, count_rows: false })).await.unwrap();
+        let types: Vec<&str> = pi.columns.iter().map(|c| c.ty).collect();
+        assert_eq!(types, vec!["string", "string", "string", "string", "int"]);
+        assert_eq!(pi.sample[0]["CUSIP"], "037833100");
+        assert_eq!(pi.sample[0]["REF"], "0042");
+        assert!(!identifier_name("valid") && !identifier_name("paid_amount") && !identifier_name("AUM"));
+        assert!(leading_zero("-012") && !leading_zero("0") && !leading_zero("0.5") && !leading_zero("10"));
+
         // Read: NDJSON, all strings, file order.
         let resp = read(Json(spec("t1/fs.txt"))).await.unwrap();
         let body = String::from_utf8(to_bytes(resp.into_body(), usize::MAX).await.unwrap().to_vec()).unwrap();
@@ -568,7 +626,7 @@ mod tests {
         assert_eq!(u.bytes, 8);
         let Json(files) = list(Json(ListReq { prefix: "t1".into() })).await.unwrap();
         let names: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(names, vec!["t1/fs.txt", "t1/in/new.csv", "t1/out/fs.parquet"]);
+        assert_eq!(names, vec!["t1/fs.txt", "t1/ids.csv", "t1/in/new.csv", "t1/out/fs.parquet"]);
         assert!(upload(axum::extract::Query(UploadQuery { uri: "../x".into() }), Body::from("x")).await.is_err());
 
         // Through the router: the token is required.

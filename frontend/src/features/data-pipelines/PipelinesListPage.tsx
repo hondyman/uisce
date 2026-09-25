@@ -27,6 +27,7 @@ export default function PipelinesListPage() {
   });
 
   return (
+    <Box sx={{ bgcolor: 'background.default', color: 'text.primary', minHeight: '100%' }}>
     <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
         <AccountTreeIcon color="primary" fontSize="large" />
@@ -66,6 +67,7 @@ export default function PipelinesListPage() {
           </Card>
         ))}
       </Box>
+    </Box>
     </Box>
   );
 }

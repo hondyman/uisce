@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Handle, NodeProps, Position } from 'reactflow';
-import { Box, Chip, Stack, Tooltip, Typography, alpha, useTheme } from '@mui/material';
+import { Box, Chip, Stack, Theme, Tooltip, Typography, alpha, useTheme } from '@mui/material';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import BusinessIcon from '@mui/icons-material/Business';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
@@ -10,6 +10,12 @@ import TableChartIcon from '@mui/icons-material/TableChart';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import type { NodeKind, NodeStats } from './api';
+
+/** One colour per category, shared by the canvas nodes and the palette. */
+export function categoryColor(theme: Theme, category: 'source' | 'step' | 'destination'): string {
+  return category === 'source' ? theme.palette.info.main
+    : category === 'destination' ? theme.palette.success.main : theme.palette.secondary.main;
+}
 
 export const NODE_META: Record<NodeKind, { icon: React.ReactElement; category: 'source' | 'step' | 'destination' }> = {
   file_source: { icon: <InsertDriveFileIcon fontSize="small" />, category: 'source' },
@@ -33,8 +39,7 @@ export interface PipelineNodeData {
 function PipelineNodeImpl({ data, selected }: NodeProps<PipelineNodeData>) {
   const theme = useTheme();
   const meta = NODE_META[data.kind];
-  const color = meta.category === 'source' ? theme.palette.info.main
-    : meta.category === 'destination' ? theme.palette.success.main : theme.palette.secondary.main;
+  const color = categoryColor(theme, meta.category);
   const hasIssues = data.issues.length > 0;
   return (
     <Box
