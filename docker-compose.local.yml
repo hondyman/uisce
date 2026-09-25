@@ -223,19 +223,6 @@ services:
   # ==========================================
   # PARITY CHECKER (Go)
   # ==========================================
-  parity-checker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.parity
-    container_name: semlayer-parity-checker
-    networks:
-      - local-net
-    environment:
-      - DATABASE_URL=postgres://postgres:${POSTGRES_PASSWORD}@${REMOTE_HOST:-100.84.126.19}:5432/alpha?sslmode=disable
-      - TEMPORAL_HOSTPORT=${REMOTE_HOST:-100.84.126.19}:7233
-      - KAFKA_BROKERS=${REMOTE_HOST:-100.84.126.19}:19092
-    restart: unless-stopped
-
   # ==========================================
   # EVENT ROUTER (Go)
   # ==========================================

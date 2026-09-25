@@ -92,24 +92,6 @@ func TestDetectVectorizedArguments(t *testing.T) {
 func TestExecuteCalculationRouting(t *testing.T) {
 	service := &SemanticCalculationService{}
 
-	// Test Cube routing
-	cubeCalc := map[string]interface{}{
-		"type":   "financial",
-		"engine": "cube",
-	}
-	cubeAdapter := NewFinancialCalcAdapter(cubeCalc)
-	cubeResult, err := service.ExecuteCalculation(cubeAdapter)
-	if err != nil {
-		t.Fatalf("Expected no error for cube calc, got: %v", err)
-	}
-	cubeResultMap, ok := cubeResult.(map[string]interface{})
-	if !ok {
-		t.Fatalf("Expected cube result to be a map")
-	}
-	if cubeResultMap["engine"] != "cube" {
-		t.Errorf("Expected engine to be 'cube', got: %v", cubeResultMap["engine"])
-	}
-
 	// Test Spark routing
 	sparkCalc := map[string]interface{}{
 		"type":   "financial",

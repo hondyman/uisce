@@ -164,46 +164,6 @@ type AISemanticCubeWorkflowParams struct {
 	ModelType    string   `json:"model_type"` // "gemini", "gpt-4", etc.
 }
 
-// AISemanticCubeWorkflow generates semantic views using AI
-func AISemanticCubeWorkflow(ctx workflow.Context, params AISemanticCubeWorkflowParams) error {
-	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting AI semantic cube workflow", "tenant_id", params.TenantID)
-
-	// Activity options - 10 minute timeout for AI inference
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Minute,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second * 5,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    time.Minute * 2,
-			MaximumAttempts:    2, // AI is expensive, limit retries
-		},
-	}
-	ctx = workflow.WithActivityOptions(ctx, ao)
-
-	// Step 1: Fetch table schemas
-	var schemas interface{}
-	err := workflow.ExecuteActivity(ctx, "FetchTableSchemasActivity", params.DatasourceID, params.Tables).Get(ctx, &schemas)
-	if err != nil {
-		return fmt.Errorf("failed to fetch table schemas: %w", err)
-	}
-
-	// Step 2: Call AI to generate semantic mappings
-	var semanticMappings interface{}
-	err = workflow.ExecuteActivity(ctx, "AIGenerateSemanticMappingsActivity", schemas, params.ModelType).Get(ctx, &semanticMappings)
-	if err != nil {
-		return fmt.Errorf("failed to generate semantic mappings: %w", err)
-	}
-
-	// Step 3: Validate and store semantic views
-	err = workflow.ExecuteActivity(ctx, "StoreSemanticViewsActivity", params.TenantID, params.DatasourceID, semanticMappings).Get(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("failed to store semantic views: %w", err)
-	}
-
-	logger.Info("AI semantic cube workflow completed")
-	return nil
-}
 
 // BatchReconciliationWorkflowParams contains parameters for batch reconciliation
 type BatchReconciliationWorkflowParams struct {

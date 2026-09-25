@@ -279,7 +279,6 @@ jobs:
         - api-gateway
         - semantic-engine
         - governance-engine
-        - cube-api
         - ai-builder
         - compliance-engine
 

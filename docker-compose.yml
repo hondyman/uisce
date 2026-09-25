@@ -380,23 +380,6 @@ services:
     # depends_on:
     #   - postgres
 
-  parity-checker:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile.parity
-    networks:
-      - semlayer-net
-    environment:
-      - DATABASE_URL=postgres://postgres:postgres@${DB_HOST:-100.84.50.65}:5432/alpha?sslmode=disable
-      - REDIS_ADDR=redis:6379
-      - TEMPORAL_HOSTPORT=temporal:7233
-      - KAFKA_BROKERS=redpanda:9092
-      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret-key-change-in-production}
-      - ENABLE_SECURITY=true
-    restart: unless-stopped
-    # depends_on:
-    #   - postgres
-
   event-router:
     build:
       context: .

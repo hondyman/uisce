@@ -187,7 +187,6 @@ type Server struct {
 	NLQService              *services.NLQService
 	FeedbackService         *services.FeedbackService
 	EvalService             *services.EvalService
-	CubeSyncService         *analytics.CubeSyncService
 	LLMConfigSvc            *llm.LLMConfigService
 	TemporalClient          temporalclient.Client
 	EvidenceBundleService   *services.EvidenceBundleService
@@ -1206,11 +1205,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	// Initialize Quality Services
 	srv.FeedbackService = services.NewFeedbackService(sqlxDB)
 	srv.EvalService = services.NewEvalService(sqlxDB, nlqService)
-
-	// Initialize Cube Sync Service
-	// Defaulting to a local 'cube_schema' directory for now
-	_ = filepath.Join(runtimeBase, "cube_schema")
-	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
 
 	// --- Audit & History Wiring ---
 	// Legacy audit chain decommissioned - auditHistoryHandler remains nil
@@ -3490,11 +3484,6 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 	// Admin Eval
 	r.Route("/admin/eval", func(r chi.Router) {
 		r.Post("/run", s.handleRunEval)
-	})
-
-	// Admin Cube Sync
-	r.Route("/admin/cube", func(r chi.Router) {
-		r.Post("/sync", s.handleCubeSync)
 	})
 
 	// Role Management
