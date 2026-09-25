@@ -3,7 +3,9 @@ package datapipeline
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +30,7 @@ CREATE TABLE staging._load_run (
 CREATE TABLE staging.ff_fund (
     _load_run_id uuid NOT NULL REFERENCES staging._load_run(id) ON DELETE CASCADE,
     _source_row_num int NOT NULL, tenant_id uuid NOT NULL,
-    fsym_id text, fund_name text, aum numeric,
+    fsym_id text, fund_name text, aum numeric, isin varchar(12),
     PRIMARY KEY (_load_run_id, _source_row_num));
 ALTER TABLE staging._load_run ENABLE ROW LEVEL SECURITY; ALTER TABLE staging._load_run FORCE ROW LEVEL SECURITY;
 ALTER TABLE staging.ff_fund ENABLE ROW LEVEL SECURITY; ALTER TABLE staging.ff_fund FORCE ROW LEVEL SECURITY;
@@ -185,8 +187,64 @@ func TestStagingSinkIntegration(t *testing.T) {
 	for _, c := range tables[0].Columns {
 		names = append(names, c.Name+":"+c.Type)
 	}
-	if strings.Join(names, ",") != "fsym_id:string,fund_name:string,aum:decimal" {
+	if strings.Join(names, ",") != "fsym_id:string,fund_name:string,aum:decimal,isin:string" {
 		t.Errorf("columns: %v", names)
+	}
+
+	// An empty mapping means same-name columns - never an empty load.
+	// The editor sends an explicit empty object, exactly as here.
+	same := Node{ID: "s", Type: NodeStagingSink, Config: json.RawMessage(`{"table":"staging.ff_fund","source_cd":"FACTSET","domain":"FUND","run_ref":"same-1","columns":{}}`)}
+	sp, _ := newStagingSink(same, db)
+	if err := sp.Open(context.Background(), &RunContext{TenantID: tenantA, RunID: "r"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sp.Process(context.Background(), []Row{{Num: 1, Data: map[string]any{"fsym_id": "S1", "fund_name": "Same", "aum": "5"}}}); err != nil {
+		t.Fatal(err)
+	}
+	_ = sp.Close(context.Background(), nil)
+	if n := count(t, db, tenantA, `SELECT count(*) FROM staging.ff_fund WHERE fsym_id = 'S1' AND fund_name = 'Same' AND aum = 5`); n != 1 {
+		t.Error("an empty mapping must load same-name columns with their values")
+	}
+	// Values the table cannot hold reject that row, with a reason; the rest load.
+	for _, dry := range []bool{true, false} {
+		fp, _ := newStagingSink(Node{ID: "s", Type: NodeStagingSink, Config: json.RawMessage(fmt.Sprintf(
+			`{"table":"staging.ff_fund","source_cd":"FACTSET","domain":"FUND","run_ref":"fit-%v","columns":{}}`, dry))}, db)
+		if err := fp.Open(context.Background(), &RunContext{TenantID: tenantA, RunID: "r", DryRun: dry}); err != nil {
+			t.Fatal(err)
+		}
+		res, err := fp.Process(context.Background(), []Row{
+			{Num: 1, Data: map[string]any{"fsym_id": "OK1", "isin": "IE0012345678", "aum": "10"}},
+			{Num: 2, Data: map[string]any{"fsym_id": "LONG", "isin": "IE00123456789", "aum": "10"}},
+			{Num: 3, Data: map[string]any{"fsym_id": "NAN", "isin": "IE0012345678", "aum": "lots"}},
+		})
+		if err != nil {
+			t.Fatalf("dry=%v: %v", dry, err)
+		}
+		_ = fp.Close(context.Background(), nil)
+		if len(res.Out) != 1 || len(res.Rejected) != 2 ||
+			res.Rejected[0].Reason != `isin: "IE00123456789" is longer than the 12 characters isin allows` ||
+			res.Rejected[1].Reason != `aum: "lots" is not a number` {
+			t.Fatalf("dry=%v: out=%d rejected=%+v", dry, len(res.Out), res.Rejected)
+		}
+	}
+	if n := count(t, db, tenantA, `SELECT count(*) FROM staging.ff_fund f JOIN staging._load_run r ON r.id = f._load_run_id WHERE r.run_ref = 'fit-false'`); n != 1 {
+		t.Errorf("only the row that fits must load, got %d", n)
+	}
+	if n := count(t, db, tenantA, `SELECT count(*) FROM staging._load_run WHERE run_ref = 'fit-true'`); n != 0 {
+		t.Error("the preview must write nothing")
+	}
+
+	// Rows with no mappable field are refused, in a run and in a preview.
+	for _, dry := range []bool{false, true} {
+		np, _ := newStagingSink(Node{ID: "s", Type: NodeStagingSink, Config: json.RawMessage(fmt.Sprintf(
+			`{"table":"staging.ff_fund","source_cd":"X","domain":"Y","run_ref":"none-%v","columns":{}}`, dry))}, db)
+		if err := np.Open(context.Background(), &RunContext{TenantID: tenantA, RunID: "r", DryRun: dry}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := np.Process(context.Background(), []Row{{Num: 1, Data: map[string]any{}}}); err == nil {
+			t.Errorf("dry=%v: rows with no mapped column must be refused", dry)
+		}
+		_ = np.Close(context.Background(), errors.New("refused"))
 	}
 
 	// Mapping to a load-tracking or unknown column is refused.

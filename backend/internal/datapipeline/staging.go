@@ -5,8 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
+	"unicode/utf8"
 
 	"github.com/lib/pq"
 )
@@ -21,9 +25,11 @@ type stagingSink struct {
 	db     *sql.DB
 	tenant string
 	runID  string
-	skip   bool              // run_ref already COMPLETED, or a dry run
+	skip   bool // run_ref already COMPLETED, or a dry run
+	dryRun bool
 	cols   map[string]string // row field -> staging column
 	valid  map[string]bool   // real columns of the table
+	shape  map[string]colShape
 	loaded int
 }
 
@@ -68,18 +74,21 @@ func (s *stagingSink) Open(ctx context.Context, rc *RunContext) error {
 	}
 	schema, table := splitTable(s.cfg.Table)
 	return s.inTenantTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`, schema, table)
+		rows, err := tx.QueryContext(ctx, `SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale
+			FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`, schema, table)
 		if err != nil {
 			return err
 		}
-		s.valid = map[string]bool{}
+		s.valid, s.shape = map[string]bool{}, map[string]colShape{}
 		for rows.Next() {
-			var c string
-			if err := rows.Scan(&c); err != nil {
+			var c, typ string
+			var maxLen, prec, scale sql.NullInt64
+			if err := rows.Scan(&c, &typ, &maxLen, &prec, &scale); err != nil {
 				rows.Close()
 				return err
 			}
 			s.valid[c] = true
+			s.shape[c] = colShape{typ: typ, maxLen: int(maxLen.Int64), precision: int(prec.Int64), scale: int(scale.Int64)}
 		}
 		rows.Close()
 		if len(s.valid) == 0 {
@@ -95,8 +104,11 @@ func (s *stagingSink) Open(ctx context.Context, rc *RunContext) error {
 				return fmt.Errorf("%s: %q is not a loadable column of %s", field, col, s.cfg.Table)
 			}
 		}
-		s.cols = s.cfg.Columns
+		if len(s.cfg.Columns) > 0 { // empty mapping = same-name columns
+			s.cols = s.cfg.Columns
+		}
 		if rc.DryRun {
+			s.dryRun = true
 			// Preview: table and mapping are checked; nothing is claimed or written.
 			s.skip = true
 			return nil
@@ -156,6 +168,10 @@ func (s *stagingSink) columnsFor(rows []Row) ([]string, []string, error) {
 	for f := range s.cols {
 		fields = append(fields, f)
 	}
+	if len(fields) == 0 {
+		// Never write rows that carry only load-tracking columns.
+		return nil, nil, fmt.Errorf("no field of the incoming rows is mapped to a column of %s", s.cfg.Table)
+	}
 	sort.Strings(fields)
 	cols := make([]string, len(fields))
 	for i, f := range fields {
@@ -165,13 +181,32 @@ func (s *stagingSink) columnsFor(rows []Row) ([]string, []string, error) {
 }
 
 func (s *stagingSink) Process(ctx context.Context, rows []Row) (Result, error) {
-	if s.skip || len(rows) == 0 {
+	if len(rows) == 0 {
+		return Result{Out: rows}, nil
+	}
+	if s.skip && !s.dryRun {
 		return Result{Out: rows}, nil
 	}
 	fields, cols, err := s.columnsFor(rows)
 	if err != nil {
 		return Result{}, err
 	}
+	// Reject, row by row, values the table cannot hold - one bad value must
+	// not fail the whole load with a database error.
+	var res Result
+	good := rows[:0:0]
+	for _, r := range rows {
+		if field, reason := s.fits(fields, r); reason != "" {
+			res.Rejected = append(res.Rejected, Reject{Row: r, Field: field, Reason: reason})
+			continue
+		}
+		good = append(good, r)
+	}
+	res.Out = good
+	if s.dryRun || len(good) == 0 {
+		return res, nil
+	}
+	rows = good
 	schema, table := splitTable(s.cfg.Table)
 	target := pq.QuoteIdentifier(schema) + "." + pq.QuoteIdentifier(table)
 	all := append([]string{"_load_run_id", "_source_row_num", "tenant_id"}, cols...)
@@ -215,7 +250,64 @@ func (s *stagingSink) Process(ctx context.Context, rows []Row) (Result, error) {
 		return Result{}, fmt.Errorf("loading %s: %w", s.cfg.Table, err)
 	}
 	s.loaded += len(rows)
-	return Result{Out: rows}, nil
+	return res, nil
+}
+
+// colShape is what a staging column can hold.
+type colShape struct {
+	typ              string
+	maxLen           int
+	precision, scale int
+}
+
+// fits checks a row's mapped values against the target columns and returns
+// the first field that does not fit, with a plain reason.
+func (s *stagingSink) fits(fields []string, r Row) (string, string) {
+	for _, f := range fields {
+		v := r.Data[f]
+		if v == nil {
+			continue
+		}
+		col := s.cols[f]
+		sh := s.shape[col]
+		str := fmt.Sprint(v)
+		switch {
+		case sh.maxLen > 0 && utf8.RuneCountInString(str) > sh.maxLen:
+			return f, fmt.Sprintf("%s: %q is longer than the %d characters %s allows", f, truncate(str, 40), sh.maxLen, col)
+		case sh.typ == "numeric" || sh.typ == "integer" || sh.typ == "bigint" || sh.typ == "smallint" || sh.typ == "double precision" || sh.typ == "real":
+			x, err := strconv.ParseFloat(strings.TrimSpace(str), 64)
+			if err != nil {
+				return f, fmt.Sprintf("%s: %q is not a number", f, truncate(str, 40))
+			}
+			if strings.Contains(sh.typ, "int") && x != math.Trunc(x) {
+				return f, fmt.Sprintf("%s: %q is not a whole number", f, truncate(str, 40))
+			}
+			if sh.typ == "numeric" && sh.precision > 0 {
+				intDigits := len(strings.TrimLeft(strings.Split(strings.TrimLeft(strings.TrimSpace(str), "+-"), ".")[0], "0"))
+				if intDigits > sh.precision-sh.scale {
+					return f, fmt.Sprintf("%s: %q is too large for %s", f, truncate(str, 40), col)
+				}
+			}
+		case sh.typ == "date":
+			if _, err := time.Parse("2006-01-02", strings.TrimSpace(str)); err != nil {
+				return f, fmt.Sprintf("%s: %q is not a date (YYYY-MM-DD)", f, truncate(str, 40))
+			}
+		case sh.typ == "boolean":
+			switch strings.ToLower(strings.TrimSpace(str)) {
+			case "true", "false", "t", "f", "1", "0", "yes", "no", "y", "n":
+			default:
+				return f, fmt.Sprintf("%s: %q is not true/false", f, truncate(str, 40))
+			}
+		}
+	}
+	return "", ""
+}
+
+func truncate(s string, n int) string {
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	return string([]rune(s)[:n]) + "…"
 }
 
 func (s *stagingSink) Close(ctx context.Context, runErr error) error {

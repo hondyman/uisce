@@ -94,7 +94,8 @@ function FileSourceForm({ cfg, set }: FormProps<'file_source'>) {
     try {
       const r = await pipelinesApi.upload(f);
       await files.refetch();
-      set({ uri: r.uri, format: guessFormat(r.uri), columns: [] });
+      // A new version of the same file keeps its column contract; a different file starts over.
+      set(r.uri === cfg.uri ? { uri: r.uri } : { uri: r.uri, format: guessFormat(r.uri), columns: [] });
     } catch (e) { setErr(String((e as Error).message)); } finally { setBusy(null); }
   };
 

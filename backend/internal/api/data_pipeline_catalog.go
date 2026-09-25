@@ -12,6 +12,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/handlers"
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
@@ -21,25 +22,41 @@ import (
 // through the same service or handler the rest of the platform uses, with the
 // caller's own tenant.
 type pipelineCatalog struct {
-	r      *http.Request // the caller's request: carries its authentication
-	tenant string
-	bos    *catalogmeta.BusinessObjectService
-	crud   *BOCRUDHandler
-	rules  *analytics.ValidationRuleService
-	deps   datapipeline.Deps
+	r        *http.Request // the caller's request: carries its authentication
+	tenant   string
+	bos      *catalogmeta.BusinessObjectService
+	resolver security.DatasourceResolver
+	crud     *BOCRUDHandler
+	rules    *analytics.ValidationRuleService
+	deps     datapipeline.Deps
 }
 
 func (c *pipelineCatalog) BusinessObjects(ctx context.Context) ([]datapipeline.BOInfo, error) {
 	if c.bos == nil {
 		return nil, fmt.Errorf("business objects are not available")
 	}
-	items, err := c.bos.ListBusinessObjectsLegacy(ctx, &security.Context{TenantID: c.tenant})
+	// Same listing as GET /business-objects (core + custom, the tenant's
+	// datasource), built from the caller's own request.
+	secCtx, sctx, err := handlers.SecurityContextFromRequest(c.r.WithContext(ctx), "", "", handlers.SecurityContextDeps{Resolver: c.resolver})
 	if err != nil {
 		return nil, err
 	}
+	items, err := c.bos.ListBusinessObjectsComposed(sctx, secCtx)
+	if err != nil {
+		if items, err = c.bos.ListBusinessObjects(sctx, secCtx); err != nil {
+			return nil, err
+		}
+	}
 	out := make([]datapipeline.BOInfo, 0, len(items))
 	for _, b := range items {
-		out = append(out, datapipeline.BOInfo{Key: b.Name, Label: b.DisplayName, Description: b.Description})
+		if b == nil || b.Key == "" {
+			continue
+		}
+		label := b.DisplayName
+		if label == "" {
+			label = b.Name
+		}
+		out = append(out, datapipeline.BOInfo{Key: b.Key, Label: label, Description: b.Description})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out, nil

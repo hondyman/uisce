@@ -108,9 +108,15 @@ export const pipelinesApi = {
 };
 
 export const platformApi = {
-  businessObjects: async () => {
+  // /business-objects returns {key, displayName, name, ...}; the pipeline
+  // addresses a BO by its key (the /bo/{boKey} routes).
+  businessObjects: async (): Promise<BOListItem[]> => {
     const data = await apiClient<unknown>('/api/business-objects');
-    return (Array.isArray(data) ? data : Object.values((data as object) ?? {})) as BOListItem[];
+    const list = (Array.isArray(data) ? data : Object.values((data as object) ?? {})) as
+      { id: string; key?: string; name?: string; displayName?: string; description?: string }[];
+    return list.filter(b => b.key).map(b => ({
+      id: b.id, name: b.key!, display_name: b.displayName || b.name || b.key!, description: b.description,
+    }));
   },
   boSchema: (boKey: string) =>
     apiClient<{ fields: BOSchemaField[] }>(`/api/bo/${encodeURIComponent(boKey)}/schema`),

@@ -59,7 +59,7 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	}
 	rules := analytics.NewValidationRuleService(sqlxDB)
 	catalog := func(req *http.Request, tenant string) datapipeline.PlatformCatalog {
-		return &pipelineCatalog{r: req, tenant: tenant, bos: s.BusinessObjectService, crud: bo, rules: rules, deps: deps}
+		return &pipelineCatalog{r: req, tenant: tenant, bos: s.BusinessObjectService, resolver: s.DatasourceResolver, crud: bo, rules: rules, deps: deps}
 	}
 	var assistant *datapipeline.Assistant
 	if s.LLMConfigSvc != nil {
