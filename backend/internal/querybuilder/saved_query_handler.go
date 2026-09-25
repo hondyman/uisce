@@ -502,21 +502,7 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		fmt.Sscanf(l, "%d", &limit)
 	}
 
-	qd := &boresolver.QueryDef{
-		Context: boresolver.QueryContext{BOID: sq.BOID, BindingID: sq.BindingID, TenantID: tenantID, RelatedBOIDs: sq.RelatedBOIDs},
-		Query: boresolver.QueryRequest{
-			Dimensions: make([]boresolver.DimensionDef, len(sq.State.Dimensions)),
-			Measures:   make([]boresolver.MeasureDef, len(sq.State.Measures)),
-			Filters:    filters,
-			Limit:      limit,
-		},
-	}
-	for i, d := range sq.State.Dimensions {
-		qd.Query.Dimensions[i] = boresolver.DimensionDef{TermNodeID: d.TermNodeID, Alias: d.Alias, BOID: d.BOID}
-	}
-	for i, m := range sq.State.Measures {
-		qd.Query.Measures[i] = boresolver.MeasureDef{TermNodeID: m.TermNodeID, Alias: m.Alias, Aggregation: m.Aggregation, BOID: m.BOID}
-	}
+	qd := savedQueryDef(sq, tenantID, filters, limit)
 
 	db := h.executor.QueryDB(secCtx.DatasourceID)
 	if db == nil {
@@ -597,4 +583,24 @@ func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Requ
 
 func (h *SavedQueryHandler) HandleGetDiff(w http.ResponseWriter, r *http.Request) {
 	h.writeError(w, errors.New("saved query version history is not implemented yet"), http.StatusNotImplemented)
+}
+
+// savedQueryDef is the query a saved query runs, with its parameters resolved.
+func savedQueryDef(sq SavedQuery, tenantID string, filters []boresolver.FilterDef, limit int) *boresolver.QueryDef {
+	qd := &boresolver.QueryDef{
+		Context: boresolver.QueryContext{BOID: sq.BOID, BindingID: sq.BindingID, TenantID: tenantID, RelatedBOIDs: sq.RelatedBOIDs},
+		Query: boresolver.QueryRequest{
+			Dimensions: make([]boresolver.DimensionDef, len(sq.State.Dimensions)),
+			Measures:   make([]boresolver.MeasureDef, len(sq.State.Measures)),
+			Filters:    filters,
+			Limit:      limit,
+		},
+	}
+	for i, d := range sq.State.Dimensions {
+		qd.Query.Dimensions[i] = boresolver.DimensionDef{TermNodeID: d.TermNodeID, Alias: d.Alias, BOID: d.BOID}
+	}
+	for i, m := range sq.State.Measures {
+		qd.Query.Measures[i] = boresolver.MeasureDef{TermNodeID: m.TermNodeID, Alias: m.Alias, Aggregation: m.Aggregation, BOID: m.BOID}
+	}
+	return qd
 }
