@@ -57,7 +57,6 @@ func TestExecutionEngine_RecursiveResolution(t *testing.T) {
 	graphService := analytics.NewSemanticGraphService(db)
 	engine, err := NewExecutionEngine(ctx, graphService, nil)
 	assert.NoError(t, err)
-	defer engine.Close(ctx)
 
 	// Seed node types
 	calcTypeID := uuid.New()

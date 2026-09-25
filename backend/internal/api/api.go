@@ -1293,11 +1293,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.ValuesHandler = valuesHandler
 	valuesHandler.RegisterRoutes(r)
 
-	// Initialize Compliance Service - MOVED to main.go for Epic 12
-	// complianceService := services.NewComplianceService(auditSvc)
-	// complianceHandler := handlers.NewComplianceHandler(complianceService)
-	// srv.ComplianceHandler = complianceHandler
-	// complianceHandler.RegisterRoutes(r)
 
 	// Initialize AI Service (Gemini Integration)
 	aiRuleRepo := rules.NewSQLRuleRepository(db)

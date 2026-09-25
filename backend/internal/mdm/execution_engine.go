@@ -4,13 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 // ExecutionTrace represents the trace of a calculation execution
@@ -26,28 +23,15 @@ type ExecutionTrace struct {
 // ExecutionEngine handles recursive semantic term resolution and execution
 type ExecutionEngine struct {
 	graphService *analytics.SemanticGraphService
-	wasmRuntime  wazero.Runtime
-	moduleCache  sync.Map // Map[string]wazero.CompiledModule
 	monitor      *analytics.ExecutionMonitorService
 }
 
 // NewExecutionEngine creates a new execution engine
 func NewExecutionEngine(ctx context.Context, graphService *analytics.SemanticGraphService, monitor *analytics.ExecutionMonitorService) (*ExecutionEngine, error) {
-	r := wazero.NewRuntime(ctx)
-
-	// Add WASI to the runtime
-	wasi_snapshot_preview1.MustInstantiate(ctx, r)
-
 	return &ExecutionEngine{
 		graphService: graphService,
-		wasmRuntime:  r,
 		monitor:      monitor,
 	}, nil
-}
-
-// Close closes the runtime
-func (e *ExecutionEngine) Close(ctx context.Context) error {
-	return e.wasmRuntime.Close(ctx)
 }
 
 // ExecuteCalculation resolves dependencies and executes a calculation term
