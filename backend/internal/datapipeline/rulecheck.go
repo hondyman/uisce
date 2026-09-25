@@ -34,7 +34,9 @@ type RuleSource interface {
 }
 
 // CatalogRuleChecker evaluates catalog validation rules on the rule engine
-// (internal/rules/vm). Rules are loaded and parsed once per tenant+rule set.
+// (internal/rules/vm). Rules are loaded and parsed once per tenant+rule set
+// for the life of the checker; each run gets its own (ForRun), so an edited
+// rule takes effect on the next run and the cache never outlives a run.
 type CatalogRuleChecker struct {
 	Rules RuleSource
 
@@ -46,6 +48,12 @@ type loadedRule struct {
 	id, name, severity string
 	node               vm.RuleNode
 }
+
+// ForRun returns a checker with an empty cache sharing the rule source.
+func (c *CatalogRuleChecker) ForRun() RuleChecker { return &CatalogRuleChecker{Rules: c.Rules} }
+
+// perRunChecker is implemented by checkers that hold per-run state.
+type perRunChecker interface{ ForRun() RuleChecker }
 
 func (c *CatalogRuleChecker) load(ctx context.Context, tenantID string, ids []string) ([]loadedRule, error) {
 	key := tenantID + "|" + strings.Join(ids, ",")
@@ -114,6 +122,9 @@ func newRuleCheckProc(n Node, ch RuleChecker) (Processor, error) {
 	}
 	if ch == nil {
 		return nil, fmt.Errorf("no rules engine is configured for this environment")
+	}
+	if pr, ok := ch.(perRunChecker); ok {
+		ch = pr.ForRun()
 	}
 	return &ruleCheckProc{cfg: c, checker: ch}, nil
 }

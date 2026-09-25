@@ -3821,6 +3821,7 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	}
 	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
 	boCRUDHandler.RegisterRoutes(r)
+	s.registerDataPipelineRoutes(r, sqlxDB, boCRUDHandler)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints

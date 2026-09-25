@@ -54,6 +54,18 @@ func TestCatalogRuleChecker(t *testing.T) {
 		t.Errorf("rules should load once per run, loaded %d times", src.calls)
 	}
 
+	// Each run starts with a fresh cache: an edited rule applies next run.
+	positive.RuleAST = json.RawMessage(`{"type":"condition","field":"aum","operator":">","value":100}`)
+	p, _ := newRuleCheckProc(Node{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{positive.ID.String()}})}, c)
+	_ = p.Open(ctx, &RunContext{TenantID: "t1"})
+	res, _ := p.Process(ctx, []Row{{Num: 1, Data: map[string]any{"aum": 50.0}}})
+	if len(res.Rejected) != 1 {
+		t.Error("a new run must see the edited rule")
+	}
+	if len(c.cache) != 1 {
+		t.Error("the shared checker's cache must not grow from runs")
+	}
+
 	// An unevaluable rule blocks, whatever its declared severity.
 	fails, _ = c.Check(ctx, "t1", []string{broken.ID.String()}, map[string]any{"name": "x"})
 	if len(fails) != 1 || fails[0].Severity != "BLOCK" || !strings.Contains(fails[0].Message, "could not be evaluated") {
