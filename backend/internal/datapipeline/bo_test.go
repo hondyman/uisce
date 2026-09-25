@@ -75,7 +75,7 @@ func TestBOSourcePagesToLimit(t *testing.T) {
 	}
 	src, _ := newBOSource(Node{ID: "b", Type: NodeBOSource, Config: cfg(BOSourceConfig{BOKey: "fund", Limit: 22})}, bo)
 	var got []Row
-	err := src.Stream(context.Background(), &RunContext{TenantID: "t"}, 10, func(rs []Row) error {
+	err := src.Stream(context.Background(), &RunContext{TenantID: "t"}, 10, func(rs []Row, _ []Reject) error {
 		got = append(got, rs...)
 		return nil
 	})

@@ -63,9 +63,9 @@ func TestSpecCycle(t *testing.T) {
 
 type fakeSource struct{ rows []Row }
 
-func (f fakeSource) Stream(_ context.Context, _ *RunContext, bs int, emit func([]Row) error) error {
+func (f fakeSource) Stream(_ context.Context, _ *RunContext, bs int, emit func([]Row, []Reject) error) error {
 	for i := 0; i < len(f.rows); i += bs {
-		if err := emit(f.rows[i:min(i+bs, len(f.rows))]); err != nil {
+		if err := emit(f.rows[i:min(i+bs, len(f.rows))], nil); err != nil {
 			return err
 		}
 	}

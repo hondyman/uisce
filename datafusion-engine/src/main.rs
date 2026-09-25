@@ -1,4 +1,5 @@
 mod debezium_consumer;
+mod files;
 mod olap_builder;
 
 use axum::{
@@ -78,6 +79,10 @@ async fn main() {
         .route("/compare", post(compare_snapshot))
         .route("/history/:entity_type/:entity_id", get(get_entity_history))
         .route("/ingest-compliance-stream", post(ingest_compliance_stream))
+        .route("/files/profile", post(files::profile))
+        .route("/files/read", post(files::read))
+        .route("/files/convert", post(files::convert))
+        .route("/files/write", post(files::write))
         .with_state(state);
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "8081".to_string());

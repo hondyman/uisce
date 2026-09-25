@@ -41,9 +41,11 @@ type Processor interface {
 	Close(ctx context.Context, runErr error) error
 }
 
-// Source produces batches. emit returning an error stops the stream.
+// Source produces batches. rejected are rows the source itself refused (e.g.
+// a value that does not fit the file contract). emit returning an error
+// stops the stream.
 type Source interface {
-	Stream(ctx context.Context, rc *RunContext, batchSize int, emit func([]Row) error) error
+	Stream(ctx context.Context, rc *RunContext, batchSize int, emit func(rows []Row, rejected []Reject) error) error
 }
 
 // RunContext is what every node may know about the current run.
@@ -224,10 +226,21 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		}
 		st := stats[id]
 		start := time.Now()
-		err = src.Stream(ctx, rc, batchSize, func(rows []Row) error {
-			st.In += int64(len(rows))
+		err = src.Stream(ctx, rc, batchSize, func(rows []Row, rejected []Reject) error {
+			st.In += int64(len(rows) + len(rejected))
 			st.Out += int64(len(rows))
-			sum.RecordsIn += int64(len(rows))
+			st.Errors += int64(len(rejected))
+			sum.RecordsIn += int64(len(rows) + len(rejected))
+			sum.Errors += int64(len(rejected))
+			for _, rj := range rejected {
+				rj.NodeID = id
+				if rec != nil {
+					rec.Rejected(ctx, rj)
+				}
+				if failFast {
+					return fmt.Errorf("row %d: %s", rj.Row.Num, rj.Reason)
+				}
+			}
 			for _, k := range children[id] {
 				if err := push(k, rows2copy(rows, len(children[id]) > 1)); err != nil {
 					return err

@@ -133,7 +133,7 @@ func newBOSource(n Node, c BOClient) (Source, error) {
 	return &boSource{cfg: cfg, client: c}, nil
 }
 
-func (s *boSource) Stream(ctx context.Context, rc *RunContext, batchSize int, emit func([]Row) error) error {
+func (s *boSource) Stream(ctx context.Context, rc *RunContext, batchSize int, emit func([]Row, []Reject) error) error {
 	page := boReadPage
 	if batchSize > 0 && batchSize < page {
 		page = batchSize
@@ -159,7 +159,7 @@ func (s *boSource) Stream(ctx context.Context, rc *RunContext, batchSize int, em
 			num++
 			rows[i] = Row{Num: num, Data: r}
 		}
-		if err := emit(rows); err != nil {
+		if err := emit(rows, nil); err != nil {
 			return err
 		}
 		if len(recs) < want {
