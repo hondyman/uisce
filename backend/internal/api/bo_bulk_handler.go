@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/jmoiron/sqlx"
 )
@@ -36,6 +38,19 @@ type boBulkResponse struct {
 	DryRun  bool            `json:"dry_run"`
 }
 
+// bulkRequestError is a request-level refusal (bad payload, unknown BO);
+// status is the HTTP status the endpoint answers with.
+type bulkRequestError struct {
+	status int
+	msg    string
+}
+
+func (e *bulkRequestError) Error() string { return e.msg }
+
+func bulkErr(status int, f string, a ...interface{}) error {
+	return &bulkRequestError{status: status, msg: fmt.Sprintf(f, a...)}
+}
+
 // HandleBulkBORecords writes many records for one BO in one transaction.
 // Each row is judged by the master rule engine exactly as a single write is
 // (metadata.EnforceWriteBatch); a rejected or invalid row is reported in
@@ -50,64 +65,70 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 		http.Error(w, err.Error(), status)
 		return
 	}
-	if h.enforcer == nil {
-		http.Error(w, errNoRuleEnforcer.Error(), http.StatusServiceUnavailable)
-		return
-	}
-	boKey := chi.URLParam(r, "boKey")
-
 	var req boBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if len(req.Records) == 0 {
-		http.Error(w, "records is required", http.StatusBadRequest)
+	resp, err := h.bulkWrite(r.Context(), tenantID, chi.URLParam(r, "boKey"), r.URL.Query().Get("subtype"), req)
+	if err != nil {
+		var be *bulkRequestError
+		if errors.As(err, &be) {
+			http.Error(w, be.msg, be.status)
+			return
+		}
+		http.Error(w, "bulk write failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// bulkWrite is the enforced bulk write shared by the HTTP endpoint and the
+// data pipeline's bo_sink. The caller has already resolved the tenant.
+func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey, subtype string, req boBulkRequest) (*boBulkResponse, error) {
+	if h.enforcer == nil {
+		return nil, bulkErr(http.StatusServiceUnavailable, "%s", errNoRuleEnforcer.Error())
+	}
+	if len(req.Records) == 0 {
+		return nil, bulkErr(http.StatusBadRequest, "records is required")
+	}
 	if len(req.Records) > maxBulkRecords {
-		http.Error(w, fmt.Sprintf("at most %d records per request", maxBulkRecords), http.StatusRequestEntityTooLarge)
-		return
+		return nil, bulkErr(http.StatusRequestEntityTooLarge, "at most %d records per request", maxBulkRecords)
 	}
 	switch req.Mode {
 	case "", "create":
 		req.Mode = "create"
 	case "upsert":
 		if len(req.KeyFields) == 0 {
-			http.Error(w, "upsert requires key_fields", http.StatusBadRequest)
-			return
+			return nil, bulkErr(http.StatusBadRequest, "upsert requires key_fields")
 		}
 	default:
-		http.Error(w, "mode must be create or upsert", http.StatusBadRequest)
-		return
+		return nil, bulkErr(http.StatusBadRequest, "mode must be create or upsert")
 	}
 
-	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
+	boMeta, err := h.resolveBOMetadata(ctx, boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
-		return
+		return nil, bulkErr(http.StatusNotFound, "failed resolving BO contract: %v", err)
 	}
-	writable, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writable, err := h.resolveWritableColumns(ctx, boMeta.DrivingTable)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
-		return
+		return nil, fmt.Errorf("failed resolving table schema: %w", err)
 	}
 	for _, k := range req.KeyFields {
 		if !writable[k] || strings.EqualFold(k, "tenant_id") {
-			http.Error(w, fmt.Sprintf("invalid key field '%s'", k), http.StatusBadRequest)
-			return
+			return nil, bulkErr(http.StatusBadRequest, "invalid key field '%s'", k)
 		}
 	}
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
-	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+	tenantScoped := h.tableHasColumn(ctx, boMeta.DrivingTable, "tenant_id")
+	if subtype != "" {
+		if col, ok := h.resolveDiscriminatorColumn(ctx, boMeta.DrivingTable); ok {
 			for _, rec := range req.Records {
 				rec[col] = subtype // forced server-side, as on single create
 			}
 		}
 	}
 
-	ctx := r.Context()
 	// ops[i] records whether row i was an update or an insert, so row events
 	// use the same trigger keys as the single-record endpoints.
 	ops := make([]string, len(req.Records))
@@ -138,11 +159,10 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 			return queryOneRow(ctx, tx, q, args)
 		})
 	if err != nil {
-		http.Error(w, "bulk write failed: "+err.Error(), http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
-	resp := boBulkResponse{Failed: []boBulkFailure{}, DryRun: req.DryRun}
+	resp := &boBulkResponse{Failed: []boBulkFailure{}, DryRun: req.DryRun}
 	for _, res := range results {
 		if res.Err != nil {
 			f := boBulkFailure{Index: res.Index, Error: res.Err.Error()}
@@ -158,9 +178,7 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 			h.emitBORowEvent(ops[res.Index], tenantID, boKey, fmt.Sprintf("%v", res.Record[boMeta.KeyColumn]), res.Record)
 		}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	return resp, nil
 }
 
 // buildBOUpsertUpdate builds the UPDATE half of an upsert: set every
