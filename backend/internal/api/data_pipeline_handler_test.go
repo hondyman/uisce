@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -132,7 +135,10 @@ func TestDataPipelines_Assist(t *testing.T) {
 func TestPipelineMCP_CheckIsGroundedForCallerTenant(t *testing.T) {
 	var gotTenant string
 	h := NewDataPipelineHandler(&datapipeline.Store{}, datapipeline.Deps{}, nil).WithGrounding(
-		func(_ *http.Request, tenant string) datapipeline.PlatformCatalog { gotTenant = tenant; return stubCatalog{} }, nil)
+		func(_ *http.Request, tenant string) datapipeline.PlatformCatalog {
+			gotTenant = tenant
+			return stubCatalog{}
+		}, nil)
 	s := mcp.NewServer(nil).SetPipelines(pipelineMCP{h: h})
 	spec := `{"spec":{"nodes":[{"id":"in","type":"bo_source","config":{"bo_key":"fund"}},{"id":"out","type":"bo_sink","config":{"bo_key":"funds"}}],"edges":[{"from":"in","to":"out"}]}}`
 	out, err := s.CallTool(context.Background(), uuid.MustParse(pipeTenant), "check_data_pipeline", json.RawMessage(spec))
@@ -145,4 +151,54 @@ func TestPipelineMCP_CheckIsGroundedForCallerTenant(t *testing.T) {
 	out, err = s.CallTool(context.Background(), uuid.MustParse(pipeTenant), "draft_data_pipeline", json.RawMessage(`{"request":"x"}`))
 	assert.Error(t, err, "drafting without an assistant must be refused")
 	_ = out
+}
+
+type recordingScheduler struct{ applied []*datapipeline.Schedule }
+
+func (r *recordingScheduler) Apply(_ context.Context, _, _ string, sc *datapipeline.Schedule) error {
+	r.applied = append(r.applied, sc)
+	return nil
+}
+
+func TestDataPipelines_Schedule(t *testing.T) {
+	const pid = "00000000-0000-0000-0000-0000000000aa"
+	put := func(h *DataPipelineHandler, mock sqlmock.Sqlmock, body string, stored bool) *httptest.ResponseRecorder {
+		mock.ExpectQuery("FROM data_pipeline_definitions").WillReturnRows(
+			sqlmock.NewRows([]string{"id", "tenant_id", "name", "description", "dag_json", "is_active", "created_by", "created_at", "last_modified_at"}).
+				AddRow(pid, pipeTenant, "p", "", []byte(`{"version":1,"nodes":[],"edges":[]}`), true, "", time.Now(), time.Now()))
+		if stored {
+			mock.ExpectExec("UPDATE data_pipeline_definitions SET schedule").WillReturnResult(sqlmock.NewResult(0, 1))
+		}
+		r := chi.NewRouter()
+		h.RegisterRoutes(r)
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, withTestAuth(httptest.NewRequest("PUT", "/data-pipelines/"+pid+"/schedule", bytes.NewBufferString(body)), pipeTenant))
+		return rec
+	}
+	db, mock, _ := sqlmock.New()
+	defer db.Close()
+	store := &datapipeline.Store{DB: sqlx.NewDb(db, "sqlmock")}
+
+	// Without Temporal, enabling is refused with the reason.
+	rec := put(NewDataPipelineHandler(store, datapipeline.Deps{}, nil), mock, `{"cron":"0 6 * * 1-5","enabled":true}`, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "schedules need Temporal")
+
+	sch := &recordingScheduler{}
+	h := NewDataPipelineHandler(store, datapipeline.Deps{}, nil).WithScheduler(sch)
+	rec = put(h, mock, `{"cron":"* * * * *","enabled":true}`, false)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Contains(t, rec.Body.String(), "at most every 5 minutes")
+	assert.Empty(t, sch.applied, "an invalid schedule must not reach Temporal")
+
+	rec = put(h, mock, `{"cron":"0 6 * * 1-5","timezone":"Europe/Dublin","enabled":true}`, true)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var v struct {
+		NextRuns []time.Time `json:"next_runs"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &v))
+	assert.Len(t, v.NextRuns, 5)
+	require.Len(t, sch.applied, 1)
+	assert.Equal(t, "Europe/Dublin", sch.applied[0].TimeZone)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

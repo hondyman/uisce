@@ -23,6 +23,7 @@ type PipelineTools interface {
 	ListRuns(ctx context.Context, tenantID uuid.UUID, id string) (interface{}, error)
 	GetRun(ctx context.Context, tenantID uuid.UUID, runID string) (interface{}, error)
 	Draft(ctx context.Context, tenantID uuid.UUID, message string, spec json.RawMessage) (interface{}, error)
+	SetSchedule(ctx context.Context, tenantID uuid.UUID, id, cron, timezone string, enabled bool) (interface{}, error)
 }
 
 // ErrPipelinesUnavailable is returned when the server was started without
@@ -124,6 +125,19 @@ func (s *Server) registerPipelineTools() {
 			}
 			_ = json.Unmarshal(a, &args)
 			return p.StartRun(ctx, t, args.ID)
+		}))
+	s.RegisterTool("set_data_pipeline_schedule",
+		"Runs a saved pipeline on a schedule (Temporal): a 5-field cron expression in an IANA time zone, e.g. \"0 6 * * 1-5\" in \"Europe/Dublin\" for weekdays at 06:00. enabled=false stops it. A run still going when the next is due is not overlapped. Returns the next run times."+tenantNote,
+		obj(map[string]interface{}{"pipeline_id": str, "cron": str, "timezone": str, "enabled": map[string]string{"type": "boolean"}}, "pipeline_id", "enabled"),
+		s.pipelineCall(func(ctx context.Context, p PipelineTools, t uuid.UUID, a json.RawMessage) (interface{}, error) {
+			var args struct {
+				ID       string `json:"pipeline_id"`
+				Cron     string `json:"cron"`
+				TimeZone string `json:"timezone"`
+				Enabled  bool   `json:"enabled"`
+			}
+			_ = json.Unmarshal(a, &args)
+			return p.SetSchedule(ctx, t, args.ID, args.Cron, args.TimeZone, args.Enabled)
 		}))
 	s.RegisterTool("list_data_pipeline_runs",
 		"Lists a pipeline's runs, newest first: status and row counts."+tenantNote,

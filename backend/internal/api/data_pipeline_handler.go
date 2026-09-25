@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -29,6 +30,13 @@ type DataPipelineHandler struct {
 	// structural checks only). assistant is nil when no LLM is configured.
 	catalog   func(r *http.Request, tenant string) datapipeline.PlatformCatalog
 	assistant *datapipeline.Assistant
+	scheduler datapipeline.Scheduler // nil: schedules need Temporal
+}
+
+// WithScheduler enables pipeline schedules.
+func (h *DataPipelineHandler) WithScheduler(s datapipeline.Scheduler) *DataPipelineHandler {
+	h.scheduler = s
+	return h
 }
 
 // WithGrounding enables grounded checks and, with an assistant, /assist.
@@ -73,6 +81,8 @@ func (h *DataPipelineHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}", h.delete)
 		r.Post("/{id}/runs", h.startRun)
 		r.Get("/{id}/runs", h.listRuns)
+		r.Get("/{id}/schedule", h.getSchedule)
+		r.Put("/{id}/schedule", h.putSchedule)
 	})
 }
 
@@ -215,9 +225,15 @@ func (h *DataPipelineHandler) delete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := h.store.Delete(r.Context(), t, chi.URLParam(r, "id")); err != nil {
+	id := chi.URLParam(r, "id")
+	if err := h.store.Delete(r.Context(), t, id); err != nil {
 		dpStoreError(w, err)
 		return
+	}
+	if h.scheduler != nil {
+		if err := h.scheduler.Apply(r.Context(), t, id, nil); err != nil {
+			log.Printf("[data-pipelines] removing schedule of deleted pipeline %s: %v", id, err)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -570,4 +586,83 @@ func (h *DataPipelineHandler) assist(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dpJSON(w, http.StatusOK, out)
+}
+
+// scheduleView is a schedule plus its next run times.
+type scheduleView struct {
+	Schedule *datapipeline.Schedule `json:"schedule"`
+	NextRuns []time.Time            `json:"next_runs,omitempty"`
+	Error    string                 `json:"error,omitempty"`
+}
+
+func viewOf(sc *datapipeline.Schedule) scheduleView {
+	v := scheduleView{Schedule: sc}
+	if sc != nil && sc.Enabled {
+		v.NextRuns, _ = sc.Next(5, time.Now())
+	}
+	return v
+}
+
+func (h *DataPipelineHandler) getSchedule(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	sc, err := h.store.GetSchedule(r.Context(), t, chi.URLParam(r, "id"))
+	if err != nil {
+		dpStoreError(w, err)
+		return
+	}
+	dpJSON(w, http.StatusOK, viewOf(sc))
+}
+
+// setScheduleCore validates, applies the live Temporal schedule, then
+// stores it. Shared by HTTP and MCP.
+func (h *DataPipelineHandler) setScheduleCore(ctx context.Context, t, id string, sc datapipeline.Schedule) (scheduleView, error) {
+	if _, err := h.store.Get(ctx, t, id); err != nil {
+		return scheduleView{}, err
+	}
+	if sc.Enabled {
+		if err := sc.Validate(); err != nil {
+			return scheduleView{}, &errBadSchedule{err}
+		}
+		if h.scheduler == nil {
+			return scheduleView{}, &errBadSchedule{fmt.Errorf("schedules need Temporal, which is not configured for this environment")}
+		}
+	}
+	if h.scheduler != nil {
+		if err := h.scheduler.Apply(ctx, t, id, &sc); err != nil {
+			return scheduleView{}, fmt.Errorf("could not update the schedule: %w", err)
+		}
+	}
+	if err := h.store.SetSchedule(ctx, t, id, &sc); err != nil {
+		return scheduleView{}, err
+	}
+	return viewOf(&sc), nil
+}
+
+type errBadSchedule struct{ err error }
+
+func (e *errBadSchedule) Error() string { return e.err.Error() }
+
+func (h *DataPipelineHandler) putSchedule(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	var sc datapipeline.Schedule
+	if err := json.NewDecoder(r.Body).Decode(&sc); err != nil {
+		dpError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	v, err := h.setScheduleCore(r.Context(), t, chi.URLParam(r, "id"), sc)
+	var bad *errBadSchedule
+	switch {
+	case errors.As(err, &bad):
+		dpError(w, http.StatusBadRequest, bad.Error())
+	case err != nil:
+		dpStoreError(w, err)
+	default:
+		dpJSON(w, http.StatusOK, v)
+	}
 }

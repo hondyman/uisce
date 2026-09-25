@@ -147,3 +147,15 @@ func (p pipelineMCP) Draft(ctx context.Context, t uuid.UUID, message string, raw
 	}
 	return p.h.assistant.Respond(ctx, p.h.catalog(p.request(ctx, t), t.String()), datapipeline.AssistRequest{Message: message, Spec: spec})
 }
+
+func (p pipelineMCP) SetSchedule(ctx context.Context, t uuid.UUID, id, cron, tz string, enabled bool) (interface{}, error) {
+	v, err := p.h.setScheduleCore(ctx, t.String(), id, datapipeline.Schedule{Cron: cron, TimeZone: tz, Enabled: enabled})
+	var bad *errBadSchedule
+	if errors.As(err, &bad) {
+		return map[string]any{"ok": false, "message": bad.Error()}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}

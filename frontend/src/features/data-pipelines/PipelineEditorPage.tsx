@@ -25,6 +25,8 @@ import { downstreamSink, fieldsIn, newNodeId, SourceFieldLookup } from './fields
 import { NODE_META, PipelineNode, PipelineNodeData } from './PipelineNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { AssistantPanel } from './AssistantPanel';
+import { ScheduleDialog } from './ScheduleDialog';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 
 const nodeTypes = { pipeline: PipelineNode };
 
@@ -78,6 +80,8 @@ export default function PipelineEditorPage() {
   const [previewNode, setPreviewNode] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const schedule = useQuery({ queryKey: ['dp-schedule', id], enabled: !isNew, queryFn: () => pipelinesApi.schedule(id!) });
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('lg')); // keep room for the canvas
 
@@ -266,6 +270,14 @@ export default function PipelineEditorPage() {
           </span>
         </Tooltip>
         <Button startIcon={<SaveIcon />} disabled={!dirty || save.isPending} onClick={() => save.mutate()}>Save</Button>
+        <Tooltip title={isNew ? 'Save first' : 'Run this pipeline on a schedule'}>
+          <span>
+            <Button startIcon={<ScheduleIcon />} disabled={isNew} onClick={() => setScheduleOpen(true)}
+              color={schedule.data?.schedule?.enabled ? 'success' : 'primary'}>
+              {schedule.data?.schedule?.enabled ? 'Scheduled' : 'Schedule'}
+            </Button>
+          </span>
+        </Tooltip>
         <Tooltip title={isNew ? 'Save first' : !valid ? 'Fix the problems first' : 'Run the whole pipeline'}>
           <span>
             <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={isNew || !valid || startRun.isPending || !!activeRun} onClick={() => startRun.mutate()}>
@@ -351,6 +363,7 @@ export default function PipelineEditorPage() {
           />
         )}
       </Box>
+      {!isNew && <ScheduleDialog pipelineId={id!} open={scheduleOpen} onClose={() => setScheduleOpen(false)} />}
       <Snackbar open={!!toast} autoHideDuration={4000} onClose={() => setToast(null)} message={toast} />
     </Box>
   );

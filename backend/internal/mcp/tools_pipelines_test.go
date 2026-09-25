@@ -17,7 +17,7 @@ func TestPipelineTools_RegisteredAndRefusedWithoutSurface(t *testing.T) {
 	}
 	for _, n := range []string{"describe_data_pipeline_steps", "list_data_pipelines", "get_data_pipeline", "check_data_pipeline",
 		"draft_data_pipeline", "preview_data_pipeline", "save_data_pipeline", "start_data_pipeline_run",
-		"list_data_pipeline_runs", "get_data_pipeline_run"} {
+		"list_data_pipeline_runs", "get_data_pipeline_run", "set_data_pipeline_schedule"} {
 		if !names[n] {
 			t.Errorf("tool %s not registered", n)
 		}

@@ -30,7 +30,7 @@ func pipelineDB(t *testing.T) *sqlx.DB {
 	db := sqlx.MustConnect("postgres", dsn)
 	t.Cleanup(func() { db.Close() })
 	// The real migrations that own these tables.
-	for _, m := range []string{"20260901_001_create_data_pipelines.up.sql", "20260909_001_datapipeline_run_persistence.up.sql"} {
+	for _, m := range []string{"20260901_001_create_data_pipelines.up.sql", "20260909_001_datapipeline_run_persistence.up.sql", "20261027_001_data_pipeline_schedule.up.sql"} {
 		b, err := os.ReadFile(filepath.Join("..", "..", "db", "migrations", m))
 		if err != nil {
 			t.Fatal(err)
@@ -123,6 +123,24 @@ func TestStoreIntegration(t *testing.T) {
 	r2, _ := st.GetRun(ctx, tenantA, runID2)
 	if r2.Status != "failed" {
 		t.Errorf("status = %s", r2.Status)
+	}
+
+	// Schedules are stored per pipeline, tenant-scoped.
+	sc := &Schedule{Cron: "0 6 * * 1-5", TimeZone: "Europe/Dublin", Enabled: true}
+	if err := st.SetSchedule(ctx, tenantA, d.ID, sc); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetSchedule(ctx, tenantA, d.ID); got == nil || *got != *sc {
+		t.Errorf("schedule round trip: %+v", got)
+	}
+	if err := st.SetSchedule(ctx, tenantB, d.ID, sc); err != ErrNotFound {
+		t.Error("other tenant must not set the schedule")
+	}
+	if err := st.SetSchedule(ctx, tenantA, d.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetSchedule(ctx, tenantA, d.ID); got != nil {
+		t.Error("cleared schedule must read as nil")
 	}
 
 	if err := st.Delete(ctx, tenantA, d.ID); err != nil {

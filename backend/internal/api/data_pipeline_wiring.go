@@ -49,8 +49,10 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	if s.TemporalClient != nil {
 		w := worker.New(s.TemporalClient, datapipeline.TaskQueue, worker.Options{})
 		w.RegisterWorkflow(datapipeline.Workflow)
+		w.RegisterWorkflow(datapipeline.ScheduledWorkflow)
 		acts := &datapipeline.Activities{Store: store, Deps: deps}
 		w.RegisterActivityWithOptions(acts.Run, activity.RegisterOptions{Name: datapipeline.ActivityName})
+		w.RegisterActivityWithOptions(acts.ScheduledRun, activity.RegisterOptions{Name: datapipeline.ScheduledActivityName})
 		if err := w.Start(); err != nil {
 			log.Printf("[data-pipelines] worker failed to start: %v", err)
 		}
@@ -70,6 +72,9 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 		}}
 	}
 	h := NewDataPipelineHandler(store, deps, s.TemporalClient).WithGrounding(catalog, assistant)
+	if s.TemporalClient != nil {
+		h.WithScheduler(&datapipeline.TemporalScheduler{Client: s.TemporalClient})
+	}
 	h.RegisterRoutes(r)
 	s.DataPipelines = h
 }
