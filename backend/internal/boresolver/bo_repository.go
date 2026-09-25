@@ -558,12 +558,15 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			COALESCE(f.description, '') AS description,
 			COALESCE(f.data_type, 'string') AS data_type,
 			COALESCE(f.field_role, 'DIMENSION') AS role,
-			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status
+			COALESCE(fb.binding_status, 'RESOLVED') AS binding_status,
+			COALESCE(cn.properties->>'term_type', '') AS term_type
 		FROM public.business_object_fields f
 		LEFT JOIN public.field_bindings fb
 			ON fb.field_id = f.id
 			AND fb.bo_id = f.bo_id
 			AND (fb.binding_id = $2::uuid OR $2::uuid IS NULL)
+		LEFT JOIN catalog_node cn
+			ON cn.id::text = f.term_node_id::text
 		WHERE f.bo_id = $1::uuid
 		  AND COALESCE(fb.binding_status, 'RESOLVED') = 'RESOLVED'
 		ORDER BY f.display_order, f.field_name
@@ -577,6 +580,7 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 	var terms []SemanticTermView
 	for rows.Next() {
 		var t SemanticTermView
+		var termType string
 		if err := rows.Scan(
 			&t.TermNodeID,
 			&t.TermKey,
@@ -586,10 +590,16 @@ func (r *PostgresBORepository) GetBOTerms(boID, bindingID string) ([]SemanticTer
 			&t.DataType,
 			&t.Role,
 			&t.BindingStatus,
+			&termType,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan term: %w", err)
 		}
-		if t.Role == "MEASURE" {
+		if termType == "calculated" {
+			t.TermType = "calculated"
+			// Calc terms define aggregation in their compiled expression;
+			// auto-populating DefaultAggregation would cause the frontend
+			// to fabricate an aggregation wrapper the user didn't choose.
+		} else if t.Role == "MEASURE" {
 			t.DefaultAggregation = "SUM"
 		}
 		terms = append(terms, t)

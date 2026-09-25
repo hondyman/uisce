@@ -2,7 +2,6 @@ package rules
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,15 +51,6 @@ func (m *MockScenarioRepository) GetTestRun(ctx context.Context, id string) (*Ru
 	return args.Get(0).(*RuleTestRun), args.Error(1)
 }
 
-type MockSampleEntityRepository struct {
-	mock.Mock
-}
-
-func (m *MockSampleEntityRepository) SampleEntities(ctx context.Context, tenantID string, entityName string, sampleSize int, filter map[string]interface{}) ([]map[string]interface{}, error) {
-	args := m.Called(ctx, tenantID, entityName, sampleSize, filter)
-	return args.Get(0).([]map[string]interface{}), args.Error(1)
-}
-
 func TestScenarioService_Create(t *testing.T) {
 	mockRepo := new(MockScenarioRepository)
 	service := NewScenarioService(mockRepo)
@@ -72,58 +62,4 @@ func TestScenarioService_Create(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "My Scenario", s.Name)
 	assert.Equal(t, "draft", s.Status)
-}
-
-func TestScenarioRunner_Run(t *testing.T) {
-	mockRepo := new(MockScenarioRepository)
-	mockSampleRepo := new(MockSampleEntityRepository)
-
-	// Setup Rule Engine (CEL-only now)
-	// We use MockRuleRepository defined in engine_test.go (assumed available in same package)
-	mockRulesRepo := &MockRuleRepository{}
-	engine := NewRuleEngine(mockRulesRepo)
-
-	runner := NewScenarioRunner(mockRepo, mockSampleRepo, engine)
-	ctx := context.Background()
-
-	// Mock Data
-	scenarioVerID := "sv-1"
-	tenantID := "tenant-1"
-
-	// Mock Rule Snapshot (Custom Rule)
-	snapshotRule := TenantValidationRule{
-		TenantID:     tenantID,
-		RuleID:       "scenario-rule",
-		InheritMode:  Custom,
-		ConditionSrc: `input.page.amount < 1000`, // CEL syntax
-	}
-	snapshotJSON, _ := json.Marshal(snapshotRule)
-
-	mockRepo.On("GetScenarioVersion", ctx, scenarioVerID).Return(&RuleScenarioVersion{
-		ID:           scenarioVerID,
-		RuleSnapshot: snapshotJSON,
-	}, nil)
-
-	mockRepo.On("CreateTestRun", ctx, mock.MatchedBy(func(run *RuleTestRun) bool {
-		return run.Status == "running"
-	})).Return(nil)
-
-	mockRepo.On("UpdateTestRun", ctx, mock.MatchedBy(func(run *RuleTestRun) bool {
-		return run.Status == "completed"
-	})).Return(nil)
-
-	// Mock Samples
-	samples := []map[string]interface{}{
-		{"amount": 500},  // Pass
-		{"amount": 1500}, // Fail
-	}
-	mockSampleRepo.On("SampleEntities", ctx, tenantID, "payment", 10, mock.Anything).Return(samples, nil)
-
-	// Run
-	run, err := runner.RunScenario(ctx, tenantID, scenarioVerID, "payment", 10, nil)
-	require.NoError(t, err)
-
-	assert.Equal(t, "completed", run.Status)
-	// currently EvaluateTenantRule returns true always, so FailureCount = 0
-	assert.Equal(t, 0, run.FailureCount)
 }

@@ -28,7 +28,9 @@ package metadata
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -115,8 +117,39 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID st
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	boKey := bo.Key
-	recordID := fmt.Sprintf("%v", result["id"])
+	s.reportViolations(ctx, tenantID, bo.Key, fmt.Sprintf("%v", result["id"]), violations, blocked)
+
+	if blocked {
+		return nil, newRuleRejection(violations)
+	}
+	return result, nil
+}
+
+// RuleRejectionError is returned when the master rule engine
+// (internal/rules/vm) rejects a BO write: a BLOCK-severity violation with
+// enforcement on. Handlers map it to 422 Unprocessable Entity. Its message
+// is unchanged from the pre-typed error so log/alert matching still works.
+type RuleRejectionError struct {
+	Rules []string `json:"rules"`
+}
+
+func (e *RuleRejectionError) Error() string {
+	return fmt.Sprintf("write rejected by validation rule(s): %s", strings.Join(e.Rules, "; "))
+}
+
+func newRuleRejection(violations []ruleViolation) *RuleRejectionError {
+	var names []string
+	for _, v := range violations {
+		if v.Severity == "BLOCK" {
+			names = append(names, v.RuleName)
+		}
+	}
+	return &RuleRejectionError{Rules: names}
+}
+
+// reportViolations persists (on s.db, so the record survives a rollback)
+// and logs every violation for one written record.
+func (s *BusinessObjectService) reportViolations(ctx context.Context, tenantID, boKey, recordID string, violations []ruleViolation, blocked bool) {
 	for _, v := range violations {
 		writeBlocked := blocked && v.Severity == "BLOCK"
 		rec := analytics.ViolationRecord{
@@ -139,18 +172,151 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID st
 				tag, v.RuleName, v.RuleID, boKey, v.Severity, recordID, v.Message)
 		}
 	}
+}
 
-	if blocked {
-		var names []string
-		for _, v := range violations {
-			if v.Severity == "BLOCK" {
-				names = append(names, v.RuleName)
-			}
+// ErrNoRowWritten is returned by a doWrite callback whose statement matched
+// no row (e.g. an UPDATE of a record that doesn't exist or belongs to
+// another tenant). The enclosing transaction is rolled back.
+var ErrNoRowWritten = errors.New("no row written")
+
+// EnforceWrite is the entry point for BO record writes that don't go
+// through CreateBORecord/UpdateBORecord (the /bo/{boKey}/records API and
+// its related-record routes). The caller keeps ownership of *how* it
+// writes (tenant forcing, column allowlists, subtype scoping); this
+// guarantees *that* the master rule engine judges the write, in the same
+// transaction, with the same enforcement flag, persistence and messages as
+// every other BO write path.
+//
+// boKeyOrID is resolved against business_objects (the tenant's own BO
+// first, else the gold copy's). Rules attach to a BO through its catalog
+// node, so a key with no business_objects row cannot be governed by any
+// rule: the write still runs transactionally, with no evaluation.
+func (s *BusinessObjectService) EnforceWrite(ctx context.Context, tenantID, boKeyOrID string, doWrite func(tx *sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
+	bo, err := s.loadEnforcementTarget(ctx, tenantID, boKeyOrID)
+	if err != nil {
+		return nil, err
+	}
+	if bo != nil {
+		return s.writeAndEnforce(ctx, tenantID, bo, doWrite)
+	}
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	result, err := doWrite(tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	return result, nil
+}
+
+// BatchRowResult is the outcome of one row of EnforceWriteBatch.
+type BatchRowResult struct {
+	Index  int
+	Record map[string]interface{} // nil when Err != nil
+	Err    error                  // *RuleRejectionError, ErrNoRowWritten, or the write's own error
+}
+
+// EnforceWriteBatch writes n records in one transaction, each under its own
+// savepoint, each judged by the master rule engine exactly as EnforceWrite
+// would judge it. A rejected or failing row is rolled back to its
+// savepoint and reported; the other rows still commit. With dryRun the
+// whole transaction is rolled back and no violations are persisted, so a
+// preview leaves no trace.
+func (s *BusinessObjectService) EnforceWriteBatch(ctx context.Context, tenantID, boKeyOrID string, n int, dryRun bool, doWrite func(tx *sqlx.Tx, i int) (map[string]interface{}, error)) ([]BatchRowResult, error) {
+	bo, err := s.loadEnforcementTarget(ctx, tenantID, boKeyOrID)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	type pending struct {
+		recordID   string
+		violations []ruleViolation
+		blocked    bool
+	}
+	var toReport []pending
+	out := make([]BatchRowResult, n)
+	for i := 0; i < n; i++ {
+		out[i].Index = i
+		if _, err := tx.ExecContext(ctx, "SAVEPOINT bo_batch_row"); err != nil {
+			return nil, fmt.Errorf("savepoint: %w", err)
 		}
-		return nil, fmt.Errorf("write rejected by validation rule(s): %s", strings.Join(names, "; "))
+		rec, werr := doWrite(tx, i)
+		if werr != nil {
+			if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT bo_batch_row"); err != nil {
+				return nil, fmt.Errorf("rollback to savepoint: %w", err)
+			}
+			out[i].Err = werr
+			continue
+		}
+		var violations []ruleViolation
+		blocked := false
+		if bo != nil {
+			violations, blocked = s.evaluateAndEnforceRules(ctx, tx, tenantID, bo, rec)
+		}
+		if blocked {
+			if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT bo_batch_row"); err != nil {
+				return nil, fmt.Errorf("rollback to savepoint: %w", err)
+			}
+			out[i].Err = newRuleRejection(violations)
+		} else {
+			if _, err := tx.ExecContext(ctx, "RELEASE SAVEPOINT bo_batch_row"); err != nil {
+				return nil, fmt.Errorf("release savepoint: %w", err)
+			}
+			out[i].Record = rec
+		}
+		if len(violations) > 0 {
+			toReport = append(toReport, pending{fmt.Sprintf("%v", rec["id"]), violations, blocked})
+		}
 	}
 
-	return result, nil
+	if dryRun {
+		return out, nil // deferred Rollback discards everything
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+	if bo != nil {
+		for _, p := range toReport {
+			s.reportViolations(ctx, tenantID, bo.Key, p.recordID, p.violations, p.blocked)
+		}
+	}
+	return out, nil
+}
+
+// loadEnforcementTarget resolves the BO definition fields rule evaluation
+// needs (Key for rule lookup, ID + DriverTableName for binding/semantic
+// resolution). Returns (nil, nil) when no business_objects row matches.
+func (s *BusinessObjectService) loadEnforcementTarget(ctx context.Context, tenantID, boKeyOrID string) (*models.BusinessObjectDefinition, error) {
+	var row struct {
+		ID     string `db:"id"`
+		Key    string `db:"bo_key"`
+		Driver string `db:"driver_table_name"`
+	}
+	err := s.db.GetContext(ctx, &row, `
+		SELECT bo.id::text AS id, bo.bo_key, COALESCE(bo.driver_table_name, '') AS driver_table_name
+		FROM public.business_objects bo
+		LEFT JOIN public.tenants t ON t.id = bo.tenant_id
+		WHERE (bo.bo_key = $1 OR bo.id::text = $1)
+		  AND (bo.tenant_id::text = $2 OR t.is_gold_copy = TRUE)
+		ORDER BY CASE WHEN bo.tenant_id::text = $2 THEN 0 ELSE 1 END
+		LIMIT 1`, boKeyOrID, tenantID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolving business object %q for rule enforcement: %w", boKeyOrID, err)
+	}
+	return &models.BusinessObjectDefinition{ID: row.ID, Key: row.Key, DriverTableName: row.Driver}, nil
 }
 
 // evaluateAndEnforceRules runs every active validation rule for boKey

@@ -52,7 +52,6 @@ func TestPortfolioSecurityService_CalculatePortfolioAnalytics(t *testing.T) {
 	graphService := analytics.NewSemanticGraphService(db)
 	engine, err := NewExecutionEngine(ctx, graphService, nil)
 	assert.NoError(t, err)
-	defer engine.Close(ctx)
 
 	// Mock repositories
 	pmRepo := new(MockPortfolioRepo)

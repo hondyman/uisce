@@ -186,7 +186,6 @@ type Server struct {
 	NLQService              *services.NLQService
 	FeedbackService         *services.FeedbackService
 	EvalService             *services.EvalService
-	CubeSyncService         *analytics.CubeSyncService
 	LLMConfigSvc            *llm.LLMConfigService
 	TemporalClient          temporalclient.Client
 	EvidenceBundleService   *services.EvidenceBundleService
@@ -203,7 +202,6 @@ type Server struct {
 	WriteHandler      *handlers.WriteHandler
 	IgniteClient      *infrastructure.IgniteClient
 	LineageSvc        *services.LineageService
-	CueEngine         *services.CueEngine
 
 	PageLayoutHandler       *handlers.PageLayoutHandler
 	PipelineHandler         *handlers.PipelineHandler
@@ -1000,7 +998,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		CalculationHandler:     nil, // Will be set after initialization
 		LineageSvc:             nil, // Will be set after initialization
 
-		CueEngine: services.NewCueEngine(),
 
 		CalcHandler: nil, // Will be set after initialization
 
@@ -1012,6 +1009,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	r.Get("/api/tempo/traces", srv.proxyTempoTraces)
 	r.Get("/api/tempo/traces/{traceId}", srv.proxyTempoGetTrace)
 	r.Get("/api/v1/metrics/commit", srv.commitMetricsV1Handler)
+
+	// Prometheus metrics endpoint (glossary_llm_calls_total, etc.)
+	r.Handle("/metrics", MetricsHandler())
 
 	// Observability Console endpoints
 	r.Get("/api/metrics/global", srv.globalMetricsHandler)
@@ -1205,11 +1205,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.FeedbackService = services.NewFeedbackService(sqlxDB)
 	srv.EvalService = services.NewEvalService(sqlxDB, nlqService)
 
-	// Initialize Cube Sync Service
-	// Defaulting to a local 'cube_schema' directory for now
-	_ = filepath.Join(runtimeBase, "cube_schema")
-	srv.CubeSyncService = nil // Stub: NewCubeSyncService returns interface{}
-
 	// --- Audit & History Wiring ---
 	// Legacy audit chain decommissioned - auditHistoryHandler remains nil
 	var auditHistoryHandler *handlers.AuditHistoryHandler
@@ -1283,11 +1278,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	srv.ValuesHandler = valuesHandler
 	valuesHandler.RegisterRoutes(r)
 
-	// Initialize Compliance Service - MOVED to main.go for Epic 12
-	// complianceService := services.NewComplianceService(auditSvc)
-	// complianceHandler := handlers.NewComplianceHandler(complianceService)
-	// srv.ComplianceHandler = complianceHandler
-	// complianceHandler.RegisterRoutes(r)
 
 	// Initialize AI Service (Gemini Integration)
 	aiRuleRepo := rules.NewSQLRuleRepository(db)
@@ -1869,7 +1859,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		auditCtx, auditCancel := context.WithCancel(context.Background())
 		_ = auditCancel
 		apiDispatcherHandler.StartAuditWorker(auditCtx)
-		RegisterValidationRulesRoutes(r, db, srv.CueEngine, srv.BusinessObjectService, srv.DatasourceResolver)
+		RegisterValidationRulesRoutes(r, db, srv.BusinessObjectService, srv.DatasourceResolver)
 
 		// Initialize Security Profile Service and Handler
 		secProfileSvc := security.NewProfileService(db)
@@ -3489,11 +3479,6 @@ func (s *Server) registerAdminRoutes(r chi.Router) {
 		r.Post("/run", s.handleRunEval)
 	})
 
-	// Admin Cube Sync
-	r.Route("/admin/cube", func(r chi.Router) {
-		r.Post("/sync", s.handleCubeSync)
-	})
-
 	// Role Management
 	s.RegisterRoleRoutes(r)
 
@@ -3831,7 +3816,13 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	notifAdapter := &notificationAdapter{svc: s.NotificationSvc}
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 
-	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine)
+	// s.BusinessObjectService is the master rule engine's write gate; a nil
+	// one makes the handler refuse writes rather than skip the rules.
+	var enforcer boWriteEnforcer
+	if s.BusinessObjectService != nil {
+		enforcer = s.BusinessObjectService
+	}
+	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
 	boCRUDHandler.RegisterRoutes(r)
 }
 
