@@ -6,8 +6,6 @@ export type BindingRequirement = BACKEND_SPECIFIC | OPTIONAL | REQUIRED;
 
 export type CommandStatus = failed | pending | success;
 
-export type DataSource = ignite | postgres | starrocks;
-
 export type Dialect = starrocks;
 
 export type ExportFormat = csv | json | parquet;
@@ -25,8 +23,6 @@ export type JobStatus = cancelled | completed | failed | queued | running;
 export type ModelType = core | custom | override;
 
 export type PreAggStatus = active | disabled | draft | error;
-
-export type QueryType = analytics | historical | realtime;
 
 export type RoleScope = Environment | Global | Tenant;
 
@@ -1413,12 +1409,6 @@ export interface Column {
   Type: string;
 }
 
-export interface ColumnInfo {
-  Label: string;
-  Name: string;
-  Type: string;
-}
-
 /** ColumnMask represents field-level masking for a semantic term. */
 export interface ColumnMask {
   MaskType: string;
@@ -1936,14 +1926,6 @@ export interface DataQualityMetrics {
 /** DataQualityService computes data quality metrics */
 export interface DataQualityService {
   db: any;
-}
-
-/** DataSourceRouter routes queries to optimal data source */
-export interface DataSourceRouter {
-  igniteDB: any;
-  logger: any;
-  postgresDB: any;
-  starrocksDB: any;
 }
 
 /** Database represents a single database in the hierarchy. */
@@ -4467,35 +4449,6 @@ Simplified sliding window or fixed window reset */
   usageMu: any;
 }
 
-export interface QueryFilter {
-  Dimension: string;
-  Operator: string;
-  Values: any[];
-}
-
-/** QueryRequest represents a query request */
-export interface QueryRequest {
-  Cube: string;
-  Dimensions: string[];
-  Filters: QueryFilter[];
-  ForceSource: DataSource;
-  Measures: string[];
-  Parameters: Record<string, any>;
-  RealTimeOnly: boolean;
-  SQL: string;
-  TimeRange: TimeRange;
-}
-
-/** QueryResult represents query results */
-export interface QueryResult {
-  CacheHit: boolean;
-  Columns: ColumnInfo[];
-  Data: Record<string, any>[];
-  QueryTime: number;
-  RowCount: number;
-  Source: DataSource;
-}
-
 /** QueryService handles query operations */
 export interface QueryService {
 }
@@ -4590,12 +4543,6 @@ export interface Relationship {
   Cardinality: string;
   JoinExpression: string;
   TargetBusinessObject: string;
-}
-
-/** ReportDefinitionBuilder helps build reports */
-export interface ReportDefinitionBuilder {
-  logger: any;
-  router: DataSourceRouter;
 }
 
 /** ResolutionResult represents the output of a semantic resolution */
@@ -5193,24 +5140,6 @@ export interface SecurityPosition {
   Weight: number;
 }
 
-/** SelfServiceReport represents a user-created report */
-export interface SelfServiceReport {
-  ChartType: string;
-  CreatedAt: any;
-  CreatedBy: string;
-  Cube: string;
-  Description: string;
-  Dimensions: string[];
-  Filters: QueryFilter[];
-  ID: string;
-  IsPublic: boolean;
-  Limit: number;
-  Measures: string[];
-  Name: string;
-  Settings: Record<string, any>;
-  SortBy: SortSpec[];
-}
-
 export interface SemanticAssistant {
   llmProvider: any;
 }
@@ -5333,11 +5262,6 @@ export interface SnapshotRefs {
 /** SnapshotService provides methods for managing dashboard snapshots. */
 export interface SnapshotService {
   db: any;
-}
-
-export interface SortSpec {
-  Direction: string;
-  Field: string;
 }
 
 /** SourceReference provides detailed information about a source used in the answer. */
@@ -5694,12 +5618,6 @@ export interface ThreeWayDiff {
   Removed: Record<string, any>;
 }
 
-export interface TimeRange {
-  End: any;
-  Granularity: string;
-  Start: any;
-}
-
 /** TokenBucket implements token bucket algorithm for rate limiting */
 export interface TokenBucket {
   capacity: number;
@@ -5945,6 +5863,12 @@ export interface UisceSemanticAST {
   RootNode: UisceASTNode;
   TenantID: string;
   Version: string;
+}
+
+/** UnsupportedOperatorError is returned for an operator that has no SQL
+pushdown (unknown, or evaluable only by the VM, e.g. length_equals). */
+export interface UnsupportedOperatorError {
+  Operator: string;
 }
 
 /** UpdateBusinessObjectRequest represents a request to update a BO */

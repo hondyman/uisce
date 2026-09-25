@@ -69,7 +69,8 @@ func TestSimpleSQLGeneration(t *testing.T) {
 	assert.Contains(t, sql, "SELECT")
 	assert.Contains(t, sql, "FROM orders")
 	assert.Contains(t, sql, "LIMIT 10")
-	assert.Nil(t, args)
+	assert.Contains(t, sql, "t0.total_amount > $1")
+	assert.Equal(t, []interface{}{100}, args)
 }
 
 func TestJoinInference(t *testing.T) {

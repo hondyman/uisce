@@ -321,11 +321,34 @@ left `asl.*`); `check-drift` green. The guard's `engineImportAllowlist` is
 empty; a planted cel-go import fails it. No `go.mod` in the repo and no
 frontend `package.json` requires an engine library.
 
-### Remaining
+### E14 — one condition vocabulary, and the last evaluators (2026-09-24)
 
-- E14: SQL filter compilers (`boresolver` filter groups, `QueryBORecords`
-  filters, `querycompiler`) vs `vm.CompileToSQL` — translation, not
-  evaluation, but a second condition vocabulary.
+- `vm.CompileConditionSQL` pushes an engine condition down to SQL (bound
+  parameters only; an operator with no faithful SQL form is an error).
+  `boresolver` filters and `QueryBORecords` both use it. Found and fixed on
+  the way: `QueryBORecords` silently dropped any filter operator it didn't
+  know (widening results); boresolver turned any operator with a list value
+  into `IN` (so `!= [a,b]` returned exactly the excluded rows), compared
+  `= null` as `= NULL`, treated `%`/`_` in contains values as wildcards, and
+  spliced the caller's operator into SQL for cross-field comparisons
+  (`valueFieldId`) - an injection path. 1,440-case before/after golden: every
+  change is one of those fixes or a newly accepted engine operator name.
+- Dead: `internal/querycompiler`, boresolver's `semantic_sql_generator.go`
+  (inlined unescaped values), `domain/advanced_policies.go`,
+  `services/data_source_router.go`.
+- `platform` ABAC attribute conditions now evaluate on vm (case-insensitive
+  via EqualFold-exact fold keys); 188,272-case old-vs-new oracle, 0
+  mismatches.
+- Editor/engine gap closed: the builder offered `between`/`not_between` and
+  ten date operators the engine rejected ("unknown operator"); all now in
+  vm (UTC calendar semantics, same in server and wasm). The builder's
+  TypeScript evaluator (`evaluateCondition`) and its only consumer (an
+  unmounted panel) are deleted - the browser evaluates only through
+  `rule_engine.wasm`. `archguard.TestEditorOperatorsAreImplemented` fails if
+  the editor offers an operator the engine lacks.
+
+### Remaining (not engine centralization)
+
 - Expression-parser string literals (`Literal` holds only float64).
 - Dead-code program: ~10k unreachable functions, incl. `internal/ops`.
 ---

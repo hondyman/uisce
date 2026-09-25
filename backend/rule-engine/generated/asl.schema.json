@@ -4142,25 +4142,6 @@
       ],
       "type": "object"
     },
-    "ColumnInfo": {
-      "properties": {
-        "Label": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "Type",
-        "Label"
-      ],
-      "type": "object"
-    },
     "ColumnMask": {
       "description": "ColumnMask represents field-level masking for a semantic term.",
       "properties": {
@@ -5668,30 +5649,6 @@
       },
       "required": [
         "db"
-      ],
-      "type": "object"
-    },
-    "DataSource": {
-      "enum": [
-        "ignite",
-        "postgres",
-        "starrocks"
-      ],
-      "type": "string"
-    },
-    "DataSourceRouter": {
-      "description": "DataSourceRouter routes queries to optimal data source",
-      "properties": {
-        "igniteDB": {},
-        "logger": {},
-        "postgresDB": {},
-        "starrocksDB": {}
-      },
-      "required": [
-        "igniteDB",
-        "starrocksDB",
-        "postgresDB",
-        "logger"
       ],
       "type": "object"
     },
@@ -13072,101 +13029,6 @@
       ],
       "type": "object"
     },
-    "QueryFilter": {
-      "properties": {
-        "Dimension": {
-          "type": "string"
-        },
-        "Operator": {
-          "type": "string"
-        },
-        "Values": {
-          "$ref": "#/definitions/any[]"
-        }
-      },
-      "required": [
-        "Dimension",
-        "Operator",
-        "Values"
-      ],
-      "type": "object"
-    },
-    "QueryRequest": {
-      "description": "QueryRequest represents a query request",
-      "properties": {
-        "Cube": {
-          "type": "string"
-        },
-        "Dimensions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Filters": {
-          "$ref": "#/definitions/QueryFilter[]"
-        },
-        "ForceSource": {
-          "$ref": "#/definitions/DataSource"
-        },
-        "Measures": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Parameters": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "RealTimeOnly": {
-          "type": "boolean"
-        },
-        "SQL": {
-          "type": "string"
-        },
-        "TimeRange": {
-          "$ref": "#/definitions/TimeRange"
-        }
-      },
-      "required": [
-        "SQL",
-        "Cube",
-        "Measures",
-        "Dimensions",
-        "Filters",
-        "TimeRange",
-        "ForceSource",
-        "RealTimeOnly",
-        "Parameters"
-      ],
-      "type": "object"
-    },
-    "QueryResult": {
-      "description": "QueryResult represents query results",
-      "properties": {
-        "CacheHit": {
-          "type": "boolean"
-        },
-        "Columns": {
-          "$ref": "#/definitions/ColumnInfo[]"
-        },
-        "Data": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
-        },
-        "QueryTime": {
-          "type": "number"
-        },
-        "RowCount": {
-          "type": "number"
-        },
-        "Source": {
-          "$ref": "#/definitions/DataSource"
-        }
-      },
-      "required": [
-        "Data",
-        "Columns",
-        "RowCount",
-        "Source",
-        "QueryTime",
-        "CacheHit"
-      ],
-      "type": "object"
-    },
     "QueryService": {
       "description": "QueryService handles query operations",
       "properties": {},
@@ -13250,14 +13112,6 @@
         "PreAggHit"
       ],
       "type": "object"
-    },
-    "QueryType": {
-      "enum": [
-        "analytics",
-        "historical",
-        "realtime"
-      ],
-      "type": "string"
     },
     "QueueStats": {
       "description": "QueueStats provides statistics about the job queue",
@@ -13439,20 +13293,6 @@
         "TargetBusinessObject",
         "JoinExpression",
         "Cardinality"
-      ],
-      "type": "object"
-    },
-    "ReportDefinitionBuilder": {
-      "description": "ReportDefinitionBuilder helps build reports",
-      "properties": {
-        "logger": {},
-        "router": {
-          "$ref": "#/definitions/DataSourceRouter"
-        }
-      },
-      "required": [
-        "router",
-        "logger"
       ],
       "type": "object"
     },
@@ -15231,68 +15071,6 @@
       ],
       "type": "object"
     },
-    "SelfServiceReport": {
-      "description": "SelfServiceReport represents a user-created report",
-      "properties": {
-        "ChartType": {
-          "type": "string"
-        },
-        "CreatedAt": {},
-        "CreatedBy": {
-          "type": "string"
-        },
-        "Cube": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "Dimensions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Filters": {
-          "$ref": "#/definitions/QueryFilter[]"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "IsPublic": {
-          "type": "boolean"
-        },
-        "Limit": {
-          "type": "number"
-        },
-        "Measures": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Settings": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "SortBy": {
-          "$ref": "#/definitions/SortSpec[]"
-        }
-      },
-      "required": [
-        "ID",
-        "Name",
-        "Description",
-        "Cube",
-        "Measures",
-        "Dimensions",
-        "Filters",
-        "SortBy",
-        "Limit",
-        "ChartType",
-        "Settings",
-        "CreatedBy",
-        "CreatedAt",
-        "IsPublic"
-      ],
-      "type": "object"
-    },
     "SemanticAssistant": {
       "properties": {
         "llmProvider": {}
@@ -15671,21 +15449,6 @@
       },
       "required": [
         "db"
-      ],
-      "type": "object"
-    },
-    "SortSpec": {
-      "properties": {
-        "Direction": {
-          "type": "string"
-        },
-        "Field": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Field",
-        "Direction"
       ],
       "type": "object"
     },
@@ -16777,21 +16540,6 @@
       ],
       "type": "object"
     },
-    "TimeRange": {
-      "properties": {
-        "End": {},
-        "Granularity": {
-          "type": "string"
-        },
-        "Start": {}
-      },
-      "required": [
-        "Start",
-        "End",
-        "Granularity"
-      ],
-      "type": "object"
-    },
     "TokenBucket": {
       "description": "TokenBucket implements token bucket algorithm for rate limiting",
       "properties": {
@@ -17556,6 +17304,18 @@
         "TenantID",
         "Dialects",
         "GeneratedSQL"
+      ],
+      "type": "object"
+    },
+    "UnsupportedOperatorError": {
+      "description": "UnsupportedOperatorError is returned for an operator that has no SQL\npushdown (unknown, or evaluable only by the VM, e.g. length_equals).",
+      "properties": {
+        "Operator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Operator"
       ],
       "type": "object"
     },
