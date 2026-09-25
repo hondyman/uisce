@@ -646,52 +646,27 @@ func TestEvaluateExpr_Parity_VM(t *testing.T) {
 			},
 		},
 	}
-	flatData := map[string]interface{}{
-		"client": map[string]interface{}{
-			"Portfolio": map[string]interface{}{
-				"Value":    150000.0,
-				"DriftPct": 0.08,
-			},
-		},
-	}
 
 	cases := []struct {
-		celExpr string
-		vmExpr  string
-		want    bool
+		expr string
+		want bool
 	}{
-		{"input.client.Portfolio.Value > 100000", "client.Portfolio.Value > 100000", true},
-		{"input.client.Portfolio.Value > 200000", "client.Portfolio.Value > 200000", false},
-		{"input.client.Portfolio.DriftPct >= 0.05", "client.Portfolio.DriftPct >= 0.05", true},
-		{"input.client.Portfolio.DriftPct > 0.10", "client.Portfolio.DriftPct > 0.10", false},
-		{"input.client.Portfolio.Value == 150000", "client.Portfolio.Value == 150000", true},
-		{"input.client.Portfolio.Value != 150000", "client.Portfolio.Value != 150000", false},
+		{"client.Portfolio.Value > 100000", true},
+		{"client.Portfolio.Value > 200000", false},
+		{"client.Portfolio.DriftPct >= 0.05", true},
+		{"client.Portfolio.DriftPct > 0.10", false},
+		{"client.Portfolio.Value == 150000", true},
+		{"client.Portfolio.Value != 150000", false},
 	}
 
 	for _, tc := range cases {
-		t.Run(tc.vmExpr, func(t *testing.T) {
-			gotCEL, err := eng.EvaluateExpr(context.Background(), tc.celExpr, boCtx)
+		t.Run(tc.expr, func(t *testing.T) {
+			got, err := eng.EvaluateExpr(context.Background(), tc.expr, boCtx)
 			if err != nil {
-				t.Fatalf("EvaluateExpr(%q): %v", tc.celExpr, err)
+				t.Fatalf("EvaluateExpr(%q): %v", tc.expr, err)
 			}
-			if gotCEL != tc.want {
-				t.Errorf("EvaluateExpr(%q) CEL = %v, want %v", tc.celExpr, gotCEL, tc.want)
-			}
-
-			exprVM, err := vm.ParseExpression(tc.vmExpr)
-			if err != nil {
-				t.Fatalf("ParseExpression(%q): %v", tc.vmExpr, err)
-			}
-			node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: &vm.Expression{Root: exprVM.Root}}
-			gotVM, err := eng.recursive.Evaluate(node, flatData)
-			if err != nil {
-				t.Fatalf("vm.Evaluate(%q): %v", tc.vmExpr, err)
-			}
-			if gotVM != tc.want {
-				t.Errorf("vm.Evaluate(%q) = %v, want %v", tc.vmExpr, gotVM, tc.want)
-			}
-			if gotCEL != gotVM {
-				t.Errorf("parity mismatch: CEL=%v vm=%v", gotCEL, gotVM)
+			if got != tc.want {
+				t.Errorf("EvaluateExpr(%q) = %v, want %v", tc.expr, got, tc.want)
 			}
 		})
 	}

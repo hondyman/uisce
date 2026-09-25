@@ -179,8 +179,6 @@ stages:
           serviceName: 'semantic-engine'
         governance-engine:
           serviceName: 'governance-engine'
-        cube-api:
-          serviceName: 'cube-api'
         ai-builder:
           serviceName: 'ai-builder'
         compliance-engine:

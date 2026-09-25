@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/hondyman/uisce/backend/internal/testutils"
@@ -154,4 +155,62 @@ func TestGenerateStandardDefinition_IncrementsCounter(t *testing.T) {
 	}
 
 	glossaryLLMCalls.Reset()
+}
+
+// TestRecordLLMError_IncrementsCounter verifies that recordLLMError increments
+// the glossary_llm_errors_total counter with the correct tenant and method labels.
+func TestRecordLLMError_IncrementsCounter(t *testing.T) {
+	glossaryLLMErrors.Reset()
+
+	ctx := context.WithValue(context.Background(), "tenant_id", "test-tenant-err")
+
+	recordLLMError(ctx, "definition")
+	recordLLMError(ctx, "definition")
+	recordLLMError(ctx, "expansion")
+
+	if got := testutil.ToFloat64(glossaryLLMErrors.WithLabelValues("test-tenant-err", "definition")); got != 2 {
+		t.Errorf("definition errors: expected 2, got %f", got)
+	}
+	if got := testutil.ToFloat64(glossaryLLMErrors.WithLabelValues("test-tenant-err", "expansion")); got != 1 {
+		t.Errorf("expansion errors: expected 1, got %f", got)
+	}
+
+	glossaryLLMErrors.Reset()
+}
+
+// TestGenerateStandardDefinition_IncrementsErrorCounter verifies that a failing
+// LLM call increments glossary_llm_errors_total but NOT glossary_llm_calls_total
+// (the call counter already incremented before the failure — it counts attempts).
+func TestGenerateStandardDefinition_IncrementsErrorCounter(t *testing.T) {
+	glossaryLLMCalls.Reset()
+	glossaryLLMErrors.Reset()
+
+	mockProvider := &testutils.MockLLMProvider{
+		GenerateResponseFunc: func(ctx context.Context, prompt string) (string, error) {
+			return "", fmt.Errorf("503 Service Unavailable")
+		},
+	}
+
+	svc := &AbbreviationService{
+		llmProvider: mockProvider,
+	}
+
+	ctx := context.WithValue(context.Background(), "tenant_id", "error-test-tenant")
+
+	_, err := svc.GenerateStandardDefinition(ctx, "SettlementDate", "settlement_date")
+	if err == nil {
+		t.Fatal("expected error from failing LLM")
+	}
+
+	// Call counter incremented (attempt counted)
+	if got := testutil.ToFloat64(glossaryLLMCalls.WithLabelValues("error-test-tenant", "definition")); got != 1 {
+		t.Errorf("definition call counter: expected 1, got %f", got)
+	}
+	// Error counter also incremented
+	if got := testutil.ToFloat64(glossaryLLMErrors.WithLabelValues("error-test-tenant", "definition")); got != 1 {
+		t.Errorf("definition error counter: expected 1, got %f", got)
+	}
+
+	glossaryLLMCalls.Reset()
+	glossaryLLMErrors.Reset()
 }

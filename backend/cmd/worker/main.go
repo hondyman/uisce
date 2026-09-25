@@ -227,18 +227,6 @@ func main() {
 	// 1. Rules Engine Dependencies
 	rulesRepo := rules.NewSQLRuleRepository(db)
 
-	// Cache and Compilers
-	// Note: In production you might persist cache or use Redis, here in-memory
-	// coreFnCache := rules.NewCoreFnCache()
-	// tenantFnCache := rules.NewTenantFnCache()
-	// predecl := starlib.Lib() // Base Starlark environment - REMOVED
-
-	// coreCompiler := rules.NewCoreCompiler(coreFnCache)
-	// tenantCompiler := rules.NewTenantCompiler(coreCompiler, tenantFnCache, rulesRepo)
-
-	// Rule Engine is now CEL/ASL based - no compilers needed in updated design
-	// Assuming RuleEngine constructor changed or we need to update it.
-	// Let's check NewRuleEngine signature in engine.go first.
 	ruleEngine := rules.NewRuleEngine(rulesRepo)
 
 	// 2. BP Activities

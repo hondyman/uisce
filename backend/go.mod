@@ -12,7 +12,6 @@ require (
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/google/cel-go v0.25.0
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/raft v1.6.1
 	github.com/hashicorp/raft-boltdb/v2 v2.2.0
@@ -67,7 +66,6 @@ require (
 )
 
 require (
-	cuelang.org/go v0.10.0
 	github.com/aws/aws-sdk-go-v2 v1.39.0
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.88.1
 	github.com/gorilla/mux v1.8.1
@@ -78,14 +76,11 @@ require (
 	github.com/segmentio/kafka-go v0.4.49
 	github.com/streadway/amqp v1.1.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.32.0
-	github.com/tetratelabs/wazero v1.6.0
-	go.starlark.net v0.0.0-20260210143700-b62fd896b91b
 )
 
 replace github.com/hondyman/uisce/libs/temporal-client => ../libs/temporal-client
 
 require (
-	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go v0.121.0 // indirect
 	cloud.google.com/go/ai v0.8.0 // indirect
 	cloud.google.com/go/auth v0.16.0 // indirect
@@ -96,7 +91,6 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Microsoft/hcsshim v0.11.5 // indirect
 	github.com/andybalholm/brotli v1.2.2 // indirect
-	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/armon/go-proxyproto v0.1.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.1 // indirect
@@ -110,7 +104,6 @@ require (
 	github.com/aws/smithy-go v1.23.0 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/cockroachdb/apd/v3 v3.2.1 // indirect
 	github.com/containerd/containerd v1.7.18 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
@@ -118,7 +111,6 @@ require (
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/emicklei/proto v1.14.2 // indirect
 	github.com/fatih/color v1.18.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
@@ -180,7 +172,6 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
-	github.com/protocolbuffers/txtpbfmt v0.0.0-20251016062345-16587c79cd91 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
@@ -191,7 +182,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.23.12 // indirect
 	github.com/shoenig/go-m1cpu v0.1.6 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
-	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect

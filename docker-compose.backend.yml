@@ -133,24 +133,6 @@ services:
     profiles:
       - services
 
-  rule-engine:
-    build:
-      context: .
-      dockerfile: backend/cmd/rule-engine-service/Dockerfile
-    restart: on-failure
-    environment:
-      PORT: 8085
-      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
-      KAFKA_BROKERS: redpanda:9092
-      # Note: messaging now uses Redpanda (Kafka-compatible)
-    expose:
-      - "8085"
-    depends_on:
-      redpanda:
-        condition: service_healthy
-    profiles:
-      - services
-
   # ============================================================================
   # OPTIONAL PROFILES
   # ============================================================================

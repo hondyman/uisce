@@ -258,7 +258,6 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Validation Rules', path: '/core/validation-rules', icon: <CheckCircleIcon />, description: 'Data validations' },
           { label: 'Calculated Fields', path: '/core/calculated-fields', icon: <QueryStatsIcon />, description: 'Field calculations' },
-          { label: 'Expressions', path: '/reports/expressions', icon: <CodeIcon />, description: 'Starlark expressions' },
           { label: 'Calculations Library', path: '/fabric/calculations', icon: <QueryStatsIcon />, description: 'Core calculation logic' },
         ]
       },
@@ -267,7 +266,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <CheckCircleIcon />,
         items: [
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Uisce Builder', path: '/core/uisce-builder', icon: <BuildIcon />, description: 'Advanced UI builder' },
           { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
           { label: 'Marketplace', path: '/marketplace', icon: <StoreIcon />, description: 'Components library' },
           { label: 'UI Components', path: '/marketplace/components', icon: <CodeIcon />, description: 'Component marketplace' },

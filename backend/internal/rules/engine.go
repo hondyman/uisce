@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/cel-go/cel"
-	"github.com/google/cel-go/checker/decls"
 	"github.com/google/uuid"
 	"golang.org/x/sync/singleflight"
 
@@ -63,7 +61,6 @@ type DriftHealerInterface interface {
 // are wait-free reads. RewarmCore/RewarmTenant build a new state in local
 // memory and atomically swap it in.
 type RuleEngine struct {
-	env  *cel.Env
 	repo RuleRepository
 
 	coreState atomic.Pointer[EngineState]
@@ -82,14 +79,7 @@ type RuleEngine struct {
 }
 
 func NewRuleEngine(repo RuleRepository) *RuleEngine {
-	env, _ := cel.NewEnv(
-		cel.Declarations(
-			decls.NewVar("input", decls.NewMapType(decls.String, decls.Dyn)),
-		),
-	)
-
 	e := &RuleEngine{
-		env:       env,
 		repo:      repo,
 		vm:        vm.NewVM(),
 		metrics:   &EngineMetrics{},
@@ -420,61 +410,6 @@ func (e *RuleEngine) EvaluateNode(ctx context.Context, node *RuleNode, input map
 	return passed, err
 }
 
-// EvaluateCEL evaluates a CEL expression against the provided input.
-func (e *RuleEngine) EvaluateCEL(ctx context.Context, expression string, input map[string]interface{}) (bool, error) {
-	if e.env == nil {
-		return false, fmt.Errorf("engine not initialized")
-	}
-	ast, issues := e.env.Compile(expression)
-	if issues != nil && issues.Err() != nil {
-		return false, fmt.Errorf("compile error: %w", issues.Err())
-	}
-
-	prg, err := e.env.Program(ast)
-	if err != nil {
-		return false, fmt.Errorf("program creation error: %w", err)
-	}
-
-	out, _, err := prg.Eval(map[string]interface{}{
-		"input": input,
-	})
-	if err != nil {
-		return false, fmt.Errorf("evaluation error: %w", err)
-	}
-
-	result, ok := out.Value().(bool)
-	if !ok {
-		return false, fmt.Errorf("expression did not return a boolean")
-	}
-
-	return result, nil
-}
-
-// EvaluateValue evaluates a CEL expression and returns the raw value.
-func (e *RuleEngine) EvaluateValue(ctx context.Context, expression string, input map[string]interface{}) (interface{}, error) {
-	if e.env == nil {
-		return nil, fmt.Errorf("engine not initialized")
-	}
-	ast, issues := e.env.Compile(expression)
-	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("compile error: %w", issues.Err())
-	}
-
-	prg, err := e.env.Program(ast)
-	if err != nil {
-		return nil, fmt.Errorf("program creation error: %w", err)
-	}
-
-	out, _, err := prg.Eval(map[string]interface{}{
-		"input": input,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("evaluation error: %w", err)
-	}
-
-	return out.Value(), nil
-}
-
 func (e *RuleEngine) EvaluateTenantRule(ctx context.Context, rule *TenantValidationRule, boCtx map[string]map[string]interface{}) (bool, error) {
 	return true, nil
 }
@@ -484,7 +419,12 @@ func (e *RuleEngine) EvaluateExpr(ctx context.Context, expr string, boCtx map[st
 	for k, v := range boCtx {
 		flatInput[k] = v
 	}
-	return e.EvaluateCEL(ctx, expr, flatInput)
+	parsed, err := vm.ParseExpression(expr)
+	if err != nil {
+		return false, fmt.Errorf("parse error: %w", err)
+	}
+	node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: parsed}
+	return e.recursive.Evaluate(node, flatInput)
 }
 
 func (e *RuleEngine) EvaluateDurationExpr(ctx context.Context, expr string, boCtx map[string]map[string]interface{}) (int, error) {
@@ -492,20 +432,16 @@ func (e *RuleEngine) EvaluateDurationExpr(ctx context.Context, expr string, boCt
 	for k, v := range boCtx {
 		flatInput[k] = v
 	}
-	val, err := e.EvaluateValue(ctx, expr, flatInput)
+	parsed, err := vm.ParseExpression(expr)
+	if err != nil {
+		return 0, fmt.Errorf("parse error: %w", err)
+	}
+	node := vm.RuleNode{Type: vm.NodeTypeExpression, Expression: parsed}
+	val, err := e.recursive.EvaluateNumeric(node, flatInput)
 	if err != nil {
 		return 0, err
 	}
-	switch v := val.(type) {
-	case int:
-		return v, nil
-	case int64:
-		return int(v), nil
-	case float64:
-		return int(v), nil
-	default:
-		return 0, fmt.Errorf("expression returned non-numeric type: %T", val)
-	}
+	return int(val), nil
 }
 
 type ConditionEvalTrace struct {

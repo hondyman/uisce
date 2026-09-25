@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,12 +20,16 @@ import (
 )
 
 type BOCRUDHandler struct {
-	db      *sqlx.DB
-	trigger *TriggerEngine
+	db       *sqlx.DB
+	trigger  *TriggerEngine
+	enforcer boWriteEnforcer
 }
 
-func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
-	return &BOCRUDHandler{db: db, trigger: trigger}
+// NewBOCRUDHandler wires the /bo/{boKey}/records API. enforcer is required:
+// with a nil enforcer every write is refused (503) rather than bypassing
+// the rule engine.
+func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine, enforcer boWriteEnforcer) *BOCRUDHandler {
+	return &BOCRUDHandler{db: db, trigger: trigger, enforcer: enforcer}
 }
 
 // resolveWritableColumns returns the set of real column names for drivingTable,
@@ -110,6 +115,7 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/bo", func(r chi.Router) {
 		r.Get("/{boKey}/records", h.HandleListBORecords)
 		r.Post("/{boKey}/records", h.HandleCreateBORecord)
+		r.Post("/{boKey}/records/bulk", h.HandleBulkBORecords)
 		r.Get("/{boKey}/records/{recordId}", h.HandleGetBORecord)
 		r.Put("/{boKey}/records/{recordId}", h.HandleUpdateBORecord)
 		r.Delete("/{boKey}/records/{recordId}", h.HandleDeleteBORecord)
@@ -380,26 +386,11 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		RETURNING *;
 	`, boMeta.DrivingTable, strings.Join(setClauses, ", "), whereClause)
 
-	rows, err := h.db.QueryxContext(r.Context(), updateSQL, args...)
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), boKey, updateSQL, args)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("database mutation error: %v", err), http.StatusInternalServerError)
+		writeBOWriteError(w, err, "record not found or tenant access violation (Rule 7)", "database mutation error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping updated record: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		http.Error(w, "record not found or tenant access violation (Rule 7)", http.StatusNotFound)
-		return
-	}
-
-	// Clean byte arrays or UUIDs for JSON serialization
-	cleanScanResult(result)
 
 	h.emitBORowEvent("row_update", tenantID, boKey, recordID, result)
 
@@ -446,54 +437,18 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var columns []string
-	var placeholders []string
-	var args []interface{}
-	argIdx := 1
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
-		columns = []string{"tenant_id"}
-		placeholders = []string{"$1"}
-		args = []interface{}{tenantID}
-		argIdx = 2
-	}
-
-	for fieldKey, val := range payload {
-		lower := strings.ToLower(fieldKey)
-		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
-			continue
-		}
-		if !writableCols[fieldKey] {
-			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
-			return
-		}
-		columns = append(columns, fieldKey)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-		args = append(args, val)
-		argIdx++
-	}
-
-	insertSQL := fmt.Sprintf(`
-		INSERT INTO %s (%s)
-		VALUES (%s)
-		RETURNING *;
-	`, boMeta.DrivingTable, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
-
-	rows, err := h.db.QueryxContext(r.Context(), insertSQL, args...)
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	insertSQL, args, err := buildBOInsert(boMeta.DrivingTable, tenantID, tenantScoped, writableCols, payload)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed creating record: %v", err), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer rows.Close()
 
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping created record", http.StatusInternalServerError)
-			return
-		}
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), boKey, insertSQL, args)
+	if err != nil {
+		writeBOWriteError(w, err, "record was not created", "failed creating record", http.StatusInternalServerError)
+		return
 	}
-
-	cleanScanResult(result)
 
 	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
 	h.emitBORowEvent("row_insert", tenantID, boKey, newRecordID, result)
@@ -501,6 +456,48 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+// buildBOInsert builds the INSERT ... RETURNING * for one record. tenant_id
+// is forced server-side (never taken from the payload) when the table is
+// tenant-scoped, audit timestamps are ignored, and every other key must be
+// a real column (identifiers can't be bind-parameterized, so the allowlist
+// is what makes interpolating them safe).
+func buildBOInsert(table string, tenantID uuid.UUID, tenantScoped bool, writable map[string]bool, payload map[string]interface{}) (string, []interface{}, error) {
+	var columns, placeholders []string
+	var args []interface{}
+	if tenantScoped {
+		columns, placeholders, args = []string{"tenant_id"}, []string{"$1"}, []interface{}{tenantID}
+	}
+	for _, fieldKey := range sortedKeys(payload) { // deterministic SQL for logs and tests
+		lower := strings.ToLower(fieldKey)
+		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
+			continue
+		}
+		if !writable[fieldKey] {
+			return "", nil, fmt.Errorf("unknown attribute '%s'", fieldKey)
+		}
+		columns = append(columns, fieldKey)
+		args = append(args, payload[fieldKey])
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+	}
+	if len(columns) == 0 {
+		return "", nil, fmt.Errorf("no writable attributes provided")
+	}
+	return fmt.Sprintf(`
+		INSERT INTO %s (%s)
+		VALUES (%s)
+		RETURNING *;
+	`, table, strings.Join(columns, ", "), strings.Join(placeholders, ", ")), args, nil
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // HandleGetBORecord hydrates a single record by ID

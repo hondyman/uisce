@@ -266,21 +266,12 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 		RETURNING *;
 	`, childMeta.DrivingTable, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
 
-	rows, err := h.db.QueryxContext(r.Context(), insertSQL, args...)
+	// The child is the BO being written, so the child's rules judge it.
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), childKey, insertSQL, args)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed creating related record: %v", err), http.StatusInternalServerError)
+		writeBOWriteError(w, err, "related record was not created", "failed creating related record", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping created record", http.StatusInternalServerError)
-			return
-		}
-	}
-	cleanScanResult(result)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -363,24 +354,11 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 		RETURNING *;
 	`, childMeta.DrivingTable, strings.Join(setClauses, ", "), childMeta.KeyColumn, fkColumn)
 
-	rows, err := h.db.QueryxContext(r.Context(), updateSQL, args...)
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), childKey, updateSQL, args)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("database mutation error: %v", err), http.StatusInternalServerError)
+		writeBOWriteError(w, err, "record not found or does not belong to this parent", "database mutation error", http.StatusInternalServerError)
 		return
 	}
-	defer rows.Close()
-
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping updated record: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		http.Error(w, "record not found or does not belong to this parent", http.StatusNotFound)
-		return
-	}
-	cleanScanResult(result)
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
