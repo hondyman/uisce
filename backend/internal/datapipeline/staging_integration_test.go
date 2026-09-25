@@ -176,6 +176,19 @@ func TestStagingSinkIntegration(t *testing.T) {
 		t.Error("dry run must still reject a bad mapping")
 	}
 
+	// The staging table list offers only loadable columns.
+	tables, err := StagingTables(context.Background(), db)
+	if err != nil || len(tables) != 1 || tables[0].Table != "staging.ff_fund" {
+		t.Fatalf("tables: %+v %v", tables, err)
+	}
+	var names []string
+	for _, c := range tables[0].Columns {
+		names = append(names, c.Name+":"+c.Type)
+	}
+	if strings.Join(names, ",") != "fsym_id:string,fund_name:string,aum:decimal" {
+		t.Errorf("columns: %v", names)
+	}
+
 	// Mapping to a load-tracking or unknown column is refused.
 	bad := Node{ID: "s", Type: NodeStagingSink, Config: cfg(StagingSinkConfig{Table: "staging.ff_fund", SourceCd: "X", Domain: "Y",
 		Columns: map[string]string{"T": "tenant_id"}})}

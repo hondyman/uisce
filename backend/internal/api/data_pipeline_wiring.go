@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/go-chi/chi/v5"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
 // registerDataPipelineRoutes mounts the visual loader. Its dependencies are
@@ -23,7 +26,7 @@ import (
 // (task queue datapipeline.TaskQueue) that shares these dependencies.
 func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *BOCRUDHandler) {
 	deps := datapipeline.Deps{
-		Rules: &datapipeline.CatalogRuleChecker{Rules: analytics.NewValidationRuleService(sqlxDB)},
+		Rules: &datapipeline.CatalogRuleChecker{Rules: analytics.NewValidationRuleService(sqlxDB)}, // execution path
 		BO:    NewPipelineBOClient(bo),
 	}
 	if u := os.Getenv("DATAPIPELINE_ENGINE_URL"); u != "" {
@@ -52,5 +55,19 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 			log.Printf("[data-pipelines] worker failed to start: %v", err)
 		}
 	}
-	NewDataPipelineHandler(store, deps, s.TemporalClient).RegisterRoutes(r)
+	rules := analytics.NewValidationRuleService(sqlxDB)
+	catalog := func(req *http.Request, tenant string) datapipeline.PlatformCatalog {
+		return &pipelineCatalog{r: req, tenant: tenant, bos: s.BusinessObjectService, crud: bo, rules: rules, deps: deps}
+	}
+	var assistant *datapipeline.Assistant
+	if s.LLMConfigSvc != nil {
+		assistant = &datapipeline.Assistant{LLM: func(ctx context.Context, prompt string) (string, error) {
+			cfg, err := s.LLMConfigSvc.Get()
+			if err != nil {
+				return "", err
+			}
+			return llm.NewGeminiProvider(cfg.APIKey, cfg.Model).GenerateResponse(ctx, prompt)
+		}}
+	}
+	NewDataPipelineHandler(store, deps, s.TemporalClient).WithGrounding(catalog, assistant).RegisterRoutes(r)
 }

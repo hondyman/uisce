@@ -236,3 +236,56 @@ func (s *stagingSink) Close(ctx context.Context, runErr error) error {
 		return err
 	})
 }
+
+// StagingTable is a loadable staging table and its target columns.
+type StagingTable struct {
+	Table   string        `json:"table"`
+	Columns []TargetField `json:"columns"`
+}
+
+// StagingTables lists staging.* tables that carry the load-tracking columns,
+// with their loadable columns (load-tracking ones excluded).
+func StagingTables(ctx context.Context, db *sql.DB) ([]StagingTable, error) {
+	rows, err := db.QueryContext(ctx, `
+		SELECT c.table_name, c.column_name, c.data_type, c.is_nullable = 'NO'
+		FROM information_schema.columns c
+		WHERE c.table_schema = 'staging'
+		  AND EXISTS (SELECT 1 FROM information_schema.columns k
+		              WHERE k.table_schema = 'staging' AND k.table_name = c.table_name AND k.column_name = '_load_run_id')
+		  AND c.column_name NOT LIKE '\_%' AND c.column_name <> 'tenant_id'
+		ORDER BY c.table_name, c.ordinal_position`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []StagingTable{}
+	for rows.Next() {
+		var table, col, typ string
+		var required bool
+		if err := rows.Scan(&table, &col, &typ, &required); err != nil {
+			return nil, err
+		}
+		if len(out) == 0 || out[len(out)-1].Table != "staging."+table {
+			out = append(out, StagingTable{Table: "staging." + table})
+		}
+		t := &out[len(out)-1]
+		t.Columns = append(t.Columns, TargetField{Name: col, Type: pgTypeName(typ), Required: required})
+	}
+	return out, rows.Err()
+}
+
+func pgTypeName(t string) string {
+	switch {
+	case strings.Contains(t, "int"):
+		return "int"
+	case t == "numeric" || strings.Contains(t, "double") || t == "real":
+		return "decimal"
+	case t == "boolean":
+		return "bool"
+	case t == "date":
+		return "date"
+	case strings.HasPrefix(t, "timestamp"):
+		return "timestamp"
+	}
+	return "string"
+}

@@ -25,6 +25,29 @@ type DataPipelineHandler struct {
 	store    *datapipeline.Store
 	deps     datapipeline.Deps
 	temporal client.Client // nil: runs execute in-process (dev)
+	// catalog returns the platform as the caller's tenant sees it (nil:
+	// structural checks only). assistant is nil when no LLM is configured.
+	catalog   func(r *http.Request, tenant string) datapipeline.PlatformCatalog
+	assistant *datapipeline.Assistant
+}
+
+// WithGrounding enables grounded checks and, with an assistant, /assist.
+func (h *DataPipelineHandler) WithGrounding(cat func(*http.Request, string) datapipeline.PlatformCatalog, a *datapipeline.Assistant) *DataPipelineHandler {
+	h.catalog, h.assistant = cat, a
+	return h
+}
+
+// check is structural validation plus grounding against the tenant's platform.
+func (h *DataPipelineHandler) check(r *http.Request, tenant string, spec *datapipeline.Spec) []datapipeline.Issue {
+	var cat datapipeline.PlatformCatalog
+	if h.catalog != nil {
+		cat = h.catalog(r, tenant)
+	}
+	issues := datapipeline.Check(r.Context(), cat, spec)
+	if issues == nil {
+		issues = []datapipeline.Issue{}
+	}
+	return issues
 }
 
 func NewDataPipelineHandler(store *datapipeline.Store, deps datapipeline.Deps, tc client.Client) *DataPipelineHandler {
@@ -36,9 +59,11 @@ func (h *DataPipelineHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/", h.list)
 		r.Post("/", h.create)
 		r.Post("/validate", h.validate)
+		r.Post("/assist", h.assist)
 		r.Post("/preview", h.preview)
 		r.Post("/suggest-mapping", h.suggestMapping)
 		r.Get("/node-types", h.nodeTypes)
+		r.Get("/staging-tables", h.stagingTables)
 		r.Get("/files", h.listFiles)
 		r.Post("/files/upload", h.uploadFile)
 		r.Post("/files/profile", h.profileFile)
@@ -91,29 +116,6 @@ func dpStoreError(w http.ResponseWriter, err error) {
 	}
 	log.Printf("[data-pipelines] %v", err)
 	dpError(w, http.StatusInternalServerError, "internal error")
-}
-
-// validationIssues turns Spec.Validate's errors into a list the canvas can
-// attach to nodes: `node "x": ...` errors carry the node id.
-type dpIssue struct {
-	NodeID  string `json:"node_id,omitempty"`
-	Message string `json:"message"`
-}
-
-func dpIssues(errs []error) []dpIssue {
-	out := make([]dpIssue, 0, len(errs))
-	for _, e := range errs {
-		msg := e.Error()
-		iss := dpIssue{Message: msg}
-		if strings.HasPrefix(msg, `node "`) {
-			if end := strings.Index(msg[6:], `"`); end >= 0 {
-				iss.NodeID = msg[6 : 6+end]
-				iss.Message = strings.TrimPrefix(msg[6+end+1:], ": ")
-			}
-		}
-		out = append(out, iss)
-	}
-	return out
 }
 
 // --- definitions -------------------------------------------------------------
@@ -221,7 +223,8 @@ func (h *DataPipelineHandler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *DataPipelineHandler) validate(w http.ResponseWriter, r *http.Request) {
-	if _, ok := h.tenant(w, r); !ok {
+	t, ok := h.tenant(w, r)
+	if !ok {
 		return
 	}
 	var spec datapipeline.Spec
@@ -232,7 +235,7 @@ func (h *DataPipelineHandler) validate(w http.ResponseWriter, r *http.Request) {
 	if spec.Version == 0 {
 		spec.Version = datapipeline.SpecVersion
 	}
-	issues := dpIssues(spec.Validate())
+	issues := h.check(r, t, &spec)
 	dpJSON(w, http.StatusOK, map[string]any{"valid": len(issues) == 0, "issues": issues})
 }
 
@@ -248,7 +251,7 @@ func (h *DataPipelineHandler) startRun(w http.ResponseWriter, r *http.Request) {
 		dpStoreError(w, err)
 		return
 	}
-	if issues := dpIssues(d.Spec.Validate()); len(issues) > 0 {
+	if issues := h.check(r, t, &d.Spec); len(issues) > 0 {
 		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "the pipeline has problems to fix before it can run", "issues": issues})
 		return
 	}
@@ -354,7 +357,7 @@ func (h *DataPipelineHandler) preview(w http.ResponseWriter, r *http.Request) {
 	if b.Spec.Version == 0 {
 		b.Spec.Version = datapipeline.SpecVersion
 	}
-	if issues := dpIssues(b.Spec.Validate()); len(issues) > 0 {
+	if issues := h.check(r, t, &b.Spec); len(issues) > 0 {
 		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "fix these first", "issues": issues})
 		return
 	}
@@ -499,4 +502,47 @@ func (h *DataPipelineHandler) profileFile(w http.ResponseWriter, r *http.Request
 		"sample":    prof.Sample,
 		"row_count": prof.RowCount,
 	})
+}
+
+// stagingTables lists staging tables a pipeline can load (those with the
+// load-tracking columns) and their loadable columns, as mapping targets.
+func (h *DataPipelineHandler) stagingTables(w http.ResponseWriter, r *http.Request) {
+	if _, ok := h.tenant(w, r); !ok {
+		return
+	}
+	if h.deps.StagingDB == nil {
+		dpError(w, http.StatusServiceUnavailable, "the staging database is not configured for this environment")
+		return
+	}
+	tables, err := datapipeline.StagingTables(r.Context(), h.deps.StagingDB)
+	if err != nil {
+		dpStoreError(w, err)
+		return
+	}
+	dpJSON(w, http.StatusOK, tables)
+}
+
+// assist answers a question about, or proposes a change to, the pipeline.
+// Proposals are grounded and checked before they are returned; nothing is
+// saved - the analyst applies it on the canvas.
+func (h *DataPipelineHandler) assist(w http.ResponseWriter, r *http.Request) {
+	t, ok := h.tenant(w, r)
+	if !ok {
+		return
+	}
+	if h.assistant == nil || h.catalog == nil {
+		dpError(w, http.StatusServiceUnavailable, "the AI assistant is not configured for this environment (Admin > LLM Config)")
+		return
+	}
+	var req datapipeline.AssistRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		dpError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+		return
+	}
+	out, err := h.assistant.Respond(r.Context(), h.catalog(r, t), req)
+	if err != nil {
+		dpError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	dpJSON(w, http.StatusOK, out)
 }

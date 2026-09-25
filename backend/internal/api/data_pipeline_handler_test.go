@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -40,8 +41,8 @@ func TestDataPipelines_ValidateAttachesIssuesToNodes(t *testing.T) {
 	dpRouter(datapipeline.Deps{}).ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 	var out struct {
-		Valid  bool      `json:"valid"`
-		Issues []dpIssue `json:"issues"`
+		Valid  bool                 `json:"valid"`
+		Issues []datapipeline.Issue `json:"issues"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
 	assert.False(t, out.Valid)
@@ -78,4 +79,49 @@ func TestDataPipelines_PaletteReflectsConfiguration(t *testing.T) {
 	assert.True(t, byType["map"].Available)
 	assert.False(t, byType["staging_sink"].Available)
 	assert.Equal(t, "the staging database is not configured", byType["staging_sink"].Unavailable)
+}
+
+type stubCatalog struct{}
+
+func (stubCatalog) BusinessObjects(context.Context) ([]datapipeline.BOInfo, error) {
+	return []datapipeline.BOInfo{{Key: "fund", Label: "Fund"}}, nil
+}
+func (stubCatalog) BOFields(context.Context, string) ([]datapipeline.TargetField, error) {
+	return []datapipeline.TargetField{{Name: "aum"}}, nil
+}
+func (stubCatalog) Rules(context.Context, string) ([]datapipeline.RuleInfo, error) { return nil, nil }
+func (stubCatalog) Files(context.Context) ([]string, error)                        { return nil, nil }
+func (stubCatalog) StagingTables(context.Context) ([]datapipeline.StagingTable, error) {
+	return nil, nil
+}
+
+func TestDataPipelines_Assist(t *testing.T) {
+	body := `{"message":"copy funds into fund","spec":{"nodes":[],"edges":[]}}`
+	// Not configured: a clear refusal.
+	rec := httptest.NewRecorder()
+	dpRouter(datapipeline.Deps{}).ServeHTTP(rec, withTestAuth(httptest.NewRequest("POST", "/data-pipelines/assist", bytes.NewBufferString(body)), pipeTenant))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+	var gotTenant string
+	llm := func(context.Context, string) (string, error) {
+		return `{"reply":"done","spec":{"version":1,"nodes":[
+			{"id":"in","type":"bo_source","config":{"bo_key":"fund"}},
+			{"id":"out","type":"bo_sink","config":{"bo_key":"funds"}}],"edges":[{"from":"in","to":"out"}]}}`, nil
+	}
+	r := chi.NewRouter()
+	NewDataPipelineHandler(&datapipeline.Store{}, datapipeline.Deps{}, nil).WithGrounding(
+		func(_ *http.Request, tenant string) datapipeline.PlatformCatalog {
+			gotTenant = tenant
+			return stubCatalog{}
+		},
+		&datapipeline.Assistant{LLM: llm, MaxAttempts: 1},
+	).RegisterRoutes(r)
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, withTestAuth(httptest.NewRequest("POST", "/data-pipelines/assist", bytes.NewBufferString(body)), pipeTenant))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var out datapipeline.AssistResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	assert.Equal(t, pipeTenant, gotTenant, "the catalog must be the caller's tenant")
+	require.Len(t, out.Issues, 1)
+	assert.Equal(t, `there is no business object "funds"`, out.Issues[0].Message)
 }
