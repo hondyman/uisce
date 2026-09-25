@@ -15,8 +15,6 @@
     "ColumnSchema",
     "Command",
     "Connection",
-    "CubeDimension",
-    "CubeMeasure",
     "DatabaseColumn",
     "Event",
     "HierarchicalNode",
@@ -78,16 +76,6 @@
       "label": "Connection",
       "insert": "Connection {\n  \n}",
       "detail": "Insert Connection node"
-    },
-    {
-      "label": "CubeDimension",
-      "insert": "CubeDimension {\n  \n}",
-      "detail": "Insert CubeDimension node"
-    },
-    {
-      "label": "CubeMeasure",
-      "insert": "CubeMeasure {\n  \n}",
-      "detail": "Insert CubeMeasure node"
     },
     {
       "label": "DatabaseColumn",
