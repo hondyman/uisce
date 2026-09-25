@@ -103,24 +103,6 @@ services:
       rabbitmq:
         condition: service_healthy
 
-  workflow-service:
-    build:
-      context: .
-      dockerfile: backend/cmd/workflow-service/Dockerfile
-    restart: on-failure
-    environment:
-      POSTGRES_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@host.docker.internal:5432/alpha?sslmode=disable
-      WORKFLOW_SERVICE_PORT: 8084
-      KAFKA_BROKERS: redpanda:9092
-      # Note: messaging now uses Redpanda (Kafka-compatible)
-    ports:
-      - "8084:8084"
-    depends_on:
-      redpanda:
-        condition: service_healthy
-    profiles:
-      - temporal
-
   screen-builder-service:
     build:
       context: .
