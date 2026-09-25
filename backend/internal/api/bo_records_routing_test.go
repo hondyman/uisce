@@ -87,8 +87,9 @@ func TestBORecords_UnresolvableDatasourceIsRefused(t *testing.T) {
 		req := withTestAuth(httptest.NewRequest(c.method, c.path, bytes.NewBufferString(c.body)), routingTenant)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.GreaterOrEqual(t, w.Code, 400, "%s %s must be refused", c.method, c.path)
-		assert.Contains(t, w.Body.String(), "no connection configuration")
+		assert.Equal(t, http.StatusServiceUnavailable, w.Code, "%s %s must be refused", c.method, c.path)
+		assert.Contains(t, w.Body.String(), `"error_code":"9000-11"`)
+		assert.NotContains(t, w.Body.String(), "no connection configuration", "the cause is logged, never sent")
 	}
 	// No INSERT/SELECT against the record table was attempted in the metadata DB:
 	// sqlmock fails any unexpected query, and none was expected.

@@ -126,7 +126,8 @@ func TestBOWrite_RuleRejectionIs422AndRollsBack(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 	var resp map[string]interface{}
 	assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, []interface{}{"notional within limit"}, resp["rules"])
+	assert.Equal(t, "9000-5", resp["error_code"])
+	assert.Equal(t, map[string]interface{}{"rules": []interface{}{"notional within limit"}}, resp["details"])
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -190,7 +191,8 @@ func TestBulkBORecords_EachRowJudgedFailuresAttributed(t *testing.T) {
 	assert.Equal(t, 1, resp.Failed[0].Index)
 	assert.Equal(t, []string{"notional within limit"}, resp.Failed[0].Rules)
 	assert.Equal(t, 2, resp.Failed[1].Index)
-	assert.Contains(t, resp.Failed[1].Error, "unknown attribute 'bogus_col'")
+	assert.Equal(t, "9000-3", resp.Failed[1].Code, "unknown field is a catalog message")
+	assert.Equal(t, "9000-5", resp.Failed[0].Code)
 	assert.Equal(t, []string{"fund"}, enf.boKeys)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -204,9 +206,9 @@ func TestBuildBOUpsertUpdate(t *testing.T) {
 	assert.Equal(t, []interface{}{"t", "X", 1, "N"}, args)
 
 	_, _, err = buildBOUpsertUpdate("mdm.fund", "t", true, w, []string{"isin"}, map[string]interface{}{"name": "N"})
-	assert.ErrorContains(t, err, "missing key field 'isin'")
+	assert.ErrorContains(t, err, "9000-15 [isin]")
 	_, _, err = buildBOUpsertUpdate("mdm.fund", "t", true, w, []string{"isin"}, map[string]interface{}{"isin": "X", "evil; DROP": 1})
-	assert.ErrorContains(t, err, "unknown attribute")
+	assert.ErrorContains(t, err, "9000-3")
 }
 
 // A write that leaves required fields empty is a 422 naming them, like a

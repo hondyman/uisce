@@ -1758,6 +1758,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		srv.registerWorkflowRoutes(r, db, cron.New())
 		srv.registerProcessRoutes(r, db, sqlxDB)
 		srv.registerTriggerEngineRoutes(r, sqlxDB)
+		msgcatStore := msgcat.NewStore(sqlxDB)
+		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
 		srv.registerBOCRUDRoutes(r, sqlxDB)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
@@ -1836,9 +1838,8 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		glossaryHandler.RegisterRoutes(r)
 
 		// Message Catalog: the one source of user-facing error text, per
-		// language and tenant, edited through /api/message-catalog.
-		msgcatStore := msgcat.NewStore(sqlxDB)
-		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
+		// language and tenant, edited through /api/message-catalog. (The
+		// catalog itself is created before the handlers that answer with it.)
 		msgcat.NewHandler(msgcatStore, srv.MessageCatalog).RegisterRoutes(r)
 
 		// Semantic Relationships Handler (AI-suggested term relationships,
@@ -3829,6 +3830,7 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 		enforcer = s.BusinessObjectService
 	}
 	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
+	boCRUDHandler.catalog = s.MessageCatalog
 	boCRUDHandler.RegisterRoutes(r)
 }
 

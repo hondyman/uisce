@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"net/http"
 	"strconv"
 	"strings"
@@ -105,11 +106,7 @@ func splitSchemaTable(qualified string) (schema, table string) {
 func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -118,12 +115,12 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 
 	rootBoID, err := h.resolveBusinessObjectID(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving business object id: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(boKey).Wrap(err))
 		return
 	}
 	rel, err := h.resolveRelationship(r.Context(), tenantID.String(), rootBoID, relKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		h.fail(w, r, tenantID, boRelationshipNotFound(relKey, boKey).Wrap(err))
 		return
 	}
 	childBoID := rel.ToBoID
@@ -132,17 +129,17 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 	}
 	childKey, err := h.resolveBOKeyByID(r.Context(), childBoID, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related business object: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(relKey).Wrap(err))
 		return
 	}
 	childMeta, err := h.resolveBOMetadata(r.Context(), childKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		h.fail(w, r, tenantID, boNotRelated(boKey).Wrap(err))
 		return
 	}
 
@@ -168,7 +165,7 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 
 	rows, err := childMeta.RecordsDB.QueryxContext(r.Context(), query, tenantID, recordID, limit, offset)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed listing related records: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("listing related records: %w", err))
 		return
 	}
 	defer rows.Close()
@@ -195,11 +192,7 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -208,18 +201,18 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
 
 	rootBoID, err := h.resolveBusinessObjectID(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving business object id: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(boKey).Wrap(err))
 		return
 	}
 	rel, err := h.resolveRelationship(r.Context(), tenantID.String(), rootBoID, relKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		h.fail(w, r, tenantID, boRelationshipNotFound(relKey, boKey).Wrap(err))
 		return
 	}
 	childBoID := rel.ToBoID
@@ -228,17 +221,17 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 	}
 	childKey, err := h.resolveBOKeyByID(r.Context(), childBoID, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related business object: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(relKey).Wrap(err))
 		return
 	}
 	childMeta, err := h.resolveBOMetadata(r.Context(), childKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		h.fail(w, r, tenantID, boNotRelated(boKey).Wrap(err))
 		return
 	}
 
@@ -270,7 +263,7 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 	// The child is the BO being written, so the child's rules judge it.
 	result, err := h.enforcedWrite(r.Context(), tenantID.String(), childKey, insertSQL, args)
 	if err != nil {
-		writeBOWriteError(w, err, "related record was not created", "failed creating related record", http.StatusInternalServerError)
+		h.fail(w, r, tenantID, writeError(err))
 		return
 	}
 
@@ -283,11 +276,7 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -297,18 +286,18 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
 
 	rootBoID, err := h.resolveBusinessObjectID(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving business object id: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(boKey).Wrap(err))
 		return
 	}
 	rel, err := h.resolveRelationship(r.Context(), tenantID.String(), rootBoID, relKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		h.fail(w, r, tenantID, boRelationshipNotFound(relKey, boKey).Wrap(err))
 		return
 	}
 	childBoID := rel.ToBoID
@@ -317,17 +306,17 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 	}
 	childKey, err := h.resolveBOKeyByID(r.Context(), childBoID, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related business object: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(relKey).Wrap(err))
 		return
 	}
 	childMeta, err := h.resolveBOMetadata(r.Context(), childKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		h.fail(w, r, tenantID, boNotRelated(boKey).Wrap(err))
 		return
 	}
 
@@ -344,7 +333,7 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 		argIdx++
 	}
 	if len(setClauses) == 0 {
-		http.Error(w, "no writable attributes provided", http.StatusBadRequest)
+		h.fail(w, r, tenantID, boNoFields())
 		return
 	}
 
@@ -357,7 +346,7 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 
 	result, err := h.enforcedWrite(r.Context(), tenantID.String(), childKey, updateSQL, args)
 	if err != nil {
-		writeBOWriteError(w, err, "record not found or does not belong to this parent", "database mutation error", http.StatusInternalServerError)
+		h.fail(w, r, tenantID, writeError(err))
 		return
 	}
 
@@ -369,11 +358,7 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -383,12 +368,12 @@ func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http
 
 	rootBoID, err := h.resolveBusinessObjectID(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving business object id: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(boKey).Wrap(err))
 		return
 	}
 	rel, err := h.resolveRelationship(r.Context(), tenantID.String(), rootBoID, relKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		h.fail(w, r, tenantID, boRelationshipNotFound(relKey, boKey).Wrap(err))
 		return
 	}
 	childBoID := rel.ToBoID
@@ -397,29 +382,29 @@ func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http
 	}
 	childKey, err := h.resolveBOKeyByID(r.Context(), childBoID, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related business object: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(relKey).Wrap(err))
 		return
 	}
 	childMeta, err := h.resolveBOMetadata(r.Context(), childKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		h.fail(w, r, tenantID, boNotRelated(boKey).Wrap(err))
 		return
 	}
 
 	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2 AND %s = $3`, childMeta.DrivingTable, childMeta.KeyColumn, fkColumn)
 	res, err := childMeta.RecordsDB.ExecContext(r.Context(), deleteSQL, tenantID, childID, recordID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed deleting related record: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("deleting related record: %w", err))
 		return
 	}
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		http.Error(w, "record not found or does not belong to this parent", http.StatusNotFound)
+		h.fail(w, r, tenantID, boRecordNotFound(relKey))
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
