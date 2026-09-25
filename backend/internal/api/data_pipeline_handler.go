@@ -241,44 +241,59 @@ func (h *DataPipelineHandler) validate(w http.ResponseWriter, r *http.Request) {
 
 // --- runs --------------------------------------------------------------------
 
+// errHasProblems carries grounded problems that stop a run or preview.
+type errHasProblems struct{ issues []datapipeline.Issue }
+
+func (e *errHasProblems) Error() string { return "the pipeline has problems to fix first" }
+
+// startRunCore checks the saved pipeline and queues a run (Temporal, or
+// in-process without it). Shared by HTTP and MCP.
+func (h *DataPipelineHandler) startRunCore(r *http.Request, t, id string) (string, error) {
+	d, err := h.store.Get(r.Context(), t, id)
+	if err != nil {
+		return "", err
+	}
+	if issues := h.check(r, t, &d.Spec); len(issues) > 0 {
+		return "", &errHasProblems{issues}
+	}
+	runID, err := h.store.CreateRun(r.Context(), t, d)
+	if err != nil {
+		return "", err
+	}
+	in := datapipeline.RunInput{TenantID: t, RunID: runID}
+	if h.temporal != nil {
+		if _, err := h.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+			ID: "data-pipeline-run-" + runID, TaskQueue: datapipeline.TaskQueue,
+		}, datapipeline.Workflow, in); err != nil {
+			_ = h.store.FinishRun(context.WithoutCancel(r.Context()), t, runID, nil, fmt.Errorf("could not start: %w", err))
+			return "", err
+		}
+		return runID, nil
+	}
+	// Dev without Temporal: run in the background.
+	go func() {
+		if _, err := h.store.Execute(context.Background(), h.deps, t, runID); err != nil {
+			log.Printf("[data-pipelines] run %s: %v", runID, err)
+		}
+	}()
+	return runID, nil
+}
+
 func (h *DataPipelineHandler) startRun(w http.ResponseWriter, r *http.Request) {
 	t, ok := h.tenant(w, r)
 	if !ok {
 		return
 	}
-	d, err := h.store.Get(r.Context(), t, chi.URLParam(r, "id"))
-	if err != nil {
+	runID, err := h.startRunCore(r, t, chi.URLParam(r, "id"))
+	var probs *errHasProblems
+	switch {
+	case errors.As(err, &probs):
+		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": probs.Error(), "issues": probs.issues})
+	case err != nil:
 		dpStoreError(w, err)
-		return
+	default:
+		dpJSON(w, http.StatusAccepted, map[string]string{"run_id": runID, "status": "queued"})
 	}
-	if issues := h.check(r, t, &d.Spec); len(issues) > 0 {
-		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "the pipeline has problems to fix before it can run", "issues": issues})
-		return
-	}
-	runID, err := h.store.CreateRun(r.Context(), t, d)
-	if err != nil {
-		dpStoreError(w, err)
-		return
-	}
-	in := datapipeline.RunInput{TenantID: t, RunID: runID}
-	if h.temporal != nil {
-		_, err = h.temporal.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
-			ID: "data-pipeline-run-" + runID, TaskQueue: datapipeline.TaskQueue,
-		}, datapipeline.Workflow, in)
-		if err != nil {
-			_ = h.store.FinishRun(context.WithoutCancel(r.Context()), t, runID, nil, fmt.Errorf("could not start: %w", err))
-			dpStoreError(w, err)
-			return
-		}
-	} else {
-		// Dev without Temporal: run in the background.
-		go func() {
-			if _, err := h.store.Execute(context.Background(), h.deps, t, runID); err != nil {
-				log.Printf("[data-pipelines] run %s: %v", runID, err)
-			}
-		}()
-	}
-	dpJSON(w, http.StatusAccepted, map[string]string{"run_id": runID, "status": "queued"})
 }
 
 func (h *DataPipelineHandler) listRuns(w http.ResponseWriter, r *http.Request) {
@@ -342,6 +357,31 @@ func (p *previewRecorder) Warned(_ context.Context, r datapipeline.Reject) {
 	p.out = append(p.out, previewReject{r.NodeID, r.Row.Num, r.Field, r.Reason, "warning"})
 }
 
+// previewCore dry-runs a spec on its first rows. Shared by HTTP and MCP.
+func (h *DataPipelineHandler) previewCore(r *http.Request, t string, spec datapipeline.Spec, rows, sampleRows int) (map[string]any, error) {
+	if spec.Version == 0 {
+		spec.Version = datapipeline.SpecVersion
+	}
+	if issues := h.check(r, t, &spec); len(issues) > 0 {
+		return nil, &errHasProblems{issues}
+	}
+	if rows <= 0 || rows > previewMaxRows {
+		rows = 100
+	}
+	if sampleRows <= 0 || sampleRows > 50 {
+		sampleRows = 20
+	}
+	rec := &previewRecorder{}
+	sum, err := datapipeline.Run(r.Context(), &spec, &datapipeline.RunContext{
+		TenantID: t, RunID: "preview-" + uuid.NewString(), MaxRows: rows, SampleRows: sampleRows, DryRun: true,
+	}, h.deps, rec)
+	resp := map[string]any{"summary": sum, "rejects": rec.out}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	return resp, nil
+}
+
 // preview runs the spec on the first rows as a dry run: nothing is written,
 // BO rows are still judged by the rule engine.
 func (h *DataPipelineHandler) preview(w http.ResponseWriter, r *http.Request) {
@@ -354,26 +394,11 @@ func (h *DataPipelineHandler) preview(w http.ResponseWriter, r *http.Request) {
 		dpError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
 		return
 	}
-	if b.Spec.Version == 0 {
-		b.Spec.Version = datapipeline.SpecVersion
-	}
-	if issues := h.check(r, t, &b.Spec); len(issues) > 0 {
-		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "fix these first", "issues": issues})
+	resp, err := h.previewCore(r, t, b.Spec, b.Rows, b.SampleRows)
+	var probs *errHasProblems
+	if errors.As(err, &probs) {
+		dpJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": "fix these first", "issues": probs.issues})
 		return
-	}
-	if b.Rows <= 0 || b.Rows > previewMaxRows {
-		b.Rows = 100
-	}
-	if b.SampleRows <= 0 || b.SampleRows > 50 {
-		b.SampleRows = 20
-	}
-	rec := &previewRecorder{}
-	sum, err := datapipeline.Run(r.Context(), &b.Spec, &datapipeline.RunContext{
-		TenantID: t, RunID: "preview-" + uuid.NewString(), MaxRows: b.Rows, SampleRows: b.SampleRows, DryRun: true,
-	}, h.deps, rec)
-	resp := map[string]any{"summary": sum, "rejects": rec.out}
-	if err != nil {
-		resp["error"] = err.Error()
 	}
 	dpJSON(w, http.StatusOK, resp)
 }

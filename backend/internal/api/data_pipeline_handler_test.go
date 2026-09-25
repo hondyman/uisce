@@ -9,10 +9,12 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/mcp"
 )
 
 func dpRouter(deps datapipeline.Deps) chi.Router {
@@ -124,4 +126,23 @@ func TestDataPipelines_Assist(t *testing.T) {
 	assert.Equal(t, pipeTenant, gotTenant, "the catalog must be the caller's tenant")
 	require.Len(t, out.Issues, 1)
 	assert.Equal(t, `there is no business object "funds"`, out.Issues[0].Message)
+}
+
+// MCP tools reach the same grounded check the editor uses, as the caller's tenant.
+func TestPipelineMCP_CheckIsGroundedForCallerTenant(t *testing.T) {
+	var gotTenant string
+	h := NewDataPipelineHandler(&datapipeline.Store{}, datapipeline.Deps{}, nil).WithGrounding(
+		func(_ *http.Request, tenant string) datapipeline.PlatformCatalog { gotTenant = tenant; return stubCatalog{} }, nil)
+	s := mcp.NewServer(nil).SetPipelines(pipelineMCP{h: h})
+	spec := `{"spec":{"nodes":[{"id":"in","type":"bo_source","config":{"bo_key":"fund"}},{"id":"out","type":"bo_sink","config":{"bo_key":"funds"}}],"edges":[{"from":"in","to":"out"}]}}`
+	out, err := s.CallTool(context.Background(), uuid.MustParse(pipeTenant), "check_data_pipeline", json.RawMessage(spec))
+	require.NoError(t, err)
+	b, _ := json.Marshal(out)
+	assert.Contains(t, string(b), `there is no business object \"funds\"`)
+	assert.Contains(t, string(b), `"ok":false`)
+	assert.Equal(t, pipeTenant, gotTenant)
+
+	out, err = s.CallTool(context.Background(), uuid.MustParse(pipeTenant), "draft_data_pipeline", json.RawMessage(`{"request":"x"}`))
+	assert.Error(t, err, "drafting without an assistant must be refused")
+	_ = out
 }

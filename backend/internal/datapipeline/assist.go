@@ -555,3 +555,7 @@ func parseAssistant(raw string) (*AssistResponse, error) {
 	}
 	return resp, nil
 }
+
+// AuthoringGuide is the pipeline document format and step reference given to
+// the assistant; MCP clients get the same text.
+func AuthoringGuide() string { return assistInstructions }

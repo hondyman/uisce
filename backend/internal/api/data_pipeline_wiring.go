@@ -69,5 +69,7 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 			return llm.NewGeminiProvider(cfg.APIKey, cfg.Model).GenerateResponse(ctx, prompt)
 		}}
 	}
-	NewDataPipelineHandler(store, deps, s.TemporalClient).WithGrounding(catalog, assistant).RegisterRoutes(r)
+	h := NewDataPipelineHandler(store, deps, s.TemporalClient).WithGrounding(catalog, assistant)
+	h.RegisterRoutes(r)
+	s.DataPipelines = h
 }

@@ -212,6 +212,7 @@ type Server struct {
 	DatasourceResolver      security.DatasourceResolver
 	SecurityContextDeps     handlers.SecurityContextDeps
 	BusinessObjectService   *catalogmeta.BusinessObjectService
+	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
@@ -1804,7 +1805,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
 			}
 		}
-		r.Handle("/mcp", mcp.NewServer(mcpDB).SetTemporal(temporalClient).HTTPHandler())
+		mcpServer := mcp.NewServer(mcpDB).SetTemporal(temporalClient)
+		if srv.DataPipelines != nil {
+			mcpServer.SetPipelines(pipelineMCP{h: srv.DataPipelines})
+		}
+		r.Handle("/mcp", mcpServer.HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
