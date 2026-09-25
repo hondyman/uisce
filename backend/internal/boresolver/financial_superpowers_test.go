@@ -35,7 +35,14 @@ func TestBitemporalScoping(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, sql, "system_valid_from")
 	assert.Contains(t, sql, "system_valid_to")
-	assert.Len(t, args, 2) // tenant_id ($1) and knowledgeDate ($2)
+	// tenant_id, plus knowledgeDate bound twice: the AS-OF bound appears at
+	// two textual positions in the bitemporal predicate
+	// (system_valid_from <= X AND system_valid_to > X), and each
+	// occurrence gets its own bound value rather than reusing one - see
+	// params.go on why (positional/"?" dialects can't rebind one arg to
+	// two placeholders; this generator's numbering must be dialect-
+	// uniform, so it pays that one extra bound param under $N too).
+	assert.Len(t, args, 3)
 }
 
 func TestFXResolver_InjectsJoin(t *testing.T) {

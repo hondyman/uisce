@@ -23,16 +23,18 @@ type CompiledPredicate struct {
 	Args []interface{}
 }
 
-// nextParam allocates the next placeholder token for ctx's dialect and
-// records the value in ctx.Args, returning the token to embed in SQL.
+// nextParam records value in ctx's pending args (creation order) and
+// returns an opaque sentinel standing in for it - never a dialect token.
+// See params.go: the real token is only assigned once, at the end of
+// generation, by textual order of appearance in the assembled SQL.
 func nextParam(g *BOSQLGenerator, ctx *GenerationContext, value interface{}) string {
 	if ctx.Args == nil {
 		ctx.Args = make([]interface{}, 0)
 	}
+	idx := len(ctx.Args)
 	ctx.ParamCounter++
-	token := paramToken(g.Dialect, ctx.ParamCounter)
 	ctx.Args = append(ctx.Args, value)
-	return token
+	return paramSentinel(ensureParamNonce(ctx), idx)
 }
 
 // CompileFilterPredicate compiles one filter clause into a parameterized SQL

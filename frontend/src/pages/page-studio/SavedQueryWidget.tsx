@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Chip, CircularProgress, Alert } from '@mui/material';
 import ReactECharts from 'echarts-for-react';
-import { runSavedQuery } from '../../features/query-builder/services/savedQueryApi';
+import { runSavedQuery, isSafeToRollUpAcrossRows, isAdditiveSafe } from '../../features/query-builder/services/savedQueryApi';
 import { buildChartOption } from '../../features/query-builder/utils/chartOption';
 import type { SavedQueryRunResult } from '../../features/query-builder/services/savedQueryApi';
 import { useSelection } from './SelectionContext';
@@ -87,8 +87,76 @@ const SavedQueryWidget: React.FC<SavedQueryWidgetProps> = ({ savedQueryId, widge
   }
 
   if (widgetType === 'gauge') {
-    const measureCol = result.columns.find((c) => typeof result.rows[0][c.name] === 'string' && !isNaN(Number(result.rows[0][c.name])))?.name || result.columns[result.columns.length - 1]?.name;
-    const total = result.rows.reduce((sum, r) => sum + (Number(r[measureCol]) || 0), 0);
+    const measureColDef = result.columns.find((c) => typeof result.rows[0][c.name] === 'string' && !isNaN(Number(result.rows[0][c.name]))) || result.columns[result.columns.length - 1];
+
+    // Fail-safe, not wait-and-see: this re-sums measureCol across EVERY
+    // returned row, client-side, independent of whatever grouping/
+    // aggregation the saved query itself already applied. isSafeToRollUpAcrossRows
+    // checks TWO things, both required - the query's row grain is intact
+    // (no join ANYWHERE in the result fans out, not just on measureCol's
+    // own path - a clean column can ride next to a fanning-out one in
+    // the same query), and measureCol's own ownership is unique. A
+    // single-BO query (hasRelatedBOs: false) passes both by construction,
+    // with no per-column metadata needed. Absence of a positive signal -
+    // any related-BO query the backend hasn't fully classified - must
+    // read as "can't establish it's safe," not as "probably fine."
+    //
+    // Two independent safety signals, both required, AND-composed here
+    // at the call site (NOT merged into one predicate at the source -
+    // see isSafeToRollUpAcrossRows and isAdditiveSafe for why the
+    // two failures stay distinct for downstream error copy):
+    //
+    //   1. isSafeToRollUpAcrossRows: grain is intact (no join fan-out)
+    //      AND measureCol's own ownership is unique. Answers "is every
+    //      row's value representable once at this grain?"
+    //   2. isAdditiveSafe: measureCol's underlying aggregation is the
+    //      one aggregation whose row values are themselves additive
+    //      under `+` (currently just "sum"). Answers "is `+` a
+    //      meaningful way to combine these values across rows at all?"
+    //
+    // Both must pass. A clean SUM column on a one-side grain is safe
+    // (both true); an AVG column on a one-side grain is NOT safe, even
+    // though grain/ownership are clean, because a sum of averages is
+    // not the average of sums.
+    //
+    // Default-fail polarity carries through: missing aggregation
+    // (single-BO today, where the backend's GenerateSQLFromSemantic
+    // branch does not populate columns), unrecognized aggregation, and
+    // non-additive aggregations ALL read as unsafe here, surfacing
+    // "Needs review" until the row-grain and additivity signals both
+    // resolve positively.
+    //
+    // The inline guard preserves TS narrowing of measureColDef past the
+    // early-return into the reduce below - hoisting the conjunction
+    // into a `const safe: boolean` would lose that narrowing and force
+    // either an `!`/`!== undefined` re-check or a non-null assertion
+    // at the use site, so the conjunction stays inline even though
+    // it's three terms now.
+    //
+    // Also NOT covered (separate, tracked): measureColDef itself is a
+    // heuristic guess (first numeric-looking column, or just the last
+    // column) that can land on a dimension or an id rather than an
+    // intended measure. That needs its own fix - this check only
+    // answers "IF this is the right column, is summing it across rows
+    // safe."
+    if (!measureColDef || !isSafeToRollUpAcrossRows(result, measureColDef) || !isAdditiveSafe(measureColDef)) {
+      return (
+        <Box sx={{ textAlign: 'center', p: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            Needs review
+          </Typography>
+          {style?.label && <Typography variant="caption" color="text.secondary">{style.label}</Typography>}
+        </Box>
+      );
+    }
+
+    // measureColDef is narrowed non-undefined by the guard above; using
+    // its .name here directly (rather than a pre-computed measureCol
+    // captured before that guard ran) lets that narrowing actually reach
+    // the value used as the row-index key, instead of a separately-typed
+    // `string | undefined` that happened to be safe in practice but
+    // wasn't provably so at its own point of use.
+    const total = result.rows.reduce((sum, r) => sum + (Number(r[measureColDef.name]) || 0), 0);
     return (
       <Box sx={{ textAlign: 'center', p: 1 }}>
         <Typography variant="h4" fontWeight={700} sx={{ color: style?.valueColor, fontSize: style?.valueFontSize ? `${style.valueFontSize}px` : undefined }}>

@@ -261,10 +261,35 @@ func dialectName(d boresolver.Dialect) string {
 	}
 }
 
-// applyColumnMetadata copies BOID/Cardinality from the columns the SQL
-// generator produced (by name) onto the columns the driver reports back,
-// since the driver only knows names/DB types, not which BO or join a column
-// came from.
+// applyColumnMetadata copies BOID/Cardinality/RootOwnership from the
+// columns the SQL generator produced (by name) onto the columns the
+// driver reports back, since the driver only knows names/DB types, not
+// which BO, join, or ownership a column came from. This is a field-by-
+// field copy rather than `dbColumns[i] = meta` because dbColumns[i]
+// already carries the driver's own Name/Type, which meta doesn't
+// reliably have (or could disagree on) - only the metadata fields the
+// generator is authoritative for get overwritten.
+//
+// Root cause of why this is a hand-maintained list at all: Preview and
+// Execute each build their own result and propagate metadata fields by
+// hand, independently, under names that don't tell you which one a given
+// endpoint actually uses - GET /api/explorer/saved-queries/{id}/preview
+// calls Execute, not Preview, despite the URL. Two hand-copies where
+// there should be one is exactly how RootOwnership got dropped here the
+// first time.
+//
+// Every field added to QueryResultColumn must be added here too, or it
+// silently stops at Preview and never reaches Execute's response.
+// RootOwnership missed this once already - caught by
+// TestApplyColumnMetadata_CopiesRootOwnership (that specific field) and
+// TestApplyColumnMetadata_CopiesEveryMetadataField (a reflection-based
+// completeness check that will catch the NEXT field too, not just this
+// one), not by inspection. Aggregation was added with this hand-copy
+// in place from day one (the reflection test caught it before it could
+// drift the way RootOwnership once did), and the field is the second of
+// two independent wire signals for the frontend roll-up-safety gate
+// (the first being RootOwnership - see QueryResultColumn.RootOwnership
+// for the grain-vs-linearity split).
 func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []boresolver.QueryResultColumn) {
 	if len(generated) == 0 {
 		return
@@ -277,6 +302,8 @@ func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []b
 		if meta, ok := byName[dbColumns[i].Name]; ok {
 			dbColumns[i].BOID = meta.BOID
 			dbColumns[i].Cardinality = meta.Cardinality
+			dbColumns[i].RootOwnership = meta.RootOwnership
+			dbColumns[i].Aggregation = meta.Aggregation
 		}
 	}
 }

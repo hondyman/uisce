@@ -534,6 +534,19 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		"rowCount":  resp.RowCount,
 		"chartType": sq.ChartType,
 		"name":      sq.Name,
+		// hasRelatedBOs lets a consumer establish "this query traversed
+		// zero relationships, so no join can have duplicated a row
+		// relative to the primary BO" without per-column ownership/
+		// cardinality metadata - which Preview's single-BO branch never
+		// populates (Columns is empty by that branch's own contract).
+		// That's the one fact a frontend roll-up-safety gate needs and
+		// cannot derive itself: it has no access to this saved query's
+		// RelatedBOIDs, only to what this endpoint returns. Computed
+		// here, at the handler seam, from data already loaded (sq),
+		// rather than adding it to QueryResultColumn or threading it
+		// through the generator - it is a fact about the QUERY, not
+		// about any column.
+		"hasRelatedBOs": len(sq.RelatedBOIDs) > 0,
 	})
 }
 

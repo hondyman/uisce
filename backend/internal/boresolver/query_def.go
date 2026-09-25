@@ -90,6 +90,41 @@ type QueryResultColumn struct {
 	// primary rows. Empty/omitted means the column belongs to the primary
 	// BO itself.
 	Cardinality string `json:"cardinality,omitempty"`
+	// RootOwnership is "unique" or "shared", describing whether a row of
+	// this column's BO is reachable from more than one primary-BO row.
+	// "unique" means every hop back to the primary BO is 1:1/1:M (no
+	// "M:1"/"M:M" anywhere), so this column's value belongs to exactly
+	// one primary row. "shared" means at least one hop back is M:1/M:M -
+	// e.g. many orders referencing the same region - so the SAME target
+	// row (and its column value) can appear under more than one primary
+	// row. This is independent of Cardinality: a plain lookup column
+	// (Cardinality "one", e.g. order -> region) can still be "shared".
+	//
+	// The distinction matters entirely downstream of this generator: a
+	// consumer that sums or averages this column ACROSS the returned
+	// rows will double-count whenever two rows share the same target row
+	// - correct per-row values, wrong rolled-up total. This field exists
+	// so that check can be made without re-deriving it from the join
+	// path. Empty/omitted means unique (no related-BO join, or a path
+	// this generator hasn't computed ownership for).
+	RootOwnership string `json:"rootOwnership,omitempty"`
+	// Aggregation is the SQL aggregation the generator wrapped around
+	// this column's expression - "sum" | "avg" | "count" | "min" |
+	// "max" | "count_distinct", lowercased at construction so the wire
+	// shape is a column-fact and consumers never re-derive it from the
+	// query's MeasureDef. Empty/omitted means this column is NOT
+	// aggregated (a dimension or a non-aggregated measure) - the unsafe
+	// sentinel on the consumption side, not a placeholder string.
+	//
+	// Distinct from Cardinality/RootOwnership: those say "is every row's
+	// value representable once at this grain?" (a fan-out/duplicate-row
+	// question). Aggregation says "is `+` a meaningful way to combine
+	// these values across rows at all?" (a linearity question). Both
+	// questions are independent and either alone can produce a wrong
+	// roll-up; consumed together as a two-signal AND at the call site.
+	// See frontend isSafeToRollUpAcrossRows (grain/ownership) and
+	// isAdditiveSafe (linearity) for the split.
+	Aggregation string `json:"aggregation,omitempty"`
 }
 
 // SemanticTermView is the shape exposed by GET /api/business-objects/{boId}/terms.
