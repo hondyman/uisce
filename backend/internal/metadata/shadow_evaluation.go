@@ -104,6 +104,10 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID st
 	if err != nil {
 		return nil, err
 	}
+	required, err := s.requiredFields(ctx, bo)
+	if err != nil {
+		return nil, err
+	}
 	tx, err := recordsDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
@@ -113,6 +117,12 @@ func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID st
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, err
+	}
+	// The BO's contract before its rules: a required field left empty is
+	// refused whatever the rule enforcement mode.
+	if missing := missingRequired(bo.Key, required, result); missing != nil {
+		_ = tx.Rollback()
+		return nil, missing
 	}
 
 	violations, blocked := s.evaluateAndEnforceRules(ctx, tx, tenantID, bo, result)
@@ -224,7 +234,7 @@ func (s *BusinessObjectService) EnforceWrite(ctx context.Context, tenantID, boKe
 type BatchRowResult struct {
 	Index  int
 	Record map[string]interface{} // nil when Err != nil
-	Err    error                  // *RuleRejectionError, ErrNoRowWritten, or the write's own error
+	Err    error                  // *RequiredFieldsError, *RuleRejectionError, ErrNoRowWritten, or the write's own error
 }
 
 // EnforceWriteBatch writes n records in one transaction, each under its own
@@ -239,8 +249,12 @@ func (s *BusinessObjectService) EnforceWriteBatch(ctx context.Context, tenantID,
 		return nil, err
 	}
 	recordsDB := s.db
+	var required []requiredField
 	if bo != nil {
 		if recordsDB, err = s.recordsDBStrict(ctx, bo.ID); err != nil {
+			return nil, err
+		}
+		if required, err = s.requiredFields(ctx, bo); err != nil {
 			return nil, err
 		}
 	}
@@ -269,6 +283,15 @@ func (s *BusinessObjectService) EnforceWriteBatch(ctx context.Context, tenantID,
 			}
 			out[i].Err = werr
 			continue
+		}
+		if bo != nil {
+			if missing := missingRequired(bo.Key, required, rec); missing != nil {
+				if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT bo_batch_row"); err != nil {
+					return nil, fmt.Errorf("rollback to savepoint: %w", err)
+				}
+				out[i].Err = missing
+				continue
+			}
 		}
 		var violations []ruleViolation
 		blocked := false
