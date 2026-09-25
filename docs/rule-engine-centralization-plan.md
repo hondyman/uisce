@@ -301,12 +301,24 @@ a 27-of-30-files-dead subsystem that belongs to the dead-code program;
 SQL/query compilers (`QueryBORecords` filters, `querycompiler`, `boresolver`)
 translate conditions to SQL rather than evaluate them — tracked as E14.
 
+### Slice 8 — RDL retired, cel-go gone, PR #138 (stacked on #134) (2026-09-24)
+
+Planned as a port; the evidence made it a retirement: `rule_definitions` has
+0 rows everywhere, the RDL UI was never mounted, and nothing calls `/api/rdl`
+or its `/api/rules` shorthand. `internal/rdl`, its routes and UI deleted;
+`cel-go` + 3 exclusive modules removed from `go.mod`. With the stack merged,
+no backend package imports cel-go — the CEL retirement project's closing claim
+("`go mod` drops the dependency") holds.
+
 ### Remaining
 
-Slice 8 (RDL CEL formulas → E1; removes cel-go), E14 (SQL filter compilers
-vs `vm.CompileToSQL`), expression-parser string literals (`Literal` holds
-only float64 — conditions cover strings today), then delete stale guard
-allowances until the allowlist is empty.
+- Merge the stack; then delete the guard's stale allowances until
+  `engineImportAllowlist` is empty (the §6 standing proof).
+- E14: SQL filter compilers (`boresolver` filter groups, `QueryBORecords`
+  filters, `querycompiler`) vs `vm.CompileToSQL` — translation, not
+  evaluation, but a second condition vocabulary.
+- Expression-parser string literals (`Literal` holds only float64).
+- Dead-code program: ~10k unreachable functions, incl. `internal/ops`.
 ---
 
 ## §6 — Closing claim
