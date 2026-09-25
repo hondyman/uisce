@@ -98,7 +98,13 @@ type ruleViolation struct {
 // rollback. Returns an error naming the blocking rule(s) if the write
 // was rejected.
 func (s *BusinessObjectService) writeAndEnforce(ctx context.Context, tenantID string, bo *models.BusinessObjectDefinition, doWrite func(tx *sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
-	tx, err := s.db.BeginTxx(ctx, nil)
+	// The write and the rule context reads run where the BO's records live;
+	// rules and violations stay in the metadata DB.
+	recordsDB, err := s.recordsDBStrict(ctx, bo.ID)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := recordsDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}
@@ -232,7 +238,13 @@ func (s *BusinessObjectService) EnforceWriteBatch(ctx context.Context, tenantID,
 	if err != nil {
 		return nil, err
 	}
-	tx, err := s.db.BeginTxx(ctx, nil)
+	recordsDB := s.db
+	if bo != nil {
+		if recordsDB, err = s.recordsDBStrict(ctx, bo.ID); err != nil {
+			return nil, err
+		}
+	}
+	tx, err := recordsDB.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("begin transaction: %w", err)
 	}

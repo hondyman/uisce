@@ -103,14 +103,25 @@ type BusinessObjectService struct {
 	backendDBCache sync.Map // string (backend id) -> *sqlx.DB
 }
 
-// resolveRecordsDB returns the *sqlx.DB that live record queries/writes for
-// this Business Object should run against: the physical database behind its
-// default (or first) binding's backend, falling back to the alpha metadata
-// DB (s.db) when the BO has no binding, the backend has no connection
-// config, or the connection can't be established. A BO whose driving table
-// happens to live in alpha resolves back to s.db too, so this is safe to
-// call unconditionally.
+// resolveRecordsDB returns the *sqlx.DB that live record reads should run
+// against: the database behind the BO's default (or first) binding's backend,
+// or the alpha metadata DB (s.db) when the BO has no bound backend. Reads
+// degrade to s.db when the bound backend cannot be resolved; writes use
+// recordsDBStrict, which never does.
 func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID string) *sqlx.DB {
+	db, err := s.recordsDBStrict(ctx, boID)
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: %v - falling back to alpha DB for a read", err)
+		return s.db
+	}
+	return db
+}
+
+// recordsDBStrict resolves the database a BO's records live in. No bound
+// backend means the records live in the metadata DB (s.db). A bound backend
+// that cannot be resolved or reached is an error: writing a tenant's records
+// to any other database is never acceptable.
+func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string) (*sqlx.DB, error) {
 	var backendID string
 	err := s.db.GetContext(ctx, &backendID, `
 		SELECT backend_id::text FROM public.business_object_binding
@@ -118,29 +129,27 @@ func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID strin
 		ORDER BY is_default DESC, created_at ASC
 		LIMIT 1
 	`, boID)
-	if err != nil || backendID == "" {
-		return s.db
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && backendID == "") {
+		return s.db, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolving the datasource of business object %s: %w", boID, err)
 	}
 
 	if cached, ok := s.backendDBCache.Load(backendID); ok {
-		return cached.(*sqlx.DB)
+		return cached.(*sqlx.DB), nil
 	}
 
 	var connectionDetails string
 	if err := s.db.GetContext(ctx, &connectionDetails, `
 		SELECT config::text FROM public.tenant_product_datasource WHERE id = $1::uuid
 	`, backendID); err != nil || connectionDetails == "" {
-		// No datasource-level connection config for this backend (e.g. an
-		// orphan/placeholder backend row) -- degrade to the metadata DB
-		// rather than failing the read outright.
-		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: no connection_details for backend %s, falling back to alpha DB", backendID)
-		return s.db
+		return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration", boID, backendID)
 	}
 
 	targetDB, err := connectToDatabaseFromDetails(ctx, connectionDetails)
 	if err != nil {
-		logging.GetLogger().Sugar().Warnf("resolveRecordsDB: failed to connect to backend %s, falling back to alpha DB: %v", backendID, err)
-		return s.db
+		return nil, fmt.Errorf("business object %s: cannot connect to its datasource %s: %w", boID, backendID, err)
 	}
 
 	sqlxDB := sqlx.NewDb(targetDB, "pgx")
@@ -150,7 +159,21 @@ func (s *BusinessObjectService) resolveRecordsDB(ctx context.Context, boID strin
 	if loaded {
 		_ = sqlxDB.Close()
 	}
-	return actual.(*sqlx.DB)
+	return actual.(*sqlx.DB), nil
+}
+
+// RecordsDB is the database a BO's records live in, for the BO records API
+// (reads and writes). It resolves the tenant's own BO first, else the gold
+// copy's; a key with no business_objects row has its records in s.db.
+func (s *BusinessObjectService) RecordsDB(ctx context.Context, tenantID, boKeyOrID string) (*sqlx.DB, error) {
+	bo, err := s.loadEnforcementTarget(ctx, tenantID, boKeyOrID)
+	if err != nil {
+		return nil, err
+	}
+	if bo == nil {
+		return s.db, nil
+	}
+	return s.recordsDBStrict(ctx, bo.ID)
 }
 
 var boFieldsColumnCache sync.Map

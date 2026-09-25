@@ -87,7 +87,7 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
 		return
 	}
-	writable, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writable, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
 		return
@@ -98,9 +98,9 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			for _, rec := range req.Records {
 				rec[col] = subtype // forced server-side, as on single create
 			}

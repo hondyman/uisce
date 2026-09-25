@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 )
 
 // relatedRelationship is the subset of business_object_relationships needed to resolve and
@@ -42,7 +43,7 @@ func (h *BOCRUDHandler) resolveRelationship(ctx context.Context, tenantID, rootB
 // parent's id. Preference order: (1) an authored relationship_bindings.join_condition_sql,
 // parsed for the child-side column; (2) the naming convention already relied on elsewhere in
 // this file (parentBoName + "_id"), verified to actually exist on the child table.
-func (h *BOCRUDHandler) resolveChildFKColumn(ctx context.Context, tenantID, relID, fromBoID, childTable, parentBoName string) (string, error) {
+func (h *BOCRUDHandler) resolveChildFKColumn(ctx context.Context, childDB *sqlx.DB, tenantID, relID, fromBoID, childTable, parentBoName string) (string, error) {
 	var joinSQL string
 	bindingQuery := `
 		SELECT rb.join_condition_sql
@@ -67,7 +68,7 @@ func (h *BOCRUDHandler) resolveChildFKColumn(ctx context.Context, tenantID, relI
 				WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
 			);
 		`
-		if err := h.db.GetContext(ctx, &exists, checkQuery, schema, table, col); err == nil && exists {
+		if err := childDB.GetContext(ctx, &exists, checkQuery, schema, table, col); err == nil && exists {
 			return col, nil
 		}
 	}
@@ -139,7 +140,7 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
 		return
 	}
-	fkColumn, err := h.resolveChildFKColumn(r.Context(), tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
+	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -165,7 +166,7 @@ func (h *BOCRUDHandler) HandleListRelatedRecords(w http.ResponseWriter, r *http.
 		LIMIT $3 OFFSET $4;
 	`, childMeta.DrivingTable, fkColumn, childMeta.KeyColumn)
 
-	rows, err := h.db.QueryxContext(r.Context(), query, tenantID, recordID, limit, offset)
+	rows, err := childMeta.RecordsDB.QueryxContext(r.Context(), query, tenantID, recordID, limit, offset)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed listing related records: %v", err), http.StatusInternalServerError)
 		return
@@ -235,7 +236,7 @@ func (h *BOCRUDHandler) HandleCreateRelatedRecord(w http.ResponseWriter, r *http
 		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
 		return
 	}
-	fkColumn, err := h.resolveChildFKColumn(r.Context(), tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
+	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -324,7 +325,7 @@ func (h *BOCRUDHandler) HandleUpdateRelatedRecord(w http.ResponseWriter, r *http
 		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
 		return
 	}
-	fkColumn, err := h.resolveChildFKColumn(r.Context(), tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
+	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
@@ -404,14 +405,14 @@ func (h *BOCRUDHandler) HandleDeleteRelatedRecord(w http.ResponseWriter, r *http
 		http.Error(w, fmt.Sprintf("failed resolving related BO contract: %v", err), http.StatusNotFound)
 		return
 	}
-	fkColumn, err := h.resolveChildFKColumn(r.Context(), tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
+	fkColumn, err := h.resolveChildFKColumn(r.Context(), childMeta.RecordsDB, tenantID.String(), rel.ID, rel.FromBoID, childMeta.DrivingTable, boKey)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
 		return
 	}
 
 	deleteSQL := fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2 AND %s = $3`, childMeta.DrivingTable, childMeta.KeyColumn, fkColumn)
-	res, err := h.db.ExecContext(r.Context(), deleteSQL, tenantID, childID, recordID)
+	res, err := childMeta.RecordsDB.ExecContext(r.Context(), deleteSQL, tenantID, childID, recordID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed deleting related record: %v", err), http.StatusInternalServerError)
 		return
