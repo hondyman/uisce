@@ -2,6 +2,7 @@ package metadata
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 
@@ -27,6 +28,8 @@ func expectPartyBO(m sqlmock.Sqlmock) {
 		WithArgs("party", "t-1").
 		WillReturnRows(sqlmock.NewRows([]string{"id", "bo_key", "driver_table_name"}).
 			AddRow("00000000-0000-0000-0000-0000000000b0", "party", "/mdm/party"))
+	// party has no bound datasource: its records live in the metadata DB.
+	m.ExpectQuery(`FROM public.business_object_binding`).WillReturnError(sql.ErrNoRows)
 }
 
 func newMockService(t *testing.T) (*BusinessObjectService, sqlmock.Sqlmock) {

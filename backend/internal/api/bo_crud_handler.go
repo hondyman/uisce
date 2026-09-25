@@ -35,7 +35,7 @@ func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine, enforcer boWriteEnfor
 // resolveWritableColumns returns the set of real column names for drivingTable,
 // used to allowlist client-supplied JSON keys before they are interpolated into
 // SQL as identifiers (column names can't be bind-parameterized).
-func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable string) (map[string]bool, error) {
+func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, db *sqlx.DB, drivingTable string) (map[string]bool, error) {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -43,7 +43,7 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 		table = drivingTable[idx+1:]
 	}
 	var cols []string
-	err := h.db.SelectContext(ctx, &cols, `
+	err := db.SelectContext(ctx, &cols, `
 		SELECT column_name FROM information_schema.columns
 		WHERE table_schema = $1 AND table_name = $2;
 	`, schema, table)
@@ -69,7 +69,7 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 // ("column tenant_id does not exist"), not a security gap closed. Mirrors
 // boresolver.PostgresBORepository.TableHasColumn's reasoning, via a plain
 // information_schema lookup since this handler has no BORepository.
-func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, drivingTable, column string) bool {
+func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, db *sqlx.DB, drivingTable, column string) bool {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -77,7 +77,7 @@ func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, drivingTable, column
 		table = drivingTable[idx+1:]
 	}
 	var exists bool
-	err := h.db.GetContext(ctx, &exists, `
+	err := db.GetContext(ctx, &exists, `
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns
 			WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
@@ -131,9 +131,37 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 type boBindingMetadata struct {
 	DrivingTable string `db:"driving_table"`
 	KeyColumn    string `db:"key_column"`
+	// RecordsDB is the database the BO's records live in (its bound
+	// datasource); every record-table read and write goes there.
+	RecordsDB *sqlx.DB `db:"-"`
 }
 
+// boRecordsLocator resolves where a BO's records live
+// (metadata.BusinessObjectService.RecordsDB).
+type boRecordsLocator interface {
+	RecordsDB(ctx context.Context, tenantID, boKeyOrID string) (*sqlx.DB, error)
+}
+
+// resolveBOMetadata resolves the BO's driving table and the database its
+// records live in. A BO whose datasource cannot be resolved is refused -
+// its records are never read from or written to another database.
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
+	m, err := h.resolveBOContract(ctx, boKey, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	m.RecordsDB = h.db
+	if loc, ok := h.enforcer.(boRecordsLocator); ok {
+		db, err := loc.RecordsDB(ctx, tenantID.String(), boKey)
+		if err != nil {
+			return nil, err
+		}
+		m.RecordsDB = db
+	}
+	return m, nil
+}
+
+func (h *BOCRUDHandler) resolveBOContract(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
 	var boMeta boBindingMetadata
 
 	// 1. Try public.business_objects + business_object_binding.
@@ -226,7 +254,7 @@ func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, ten
 // (business_objects.sti_discriminator_column is always "subtype_code" for compound
 // "{root}/{subtypeCode}" bo_key rows, e.g. "oms.account/sma"). Returns ("", false) for BOs
 // without subtypes so callers can skip subtype scoping entirely (no behavior change).
-func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingTable string) (string, bool) {
+func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, db *sqlx.DB, drivingTable string) (string, bool) {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -240,7 +268,7 @@ func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingT
 			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'subtype_code'
 		);
 	`
-	if err := h.db.GetContext(ctx, &exists, checkQuery, schema, table); err == nil && exists {
+	if err := db.GetContext(ctx, &exists, checkQuery, schema, table); err == nil && exists {
 		return "subtype_code", true
 	}
 	return "", false
@@ -330,13 +358,13 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	setClauses := make([]string, 0)
 	var args []interface{}
 	var whereClause string
@@ -371,7 +399,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			// Defends against updating a record that doesn't belong to this subtype.
 			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
@@ -425,19 +453,19 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 
 	subtype := r.URL.Query().Get("subtype")
 	if subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			// Force the discriminator value server-side, overriding whatever the client sent.
 			payload[col] = subtype
 		}
 	}
 
-	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	insertSQL, args, err := buildBOInsert(boMeta.DrivingTable, tenantID, tenantScoped, writableCols, payload)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -520,7 +548,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	var args []interface{}
 	var whereClause string
 	argIdx := 2
@@ -535,7 +563,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
 		}
@@ -547,7 +575,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		LIMIT 1;
 	`, boMeta.DrivingTable, whereClause)
 
-	rows, err := h.db.QueryxContext(r.Context(), selectSQL, args...)
+	rows, err := boMeta.RecordsDB.QueryxContext(r.Context(), selectSQL, args...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed querying record: %v", err), http.StatusInternalServerError)
 		return
@@ -758,7 +786,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 	colTypes := map[string]string{}
 	if schemaName != "" && tableName != "" {
 		var ctRows []colTypeRow
-		if err := h.db.SelectContext(r.Context(), &ctRows, `
+		if err := boMeta.RecordsDB.SelectContext(r.Context(), &ctRows, `
 			SELECT column_name, data_type FROM information_schema.columns
 			WHERE table_schema = $1 AND table_name = $2
 		`, schemaName, tableName); err == nil {
@@ -984,7 +1012,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	whereClauses := []string{}
 	args := []interface{}{}
 	argIdx := 1
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+	if h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id") {
 		whereClauses = append(whereClauses, fmt.Sprintf("tenant_id = $%d", argIdx))
 		args = append(args, tenantID)
 		argIdx++
@@ -998,7 +1026,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", col, argIdx))
 			args = append(args, subtype)
 			argIdx++
@@ -1017,7 +1045,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	`, boMeta.DrivingTable, whereSQL, boMeta.KeyColumn, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
-	rows, err := h.db.QueryxContext(r.Context(), query, args...)
+	rows, err := boMeta.RecordsDB.QueryxContext(r.Context(), query, args...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed listing records: %v", err), http.StatusInternalServerError)
 		return
@@ -1064,14 +1092,14 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 
 	var deleteSQL string
 	var execArgs []interface{}
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+	if h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id") {
 		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2`, boMeta.DrivingTable, boMeta.KeyColumn)
 		execArgs = []interface{}{tenantID, recordID}
 	} else {
 		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, boMeta.DrivingTable, boMeta.KeyColumn)
 		execArgs = []interface{}{recordID}
 	}
-	res, err := h.db.ExecContext(r.Context(), deleteSQL, execArgs...)
+	res, err := boMeta.RecordsDB.ExecContext(r.Context(), deleteSQL, execArgs...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed deleting record: %v", err), http.StatusInternalServerError)
 		return
