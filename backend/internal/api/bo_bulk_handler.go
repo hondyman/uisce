@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -28,7 +29,8 @@ type boBulkRequest struct {
 
 type boBulkFailure struct {
 	Index int      `json:"index"`
-	Error string   `json:"error"`
+	Error string   `json:"error"` // catalog text, in the caller's language
+	Code  string   `json:"error_code"`
 	Rules []string `json:"rules,omitempty"` // set when the rule engine rejected the row
 	// Missing lists required fields the row left empty.
 	Missing []string `json:"missing,omitempty"`
@@ -40,19 +42,6 @@ type boBulkResponse struct {
 	DryRun  bool            `json:"dry_run"`
 }
 
-// bulkRequestError is a request-level refusal (bad payload, unknown BO);
-// status is the HTTP status the endpoint answers with.
-type bulkRequestError struct {
-	status int
-	msg    string
-}
-
-func (e *bulkRequestError) Error() string { return e.msg }
-
-func bulkErr(status int, f string, a ...interface{}) error {
-	return &bulkRequestError{status: status, msg: fmt.Sprintf(f, a...)}
-}
-
 // HandleBulkBORecords writes many records for one BO in one transaction.
 // Each row is judged by the master rule engine exactly as a single write is
 // (metadata.EnforceWriteBatch); a rejected or invalid row is reported in
@@ -60,26 +49,20 @@ func bulkErr(status int, f string, a ...interface{}) error {
 func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	var req boBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
-	resp, err := h.bulkWrite(r.Context(), tenantID, chi.URLParam(r, "boKey"), r.URL.Query().Get("subtype"), req)
+	ref := msgcat.CorrelationID(r)
+	w.Header().Set("X-Request-ID", ref)
+	resp, err := h.bulkWrite(r.Context(), tenantID, chi.URLParam(r, "boKey"), r.URL.Query().Get("subtype"), req,
+		msgcat.Preferences(r.Header.Get("Accept-Language")), ref)
 	if err != nil {
-		var be *bulkRequestError
-		if errors.As(err, &be) {
-			http.Error(w, be.msg, be.status)
-			return
-		}
-		http.Error(w, "bulk write failed: "+err.Error(), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -88,38 +71,41 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 
 // bulkWrite is the enforced bulk write shared by the HTTP endpoint and the
 // data pipeline's bo_sink. The caller has already resolved the tenant.
-func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey, subtype string, req boBulkRequest) (*boBulkResponse, error) {
+// Request-level refusals are catalog errors; each failed row is rendered
+// from the catalog in langs, with ref as its correlation ID - never a raw
+// error.
+func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey, subtype string, req boBulkRequest, langs []string, ref string) (*boBulkResponse, error) {
 	if h.enforcer == nil {
-		return nil, bulkErr(http.StatusServiceUnavailable, "%s", errNoRuleEnforcer.Error())
+		return nil, boEnforcementUnavailable()
 	}
 	if len(req.Records) == 0 {
-		return nil, bulkErr(http.StatusBadRequest, "records is required")
+		return nil, msgcat.New(msgcat.SetSystem, 9, "records")
 	}
 	if len(req.Records) > maxBulkRecords {
-		return nil, bulkErr(http.StatusRequestEntityTooLarge, "at most %d records per request", maxBulkRecords)
+		return nil, boTooManyRecords(maxBulkRecords)
 	}
 	switch req.Mode {
 	case "", "create":
 		req.Mode = "create"
 	case "upsert":
 		if len(req.KeyFields) == 0 {
-			return nil, bulkErr(http.StatusBadRequest, "upsert requires key_fields")
+			return nil, boUpsertNeedsKeys()
 		}
 	default:
-		return nil, bulkErr(http.StatusBadRequest, "mode must be create or upsert")
+		return nil, boBadMode()
 	}
 
 	boMeta, err := h.resolveBOMetadata(ctx, boKey, tenantID)
 	if err != nil {
-		return nil, bulkErr(http.StatusNotFound, "failed resolving BO contract: %v", err)
+		return nil, err
 	}
 	writable, err := h.resolveWritableColumns(ctx, boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
-		return nil, fmt.Errorf("failed resolving table schema: %w", err)
+		return nil, fmt.Errorf("resolving table schema: %w", err)
 	}
 	for _, k := range req.KeyFields {
 		if !writable[k] || strings.EqualFold(k, "tenant_id") {
-			return nil, bulkErr(http.StatusBadRequest, "invalid key field '%s'", k)
+			return nil, boBadKeyField(k)
 		}
 	}
 	tenantScoped := h.tableHasColumn(ctx, boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
@@ -161,13 +147,14 @@ func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey
 			return queryOneRow(ctx, tx, q, args)
 		})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bulk write: %w", err)
 	}
 
 	resp := &boBulkResponse{Failed: []boBulkFailure{}, DryRun: req.DryRun}
 	for _, res := range results {
 		if res.Err != nil {
-			f := boBulkFailure{Index: res.Index, Error: res.Err.Error()}
+			f := boBulkFailure{Index: res.Index}
+			f.Code, f.Error = h.rowError(ctx, tenantID, langs, ref, res.Index, res.Err)
 			var rej *metadata.RuleRejectionError
 			if errors.As(res.Err, &rej) {
 				f.Rules = rej.Rules
@@ -202,7 +189,7 @@ func buildBOUpsertUpdate(table, tenantID string, tenantScoped bool, writable map
 	for _, k := range keyFields {
 		v, ok := rec[k]
 		if !ok || v == nil {
-			return "", nil, fmt.Errorf("missing key field '%s'", k)
+			return "", nil, boMissingKeyField(k)
 		}
 		isKey[k] = true
 		args = append(args, v)
@@ -215,7 +202,7 @@ func buildBOUpsertUpdate(table, tenantID string, tenantScoped bool, writable map
 			continue
 		}
 		if !writable[k] {
-			return "", nil, fmt.Errorf("unknown attribute '%s'", k)
+			return "", nil, boUnknownField(k)
 		}
 		args = append(args, rec[k])
 		sets = append(sets, fmt.Sprintf("%s = $%d", k, len(args)))

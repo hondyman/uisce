@@ -47,6 +47,9 @@ func index(entries []Entry) map[key]byLang {
 }
 
 func (c *Catalog) coreSnapshot(ctx context.Context) (map[key]byLang, error) {
+	if c == nil {
+		return nil, nil
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.core != nil && time.Since(c.core.loaded) < c.ttl {
@@ -64,7 +67,7 @@ func (c *Catalog) coreSnapshot(ctx context.Context) (map[key]byLang, error) {
 }
 
 func (c *Catalog) tenantSnapshot(ctx context.Context, tenantID string) (map[key]byLang, error) {
-	if tenantID == "" {
+	if c == nil || tenantID == "" {
 		return nil, nil
 	}
 	c.mu.Lock()
@@ -85,6 +88,9 @@ func (c *Catalog) tenantSnapshot(ctx context.Context, tenantID string) (map[key]
 
 // Invalidate drops cached text after an edit (tenantID "" = core).
 func (c *Catalog) Invalidate(tenantID string) {
+	if c == nil {
+		return
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if tenantID == "" {
@@ -136,6 +142,11 @@ func (c *Catalog) Lookup(ctx context.Context, tenantID string, langs []string, s
 // missing from the catalog renders as the internal-error message with the
 // given reference, so a gap in the catalog never leaks anything either.
 func (c *Catalog) Render(ctx context.Context, tenantID string, langs []string, e *Error, ref string) Rendered {
+	if c == nil {
+		// No catalog wired (unit tests, tools): keep the code, never the cause.
+		return Rendered{Code: e.Code(), Severity: string(SeverityError), Language: BaseLanguage,
+			Message: "Request failed (" + e.Code() + ", ref " + ref + ")", Status: statusOf(e, SeverityError)}
+	}
 	entry, ok := c.Lookup(ctx, tenantID, langs, e.Set, e.Nbr)
 	if !ok {
 		logging.GetLogger().Sugar().Errorf("msgcat: message %s is not in the catalog (ref %s)", e.Code(), ref)
@@ -144,13 +155,7 @@ func (c *Catalog) Render(ctx context.Context, tenantID string, langs []string, e
 			entry = Entry{Language: BaseLanguage, Severity: string(SeverityFatal), Text: unavailableText}
 		}
 	}
-	status := e.Status
-	if status == 0 {
-		status = http.StatusBadRequest
-		if entry.Severity == string(SeverityFatal) {
-			status = http.StatusInternalServerError
-		}
-	}
+	status := statusOf(e, Severity(entry.Severity))
 	return Rendered{
 		Code:       e.Code(),
 		Severity:   entry.Severity,
@@ -159,4 +164,16 @@ func (c *Catalog) Render(ctx context.Context, tenantID string, langs []string, e
 		Language:   entry.Language,
 		Status:     status,
 	}
+}
+
+// statusOf is the HTTP status for a message: its own, else 500 for Fatal
+// and 400 otherwise.
+func statusOf(e *Error, sev Severity) int {
+	if e.Status != 0 {
+		return e.Status
+	}
+	if sev == SeverityFatal {
+		return http.StatusInternalServerError
+	}
+	return http.StatusBadRequest
 }

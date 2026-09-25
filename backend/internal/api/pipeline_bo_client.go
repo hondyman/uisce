@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
@@ -29,7 +30,10 @@ func (c *pipelineBOClient) WriteBatch(ctx context.Context, tenantID, boKey strin
 	for i, r := range req.Records {
 		recs[i] = r
 	}
-	resp, err := c.h.bulkWrite(ctx, tid, boKey, "", boBulkRequest{Mode: req.Mode, KeyFields: req.KeyFields, DryRun: req.DryRun, Records: recs})
+	// Row failures land in the run's reject list, rendered from the catalog
+	// (English; the analyst sees the code too), under one reference per batch.
+	resp, err := c.h.bulkWrite(ctx, tid, boKey, "", boBulkRequest{Mode: req.Mode, KeyFields: req.KeyFields, DryRun: req.DryRun, Records: recs},
+		[]string{msgcat.BaseLanguage}, uuid.NewString())
 	if err != nil {
 		return nil, err
 	}
