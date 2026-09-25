@@ -81,17 +81,6 @@ services:
     ports:
       - "8083:8083"
 
-  rule-engine:
-    build:
-      context: .
-      dockerfile: backend/cmd/rule-engine-service/Dockerfile
-    environment:
-      PORT: 8083
-      DATABASE_URL: "postgresql://postgres:postgres@host.docker.internal:5432/alpha"
-      KAFKA_BROKERS: "redpanda:9092"
-    ports:
-      - "8083:8083"
-
   # Proxy removed: local module path issues. Use api-gateway (8001) instead.
 
   runner:
