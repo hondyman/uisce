@@ -32,6 +32,16 @@ type Context struct {
 	ImpersonationAdminRole string // "global_admin" | "helpdesk" | "professional_services"
 }
 
+// ScopedDatasourceID is the request's datasource, or "" for a tenant-only
+// request, which BuildContext marks with the placeholder "none". Use it
+// wherever the ID is compared with or stored in a uuid column.
+func (c *Context) ScopedDatasourceID() string {
+	if c == nil || c.DatasourceID == "none" {
+		return ""
+	}
+	return c.DatasourceID
+}
+
 type AuthInfo struct {
 	UserID    string
 	Roles     []string
