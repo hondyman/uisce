@@ -21,8 +21,6 @@ import ValidationsTab from '../components/validation/ValidationsTab';
 import { useBusinessEntitySemanticLayer } from '../hooks/useBusinessEntitySemanticLayer';
 import SemanticAssetsTab from '../components/entity/SemanticAssetsTab';
 import RelationshipsTab from '../components/relationship/RelationshipsTab';
-import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
-import { useNotification } from '../hooks/useNotification';
 
 // Transform backend response structure to match frontend expectations
 // Backend returns fields in a nested config object, but frontend expects them at top level
@@ -99,11 +97,6 @@ export default function EntityDetailsPage() {
   const [loading, setLoading] = useState(!location.state?.entities);
   const [validationRules, setValidationRules] = useState([] as AnnotatedValidationRule[]);
   const [activeTab, setActiveTab] = useState('entity');
-  const [validationRuleCreatorOpen, setValidationRuleCreatorOpen] = useState(false);
-  const [rawSchema, setRawSchema] = useState<any>(null);
-  const [availableEntities, setAvailableEntities] = useState<any[]>([]);
-  const [editingRule, setEditingRule] = useState<AnnotatedValidationRule | null>(null);
-  const notification = useNotification();
 
   // Initialize semantic layer for business entity
   const semanticLayer = useBusinessEntitySemanticLayer({
@@ -207,14 +200,12 @@ export default function EntityDetailsPage() {
     }
   }, [location.state?.entities, tenant, datasource]);
 
-  // Fetch full schema for rule creator
+  // Fetch the entity schema (populates entities when not passed via location)
   useEffect(() => {
     const loadSchema = async () => {
       if (!tenant || !datasource) return;
       try {
         const schema = await fetchEntitySchema(tenant.id, datasource.id || datasource.alpha_tenant_instance_id);
-        setRawSchema(schema);
-        setAvailableEntities(Object.keys(schema).sort());
         
         // If entities state wasn't provided via location, transform and set it
         if (!entities) {
@@ -227,23 +218,13 @@ export default function EntityDetailsPage() {
     loadSchema();
   }, [tenant?.id, datasource?.id, entities]);
 
-  const handleAddRule = () => {
-    setEditingRule(null);
-    setValidationRuleCreatorOpen(true);
-  };
-
-  const handleEditRule = (rule: AnnotatedValidationRule) => {
-    setEditingRule(rule);
-    setValidationRuleCreatorOpen(true);
-  };
-
-  const handleSaveRule = async (rule: any) => {
-    // Refresh rules after save
-    await fetchValidationRules();
-    notification.success(editingRule ? 'Rule updated successfully' : 'Rule created successfully');
-    setValidationRuleCreatorOpen(false);
-    setEditingRule(null);
-  };
+  // Rules are authored in the single rule engine's editor
+  // (internal/rules/vm via /api/validation-rule-nodes). The legacy CUE
+  // creator that used to open here wrote to the retired
+  // catalog_validation_rules corpus.
+  const openRuleEditor = () => navigate('/core/validation-rules/editor');
+  const handleAddRule = openRuleEditor;
+  const handleEditRule = (_rule: AnnotatedValidationRule) => openRuleEditor();
 
   if (loading) {
     return (
@@ -489,20 +470,6 @@ export default function EntityDetailsPage() {
 
       </Container>
 
-      <ValidationRuleCreator
-        isOpen={validationRuleCreatorOpen}
-        onClose={() => {
-          setValidationRuleCreatorOpen(false);
-          setEditingRule(null);
-        }}
-        onSave={handleSaveRule}
-        tenantId={tenant?.id || ''}
-        datasourceId={datasource?.id || datasource?.alpha_tenant_instance_id || ''}
-        availableEntities={availableEntities}
-        entitySchema={rawSchema}
-        editingRule={editingRule as any}
-        defaultTargetEntity={entityKey}
-      />
     </Box>
   );
 }

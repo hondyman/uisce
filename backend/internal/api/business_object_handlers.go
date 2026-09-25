@@ -1381,7 +1381,7 @@ func (h *BusinessObjectHandler) CreateBORecord(w http.ResponseWriter, r *http.Re
 	record, err := h.service.CreateBORecord(ctx, secCtx, id, req, userID)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to create BO record for %s: %v", id, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeBOWriteError(w, err, "record was not created", "", http.StatusInternalServerError)
 		return
 	}
 
@@ -1418,7 +1418,7 @@ func (h *BusinessObjectHandler) UpdateBORecord(w http.ResponseWriter, r *http.Re
 	record, err := h.service.UpdateBORecord(ctx, secCtx, id, recordId, req, userID)
 	if err != nil {
 		logging.GetLogger().Sugar().Errorf("Failed to update BO record %s for %s: %v", recordId, id, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		writeBOWriteError(w, err, "record not found", "", http.StatusInternalServerError)
 		return
 	}
 

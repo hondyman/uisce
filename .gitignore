@@ -19,11 +19,9 @@ backend/e2e_amqp
 backend/migrate
 backend/server
 backend/worker
-backend/rule-engine-service
 backend/semantic-rules-api
 backend/semantic-rules-api/semantic-rules-api
 backend/temporal-worker
-backend/validation-service
 backend/websocket
 backend/websocket_server
 bp-backend/server
@@ -182,7 +180,6 @@ desktop/bin/
 /backend/cmd/catalog-worker/catalog-worker
 /backend/cmd/mock_admin_server/mock_admin_server
 /backend/compliance-demo
-/backend/cube-parity
 /backend/demo_xirr_execution
 /backend/dev-proxy/dev-proxy
 /backend/dev-proxy/proxy
@@ -206,16 +203,8 @@ desktop/bin/
 /backend/testbin
 /backend/websocket_client
 /bin/api-gateway
-/bin/cube-gonja
 /bin/triggers
 /calendar-service/bin/jwt_gen
-/cube-gonja/bin/cube-gonja
-/cube-gonja/cube-gonja
-/cube-gonja/gonja-service
-/cube-gonja/gonja-service-1.22
-/cube-gonja/main
-/cube-gonja/test-binary
-/cube-gonja/test-server
 /docs/archives/AAAWealth_TRANSFER.md
 /docs/project_history/AAAWealth_TRANSFER.md
 /portfolio-management/backend/bin/portfolio-service

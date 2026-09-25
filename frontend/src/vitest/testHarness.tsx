@@ -40,41 +40,8 @@ vi.mock('@/contexts/ApiContext', () => ({
   })
 }))
 
-// ExpressionBuilder mock (heavy dependency)
-vi.mock('@/components/ExpressionBuilder', () => ({
-  ExpressionBuilder: () => <div data-testid="expression-builder" />
-}))
-
-vi.mock('@/components/ExpressionBuilder/ExpressionBuilder', () => ({
-  default: () => <div data-testid="expression-builder" />
-}))
-
 vi.mock('@/components/validation/ConditionBuilder', () => ({
   default: () => <div data-testid="condition-builder" />
-}))
-
-vi.mock('@/components/validation/RuleTemplatesSelector', () => ({
-  default: () => <div data-testid="rule-templates-selector" />
-}))
-
-vi.mock('@/components/validation/LivePreview', () => ({
-  default: () => <div data-testid="live-preview" />
-}))
-
-vi.mock('@/components/validation/ImpactAnalysis', () => ({
-  default: () => <div data-testid="impact-analysis" />
-}))
-
-vi.mock('@/components/validation/AdvancedFieldSelector', () => ({
-  default: () => <div data-testid="advanced-field-selector" />
-}))
-
-vi.mock('@/components/validation/RuleCloneAndConflict', () => ({
-  default: () => <div data-testid="rule-clone-conflict" />
-}))
-
-vi.mock('@/components/validation/SampleDataGenerator', () => ({
-  default: () => <div data-testid="sample-data-generator" />
 }))
 
 // Apollo hooks mock - Apollo has been removed, these are no-ops

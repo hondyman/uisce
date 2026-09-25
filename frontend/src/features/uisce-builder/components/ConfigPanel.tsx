@@ -7,7 +7,6 @@ import CurrencyExchangeIcon from '@mui/icons-material/CurrencyExchange';
 import EventIcon from '@mui/icons-material/Event';
 import LinkIcon from '@mui/icons-material/Link';
 import axios from '@/utils/axiosClient';
-import MonacoCodeEditor from '../../../components/UnifiedSemanticBuilder/MonacoCodeEditor';
 
 const ConfigPanel = () => {
   const { nodes, selectedNodeId, updateNodeConfig, selectedBO } = useUisceStore();
@@ -34,10 +33,11 @@ const ConfigPanel = () => {
             .catch(err => console.error("Failed to fetch lookups", err));
       }
 
-      // Fetch validation rules if Policy Check and we know the context
-      if (type === 'Policy_Check' && selectedBO?.id) {
-          axios.get(`/api/validation-rules?target_entity_id=${selectedBO.id}`)
-            .then(res => setValidationRules(res.data.items || []))
+      // Fetch the BO's rules from the single rule engine (internal/rules/vm)
+      const boKey = selectedBO?.key || selectedBO?.bo_key || selectedBO?.name;
+      if (type === 'Policy_Check' && boKey) {
+          axios.get('/api/validation-rule-nodes', { params: { bo_name: boKey } })
+            .then(res => setValidationRules(res.data.validationRules || []))
             .catch(err => console.error("Failed to fetch validation rules", err));
       }
 
@@ -153,7 +153,7 @@ const ConfigPanel = () => {
       <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
         <Tabs value={tabIndex} onChange={handleTabChange} aria-label="config tabs" variant="fullWidth">
             <Tab label="Properties" sx={{ fontWeight: 600 }} />
-            <Tab label="Code (CUE)" sx={{ fontWeight: 600 }} />
+            <Tab label="Code" sx={{ fontWeight: 600 }} />
         </Tabs>
       </Box>
 
@@ -427,7 +427,7 @@ const ConfigPanel = () => {
                 {/* 6. Formula */}
                 {filterType === 'Formula' && (
                     <TextField 
-                        label="Expression (Starlark/CUE)"
+                        label="Expression"
                         fullWidth
                         multiline
                         rows={4}
@@ -435,7 +435,7 @@ const ConfigPanel = () => {
                         value={formData.expression || ''}
                         onChange={(e) => handleChange('expression', e.target.value)}
                         placeholder="e.g. trade.amount * 0.1 < client.credit_limit"
-                        helperText="Use available fields from the selected Business Object."
+                        helperText="Rule-engine expression over the selected Business Object's fields."
                     />
                 )}
 
@@ -563,34 +563,13 @@ const ConfigPanel = () => {
                             label="Transform Type"
                             fullWidth
                             size="small"
-                            value={formData.transformType || 'script'}
+                            value={formData.transformType || 'map'}
                             onChange={(e) => handleChange('transformType', e.target.value)}
                             sx={{ mb: 2 }}
                         >
-                            <MenuItem value="script">Custom Script (Starlark)</MenuItem>
                             <MenuItem value="map">Field Mapping</MenuItem>
                         </TextField>
 
-                        {(!formData.transformType || formData.transformType === 'script') && (
-                            <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1, overflow: 'hidden' }}>
-                                <Box sx={{ p: 1, bgcolor: '#f8fafc', borderBottom: '1px solid #e2e8f0', display:'flex', alignItems:'center' }}>
-                                     <Typography variant="caption" fontWeight="bold">Starlark Script</Typography>
-                                     <Box sx={{ flexGrow: 1 }} />
-                                     <Typography variant="caption" sx={{ color: '#64748b' }}>input.field | variables.name</Typography>
-                                </Box>
-                                <Box sx={{ height: 200 }}>
-                                    <MonacoCodeEditor
-                                        language="python"
-                                        value={formData.script || 'def transform(input, variables):\n    output = {}\n    # Your logic here\n    return output'}
-                                        onChange={(val: string) => handleChange('script', val)}
-                                        dynamicCompletions={[
-                                            ...boFields.map(f => ({ label: `input.${f.name}`, insertText: `input.${f.name}`, kind: 9 })), 
-                                            ...pipelineVariables.map(v => ({ label: `variables.${v.name}`, insertText: `variables.${v.name}`, kind: 6 }))
-                                        ]}
-                                    />
-                                </Box>
-                            </Box>
-                        )}
                     </>
                 )}
 
@@ -730,7 +709,7 @@ const ConfigPanel = () => {
                             >
                                 {validationRules.map((rule: any) => (
                                     <MenuItem key={rule.id} value={rule.id}>
-                                        {rule.rule_name}
+                                        {rule.name}
                                     </MenuItem>
                                 ))}
                             </TextField>
@@ -1967,7 +1946,7 @@ const ConfigPanel = () => {
                      filterType === 'Conditional' ? `if (${formData.condition || 'true'}) {\n  return "path_A"\n} else {\n  return "path_B"\n}` :
                      filterType === 'Approval_Gate' ? `require_approval(roles=${JSON.stringify(formData.approverRoles || [])}, timeout="${formData.timeout || 24}h")` :
                      filterType === 'External_API' ? `http.${formData.method || 'POST'}("${formData.url || 'http://localhost'}")` :
-                     filterType === 'Transform' ? `// Transform\n${formData.script || 'pass'}` :
+                     filterType === 'Transform' ? `// Transform: field mapping` :
                      filterType === 'AI_Anomaly' ? `detect_anomaly(model="${formData.modelVersion || 'v2'}", sensitivity=${(formData.sensitivity || 50) / 100})` :
                      `// Standard Policy Logic for ${filterType}`}
                 </Typography>

@@ -73,7 +73,7 @@ func (a *ResolutionActivities) ResolveApproverRoleActivity(
 			return role, nil
 		}
 
-		// Use Starlark engine
+		// Evaluate via the rule engine
 		okMatch, err := a.Engine.EvaluateExpr(ctx, cond, boCtx)
 		if err == nil && okMatch {
 			return role, nil

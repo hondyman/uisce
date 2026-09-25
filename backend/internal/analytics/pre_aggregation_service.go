@@ -491,74 +491,6 @@ func (s *PreAggregationService) ListByBO(ctx context.Context, tenantID, boName s
 	return result, nil
 }
 
-// GenerateCubeSchema generates Cube.js schema for all pre-aggregations of a tenant.
-func (s *PreAggregationService) GenerateCubeSchema(ctx context.Context, tenantID string) (*models.CubeSchema, error) {
-	var nodes []struct {
-		NodeName   string          `db:"node_name"`
-		Properties json.RawMessage `db:"properties"`
-		Config     json.RawMessage `db:"config"`
-	}
-
-	err := s.db.SelectContext(ctx, &nodes, `
-		SELECT n.node_name, n.properties, n.config
-		FROM catalog_node n
-		JOIN catalog_node_type nt ON n.node_type_id = nt.id
-		WHERE nt.catalog_type_name = 'pre_aggregation'
-		  AND n.tenant_id = $1
-		  AND n.properties->>'governance_status' IN ('published', 'draft')
-	`, tenantID)
-	if err != nil {
-		return nil, err
-	}
-
-	schema := &models.CubeSchema{
-		Cubes: make([]models.CubeDefinition, 0, len(nodes)),
-	}
-
-	for _, n := range nodes {
-		props, _ := models.ParsePreAggProperties(n.Properties)
-		cfg, _ := models.ParsePreAggConfig(n.Config)
-
-		// Generate cube name (PascalCase from snake_case)
-		cubeName := preAggToPascalCase(n.NodeName)
-
-		// Build SQL
-		sql := fmt.Sprintf("SELECT * FROM %s.%s", props.TargetDatabase, cfg.Materialization.TargetName)
-
-		// Build measures from calculations
-		measures := make(map[string]models.CubeMeasure)
-		for _, calc := range cfg.Calculations {
-			measures[preAggToCamelCase(calc)] = models.CubeMeasure{
-				SQL:  calc,
-				Type: "number",
-			}
-		}
-
-		// Build dimensions from terms/group_by
-		dimensions := make(map[string]models.CubeDimension)
-		for _, term := range cfg.GroupBy {
-			dimType := "string"
-			// Heuristic: if name contains "date" or "time", treat as time dimension
-			if strings.Contains(strings.ToLower(term), "date") || strings.Contains(strings.ToLower(term), "time") {
-				dimType = "time"
-			}
-			dimensions[preAggToCamelCase(term)] = models.CubeDimension{
-				SQL:  term,
-				Type: dimType,
-			}
-		}
-
-		schema.Cubes = append(schema.Cubes, models.CubeDefinition{
-			Name:       cubeName,
-			SQL:        sql,
-			Measures:   measures,
-			Dimensions: dimensions,
-		})
-	}
-
-	return schema, nil
-}
-
 // GetByID returns a single pre-aggregation by its ID.
 //
 // GetByID is NOT tenant-scoped: it is for internal callers that already hold a trusted id (the lifecycle
@@ -868,12 +800,4 @@ func preAggToPascalCase(s string) string {
 		}
 	}
 	return strings.Join(parts, "")
-}
-
-func preAggToCamelCase(s string) string {
-	pascal := preAggToPascalCase(s)
-	if len(pascal) > 0 {
-		return strings.ToLower(pascal[:1]) + pascal[1:]
-	}
-	return pascal
 }

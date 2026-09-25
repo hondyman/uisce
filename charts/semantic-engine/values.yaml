@@ -191,12 +191,6 @@ config:
     isolation: schema # database | schema | row
     tenantHeader: X-Tenant-ID
 
-  # Cube.js integration
-  cube:
-    enabled: true
-    endpoint: http://cube-api:4000
-    apiSecret: ""
-
   # Observability
   metrics:
     enabled: true
@@ -215,8 +209,6 @@ secrets:
     secretName: db-password
   - name: redis-password
     secretName: redis-password
-  - name: cube-api-secret
-    secretName: cube-api-secret
 
 # Volume mounts for configuration
 extraVolumes:

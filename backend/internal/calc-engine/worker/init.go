@@ -70,7 +70,6 @@ func InitializeTemporalWorker(cfg TemporalWorkerConfig) (client.Client, worker.W
 	w.RegisterActivity(activities.ComputeAndMergePoP)
 	w.RegisterActivity(activities.ComputeAndMergeAnomalies)
 	w.RegisterActivity(activities.PublishCompletionEvent)
-	w.RegisterActivity(activities.RefreshCubePartitions)
 
 	// Register Gold Copy Activities
 	// Audit service disabled - legacy audit pipeline decommissioned
