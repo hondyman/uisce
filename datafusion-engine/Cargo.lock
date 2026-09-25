@@ -1419,8 +1419,10 @@ version = "0.1.0"
 dependencies = [
  "arrow 50.0.0",
  "axum",
+ "bytes",
  "chrono",
  "datafusion",
+ "futures",
  "iceberg",
  "serde",
  "serde_json",

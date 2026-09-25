@@ -110,6 +110,7 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/bo", func(r chi.Router) {
 		r.Get("/{boKey}/records", h.HandleListBORecords)
 		r.Post("/{boKey}/records", h.HandleCreateBORecord)
+		r.Post("/{boKey}/records/bulk", h.HandleBulkBORecords)
 		r.Get("/{boKey}/records/{recordId}", h.HandleGetBORecord)
 		r.Put("/{boKey}/records/{recordId}", h.HandleUpdateBORecord)
 		r.Delete("/{boKey}/records/{recordId}", h.HandleDeleteBORecord)
