@@ -253,6 +253,13 @@ const categoryConfigs: CategoryConfig[] = [
         ]
       },
       {
+        label: 'Data',
+        icon: <AccountTreeIcon />,
+        items: [
+          { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
+        ]
+      },
+      {
         label: 'Rules',
         icon: <CheckCircleIcon />,
         items: [

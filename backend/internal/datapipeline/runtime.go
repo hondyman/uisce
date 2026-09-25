@@ -95,8 +95,8 @@ type Factory interface {
 type Summary struct {
 	Nodes      []NodeStats
 	Samples    map[string][]Row `json:"samples,omitempty"` // preview only
-	RecordsIn  int64 // rows read from sources
-	RecordsOut int64 // rows accepted by sinks
+	RecordsIn  int64            // rows read from sources
+	RecordsOut int64            // rows accepted by sinks
 	Errors     int64
 }
 
