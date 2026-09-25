@@ -15,13 +15,14 @@ import (
 // keep the shape of the platform's existing ErrorResponse, so current
 // clients that read "error" show the catalog text.
 type ErrorBody struct {
-	Error         string `json:"error"`      // the rendered message
-	Status        int    `json:"code"`       // HTTP status
-	Code          string `json:"error_code"` // catalog code, "set-nbr"
-	Severity      string `json:"severity"`
-	UserAction    string `json:"user_action,omitempty"`
-	Language      string `json:"language"`
-	CorrelationID string `json:"correlation_id"`
+	Error         string         `json:"error"`      // the rendered message
+	Status        int            `json:"code"`       // HTTP status
+	Code          string         `json:"error_code"` // catalog code, "set-nbr"
+	Severity      string         `json:"severity"`
+	UserAction    string         `json:"user_action,omitempty"`
+	Language      string         `json:"language"`
+	CorrelationID string         `json:"correlation_id"`
+	Details       map[string]any `json:"details,omitempty"`
 }
 
 var requestIDRE = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
@@ -55,6 +56,6 @@ func (c *Catalog) WriteError(w http.ResponseWriter, r *http.Request, tenantID st
 	w.WriteHeader(out.Status)
 	_ = json.NewEncoder(w).Encode(ErrorBody{
 		Error: out.Message, Status: out.Status, Code: out.Code, Severity: out.Severity,
-		UserAction: out.UserAction, Language: out.Language, CorrelationID: ref,
+		UserAction: out.UserAction, Language: out.Language, CorrelationID: ref, Details: me.Details,
 	})
 }

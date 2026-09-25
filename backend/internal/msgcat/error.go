@@ -42,7 +42,10 @@ type Error struct {
 	// Status is the HTTP status to answer with; 0 means 500 for a Fatal
 	// message and 400 otherwise.
 	Status int
-	cause  error
+	// Details are structured, client-safe facts (the rules that rejected a
+	// write, the fields it left empty) sent alongside the message.
+	Details map[string]any
+	cause   error
 }
 
 // New returns the catalog message set-nbr with its parameters (%1, %2, ...).
@@ -58,6 +61,17 @@ func New(set, nbr int, params ...any) *Error {
 func (e *Error) WithStatus(status int) *Error {
 	c := *e
 	c.Status = status
+	return &c
+}
+
+// WithDetail returns a copy carrying one client-safe detail.
+func (e *Error) WithDetail(key string, value any) *Error {
+	c := *e
+	c.Details = map[string]any{}
+	for k, v := range e.Details {
+		c.Details[k] = v
+	}
+	c.Details[key] = value
 	return &c
 }
 
