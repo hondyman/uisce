@@ -47,41 +47,11 @@ type allowance struct {
 	Until  string
 }
 
-// engineImportAllowlist is keyed by backend-relative file path. It may only
-// shrink. Adding a file here requires a signed amendment to
+// engineImportAllowlist is keyed by backend-relative file path. It is empty:
+// every other engine (cel-go, Starlark, wazero, CUE, OPA) has been retired.
+// Adding a file here requires a signed amendment to
 // docs/rule-engine-centralization-plan.md.
-var engineImportAllowlist = map[string]allowance{
-	// cel-go: CEL retirement project.
-	"internal/rules/engine.go":         {"CEL entry points", "PR #74"},
-	"internal/rulefabric/evaluator.go": {"rulefabric CEL evaluator", "slice 1 (rulefabric deletion)"},
-	"internal/rdl/service.go":          {"RDL CEL formulas", "RDL spin-out"},
-
-	// Starlark / wazero / CUE: removed on open PRs.
-	"internal/ai/starlark_guard.go":                            {"dead Starlark assistant", "PR #127"},
-	"internal/rules/core_compile.go":                           {"dead Starlark compiler", "PR #127"},
-	"internal/rules/corecache.go":                              {"dead Starlark cache", "PR #127"},
-	"internal/rules/loader.go":                                 {"dead Starlark loader", "PR #127"},
-	"internal/rules/tenant_compile.go":                         {"dead Starlark compiler", "PR #127"},
-	"internal/rules/tenantcache.go":                            {"dead Starlark cache", "PR #127"},
-	"internal/services/starlark_engine.go":                     {"dead Starlark engine", "PR #127"},
-	"internal/starlib/bo_helpers.go":                           {"dead Starlark lib", "PR #127"},
-	"internal/starlib/compare.go":                              {"dead Starlark lib", "PR #127"},
-	"internal/starlib/context.go":                              {"dead Starlark lib", "PR #127"},
-	"internal/starlib/extras.go":                               {"dead Starlark lib", "PR #127"},
-	"internal/starlib/extras_test.go":                          {"dead Starlark lib", "PR #127"},
-	"internal/starlib/fieldpaths.go":                           {"dead Starlark lib", "PR #127"},
-	"internal/starlib/helpers.go":                              {"dead Starlark lib", "PR #127"},
-	"internal/starlib/string_date.go":                          {"dead Starlark lib", "PR #127"},
-	"internal/wasm/engine.go":                                  {"dead wazero engine", "PR #127"},
-	"internal/mdm/execution_engine.go":                         {"unused wazero runtime", "PR #127"},
-	"internal/services/cue_engine.go":                          {"CUE engine", "PR #128"},
-	"internal/services/cue_schema_generator.go":                {"CUE schema generator", "PR #128"},
-	"internal/services/cue_schema_generator_test.go":           {"CUE schema generator", "PR #128"},
-	"services/compliance-engine/internal/engine/cue_engine.go": {"CUE compliance service", "PR #128"},
-
-	// OPA/Rego: live governance engine, not yet on vm (plan E15).
-	"pkg/governance/engine.go": {"OPA governance policies (trade compliance, pipeline/semantic validation, portal authz)", "slice 7 (E15)"},
-}
+var engineImportAllowlist = map[string]allowance{}
 
 // TestSingleRuleEngine fails when a backend Go file imports a forbidden
 // engine library without an allowance.

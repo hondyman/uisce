@@ -310,10 +310,19 @@ or its `/api/rules` shorthand. `internal/rdl`, its routes and UI deleted;
 no backend package imports cel-go — the CEL retirement project's closing claim
 ("`go mod` drops the dependency") holds.
 
+### Stack merged (2026-09-24)
+
+Merged in order: #126, #127, #132, #128, #129, #74, #130, #134, #135, #138,
+#136, #137, #131. Two merge resolutions, both "keep both deletions"
+(`docker-start.sh`/`prometheus.yml` between #128/#129 and #130; adjacent
+`go.mod` removals between #136 and #138). `rule-engine/generated` artifacts
+regenerated on #136 after #130 (the retired Cube/CUE/Starlark/validation types
+left `asl.*`); `check-drift` green. The guard's `engineImportAllowlist` is
+empty; a planted cel-go import fails it. No `go.mod` in the repo and no
+frontend `package.json` requires an engine library.
+
 ### Remaining
 
-- Merge the stack; then delete the guard's stale allowances until
-  `engineImportAllowlist` is empty (the §6 standing proof).
 - E14: SQL filter compilers (`boresolver` filter groups, `QueryBORecords`
   filters, `querycompiler`) vs `vm.CompileToSQL` — translation, not
   evaluation, but a second condition vocabulary.
