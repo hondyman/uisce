@@ -15,6 +15,10 @@ import (
 func fakeEngine(t *testing.T, ndjson string) (*HTTPFileEngine, *[]string, *[]string) {
 	var readURIs, written []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 		switch r.URL.Path {
 		case "/files/read":
 			var fs FileSpec
@@ -30,7 +34,7 @@ func fakeEngine(t *testing.T, ndjson string) (*HTTPFileEngine, *[]string, *[]str
 		}
 	}))
 	t.Cleanup(srv.Close)
-	return &HTTPFileEngine{BaseURL: srv.URL}, &readURIs, &written
+	return &HTTPFileEngine{BaseURL: srv.URL, Token: "test-token"}, &readURIs, &written
 }
 
 func notNull() *bool { f := false; return &f }

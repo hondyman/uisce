@@ -82,6 +82,7 @@ func tenantPath(tenantID, uri string) (string, error) {
 // HTTPFileEngine calls the DataFusion engine over HTTP.
 type HTTPFileEngine struct {
 	BaseURL string
+	Token   string // shared secret the engine requires (FILE_ENGINE_TOKEN there)
 	Client  *http.Client
 }
 
@@ -98,6 +99,7 @@ func (e *HTTPFileEngine) post(ctx context.Context, path string, body io.Reader, 
 		return nil, err
 	}
 	req.Header.Set("Content-Type", ctype)
+	req.Header.Set("Authorization", "Bearer "+e.Token)
 	resp, err := e.client().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("file engine unavailable: %w", err)

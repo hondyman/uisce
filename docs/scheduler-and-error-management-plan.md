@@ -1,7 +1,9 @@
 # One Scheduler, One Error Catalog — Plan
 
-> **Status:** DRAFT for owner sign-off (sign-then-execute). Decisions D1–D5 below
-> block the slices named. Nothing here is executed before sign-off.
+> **Status:** SIGNED 2026-09-25 via decision answers: D1 (a) rebuild the Scheduler
+> Intelligence console on the core; D2 apply additive migrations to `alpha`, engine on
+> the Docker host; D3 maker–checker per tenant, default on; D4 LLM per-tenant opt-in
+> with mandatory redaction. D5 revised below, pending confirmation.
 
 Goal (owner, 2026-09-25): one centralized, easy, visual scheduler used by reports,
 the query builder, data pipelines and workflows; one centralized error catalog and
@@ -71,6 +73,9 @@ second calendar store (`tenant_exchange_calendars`).
 * **One run history** (`schedule_runs`): target, status, timings, row counts, error
   code (catalog), correlation id, Temporal ids — the Process Monitor.
 * **One API** (`/api/v1/schedules`, `/runs`, `/calendars`) and **one MCP tool set**.
+* **Events on Redpanda** (the platform's streaming layer, Kafka API): schedule-run and
+  error events are published to Redpanda topics for notification, the error bot and
+  downstream consumers.
 * **One UI**: a reusable `<ScheduleEditor>` (presets, calendar picker, next runs
   shown in the time zone, plain-language summary) embedded in the report builder,
   query builder, pipeline editor and workflow designer; plus one **Schedules console**:
@@ -149,8 +154,15 @@ Each slice ships with tests, a live check on the running backend, and a PR.
 * **D4 — Bot and LLM.** May redacted error context go to the configured LLM (Gemini
   today)? Per-tenant opt-in? *Recommended: per-tenant opt-in, redaction mandatory,
   bot works without the LLM (catalog explanation + rules).*
-* **D5 — Calendars.** Use MDM golden calendars as the only business calendar source and
-  retire `tenant_exchange_calendars`. *Recommended: yes.*
+* **D5 — Calendars (revised 2026-09-25, pending owner confirmation).** The scheduler
+  reads only **published** MDM golden calendars (`calendar_golden_record` current +
+  published, materialized `calendar_day`) through a read-only calendar service — never
+  MDM working tables. Standard market calendars are published once in the **gold-copy
+  tenant** and inherited read-only; tenants publish their own (e.g. fund dealing
+  calendars) in their tenant. Gold-copy calendars are loaded through the MDM calendar
+  pipeline fed by the data pipeline. A schedule warns when its calendar's published
+  horizon is too short. `tenant_exchange_calendars` retires. (MDM calendar tables are
+  empty today.)
 
 ---
 

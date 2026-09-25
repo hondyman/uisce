@@ -302,7 +302,9 @@ pub async fn write(
     res
 }
 
-/// The file routes.
+/// The file routes. Every call must carry `Authorization: Bearer <token>`
+/// matching FILE_ENGINE_TOKEN; without a configured token the routes refuse
+/// everything (tenant files are never served unauthenticated).
 pub fn router<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
     use axum::routing::post;
     axum::Router::new()
@@ -312,6 +314,31 @@ pub fn router<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
         .route("/files/list", post(list))
         .route("/files/write", post(write))
         .route("/files/upload", post(upload))
+        .layer(axum::middleware::from_fn(require_token))
+}
+
+async fn require_token(req: axum::extract::Request, next: axum::middleware::Next) -> Result<Response, ApiErr> {
+    let expected = std::env::var("FILE_ENGINE_TOKEN").unwrap_or_default();
+    if expected.len() < 32 {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "file engine token is not configured".into()));
+    }
+    let got = req
+        .headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or("");
+    if !constant_time_eq(got.as_bytes(), expected.as_bytes()) {
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized".into()));
+    }
+    Ok(next.run(req).await)
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 /// Size cap for streamed bodies (uploads, exports): FILE_BODY_LIMIT_MB,
@@ -544,12 +571,22 @@ mod tests {
         assert_eq!(names, vec!["t1/fs.txt", "t1/in/new.csv", "t1/out/fs.parquet"]);
         assert!(upload(axum::extract::Query(UploadQuery { uri: "../x".into() }), Body::from("x")).await.is_err());
 
-        // Through the router: a body over axum's 2 MB default is accepted.
+        // Through the router: the token is required.
         use tower::ServiceExt;
+        let token = "t".repeat(40);
+        std::env::set_var("FILE_ENGINE_TOKEN", &token);
+        for auth in [None, Some("Bearer wrong".to_string())] {
+            let mut rq = axum::http::Request::post("/files/list").header("content-type", "application/json");
+            if let Some(a) = auth { rq = rq.header("authorization", a); }
+            let resp = router::<()>().oneshot(rq.body(Body::from(r#"{"prefix":"t1"}"#)).unwrap()).await.unwrap();
+            assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        }
+        // Through the router: a body over axum's 2 MB default is accepted.
         let big = vec![b'x'; 3 * 1024 * 1024];
         let resp = router::<()>()
             .oneshot(
                 axum::http::Request::post("/files/upload?uri=t1/in/big.bin")
+                    .header("authorization", format!("Bearer {token}"))
                     .body(Body::from(big))
                     .unwrap(),
             )
@@ -563,6 +600,7 @@ mod tests {
         let resp = router::<()>()
             .oneshot(
                 axum::http::Request::post("/files/upload?uri=t1/in/too_big.bin")
+                    .header("authorization", format!("Bearer {token}"))
                     .body(Body::from(vec![b'x'; 3 * 1024 * 1024]))
                     .unwrap(),
             )
@@ -571,6 +609,12 @@ mod tests {
         std::env::remove_var("FILE_BODY_LIMIT_MB");
         assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
         assert!(!dir.join("t1/in/too_big.bin").exists());
+        std::env::remove_var("FILE_ENGINE_TOKEN");
+        let resp = router::<()>()
+            .oneshot(axum::http::Request::post("/files/list").header("authorization", format!("Bearer {token}"))
+                .header("content-type", "application/json").body(Body::from(r#"{"prefix":"t1"}"#)).unwrap())
+            .await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE, "no token configured: refuse everything");
         let leftovers = std::fs::read_dir(dir.join("t1/in")).unwrap().flatten()
             .filter(|e| e.file_name().to_string_lossy().contains(".upload-")).count();
         assert_eq!(leftovers, 0, "partial upload must be removed");

@@ -30,7 +30,7 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 		BO:    NewPipelineBOClient(bo),
 	}
 	if u := os.Getenv("DATAPIPELINE_ENGINE_URL"); u != "" {
-		deps.Files = &datapipeline.HTTPFileEngine{BaseURL: u}
+		deps.Files = &datapipeline.HTTPFileEngine{BaseURL: u, Token: os.Getenv("DATAPIPELINE_ENGINE_TOKEN")}
 	} else {
 		log.Printf("[data-pipelines] DATAPIPELINE_ENGINE_URL not set: file sources and exports are disabled")
 	}
