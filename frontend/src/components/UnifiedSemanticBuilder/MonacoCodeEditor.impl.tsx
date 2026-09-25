@@ -666,7 +666,7 @@ const MonacoCodeEditor: React.FC<MonacoCodeEditorProps> = ({ value, language, re
       const jsonProv = (monaco as any).languages.registerCompletionItemProvider('json', { provideCompletionItems: () => ({ suggestions: mkSuggestions('json') }) });
       const yamlProv = (monaco as any).languages.registerCompletionItemProvider('yaml', { provideCompletionItems: () => ({ suggestions: mkSuggestions('yaml') }) });
       
-      // Generic provider for Python to support Starlark dynamic variables
+      // Generic provider for Python with dynamic completion variables
       const pyProv = (monaco as any).languages.registerCompletionItemProvider('python', {
         provideCompletionItems: () => {
              const extra = (dynCompletionsRef.current || []).map((c) => ({ 

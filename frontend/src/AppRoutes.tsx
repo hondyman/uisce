@@ -42,10 +42,8 @@ import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
 import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
 import Marketplace from "./pages/marketplace/Marketplace";
-import { ValidationRulesBuilderPage } from "./pages/ValidationRulesBuilderPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
-import { UisceBuilderPage } from "./pages/UisceBuilderPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
@@ -121,7 +119,6 @@ import { ReportLibrary } from "./features/reporting/components/ReportLibrary";
 import ReportBuilderPage from "./pages/ReportBuilderPage";
 import { DataExplorer } from './components/reporting/DataExplorer';
 import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
-import { ExpressionLibrary } from "./features/expressions/components/ExpressionLibrary";
 
 
 
@@ -297,7 +294,8 @@ function ProtectedApp() {
         <Route path="fabric/bundles" element={<ProtectedRoute><BundleListPage /></ProtectedRoute>} />
         <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
-        <Route path="core/validation-rules" element={<ProtectedRoute><ValidationRulesBuilderPage /></ProtectedRoute>} />
+        {/* Validation rules: one editor, one engine (internal/rules/vm). */}
+        <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         {/* System-wide validation-rule-nodes view (every BO, one page) -
             a sibling of the two routes above, not a replacement: those
@@ -306,9 +304,7 @@ function ProtectedApp() {
             system's tenant-wide list. */}
         <Route path="core/validation-rules/all" element={<ProtectedRoute><SystemValidationsPage /></ProtectedRoute>} />
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
-        <Route path="reports/expressions" element={<ProtectedRoute><ExpressionLibrary /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
-        <Route path="core/uisce-builder" element={<ProtectedRoute><UisceBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
         <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
         <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />

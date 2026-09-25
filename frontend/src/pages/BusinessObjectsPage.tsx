@@ -48,8 +48,6 @@ import {
   Search as SearchIcon,
 } from '@mui/icons-material';
 
-import ValidationRuleScriptEditor from '../components/ValidationRules/ValidationRuleScriptEditor';
-import { ValidationRuleCreator } from '../components/ValidationRules/ValidationRuleCreator';
 import { EditBusinessObjectModal } from '../components/BusinessObjectManager/EditBusinessObjectModal';
 import BusinessObjectBindingWizard from '../components/BusinessObjectManager/BusinessObjectBindingWizard';
 import BOAIAssistantModal from '../components/BusinessObjectManager/BOAIAssistantModal';
@@ -58,7 +56,6 @@ import { filterBusinessObjectsBySearch } from '../utils/businessObjectSearch';
 import { useTenant } from '../contexts/TenantContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { useNotification } from '../hooks/useNotification';
-import { devDebug } from '../utils/devLogger';
 
 import { getSelectedRegion } from '../lib/region';
 
@@ -124,13 +121,7 @@ export default function BusinessObjectsPage() {
   // Validation Rules State
   const [selectedFieldForValidation, _setSelectedFieldForValidation] = useState<any>(null);
   const [fieldValidationModalOpen, setFieldValidationModalOpen] = useState(false);
-  const [validationRuleCreatorOpen, setValidationRuleCreatorOpen] = useState(false);
-  const [editingRule, setEditingRule] = useState<any>(null);
-  const [viewingRule, setViewingRule] = useState<any>(null);
 
-  const [availableEntitiesMemo, _setAvailableEntitiesMemo] = useState<any[]>([]);
-  const [entitySchemaMemo, _setEntitySchemaMemo] = useState<any>(null);
-  const [selectedObject, _setSelectedObject] = useState<BusinessObject | null>(null);
 
   // Edit Business Object Modal State
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -161,16 +152,6 @@ export default function BusinessObjectsPage() {
   const getValidationRulesForField = (_fieldKey: string) => {
     // Placeholder for fetching validation rules filtering by field
     return [];
-  };
-
-  const handleSaveValidationRule = (rule: any) => {
-     devDebug('Saved rule:', rule);
-     setValidationRuleCreatorOpen(false);
-  };
-
-  const _handleEditValidationRule = (rule: any) => {
-      setEditingRule(rule);
-      setValidationRuleCreatorOpen(true);
   };
 
   // Filtered business objects based on search, status, and scope
@@ -1135,24 +1116,6 @@ export default function BusinessObjectsPage() {
       </Box>
 
 
-      {/* Validation Rule Creator Modal */}
-      {validationRuleCreatorOpen && (
-        <ValidationRuleCreator
-          isOpen={validationRuleCreatorOpen}
-          onClose={() => {
-            setValidationRuleCreatorOpen(false);
-            setEditingRule(null);
-          }}
-          onSave={handleSaveValidationRule}
-          tenantId={tenantId}
-          datasourceId={datasourceId}
-          availableEntities={availableEntitiesMemo}
-          defaultTargetEntity={selectedObject?.name || ''}
-          entitySchema={entitySchemaMemo}
-          editingRule={editingRule as any}
-        />
-      )}
-
       {/* Edit Business Object Modal */}
       <EditBusinessObjectModal
         isOpen={editModalOpen}
@@ -1163,43 +1126,6 @@ export default function BusinessObjectsPage() {
         }}
         onSave={handleSaveBusinessObject}
       />
-
-      {/* Code Viewer Modal */}
-      {viewingRule && (
-        <Dialog
-          open={!!viewingRule}
-          onClose={() => setViewingRule(null)}
-          maxWidth="md"
-          fullWidth
-        >
-          <DialogTitle sx={{ fontWeight: 600 }}>
-            Rule Logic: {viewingRule.rule_name}
-            <IconButton
-              onClick={() => setViewingRule(null)}
-              sx={{ position: 'absolute', right: 8, top: 8 }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent>
-            <Box sx={{ height: '400px', mt: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-              <ValidationRuleScriptEditor
-                value={
-                  viewingRule.rule_type === 'starlark' 
-                    ? (viewingRule as any).script_content || '# No script content'
-                    : JSON.stringify(viewingRule.condition_json || {}, null, 2)
-                }
-                onChange={() => {}}
-                language={viewingRule.rule_type === 'starlark' ? 'python' : 'json'}
-                theme="vs-dark"
-              />
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setViewingRule(null)}>Close</Button>
-          </DialogActions>
-        </Dialog>
-      )}
 
       {/* Field Validation Rules Modal */}
       {fieldValidationModalOpen && selectedFieldForValidation && (
