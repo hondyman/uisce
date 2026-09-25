@@ -28,6 +28,7 @@ import {
   ExpressionParseError,
 } from '../rules/wasmRuntime';
 import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setAslFields } from '../rules/aslMonacoRegistry';
+import { toRuleNode } from '../rules/ruleAst';
 import apiClient from '../utils/apiClient';
 
 // Small section-header pattern shared by every card on this page - an
@@ -63,30 +64,6 @@ const SEVERITY_META: Record<string, { color: 'error' | 'warning'; icon: React.Re
   BLOCK: { color: 'error', icon: <BlockIcon fontSize="small" /> },
   WARN: { color: 'warning', icon: <WarningAmberIcon fontSize="small" /> },
 };
-
-// Converts the editor's ConditionNode shape into the wire format
-// internal/rules/vm.RuleNode.UnmarshalJSON expects (flat "type" +
-// sibling fields, not nested under a "Condition"/"Group" key - see
-// backend/internal/rules/vm/ast.go). Structural discrimination
-// ("conditions" in node) rather than trusting node.type, since Condition
-// nodes from the builder don't always set an explicit type.
-function toRuleNode(node: ConditionNode): unknown {
-  if ('conditions' in node) {
-    return {
-      type: 'group',
-      id: node.id,
-      operator: node.operator,
-      conditions: node.conditions.map(toRuleNode),
-    };
-  }
-  return {
-    type: 'condition',
-    id: node.id,
-    field: node.fieldPath || node.field,
-    operator: node.operator,
-    value: node.value,
-  };
-}
 
 // The builder's operator vocabulary (e.g. "greater_equal") doesn't match
 // every wire-format operator token rules can be saved with (e.g. ">=",

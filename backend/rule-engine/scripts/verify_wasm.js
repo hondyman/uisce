@@ -88,6 +88,23 @@ async function main() {
     failures.push(`expected condition operators (not_in, matches_regex, contains_any) to evaluate, got pass=${JSON.stringify(opPass)} fail=${JSON.stringify(opFail)}`);
   }
 
+  // Range (Value + SecondValue, as the editor saves it) and absolute date
+  // operators - the builder's own evaluator was removed, so the browser has
+  // only this engine.
+  const rangeDateRule = {
+    Type: "group",
+    Operator: "AND",
+    Conditions: [
+      { Type: "condition", Field: "age", Operator: "between", Value: 18, SecondValue: 65 },
+      { Type: "condition", Field: "hired", Operator: "before", Value: "2021-01-01" },
+    ],
+  };
+  const rdPass = evaluateRule(JSON.stringify(rangeDateRule), JSON.stringify({ age: 30, hired: "2020-01-15" }));
+  const rdFail = evaluateRule(JSON.stringify(rangeDateRule), JSON.stringify({ age: 70, hired: "2020-01-15" }));
+  if (rdPass.result !== true || rdFail.result !== false) {
+    failures.push(`expected between/before to evaluate, got pass=${JSON.stringify(rdPass)} fail=${JSON.stringify(rdFail)}`);
+  }
+
   if (failures.length > 0) {
     console.error("verify_wasm: FAILED");
     failures.forEach((f) => console.error(`  - ${f}`));

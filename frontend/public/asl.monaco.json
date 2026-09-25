@@ -11,7 +11,6 @@
   "nodeKinds": [
     "Change",
     "Column",
-    "ColumnInfo",
     "ColumnSchema",
     "Command",
     "Connection",
@@ -56,11 +55,6 @@
       "label": "Column",
       "insert": "Column {\n  \n}",
       "detail": "Insert Column node"
-    },
-    {
-      "label": "ColumnInfo",
-      "insert": "ColumnInfo {\n  \n}",
-      "detail": "Insert ColumnInfo node"
     },
     {
       "label": "ColumnSchema",
@@ -344,11 +338,6 @@
       "2",
       "3"
     ],
-    "DataSource": [
-      "\"ignite\"",
-      "\"postgres\"",
-      "\"starrocks\""
-    ],
     "Dialect": [
       "\"starrocks\""
     ],
@@ -451,11 +440,6 @@
       "7",
       "8",
       "9"
-    ],
-    "QueryType": [
-      "\"analytics\"",
-      "\"historical\"",
-      "\"realtime\""
     ],
     "RemovalPolicy": [
       "0",

@@ -20,6 +20,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/platform"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 	"github.com/jmoiron/sqlx"
@@ -52,18 +53,18 @@ type JoinColumn struct {
 }
 
 type RelationshipResult struct {
-	ID                string        `json:"id" db:"id"`
-	RelatedObjectName string        `json:"relatedObjectName" db:"related_object_name"`
-	TargetObjectID    string        `json:"targetObjectId" db:"target_object_id"`
-	RelationshipType  string        `json:"relationshipType" db:"relationship_type"`
-	Cardinality       string        `json:"cardinality" db:"cardinality"`
-	Description       string        `json:"description" db:"description"`
-	JoinCondition     string        `json:"joinCondition" db:"join_condition"`
-	JoinColumns       []JoinColumn  `json:"joinColumns,omitempty"`
-	SourceDriverTable string        `json:"sourceDriverTable" db:"source_driver_table"`
-	TargetDriverTable string        `json:"targetDriverTable" db:"target_driver_table"`
-	Kind              string        `json:"kind"`
-	LinkTable         string        `json:"linkTable,omitempty"`
+	ID                string       `json:"id" db:"id"`
+	RelatedObjectName string       `json:"relatedObjectName" db:"related_object_name"`
+	TargetObjectID    string       `json:"targetObjectId" db:"target_object_id"`
+	RelationshipType  string       `json:"relationshipType" db:"relationship_type"`
+	Cardinality       string       `json:"cardinality" db:"cardinality"`
+	Description       string       `json:"description" db:"description"`
+	JoinCondition     string       `json:"joinCondition" db:"join_condition"`
+	JoinColumns       []JoinColumn `json:"joinColumns,omitempty"`
+	SourceDriverTable string       `json:"sourceDriverTable" db:"source_driver_table"`
+	TargetDriverTable string       `json:"targetDriverTable" db:"target_driver_table"`
+	Kind              string       `json:"kind"`
+	LinkTable         string       `json:"linkTable,omitempty"`
 	// Not serialized - internal-only, used to resolve the real FK column
 	// from information_schema below when the catalog graph's own
 	// join_condition/cardinality properties are unpopulated (the common
@@ -3587,46 +3588,22 @@ func (s *BusinessObjectService) QueryBORecords(
 		argIdx++
 	}
 
-	// User-specified filters
+	// User-specified filters: the rule engine's condition vocabulary, pushed
+	// down to SQL. An operator it cannot push down is an error - never a
+	// dropped predicate that widens the result.
 	for _, flt := range req.Filters {
 		if flt.Field == "" {
 			continue
 		}
-		quotedField := pq.QuoteIdentifier(flt.Field)
-		switch strings.ToLower(flt.Operator) {
-		case "eq", "=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
+		pred, err := vm.CompileConditionSQL(pq.QuoteIdentifier(flt.Field), flt.Operator, flt.Value, func(v interface{}) string {
+			args = append(args, v)
 			argIdx++
-		case "neq", "!=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s != $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "gt", ">":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s > $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "gte", ">=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s >= $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "lt", "<":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s < $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "lte", "<=":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s <= $%d", quotedField, argIdx))
-			args = append(args, flt.Value)
-			argIdx++
-		case "like", "contains":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s ILIKE $%d", quotedField, argIdx))
-			args = append(args, fmt.Sprintf("%%%v%%", flt.Value))
-			argIdx++
-		case "is_null":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NULL", quotedField))
-		case "is_not_null":
-			whereClauses = append(whereClauses, fmt.Sprintf("%s IS NOT NULL", quotedField))
+			return fmt.Sprintf("$%d", argIdx-1)
+		})
+		if err != nil {
+			return nil, fmt.Errorf("filter on %q: %w", flt.Field, err)
 		}
+		whereClauses = append(whereClauses, pred)
 	}
 
 	// Text search across string columns if provided

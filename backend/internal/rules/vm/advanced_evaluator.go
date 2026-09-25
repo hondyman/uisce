@@ -108,11 +108,17 @@ func (ae *AdvancedEvaluator) evaluateCondition(cond *RuleCondition, data map[str
 	if cond.FieldPath != "" {
 		field = cond.FieldPath
 	}
+	value := cond.Value
+	// The editor saves a range as Value + SecondValue; the operator takes
+	// [low, high] (the same shape SQL pushdown uses).
+	if (cond.Operator == "between" || cond.Operator == "not_between") && cond.SecondValue != nil {
+		value = []interface{}{cond.Value, cond.SecondValue}
+	}
 	conditionMap := map[string]interface{}{
 		"type":     "simple",
 		"field":    field,
 		"operator": cond.Operator,
-		"value":    cond.Value,
+		"value":    value,
 	}
 	return ae.baseEvaluator.EvaluateWithHierarchy(conditionMap, data)
 }

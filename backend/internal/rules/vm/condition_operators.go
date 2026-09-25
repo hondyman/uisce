@@ -20,6 +20,9 @@ import (
 //     operators contains_any, contains_all); a list may be an array or a
 //     comma-separated string
 //   - length_* measure the string form in characters (runes)
+//   - between/not_between are inclusive numeric ranges over [low, high]
+//   - date operators (before, after, in_last_n_days, is_today, ...) are
+//     in date_operators.go
 //   - matches_regex uses RE2 (Go regexp); an invalid pattern is an error
 //     here rather than the editor's silent false - an unevaluable rule must
 //     never read as "data failed"
@@ -49,6 +52,28 @@ func compareExtended(actual interface{}, operator string, expected interface{}) 
 		return isEmptyValue(actual), true, nil
 	case "is_not_empty":
 		return !isEmptyValue(actual), true, nil
+
+	case "between", "not_between":
+		// Inclusive numeric range; expected is [low, high] (the evaluator
+		// packs Value/SecondValue into that form). Bad bounds are a rule
+		// error; a non-numeric value simply fails, as in the editor.
+		b := listOf(expected)
+		if len(b) != 2 {
+			return false, true, fmt.Errorf("%s requires [low, high], got %v", operator, expected)
+		}
+		lo, okLo := toFloatAny(b[0])
+		hi, okHi := toFloatAny(b[1])
+		if !okLo || !okHi {
+			return false, true, fmt.Errorf("%s: bounds must be numeric, got %v", operator, expected)
+		}
+		v, ok := toFloatAny(actual)
+		if !ok {
+			return false, true, nil
+		}
+		if operator == "between" {
+			return v >= lo && v <= hi, true, nil
+		}
+		return v < lo || v > hi, true, nil
 
 	case "length_equals", "length_greater", "length_less":
 		n, ok := toFloatAny(expected)
@@ -131,7 +156,7 @@ func compareExtended(actual interface{}, operator string, expected interface{}) 
 			return n == 0, true, nil
 		}
 	}
-	return false, false, nil
+	return compareDate(actual, operator, expected)
 }
 
 // jsString renders a value the way the editor's String(v) does for the
