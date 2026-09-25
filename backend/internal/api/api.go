@@ -3773,9 +3773,6 @@ func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes,
 	// Calc Engine - Metric computation endpoints
 	RegisterCalcEngineRoutes(r, db, temporalClient)
 
-	// RDL (Rule Definition Language)
-	RegisterRDLRoutes(r, s.SQLXDB)
-
 	// Catalog Chart endpoints
 	r.Post("/catalog/{datasourceId}/refresh-charts", s.handleRefreshCharts)
 }
