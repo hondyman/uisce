@@ -204,7 +204,7 @@ func (s *DataQualitySentinelService) ProfileFieldQuality(
 	reasonsJSON, _ := json.Marshal(blockingReasons)
 
 	_, _ = s.db.ExecContext(ctx, `
-		UPDATE public.bo_fields
+		UPDATE public.business_object_fields
 		SET quality_status = $1,
 		    quality_profile = $2,
 		    last_profiled_at = NOW()
@@ -237,8 +237,8 @@ func (s *DataQualitySentinelService) ProfileBusinessObjectQuality(
 	}
 
 	query := `
-		SELECT id, name, role, binding_requirement, source_table, source_column
-		FROM public.bo_fields
+		SELECT id, field_name as name, field_role as role, binding_requirement, '' as source_table, technical_name as source_column
+		FROM public.business_object_fields
 		WHERE bo_id = $1 AND tenant_id = $2
 	`
 	rows, err := s.db.QueryContext(ctx, query, boID.String(), tenantID.String())
@@ -299,8 +299,8 @@ func (s *DataQualitySentinelService) GetQualitySummary(
 	}
 
 	query := `
-		SELECT id, name, role, binding_requirement, COALESCE(quality_status, 'UNPROFILED'), COALESCE(quality_profile, '{}'::jsonb)
-		FROM public.bo_fields
+		SELECT id, field_name as name, field_role as role, binding_requirement, COALESCE(quality_status, 'UNPROFILED'), COALESCE(quality_profile, '{}'::jsonb)
+		FROM public.business_object_fields
 		WHERE bo_id = $1 AND tenant_id = $2
 	`
 	rows, err := s.db.QueryContext(ctx, query, boID.String(), tenantID.String())
@@ -358,7 +358,7 @@ func (s *DataQualitySentinelService) SetFieldFallback(
 	}
 
 	query := `
-		UPDATE public.bo_fields
+		UPDATE public.business_object_fields
 		SET default_fallback_value = $1,
 		    quality_status = 'HEALTHY'
 		WHERE id = $2 AND bo_id = $3 AND tenant_id = $4

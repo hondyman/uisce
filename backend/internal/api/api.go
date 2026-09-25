@@ -3841,7 +3841,13 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	notifAdapter := &notificationAdapter{svc: s.NotificationSvc}
 	triggerEngine := NewTriggerEngine(sqlxDB, abacEngine, s.EventBus, notifAdapter)
 
-	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine)
+	// s.BusinessObjectService is the master rule engine's write gate; a nil
+	// one makes the handler refuse writes rather than skip the rules.
+	var enforcer boWriteEnforcer
+	if s.BusinessObjectService != nil {
+		enforcer = s.BusinessObjectService
+	}
+	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
 	boCRUDHandler.RegisterRoutes(r)
 }
 
