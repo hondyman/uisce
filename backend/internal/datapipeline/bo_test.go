@@ -104,3 +104,38 @@ func TestBOSourceFiltersValidatedAtDesignTime(t *testing.T) {
 		t.Fatalf("want 3 filter errors, got %v", errs)
 	}
 }
+
+var _ Factory = Deps{}
+
+// End to end through Run: a BO source feeding a rule check and a BO sink.
+func TestRunBOToBO(t *testing.T) {
+	src := &fakeBO{}
+	for i := 0; i < 5; i++ {
+		src.store = append(src.store, map[string]any{"aum": i})
+	}
+	spec := &Spec{Version: SpecVersion, Nodes: []Node{
+		{ID: "in", Type: NodeBOSource, Config: cfg(BOSourceConfig{BOKey: "fund"})},
+		{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{"r"}})},
+		{ID: "out", Type: NodeBOSink, Config: cfg(BOSinkConfig{BOKey: "fund_copy"})},
+	}, Edges: []Edge{{From: "in", To: "rc"}, {From: "rc", To: "out"}}}
+	sum, err := Run(context.Background(), spec, &RunContext{TenantID: "t", RunID: "r1"},
+		Deps{BO: src, Rules: blockOdd{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.RecordsIn != 5 || sum.RecordsOut != 3 || sum.Errors != 2 {
+		t.Fatalf("summary %+v", sum)
+	}
+	if got := len(src.writes[0]); got != 3 {
+		t.Errorf("sink should receive the 3 rows that passed, got %d", got)
+	}
+}
+
+type blockOdd struct{}
+
+func (blockOdd) Check(_ context.Context, _ string, _ []string, d map[string]any) ([]RuleFailure, error) {
+	if d["aum"].(int)%2 == 1 {
+		return []RuleFailure{{RuleName: "even", Severity: "BLOCK", Message: "odd"}}, nil
+	}
+	return nil, nil
+}
