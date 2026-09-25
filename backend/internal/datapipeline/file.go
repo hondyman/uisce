@@ -24,6 +24,17 @@ type FileEngine interface {
 	Read(ctx context.Context, spec FileSpec) (io.ReadCloser, error)
 	// Write converts an NDJSON body to the target file, published atomically.
 	Write(ctx context.Context, uri, format, delimiter string, ndjson io.Reader) (rows int, err error)
+	// Upload stores a file as-is, atomically.
+	Upload(ctx context.Context, uri string, body io.Reader) (bytes int64, err error)
+	// List returns files under a folder.
+	List(ctx context.Context, prefix string) ([]FileEntry, error)
+}
+
+// FileEntry is one stored file; Path is relative to the engine root.
+type FileEntry struct {
+	Path     string `json:"path"`
+	Bytes    int64  `json:"bytes"`
+	Modified int64  `json:"modified,omitempty"`
 }
 
 // FileSpec is the engine's file descriptor.
@@ -137,6 +148,38 @@ func (e *HTTPFileEngine) Write(ctx context.Context, uri, format, delimiter strin
 		Rows int `json:"rows"`
 	}
 	return out.Rows, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+func (e *HTTPFileEngine) Upload(ctx context.Context, uri string, body io.Reader) (int64, error) {
+	resp, err := e.post(ctx, "/files/upload?"+url.Values{"uri": {uri}}.Encode(), body, "application/octet-stream")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Bytes int64 `json:"bytes"`
+	}
+	return out.Bytes, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+func (e *HTTPFileEngine) List(ctx context.Context, prefix string) ([]FileEntry, error) {
+	b, _ := json.Marshal(map[string]string{"prefix": prefix})
+	resp, err := e.post(ctx, "/files/list", bytes.NewReader(b), "application/json")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	var out []FileEntry
+	return out, json.NewDecoder(resp.Body).Decode(&out)
+}
+
+// TenantPath exposes tenantPath for the API layer.
+func TenantPath(tenantID, uri string) (string, error) { return tenantPath(tenantID, uri) }
+
+// TenantRelative strips the tenant folder from an engine path, so analysts
+// only ever see their own relative paths.
+func TenantRelative(tenantID, p string) string {
+	return strings.TrimPrefix(p, "tenants/"+tenantID+"/")
 }
 
 // --- file_source ---------------------------------------------------------
@@ -369,6 +412,9 @@ func (s *fileSink) Open(_ context.Context, rc *RunContext) error {
 		return err
 	}
 	s.tenant = rc.TenantID
+	if rc.DryRun {
+		return nil // spool stays nil: Process only counts, Close publishes nothing
+	}
 	f, err := os.CreateTemp("", "pipeline-export-*.ndjson")
 	if err != nil {
 		return err
@@ -378,6 +424,9 @@ func (s *fileSink) Open(_ context.Context, rc *RunContext) error {
 }
 
 func (s *fileSink) Process(_ context.Context, rows []Row) (Result, error) {
+	if s.spool == nil {
+		return Result{Out: rows}, nil
+	}
 	for _, r := range rows {
 		b, err := json.Marshal(r.Data)
 		if err != nil {

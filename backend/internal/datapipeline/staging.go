@@ -21,7 +21,7 @@ type stagingSink struct {
 	db     *sql.DB
 	tenant string
 	runID  string
-	skip   bool              // run_ref already COMPLETED
+	skip   bool              // run_ref already COMPLETED, or a dry run
 	cols   map[string]string // row field -> staging column
 	valid  map[string]bool   // real columns of the table
 	loaded int
@@ -96,6 +96,11 @@ func (s *stagingSink) Open(ctx context.Context, rc *RunContext) error {
 			}
 		}
 		s.cols = s.cfg.Columns
+		if rc.DryRun {
+			// Preview: table and mapping are checked; nothing is claimed or written.
+			s.skip = true
+			return nil
+		}
 
 		// Claim the run.
 		err = tx.QueryRowContext(ctx, `

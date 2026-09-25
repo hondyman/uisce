@@ -157,6 +157,25 @@ func TestStagingSinkIntegration(t *testing.T) {
 		t.Errorf("retry must replace the failed run's rows, got %d", n)
 	}
 
+	// A dry run validates the mapping but claims and writes nothing.
+	dry := Node{ID: "s", Type: NodeStagingSink, Config: cfg(StagingSinkConfig{Table: "staging.ff_fund", SourceCd: "FACTSET", Domain: "FUND", RunRef: "dry-1",
+		Columns: map[string]string{"FSYM_ID": "fsym_id"}})}
+	dp, _ := newStagingSink(dry, db)
+	if err := dp.Open(context.Background(), &RunContext{TenantID: tenantA, RunID: "r", DryRun: true}); err != nil {
+		t.Fatal(err)
+	}
+	dp.Process(context.Background(), rows)
+	dp.Close(context.Background(), nil)
+	if n := count(t, db, tenantA, `SELECT count(*) FROM staging._load_run WHERE run_ref = 'dry-1'`); n != 0 {
+		t.Error("dry run must not claim a load run")
+	}
+	badDry := Node{ID: "s", Type: NodeStagingSink, Config: cfg(StagingSinkConfig{Table: "staging.ff_fund", SourceCd: "X", Domain: "Y",
+		Columns: map[string]string{"A": "no_such_col"}})}
+	bp, _ := newStagingSink(badDry, db)
+	if err := bp.Open(context.Background(), &RunContext{TenantID: tenantA, RunID: "r", DryRun: true}); err == nil {
+		t.Error("dry run must still reject a bad mapping")
+	}
+
 	// Mapping to a load-tracking or unknown column is refused.
 	bad := Node{ID: "s", Type: NodeStagingSink, Config: cfg(StagingSinkConfig{Table: "staging.ff_fund", SourceCd: "X", Domain: "Y",
 		Columns: map[string]string{"T": "tenant_id"}})}

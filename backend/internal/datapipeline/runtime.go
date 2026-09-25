@@ -53,6 +53,12 @@ type RunContext struct {
 	RunID    string
 	TenantID string
 	Spec     *Spec
+	// Preview: MaxRows stops each source after that many rows, SampleRows
+	// keeps the first rows leaving every node, and DryRun makes sinks write
+	// nothing (a BO sink still has every row judged by the rule engine).
+	MaxRows    int
+	SampleRows int
+	DryRun     bool
 }
 
 // Recorder receives per-run observability. Implementations persist to
@@ -88,12 +94,16 @@ type Factory interface {
 // Summary is the run outcome.
 type Summary struct {
 	Nodes      []NodeStats
+	Samples    map[string][]Row `json:"samples,omitempty"` // preview only
 	RecordsIn  int64 // rows read from sources
 	RecordsOut int64 // rows accepted by sinks
 	Errors     int64
 }
 
 const defaultBatchSize = 2000
+
+// errPreviewDone stops a source once a preview has enough rows.
+var errPreviewDone = errors.New("preview row limit reached")
 
 // Run executes the spec. The graph is a forest (each non-source node has one
 // parent, validated by Spec.Validate), so batches flow depth-first from each
@@ -163,6 +173,20 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 	}
 
 	sum := &Summary{}
+	sample := func(id string, rows []Row) {
+		if rc.SampleRows <= 0 {
+			return
+		}
+		if sum.Samples == nil {
+			sum.Samples = map[string][]Row{}
+		}
+		for _, r := range rows {
+			if len(sum.Samples[id]) >= rc.SampleRows {
+				return
+			}
+			sum.Samples[id] = append(sum.Samples[id], r)
+		}
+	}
 	var push func(id string, rows []Row) error
 	push = func(id string, rows []Row) error {
 		if len(rows) == 0 {
@@ -178,6 +202,7 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 			return fmt.Errorf("node %q: %w", id, err)
 		}
 		st.Out += int64(len(res.Out))
+		sample(id, res.Out)
 		st.Errors += int64(len(res.Rejected))
 		sum.Errors += int64(len(res.Rejected))
 		for _, w := range res.Warnings {
@@ -226,7 +251,18 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		}
 		st := stats[id]
 		start := time.Now()
+		seen := 0
 		err = src.Stream(ctx, rc, batchSize, func(rows []Row, rejected []Reject) error {
+			if rc.MaxRows > 0 {
+				if seen >= rc.MaxRows {
+					return errPreviewDone
+				}
+				if left := rc.MaxRows - seen; len(rows) > left {
+					rows = rows[:left]
+				}
+				seen += len(rows)
+			}
+			sample(id, rows)
 			st.In += int64(len(rows) + len(rejected))
 			st.Out += int64(len(rows))
 			st.Errors += int64(len(rejected))
@@ -249,6 +285,9 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 			return ctx.Err()
 		})
 		st.Duration += time.Since(start)
+		if errors.Is(err, errPreviewDone) {
+			err = nil
+		}
 		if err != nil {
 			st.Status, st.Err = "FAILED", err.Error()
 			runErr = fmt.Errorf("node %q: %w", id, err)

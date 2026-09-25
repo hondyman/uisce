@@ -24,3 +24,6 @@ bytes = "1"
 
 # Iceberg Rust SDK
 iceberg = "0.3"
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }

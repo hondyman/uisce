@@ -4,6 +4,8 @@
 //! - POST /files/read     : stream a file as NDJSON, in file order
 //! - POST /files/convert  : NDJSON spool -> csv/json/parquet (export)
 //! - POST /files/write    : NDJSON request body -> csv/json/parquet (export)
+//! - POST /files/upload   : raw request body -> file (atomic)
+//! - POST /files/list     : files under a folder
 //!
 //! All URIs resolve under DATAFUSION_FILE_ROOT (default /data/files); absolute
 //! paths, `..` and symlinks that escape the root are rejected. Tenant scoping
@@ -285,7 +287,6 @@ pub async fn write(
     axum::extract::Query(q): axum::extract::Query<WriteQuery>,
     body: Body,
 ) -> Result<Json<ConvertResp>, ApiErr> {
-    use std::io::Write;
     // Validate the destination before accepting any data.
     resolve(&q.uri)?;
     let spool_rel = format!(".spool/{}.ndjson", uuid::Uuid::new_v4());
@@ -293,16 +294,133 @@ pub async fn write(
     std::fs::create_dir_all(spool.parent().unwrap()).map_err(internal)?;
     let res = async {
         let mut f = File::create(&spool).map_err(internal)?;
-        let mut stream = body.into_data_stream();
-        while let Some(chunk) = stream.next().await {
-            f.write_all(&chunk.map_err(|e| bad(format!("reading body: {e}")))?).map_err(internal)?;
-        }
-        f.sync_all().map_err(internal)?;
+        copy_body(body, &mut f).await?;
         convert(Json(ConvertReq { spool_uri: spool_rel.clone(), uri: q.uri, format: q.format, delimiter: q.delimiter })).await
     }
     .await;
     let _ = std::fs::remove_file(&spool);
     res
+}
+
+/// The file routes.
+pub fn router<S: Clone + Send + Sync + 'static>() -> axum::Router<S> {
+    use axum::routing::post;
+    axum::Router::new()
+        .route("/files/profile", post(profile))
+        .route("/files/read", post(read))
+        .route("/files/convert", post(convert))
+        .route("/files/list", post(list))
+        .route("/files/write", post(write))
+        .route("/files/upload", post(upload))
+}
+
+/// Size cap for streamed bodies (uploads, exports): FILE_BODY_LIMIT_MB,
+/// default 5 GB. Raw `Body` streams are not limited by axum, so the copy
+/// loops enforce it.
+fn body_limit_bytes() -> u64 {
+    let mb: u64 = std::env::var("FILE_BODY_LIMIT_MB").ok().and_then(|v| v.parse().ok()).unwrap_or(5 * 1024);
+    mb * 1024 * 1024
+}
+
+/// Copy a streamed body into f, refusing more than the size cap.
+async fn copy_body(body: Body, f: &mut File) -> Result<u64, ApiErr> {
+    use std::io::Write;
+    let limit = body_limit_bytes();
+    let mut stream = body.into_data_stream();
+    let mut n = 0u64;
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| bad(format!("reading body: {e}")))?;
+        n += chunk.len() as u64;
+        if n > limit {
+            return Err((StatusCode::PAYLOAD_TOO_LARGE, format!("file exceeds the {} MB limit", limit / 1024 / 1024)));
+        }
+        f.write_all(&chunk).map_err(internal)?;
+    }
+    f.sync_all().map_err(internal)?;
+    Ok(n)
+}
+
+#[derive(Deserialize)]
+pub struct UploadQuery {
+    uri: String,
+}
+
+#[derive(Serialize)]
+pub struct UploadResp {
+    bytes: u64,
+}
+
+/// POST /files/upload?uri=..: store the request body at uri, atomically.
+pub async fn upload(
+    axum::extract::Query(q): axum::extract::Query<UploadQuery>,
+    body: Body,
+) -> Result<Json<UploadResp>, ApiErr> {
+    let out = resolve(&q.uri)?;
+    if let Some(parent) = out.parent() {
+        std::fs::create_dir_all(parent).map_err(internal)?;
+    }
+    let tmp = out.with_extension(format!("upload-{}", uuid::Uuid::new_v4()));
+    let res = async {
+        let mut f = File::create(&tmp).map_err(internal)?;
+        let n = copy_body(body, &mut f).await?;
+        std::fs::rename(&tmp, &out).map_err(internal)?;
+        Ok(n)
+    }
+    .await;
+    if res.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(Json(UploadResp { bytes: res? }))
+}
+
+#[derive(Deserialize)]
+pub struct ListReq {
+    prefix: String,
+}
+
+#[derive(Serialize)]
+pub struct FileEntry {
+    path: String,
+    bytes: u64,
+    modified: Option<u64>,
+}
+
+/// POST /files/list: regular files under prefix (recursive, max 1000),
+/// paths relative to the root. Temp/spool files are hidden.
+pub async fn list(Json(req): Json<ListReq>) -> Result<Json<Vec<FileEntry>>, ApiErr> {
+    let dir = resolve(&req.prefix)?;
+    let base = root();
+    let mut out = Vec::new();
+    let mut stack = vec![dir];
+    while let Some(d) = stack.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else { continue };
+        for e in rd.flatten() {
+            let Ok(ft) = e.file_type() else { continue };
+            let p = e.path();
+            if ft.is_dir() {
+                stack.push(p);
+            } else if ft.is_file() {
+                let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name.contains(".upload-") || name.ends_with(".part") {
+                    continue;
+                }
+                let md = e.metadata().ok();
+                out.push(FileEntry {
+                    path: p.strip_prefix(&base).unwrap_or(&p).to_string_lossy().into_owned(),
+                    bytes: md.as_ref().map(|m| m.len()).unwrap_or(0),
+                    modified: md
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs()),
+                });
+                if out.len() >= 1000 {
+                    break;
+                }
+            }
+        }
+    }
+    out.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(Json(out))
 }
 
 pub async fn convert(Json(req): Json<ConvertReq>) -> Result<Json<ConvertResp>, ApiErr> {
@@ -417,6 +535,45 @@ mod tests {
         let back = FileSpec { uri: "t1/out/fs.parquet".into(), format: "parquet".into(), delimiter: None, has_header: true, columns: vec![] };
         let Json(p2) = profile(Json(ProfileReq { file: back, sample_rows: 5, count_rows: true })).await.unwrap();
         assert_eq!(p2.row_count, Some(2));
+
+        // Upload then list.
+        let Json(u) = upload(axum::extract::Query(UploadQuery { uri: "t1/in/new.csv".into() }), Body::from("a,b\n1,2\n")).await.unwrap();
+        assert_eq!(u.bytes, 8);
+        let Json(files) = list(Json(ListReq { prefix: "t1".into() })).await.unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(names, vec!["t1/fs.txt", "t1/in/new.csv", "t1/out/fs.parquet"]);
+        assert!(upload(axum::extract::Query(UploadQuery { uri: "../x".into() }), Body::from("x")).await.is_err());
+
+        // Through the router: a body over axum's 2 MB default is accepted.
+        use tower::ServiceExt;
+        let big = vec![b'x'; 3 * 1024 * 1024];
+        let resp = router::<()>()
+            .oneshot(
+                axum::http::Request::post("/files/upload?uri=t1/in/big.bin")
+                    .body(Body::from(big))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(std::fs::metadata(dir.join("t1/in/big.bin")).unwrap().len(), 3 * 1024 * 1024);
+
+        // ...and one over the configured cap is refused, leaving nothing behind.
+        std::env::set_var("FILE_BODY_LIMIT_MB", "2");
+        let resp = router::<()>()
+            .oneshot(
+                axum::http::Request::post("/files/upload?uri=t1/in/too_big.bin")
+                    .body(Body::from(vec![b'x'; 3 * 1024 * 1024]))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        std::env::remove_var("FILE_BODY_LIMIT_MB");
+        assert_eq!(resp.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert!(!dir.join("t1/in/too_big.bin").exists());
+        let leftovers = std::fs::read_dir(dir.join("t1/in")).unwrap().flatten()
+            .filter(|e| e.file_name().to_string_lossy().contains(".upload-")).count();
+        assert_eq!(leftovers, 0, "partial upload must be removed");
 
         // Path safety.
         for bad_uri in ["../etc/passwd", "/t1/../../x", "s3://bucket/x.csv"] {

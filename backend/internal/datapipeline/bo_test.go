@@ -139,3 +139,40 @@ func (blockOdd) Check(_ context.Context, _ string, _ []string, d map[string]any)
 	}
 	return nil, nil
 }
+
+func TestPreviewLimitsSamplesAndWritesNothing(t *testing.T) {
+	src := &fakeBO{}
+	for i := 0; i < 50; i++ {
+		src.store = append(src.store, map[string]any{"aum": i})
+	}
+	spec := &Spec{Version: SpecVersion, Nodes: []Node{
+		{ID: "in", Type: NodeBOSource, Config: cfg(BOSourceConfig{BOKey: "fund"})},
+		{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{"r"}})},
+		{ID: "out", Type: NodeBOSink, Config: cfg(BOSinkConfig{BOKey: "fund_copy"})},
+	}, Edges: []Edge{{From: "in", To: "rc"}, {From: "rc", To: "out"}}, BatchSize: 4}
+	dry := &dryBO{fakeBO: src}
+	sum, err := Run(context.Background(), spec, &RunContext{TenantID: "t", MaxRows: 10, SampleRows: 3, DryRun: true},
+		Deps{BO: dry, Rules: blockOdd{}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.RecordsIn != 10 || sum.Errors != 5 {
+		t.Fatalf("preview should stop at 10 rows: %+v", sum)
+	}
+	if len(sum.Samples["in"]) != 3 || len(sum.Samples["rc"]) != 3 || sum.Samples["rc"][1].Data["aum"] != 2 {
+		t.Fatalf("samples: %+v", sum.Samples)
+	}
+	if !dry.allDry {
+		t.Error("preview BO writes must be dry runs")
+	}
+}
+
+type dryBO struct {
+	*fakeBO
+	allDry bool
+}
+
+func (d *dryBO) WriteBatch(ctx context.Context, t, k string, req BOWriteRequest) (*BOWriteResult, error) {
+	d.allDry = req.DryRun
+	return d.fakeBO.WriteBatch(ctx, t, k, req)
+}

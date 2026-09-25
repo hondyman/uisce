@@ -55,6 +55,7 @@ type boSinkProc struct {
 	cfg    BOSinkConfig
 	client BOClient
 	tenant string
+	dryRun bool
 }
 
 func newBOSinkProc(n Node, c BOClient) (Processor, error) {
@@ -70,6 +71,7 @@ func newBOSinkProc(n Node, c BOClient) (Processor, error) {
 
 func (p *boSinkProc) Open(_ context.Context, rc *RunContext) error {
 	p.tenant = rc.TenantID
+	p.dryRun = p.cfg.DryRun || rc.DryRun
 	return nil
 }
 func (p *boSinkProc) Close(context.Context, error) error { return nil }
@@ -87,7 +89,7 @@ func (p *boSinkProc) Process(ctx context.Context, rows []Row) (Result, error) {
 			recs[i] = r.Data
 		}
 		out, err := p.client.WriteBatch(ctx, p.tenant, p.cfg.BOKey, BOWriteRequest{
-			Mode: p.cfg.Mode, KeyFields: p.cfg.KeyFields, DryRun: p.cfg.DryRun, Records: recs,
+			Mode: p.cfg.Mode, KeyFields: p.cfg.KeyFields, DryRun: p.dryRun, Records: recs,
 		})
 		if err != nil {
 			return res, fmt.Errorf("writing to %s: %w", p.cfg.BOKey, err)
