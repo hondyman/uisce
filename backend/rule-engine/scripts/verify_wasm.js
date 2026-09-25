@@ -70,13 +70,31 @@ async function main() {
     failures.push(`expected FuncCall/SUM to compute and reject only for non-bool root, got ${JSON.stringify(funcCallResult)}`);
   }
 
+  // The editor's list/string/regex operators (condition_operators.go) must
+  // run in the browser build too, or the editor previews rules the server
+  // then evaluates differently.
+  const opRule = {
+    Type: "group",
+    Operator: "AND",
+    Conditions: [
+      { Type: "condition", Field: "symbol", Operator: "not_in", Value: ["RSTR", "BAD"] },
+      { Type: "condition", Field: "name", Operator: "matches_regex", Value: "^[a-z ]+$" },
+      { Type: "condition", Field: "tags", Operator: "contains_any", Value: ["pii"] },
+    ],
+  };
+  const opPass = evaluateRule(JSON.stringify(opRule), JSON.stringify({ symbol: "AAPL", name: "total revenue", tags: ["pii", "x"] }));
+  const opFail = evaluateRule(JSON.stringify(opRule), JSON.stringify({ symbol: "BAD", name: "total revenue", tags: ["pii"] }));
+  if (opPass.result !== true || opFail.result !== false) {
+    failures.push(`expected condition operators (not_in, matches_regex, contains_any) to evaluate, got pass=${JSON.stringify(opPass)} fail=${JSON.stringify(opFail)}`);
+  }
+
   if (failures.length > 0) {
     console.error("verify_wasm: FAILED");
     failures.forEach((f) => console.error(`  - ${f}`));
     process.exit(1);
   }
 
-  console.log("verify_wasm: frontend/public/rule_engine.wasm evaluates correctly (Group AND/OR, FuncCall arithmetic)");
+  console.log("verify_wasm: frontend/public/rule_engine.wasm evaluates correctly (Group AND/OR, FuncCall arithmetic, condition operators)");
 }
 
 main().catch((err) => {
