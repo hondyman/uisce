@@ -111,7 +111,7 @@ func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey
 	if err != nil {
 		return nil, bulkErr(http.StatusNotFound, "failed resolving BO contract: %v", err)
 	}
-	writable, err := h.resolveWritableColumns(ctx, boMeta.DrivingTable)
+	writable, err := h.resolveWritableColumns(ctx, boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
 		return nil, fmt.Errorf("failed resolving table schema: %w", err)
 	}
@@ -120,9 +120,9 @@ func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey
 			return nil, bulkErr(http.StatusBadRequest, "invalid key field '%s'", k)
 		}
 	}
-	tenantScoped := h.tableHasColumn(ctx, boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(ctx, boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	if subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(ctx, boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(ctx, boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			for _, rec := range req.Records {
 				rec[col] = subtype // forced server-side, as on single create
 			}

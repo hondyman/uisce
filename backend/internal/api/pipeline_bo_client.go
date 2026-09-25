@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jmoiron/sqlx"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
 	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/lib/pq"
@@ -44,11 +45,11 @@ func (c *pipelineBOClient) ReadPage(ctx context.Context, tenantID, boKey string,
 	if err != nil {
 		return nil, fmt.Errorf("invalid tenant id: %w", err)
 	}
-	q, args, err := c.h.buildPipelineRead(ctx, tid, boKey, filters, offset, limit)
+	db, q, args, err := c.h.buildPipelineRead(ctx, tid, boKey, filters, offset, limit)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := c.h.db.QueryxContext(ctx, q, args...)
+	rows, err := db.QueryxContext(ctx, q, args...)
 	if err != nil {
 		return nil, fmt.Errorf("reading records: %w", err)
 	}
@@ -68,14 +69,14 @@ func (c *pipelineBOClient) ReadPage(ctx context.Context, tenantID, boKey string,
 // buildPipelineRead builds a tenant-scoped page query. Filter fields must be
 // real columns of the driving table; operators and values are the rule
 // engine's (vm.CompileConditionSQL), always bound, never interpolated.
-func (h *BOCRUDHandler) buildPipelineRead(ctx context.Context, tenantID uuid.UUID, boKey string, filters []datapipeline.Condition, offset, limit int) (string, []interface{}, error) {
+func (h *BOCRUDHandler) buildPipelineRead(ctx context.Context, tenantID uuid.UUID, boKey string, filters []datapipeline.Condition, offset, limit int) (*sqlx.DB, string, []interface{}, error) {
 	boMeta, err := h.resolveBOMetadata(ctx, boKey, tenantID)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed resolving BO contract: %w", err)
+		return nil, "", nil, fmt.Errorf("failed resolving BO contract: %w", err)
 	}
-	cols, err := h.resolveWritableColumns(ctx, boMeta.DrivingTable)
+	cols, err := h.resolveWritableColumns(ctx, boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
-		return "", nil, fmt.Errorf("failed resolving table schema: %w", err)
+		return nil, "", nil, fmt.Errorf("failed resolving table schema: %w", err)
 	}
 	var where []string
 	var args []interface{}
@@ -88,11 +89,11 @@ func (h *BOCRUDHandler) buildPipelineRead(ctx context.Context, tenantID uuid.UUI
 	}
 	for _, f := range filters {
 		if !cols[f.Field] {
-			return "", nil, fmt.Errorf("unknown field '%s' on %s", f.Field, boKey)
+			return nil, "", nil, fmt.Errorf("unknown field '%s' on %s", f.Field, boKey)
 		}
 		pred, err := vm.CompileConditionSQL(pq.QuoteIdentifier(f.Field), f.Operator, f.Value, param)
 		if err != nil {
-			return "", nil, fmt.Errorf("filter on %q: %w", f.Field, err)
+			return nil, "", nil, fmt.Errorf("filter on %q: %w", f.Field, err)
 		}
 		where = append(where, pred)
 	}
@@ -101,6 +102,6 @@ func (h *BOCRUDHandler) buildPipelineRead(ctx context.Context, tenantID uuid.UUI
 		whereSQL = strings.Join(where, " AND ")
 	}
 	lim, off := param(limit), param(offset)
-	return fmt.Sprintf(`SELECT * FROM %s WHERE %s ORDER BY %s ASC LIMIT %s OFFSET %s`,
+	return boMeta.RecordsDB, fmt.Sprintf(`SELECT * FROM %s WHERE %s ORDER BY %s ASC LIMIT %s OFFSET %s`,
 		boMeta.DrivingTable, whereSQL, pq.QuoteIdentifier(boMeta.KeyColumn), lim, off), args, nil
 }
