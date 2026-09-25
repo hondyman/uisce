@@ -3469,6 +3469,31 @@ func quotedQualifiedTable(drivingTable string) string {
 	return pq.QuoteIdentifier(schema) + "." + pq.QuoteIdentifier(table)
 }
 
+// tenantScopePredicate returns a "tenant_id = $argIdx" predicate and its bound
+// arg when drivingTable (on db) has a tenant_id column. Tables without one are
+// isolated at the datasource level and get no predicate. Fails closed: an
+// introspection error, or a tenanted table with no caller tenant, is an error
+// rather than an unscoped read.
+func tenantScopePredicate(ctx context.Context, db *sqlx.DB, drivingTable string, secCtx *security.Context, argIdx int) (string, []interface{}, error) {
+	schemaName, tableName := resolveQualifiedTable(drivingTable)
+	var hasTenant bool
+	if err := db.GetContext(ctx, &hasTenant, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.columns
+			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'tenant_id'
+		)
+	`, schemaName, tableName); err != nil {
+		return "", nil, fmt.Errorf("tenant scope check on %s.%s: %w", schemaName, tableName, err)
+	}
+	if !hasTenant {
+		return "", nil, nil
+	}
+	if secCtx == nil || secCtx.TenantID == "" {
+		return "", nil, fmt.Errorf("tenant context required to query %s.%s", schemaName, tableName)
+	}
+	return fmt.Sprintf("%s = $%d", pq.QuoteIdentifier("tenant_id"), argIdx), []interface{}{secCtx.TenantID}, nil
+}
+
 // QueryBORecords queries physical records through the Business Object ORM layer with
 // parameter filtering, column projections, bi-temporal time-travel, and pagination.
 func (s *BusinessObjectService) QueryBORecords(
@@ -3600,6 +3625,19 @@ func (s *BusinessObjectService) QueryBORecords(
 	whereClauses := []string{"1=1"}
 	args := make([]interface{}, 0)
 	argIdx := 1
+
+	// Tenant isolation: a driving table shared across tenants carries a
+	// tenant_id column and must be scoped to the caller's tenant. Applies to
+	// both the COUNT and the page query since they share whereSQL/args.
+	tenantPred, tenantArgs, err := tenantScopePredicate(ctx, recordsDB, drivingTable, secCtx, argIdx)
+	if err != nil {
+		return nil, err
+	}
+	if tenantPred != "" {
+		whereClauses = append(whereClauses, tenantPred)
+		args = append(args, tenantArgs...)
+		argIdx += len(tenantArgs)
+	}
 
 	// Bi-temporal / Historical query filter
 	if req.AsOfValidTime != nil && bo.EnableHistory {

@@ -20,9 +20,10 @@ import (
 // handler's write in a real (mocked) transaction and rejects the row
 // indices listed in reject, the way the rule engine would.
 type txEnforcer struct {
-	db     *sqlx.DB
-	reject map[int]bool
-	boKeys []string
+	db      *sqlx.DB
+	reject  map[int]bool
+	missing map[int]bool // rows that leave a required field empty
+	boKeys  []string
 }
 
 func (e *txEnforcer) EnforceWrite(ctx context.Context, _ string, boKey string, do func(*sqlx.Tx) (map[string]interface{}, error)) (map[string]interface{}, error) {
@@ -56,6 +57,8 @@ func (e *txEnforcer) EnforceWriteBatch(ctx context.Context, _ string, boKey stri
 		switch {
 		case err != nil:
 			out[i].Err = err
+		case e.missing[i]:
+			out[i].Err = &metadata.RequiredFieldsError{Fields: []string{"Issuer (issuer_id)"}}
 		case e.reject[i]:
 			out[i].Err = &metadata.RuleRejectionError{Rules: []string{"notional within limit"}}
 		default:
@@ -204,4 +207,49 @@ func TestBuildBOUpsertUpdate(t *testing.T) {
 	assert.ErrorContains(t, err, "missing key field 'isin'")
 	_, _, err = buildBOUpsertUpdate("mdm.fund", "t", true, w, []string{"isin"}, map[string]interface{}{"isin": "X", "evil; DROP": 1})
 	assert.ErrorContains(t, err, "unknown attribute")
+}
+
+// A write that leaves required fields empty is a 422 naming them, like a
+// rule rejection.
+func TestWriteBOWriteError_RequiredFieldsIs422(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeBOWriteError(rec, &metadata.RequiredFieldsError{Fields: []string{"Issuer (issuer_id)"}}, "not found", "failed", http.StatusInternalServerError)
+	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	var resp map[string]interface{}
+	assert.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, []interface{}{"Issuer (issuer_id)"}, resp["missing"])
+}
+
+func TestBulkBORecords_MissingRequiredFieldIsAttributed(t *testing.T) {
+	db, mock, _ := sqlmock.New()
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+	mock.MatchExpectationsInOrder(false)
+	h := NewBOCRUDHandler(sqlxDB, nil, &txEnforcer{db: sqlxDB, missing: map[int]bool{0: true}})
+	r := chi.NewRouter()
+	r.Route("/api/v1", h.RegisterRoutes)
+
+	mock.ExpectQuery("SELECT COALESCE.*FROM public.business_objects").
+		WillReturnRows(sqlmock.NewRows([]string{"driving_table", "key_column"}).AddRow("orm.security", "id"))
+	mock.ExpectQuery("SELECT column_name FROM information_schema.columns").
+		WillReturnRows(sqlmock.NewRows([]string{"column_name"}).AddRow("id").AddRow("sec_name"))
+	mock.ExpectQuery("SELECT EXISTS").WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+	mock.ExpectBegin()
+	for i := 0; i < 2; i++ {
+		mock.ExpectQuery(`INSERT INTO orm.security`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(i))
+	}
+	mock.ExpectCommit()
+
+	body, _ := json.Marshal(map[string]interface{}{"records": []map[string]interface{}{{"sec_name": "A"}, {"sec_name": "B"}}})
+	req := withTestAuth(httptest.NewRequest(http.MethodPost, "/api/v1/bo/security/records/bulk", bytes.NewBuffer(body)), "00000000-0000-0000-0000-000000000001")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	var resp boBulkResponse
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 1, resp.Written)
+	if assert.Len(t, resp.Failed, 1) {
+		assert.Equal(t, 0, resp.Failed[0].Index)
+		assert.Equal(t, []string{"Issuer (issuer_id)"}, resp.Failed[0].Missing)
+	}
 }

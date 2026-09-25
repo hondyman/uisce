@@ -13,6 +13,7 @@
 
 import { getSelectedRegion } from './region';
 import { readCachedSelection } from '../utils/tenantScope';
+import { acceptLanguage, parseCatalogError, type CatalogErrorBody } from '../utils/catalogError';
 
 /**
  * Helper to get all required headers from localStorage / AccessContext
@@ -77,6 +78,9 @@ function getTenantHeadersInternal(): Record<string, string> {
  *   const data = await apiFetch('/api/semantic-terms', { method: 'POST', body: JSON.stringify(...) });
  */
 export class ApiError extends Error {
+  /** Set when the backend answered with a Message Catalog error. */
+  catalog?: CatalogErrorBody;
+
   constructor(
     message: string,
     public readonly status: number,
@@ -106,16 +110,25 @@ export async function apiFetch(
     }
   });
 
+  if (!headers.has('Accept-Language')) {
+    headers.set('Accept-Language', acceptLanguage());
+  }
+
   const response = await fetch(input, { ...init, headers });
 
   if (!response.ok) {
     const body = await response.text().catch(() => '');
-    throw new ApiError(
-      `API request failed: ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`,
+    const catalog = parseCatalogError(body);
+    const err = new ApiError(
+      catalog
+        ? catalog.error
+        : `API request failed: ${response.status} ${response.statusText}${body ? ': ' + body.slice(0, 200) : ''}`,
       response.status,
       response.statusText,
       response
     );
+    if (catalog) err.catalog = catalog;
+    throw err;
   }
 
   return response;

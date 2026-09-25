@@ -30,6 +30,8 @@ type boBulkFailure struct {
 	Index int      `json:"index"`
 	Error string   `json:"error"`
 	Rules []string `json:"rules,omitempty"` // set when the rule engine rejected the row
+	// Missing lists required fields the row left empty.
+	Missing []string `json:"missing,omitempty"`
 }
 
 type boBulkResponse struct {
@@ -169,6 +171,10 @@ func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey
 			var rej *metadata.RuleRejectionError
 			if errors.As(res.Err, &rej) {
 				f.Rules = rej.Rules
+			}
+			var req *metadata.RequiredFieldsError
+			if errors.As(res.Err, &req) {
+				f.Missing = req.Fields
 			}
 			resp.Failed = append(resp.Failed, f)
 			continue

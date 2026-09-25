@@ -59,11 +59,16 @@ func queryOneRow(ctx context.Context, tx *sqlx.Tx, query string, args []interfac
 // with fallbackMsg when non-empty).
 func writeBOWriteError(w http.ResponseWriter, err error, notFoundMsg, fallbackMsg string, fallbackStatus int) {
 	var rej *metadata.RuleRejectionError
+	var req *metadata.RequiredFieldsError
 	switch {
 	case errors.As(err, &rej):
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": rej.Error(), "rules": rej.Rules})
+	case errors.As(err, &req):
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"error": req.Error(), "missing": req.Fields})
 	case errors.Is(err, metadata.ErrNoRowWritten):
 		http.Error(w, notFoundMsg, http.StatusNotFound)
 	case errors.Is(err, errNoRuleEnforcer):

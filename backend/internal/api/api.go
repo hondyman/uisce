@@ -64,6 +64,7 @@ import (
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
 	models "github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	uisceoauth "github.com/hondyman/uisce/backend/internal/oauth"
 	"github.com/hondyman/uisce/backend/internal/oms/account"
 	"github.com/hondyman/uisce/backend/internal/oms/position"
@@ -211,6 +212,8 @@ type Server struct {
 	CalcHandler             *handlers.CalcHandler
 	DatasourceResolver      security.DatasourceResolver
 	SecurityContextDeps     handlers.SecurityContextDeps
+	// MessageCatalog renders every user-facing error (msgcat.WriteError).
+	MessageCatalog          *msgcat.Catalog
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	QueryHandler            *handlers.QueryHandler
@@ -1836,6 +1839,12 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		glossarySvc := NewGlossaryService(context.Background(), db, srv.AbbreviationSvc, glossaryJobStore)
 		glossaryHandler := NewGlossaryHandler(db, lineage.NewDBLineageRepository(sqlxDB), handlers.SecurityContextDeps{Resolver: srv.DatasourceResolver}, srv.AbbreviationSvc, glossarySvc, glossaryJobStore)
 		glossaryHandler.RegisterRoutes(r)
+
+		// Message Catalog: the one source of user-facing error text, per
+		// language and tenant, edited through /api/message-catalog.
+		msgcatStore := msgcat.NewStore(sqlxDB)
+		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
+		msgcat.NewHandler(msgcatStore, srv.MessageCatalog).RegisterRoutes(r)
 
 		// Semantic Relationships Handler (AI-suggested term relationships,
 		// rejections store, taxonomy classification). This was fully

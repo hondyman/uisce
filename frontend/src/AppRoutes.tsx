@@ -75,6 +75,7 @@ import MetricCalcConsole from "./pages/metrics/MetricCalcConsole";
 import SemanticEnrichmentWizard from "./pages/SemanticEnrichment/SemanticEnrichmentWizard";
 import NLQPage from "./pages/nlq/NLQPage";
 import LLMConfigPage from "./pages/admin/LLMConfigPage";
+import MessageCatalogPage from "./features/message-catalog/MessageCatalogPage";
 
 import { Feed } from "./features/feed/components/Feed";
 import { ApprovalInboxPage } from "./features/wealth/pages/ApprovalInboxPage";
@@ -256,6 +257,7 @@ function ProtectedApp() {
 
         <Route path="audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
         <Route path="admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
+        <Route path="admin/message-catalog" element={<ProtectedRoute><MessageCatalogPage /></ProtectedRoute>} />
         <Route path="admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
         <Route path="admin/temporal-ops" element={<ProtectedRoute><TemporalOpsPage /></ProtectedRoute>} />
         <Route path="fabric/tenants" element={<ProtectedRoute><TenantsManagementPage /></ProtectedRoute>} />

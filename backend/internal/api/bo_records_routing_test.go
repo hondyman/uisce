@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const routingTenant = "00000000-0000-0000-0000-000000000001"
+
 // routedEnforcer is a txEnforcer whose BO records live in another database.
 type routedEnforcer struct {
 	*txEnforcer
@@ -53,7 +55,7 @@ func TestBORecords_UseTheBOsOwnDatabase(t *testing.T) {
 	rec.ExpectCommit()
 
 	body, _ := json.Marshal(map[string]any{"records": []map[string]any{{"sec_name": "Alpha", "isin": "IE0019722233"}}})
-	req := withTestAuth(httptest.NewRequest(http.MethodPost, "/api/v1/bo/security/records/bulk", bytes.NewBuffer(body)), pipeTenant)
+	req := withTestAuth(httptest.NewRequest(http.MethodPost, "/api/v1/bo/security/records/bulk", bytes.NewBuffer(body)), routingTenant)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -82,7 +84,7 @@ func TestBORecords_UnresolvableDatasourceIsRefused(t *testing.T) {
 	} {
 		meta.ExpectQuery("SELECT COALESCE.*FROM public.business_objects").
 			WillReturnRows(sqlmock.NewRows([]string{"driving_table", "key_column"}).AddRow("orm.security", "id"))
-		req := withTestAuth(httptest.NewRequest(c.method, c.path, bytes.NewBufferString(c.body)), pipeTenant)
+		req := withTestAuth(httptest.NewRequest(c.method, c.path, bytes.NewBufferString(c.body)), routingTenant)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		assert.GreaterOrEqual(t, w.Code, 400, "%s %s must be refused", c.method, c.path)

@@ -821,11 +821,14 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 			display = humanizeIdent(f.FieldName)
 		}
 		out.Fields = append(out.Fields, boSchemaField{
-			ID:             f.ID,
-			Name:           f.FieldName,
-			DisplayName:    display,
-			Type:           normalizeFormType(colType),
-			Required:       f.IsRequired || f.BindingReq == "REQUIRED",
+			ID:          f.ID,
+			Name:        f.FieldName,
+			DisplayName: display,
+			Type:        normalizeFormType(colType),
+			// is_required is whether a value may be empty (and is what writes
+			// enforce); binding_requirement is whether a storage tier must map
+			// the field, which is not a form's concern.
+			Required:       f.IsRequired,
 			PhysicalColumn: physical,
 		})
 	}

@@ -222,7 +222,109 @@
       "noCalendars": "No business calendars yet",
       "noTemplates": "No notification templates yet"
     }
+  },
+  "messageCatalog": {
+    "title": "Message Catalog",
+    "subtitle": "Every error, warning and message your users see: one catalog, in every language, with approvals.",
+    "newMessage": "New message",
+    "tabs": {
+      "messages": "Messages",
+      "approvals": "Approvals"
+    },
+    "allSets": "All message sets",
+    "messageCount_one": "{{count}} message",
+    "messageCount_other": "{{count}} messages",
+    "setSecondary_one": "{{type}} · {{count}} message",
+    "setSecondary_other": "{{type}} · {{count}} messages",
+    "setTypes": {
+      "core": "Core",
+      "custom": "Implementer",
+      "client": "Your organization"
+    },
+    "searchPlaceholder": "Search by code or text",
+    "showIn": "Show text in",
+    "columns": {
+      "code": "Code",
+      "message": "Message",
+      "languages": "Languages"
+    },
+    "severity": "Severity",
+    "severities": {
+      "Message": "Message",
+      "Warning": "Warning",
+      "Error": "Error",
+      "Fatal": "Fatal"
+    },
+    "untranslated": "Not translated into {{language}} yet; users see English.",
+    "overridden": "Changed for your organization",
+    "pendingCount_one": "{{count}} change awaiting approval",
+    "pendingCount_other": "{{count}} changes awaiting approval",
+    "scope": {
+      "tenant": "Your organization",
+      "core": "Core catalog"
+    },
+    "missing": "missing",
+    "languagesCount": "{{count}}/{{total}} languages",
+    "noMatches": "No messages match.",
+    "close": "Close",
+    "errorRef": "Code {{code}} · reference {{ref}}",
+    "status": {
+      "pending": "Awaiting approval",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn"
+    },
+    "editor": {
+      "newTitle": "New message",
+      "editTitle": "Edit message",
+      "scope": "Change it for",
+      "scopeTenantHelp": "Your wording replaces the core text for your organization only.",
+      "scopeCoreHelp": "Changes the core catalog for every organization. A second platform administrator must approve.",
+      "readOnly": "You can view this message but not change it.",
+      "set": "Message set",
+      "number": "Number",
+      "englishReference": "English (the fallback for every language)",
+      "text": "Message text",
+      "paramMismatch": "Must use exactly the parameters of the English text: {{params}}",
+      "textHelp": "Use %1, %2 … where the system fills in values, such as a name or an ID.",
+      "userAction": "What the user can do",
+      "userActionHelp": "Optional. Shown under the message to tell users how to fix or avoid the problem.",
+      "description": "Internal explanation",
+      "descriptionHelp": "For administrators and support only; never shown to users.",
+      "preview": "Preview",
+      "previewFooter": "Code {{code}}",
+      "reason": "Reason for the change",
+      "reasonHelpApproval": "Helps the approver. Recorded in the change history.",
+      "submitted": "Submitted. The change takes effect when another administrator approves it.",
+      "saved": "Saved. Users see the new text within a minute.",
+      "history": "Change history",
+      "removeOverride": "Restore core text",
+      "removeTranslation": "Delete this translation",
+      "changedCount_one": "{{count}} language changed",
+      "changedCount_other": "{{count}} languages changed",
+      "noChanges": "No changes",
+      "approvalTooltip": "Another administrator must approve before it takes effect.",
+      "submitForApproval": "Submit for approval",
+      "save": "Save"
+    },
+    "approvals": {
+      "intro": "Changes wait here until someone other than their author approves them.",
+      "deleteAction": "Delete",
+      "newText": "New",
+      "reviewedBy": "Reviewed by {{user}} · {{when}}",
+      "requestedBy": "{{user}} · {{when}}",
+      "reason": "Reason",
+      "yours": "You proposed this change. Another administrator must review it.",
+      "withdraw": "Withdraw",
+      "comment": "Comment (optional)",
+      "reject": "Reject",
+      "approve": "Approve",
+      "historyTooltip": "Every change ever proposed, with who approved it",
+      "showPending": "Show awaiting approval",
+      "showAll": "Show full history",
+      "none": "Nothing is awaiting approval.",
+      "noneEver": "No changes have been proposed yet."
+    }
   }
-  
 }
 
