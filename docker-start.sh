@@ -172,7 +172,7 @@ list_services() {
 # Function to start only backend services
 start_backend() {
     print_info "Starting backend microservices..."
-    BACKEND_SERVICES=(backend fabric-builder wealth-management ai-builder semantic-engine governance compliance-engine notifications-service policy-service search-service event-router)
+    BACKEND_SERVICES=(backend fabric-builder wealth-management ai-builder semantic-engine governance notifications-service policy-service search-service event-router)
 
     # Helper: determine likely Dockerfile locations for a service and skip missing builds
     services_to_start=()
@@ -206,7 +206,7 @@ start_backend() {
                                 ;;
                         esac
                 ;;
-            fabric-builder|wealth-management|ai-builder|semantic-engine|governance|compliance-engine)
+            fabric-builder|wealth-management|ai-builder|semantic-engine|governance)
                 dir="./services/${svc//-/_}"
                 dir_alt="./services/$(echo $svc | sed 's/-/\//')"
                 # check typical locations

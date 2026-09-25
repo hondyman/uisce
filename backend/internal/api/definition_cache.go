@@ -6,11 +6,13 @@ import (
 	"strings"
 )
 
-// Version constants — bump NamingLogicVersion when naming rules change,
+// Version markers — bump NamingLogicVersion when naming rules change,
 // bump AbbreviationsVersion when the abbreviation dictionary changes.
 // Two columns that derive the same name with different dictionary versions
 // produce different cache keys, so stale definitions are never reused.
-const (
+//
+// These are var (not const) so tests can override them to verify invalidation.
+var (
 	NamingLogicVersion  = "v1"
 	AbbreviationsVersion = "v1"
 )

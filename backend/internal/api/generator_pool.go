@@ -169,9 +169,9 @@ func (s *GlossaryService) runBulk(ctx context.Context, tenantID, datasourceID st
 
 			results[origIdx] = *res
 			store.Update(job.ID, func(j *Job) {
-				j.Done++
+				j.Done += len(item.ColumnIDs)
 			})
-			prog.Increment()
+			prog.IncrementN(len(item.ColumnIDs))
 			return nil
 		})
 	}

@@ -34,12 +34,6 @@ func (e *RuleEngine) EvaluateRule(
 		}
 	}
 
-	if passed && rule.ScoringFormula != "" {
-		if score, err := e.evaluateScoringFormula(ctx, rule.ScoringFormula, input); err == nil {
-			result.Score = &score
-		}
-	}
-
 	return result, trace
 }
 
@@ -116,10 +110,6 @@ func (e *RuleEngine) EvaluateBatch(
 		if !passed {
 			passedAll = false
 			results[i].Actions = rule.Actions
-		} else if rule.ScoringFormula != "" {
-			if score, err := e.evaluateScoringFormula(ctx, rule.ScoringFormula, input); err == nil {
-				results[i].Score = &score
-			}
 		}
 	}
 
@@ -188,34 +178,4 @@ func (e *RuleEngine) EvaluateSweep(
 	}
 
 	return results
-}
-
-func (e *RuleEngine) evaluateScoringFormula(ctx context.Context, formula string, input map[string]any) (float64, error) {
-	if e.env == nil {
-		return 0, nil
-	}
-	ast, issues := e.env.Compile(formula)
-	if issues != nil && issues.Err() != nil {
-		return 0, issues.Err()
-	}
-	prg, err := e.env.Program(ast)
-	if err != nil {
-		return 0, err
-	}
-	out, _, err := prg.Eval(map[string]interface{}{
-		"input": input,
-	})
-	if err != nil {
-		return 0, err
-	}
-	switch v := out.Value().(type) {
-	case float64:
-		return v, nil
-	case int:
-		return float64(v), nil
-	case int64:
-		return float64(v), nil
-	default:
-		return 0, nil
-	}
 }

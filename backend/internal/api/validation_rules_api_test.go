@@ -14,7 +14,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
 	httpapi "github.com/hondyman/uisce/backend/internal/api"
-	"github.com/hondyman/uisce/backend/internal/services"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +21,7 @@ import (
 
 func newValidationRouter(db *sql.DB) http.Handler {
 	r := chi.NewRouter()
-	httpapi.RegisterValidationRulesRoutes(r, db, services.NewCueEngine(), nil, &mockResolver{})
+	httpapi.RegisterValidationRulesRoutes(r, db, nil, &mockResolver{})
 	return r
 }
 
@@ -165,4 +164,30 @@ func TestValidationRulesAPI_ListRulesCountError(t *testing.T) {
 	var errResp httpapi.ErrorResponse
 	require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &errResp))
 	assert.Equal(t, "query_error", errResp.ErrorCode)
+}
+
+// The legacy catalog_validation_rules execution surface ran rules through a
+// CUE engine; it is retired so internal/rules/vm is the only rule engine.
+// None of these may touch the database or evaluate anything.
+func TestValidationRulesAPI_LegacyEvaluationEndpointsAreGone(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	router := newValidationRouter(db)
+
+	for _, c := range []struct{ method, path string }{
+		{http.MethodGet, "/validation-rules/schema?tenant_id=t&bo_id=b"},
+		{http.MethodPost, "/validation-rules/r1/execute"},
+		{http.MethodPost, "/validation-rules/r1/simulate-with-instance"},
+	} {
+		req := httptest.NewRequest(c.method, c.path, bytes.NewBufferString(`{}`))
+		resp := httptest.NewRecorder()
+		router.ServeHTTP(resp, req)
+
+		require.Equal(t, http.StatusGone, resp.Code, c.path)
+		var errResp httpapi.ErrorResponse
+		require.NoError(t, json.Unmarshal(resp.Body.Bytes(), &errResp), c.path)
+		assert.Equal(t, "endpoint_retired", errResp.ErrorCode, c.path)
+	}
+	require.NoError(t, mock.ExpectationsWereMet()) // no queries ran
 }

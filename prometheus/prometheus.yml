@@ -75,17 +75,6 @@ scrape_configs:
     target_label: service
     replacement: 'graphql-engine'
 
-# Cube.js Semantic Layer metrics
-- job_name: 'cubejs'
-  static_configs:
-  - targets: [ 'cube:4000' ]
-  scrape_interval: 15s
-  metrics_path: '/metrics'
-  relabel_configs:
-  - source_labels: [ __address__ ]
-    target_label: service
-    replacement: 'cubejs'
-
 # Notifications Service metrics
 - job_name: 'notifications-service'
   static_configs:

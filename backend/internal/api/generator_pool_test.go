@@ -187,3 +187,60 @@ func TestBuildDefinitionCacheKey_NonContextSensitiveIgnoresContext(t *testing.T)
 		t.Error("non-context-sensitive names should ignore context")
 	}
 }
+
+// TestBuildDefinitionCacheKey_VersionBumpInvalidatesCache verifies that bumping
+// NamingLogicVersion produces a different cache key for identical inputs.
+// This is the version-as-mechanism design: when naming logic or abbreviation
+// dictionaries change, bumping the constant invalidates all cached definitions
+// without requiring a manual cache flush.
+func TestBuildDefinitionCacheKey_VersionBumpInvalidatesCache(t *testing.T) {
+	// Save and restore the constant to avoid polluting other tests.
+	origVersion := NamingLogicVersion
+	defer func() { NamingLogicVersion = origVersion }()
+
+	NamingLogicVersion = "v1"
+	keyV1 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+
+	NamingLogicVersion = "v2"
+	keyV2 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+
+	if keyV1 == keyV2 {
+		t.Errorf("version bump should invalidate cache: v1=%s v2=%s", keyV1, keyV2)
+	}
+}
+
+// TestBuildDefinitionCacheKey_AbbreviationBumpInvalidatesCache verifies that
+// bumping AbbreviationsVersion produces a different cache key.
+func TestBuildDefinitionCacheKey_AbbreviationBumpInvalidatesCache(t *testing.T) {
+	origVersion := AbbreviationsVersion
+	defer func() { AbbreviationsVersion = origVersion }()
+
+	AbbreviationsVersion = "v1"
+	keyV1 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+
+	AbbreviationsVersion = "v2"
+	keyV2 := buildDefinitionCacheKey([]string{"Customer", "Identifier"}, "", false)
+
+	if keyV1 == keyV2 {
+		t.Errorf("abbreviation version bump should invalidate cache: v1=%s v2=%s", keyV1, keyV2)
+	}
+}
+
+// TestBuildDefinitionCacheKey_CrossVersionStability verifies that the same
+// version constants always produce the same key (no drift across runs).
+func TestBuildDefinitionCacheKey_CrossVersionStability(t *testing.T) {
+	origNLV := NamingLogicVersion
+	origAV := AbbreviationsVersion
+	defer func() {
+		NamingLogicVersion = origNLV
+		AbbreviationsVersion = origAV
+	}()
+
+	NamingLogicVersion = "v3"
+	AbbreviationsVersion = "v7"
+	key1 := buildDefinitionCacheKey([]string{"Tenant", "Status"}, `table "security_change_request"`, true)
+	key2 := buildDefinitionCacheKey([]string{"Tenant", "Status"}, `table "security_change_request"`, true)
+	if key1 != key2 {
+		t.Errorf("same constants should be stable: %s != %s", key1, key2)
+	}
+}
