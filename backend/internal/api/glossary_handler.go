@@ -2153,7 +2153,7 @@ func (h *GlossaryHandler) GetJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(job)
+	json.NewEncoder(w).Encode(&job) // a snapshot; pointer so vet sees no lock copy
 }
 
 func (h *GlossaryHandler) GenerateSemanticTerms(w http.ResponseWriter, r *http.Request) {
