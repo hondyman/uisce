@@ -12,10 +12,12 @@ coverage, silently.
 
 ## Decisions (2026-09-26)
 
-- A staging table is an **additional, non-core binding** of the business object
-  it feeds: `business_object_binding` (driving node = the staging table) plus
-  `field_bindings` (BO field → staging column, `RESOLVED`). Resolution uses
-  `ResolveSemanticFieldMapForBinding`, which fails loud on uncovered fields.
+- A staging table binds to the business object it feeds in **dedicated
+  tables** - `staging_bindings` (BO field → staging column) and
+  `staging_binding_changes` - used only by rule checks and lineage.
+  Not `business_object_binding`: that is where an object's records are read
+  and written (one binding per tenant, object and backend, chosen by the
+  record resolvers), so a staging binding there could become a record source.
 - Creating or changing a staging binding goes through **maker-checker**
   (the message-catalog pattern): drafted by one person, approved by another,
   audited.
@@ -35,9 +37,19 @@ coverage, silently.
    - At design time the grounding check compares each picked rule's fields
      with the fields reaching the step (map targets, file columns or BO
      fields) and flags rules of one object in front of a load into another.
-2. **Staging bindings.** Register staging tables and columns in the catalog;
-   binding drafts, approval, audit; API + MCP. The rule-check step aliases
-   rows through the binding of its downstream staging sink.
+2. **Staging bindings (this change).**
+   - Tables with RLS: a tenant reads/writes its own and reads the gold copy's;
+     its own binding wins. Messages in set 9300 (en/es/fr).
+   - Maker-checker: propose → a second person approves (applied, re-checked
+     against the binding it was proposed on) or rejects; the proposer can
+     withdraw. Core (gold-copy) bindings need a platform administrator,
+     tenant bindings a tenant administrator; impersonating administrators
+     can't propose or approve.
+   - API: `/api/staging-bindings` (list, resolve, changes, propose,
+     approve, reject, withdraw).
+   - A rule check in front of a staging load reads rows through the table's
+     binding to its object; without an approved binding the editor flags it
+     and a run doesn't start. The load still receives the rows unchanged.
 3. **Product business object.** Scan `mdm.product` into the catalog, define
    the Product BO (fields, terms, `MAPS_TO`), bind `staging.ff_product`.
 4. **UI.** The staging load step shows the object it is checked as and its

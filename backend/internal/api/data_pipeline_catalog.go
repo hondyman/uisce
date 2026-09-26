@@ -120,6 +120,13 @@ func (c *pipelineCatalog) Files(ctx context.Context) ([]string, error) {
 	return out, nil
 }
 
+func (c *pipelineCatalog) StagingBinding(ctx context.Context, boKey, table string) (map[string]string, error) {
+	if c.deps.Bindings == nil {
+		return nil, fmt.Errorf("staging bindings are not available")
+	}
+	return c.deps.Bindings.StagingFields(ctx, c.tenant, boKey, table)
+}
+
 func (c *pipelineCatalog) StagingTables(ctx context.Context) ([]datapipeline.StagingTable, error) {
 	if c.deps.StagingDB == nil {
 		return nil, fmt.Errorf("the staging database is not configured")

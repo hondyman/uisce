@@ -35,6 +35,9 @@ type PlatformCatalog interface {
 	Rules(ctx context.Context, boKey string) ([]RuleInfo, error)
 	Files(ctx context.Context) ([]string, error)
 	StagingTables(ctx context.Context) ([]StagingTable, error)
+	// StagingBinding is the approved binding of a staging table to a
+	// business object (field -> column), nil when there is none.
+	StagingBinding(ctx context.Context, boKey, table string) (map[string]string, error)
 }
 
 // Issue is a problem on a node (NodeID empty: the whole pipeline).
@@ -139,8 +142,24 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 				known[r.ID] = r
 			}
 			// Rules read business object fields: the rows reaching this step
-			// must carry them, or every row is rejected at run time.
+			// must carry them, or every row is rejected at run time. In front
+			// of a staging load they are read through the table's binding.
 			have := fieldsReaching(spec, n.ID, fieldsOf)
+			if sink := downstreamSinkOf(spec, n.ID); sink != nil && sink.Type == NodeStagingSink {
+				var sc StagingSinkConfig
+				if json.Unmarshal(sink.Config, &sc) != nil || sc.Table == "" {
+					continue
+				}
+				binding, berr := cat.StagingBinding(ctx, c.BOKey, sc.Table)
+				if berr != nil {
+					continue
+				}
+				if binding == nil {
+					add(n.ID, "%s has no approved binding to %s, so these rules can't check its rows - propose one under Data > Staging bindings", sc.Table, c.BOKey)
+					continue
+				}
+				have = throughBinding(have, binding)
+			}
 			for _, id := range c.RuleIDs {
 				r, ok := known[id]
 				if !ok {
@@ -641,4 +660,23 @@ func fieldsReaching(spec *Spec, id string, boFields func(string) map[string]bool
 			return boFields(c.BOKey)
 		}
 	}
+}
+
+// throughBinding is the fields rules see when rows with columns cols are read
+// through binding (field -> column): each bound field whose column arrives,
+// plus the columns themselves. nil cols (unknown) stays unknown.
+func throughBinding(cols map[string]bool, binding map[string]string) map[string]bool {
+	if cols == nil {
+		return nil
+	}
+	out := make(map[string]bool, len(cols)+len(binding))
+	for c := range cols {
+		out[c] = true
+	}
+	for field, col := range binding {
+		if cols[col] {
+			out[field] = true
+		}
+	}
+	return out
 }

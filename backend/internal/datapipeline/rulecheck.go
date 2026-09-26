@@ -119,12 +119,18 @@ func (c *CatalogRuleChecker) Check(ctx context.Context, tenantID string, ids []s
 }
 
 type ruleCheckProc struct {
-	cfg     RuleCheckConfig
-	checker RuleChecker
-	tenant  string
+	id       string
+	cfg      RuleCheckConfig
+	checker  RuleChecker
+	bindings BindingSource
+	tenant   string
+	// alias is the staging binding (field -> column) the rows are read
+	// through when the step feeds a staging load; nil: rows are already in
+	// the object's field names.
+	alias map[string]string
 }
 
-func newRuleCheckProc(n Node, ch RuleChecker) (Processor, error) {
+func newRuleCheckProc(n Node, ch RuleChecker, b BindingSource) (Processor, error) {
 	var c RuleCheckConfig
 	if err := decodeConfig(n, &c); err != nil {
 		return nil, err
@@ -135,12 +141,59 @@ func newRuleCheckProc(n Node, ch RuleChecker) (Processor, error) {
 	if pr, ok := ch.(perRunChecker); ok {
 		ch = pr.ForRun()
 	}
-	return &ruleCheckProc{cfg: c, checker: ch}, nil
+	return &ruleCheckProc{id: n.ID, cfg: c, checker: ch, bindings: b}, nil
 }
 
-func (p *ruleCheckProc) Open(_ context.Context, rc *RunContext) error {
+// Open resolves, once per run, how rows are put in the rules' terms: a step
+// feeding a staging load reads them through the table's approved binding to
+// the rules' business object, and without one the run doesn't start.
+func (p *ruleCheckProc) Open(ctx context.Context, rc *RunContext) error {
 	p.tenant = rc.TenantID
+	if rc.Spec == nil {
+		return nil
+	}
+	sink := downstreamSinkOf(rc.Spec, p.id)
+	if sink == nil || sink.Type != NodeStagingSink {
+		return nil
+	}
+	var sc StagingSinkConfig
+	if err := decodeConfig(*sink, &sc); err != nil {
+		return err
+	}
+	if p.cfg.BOKey == "" {
+		return fmt.Errorf("say which business object's rules to apply: rows loaded into %s are checked through its binding to that object", sc.Table)
+	}
+	if p.bindings == nil {
+		return fmt.Errorf("staging bindings are not available in this environment, so rules can't check rows loaded into %s", sc.Table)
+	}
+	fields, err := p.bindings.StagingFields(ctx, rc.TenantID, p.cfg.BOKey, sc.Table)
+	if err != nil {
+		return err
+	}
+	if fields == nil {
+		return fmt.Errorf("%s has no approved binding to %s, so its rules can't check these rows - propose one under Data > Staging bindings", sc.Table, p.cfg.BOKey)
+	}
+	p.alias = fields
 	return nil
+}
+
+// inTerms is the row as the rules read it: through the binding when there is
+// one (each bound field takes its column's value; unbound columns stay
+// visible under their own names), else the row itself.
+func (p *ruleCheckProc) inTerms(data map[string]any) map[string]any {
+	if p.alias == nil {
+		return data
+	}
+	out := make(map[string]any, len(data)+len(p.alias))
+	for k, v := range data {
+		out[k] = v
+	}
+	for field, col := range p.alias {
+		if v, ok := data[col]; ok {
+			out[field] = v
+		}
+	}
+	return out
 }
 func (p *ruleCheckProc) Close(context.Context, error) error { return nil }
 
@@ -151,7 +204,7 @@ func blocking(sev string) bool { return strings.EqualFold(sev, models.Validation
 func (p *ruleCheckProc) Process(ctx context.Context, rows []Row) (Result, error) {
 	var res Result
 	for _, r := range rows {
-		fails, err := p.checker.Check(ctx, p.tenant, p.cfg.RuleIDs, r.Data)
+		fails, err := p.checker.Check(ctx, p.tenant, p.cfg.RuleIDs, p.inTerms(r.Data))
 		if err != nil {
 			return res, err
 		}

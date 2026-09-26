@@ -25,8 +25,17 @@ func (fakeCatalog) Rules(_ context.Context, k string) ([]RuleInfo, error) {
 	return nil, nil
 }
 func (fakeCatalog) Files(context.Context) ([]string, error) { return []string{"uploads/fs.txt"}, nil }
+func (fakeCatalog) StagingBinding(_ context.Context, bo, table string) (map[string]string, error) {
+	if bo == "fund" && table == "staging.ff_fund_bound" {
+		return map[string]string{"fsym_id": "fsym_id", "aum": "aum_amt"}, nil
+	}
+	return nil, nil
+}
 func (fakeCatalog) StagingTables(context.Context) ([]StagingTable, error) {
-	return []StagingTable{{Table: "staging.ff_fund", Columns: []TargetField{{Name: "fsym_id"}, {Name: "aum"}}}}, nil
+	return []StagingTable{
+		{Table: "staging.ff_fund", Columns: []TargetField{{Name: "fsym_id"}, {Name: "aum"}}},
+		{Table: "staging.ff_fund_bound", Columns: []TargetField{{Name: "fsym_id"}, {Name: "aum_amt"}}},
+	}, nil
 }
 
 const goodSpec = `{"version":1,"nodes":[
@@ -89,7 +98,8 @@ func TestCheckRuleFieldsReachTheRuleCheck(t *testing.T) {
 	 {"id":"rules","type":"rule_check","config":{"bo_key":"fund","rule_ids":["11111111-1111-1111-1111-111111111111"]}},
 	 {"id":"out","type":"staging_sink","config":{"table":"staging.ff_fund","source_cd":"FACTSET","domain":"PRODUCT"}}],
 	 "edges":[{"from":"file","to":"map"},{"from":"map","to":"rules"},{"from":"rules","to":"out"}]}`
-	want := `rules: rule "AUM positive" reads fund field(s) aum, which the rows here don't have - map them to fund's fields before this step`
+	// No binding: the rules can't read staging columns at all.
+	want := `rules: staging.ff_fund has no approved binding to fund, so these rules can't check its rows - propose one under Data > Staging bindings`
 	got := map[string]bool{}
 	for _, i := range Check(context.Background(), fakeCatalog{}, specOf(t, staging)) {
 		got[i.NodeID+": "+i.Message] = true
@@ -98,12 +108,27 @@ func TestCheckRuleFieldsReachTheRuleCheck(t *testing.T) {
 		t.Errorf("missing %q in %v", want, got)
 	}
 
+	// With a binding (aum <- aum_amt) the same rows are in the rules' terms.
+	bound := strings.Replace(staging, `"table":"staging.ff_fund"`, `"table":"staging.ff_fund_bound"`, 1)
+	if issues := Check(context.Background(), fakeCatalog{}, specOf(t, bound)); len(issues) != 0 {
+		t.Errorf("bound staging load flagged: %+v", issues)
+	}
+	// A binding that doesn't cover what the rule reads is still caught.
+	unmapped := strings.Replace(bound, `{"from":"AUM","to":"aum_amt"}`, `{"from":"AUM","to":"aum_other"}`, 1)
+	found := false
+	for _, i := range Check(context.Background(), fakeCatalog{}, specOf(t, unmapped)) {
+		found = found || (i.NodeID == "rules" && strings.Contains(i.Message, "reads fund field(s) aum"))
+	}
+	if !found {
+		t.Error("a rule field its binding's column doesn't supply must be flagged")
+	}
+
 	// Straight from the file, rows carry the file's columns (AUM, not aum).
 	direct := `{"version":1,"nodes":[
 	 {"id":"file","type":"file_source","config":{"uri":"uploads/fs.txt","format":"csv","columns":[{"name":"AUM","type":"decimal"}]}},
 	 {"id":"rules","type":"rule_check","config":{"bo_key":"fund","rule_ids":["11111111-1111-1111-1111-111111111111"]}}],
 	 "edges":[{"from":"file","to":"rules"}]}`
-	found := false
+	found = false
 	for _, i := range Check(context.Background(), fakeCatalog{}, specOf(t, direct)) {
 		found = found || (i.NodeID == "rules" && strings.Contains(i.Message, "reads fund field(s) aum"))
 	}

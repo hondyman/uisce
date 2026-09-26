@@ -14,6 +14,10 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
+	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
+	"github.com/hondyman/uisce/backend/internal/security"
+	"github.com/hondyman/uisce/backend/internal/stagingbind"
 	"github.com/hondyman/uisce/backend/pkg/llm"
 )
 
@@ -44,6 +48,16 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	} else {
 		log.Printf("[data-pipelines] DATAPIPELINE_STAGING_DSN not set: staging loads are disabled")
 	}
+
+	// Staging bindings: how rule checks in front of a staging load read its
+	// rows (business object field -> staging column), maker-checker.
+	bindings := &stagingbind.Store{DB: sqlxDB}
+	deps.Bindings = bindings
+	editor := &stagingbind.Editor{Store: bindings}
+	if deps.StagingDB != nil {
+		editor.Columns = stagingColumns{db: deps.StagingDB}
+	}
+	(&stagingbind.Handler{Store: bindings, Editor: editor, Catalog: s.MessageCatalog, ActorFrom: s.stagingBindActor}).RegisterRoutes(r)
 
 	store := &datapipeline.Store{DB: sqlxDB}
 	acts := &datapipeline.Activities{Store: store, Deps: deps}
@@ -76,4 +90,47 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	h.WithScheduler(&pipelineCoreScheduler{srv: s, store: store})
 	h.RegisterRoutes(r)
 	s.DataPipelines = h
+}
+
+// stagingColumns lists a staging table's loadable columns for binding checks.
+type stagingColumns struct{ db *sql.DB }
+
+func (c stagingColumns) Columns(ctx context.Context, table string) ([]string, error) {
+	tables, err := datapipeline.StagingTables(ctx, c.db)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tables {
+		if t.Table == table {
+			out := make([]string, len(t.Columns))
+			for i, col := range t.Columns {
+				out[i] = col.Name
+			}
+			return out, nil
+		}
+	}
+	return nil, nil
+}
+
+// stagingBindActor is the caller: the tenant from the token (never a header
+// on its own) and the administrator roles that scope binding changes. An
+// impersonating administrator can't propose or approve - maker-checker
+// records must name the real people.
+func (s *Server) stagingBindActor(r *http.Request) (stagingbind.Actor, error) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
+	if err != nil || secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
+		return stagingbind.Actor{}, msgcat.Unauthenticated().Wrap(err)
+	}
+	a := stagingbind.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID, Name: msgcat.CallerName(r)}
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && !auth.ImpersonationActive {
+		for _, role := range auth.Roles {
+			switch role {
+			case "global_admin":
+				a.PlatformAdmin = true
+			case "tenant_admin":
+				a.TenantAdmin = true
+			}
+		}
+	}
+	return a, nil
 }

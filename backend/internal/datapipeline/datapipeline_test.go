@@ -253,7 +253,7 @@ func (fakeChecker) Check(_ context.Context, _ string, _ []string, d map[string]a
 
 func TestRuleCheckNode(t *testing.T) {
 	n := Node{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{"r1", "r2"}})}
-	p, err := newRuleCheckProc(n, fakeChecker{})
+	p, err := newRuleCheckProc(n, fakeChecker{}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +269,7 @@ func TestRuleCheckNode(t *testing.T) {
 	if !strings.Contains(res.Rejected[0].Reason, `rule "AUM positive" failed`) {
 		t.Errorf("reason: %s", res.Rejected[0].Reason)
 	}
-	if _, err := newRuleCheckProc(n, nil); err == nil {
+	if _, err := newRuleCheckProc(n, nil, nil); err == nil {
 		t.Error("nil checker must error")
 	}
 	bad := &Spec{Version: SpecVersion, Nodes: []Node{{ID: "x", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{})}}}
