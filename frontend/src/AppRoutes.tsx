@@ -185,6 +185,8 @@ import RuntimePage from './pages/PageRuntimeRenderer';
 
 // Code-split workstation components for standalone / detached popout routes
 const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
+const PipelinesListPage = React.lazy(() => import('./features/data-pipelines/PipelinesListPage'));
+const PipelineEditorPage = React.lazy(() => import('./features/data-pipelines/PipelineEditorPage'));
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
@@ -299,6 +301,8 @@ function ProtectedApp() {
         <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         {/* Validation rules: one editor, one engine (internal/rules/vm). */}
+        <Route path="data/pipelines" element={<ProtectedRoute><PipelinesListPage /></ProtectedRoute>} />
+        <Route path="data/pipelines/:id" element={<ProtectedRoute><PipelineEditorPage /></ProtectedRoute>} />
         <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         {/* System-wide validation-rule-nodes view (every BO, one page) -

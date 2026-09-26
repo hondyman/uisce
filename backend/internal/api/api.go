@@ -219,6 +219,7 @@ type Server struct {
 	ScheduleService         *schedule.Service
 	ScheduleRunners         *schedule.Registry
 	BusinessObjectService   *catalogmeta.BusinessObjectService
+	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler
@@ -1812,7 +1813,11 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				log.Printf("[mcp-cutover] MCP DB pool mode=%s", mode)
 			}
 		}
-		r.Handle("/mcp", mcp.NewServer(mcpDB).SetTemporal(temporalClient).HTTPHandler())
+		mcpServer := mcp.NewServer(mcpDB).SetTemporal(temporalClient)
+		if srv.DataPipelines != nil {
+			mcpServer.SetPipelines(pipelineMCP{h: srv.DataPipelines})
+		}
+		r.Handle("/mcp", mcpServer.HTTPHandler())
 
 		// Register handlers that were previously orphaned
 		ipWhitelistHandler.RegisterRoutes(r)
@@ -3835,6 +3840,7 @@ func (s *Server) registerBOCRUDRoutes(r chi.Router, sqlxDB *sqlx.DB) {
 	boCRUDHandler := NewBOCRUDHandler(sqlxDB, triggerEngine, enforcer)
 	boCRUDHandler.catalog = s.MessageCatalog
 	boCRUDHandler.RegisterRoutes(r)
+	s.registerDataPipelineRoutes(r, sqlxDB, boCRUDHandler)
 }
 
 // registerNBAEngineRoutes mounts next-best-action and recommendation engine endpoints

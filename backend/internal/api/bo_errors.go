@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -127,12 +128,12 @@ func (h *BOCRUDHandler) fail(w http.ResponseWriter, r *http.Request, tenantID uu
 // rowError renders one bulk row's failure. A cause that is not a catalog
 // message (a database error, say) is logged against ref and answered as
 // the internal-error message, so no row ever carries a raw error.
-func (h *BOCRUDHandler) rowError(r *http.Request, tenantID uuid.UUID, ref string, index int, err error) (code, message string) {
+func (h *BOCRUDHandler) rowError(ctx context.Context, tenantID uuid.UUID, langs []string, ref string, index int, err error) (code, message string) {
 	var me *msgcat.Error
 	if !errors.As(writeError(err), &me) {
 		logging.GetLogger().Sugar().Errorw("bulk row failed", "correlation_id", ref, "tenant", tenantID.String(), "index", index, "error", err)
 		me = msgcat.Internal(ref)
 	}
-	out := h.catalog.Render(r.Context(), tenantID.String(), msgcat.Preferences(r.Header.Get("Accept-Language")), me, ref)
+	out := h.catalog.Render(ctx, tenantID.String(), langs, me, ref)
 	return out.Code, out.Message
 }

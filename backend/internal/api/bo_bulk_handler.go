@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,64 +52,71 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
-	if h.enforcer == nil {
-		h.fail(w, r, tenantID, boEnforcementUnavailable())
-		return
-	}
-	boKey := chi.URLParam(r, "boKey")
-
 	var req boBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
-	if len(req.Records) == 0 {
-		h.fail(w, r, tenantID, msgcat.New(msgcat.SetSystem, 9, "records"))
+	ref := msgcat.CorrelationID(r)
+	w.Header().Set("X-Request-ID", ref)
+	resp, err := h.bulkWrite(r.Context(), tenantID, chi.URLParam(r, "boKey"), r.URL.Query().Get("subtype"), req,
+		msgcat.Preferences(r.Header.Get("Accept-Language")), ref)
+	if err != nil {
+		h.fail(w, r, tenantID, err)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// bulkWrite is the enforced bulk write shared by the HTTP endpoint and the
+// data pipeline's bo_sink. The caller has already resolved the tenant.
+// Request-level refusals are catalog errors; each failed row is rendered
+// from the catalog in langs, with ref as its correlation ID - never a raw
+// error.
+func (h *BOCRUDHandler) bulkWrite(ctx context.Context, tenantID uuid.UUID, boKey, subtype string, req boBulkRequest, langs []string, ref string) (*boBulkResponse, error) {
+	if h.enforcer == nil {
+		return nil, boEnforcementUnavailable()
+	}
+	if len(req.Records) == 0 {
+		return nil, msgcat.New(msgcat.SetSystem, 9, "records")
+	}
 	if len(req.Records) > maxBulkRecords {
-		h.fail(w, r, tenantID, boTooManyRecords(maxBulkRecords))
-		return
+		return nil, boTooManyRecords(maxBulkRecords)
 	}
 	switch req.Mode {
 	case "", "create":
 		req.Mode = "create"
 	case "upsert":
 		if len(req.KeyFields) == 0 {
-			h.fail(w, r, tenantID, boUpsertNeedsKeys())
-			return
+			return nil, boUpsertNeedsKeys()
 		}
 	default:
-		h.fail(w, r, tenantID, boBadMode())
-		return
+		return nil, boBadMode()
 	}
 
-	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
+	boMeta, err := h.resolveBOMetadata(ctx, boKey, tenantID)
 	if err != nil {
-		h.fail(w, r, tenantID, err)
-		return
+		return nil, err
 	}
-	writable, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
+	writable, err := h.resolveWritableColumns(ctx, boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
-		h.fail(w, r, tenantID, fmt.Errorf("resolving table schema: %w", err))
-		return
+		return nil, fmt.Errorf("resolving table schema: %w", err)
 	}
 	for _, k := range req.KeyFields {
 		if !writable[k] || strings.EqualFold(k, "tenant_id") {
-			h.fail(w, r, tenantID, boBadKeyField(k))
-			return
+			return nil, boBadKeyField(k)
 		}
 	}
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
-	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
+	tenantScoped := h.tableHasColumn(ctx, boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
+	if subtype != "" {
+		if col, ok := h.resolveDiscriminatorColumn(ctx, boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			for _, rec := range req.Records {
 				rec[col] = subtype // forced server-side, as on single create
 			}
 		}
 	}
 
-	ctx := r.Context()
 	// ops[i] records whether row i was an update or an insert, so row events
 	// use the same trigger keys as the single-record endpoints.
 	ops := make([]string, len(req.Records))
@@ -139,17 +147,14 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 			return queryOneRow(ctx, tx, q, args)
 		})
 	if err != nil {
-		h.fail(w, r, tenantID, fmt.Errorf("bulk write: %w", err))
-		return
+		return nil, fmt.Errorf("bulk write: %w", err)
 	}
 
-	resp := boBulkResponse{Failed: []boBulkFailure{}, DryRun: req.DryRun}
-	ref := msgcat.CorrelationID(r)
-	w.Header().Set("X-Request-ID", ref)
+	resp := &boBulkResponse{Failed: []boBulkFailure{}, DryRun: req.DryRun}
 	for _, res := range results {
 		if res.Err != nil {
 			f := boBulkFailure{Index: res.Index}
-			f.Code, f.Error = h.rowError(r, tenantID, ref, res.Index, res.Err)
+			f.Code, f.Error = h.rowError(ctx, tenantID, langs, ref, res.Index, res.Err)
 			var rej *metadata.RuleRejectionError
 			if errors.As(res.Err, &rej) {
 				f.Rules = rej.Rules
@@ -166,9 +171,7 @@ func (h *BOCRUDHandler) HandleBulkBORecords(w http.ResponseWriter, r *http.Reque
 			h.emitBORowEvent(ops[res.Index], tenantID, boKey, fmt.Sprintf("%v", res.Record[boMeta.KeyColumn]), res.Record)
 		}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	return resp, nil
 }
 
 // buildBOUpsertUpdate builds the UPDATE half of an upsert: set every

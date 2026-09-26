@@ -1,9 +1,8 @@
 package api
 
 import (
+	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"regexp"
 	"strings"
@@ -33,8 +32,7 @@ func TestBOHandlers_NoRawErrorResponses(t *testing.T) {
 // A database error in a bulk row never reaches the client.
 func TestBulkRowError_HidesCause(t *testing.T) {
 	h := &BOCRUDHandler{}
-	req := httptest.NewRequest(http.MethodPost, "/x", nil)
-	code, msg := h.rowError(req, uuid.MustParse(routingTenant), "ref-1", 0, errors.New(`pq: duplicate key value violates unique constraint "secret_idx"`))
+	code, msg := h.rowError(context.Background(), uuid.MustParse(routingTenant), []string{"en"}, "ref-1", 0, errors.New(`pq: duplicate key value violates unique constraint "secret_idx"`))
 	assert.Equal(t, "1-4", code)
 	assert.NotContains(t, msg, "secret_idx")
 }

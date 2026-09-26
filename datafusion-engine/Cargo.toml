@@ -19,6 +19,11 @@ uuid = { version = "1.6", features = ["v4", "serde"] }
 # Arrow & DataFusion for in-memory processing and OLAP transformations
 arrow = "50"
 datafusion = "37"
+futures = "0.3"
+bytes = "1"
 
 # Iceberg Rust SDK
 iceberg = "0.3"
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
