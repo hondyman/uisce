@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -81,6 +82,13 @@ type ResolvedDatasource struct {
 	AllowedRegions []string
 }
 
+// ErrDatasourceNotAvailable reports that the requested datasource does not
+// exist, is inactive, or belongs to a tenant the caller may not use. The
+// three are deliberately indistinguishable so the answer never confirms that
+// another tenant's datasource exists. It is a scope problem with an
+// authenticated caller, not missing credentials.
+var ErrDatasourceNotAvailable = errors.New("datasource not found")
+
 type DatasourceResolver interface {
 	Resolve(ctx context.Context, datasourceID string) (*ResolvedDatasource, error)
 }
@@ -134,7 +142,7 @@ func BuildContext(ctx context.Context, auth AuthInfo, req BuildContextRequest, r
 		return nil, err
 	}
 	if !isGlobalAdmin && !tenantAllowed(auth.TenantIDs, resolved.TenantID) {
-		return nil, fmt.Errorf("datasource not found")
+		return nil, ErrDatasourceNotAvailable
 	}
 	if len(resolved.AllowedRegions) > 0 && !containsRegion(resolved.AllowedRegions, req.Region) {
 		return nil, fmt.Errorf("region '%s' is not configured for datasource", req.Region)

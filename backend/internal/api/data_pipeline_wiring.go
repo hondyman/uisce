@@ -118,8 +118,11 @@ func (c stagingColumns) Columns(ctx context.Context, table string) ([]string, er
 // records must name the real people.
 func (s *Server) stagingBindActor(r *http.Request) (stagingbind.Actor, error) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
-	if err != nil || secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
-		return stagingbind.Actor{}, msgcat.Unauthenticated().Wrap(err)
+	if err != nil {
+		return stagingbind.Actor{}, handlers.SecurityContextError(err)
+	}
+	if secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
+		return stagingbind.Actor{}, msgcat.Unauthenticated()
 	}
 	a := stagingbind.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID, Name: msgcat.CallerName(r)}
 	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && !auth.ImpersonationActive {

@@ -1,16 +1,17 @@
 import axios from 'axios';
-import { getRequiredTenantScope, hasTenantScope, readCachedSelection } from './tenantScope';
+import { getRequiredTenantScope, hasTenantScope, readCachedSelection, whenTenantScopeReady } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 
 const axiosClient = axios.create();
 
-axiosClient.interceptors.request.use((config) => {
+axiosClient.interceptors.request.use(async (config) => {
     // Resolve base URL
     if (config.url && (config.url.startsWith('/api') || config.url.startsWith('/'))) {
         config.url = resolveApiUrl(config.url.startsWith('/api') ? config.url : `/api${config.url}`);
     }
 
-    // Inject Tenant Scope
+    // Inject Tenant Scope, once the Operating Scope is restored
+    await whenTenantScopeReady(config.url ?? '');
     try {
         const { tenant, datasource } = readCachedSelection();
         if (tenant?.id) {

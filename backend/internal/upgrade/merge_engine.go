@@ -165,7 +165,7 @@ func (s *Service) ExecuteTenantUpgrade(ctx context.Context, tenantID, layoutKey,
 func (s *Service) ComputeTenantDelta(ctx context.Context, tenantID string) (*TenantDelta, error) {
 	// Query custom fields for tenant
 	var customAttrs []map[string]interface{}
-	rows, err := s.db.QueryxContext(ctx, `SELECT attribute_name, display_name, data_type, jsonb_path FROM public.tenant_custom_attributes WHERE tenant_id = $1`, tenantID)
+	rows, err := s.db.QueryxContext(ctx, `SELECT field_cd AS attribute_name, name AS display_name, data_type, json_path AS jsonb_path FROM public.attribute_def WHERE tenant_id::text = $1 AND is_active`, tenantID)
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

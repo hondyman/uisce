@@ -2,11 +2,13 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
@@ -112,4 +114,16 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	// Inject security context into request context for downstream use
 	ctx := security.WithContext(r.Context(), secCtx)
 	return secCtx, ctx, nil
+}
+
+// SecurityContextError is the catalog message for a SecurityContextFromRequest
+// failure. A datasource that is unknown or belongs to another tenant is a
+// scope problem (403, 1-16), not missing credentials; everything else stays
+// "authentication is required" (401, 1-3). The tenant itself is never taken
+// from this mapping: it is still resolved from the token alone.
+func SecurityContextError(err error) *msgcat.Error {
+	if errors.Is(err, security.ErrDatasourceNotAvailable) {
+		return msgcat.DatasourceNotAvailable().Wrap(err)
+	}
+	return msgcat.Unauthenticated().Wrap(err)
 }

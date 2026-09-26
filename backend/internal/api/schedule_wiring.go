@@ -96,8 +96,11 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 // the request is working in, which scheduled runs reuse.
 func (s *Server) scheduleActor(r *http.Request) (schedule.Actor, error) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
-	if err != nil || secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
-		return schedule.Actor{}, msgcat.Unauthenticated().Wrap(err)
+	if err != nil {
+		return schedule.Actor{}, handlers.SecurityContextError(err)
+	}
+	if secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
+		return schedule.Actor{}, msgcat.Unauthenticated()
 	}
 	a := schedule.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID,
 		DatasourceID: secCtx.ScopedDatasourceID(), Region: secCtx.Region, CanTrigger: true}
