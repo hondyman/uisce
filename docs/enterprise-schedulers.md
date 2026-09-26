@@ -91,3 +91,18 @@ catalog messages (`error`, `error_code`, `user_action`), translated per
 Externally triggered runs carry the calling system and job reference (e.g.
 "tidal · EOD_ORDERS"), and the idempotency key, next to scheduled and manual
 runs. The trigger is audited as the service account.
+
+## Testing without Tidal
+
+`scripts/fake-enterprise-scheduler.sh` plays the enterprise scheduler: it
+makes up a run id the way Tidal would, runs `uisce-job run --wait` with it as
+the key, and reports the exit code as a job definition would ("COMPLETED
+NORMALLY", "SKIPPED - business calendar closed", ...). `--retry` re-runs with
+the same run id, like an agent restart, to show no second run starts.
+
+```bash
+scripts/fake-enterprise-scheduler.sh --schedule "Order volume - London close" --retry
+```
+
+It uses the same settings as a real agent, defaulting to the local backend
+and the `tidal-northwind` client made by `create-scheduler-client.sh`.
