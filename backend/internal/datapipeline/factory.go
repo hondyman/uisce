@@ -1,6 +1,7 @@
 package datapipeline
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
@@ -12,6 +13,15 @@ type Deps struct {
 	BO        BOClient    // bo_source, bo_sink
 	Files     FileEngine  // file_source, file_sink
 	StagingDB *sql.DB     // staging_sink
+	// Bindings resolves staging table bindings for rule checks in front of
+	// a staging load (nil: such checks can't run).
+	Bindings BindingSource
+}
+
+// BindingSource resolves the approved binding of a staging table to a
+// business object: field -> staging column, nil when there is none.
+type BindingSource interface {
+	StagingFields(ctx context.Context, tenantID, boKey, table string) (map[string]string, error)
 }
 
 // Factory builds each node's runtime from Deps.
@@ -32,7 +42,7 @@ func (d Deps) Processor(n Node) (Processor, error) {
 	case NodeMap:
 		return newMapProc(n)
 	case NodeRuleCheck:
-		return newRuleCheckProc(n, d.Rules)
+		return newRuleCheckProc(n, d.Rules, d.Bindings)
 	case NodeBOSink:
 		return newBOSinkProc(n, d.BO)
 	case NodeStagingSink:

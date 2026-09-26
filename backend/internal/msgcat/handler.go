@@ -65,6 +65,16 @@ func actor(r *http.Request) (Actor, bool) {
 	return a, true
 }
 
+// CallerName is the caller's readable identity (the token's email) for
+// change logs; "" when unknown.
+func CallerName(r *http.Request) string {
+	auth, ok := security.AuthInfoFromContext(r.Context())
+	if !ok {
+		return ""
+	}
+	return claimString(auth.RawClaims, "Email")
+}
+
 // claimString reads a string field from the validated token claims (their
 // concrete type lives in the services package).
 func claimString(claims any, field string) string {

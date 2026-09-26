@@ -96,6 +96,9 @@ func (stubCatalog) BOFields(context.Context, string) ([]datapipeline.TargetField
 }
 func (stubCatalog) Rules(context.Context, string) ([]datapipeline.RuleInfo, error) { return nil, nil }
 func (stubCatalog) Files(context.Context) ([]string, error)                        { return nil, nil }
+func (stubCatalog) StagingBinding(context.Context, string, string) (map[string]string, error) {
+	return nil, nil
+}
 func (stubCatalog) StagingTables(context.Context) ([]datapipeline.StagingTable, error) {
 	return nil, nil
 }

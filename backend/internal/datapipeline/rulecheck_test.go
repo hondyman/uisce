@@ -56,7 +56,7 @@ func TestCatalogRuleChecker(t *testing.T) {
 
 	// Each run starts with a fresh cache: an edited rule applies next run.
 	positive.RuleAST = json.RawMessage(`{"type":"condition","field":"aum","operator":">","value":100}`)
-	p, _ := newRuleCheckProc(Node{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{positive.ID.String()}})}, c)
+	p, _ := newRuleCheckProc(Node{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{RuleIDs: []string{positive.ID.String()}})}, c, nil)
 	_ = p.Open(ctx, &RunContext{TenantID: "t1"})
 	res, _ := p.Process(ctx, []Row{{Num: 1, Data: map[string]any{"aum": 50.0}}})
 	if len(res.Rejected) != 1 {
@@ -119,5 +119,57 @@ func TestCatalogRuleCheckerMissingField(t *testing.T) {
 		if strings.Contains(f.Message, "does not have") {
 			t.Errorf("nested path flagged as missing: %+v", f)
 		}
+	}
+}
+
+type fakeBindings map[string]map[string]string // bo|table -> field -> column
+
+func (f fakeBindings) StagingFields(_ context.Context, _, bo, table string) (map[string]string, error) {
+	return f[bo+"|"+table], nil
+}
+
+// In front of a staging load the rows are read through the table's binding:
+// the rule reads the object's field (aum), the row carries the staging column
+// (aum_amt), and what flows on to the load is the row as it was.
+func TestRuleCheckReadsStagingRowsThroughTheBinding(t *testing.T) {
+	positive := rule("t1", "AUM positive", "BLOCK", `{"type":"condition","field":"aum","operator":">","value":0}`)
+	checker := &CatalogRuleChecker{Rules: &fakeRules{byID: map[uuid.UUID]*models.ValidationRuleDescriptor{positive.ID: positive}}}
+	spec := &Spec{Nodes: []Node{
+		{ID: "rc", Type: NodeRuleCheck, Config: cfg(RuleCheckConfig{BOKey: "fund", RuleIDs: []string{positive.ID.String()}})},
+		{ID: "out", Type: NodeStagingSink, Config: cfg(StagingSinkConfig{Table: "staging.ff_fund", SourceCd: "FS", Domain: "PRODUCT"})},
+	}, Edges: []Edge{{From: "rc", To: "out"}}}
+	ctx := context.Background()
+
+	bindings := fakeBindings{"fund|staging.ff_fund": {"aum": "aum_amt"}}
+	p, err := newRuleCheckProc(spec.Nodes[0], checker, bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Open(ctx, &RunContext{TenantID: "t1", Spec: spec}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := p.Process(ctx, []Row{
+		{Num: 1, Data: map[string]any{"aum_amt": 5.0}},
+		{Num: 2, Data: map[string]any{"aum_amt": -1.0}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Out) != 1 || len(res.Rejected) != 1 || res.Rejected[0].Row.Num != 2 {
+		t.Fatalf("out=%d rejected=%+v", len(res.Out), res.Rejected)
+	}
+	if _, aliased := res.Out[0].Data["aum"]; aliased {
+		t.Error("the row passed on to the load must keep its own columns only")
+	}
+
+	// No approved binding: the run does not start.
+	p, _ = newRuleCheckProc(spec.Nodes[0], checker, fakeBindings{})
+	if err := p.Open(ctx, &RunContext{TenantID: "t1", Spec: spec}); err == nil || !strings.Contains(err.Error(), "no approved binding") {
+		t.Errorf("want a no-binding error, got %v", err)
+	}
+	// Nor without the bindings service.
+	p, _ = newRuleCheckProc(spec.Nodes[0], checker, nil)
+	if err := p.Open(ctx, &RunContext{TenantID: "t1", Spec: spec}); err == nil {
+		t.Error("a staging rule check without bindings must not run")
 	}
 }
