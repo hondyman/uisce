@@ -42,6 +42,7 @@ type scheduleRow struct {
 	TargetKind   string         `db:"target_kind"`
 	TargetRef    string         `db:"target_ref"`
 	TargetParams []byte         `db:"target_params"`
+	TriggerMode  string         `db:"trigger_mode"`
 	Cron         string         `db:"cron"`
 	TimeZone     string         `db:"time_zone"`
 	CalendarCD   sql.NullString `db:"calendar_cd"`
@@ -61,14 +62,14 @@ type scheduleRow struct {
 }
 
 const scheduleCols = `id::text, tenant_id::text, name, description, target_kind, target_ref, target_params,
-	cron, time_zone, calendar_cd, calendar_rule, business_day, start_at, end_at, enabled, owner_id,
+	trigger_mode, cron, time_zone, calendar_cd, calendar_rule, business_day, start_at, end_at, enabled, owner_id,
 	datasource_id, region, version, created_by, created_at, updated_by, updated_at`
 
 func (r scheduleRow) schedule() *Schedule {
 	s := &Schedule{
 		ID: r.ID, TenantID: r.TenantID, Name: r.Name, Description: r.Description.String,
 		Target: Target{Kind: r.TargetKind, Ref: r.TargetRef},
-		Timing: Timing{Cron: r.Cron, TimeZone: r.TimeZone, Calendar: r.CalendarCD.String,
+		Timing: Timing{Mode: r.TriggerMode, Cron: r.Cron, TimeZone: r.TimeZone, Calendar: r.CalendarCD.String,
 			CalendarRule: r.CalendarRule, BusinessDay: int(r.BusinessDay.Int64)},
 		Enabled: r.Enabled, OwnerID: r.OwnerID, DatasourceID: r.DatasourceID.String, Region: r.Region.String,
 		Version: r.Version, CreatedBy: r.CreatedBy, CreatedAt: r.CreatedAt, UpdatedBy: r.UpdatedBy.String, UpdatedAt: r.UpdatedAt,
@@ -172,13 +173,13 @@ func (s *Store) Create(ctx context.Context, sc *Schedule, actor string) (*Schedu
 		var id string
 		if err := tx.GetContext(ctx, &id, `INSERT INTO public.schedules
 			(tenant_id, name, description, target_kind, target_ref, target_params, cron, time_zone, calendar_cd,
-			 calendar_rule, business_day, start_at, end_at, enabled, owner_id, datasource_id, region, created_by)
-			VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 calendar_rule, business_day, start_at, end_at, enabled, owner_id, datasource_id, region, created_by, trigger_mode)
+			VALUES ($1::uuid, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 			RETURNING id::text`,
 			sc.TenantID, sc.Name, nullStr(sc.Description), sc.Target.Kind, sc.Target.Ref, string(params),
-			sc.Timing.Cron, sc.Timing.TimeZone, nullStr(sc.Timing.Calendar), sc.Timing.rule(), businessDayArg(sc.Timing),
+			sc.Timing.cronArg(), sc.Timing.TimeZone, nullStr(sc.Timing.Calendar), sc.Timing.rule(), businessDayArg(sc.Timing),
 			nullTime(sc.Timing.StartAt), nullTime(sc.Timing.EndAt), sc.Enabled, sc.OwnerID, nullStr(sc.DatasourceID),
-			nullStr(sc.Region), actor); err != nil {
+			nullStr(sc.Region), actor, sc.Timing.mode()); err != nil {
 			return err
 		}
 		var err error
@@ -208,11 +209,12 @@ func (s *Store) Update(ctx context.Context, tenantID, id, action, actor string, 
 		if _, err := tx.ExecContext(ctx, `UPDATE public.schedules SET name = $3, description = $4, target_kind = $5,
 			target_ref = $6, target_params = $7::jsonb, cron = $8, time_zone = $9, calendar_cd = $10, calendar_rule = $11,
 			business_day = $12, start_at = $13, end_at = $14, enabled = $15, version = version + 1,
-			updated_by = $16, updated_at = now()
+			updated_by = $16, updated_at = now(), trigger_mode = $17
 			WHERE id::text = $1 AND tenant_id::text = $2`,
 			id, tenantID, next.Name, nullStr(next.Description), next.Target.Kind, next.Target.Ref, string(params),
-			next.Timing.Cron, next.Timing.TimeZone, nullStr(next.Timing.Calendar), next.Timing.rule(),
-			businessDayArg(next.Timing), nullTime(next.Timing.StartAt), nullTime(next.Timing.EndAt), next.Enabled, actor); err != nil {
+			next.Timing.cronArg(), next.Timing.TimeZone, nullStr(next.Timing.Calendar), next.Timing.rule(),
+			businessDayArg(next.Timing), nullTime(next.Timing.StartAt), nullTime(next.Timing.EndAt), next.Enabled, actor,
+			next.Timing.mode()); err != nil {
 			return err
 		}
 		if after, err = getTx(ctx, tx, tenantID, id, false); err != nil {
@@ -282,6 +284,9 @@ type Run struct {
 	ErrorParams      json.RawMessage `db:"error_params" json:"-"`
 	HasOutput        bool            `db:"has_output" json:"has_output"`
 	WorkflowID       sql.NullString  `db:"workflow_id" json:"-"`
+	ExternalSystem   sql.NullString  `db:"external_system" json:"-"`
+	ExternalRef      sql.NullString  `db:"external_ref" json:"-"`
+	IdempotencyKey   sql.NullString  `db:"idempotency_key" json:"-"`
 }
 
 // MarshalJSON flattens nullable columns. error_detail is never included.
@@ -298,20 +303,25 @@ func (r Run) MarshalJSON() ([]byte, error) {
 	_ = json.Unmarshal(r.ErrorParams, &params)
 	return json.Marshal(struct {
 		alias
-		TriggeredBy string     `json:"triggered_by,omitempty"`
-		StartedAt   *time.Time `json:"started_at,omitempty"`
-		FinishedAt  *time.Time `json:"finished_at,omitempty"`
-		SkipReason  string     `json:"skip_reason,omitempty"`
-		ErrorCode   string     `json:"error_code,omitempty"`
-		ErrorParams []string   `json:"error_params,omitempty"`
-	}{alias(r), r.TriggeredBy.String, started, finished, r.SkipReason.String, r.ErrorCode.String, params})
+		TriggeredBy    string     `json:"triggered_by,omitempty"`
+		StartedAt      *time.Time `json:"started_at,omitempty"`
+		FinishedAt     *time.Time `json:"finished_at,omitempty"`
+		SkipReason     string     `json:"skip_reason,omitempty"`
+		ErrorCode      string     `json:"error_code,omitempty"`
+		ErrorParams    []string   `json:"error_params,omitempty"`
+		ExternalSystem string     `json:"external_system,omitempty"`
+		ExternalRef    string     `json:"external_ref,omitempty"`
+		IdempotencyKey string     `json:"idempotency_key,omitempty"`
+	}{alias(r), r.TriggeredBy.String, started, finished, r.SkipReason.String, r.ErrorCode.String, params,
+		r.ExternalSystem.String, r.ExternalRef.String, r.IdempotencyKey.String})
 }
 
 const runCols = `r.id::text, r.schedule_id::text, s.name AS schedule_name, r.target_kind, r.target_ref, r.trigger,
 	r.triggered_by, r.scheduled_for, r.started_at, r.finished_at, r.status, r.skip_reason,
 	COALESCE(r.calendar_decision, 'null'::jsonb) AS calendar_decision, COALESCE(r.outcome, 'null'::jsonb) AS outcome,
 	r.error_code, COALESCE(r.error_params, 'null'::jsonb) AS error_params,
-	EXISTS (SELECT 1 FROM public.schedule_run_outputs o WHERE o.run_id = r.id) AS has_output, r.workflow_id`
+	EXISTS (SELECT 1 FROM public.schedule_run_outputs o WHERE o.run_id = r.id) AS has_output, r.workflow_id,
+	r.external_system, r.external_ref, r.idempotency_key`
 
 // RunFilter narrows Runs.
 type RunFilter struct {
@@ -366,10 +376,24 @@ type RunStart struct {
 	SkipReason                                            string
 	Decision                                              *Decision
 	WorkflowID, WorkflowRunID                             string
+	// Set on an external trigger.
+	External *ExternalTrigger
+}
+
+// ExternalTrigger is who fired a run from outside: the enterprise
+// scheduler's name and job reference, and the caller's idempotency key.
+type ExternalTrigger struct {
+	System         string `json:"system,omitempty"`
+	Ref            string `json:"ref,omitempty"`
+	IdempotencyKey string `json:"idempotency_key"`
 }
 
 func (s *Store) StartRun(ctx context.Context, in RunStart) (string, error) {
 	var id string
+	ext := ExternalTrigger{}
+	if in.External != nil {
+		ext = *in.External
+	}
 	dec, _ := json.Marshal(in.Decision)
 	if in.Decision == nil {
 		dec = nil
@@ -377,11 +401,12 @@ func (s *Store) StartRun(ctx context.Context, in RunStart) (string, error) {
 	err := s.tx(ctx, in.TenantID, func(tx *sqlx.Tx) error {
 		return tx.GetContext(ctx, &id, `INSERT INTO public.schedule_runs
 			(tenant_id, schedule_id, target_kind, target_ref, trigger, triggered_by, scheduled_for, started_at, finished_at,
-			 status, skip_reason, calendar_decision, workflow_id, workflow_run_id)
+			 status, skip_reason, calendar_decision, workflow_id, workflow_run_id, external_system, external_ref, idempotency_key)
 			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, now(), CASE WHEN $8 = 'skipped' THEN now() END,
-			        $8, $9, $10::jsonb, $11, $12)
+			        $8, $9, $10::jsonb, $11, $12, $13, $14, $15)
 			RETURNING id::text`, in.TenantID, in.ScheduleID, in.Kind, in.Ref, in.Trigger, nullStr(in.TriggeredBy),
-			in.ScheduledFor, in.Status, nullStr(in.SkipReason), nullJSON(dec), nullStr(in.WorkflowID), nullStr(in.WorkflowRunID))
+			in.ScheduledFor, in.Status, nullStr(in.SkipReason), nullJSON(dec), nullStr(in.WorkflowID), nullStr(in.WorkflowRunID),
+			nullStr(ext.System), nullStr(ext.Ref), nullStr(ext.IdempotencyKey))
 	})
 	return id, err
 }
@@ -453,4 +478,22 @@ func timeOrNil(t time.Time) *time.Time {
 		return nil
 	}
 	return &t
+}
+
+// RunByKey is the run an external trigger with key started (nil when it
+// hasn't been recorded yet).
+func (s *Store) RunByKey(ctx context.Context, tenantID, scheduleID, key string) (*Run, error) {
+	var out Run
+	err := s.tx(ctx, tenantID, func(tx *sqlx.Tx) error {
+		return tx.GetContext(ctx, &out, `SELECT `+runCols+` FROM public.schedule_runs r
+			JOIN public.schedules s ON s.id = r.schedule_id
+			WHERE r.tenant_id::text = $1 AND r.schedule_id::text = $2 AND r.idempotency_key = $3`, tenantID, scheduleID, key)
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

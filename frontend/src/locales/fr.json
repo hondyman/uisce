@@ -482,6 +482,7 @@
       "data_pipeline": "Pipeline de données"
     },
     "when": {
+      "external": "Déclenchée par un ordonnanceur externe",
       "weekdays": "Chaque jour de semaine à {{time}}",
       "daily": "Tous les jours à {{time}}",
       "weekly": "Chaque {{weekday}} à {{time}}",
@@ -516,6 +517,10 @@
       "failed": "Échouée",
       "skipped": "Ignorée"
     },
+    "modes": {
+      "timetable": "Selon son propre horaire",
+      "external": "Déclenchée par un ordonnanceur externe (Tidal, Control-M, AutoSys…)"
+    },
     "filters": {
       "search": "Rechercher",
       "searchSchedules": "Rechercher par nom, cible, calendrier ou horaire",
@@ -531,6 +536,8 @@
       "noMatches": "Aucun résultat pour ces filtres."
     },
     "runs": {
+      "external": "Externe",
+      "key": "Clé d’idempotence : {{key}}",
       "when": "Prévue pour",
       "schedule": "Planification",
       "status": "Statut",
@@ -545,6 +552,8 @@
       "none": "Aucune exécution pour l'instant."
     },
     "editor": {
+      "mode": "Mode d’exécution",
+      "externalHelp": "Un ordonnanceur d’entreprise lance chaque exécution via l’API de déclenchement ou la commande uisce-job, avec une clé (utilisez l’identifiant d’exécution du job) pour qu’une relance ne s’exécute jamais deux fois. Le calendrier ouvré peut toujours ignorer un jour fermé.",
       "newTitle": "Nouvelle planification",
       "editTitle": "Modifier la planification",
       "name": "Nom",

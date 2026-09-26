@@ -2,10 +2,12 @@ package schedule
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 )
 
 // Service is the scheduler's operations, used by the API and MCP tools.
@@ -30,6 +32,12 @@ type Actor struct {
 	TenantID     string
 	DatasourceID string
 	Region       string
+	// Machine is an enterprise scheduler's service account: it may read and
+	// trigger schedules, never change them.
+	Machine bool
+	// CanTrigger: people always; a service account only with the
+	// schedule_trigger role.
+	CanTrigger bool
 }
 
 // Input is a schedule as a caller writes it.
@@ -165,6 +173,108 @@ func (s *Service) RunNow(ctx context.Context, a Actor, id string) (string, error
 		return "", err
 	}
 	return s.Engine.RunNow(ctx, sc, a.UserID)
+}
+
+// TriggerStatus is where an external trigger stands: queued until its run
+// is recorded, then the run's own status.
+type TriggerStatus struct {
+	ScheduleID     string `json:"schedule_id"`
+	IdempotencyKey string `json:"idempotency_key"`
+	Status         string `json:"status"` // queued | running | succeeded | failed | skipped
+	Run            *Run   `json:"run,omitempty"`
+}
+
+// Done reports whether the run has finished (or was skipped).
+func (t TriggerStatus) Done() bool {
+	return t.Status == "succeeded" || t.Status == "failed" || t.Status == "skipped"
+}
+
+const maxKey = 200
+
+// Trigger fires an externally triggered schedule on an enterprise
+// scheduler's request. The key makes it idempotent: a repeat returns where
+// the first trigger stands and starts nothing.
+func (s *Service) Trigger(ctx context.Context, a Actor, id string, t ExternalTrigger) (*TriggerStatus, error) {
+	t.IdempotencyKey = strings.TrimSpace(t.IdempotencyKey)
+	if t.IdempotencyKey == "" || len(t.IdempotencyKey) > maxKey {
+		return nil, msgNeedKey()
+	}
+	t.System, t.Ref = clip(strings.TrimSpace(t.System), 100), clip(strings.TrimSpace(t.Ref), 200)
+	sc, err := s.Store.Get(ctx, a.TenantID, id)
+	if err != nil {
+		return nil, err
+	}
+	if st, err := s.triggerStatus(ctx, a, sc.ID, t.IdempotencyKey); err == nil {
+		return st, nil // already triggered with this key
+	} else if !isNoTrigger(err) {
+		return nil, err
+	}
+	if !sc.Timing.External() {
+		return nil, msgNotExternal(sc.ID)
+	}
+	if !sc.Enabled {
+		return nil, msgPaused(sc.ID)
+	}
+	if err := s.Engine.Trigger(ctx, sc, a.UserID, t); err != nil {
+		return nil, err
+	}
+	return &TriggerStatus{ScheduleID: sc.ID, IdempotencyKey: t.IdempotencyKey, Status: "queued"}, nil
+}
+
+// TriggerStatusOf is where the trigger with key stands. With wait > 0 it
+// waits (up to wait) for the run to finish - a long poll for callers that
+// block on the result, like the uisce-job CLI.
+func (s *Service) TriggerStatusOf(ctx context.Context, a Actor, id, key string, wait time.Duration) (*TriggerStatus, error) {
+	deadline := time.Now().Add(wait)
+	for {
+		st, err := s.triggerStatus(ctx, a, id, key)
+		if err != nil || st.Done() || !time.Now().Before(deadline) {
+			return st, err
+		}
+		select {
+		case <-ctx.Done():
+			return st, nil
+		case <-time.After(time.Second):
+		}
+	}
+}
+
+func (s *Service) triggerStatus(ctx context.Context, a Actor, id, key string) (*TriggerStatus, error) {
+	st := &TriggerStatus{ScheduleID: id, IdempotencyKey: key, Status: "queued"}
+	run, err := s.Store.RunByKey(ctx, a.TenantID, id, key)
+	if err != nil {
+		return nil, err
+	}
+	if run != nil {
+		st.Status, st.Run = run.Status, run
+		return st, nil
+	}
+	// No run recorded: queued if the trigger's workflow is still going;
+	// never started means the key is unknown; ended without recording a run
+	// (it could not start) is a failure the caller must see, not a wait.
+	state, err := s.Engine.TriggerState(ctx, id, key)
+	if err != nil {
+		return nil, err
+	}
+	switch state {
+	case TriggerNone:
+		return nil, msgNoTrigger(id, key)
+	case TriggerClosed:
+		st.Status = "failed"
+	}
+	return st, nil
+}
+
+func isNoTrigger(err error) bool {
+	var me *msgcat.Error
+	return errors.As(err, &me) && me.Set == SetSchedule && me.Nbr == 23
+}
+
+func clip(s string, n int) string {
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
 }
 
 // Upcoming is one planned firing and what the calendar will make of it.

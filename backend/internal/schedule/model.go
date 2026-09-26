@@ -26,6 +26,10 @@ const MinInterval = 5 * time.Minute
 
 // Timing is when a schedule fires.
 type Timing struct {
+	// Mode is how the schedule fires: on its own timetable (the default) or
+	// only when an enterprise scheduler triggers it (ModeExternal; Cron is
+	// then unused).
+	Mode         string     `json:"mode,omitempty"`
 	Cron         string     `json:"cron"`      // minute hour day-of-month month day-of-week
 	TimeZone     string     `json:"time_zone"` // IANA, e.g. America/New_York
 	Calendar     string     `json:"calendar,omitempty"`
@@ -81,10 +85,52 @@ func (t Timing) rule() string {
 	return t.CalendarRule
 }
 
+// Trigger modes.
+const (
+	ModeTimetable = "timetable"
+	ModeExternal  = "external"
+)
+
+// External reports whether the schedule is fired only by an external
+// scheduler.
+func (t Timing) External() bool { return t.Mode == ModeExternal }
+
+func (t Timing) mode() string {
+	if t.External() {
+		return ModeExternal
+	}
+	return ModeTimetable
+}
+
+// cronArg is the stored cron: none for an external schedule.
+func (t Timing) cronArg() string {
+	if t.External() {
+		return ""
+	}
+	return t.Cron
+}
+
 // Validate checks everything that can be checked without a database.
 func (t Timing) Validate() error {
 	if _, err := t.location(); err != nil {
 		return err
+	}
+	if t.Mode != "" && t.Mode != ModeTimetable && t.Mode != ModeExternal {
+		return msgBadRule(t.Mode)
+	}
+	if t.External() {
+		// No timetable: the caller decides when. The calendar can still
+		// refuse a closed day, but never defer the run.
+		switch t.rule() {
+		case RuleNone:
+		case RuleSkip:
+			if t.Calendar == "" {
+				return msgRuleNeedsCalendar()
+			}
+		default:
+			return msgExternalRule()
+		}
+		return nil
 	}
 	sched, err := cronParser.Parse(strings.TrimSpace(t.Cron))
 	if err != nil {
@@ -124,6 +170,9 @@ func (t Timing) Validate() error {
 // Fires returns the next n cron firings after from, in the schedule's zone
 // (calendar rules not applied).
 func (t Timing) Fires(n int, from time.Time) ([]time.Time, error) {
+	if t.External() {
+		return nil, nil // fired by the external scheduler, not a timetable
+	}
 	loc, err := t.location()
 	if err != nil {
 		return nil, err

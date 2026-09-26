@@ -7,7 +7,7 @@ import {
 } from '@mui/material';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import {
-  CalendarRule, fmt, presetCron, presetFrom, PresetState, Schedule, ScheduleInput, schedulesApi, Timing,
+  CalendarRule, fmt, presetCron, presetFrom, PresetState, Schedule, ScheduleInput, schedulesApi, Timing, TriggerMode,
 } from './api';
 
 const ZONES = [
@@ -48,6 +48,8 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
   const [rule, setRule] = useState<CalendarRule>(schedule?.timing.calendar_rule ?? 'none');
   const [bd, setBd] = useState<number>(schedule?.timing.business_day ?? 1);
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
+  const [mode, setMode] = useState<TriggerMode>(schedule?.timing.mode ?? 'timetable');
+  const external = mode === 'external';
 
   const kinds = useQuery({ queryKey: ['sched-kinds'], queryFn: schedulesApi.kinds, enabled: open });
   const targets = useQuery({
@@ -58,20 +60,24 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
   const calendars = useQuery({ queryKey: ['sched-calendars'], queryFn: schedulesApi.calendars, enabled: open });
 
   // Monthly business day N needs a calendar and its rule.
-  const effectiveRule: CalendarRule = preset.preset === 'monthly_bd' ? 'business_day_of_month' : rule === 'business_day_of_month' ? 'none' : rule;
+  // An external schedule can only skip a closed day (the caller waits for an answer).
+  const effectiveRule: CalendarRule = external
+    ? (rule === 'skip' ? 'skip' : 'none')
+    : preset.preset === 'monthly_bd' ? 'business_day_of_month' : rule === 'business_day_of_month' ? 'none' : rule;
   const timing: Timing = useMemo(() => ({
-    cron: presetCron(preset),
+    mode,
+    cron: external ? '' : presetCron(preset),
     time_zone: zone,
     calendar: effectiveRule === 'none' ? undefined : calendar || undefined,
     calendar_rule: effectiveRule,
     business_day: effectiveRule === 'business_day_of_month' ? bd : undefined,
-  }), [preset, zone, calendar, effectiveRule, bd]);
+  }), [mode, external, preset, zone, calendar, effectiveRule, bd]);
   const debounced = useDebounced(timing, 350);
   const needsCalendar = effectiveRule !== 'none' && !calendar;
   const preview = useQuery({
     queryKey: ['sched-preview', debounced],
     queryFn: () => schedulesApi.preview(debounced, 8),
-    enabled: open && !needsCalendar && !!debounced.cron,
+    enabled: open && !external && !needsCalendar && !!debounced.cron,
     retry: false,
   });
 
@@ -113,8 +119,27 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
           {targets.error && <CatalogErrorAlert error={targets.error} />}
 
           <Box>
+            <Typography variant="subtitle2" gutterBottom>{t('schedules.editor.mode')}</Typography>
+            <RadioGroup row value={mode} onChange={(e) => setMode(e.target.value as TriggerMode)}>
+              <FormControlLabel value="timetable" control={<Radio size="small" />} label={t('schedules.modes.timetable')} />
+              <FormControlLabel value="external" control={<Radio size="small" />} label={t('schedules.modes.external')} />
+            </RadioGroup>
+            {external && (
+              <Alert severity="info" sx={{ mt: 1 }}>
+                <Typography variant="body2">{t('schedules.editor.externalHelp')}</Typography>
+                {schedule && (
+                  <Box component="pre" sx={{ mt: 1, mb: 0, p: 1, fontSize: 12, bgcolor: 'action.hover', borderRadius: 1, overflowX: 'auto' }}>
+                    {`uisce-job run --schedule ${schedule.id} --key "$JOB_RUN_ID" --system tidal --wait`}
+                  </Box>
+                )}
+              </Alert>
+            )}
+          </Box>
+
+          <Box>
             <Typography variant="subtitle2" gutterBottom>{t('schedules.editor.when')}</Typography>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'center' }}>
+              {!external && (<>
               <FormControl sx={{ minWidth: 240 }}>
                 <InputLabel>{t('schedules.editor.repeat')}</InputLabel>
                 <Select label={t('schedules.editor.repeat')} value={preset.preset}
@@ -150,6 +175,7 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
                   onChange={(e) => setBd(Number(e.target.value))} inputProps={{ min: -23, max: 23 }}
                   helperText={t('schedules.editor.businessDayHelp')} />
               )}
+              </>)}
               <FormControl sx={{ minWidth: 200 }}>
                 <InputLabel>{t('schedules.editor.timeZone')}</InputLabel>
                 <Select label={t('schedules.editor.timeZone')} value={zone} onChange={(e) => setZone(e.target.value)}>
@@ -173,9 +199,9 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
                   ))}
                 </Select>
               </FormControl>
-              {preset.preset !== 'monthly_bd' && (
-                <RadioGroup value={calendar ? rule : 'none'} onChange={(e) => setRule(e.target.value as CalendarRule)}>
-                  {(['none', 'skip', 'next_business_day'] as const).map((r) => (
+              {(external || preset.preset !== 'monthly_bd') && (
+                <RadioGroup value={calendar ? effectiveRule : 'none'} onChange={(e) => setRule(e.target.value as CalendarRule)}>
+                  {(external ? (['none', 'skip'] as const) : (['none', 'skip', 'next_business_day'] as const)).map((r) => (
                     <FormControlLabel key={r} value={r} disabled={!calendar && r !== 'none'} control={<Radio size="small" />}
                       label={t(`schedules.rules.${r}`)} />
                   ))}
@@ -185,7 +211,7 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
             {needsCalendar && <Alert severity="info" sx={{ mt: 1 }}>{t('schedules.editor.pickCalendar')}</Alert>}
           </Box>
 
-          <Box>
+          {!external && <Box>
             <Typography variant="subtitle2" gutterBottom>{t('schedules.editor.nextRuns')}</Typography>
             {preview.isFetching && <LinearProgress />}
             {preview.error && <CatalogErrorAlert error={preview.error} />}
@@ -205,7 +231,7 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
                 </Stack>
               ))}
             </Stack>
-          </Box>
+          </Box>}
 
           <FormControlLabel control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
             label={t('schedules.editor.enabled')} />

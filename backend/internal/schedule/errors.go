@@ -37,6 +37,16 @@ func msgNameRequired() *msgcat.Error         { return m(14) }
 func msgRunNotFound(id string) *msgcat.Error { return m(15, id).WithStatus(http.StatusNotFound) }
 func msgBadRule(rule string) *msgcat.Error   { return m(16, rule) }
 func msgBadDate(v string) *msgcat.Error      { return m(17, v) }
+func msgNotExternal(id string) *msgcat.Error {
+	return m(18, id).WithStatus(http.StatusConflict)
+}
+func msgPaused(id string) *msgcat.Error { return m(19, id).WithStatus(http.StatusConflict) }
+func msgNeedKey() *msgcat.Error         { return m(20) }
+func msgExternalRule() *msgcat.Error    { return m(21) }
+func msgMachineReadOnly() *msgcat.Error { return m(22).WithStatus(http.StatusForbidden) }
+func msgNoTrigger(id, key string) *msgcat.Error {
+	return m(23, id, key).WithStatus(http.StatusNotFound)
+}
 
 // MsgTargetNotFound lets runners report a missing target in the scheduler's
 // vocabulary ("Report 42 was not found").

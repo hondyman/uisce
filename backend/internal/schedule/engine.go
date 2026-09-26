@@ -2,6 +2,8 @@ package schedule
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -19,7 +21,20 @@ type Engine interface {
 	Apply(ctx context.Context, s *Schedule) error // enabled: create/update; disabled: pause
 	Remove(ctx context.Context, tenantID, id string) error
 	RunNow(ctx context.Context, s *Schedule, actor string) (string, error)
+	// Trigger starts the run an external scheduler asked for. It is
+	// idempotent on the trigger's key: a repeat returns without a new run.
+	Trigger(ctx context.Context, s *Schedule, actor string, t ExternalTrigger) error
+	// TriggerState is whether the trigger with key was started: TriggerNone,
+	// TriggerOpen (still running) or TriggerClosed.
+	TriggerState(ctx context.Context, scheduleID, key string) (string, error)
 }
+
+// Trigger workflow states.
+const (
+	TriggerNone   = "none"
+	TriggerOpen   = "open"
+	TriggerClosed = "closed"
+)
 
 // EngineID is the Temporal schedule id of a schedule.
 func EngineID(tenantID, id string) string { return "schedule-" + tenantID + "-" + id }
@@ -54,6 +69,10 @@ func (e *TemporalEngine) Apply(ctx context.Context, s *Schedule) error {
 		return msgEngineUnavailable()
 	}
 	id := EngineID(s.TenantID, s.ID)
+	if s.Timing.External() {
+		// No timetable of its own (and none left over from before a switch).
+		return e.Remove(ctx, s.TenantID, s.ID)
+	}
 	spec, action := e.spec(s), e.action(s)
 	_, err := e.Client.ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: id, Spec: spec, Action: action, Overlap: enums.SCHEDULE_OVERLAP_POLICY_SKIP, Paused: !s.Enabled,
@@ -98,6 +117,47 @@ func (e *TemporalEngine) Remove(ctx context.Context, tenantID, id string) error 
 		return msgEngineUnavailable().Wrap(err)
 	}
 	return nil
+}
+
+// TriggerWorkflowID is the workflow an external trigger runs as: derived from
+// the key, so Temporal itself refuses a second run for the same key.
+func TriggerWorkflowID(scheduleID, key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return "schedule-run-" + scheduleID + "-ext-" + hex.EncodeToString(sum[:12])
+}
+
+func (e *TemporalEngine) Trigger(ctx context.Context, s *Schedule, actor string, t ExternalTrigger) error {
+	if e == nil || e.Client == nil {
+		return msgEngineUnavailable()
+	}
+	_, err := e.Client.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID: TriggerWorkflowID(s.ID, t.IdempotencyKey), TaskQueue: TaskQueue,
+		WorkflowIDReusePolicy:                    enums.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		WorkflowExecutionErrorWhenAlreadyStarted: true,
+	}, FireWorkflow, FireInput{TenantID: s.TenantID, ScheduleID: s.ID, TriggeredBy: actor, External: &t})
+	var started *serviceerror.WorkflowExecutionAlreadyStarted
+	if err != nil && !errors.As(err, &started) {
+		return msgEngineUnavailable().Wrap(err)
+	}
+	return nil
+}
+
+func (e *TemporalEngine) TriggerState(ctx context.Context, scheduleID, key string) (string, error) {
+	if e == nil || e.Client == nil {
+		return "", msgEngineUnavailable()
+	}
+	d, err := e.Client.DescribeWorkflowExecution(ctx, TriggerWorkflowID(scheduleID, key), "")
+	var nf *serviceerror.NotFound
+	if errors.As(err, &nf) {
+		return TriggerNone, nil
+	}
+	if err != nil {
+		return "", msgEngineUnavailable().Wrap(err)
+	}
+	if d.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return TriggerOpen, nil
+	}
+	return TriggerClosed, nil
 }
 
 // RunNow starts one run immediately, outside the timetable and its calendar

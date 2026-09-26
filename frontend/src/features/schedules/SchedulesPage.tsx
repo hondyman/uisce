@@ -29,6 +29,11 @@ function useWhen() {
   const { t, i18n } = useTranslation();
   const dayName = (d: number) => new Intl.DateTimeFormat(i18n.language, { weekday: 'long' }).format(new Date(Date.UTC(2026, 0, 4 + d)));
   return (s: Schedule) => {
+    if (s.timing.mode === 'external') {
+      let ext = `${t('schedules.when.external')} (${s.timing.time_zone})`;
+      if (s.timing.calendar && s.timing.calendar_rule === 'skip') ext += ` · ${s.timing.calendar}: ${t('schedules.rulesShort.skip')}`;
+      return ext;
+    }
     const p = presetFrom(s.timing.cron, s.timing.calendar_rule);
     let when = p.preset === 'custom'
       ? t('schedules.when.custom', { cron: s.timing.cron })
@@ -149,6 +154,12 @@ function RunsTable({ scheduleId }: { scheduleId?: string }) {
                   <TableCell>
                     {r.schedule_name}
                     {r.trigger === 'manual' && <Chip size="small" sx={{ ml: 1 }} label={t('schedules.runs.manual')} />}
+                    {r.trigger === 'external' && (
+                      <Tooltip title={r.idempotency_key ? t('schedules.runs.key', { key: r.idempotency_key }) : ''}>
+                        <Chip size="small" sx={{ ml: 1 }} color="info" variant="outlined"
+                          label={[r.external_system || t('schedules.runs.external'), r.external_ref].filter(Boolean).join(' · ')} />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell><Chip size="small" color={STATUS_COLOR[r.status]} label={t(`schedules.status.${r.status}`)} /></TableCell>
                   <TableCell>

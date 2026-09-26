@@ -16,6 +16,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/schedule"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
 
 var alphaDB = regexp.MustCompile(`/alpha([?]|$)`)
@@ -98,6 +99,26 @@ func (s *Server) scheduleActor(r *http.Request) (schedule.Actor, error) {
 	if err != nil || secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
 		return schedule.Actor{}, msgcat.Unauthenticated().Wrap(err)
 	}
-	return schedule.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID,
-		DatasourceID: secCtx.ScopedDatasourceID(), Region: secCtx.Region}, nil
+	a := schedule.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID,
+		DatasourceID: secCtx.ScopedDatasourceID(), Region: secCtx.Region, CanTrigger: true}
+	// An enterprise scheduler's service account (Keycloak client-credentials,
+	// realm role uisce_service_account) reads and triggers only, and
+	// triggers only with schedule_trigger.
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok {
+		roles := map[string]bool{}
+		for _, role := range auth.Roles {
+			roles[role] = true
+		}
+		if roles[RoleServiceAccount] {
+			a.Machine, a.CanTrigger = true, roles[RoleScheduleTrigger]
+		}
+	}
+	return a, nil
 }
+
+// Realm roles for enterprise scheduler service accounts
+// (infrastructure/keycloak/create-scheduler-client.sh).
+const (
+	RoleServiceAccount  = "uisce_service_account"
+	RoleScheduleTrigger = "schedule_trigger"
+)

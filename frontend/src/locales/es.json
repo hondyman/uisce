@@ -482,6 +482,7 @@
       "data_pipeline": "Canalización de datos"
     },
     "when": {
+      "external": "Disparada por un planificador externo",
       "weekdays": "Cada día laborable a las {{time}}",
       "daily": "Todos los días a las {{time}}",
       "weekly": "Cada {{weekday}} a las {{time}}",
@@ -516,6 +517,10 @@
       "failed": "Fallida",
       "skipped": "Omitida"
     },
+    "modes": {
+      "timetable": "Con su propio horario",
+      "external": "Disparada por un planificador externo (Tidal, Control-M, AutoSys…)"
+    },
     "filters": {
       "search": "Buscar",
       "searchSchedules": "Buscar por nombre, destino, calendario u horario",
@@ -531,6 +536,8 @@
       "noMatches": "Nada coincide con estos filtros."
     },
     "runs": {
+      "external": "Externa",
+      "key": "Clave de idempotencia: {{key}}",
       "when": "Programada para",
       "schedule": "Programación",
       "status": "Estado",
@@ -545,6 +552,8 @@
       "none": "Todavía no hay ejecuciones."
     },
     "editor": {
+      "mode": "Cómo se ejecuta",
+      "externalHelp": "Un planificador empresarial inicia cada ejecución mediante la API de disparo o el comando uisce-job, con una clave (use el id de ejecución del trabajo) para que un reintento nunca ejecute dos veces. El calendario laboral aún puede omitir un día cerrado.",
       "newTitle": "Nueva programación",
       "editTitle": "Editar programación",
       "name": "Nombre",
