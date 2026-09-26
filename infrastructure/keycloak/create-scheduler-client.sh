@@ -23,7 +23,8 @@
 #
 # Reads (from env, then from repo-root .env if present):
 #   KEYCLOAK_HOST (default 100.84.50.65), KEYCLOAK_PORT (default 8443),
-#   KEYCLOAK_ADMIN, KEYCLOAK_ADMIN_PASS, KEYCLOAK_REALM (default uisce),
+#   KEYCLOAK_ADMIN, KEYCLOAK_ADMIN_PASS (asked for when run in a terminal),
+#   KEYCLOAK_REALM (default uisce),
 #   KEYCLOAK_INSECURE_SKIP_VERIFY (default true, dev only)
 #
 set -euo pipefail
@@ -73,12 +74,32 @@ if (( DRY_RUN )); then
   exit 0
 fi
 
-# Only a real run talks to Keycloak and needs the admin credentials.
-[[ -n "${KC_ADMIN}" && -n "${KC_ADMIN_PASS}" ]] || { echo "set KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASS (not needed for --dry-run)" >&2; exit 2; }
+# Only a real run talks to Keycloak and needs the admin credentials: from
+# the environment, or asked for here (the password is not echoed and is kept
+# only in this process).
+if [[ -z "${KC_ADMIN}" || -z "${KC_ADMIN_PASS}" ]]; then
+  if [[ -t 0 ]]; then
+    [[ -n "${KC_ADMIN}" ]] || read -rp "Keycloak admin user: " KC_ADMIN
+    [[ -n "${KC_ADMIN_PASS}" ]] || { read -rsp "Keycloak admin password: " KC_ADMIN_PASS; echo; }
+  fi
+  [[ -n "${KC_ADMIN}" && -n "${KC_ADMIN_PASS}" ]] || { echo "set KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASS, or run this in a terminal to be asked (not needed for --dry-run)" >&2; exit 2; }
+fi
 
-TOKEN="$("${CURL[@]}" -d grant_type=password -d client_id=admin-cli \
+# Keycloak's reason is shown if the admin login is refused (it never
+# contains the password): 401 is a wrong password; 400 is usually a locked
+# account ("temporarily disabled") or a pending required action.
+LOGIN_CURL=(curl -sS)
+[[ "${INSECURE}" == "true" ]] && LOGIN_CURL+=(-k)
+LOGIN="$("${LOGIN_CURL[@]}" -w '\n%{http_code}' -d grant_type=password -d client_id=admin-cli \
   --data-urlencode "username=${KC_ADMIN}" --data-urlencode "password=${KC_ADMIN_PASS}" \
-  "${BASE}/realms/master/protocol/openid-connect/token" | jq -r .access_token)"
+  "${BASE}/realms/master/protocol/openid-connect/token")"
+CODE="${LOGIN##*$'\n'}"; LOGIN="${LOGIN%$'\n'*}"
+if [[ "${CODE}" != 200 ]]; then
+  echo "Keycloak refused the admin login (HTTP ${CODE}): $(jq -r '[.error, .error_description] | map(select(. != null)) | join(": ")' <<<"${LOGIN}" 2>/dev/null)" >&2
+  exit 3
+fi
+TOKEN="$(jq -r .access_token <<<"${LOGIN}")"
+unset LOGIN
 api() { local m="$1" p="$2"; shift 2; "${CURL[@]}" -X "$m" -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' "${BASE}/admin/realms/${KC_REALM}${p}" "$@"; }
 
 for role in uisce_service_account schedule_trigger; do
@@ -127,5 +148,5 @@ else
   infisical secrets set "${NAME}=${SECRET}" --path "${INFISICAL_PATH}" >/dev/null
   say "secret stored in Infisical ${INFISICAL_PATH}/${NAME}"
 fi
-unset SECRET TOKEN
+unset SECRET TOKEN KC_ADMIN_PASS
 say "token URL for the agent: ${BASE}/realms/${KC_REALM}/protocol/openid-connect/token"
