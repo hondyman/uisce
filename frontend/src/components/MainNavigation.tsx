@@ -260,6 +260,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <AccountTreeIcon />,
         items: [
           { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
+          { label: 'Staging Bindings', path: '/data/staging-bindings', icon: <AccountTreeIcon />, description: 'Map vendor staging tables to business objects; approvals', badge: { label: 'New', color: 'success' } },
         ]
       },
       {
