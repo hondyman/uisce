@@ -59,7 +59,6 @@ KC_REALM="$(env_or_file KEYCLOAK_REALM uisce)"
 KC_ADMIN="$(env_or_file KEYCLOAK_ADMIN '')"
 KC_ADMIN_PASS="$(env_or_file KEYCLOAK_ADMIN_PASS '')"
 INSECURE="$(env_or_file KEYCLOAK_INSECURE_SKIP_VERIFY true)"
-[[ -n "${KC_ADMIN}" && -n "${KC_ADMIN_PASS}" ]] || { echo "set KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASS" >&2; exit 2; }
 BASE="https://${KC_HOST}:${KC_PORT}"
 CURL=(curl -sS --fail-with-body)
 [[ "${INSECURE}" == "true" ]] && CURL+=(-k)
@@ -73,6 +72,9 @@ if (( DRY_RUN )); then
   say "store the secret in ${SECRET_OUT:-Infisical ${INFISICAL_PATH}/UISCE_CLIENT_SECRET_${CLIENT_ID//[-.]/_}}"
   exit 0
 fi
+
+# Only a real run talks to Keycloak and needs the admin credentials.
+[[ -n "${KC_ADMIN}" && -n "${KC_ADMIN_PASS}" ]] || { echo "set KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASS (not needed for --dry-run)" >&2; exit 2; }
 
 TOKEN="$("${CURL[@]}" -d grant_type=password -d client_id=admin-cli \
   --data-urlencode "username=${KC_ADMIN}" --data-urlencode "password=${KC_ADMIN_PASS}" \
