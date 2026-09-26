@@ -635,7 +635,9 @@ export function buildCreateBusinessObjectPayload(
     enable_history: bo.enableHistory,
     history_mode: bo.historyMode,
     driver_table_id: binding.drivingTableId,
-    driver_table_name: binding.drivingTableName,
+    // The qualified path (/schema/table): the semantic field map resolves a
+    // business object's columns under it, so a bare table name finds none.
+    driver_table_name: binding.drivingTableQualifiedPath || binding.drivingTableName,
     config: {
       is_active: publish,
       fields,
