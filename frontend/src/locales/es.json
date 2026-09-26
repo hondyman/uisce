@@ -516,6 +516,20 @@
       "failed": "Fallida",
       "skipped": "Omitida"
     },
+    "filters": {
+      "search": "Buscar",
+      "searchSchedules": "Buscar por nombre, destino, calendario u horario",
+      "searchRuns": "Buscar por programación, destino o código de error",
+      "allKinds": "Todos los destinos",
+      "allStatuses": "Todos los estados",
+      "allStates": "Activas y en pausa",
+      "active": "Activas",
+      "paused": "En pausa",
+      "from": "Desde",
+      "to": "Hasta",
+      "clear": "Borrar filtros",
+      "noMatches": "Nada coincide con estos filtros."
+    },
     "runs": {
       "when": "Programada para",
       "schedule": "Programación",

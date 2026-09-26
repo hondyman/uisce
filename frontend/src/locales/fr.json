@@ -516,6 +516,20 @@
       "failed": "Échouée",
       "skipped": "Ignorée"
     },
+    "filters": {
+      "search": "Rechercher",
+      "searchSchedules": "Rechercher par nom, cible, calendrier ou horaire",
+      "searchRuns": "Rechercher par planification, cible ou code d'erreur",
+      "allKinds": "Toutes les cibles",
+      "allStatuses": "Tous les statuts",
+      "allStates": "Actives et en pause",
+      "active": "Actives",
+      "paused": "En pause",
+      "from": "Du",
+      "to": "Au",
+      "clear": "Effacer les filtres",
+      "noMatches": "Aucun résultat pour ces filtres."
+    },
     "runs": {
       "when": "Prévue pour",
       "schedule": "Planification",

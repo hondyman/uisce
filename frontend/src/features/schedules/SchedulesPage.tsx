@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert, Box, Button, Chip, IconButton, LinearProgress, Paper, Stack, Switch, Tab, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Tabs, Tooltip, Typography,
+  Alert, Box, Button, Chip, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Switch, Tab, Table,
+  TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
 import EventRepeatIcon from '@mui/icons-material/EventRepeat';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -13,7 +14,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import DownloadIcon from '@mui/icons-material/Download';
 import apiClient from '../../utils/apiClient';
 import { CatalogErrorAlert } from '../message-catalog/parts';
-import { fmt, presetFrom, RenderedError, Run, Schedule, schedulesApi } from './api';
+import { fmt, presetFrom, RenderedError, Run, RunFilter, Schedule, schedulesApi } from './api';
 import ScheduleEditor from './ScheduleEditor';
 
 const STATUS_COLOR: Record<Run['status'], 'default' | 'success' | 'error' | 'info'> = {
@@ -54,9 +55,56 @@ async function download(run: Run) {
   URL.revokeObjectURL(url);
 }
 
+function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(id);
+  }, [value, ms]);
+  return v;
+}
+
+function SearchField({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
+  const { t } = useTranslation();
+  return (
+    <TextField size="small" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      inputProps={{ 'aria-label': t('schedules.filters.search') }} sx={{ flex: 1, minWidth: 220 }}
+      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
+  );
+}
+
+/** Target kinds for the filter menus: the registered runners, labelled like the table chips. */
+function KindSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { t } = useTranslation();
+  const kinds = useQuery({ queryKey: ['sched-kinds'], queryFn: schedulesApi.kinds });
+  return (
+    <TextField select size="small" value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 170 }}
+      inputProps={{ 'aria-label': t('schedules.columns.runs') }}>
+      <MenuItem value="">{t('schedules.filters.allKinds')}</MenuItem>
+      {(kinds.data?.kinds ?? []).map((k) => (
+        <MenuItem key={k.kind} value={k.kind}>{t(`schedules.kinds.${k.kind}`, k.label)}</MenuItem>
+      ))}
+    </TextField>
+  );
+}
+
+const NO_FILTER: RunFilter = { q: '', status: '', kind: '', from: '', to: '' };
+
 function RunsTable({ scheduleId }: { scheduleId?: string }) {
   const { t, i18n } = useTranslation();
-  const runs = useQuery({ queryKey: ['sched-runs', scheduleId ?? 'all'], queryFn: () => schedulesApi.runs(scheduleId), refetchInterval: 10000 });
+  const [filter, setFilter] = useState<RunFilter>(NO_FILTER);
+  const q = useDebounced(filter.q ?? '', 300);
+  // Searched on the server: history is paged to the latest runs, so a
+  // client-side filter would miss older matches.
+  const applied = useMemo(() => ({ ...filter, q: q.trim() }), [filter, q]);
+  const filtered = Object.values(applied).some(Boolean);
+  const set = (k: keyof RunFilter) => (v: string) => setFilter((f) => ({ ...f, [k]: v }));
+  const runs = useQuery({
+    queryKey: ['sched-runs', scheduleId ?? 'all', applied],
+    queryFn: () => schedulesApi.runs(scheduleId, applied),
+    refetchInterval: 10000,
+    placeholderData: (prev) => prev,
+  });
   const [open, setOpen] = useState<string | null>(null);
   const detail = useQuery({ queryKey: ['sched-run', open], queryFn: () => schedulesApi.run(open!), enabled: !!open });
   const list = runs.data?.runs ?? [];
@@ -64,7 +112,23 @@ function RunsTable({ scheduleId }: { scheduleId?: string }) {
 
   return (
     <Box>
-      {runs.isLoading && <LinearProgress />}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+        <SearchField value={filter.q ?? ''} onChange={set('q')} placeholder={t('schedules.filters.searchRuns')} />
+        <TextField select size="small" value={filter.status} onChange={(e) => set('status')(e.target.value)} sx={{ minWidth: 150 }}
+          inputProps={{ 'aria-label': t('schedules.runs.status') }}>
+          <MenuItem value="">{t('schedules.filters.allStatuses')}</MenuItem>
+          {(Object.keys(STATUS_COLOR) as Run['status'][]).map((st) => (
+            <MenuItem key={st} value={st}>{t(`schedules.status.${st}`)}</MenuItem>
+          ))}
+        </TextField>
+        <KindSelect value={filter.kind ?? ''} onChange={set('kind')} />
+        <TextField type="date" size="small" label={t('schedules.filters.from')} value={filter.from} onChange={(e) => set('from')(e.target.value)}
+          InputLabelProps={{ shrink: true }} inputProps={{ max: filter.to || undefined }} />
+        <TextField type="date" size="small" label={t('schedules.filters.to')} value={filter.to} onChange={(e) => set('to')(e.target.value)}
+          InputLabelProps={{ shrink: true }} inputProps={{ min: filter.from || undefined }} />
+        {filtered && <Button onClick={() => setFilter(NO_FILTER)}>{t('schedules.filters.clear')}</Button>}
+      </Stack>
+      {runs.isFetching && <LinearProgress />}
       {runs.error && <CatalogErrorAlert error={runs.error} />}
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
@@ -116,7 +180,7 @@ function RunsTable({ scheduleId }: { scheduleId?: string }) {
               </React.Fragment>
             ))}
             {!runs.isLoading && list.length === 0 && (
-              <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>{t('schedules.runs.none')}</Typography></TableCell></TableRow>
+              <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>{t(filtered ? 'schedules.filters.noMatches' : 'schedules.runs.none')}</Typography></TableCell></TableRow>
             )}
           </TableBody>
         </Table>
@@ -143,7 +207,24 @@ export default function SchedulesPage() {
   const runNow = useMutation({ mutationFn: (s: Schedule) => schedulesApi.runNow(s.id), onSuccess: () => { setTab('runs'); setTimeout(refresh, 1500); } });
   const remove = useMutation({ mutationFn: (s: Schedule) => schedulesApi.remove(s.id), onSuccess: refresh });
   const actionError = toggle.error ?? runNow.error ?? remove.error;
-  const schedules = list.data?.schedules ?? [];
+  const all = list.data?.schedules ?? [];
+  const [search, setSearch] = useState('');
+  const [kind, setKind] = useState('');
+  const [state, setState] = useState<'' | 'active' | 'paused'>('');
+  const filtered = !!(search.trim() || kind || state);
+  // Every schedule is already loaded, so this tab filters in the browser -
+  // over what the row shows, in the viewer's language.
+  const schedules = useMemo(() => {
+    const words = search.trim().toLocaleLowerCase(i18n.language).split(/\s+/).filter(Boolean);
+    return all.filter((s) => {
+      if (kind && s.target.kind !== kind) return false;
+      if (state && (state === 'active') !== s.enabled) return false;
+      if (!words.length) return true;
+      const text = [s.name, s.description, s.target.kind, t(`schedules.kinds.${s.target.kind}`, s.target.kind), s.timing.calendar, s.timing.cron, when(s)]
+        .filter(Boolean).join(' ').toLocaleLowerCase(i18n.language);
+      return words.every((w) => text.includes(w));
+    });
+  }, [all, search, kind, state, when, t, i18n.language]);
 
   return (
     // Own themed surface: the shell's canvas is dark whatever the MUI mode.
@@ -170,6 +251,17 @@ export default function SchedulesPage() {
 
         {tab === 'schedules' && (
           <>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
+              <SearchField value={search} onChange={setSearch} placeholder={t('schedules.filters.searchSchedules')} />
+              <KindSelect value={kind} onChange={setKind} />
+              <TextField select size="small" value={state} onChange={(e) => setState(e.target.value as typeof state)} sx={{ minWidth: 170 }}
+                inputProps={{ 'aria-label': t('schedules.columns.enabled') }}>
+                <MenuItem value="">{t('schedules.filters.allStates')}</MenuItem>
+                <MenuItem value="active">{t('schedules.filters.active')}</MenuItem>
+                <MenuItem value="paused">{t('schedules.filters.paused')}</MenuItem>
+              </TextField>
+              {filtered && <Button onClick={() => { setSearch(''); setKind(''); setState(''); }}>{t('schedules.filters.clear')}</Button>}
+            </Stack>
             {list.isLoading && <LinearProgress />}
             <TableContainer component={Paper} variant="outlined">
               <Table size="small">
@@ -207,7 +299,7 @@ export default function SchedulesPage() {
                     </TableRow>
                   ))}
                   {!list.isLoading && schedules.length === 0 && (
-                    <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{t('schedules.empty')}</Typography></TableCell></TableRow>
+                    <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{t(filtered ? 'schedules.filters.noMatches' : 'schedules.empty')}</Typography></TableCell></TableRow>
                   )}
                 </TableBody>
               </Table>

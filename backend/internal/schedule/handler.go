@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -174,16 +175,47 @@ func (h *Handler) preview(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) runs(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		l, err := h.Service.Store.Runs(r.Context(), a.TenantID, RunFilter{Status: r.URL.Query().Get("status"), Limit: limit})
+		f, err := runFilterFrom(r)
+		if err != nil {
+			return nil, 0, err
+		}
+		l, err := h.Service.Store.Runs(r.Context(), a.TenantID, f)
 		return map[string]any{"runs": l}, http.StatusOK, err
 	})
 }
 
+// runFilterFrom reads the run history filters: status, kind, q (schedule
+// name, target kind, error code or run id), from/to (YYYY-MM-DD, to
+// inclusive, in UTC) and limit.
+func runFilterFrom(r *http.Request) (RunFilter, error) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	f := RunFilter{Status: q.Get("status"), Kind: q.Get("kind"), Query: q.Get("q"), Limit: limit}
+	if v := q.Get("from"); v != "" {
+		t, err := time.Parse(time.DateOnly, v)
+		if err != nil {
+			return f, msgBadDate(v)
+		}
+		f.From = t
+	}
+	if v := q.Get("to"); v != "" {
+		t, err := time.Parse(time.DateOnly, v)
+		if err != nil {
+			return f, msgBadDate(v)
+		}
+		f.To = t.AddDate(0, 0, 1)
+	}
+	return f, nil
+}
+
 func (h *Handler) scheduleRuns(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
-		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		l, err := h.Service.Store.Runs(r.Context(), a.TenantID, RunFilter{ScheduleID: chi.URLParam(r, "id"), Status: r.URL.Query().Get("status"), Limit: limit})
+		f, err := runFilterFrom(r)
+		if err != nil {
+			return nil, 0, err
+		}
+		f.ScheduleID = chi.URLParam(r, "id")
+		l, err := h.Service.Store.Runs(r.Context(), a.TenantID, f)
 		return map[string]any{"runs": l}, http.StatusOK, err
 	})
 }
