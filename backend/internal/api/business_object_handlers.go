@@ -815,10 +815,12 @@ func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWrite
 		BindingName            string `json:"bindingName"`
 		BaseSQL                string `json:"baseSql"`
 		TemporalMode           string `json:"temporalMode"`
-		IsCore                 bool   `json:"isCore"`
 		CoreReferenceBindingID string `json:"coreReferenceBindingId"`
 		IsDefault              *bool  `json:"isDefault"`
 	}
+	// is_core is deliberately not read from the body: it follows the
+	// caller's tenant (see below), so a regular tenant can never mint a
+	// "core" binding and a gold-copy binding is never left non-core.
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
 		return
@@ -873,6 +875,12 @@ func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWrite
 		isDefault = existingCount == 0
 	}
 
+	isCore, err := catalogmeta.IsGoldCopyTenant(ctx, h.db, secCtx.TenantID)
+	if err != nil {
+		http.Error(w, "failed to resolve gold copy tenant: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	tx, err := h.db.BeginTxx(ctx, nil)
 	if err != nil {
 		http.Error(w, "failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
@@ -905,7 +913,7 @@ func (h *BusinessObjectHandler) CreateBusinessObjectBinding(w http.ResponseWrite
 			(gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, $4::uuid,
 			 $5, $6, $7, $7, $8, true, $9, $10::uuid)
 		RETURNING bo_binding_id
-	`, secCtx.TenantID, boID, req.BackendID, req.DrivingNodeID, bindingName, baseSQL, req.TemporalMode, isDefault, req.IsCore, coreRefID).Scan(&newBindingID)
+	`, secCtx.TenantID, boID, req.BackendID, req.DrivingNodeID, bindingName, baseSQL, req.TemporalMode, isDefault, isCore, coreRefID).Scan(&newBindingID)
 	if insertErr != nil {
 		if dberrors.IsUniqueViolation(insertErr) {
 			http.Error(w, "a binding to this backend already exists for this business object", http.StatusConflict)
