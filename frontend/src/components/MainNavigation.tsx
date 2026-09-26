@@ -260,6 +260,7 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <AccountTreeIcon />,
         items: [
           { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
+          { label: 'Manage Custom Fields', path: '/catalog/custom-fields', icon: <SchemaIcon />, description: 'Define custom_attributes and map semantic terms' },
         ]
       },
       {
