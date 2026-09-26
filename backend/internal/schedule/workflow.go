@@ -18,7 +18,21 @@ type FireInput struct {
 	TenantID    string
 	ScheduleID  string
 	Manual      bool   // run now: no calendar rule
-	TriggeredBy string // who asked, for a manual run
+	TriggeredBy string // who asked, for a manual or external run
+	// External is set when an enterprise scheduler fired the run; the
+	// calendar rule still applies (it can only skip).
+	External *ExternalTrigger `json:",omitempty"`
+}
+
+// trigger is how the run was started, as recorded in its history.
+func (in FireInput) trigger() string {
+	switch {
+	case in.External != nil:
+		return "external"
+	case in.Manual:
+		return "manual"
+	}
+	return "schedule"
 }
 
 // GateResult is what a firing should do.
@@ -96,7 +110,10 @@ func (a *Activities) Gate(ctx context.Context, in FireInput, firedAt time.Time) 
 	if err != nil {
 		return GateResult{}, err
 	}
-	if !s.Enabled && !in.Manual {
+	// An external trigger was accepted while the schedule was enabled (the
+	// API refuses a paused one); the caller is waiting on its key, so it is
+	// always recorded, never dropped.
+	if !s.Enabled && !in.Manual && in.External == nil {
 		return GateResult{Stop: true}, nil
 	}
 	g := GateResult{Run: true, Kind: s.Target.Kind, Ref: s.Target.Ref}
@@ -130,7 +147,7 @@ func (a *Activities) Gate(ctx context.Context, in FireInput, firedAt time.Time) 
 func (a *Activities) failedGate(ctx context.Context, s *Schedule, in FireInput, firedAt time.Time, cause error) (GateResult, error) {
 	info := activity.GetInfo(ctx)
 	runID, err := a.Store.StartRun(ctx, RunStart{TenantID: s.TenantID, ScheduleID: s.ID, Kind: s.Target.Kind, Ref: s.Target.Ref,
-		Trigger: "schedule", ScheduledFor: firedAt, Status: "running",
+		Trigger: in.trigger(), TriggeredBy: in.TriggeredBy, External: in.External, ScheduledFor: firedAt, Status: "running",
 		WorkflowID: info.WorkflowExecution.ID, WorkflowRunID: info.WorkflowExecution.RunID})
 	if err != nil {
 		return GateResult{}, err
@@ -150,7 +167,8 @@ func (a *Activities) RecordSkip(ctx context.Context, in FireInput, firedAt time.
 		reason = g.Decision.Reason
 	}
 	_, err := a.Store.StartRun(ctx, RunStart{TenantID: in.TenantID, ScheduleID: in.ScheduleID, Kind: g.Kind, Ref: g.Ref,
-		Trigger: "schedule", ScheduledFor: firedAt, Status: "skipped", SkipReason: reason, Decision: g.Decision,
+		Trigger: in.trigger(), TriggeredBy: in.TriggeredBy, External: in.External, ScheduledFor: firedAt, Status: "skipped",
+		SkipReason: reason, Decision: g.Decision,
 		WorkflowID: info.WorkflowExecution.ID, WorkflowRunID: info.WorkflowExecution.RunID})
 	return err
 }
@@ -163,12 +181,8 @@ func (a *Activities) Run(ctx context.Context, in FireInput, firedAt time.Time, g
 		return err
 	}
 	info := activity.GetInfo(ctx)
-	trigger := "schedule"
-	if in.Manual {
-		trigger = "manual"
-	}
 	runID, err := a.Store.StartRun(ctx, RunStart{TenantID: s.TenantID, ScheduleID: s.ID, Kind: s.Target.Kind, Ref: s.Target.Ref,
-		Trigger: trigger, TriggeredBy: in.TriggeredBy, ScheduledFor: firedAt, Status: "running", Decision: g.Decision,
+		Trigger: in.trigger(), TriggeredBy: in.TriggeredBy, External: in.External, ScheduledFor: firedAt, Status: "running", Decision: g.Decision,
 		WorkflowID: info.WorkflowExecution.ID, WorkflowRunID: info.WorkflowExecution.RunID})
 	if err != nil {
 		return err

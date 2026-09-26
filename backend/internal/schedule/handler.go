@@ -24,7 +24,7 @@ type Handler struct {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/schedules", func(r chi.Router) {
 		r.Get("/", h.list)
-		r.Post("/", h.create)
+		r.Post("/", h.people(h.create))
 		r.Get("/kinds", h.kinds)
 		r.Get("/targets", h.targets)
 		r.Get("/calendars", h.calendars)
@@ -33,11 +33,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/runs/{runId}", h.run)
 		r.Get("/runs/{runId}/output", h.output)
 		r.Get("/{id}", h.get)
-		r.Put("/{id}", h.update)
-		r.Delete("/{id}", h.remove)
-		r.Post("/{id}/pause", h.setEnabled(false))
-		r.Post("/{id}/resume", h.setEnabled(true))
-		r.Post("/{id}/run", h.runNow)
+		r.Put("/{id}", h.people(h.update))
+		r.Delete("/{id}", h.people(h.remove))
+		r.Post("/{id}/pause", h.people(h.setEnabled(false)))
+		r.Post("/{id}/resume", h.people(h.setEnabled(true)))
+		r.Post("/{id}/run", h.people(h.runNow))
+		r.Post("/{id}/trigger", h.trigger)
+		r.Get("/{id}/triggers/{key}", h.triggerStatus)
 		r.Get("/{id}/runs", h.scheduleRuns)
 		r.Get("/{id}/audit", h.audit)
 	})
@@ -57,6 +59,68 @@ func (h *Handler) with(w http.ResponseWriter, r *http.Request, fn func(Actor) (a
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
+}
+
+// people guards a route that changes schedules: service accounts (enterprise
+// schedulers) only read and trigger.
+func (h *Handler) people(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		a, err := h.ActorFrom(r)
+		if err != nil {
+			h.Catalog.WriteError(w, r, "", err)
+			return
+		}
+		if a.Machine {
+			h.Catalog.WriteError(w, r, a.TenantID, msgMachineReadOnly())
+			return
+		}
+		next(w, r)
+	}
+}
+
+// maxWait caps a trigger status long poll; callers poll again for longer.
+const maxWait = 2 * time.Minute
+
+// trigger is an enterprise scheduler (Tidal, Control-M, ...) firing an
+// externally triggered schedule. Idempotent on idempotency_key.
+func (h *Handler) trigger(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.CanTrigger {
+			return nil, 0, msgMachineReadOnly()
+		}
+		var in ExternalTrigger
+		if err := decode(r, &in); err != nil {
+			return nil, 0, err
+		}
+		if in.IdempotencyKey == "" {
+			in.IdempotencyKey = r.Header.Get("Idempotency-Key")
+		}
+		st, err := h.Service.Trigger(r.Context(), a, chi.URLParam(r, "id"), in)
+		if err != nil {
+			return nil, 0, err
+		}
+		status := http.StatusAccepted
+		if st.Done() {
+			status = http.StatusOK
+		}
+		return st, status, nil
+	})
+}
+
+// triggerStatus is where a trigger stands; ?wait=60s long-polls until the
+// run finishes or the wait (capped) runs out.
+func (h *Handler) triggerStatus(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		wait, _ := time.ParseDuration(r.URL.Query().Get("wait"))
+		if wait < 0 {
+			wait = 0
+		}
+		if wait > maxWait {
+			wait = maxWait
+		}
+		st, err := h.Service.TriggerStatusOf(r.Context(), a, chi.URLParam(r, "id"), chi.URLParam(r, "key"), wait)
+		return st, http.StatusOK, err
+	})
 }
 
 func decode(r *http.Request, v any) error {

@@ -4,7 +4,11 @@ import apiClient from '../../utils/apiClient';
 
 export type CalendarRule = 'none' | 'skip' | 'next_business_day' | 'business_day_of_month';
 
+export type TriggerMode = 'timetable' | 'external';
+
 export interface Timing {
+  /** external: fired only by an enterprise scheduler (Tidal, Control-M, ...) through the trigger API; cron unused. */
+  mode?: TriggerMode;
   cron: string;
   time_zone: string;
   calendar?: string;
@@ -86,8 +90,12 @@ export interface Run {
   schedule_name: string;
   target_kind: string;
   target_ref: string;
-  trigger: 'schedule' | 'manual';
+  trigger: 'schedule' | 'manual' | 'external';
   triggered_by?: string;
+  /** Set on an external trigger: the enterprise scheduler and its job reference. */
+  external_system?: string;
+  external_ref?: string;
+  idempotency_key?: string;
   scheduled_for: string;
   started_at?: string;
   finished_at?: string;

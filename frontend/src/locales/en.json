@@ -354,6 +354,7 @@
       "data_pipeline": "Data pipeline"
     },
     "when": {
+      "external": "Triggered by an external scheduler",
       "weekdays": "Every weekday at {{time}}",
       "daily": "Every day at {{time}}",
       "weekly": "Every {{weekday}} at {{time}}",
@@ -388,6 +389,10 @@
       "failed": "Failed",
       "skipped": "Skipped"
     },
+    "modes": {
+      "timetable": "On its own timetable",
+      "external": "Triggered by an external scheduler (Tidal, Control-M, AutoSys…)"
+    },
     "filters": {
       "search": "Search",
       "searchSchedules": "Search by name, target, calendar or timing",
@@ -403,6 +408,8 @@
       "noMatches": "Nothing matches these filters."
     },
     "runs": {
+      "external": "External",
+      "key": "Idempotency key: {{key}}",
       "when": "Scheduled for",
       "schedule": "Schedule",
       "status": "Status",
@@ -416,6 +423,8 @@
       "none": "No runs yet."
     },
     "editor": {
+      "mode": "How it runs",
+      "externalHelp": "An enterprise scheduler starts each run through the trigger API or the uisce-job command, with a key (use the job’s run id) so a retried job never runs twice. The business calendar can still skip a closed day.",
       "newTitle": "New schedule",
       "editTitle": "Edit schedule",
       "name": "Name",
