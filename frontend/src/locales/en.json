@@ -325,6 +325,105 @@
       "none": "Nothing is awaiting approval.",
       "noneEver": "No changes have been proposed yet."
     }
+  },
+  "schedules": {
+    "title": "Schedules",
+    "subtitle": "Everything that runs on a timetable - reports, saved queries, pipelines - in one place, on your business calendars.",
+    "new": "New schedule",
+    "tabs": {
+      "schedules": "Schedules",
+      "runs": "Run history"
+    },
+    "columns": {
+      "name": "Name",
+      "runs": "Runs",
+      "when": "When",
+      "enabled": "Active"
+    },
+    "updated": "Updated {{when}}",
+    "runNow": "Run now",
+    "edit": "Edit",
+    "delete": "Delete",
+    "confirmDelete": "Delete the schedule \"{{name}}\"? Its run history is kept.",
+    "empty": "No schedules yet. Create one to run a report or a saved query on a timetable.",
+    "cancel": "Cancel",
+    "save": "Save",
+    "kinds": {
+      "report": "Report",
+      "saved_query": "Saved query",
+      "data_pipeline": "Data pipeline"
+    },
+    "when": {
+      "weekdays": "Every weekday at {{time}}",
+      "daily": "Every day at {{time}}",
+      "weekly": "Every {{weekday}} at {{time}}",
+      "monthly_bd": "Business day {{n}} of each month at {{time}}",
+      "custom": "Timetable {{cron}}"
+    },
+    "rulesShort": {
+      "skip": "skip closed days",
+      "next_business_day": "move to the next business day",
+      "business_day_of_month": "business days only"
+    },
+    "rules": {
+      "none": "Run whatever the day",
+      "skip": "Skip days the calendar is closed",
+      "next_business_day": "On a closed day, run on the next business day"
+    },
+    "presets": {
+      "weekdays": "Every weekday",
+      "daily": "Every day",
+      "weekly": "Once a week",
+      "monthly_bd": "Business day N of the month",
+      "custom": "Custom timetable"
+    },
+    "actions": {
+      "run": "Runs",
+      "skip": "Skipped",
+      "wait": "Moves"
+    },
+    "status": {
+      "running": "Running",
+      "succeeded": "Succeeded",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "runs": {
+      "when": "Scheduled for",
+      "schedule": "Schedule",
+      "status": "Status",
+      "result": "Result",
+      "manual": "Run now",
+      "failedCode": "Failed ({{code}}) - click for details",
+      "rows_one": "{{count}} row",
+      "rows_other": "{{count}} rows",
+      "download": "Download the result",
+      "reference": "Code {{code}} · reference {{ref}}",
+      "none": "No runs yet."
+    },
+    "editor": {
+      "newTitle": "New schedule",
+      "editTitle": "Edit schedule",
+      "name": "Name",
+      "kind": "What to run",
+      "target": "Which one",
+      "when": "When",
+      "repeat": "Repeat",
+      "cron": "Timetable (cron)",
+      "cronHelp": "5 fields: minute hour day month weekday, e.g. 0 18 * * 1-5. At most every 5 minutes.",
+      "time": "Time",
+      "weekday": "Day",
+      "businessDay": "Business day",
+      "businessDayHelp": "1 = first; -1 = last business day of the month",
+      "timeZone": "Time zone",
+      "calendar": "Business calendar",
+      "noCalendar": "No calendar",
+      "withYourDays": "with your organization's days",
+      "pickCalendar": "Choose a business calendar for this rule.",
+      "nextRuns": "Next runs",
+      "halfDay": "Half day",
+      "enabled": "Active"
+    }
   }
 }
 

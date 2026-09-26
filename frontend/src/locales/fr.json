@@ -453,5 +453,105 @@
       "none": "Rien n'est en attente d'approbation.",
       "noneEver": "Aucune modification n'a encore été proposée."
     }
+  },
+  "schedules": {
+    "title": "Planifications",
+    "subtitle": "Tout ce qui s'exécute selon un horaire (rapports, requêtes enregistrées, pipelines) au même endroit, selon vos calendriers ouvrés.",
+    "new": "Nouvelle planification",
+    "tabs": {
+      "schedules": "Planifications",
+      "runs": "Historique des exécutions"
+    },
+    "columns": {
+      "name": "Nom",
+      "runs": "Exécute",
+      "when": "Quand",
+      "enabled": "Active"
+    },
+    "updated": "Mise à jour {{when}}",
+    "runNow": "Exécuter maintenant",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "confirmDelete": "Supprimer la planification « {{name}} » ? Son historique d'exécutions est conservé.",
+    "empty": "Aucune planification pour l'instant. Créez-en une pour exécuter un rapport ou une requête enregistrée selon un horaire.",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "kinds": {
+      "report": "Rapport",
+      "saved_query": "Requête enregistrée",
+      "data_pipeline": "Pipeline de données"
+    },
+    "when": {
+      "weekdays": "Chaque jour de semaine à {{time}}",
+      "daily": "Tous les jours à {{time}}",
+      "weekly": "Chaque {{weekday}} à {{time}}",
+      "monthly_bd": "Jour ouvré {{n}} de chaque mois à {{time}}",
+      "custom": "Horaire {{cron}}"
+    },
+    "rulesShort": {
+      "skip": "ignore les jours fermés",
+      "next_business_day": "reporte au jour ouvré suivant",
+      "business_day_of_month": "jours ouvrés uniquement"
+    },
+    "rules": {
+      "none": "Exécuter quel que soit le jour",
+      "skip": "Ignorer les jours où le calendrier est fermé",
+      "next_business_day": "Un jour fermé, exécuter le jour ouvré suivant"
+    },
+    "presets": {
+      "weekdays": "Chaque jour de semaine",
+      "daily": "Tous les jours",
+      "weekly": "Une fois par semaine",
+      "monthly_bd": "Jour ouvré N du mois",
+      "custom": "Horaire personnalisé"
+    },
+    "actions": {
+      "run": "S'exécute",
+      "skip": "Ignorée",
+      "wait": "Reportée"
+    },
+    "status": {
+      "running": "En cours",
+      "succeeded": "Réussie",
+      "failed": "Échouée",
+      "skipped": "Ignorée"
+    },
+    "runs": {
+      "when": "Prévue pour",
+      "schedule": "Planification",
+      "status": "Statut",
+      "result": "Résultat",
+      "manual": "Exécutée maintenant",
+      "failedCode": "Échouée ({{code}}) : cliquez pour les détails",
+      "rows_one": "{{count}} ligne",
+      "rows_many": "{{count}} lignes",
+      "rows_other": "{{count}} lignes",
+      "download": "Télécharger le résultat",
+      "reference": "Code {{code}} · référence {{ref}}",
+      "none": "Aucune exécution pour l'instant."
+    },
+    "editor": {
+      "newTitle": "Nouvelle planification",
+      "editTitle": "Modifier la planification",
+      "name": "Nom",
+      "kind": "Quoi exécuter",
+      "target": "Lequel",
+      "when": "Quand",
+      "repeat": "Répéter",
+      "cron": "Horaire (cron)",
+      "cronHelp": "5 champs : minute heure jour mois jour-de-semaine, p. ex. 0 18 * * 1-5. Au plus toutes les 5 minutes.",
+      "time": "Heure",
+      "weekday": "Jour",
+      "businessDay": "Jour ouvré",
+      "businessDayHelp": "1 = le premier ; -1 = le dernier jour ouvré du mois",
+      "timeZone": "Fuseau horaire",
+      "calendar": "Calendrier ouvré",
+      "noCalendar": "Aucun calendrier",
+      "withYourDays": "avec les jours de votre organisation",
+      "pickCalendar": "Choisissez un calendrier ouvré pour cette règle.",
+      "nextRuns": "Prochaines exécutions",
+      "halfDay": "Demi-journée",
+      "enabled": "Active"
+    }
   }
 }
