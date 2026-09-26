@@ -190,7 +190,7 @@ function RunsTable({ scheduleId }: { scheduleId?: string }) {
                 )}
               </React.Fragment>
             ))}
-            {!runs.isLoading && list.length === 0 && (
+            {!runs.isLoading && !runs.error && list.length === 0 && (
               <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>{t(filtered ? 'schedules.filters.noMatches' : 'schedules.runs.none')}</Typography></TableCell></TableRow>
             )}
           </TableBody>
@@ -309,7 +309,7 @@ export default function SchedulesPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {!list.isLoading && schedules.length === 0 && (
+                  {!list.isLoading && !list.error && schedules.length === 0 && (
                     <TableRow><TableCell colSpan={5}><Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{t(filtered ? 'schedules.filters.noMatches' : 'schedules.empty')}</Typography></TableCell></TableRow>
                   )}
                 </TableBody>
