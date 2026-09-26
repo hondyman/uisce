@@ -453,5 +453,105 @@
       "none": "No hay nada pendiente de aprobación.",
       "noneEver": "Todavía no se ha propuesto ningún cambio."
     }
+  },
+  "schedules": {
+    "title": "Programaciones",
+    "subtitle": "Todo lo que se ejecuta con horario (informes, consultas guardadas, canalizaciones) en un solo lugar, según sus calendarios laborales.",
+    "new": "Nueva programación",
+    "tabs": {
+      "schedules": "Programaciones",
+      "runs": "Historial de ejecuciones"
+    },
+    "columns": {
+      "name": "Nombre",
+      "runs": "Ejecuta",
+      "when": "Cuándo",
+      "enabled": "Activa"
+    },
+    "updated": "Actualizada {{when}}",
+    "runNow": "Ejecutar ahora",
+    "edit": "Editar",
+    "delete": "Eliminar",
+    "confirmDelete": "¿Eliminar la programación \"{{name}}\"? Su historial de ejecuciones se conserva.",
+    "empty": "Todavía no hay programaciones. Cree una para ejecutar un informe o una consulta guardada con horario.",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "kinds": {
+      "report": "Informe",
+      "saved_query": "Consulta guardada",
+      "data_pipeline": "Canalización de datos"
+    },
+    "when": {
+      "weekdays": "Cada día laborable a las {{time}}",
+      "daily": "Todos los días a las {{time}}",
+      "weekly": "Cada {{weekday}} a las {{time}}",
+      "monthly_bd": "Día hábil {{n}} de cada mes a las {{time}}",
+      "custom": "Horario {{cron}}"
+    },
+    "rulesShort": {
+      "skip": "omite los días cerrados",
+      "next_business_day": "pasa al siguiente día hábil",
+      "business_day_of_month": "solo días hábiles"
+    },
+    "rules": {
+      "none": "Ejecutar sea cual sea el día",
+      "skip": "Omitir los días en que el calendario está cerrado",
+      "next_business_day": "En un día cerrado, ejecutar el siguiente día hábil"
+    },
+    "presets": {
+      "weekdays": "Cada día laborable",
+      "daily": "Todos los días",
+      "weekly": "Una vez por semana",
+      "monthly_bd": "Día hábil N del mes",
+      "custom": "Horario personalizado"
+    },
+    "actions": {
+      "run": "Se ejecuta",
+      "skip": "Se omite",
+      "wait": "Se traslada"
+    },
+    "status": {
+      "running": "En curso",
+      "succeeded": "Correcta",
+      "failed": "Fallida",
+      "skipped": "Omitida"
+    },
+    "runs": {
+      "when": "Programada para",
+      "schedule": "Programación",
+      "status": "Estado",
+      "result": "Resultado",
+      "manual": "Ejecutada ahora",
+      "failedCode": "Fallida ({{code}}): haga clic para ver los detalles",
+      "rows_one": "{{count}} fila",
+      "rows_many": "{{count}} filas",
+      "rows_other": "{{count}} filas",
+      "download": "Descargar el resultado",
+      "reference": "Código {{code}} · referencia {{ref}}",
+      "none": "Todavía no hay ejecuciones."
+    },
+    "editor": {
+      "newTitle": "Nueva programación",
+      "editTitle": "Editar programación",
+      "name": "Nombre",
+      "kind": "Qué ejecutar",
+      "target": "Cuál",
+      "when": "Cuándo",
+      "repeat": "Repetir",
+      "cron": "Horario (cron)",
+      "cronHelp": "5 campos: minuto hora día mes día-de-la-semana, p. ej. 0 18 * * 1-5. Como máximo cada 5 minutos.",
+      "time": "Hora",
+      "weekday": "Día",
+      "businessDay": "Día hábil",
+      "businessDayHelp": "1 = el primero; -1 = el último día hábil del mes",
+      "timeZone": "Zona horaria",
+      "calendar": "Calendario laboral",
+      "noCalendar": "Sin calendario",
+      "withYourDays": "con los días de su organización",
+      "pickCalendar": "Elija un calendario laboral para esta regla.",
+      "nextRuns": "Próximas ejecuciones",
+      "halfDay": "Media jornada",
+      "enabled": "Activa"
+    }
   }
 }

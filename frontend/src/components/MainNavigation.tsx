@@ -37,6 +37,7 @@ import {
   Build as BuildIcon,
   Timeline as TimelineIcon,
   Translate as TranslateIcon,
+  EventRepeat as EventRepeatIcon,
   KeyboardArrowDown as KeyboardArrowDownIcon,
   CheckCircle as CheckCircleIcon,
   Api as ApiIcon,
@@ -287,6 +288,13 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Build CRUD pages against a Business Object' },
           { label: 'Menu Designer', path: '/menu-designer', icon: <AccountTreeIcon />, description: 'Arrange pages into the navigation menu' },
           { label: 'Browse Pages', path: '/pages', icon: <ApiIcon />, description: 'View pages as a consumer would' },
+        ]
+      },
+      {
+        label: 'Automation',
+        icon: <EventRepeatIcon />,
+        items: [
+          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Run reports and queries on business calendars', badge: { label: 'New', color: 'success' } },
         ]
       }
     ]

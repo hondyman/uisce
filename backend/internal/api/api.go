@@ -80,6 +80,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/region"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/rules"
+	"github.com/hondyman/uisce/backend/internal/schedule"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/services"
@@ -213,7 +214,10 @@ type Server struct {
 	DatasourceResolver      security.DatasourceResolver
 	SecurityContextDeps     handlers.SecurityContextDeps
 	// MessageCatalog renders every user-facing error (msgcat.WriteError).
-	MessageCatalog          *msgcat.Catalog
+	MessageCatalog *msgcat.Catalog
+	// The one scheduler (internal/schedule) and its runners by target kind.
+	ScheduleService         *schedule.Service
+	ScheduleRunners         *schedule.Registry
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	QueryHandler            *handlers.QueryHandler
@@ -1002,7 +1006,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		CalculationHandler:     nil, // Will be set after initialization
 		LineageSvc:             nil, // Will be set after initialization
 
-
 		CalcHandler: nil, // Will be set after initialization
 
 		ExportHandlers:    nil, // Will be set after initialization
@@ -1281,7 +1284,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	valuesHandler := handlers.NewValuesHandler(valuesService)
 	srv.ValuesHandler = valuesHandler
 	valuesHandler.RegisterRoutes(r)
-
 
 	// Initialize AI Service (Gemini Integration)
 	aiRuleRepo := rules.NewSQLRuleRepository(db)
@@ -1762,6 +1764,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		msgcatStore := msgcat.NewStore(sqlxDB)
 		srv.MessageCatalog = msgcat.NewCatalog(msgcatStore)
 		srv.registerBOCRUDRoutes(r, sqlxDB)
+		srv.registerScheduleRoutes(r, sqlxDB, temporalClient, reportService, reportExecutor)
 		srv.registerNBAEngineRoutes(r, sqlxDB)
 		srv.registerBillingRoutes(r)
 		srv.registerFeedbackRoutes(r)

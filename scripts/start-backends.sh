@@ -118,10 +118,17 @@ export DATAPIPELINE_STAGING_DSN="${DATAPIPELINE_STAGING_DSN:-$(printf '%s' "$POS
 [ -n "${DATAPIPELINE_ENGINE_TOKEN:-}" ] && ok "pipeline engine token loaded" || warn "DATAPIPELINE_ENGINE_TOKEN missing - pipelines cannot reach the file engine"
 
 step "5. Backend on :$PORT from $SRC_DIR ($(git -C "$SRC_DIR" branch --show-current 2>/dev/null || echo '?'))"
-if pid=$(lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null); then
+listener() { lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | head -1; }
+if pid=$(listener) && [ -n "$pid" ]; then
   cmd=$(ps -p "$pid" -o comm= 2>/dev/null || true)
   case "$cmd" in
-    *server*) kill "$pid"; sleep 2; ok "stopped the previous server (pid $pid)" ;;
+    *server*)
+      kill "$pid" 2>/dev/null || true
+      # The server may not exit on TERM; the port must be free before starting.
+      for _ in $(seq 1 15); do [ -z "$(listener)" ] && break; sleep 1; done
+      if [ -n "$(listener)" ]; then kill -9 "$pid" 2>/dev/null || true; sleep 1; fi
+      [ -z "$(listener)" ] || die "could not free port $PORT (pid $pid)"
+      ok "stopped the previous server (pid $pid)" ;;
     *) die "port $PORT is used by '$cmd' (pid $pid) - stop it or pick another port" ;;
   esac
 fi
@@ -143,7 +150,9 @@ for _ in $(seq 1 90); do
   if ! kill -0 "$PID" 2>/dev/null; then
     tail -25 "$LOG"; die "server exited - see $LOG"
   fi
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/message-catalog/languages")" != 000 ]; then
+  # Up means *this* process holds the port and answers - not some other one.
+  if [ "$(listener)" = "$PID" ] && \
+     [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:$PORT/api/message-catalog/languages")" != 000 ]; then
     ok "server is answering"
     printf '\n  URL:  http://localhost:%s\n  PID:  %s   (stop: kill %s)\n  Log:  %s\n' "$PORT" "$PID" "$PID" "$LOG"
     exit 0

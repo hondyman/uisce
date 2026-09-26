@@ -490,6 +490,15 @@ main() {
         elif [ "$gen_rc" -ne 0 ]; then
             echo "FATAL: generate_env_file failed for frontend (rc=$gen_rc)" >&2
             exit 1
+        else
+            # The frontend file has never been replaced from Infisical: the
+            # temp copy was left behind on every run (a file full of secrets
+            # next to the app). Remove it. Applying it is a separate decision:
+            # Infisical's "frontend" section and the existing .env.local
+            # differ, and a browser app's env should hold no server secrets.
+            tmp_path=$(<"$_bootstrap_tmp")
+            rm -f "$tmp_path"
+            warn "frontend: $frontend_env left as is (not replaced from Infisical)"
         fi
     fi
 
