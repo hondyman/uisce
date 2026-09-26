@@ -5,16 +5,26 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
+	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 type CatalogHandler struct {
-	boService     *metadata.BusinessObjectService
-	securityDeps  handlers.SecurityContextDeps
+	boService    *metadata.BusinessObjectService
+	securityDeps handlers.SecurityContextDeps
+	db           *sqlx.DB // term -> column mappings for semantic-terms-by-table (nil: none)
+}
+
+// WithDB lets semantic-terms-by-table say which column each term maps to.
+func (h *CatalogHandler) WithDB(db *sqlx.DB) *CatalogHandler {
+	h.db = db
+	return h
 }
 
 func NewCatalogHandler(boService *metadata.BusinessObjectService, securityDeps handlers.SecurityContextDeps) *CatalogHandler {
@@ -150,13 +160,14 @@ func (h *CatalogHandler) handleGetSemanticTermsByTable(w http.ResponseWriter, r 
 		return
 	}
 
-	tenantID := ""
-	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil {
-		tenantID = claims.TenantID
+	// The tenant comes from the authenticated token only - never from a
+	// request header on its own.
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps)
+	if err != nil || secCtx == nil || secCtx.TenantID == "" {
+		http.Error(w, "authentication with a tenant is required", http.StatusUnauthorized)
+		return
 	}
-	if tenantID == "" {
-		tenantID = r.Header.Get("X-Tenant-ID")
-	}
+	tenantID := secCtx.TenantID
 
 	terms, err := h.boService.GetSemanticTermsByTable(r.Context(), tableID, datasourceID, tenantID)
 	if err != nil {
@@ -167,8 +178,70 @@ func (h *CatalogHandler) handleGetSemanticTermsByTable(w http.ResponseWriter, r 
 		terms = []models.CatalogNode{}
 	}
 
+	// Say which column of this table each term maps to (MAPS_TO), so the
+	// binding wizard can resolve fields instead of guessing from properties.
+	mappings := h.termColumnMappings(r, tableID, terms)
+	out := make([]termWithMappings, len(terms))
+	for i, t := range terms {
+		out[i] = termWithMappings{CatalogNode: t, Mappings: mappings[t.ID]}
+		if out[i].Mappings == nil {
+			out[i].Mappings = []termColumnMapping{}
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"semanticTerms": terms,
+		"semanticTerms": out,
 	})
+}
+
+type termColumnMapping struct {
+	ColumnNodeID    string `json:"column_node_id" db:"column_node_id"`
+	ColumnName      string `json:"column_name" db:"column_name"`
+	TableNodeID     string `json:"table_node_id" db:"table_node_id"`
+	TableName       string `json:"table_name" db:"table_name"`
+	IsPrimarySource bool   `json:"is_primary_source" db:"-"`
+	TermID          string `json:"-" db:"term_id"`
+}
+
+type termWithMappings struct {
+	models.CatalogNode
+	Mappings []termColumnMapping `json:"mappings"`
+}
+
+// termColumnMappings is term id -> the columns of tableID it MAPS_TO. The
+// terms were already scoped to the caller's tenant; a mapping is only read
+// for them. Errors are logged and leave terms without mappings (the wizard
+// then marks them unresolved, as before).
+func (h *CatalogHandler) termColumnMappings(r *http.Request, tableID string, terms []models.CatalogNode) map[string][]termColumnMapping {
+	out := map[string][]termColumnMapping{}
+	if h.db == nil || len(terms) == 0 {
+		return out
+	}
+	if _, err := uuid.Parse(tableID); err != nil {
+		return out
+	}
+	ids := make([]string, len(terms))
+	for i, t := range terms {
+		ids[i] = t.ID
+	}
+	var rows []termColumnMapping
+	err := h.db.SelectContext(r.Context(), &rows, `
+		SELECT ce.source_node_id::text AS term_id, col.id::text AS column_node_id, col.node_name AS column_name,
+		       tbl.id::text AS table_node_id, tbl.node_name AS table_name
+		FROM catalog_edge ce
+		JOIN catalog_edge_type et ON et.id = ce.edge_type_id AND et.edge_type_name = 'MAPS_TO'
+		JOIN catalog_node col ON col.id = ce.target_node_id
+		JOIN catalog_node tbl ON tbl.id = col.parent_id
+		WHERE tbl.id = $1::uuid AND ce.source_node_id::text = ANY($2)
+		ORDER BY col.node_name`, tableID, pq.Array(ids))
+	if err != nil {
+		logging.GetLogger().Sugar().Warnf("semantic-terms-by-table %s: term mappings: %v", tableID, err)
+		return out
+	}
+	for _, m := range rows {
+		m.IsPrimarySource = len(out[m.TermID]) == 0
+		out[m.TermID] = append(out[m.TermID], m)
+	}
+	return out
 }
