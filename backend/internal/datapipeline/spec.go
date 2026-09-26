@@ -109,6 +109,10 @@ type ValidateConfig struct {
 // recorded as a warning.
 type RuleCheckConfig struct {
 	RuleIDs []string `json:"rule_ids"`
+	// BOKey is whose rules these are. Rows reaching the step must be in that
+	// object's field names - or feed a staging load whose table has an
+	// approved binding to the object, which the check reads them through.
+	BOKey string `json:"bo_key,omitempty"`
 }
 
 // MapConfig maps source fields to target fields.
