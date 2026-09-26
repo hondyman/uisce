@@ -68,7 +68,8 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
     mode,
     cron: external ? '' : presetCron(preset),
     time_zone: zone,
-    calendar: effectiveRule === 'none' ? undefined : calendar || undefined,
+    // Kept with rule 'none' (not applied) so switching the rule back doesn't lose it.
+    calendar: calendar || undefined,
     calendar_rule: effectiveRule,
     business_day: effectiveRule === 'business_day_of_month' ? bd : undefined,
   }), [mode, external, preset, zone, calendar, effectiveRule, bd]);
