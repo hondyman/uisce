@@ -494,6 +494,16 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		return nil, fmt.Errorf("cannot create business object %q: driver table catalog node not found (has the datasource been scanned, and is driverTableId valid?)", req.Name)
 	}
 
+	// Core-ness follows the caller's tenant, not the request: a BO created in
+	// the gold-copy tenant is core (ListBusinessObjectsComposed only shows
+	// core objects there, and other tenants inherit it read-only); anywhere
+	// else it is that tenant's own custom object.
+	isGold, err := IsGoldCopyTenant(ctx, s.db, tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve gold copy tenant: %w", err)
+	}
+	bo.IsCore = isGold
+
 	// Insert BO
 	query := `
 		INSERT INTO public.business_objects (
@@ -513,7 +523,7 @@ func (s *BusinessObjectService) CreateBusinessObject(
 
 	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s driverTable=%v name=%s", bo.TenantID, driverTableID, bo.Name)
 
-	_, err := s.db.ExecContext(ctx, query,
+	_, err = s.db.ExecContext(ctx, query,
 		bo.ID, bo.TenantID, bo.Key, bo.DisplayName, bo.Description,
 		classificationNodeID, keyColumnNodeID,
 		driverTableID, bo.DriverTableName,

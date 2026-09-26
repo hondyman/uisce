@@ -299,11 +299,12 @@ export async function createBinding(
     bindingName?: string;
     baseSql?: string;
     temporalMode?: string;
-    isCore?: boolean;
     coreReferenceBindingId?: string;
     isDefault?: boolean;
   }
 ): Promise<any> {
+  // No isCore: the server decides it from the caller's tenant (core in the
+  // gold copy, custom elsewhere) - see CreateBusinessObjectBinding.
   return fetchAPI(`/business-objects/${boId}/bindings`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -454,7 +455,6 @@ export async function saveBindingWithFields(
         ? `${binding.backendName} Binding`
         : `${bo.name} Binding`,
       temporalMode: 'NONE',
-      isCore: false,
     });
     const bindingId = bindingResult?.boBindingId || bindingResult?.bo_binding_id;
 

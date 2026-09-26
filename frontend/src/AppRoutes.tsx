@@ -122,7 +122,6 @@ import EntityManagerPage from "./features/admin/pages/EntityManagerPage";
 import EntityDetailsPage from "./pages/EntityDetailsPage";
 import BusinessObjectsPage from "./pages/BusinessObjectsPage";
 import BusinessObjectDetailsPage from "./pages/BusinessObjectDetailsPage";
-import BusinessObjectWizardPage from "./pages/BusinessObjectWizardPage";
 import SemanticHealthDashboard from "./pages/SemanticHealthDashboard";
 import SchemaExplorerPage from "./features/schema-explorer/pages/SchemaExplorer";
 import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
@@ -286,7 +285,10 @@ function ProtectedApp() {
             BUILD - Semantic layer
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="business-objects" element={<ProtectedRoute><BusinessObjectsPage /></ProtectedRoute>} />
-        <Route path="business-objects/new" element={<ProtectedRoute><BusinessObjectWizardPage /></ProtectedRoute>} />
+        {/* The old standalone "new BO" page read fake driving tables and posted to an
+            unrouted save endpoint; new business objects are created by the binding
+            wizard on the list page, which ?new=1 opens. */}
+        <Route path="business-objects/new" element={<Navigate to={`/${locale}/business-objects?new=1`} replace />} />
         <Route path="business-objects/:id" element={<ProtectedRoute><BusinessObjectDetailsPage /></ProtectedRoute>} />
         <Route path="semantic-health" element={<ProtectedRoute><SemanticHealthDashboard /></ProtectedRoute>} />
         <Route path="views" element={<ProtectedRoute><ViewsCatalogPage /></ProtectedRoute>} />
