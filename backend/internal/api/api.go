@@ -1504,7 +1504,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	reportGenerationHandler.RegisterRoutes(r)
 
 	// Initialize Catalog Handler (Phase 18)
-	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps)
+	catalogHandler := NewCatalogHandler(boService, schedulerSecurityDeps).WithDB(sqlxDB)
 	// Registration moved to /api group below
 
 	// Initialize Semantic Terms handler for catalog_node queries
