@@ -3611,6 +3611,29 @@ func (s *BusinessObjectService) QueryBORecords(
 		}
 	}
 
+	// Always pull custom_attributes when present so semantic custom fields can hydrate.
+	{
+		schemaName, tableName := resolveQualifiedTable(drivingTable)
+		var hasCustom bool
+		_ = recordsDB.GetContext(ctx, &hasCustom, `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.columns
+				WHERE table_schema = $1 AND table_name = $2 AND column_name = 'custom_attributes'
+			)`, schemaName, tableName)
+		if hasCustom {
+			found := false
+			for _, c := range columnNames {
+				if c == "custom_attributes" {
+					found = true
+					break
+				}
+			}
+			if !found && len(columnNames) > 0 {
+				columnNames = append(columnNames, "custom_attributes")
+			}
+		}
+	}
+
 	// If no fields declared, select * from driver table
 	selectCols := "*"
 	if len(columnNames) > 0 {
@@ -3741,6 +3764,8 @@ func (s *BusinessObjectService) QueryBORecords(
 		resultRows = []map[string]interface{}{}
 	}
 
+	s.hydrateCustomAttributeRows(ctx, secCtx.TenantID, drivingTable, resultRows)
+
 	return &models.BORecordQueryResponse{
 		Total:           total,
 		Page:            page,
@@ -3803,6 +3828,7 @@ func (s *BusinessObjectService) CreateBORecord(
 		return nil, fmt.Errorf("record data is required")
 	}
 	normalizeEmptyStringsToNull(rec)
+	rec = s.dehydrateCustomAttributesForBO(ctx, secCtx.TenantID, table, rec)
 
 	// Auto-generate UUID id if missing
 	if _, ok := rec["id"]; !ok {
@@ -3815,9 +3841,16 @@ func (s *BusinessObjectService) CreateBORecord(
 	idx := 1
 
 	for k, v := range rec {
-		cols = append(cols, pq.QuoteIdentifier(k))
-		placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
-		vals = append(vals, v)
+		if strings.EqualFold(k, "custom_attributes") || strings.EqualFold(k, "customAttributes") {
+			jsonBytes, _ := json.Marshal(v)
+			cols = append(cols, pq.QuoteIdentifier("custom_attributes"))
+			placeholders = append(placeholders, fmt.Sprintf("$%d::jsonb", idx))
+			vals = append(vals, string(jsonBytes))
+		} else {
+			cols = append(cols, pq.QuoteIdentifier(k))
+			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+			vals = append(vals, v)
+		}
 		idx++
 	}
 
@@ -3850,6 +3883,7 @@ func (s *BusinessObjectService) CreateBORecord(
 		return nil, err
 	}
 
+	result = s.hydrateCustomAttributesForBO(ctx, secCtx.TenantID, table, result)
 	s.logAudit(ctx, secCtx.TenantID, "instance", toString(rec["id"]), "create", rec, userID)
 	return result, nil
 }
@@ -3882,6 +3916,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 		return nil, fmt.Errorf("record update data is required")
 	}
 	normalizeEmptyStringsToNull(rec)
+	rec = s.dehydrateCustomAttributesForBO(ctx, secCtx.TenantID, table, rec)
 
 	var setClauses []string
 	var vals []interface{}
@@ -3938,6 +3973,7 @@ func (s *BusinessObjectService) UpdateBORecord(
 		return nil, err
 	}
 
+	result = s.hydrateCustomAttributesForBO(ctx, secCtx.TenantID, table, result)
 	s.logAudit(ctx, secCtx.TenantID, "instance", recordID, "update", rec, userID)
 	return result, nil
 }

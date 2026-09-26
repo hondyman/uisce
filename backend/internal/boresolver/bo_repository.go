@@ -319,7 +319,7 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 
 	for _, f := range fields {
 		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
-		def.Fields = append(def.Fields, BOField{
+		boField := BOField{
 			ID:             f.ID,
 			Name:           f.FieldName,
 			DisplayName:    f.DisplayName,
@@ -327,7 +327,39 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 			SemanticTermID: f.TermNodeID,
 			PhysicalColumn: physicalColumn,
 			Type:           f.DataType,
-		})
+			SourceType:     "COLUMN",
+		}
+
+		// Explicit JSON_PATH field_binding wins over column resolution.
+		var jsonPath sql.NullString
+		var srcType sql.NullString
+		_ = r.DB.QueryRow(`
+			SELECT source_type, json_path
+			FROM public.field_bindings
+			WHERE field_id = $1::uuid AND binding_status = 'RESOLVED' AND source_type = 'JSON_PATH'
+			LIMIT 1`, f.ID).Scan(&srcType, &jsonPath)
+		if srcType.Valid && srcType.String == "JSON_PATH" && jsonPath.Valid && jsonPath.String != "" {
+			boField.SourceType = "JSON_PATH"
+			boField.JSONPath = jsonPath.String
+			if boField.PhysicalColumn == "" || !strings.Contains(boField.PhysicalColumn, "custom_attributes") {
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		} else if f.TermNodeID != "" {
+			// attribute_def linked to the same semantic term → JSONB key binding
+			var fieldCd sql.NullString
+			_ = r.DB.QueryRow(`
+				SELECT field_cd FROM public.attribute_def
+				WHERE semantic_term_id = $1::uuid AND is_active
+				ORDER BY updated_at DESC
+				LIMIT 1`, f.TermNodeID).Scan(&fieldCd)
+			if fieldCd.Valid && fieldCd.String != "" {
+				boField.SourceType = "JSON_PATH"
+				boField.JSONPath = fieldCd.String
+				boField.PhysicalColumn = fmt.Sprintf("%s.custom_attributes", drivingTable)
+			}
+		}
+
+		def.Fields = append(def.Fields, boField)
 	}
 
 	// Relationship/join inference isn't available from business_object_fields
