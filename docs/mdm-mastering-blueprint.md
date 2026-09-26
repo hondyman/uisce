@@ -65,20 +65,26 @@ same rule applies wherever the entity's data is:
 A rule that reads a field the rows don't carry fails loud: never an ordinary
 pass or fail.
 
-## Workflow approvals
+## Approvals: maker-checker for config, workflows for overrides
 
-One **Approvals inbox** for everything that needs a second person, fed by
-pluggable approval sources rather than one queue per feature:
+**Configuration** - staging bindings, MDM validation rules, match and
+survivorship rules, message catalog - is maker-checker: one person proposes,
+another approves, both audited (built for bindings and the catalog).
 
-- message catalog changes, staging binding changes (already maker-checker)
-- MDM validation rule changes
-- golden-record overrides and steward match decisions (merge / split)
+**Overrides** go through the approval **workflow**. A steward overriding a
+golden value (choosing a vendor's value or entering one, with a reason) from
+the exception queue (`mdm.universal_exception_queue`) does not change the
+golden record directly. It starts an approval workflow (`internal/approvals`,
+Temporal): stages by risk (low = peer; medium = peer + domain owner;
+high = + compliance), survives restarts, can time out and be delegated, and
+the proposer can never approve. On approval the override is applied and the
+mastering run publishes golden version N+1 with the override as that field's
+provenance (value, reason, who proposed, who approved). A rejected override
+changes nothing.
 
-Each item shows who proposed it, what it changes (a diff), and the risk level.
-Risk decides the stages (the `internal/approvals` workflow): low = one peer,
-medium = peer + domain owner, high = peer + domain + compliance. Stages run as
-a Temporal workflow so an approval survives restarts, can time out and can be
-delegated. Every decision is audited. The proposer can never approve.
+Today `MDMStewardHandler.ApplyOverride` applies at once and `GetExceptions`
+takes the tenant from a header or query parameter; both are fixed in the
+overrides slice (the tenant comes from the token only).
 
 ## Governance
 
@@ -106,11 +112,10 @@ delegated. Every decision is audited. The proposer can never approve.
 | 1 | Rule checks fail loud; staging bindings with maker-checker | done (#157, #159) |
 | 2 | Product business object over `mdm.product` (30 fields); FactSet binding approved; rules on staging rows | done |
 | 3 | **Staging bindings UI**: bindings, mapping editor with suggestions, approval queue, history | this change |
-| 4 | **Approvals inbox** (pluggable sources, risk-based stages on the approvals workflow); MDM rule changes under approval | |
-| 4b | Binding transforms + type-map lookups; import `product_field_mapping` | |
+| 4 | Binding transforms + type-map lookups; import `product_field_mapping`; MDM rule changes under maker-checker | |
 | 5 | Canonicalize: staging → `product_incoming` through the binding; MDM rules on canonical rows | |
 | 6 | Match engine: match rules, `entity_xref`, candidates, steward review queue | |
 | 7 | Survivorship + versioned golden publish with provenance → `mdm.product`; MDM rules gate publishing | |
 | 8 | Mastering workflow + schedule + feed-health dashboard | |
 | 9 | Second and third source (BBG, RDP) to prove multi-source survivorship | |
-| 10 | Steward overrides (maker-checker), exceptions, backfill tooling | |
+| 10 | **Steward overrides through the approval workflow** (risk-based stages) → golden N+1 with override provenance; exception queue tenant fix; backfill tooling | |
