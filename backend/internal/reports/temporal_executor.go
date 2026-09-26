@@ -111,9 +111,9 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		actorID = *triggeredBy
 	}
 	// Extract schedule_id before the closure so the closure can capture it
-	scheduleIDStr := ""
+	scheduleID := ""
 	if sidVal, ok := params["schedule_id"].(string); ok && sidVal != "" {
-		scheduleIDStr = sidVal
+		scheduleID = sidVal
 	}
 	err = db.WithTenantTransaction(ctx, e.db, tmpl.TenantID.String(), func(tx *sql.Tx) error {
 		insertQuery := `
@@ -134,8 +134,8 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		}
 		// detail: include schedule_id when present (self-contained audit record)
 		var detailJSON []byte
-		if scheduleIDStr != "" {
-			detailJSON, _ = json.Marshal(map[string]interface{}{"schedule_id": scheduleIDStr})
+		if scheduleID != "" {
+			detailJSON, _ = json.Marshal(map[string]interface{}{"schedule_id": scheduleID})
 		} else {
 			detailJSON = []byte(`{}`)
 		}
@@ -143,9 +143,9 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 			INSERT INTO public.report_execution_events (
 				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
 			) VALUES (
-				gen_random_uuid(), $1, $2, 'CREATED', NULL, 'pending', $3, $4
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
 			)
-		`, execID, tmpl.TenantID, actorID, detailJSON)
+		`, execID, tmpl.TenantID, "CREATED", nil, "pending", actorID, detailJSON)
 		return txErr
 	})
 	if err != nil {
@@ -178,11 +178,6 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		hydratedTmpl.CreatedBy = tmpl.CreatedBy
 	}
 
-	scheduleID := ""
-	if sidVal, ok := params["schedule_id"].(string); ok {
-		scheduleID = sidVal
-	}
-
 	workflowParams := workflows.ReportGenerationWorkflowParams{
 		ExecutionID:   execID.String(),
 		Template:      hydratedTmpl,
@@ -200,7 +195,7 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 	// 5. Dispatch workflow to Temporal
 	if e.temporalClient == nil {
 		// Fail loud when Temporal is unconfigured or unavailable
-		e.markExecutionFailed(ctx, tmpl.TenantID.String(), execID, "Temporal client is nil / unavailable")
+		e.MarkExecutionFailed(ctx, tmpl.TenantID.String(), execID, "Temporal client is nil / unavailable")
 		return nil, &DispatchError{ExecutionID: execID, Err: errors.New("temporal service unavailable")}
 	}
 
@@ -209,13 +204,15 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 		// Temporal dispatch failed: mark row as failed loud and return error
 		errMsg := fmt.Sprintf("temporal workflow dispatch failed: %v", err)
 		log.Printf("[ERROR] %s (execution_id=%s)", errMsg, execID)
-		e.markExecutionFailed(ctx, tmpl.TenantID.String(), execID, errMsg)
+		e.MarkExecutionFailed(ctx, tmpl.TenantID.String(), execID, errMsg)
 		return nil, &DispatchError{ExecutionID: execID, Err: fmt.Errorf("workflow dispatch error: %w", err)}
 	}
 
 	runID := run.GetRunID()
 
 	// 6. Transition execution row to 'running'
+	// Event insert is in the SAME transaction — audit trail completeness invariant:
+	// no status transition without its event, no event without the status transition.
 	err = db.WithTenantTransaction(ctx, e.db, tmpl.TenantID.String(), func(tx *sql.Tx) error {
 		updateQuery := `
 			UPDATE public.report_executions
@@ -225,10 +222,21 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 			WHERE id = $3
 		`
 		_, txErr := tx.ExecContext(ctx, updateQuery, workflowID, runID, execID)
+		if txErr != nil {
+			return txErr
+		}
+		_, txErr = tx.ExecContext(ctx, `
+			INSERT INTO public.report_execution_events (
+				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
+			)
+		`, execID, tmpl.TenantID, "STARTED", "pending", "running", "system:executor", `{}`)
 		return txErr
 	})
 	if err != nil {
 		log.Printf("[WARN] failed to update execution %s to running: %v", execID, err)
+		return nil, err
 	}
 
 	res := &ScheduleExecutionResult{
@@ -246,8 +254,10 @@ func (e *TemporalReportExecutor) ExecuteReport(ctx context.Context, tmpl *Report
 	return res, nil
 }
 
-func (e *TemporalReportExecutor) markExecutionFailed(ctx context.Context, tenantID string, execID uuid.UUID, errMsg string) {
-	_ = db.WithTenantTransaction(ctx, e.db, tenantID, func(tx *sql.Tx) error {
+// MarkExecutionFailed records a failed execution and its audit event.
+// Exported for testing; prefer the internal call paths in production use.
+func (e *TemporalReportExecutor) MarkExecutionFailed(ctx context.Context, tenantID string, execID uuid.UUID, errMsg string) {
+	txErr := db.WithTenantTransaction(ctx, e.db, tenantID, func(tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `
 			UPDATE public.report_executions
 			SET status = 'failed',
@@ -255,6 +265,20 @@ func (e *TemporalReportExecutor) markExecutionFailed(ctx context.Context, tenant
 			    completed_at = NOW()
 			WHERE id = $2
 		`, errMsg, execID)
+		if err != nil {
+			return err
+		}
+		detailJSON, _ := json.Marshal(map[string]interface{}{"error_message": errMsg})
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO public.report_execution_events (
+				id, execution_id, tenant_id, event, from_status, to_status, actor_id, detail
+			) VALUES (
+				gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7
+			)
+		`, execID, tenantID, "FAILED", "running", "failed", "system:executor", detailJSON)
 		return err
 	})
+	if txErr != nil {
+		log.Printf("[ERROR] MarkExecutionFailed: failed to insert FAILED event for execution %s (tenant %s): %v", execID, tenantID, txErr)
+	}
 }
