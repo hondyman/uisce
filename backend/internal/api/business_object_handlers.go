@@ -93,6 +93,7 @@ func (h *BusinessObjectHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/with_bindings", h.GetBusinessObjectWithBindings)
 		r.Get("/{id}/bindings", h.GetBusinessObjectBindings)
 		r.Post("/{id}/bindings", h.CreateBusinessObjectBinding)
+		r.Post("/{id}/bindings/{bindingId}/fields", h.UpsertBindingFields)
 		r.Put("/{id}/bindings/{bindingId}", h.UpdateBusinessObjectBinding)
 		r.Delete("/{id}/bindings/{bindingId}", h.DeleteBusinessObjectBinding)
 		r.Get("/{id}", h.GetBusinessObject)
