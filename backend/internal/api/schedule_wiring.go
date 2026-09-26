@@ -50,7 +50,10 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 		}
 	}
 	var gold string
-	if err := sqlxDB.Get(&gold, `SELECT public.uisce_gold_copy_tenant_id()::text`); err != nil {
+	if sqlxDB == nil || sqlxDB.DB == nil {
+		// Router built without a database (route-table tests, tools).
+		log.Warnf("scheduler: no metadata database; schedules are unavailable")
+	} else if err := sqlxDB.Get(&gold, `SELECT public.uisce_gold_copy_tenant_id()::text`); err != nil {
 		log.Warnf("scheduler: gold-copy tenant not resolved; core calendars unavailable: %v", err)
 	}
 
