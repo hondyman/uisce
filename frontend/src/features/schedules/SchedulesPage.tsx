@@ -78,7 +78,7 @@ function KindSelect({ value, onChange }: { value: string; onChange: (v: string) 
   const { t } = useTranslation();
   const kinds = useQuery({ queryKey: ['sched-kinds'], queryFn: schedulesApi.kinds });
   return (
-    <TextField select size="small" value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 170 }}
+    <TextField select size="small" SelectProps={{ displayEmpty: true }} value={value} onChange={(e) => onChange(e.target.value)} sx={{ minWidth: 170 }}
       inputProps={{ 'aria-label': t('schedules.columns.runs') }}>
       <MenuItem value="">{t('schedules.filters.allKinds')}</MenuItem>
       {(kinds.data?.kinds ?? []).map((k) => (
@@ -114,7 +114,7 @@ function RunsTable({ scheduleId }: { scheduleId?: string }) {
     <Box>
       <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <SearchField value={filter.q ?? ''} onChange={set('q')} placeholder={t('schedules.filters.searchRuns')} />
-        <TextField select size="small" value={filter.status} onChange={(e) => set('status')(e.target.value)} sx={{ minWidth: 150 }}
+        <TextField select size="small" SelectProps={{ displayEmpty: true }} value={filter.status} onChange={(e) => set('status')(e.target.value)} sx={{ minWidth: 150 }}
           inputProps={{ 'aria-label': t('schedules.runs.status') }}>
           <MenuItem value="">{t('schedules.filters.allStatuses')}</MenuItem>
           {(Object.keys(STATUS_COLOR) as Run['status'][]).map((st) => (
@@ -254,7 +254,7 @@ export default function SchedulesPage() {
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 2 }}>
               <SearchField value={search} onChange={setSearch} placeholder={t('schedules.filters.searchSchedules')} />
               <KindSelect value={kind} onChange={setKind} />
-              <TextField select size="small" value={state} onChange={(e) => setState(e.target.value as typeof state)} sx={{ minWidth: 170 }}
+              <TextField select size="small" SelectProps={{ displayEmpty: true }} value={state} onChange={(e) => setState(e.target.value as typeof state)} sx={{ minWidth: 170 }}
                 inputProps={{ 'aria-label': t('schedules.columns.enabled') }}>
                 <MenuItem value="">{t('schedules.filters.allStates')}</MenuItem>
                 <MenuItem value="active">{t('schedules.filters.active')}</MenuItem>
