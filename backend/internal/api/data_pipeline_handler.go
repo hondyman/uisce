@@ -608,10 +608,23 @@ func (h *DataPipelineHandler) getSchedule(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	sc, err := h.store.GetSchedule(r.Context(), t, chi.URLParam(r, "id"))
+	id := chi.URLParam(r, "id")
+	sc, err := h.store.GetSchedule(r.Context(), t, id) // also 404s an unknown pipeline
 	if err != nil {
 		dpStoreError(w, err)
 		return
+	}
+	if cur, ok := h.scheduler.(interface {
+		Current(ctx context.Context, tenantID, pipelineID string) (*datapipeline.Schedule, bool, error)
+	}); ok {
+		core, found, err := cur.Current(r.Context(), t, id)
+		if err != nil {
+			dpStoreError(w, err)
+			return
+		}
+		if found {
+			sc = core
+		}
 	}
 	dpJSON(w, http.StatusOK, viewOf(sc))
 }

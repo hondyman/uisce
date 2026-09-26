@@ -93,13 +93,7 @@ import CryptoPortfolioCenter from "./features/crypto/CryptoPortfolioCenter";
 // Scheduler imports
 import {
   SchedulerDashboardPage,
-  JobsListPage,
-  JobEditorPage,
-  ExecutionsListPage,
-  ExecutionDetailPage,
   DependencyVisualizerPage,
-  BusinessCalendarsPage,
-  CalendarEditorPage,
   NotificationTemplatesPage,
   NotificationTemplateEditorPage as SchedulerNotificationTemplateEditorPage,
   ComplianceDashboardPage,
@@ -405,15 +399,8 @@ function ProtectedApp() {
             OPERATIONS - Scheduling and workflows
             ═══════════════════════════════════════════════════════════════════ */}
         <Route path="scheduler-intelligence" element={<ProtectedRoute><SchedulerConsolePage /></ProtectedRoute>} />
-        <Route path="scheduler/jobs" element={<ProtectedRoute><JobsListPage /></ProtectedRoute>} />
-        <Route path="scheduler/jobs/new" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="scheduler/jobs/:jobId" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="scheduler/jobs/:jobId/edit" element={<ProtectedRoute><JobEditorPage /></ProtectedRoute>} />
-        <Route path="scheduler/executions" element={<ProtectedRoute><ExecutionsListPage /></ProtectedRoute>} />
-        <Route path="scheduler/executions/:executionId" element={<ProtectedRoute><ExecutionDetailPage /></ProtectedRoute>} />
-        <Route path="scheduler/calendars" element={<ProtectedRoute><BusinessCalendarsPage /></ProtectedRoute>} />
-        <Route path="scheduler/calendars/new" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
-        <Route path="scheduler/calendars/:calendarId/edit" element={<ProtectedRoute><CalendarEditorPage /></ProtectedRoute>} />
+        {/* The S1 job scheduler was retired: schedules, runs and calendars live on the one scheduler. */}
+        <Route path="scheduler/*" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         
         <Route path="bp-console" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
         <Route path="bp-console/:tab" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />
@@ -502,7 +489,7 @@ function ProtectedApp() {
         <Route path="change-reviews" element={<Navigate to={`/${locale}/governance/changesets`} replace />} />
         <Route path="change-reviews/:id" element={<ProtectedRoute><ChangeReviewPage /></ProtectedRoute>} />
         <Route path="incidents/:id" element={<ProtectedRoute><IncidentPage /></ProtectedRoute>} />
-        <Route path="scheduler" element={<Navigate to={`/${locale}/scheduler-intelligence`} replace />} />
+        <Route path="scheduler" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         <Route path="aso" element={<Navigate to={`/${locale}/optimization`} replace />} />
         
         <Route path="" element={<ProtectedRoute><BundleExplorer /></ProtectedRoute>} />

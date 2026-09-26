@@ -25,7 +25,8 @@ import { downstreamSink, fieldsIn, newNodeId, SourceFieldLookup } from './fields
 import { categoryColor, NODE_META, PipelineNode, PipelineNodeData } from './PipelineNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { AssistantPanel } from './AssistantPanel';
-import { ScheduleDialog } from './ScheduleDialog';
+import ScheduleEditor from '../schedules/ScheduleEditor';
+import { schedulesApi } from '../schedules/api';
 import { useFillHeight } from './useFillHeight';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 
@@ -82,7 +83,14 @@ export default function PipelineEditorPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const schedule = useQuery({ queryKey: ['dp-schedule', id], enabled: !isNew, queryFn: () => pipelinesApi.schedule(id!) });
+  // The pipeline's schedule lives on the one scheduler (kind data_pipeline),
+  // so it is edited with the same editor as the Schedules console.
+  const schedule = useQuery({
+    queryKey: ['sched-list', 'data_pipeline', id],
+    enabled: !isNew,
+    queryFn: () => schedulesApi.list({ kind: 'data_pipeline', ref: id! }),
+  });
+  const coreSchedule = schedule.data?.schedules?.[0];
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down('lg')); // keep room for the canvas
 
@@ -278,8 +286,8 @@ export default function PipelineEditorPage() {
         <Tooltip title={isNew ? 'Save first' : 'Run this pipeline on a schedule'}>
           <span>
             <Button startIcon={<ScheduleIcon />} disabled={isNew} onClick={() => setScheduleOpen(true)}
-              color={schedule.data?.schedule?.enabled ? 'success' : 'primary'}>
-              {schedule.data?.schedule?.enabled ? 'Scheduled' : 'Schedule'}
+              color={coreSchedule?.enabled ? 'success' : 'primary'}>
+              {coreSchedule?.enabled ? 'Scheduled' : 'Schedule'}
             </Button>
           </span>
         </Tooltip>
@@ -368,7 +376,10 @@ export default function PipelineEditorPage() {
           />
         )}
       </Box>
-      {!isNew && <ScheduleDialog pipelineId={id!} open={scheduleOpen} onClose={() => setScheduleOpen(false)} />}
+      {!isNew && scheduleOpen && (
+        <ScheduleEditor key={coreSchedule?.id ?? 'new'} open schedule={coreSchedule}
+          fixedTarget={{ kind: 'data_pipeline', ref: id!, name }} onClose={() => setScheduleOpen(false)} />
+      )}
       <Snackbar open={!!toast} autoHideDuration={4000} onClose={() => setToast(null)} message={toast} />
     </Box>
   );

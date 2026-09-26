@@ -131,7 +131,7 @@ export default function SchedulesPage() {
   const when = useWhen();
   const [tab, setTab] = useState<'schedules' | 'runs'>('schedules');
   const [editing, setEditing] = useState<Schedule | 'new' | null>(null);
-  const list = useQuery({ queryKey: ['sched-list'], queryFn: schedulesApi.list });
+  const list = useQuery({ queryKey: ['sched-list'], queryFn: () => schedulesApi.list() });
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['sched-list'] });
     qc.invalidateQueries({ queryKey: ['sched-runs'] });

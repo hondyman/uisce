@@ -69,8 +69,6 @@ export interface RunRecord {
   errors_sample: { kind?: string; node_id?: string; row?: number; field?: string; reason?: string; run_error?: string }[];
   steps?: NodeStats[];
 }
-export interface Schedule { cron: string; timezone?: string; enabled: boolean }
-export interface ScheduleView { schedule: Schedule | null; next_runs?: string[] }
 export interface BOListItem { id: string; name: string; display_name: string; description?: string }
 export interface BOSchemaField { name: string; displayName?: string; type: string; required?: boolean; physicalColumn?: string }
 export interface RuleDescriptor { id: string; name: string; description?: string; severity: 'BLOCK' | 'WARN'; is_active: boolean; origin?: string }
@@ -103,8 +101,6 @@ export const pipelinesApi = {
   startRun: (id: string) => apiClient<{ run_id: string; status: string }>(`${base}/${id}/runs`, { method: 'POST' }),
   runs: (id: string) => apiClient<RunRecord[]>(`${base}/${id}/runs`),
   run: (runId: string) => apiClient<RunRecord>(`${base}/runs/${runId}`),
-  schedule: (id: string) => apiClient<ScheduleView>(`${base}/${id}/schedule`),
-  setSchedule: (id: string, s: Schedule) => apiClient<ScheduleView>(`${base}/${id}/schedule`, { method: 'PUT', ...json(s) }),
 };
 
 export const platformApi = {
