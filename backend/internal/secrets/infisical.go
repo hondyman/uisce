@@ -61,7 +61,8 @@ func (p *InfisicalProvider) GetMap(ctx context.Context, key string) (map[string]
 
 	secrets, err := p.client.ListSecrets(ctx, path)
 	if err != nil {
-		return nil, ErrSecretNotFound
+		// Keep the cause (auth failure vs missing folder); it names the path, never a value.
+		return nil, fmt.Errorf("%w: %v", ErrSecretNotFound, err)
 	}
 
 	result := make(map[string]string)
@@ -80,6 +81,9 @@ func (p *InfisicalProvider) PutMap(ctx context.Context, key string, values map[s
 	path := key
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
+	}
+	if err := p.client.EnsureFolderPath(ctx, path); err != nil {
+		return err
 	}
 
 	for k, v := range values {

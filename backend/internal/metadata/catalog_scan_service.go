@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/scanner"
@@ -26,6 +27,11 @@ import (
 
 // overrideable function used to fetch gold copy node maps (helps testing)
 var getCatalogNodeMapForGoldCopy = db.GetCatalogNodeMapForGoldCopy
+
+// datasourceCreds resolves connection credentials from the secrets store
+// (overrideable for tests). Every path in this package that opens a connection
+// to a tenant datasource hydrates its config through it first.
+var datasourceCreds = dscreds.Default
 
 // overrideable function used to upsert Business Terms from gold copy (helps testing)
 var upsertBusinessTermsFromGold = db.UpsertBusinessTermsFromGold
@@ -159,8 +165,28 @@ type DatasourceConfig struct {
 	TenantID          uuid.UUID `db:"tenant_id"`
 	Name              string    `db:"name"`
 	SourceSystem      string    `db:"source_system"`
-	ConnectionDetails string    `db:"connection_details"` // JSON with connection info
+	ConnectionDetails string    `db:"connection_details"` // JSON with connection info; credentials only by secret_path reference once migrated
 	IsGoldCopy        bool      `db:"is_gold_copy"`
+	// The row that owns the credentials: the linked public.connections row when
+	// there is one, else the tenant_product_datasource itself. Empty means the
+	// datasource itself (ID/TenantID).
+	CredentialKind     string `db:"credential_kind"`
+	CredentialOwnerID  string `db:"credential_owner_id"`
+	CredentialTenantID string `db:"credential_tenant_id"`
+}
+
+// hydratedConnectionDetails returns ds.ConnectionDetails with credentials read
+// from the secrets store, keyed by the owning row's own tenant and id.
+func hydratedConnectionDetails(ctx context.Context, ds DatasourceConfig) (string, error) {
+	kind, tenantID, ownerID := dscreds.KindDatasource, ds.TenantID.String(), ds.ID.String()
+	if ds.CredentialKind == string(dscreds.KindConnection) {
+		kind, tenantID, ownerID = dscreds.KindConnection, ds.CredentialTenantID, ds.CredentialOwnerID
+	}
+	out, err := datasourceCreds().Hydrate(ctx, kind, tenantID, ownerID, []byte(ds.ConnectionDetails))
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 // ScanResult represents the result for a single datasource scan
@@ -383,11 +409,15 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 						'database', c.database,
 						'username', c.username,
 						'password', c.password,
-						'schema', c.schema
+						'schema', c.schema,
+						'secret_path', c.secret_path
 					)::jsonb)
 				ELSE tpd.config
 			END AS connection_details,
-			t.is_gold_copy AS is_gold_copy
+			t.is_gold_copy AS is_gold_copy,
+			CASE WHEN c.id IS NOT NULL THEN 'connections' ELSE 'datasources' END AS credential_kind,
+			COALESCE(c.id, tpd.id)::text AS credential_owner_id,
+			COALESCE(c.tenant_id, ti.tenant_id)::text AS credential_tenant_id
 		FROM
 			public.tenant_product_datasource tpd
 		LEFT JOIN
@@ -423,7 +453,8 @@ func (s *CatalogScanService) getDatasourcesToScan(tenantDatasourceID *uuid.UUID)
 		defer rows.Close()
 		for rows.Next() {
 			var ds DatasourceConfig
-			if scanErr := rows.Scan(&ds.ID, &ds.TenantID, &ds.Name, &ds.SourceSystem, &ds.ConnectionDetails, &ds.IsGoldCopy); scanErr != nil {
+			if scanErr := rows.Scan(&ds.ID, &ds.TenantID, &ds.Name, &ds.SourceSystem, &ds.ConnectionDetails, &ds.IsGoldCopy,
+				&ds.CredentialKind, &ds.CredentialOwnerID, &ds.CredentialTenantID); scanErr != nil {
 				return scanErr
 			}
 			datasources = append(datasources, ds)
@@ -476,10 +507,13 @@ func (s *CatalogScanService) scanSingleDatasource(ctx context.Context, ds Dataso
 	if progress != nil {
 		progress <- models.ScanProgress{Phase: "connecting", Percent: 0, Message: fmt.Sprintf("Connecting to %s...", ds.Name)}
 	}
-	if s.connectTargetDBFunc != nil {
-		targetDB, err = s.connectTargetDBFunc(ctx, ds.ConnectionDetails)
-	} else {
-		targetDB, err = s.connectToTargetDatabase(ctx, ds.ConnectionDetails)
+	connectionDetails, err := hydratedConnectionDetails(ctx, ds)
+	if err == nil {
+		if s.connectTargetDBFunc != nil {
+			targetDB, err = s.connectTargetDBFunc(ctx, connectionDetails)
+		} else {
+			targetDB, err = s.connectToTargetDatabase(ctx, connectionDetails)
+		}
 	}
 	if err != nil {
 		// UPDATE STATUS: Failed
@@ -726,8 +760,12 @@ func (s *CatalogScanService) TestConnectionByID(ctx context.Context, datasourceI
 		return fmt.Errorf("no connection details found for datasource: %s", ds.Name)
 	}
 
+	connectionDetails, err := hydratedConnectionDetails(ctx, ds)
+	if err != nil {
+		return err
+	}
 	// Use existing TestConnection logic
-	return s.TestConnection(ctx, ds.ConnectionDetails)
+	return s.TestConnection(ctx, connectionDetails)
 }
 
 // connectToTargetDatabase establishes connection to a target database
