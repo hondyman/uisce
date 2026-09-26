@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	br "github.com/hondyman/uisce/backend/internal/boresolver"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 type fakeRepo struct {
@@ -25,6 +26,10 @@ func (f *fakeRepo) GetBOByTechnicalName(tenantID, datasourceID, technicalName st
 
 func (f *fakeRepo) TableHasColumn(drivingTable, column string) bool {
 	return true
+}
+
+func (f *fakeRepo) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	return nil, nil
 }
 
 func TestValidateSelectedFields_AllValid(t *testing.T) {

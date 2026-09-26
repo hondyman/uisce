@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // SQLGenerationRequest defines the input for generating SQL from a Business Object.
@@ -34,6 +35,14 @@ type SQLGenerationRequest struct {
 	KnowledgeDate time.Time `json:"knowledgeDate,omitempty"`
 	// DialectOverride explicitly selects a dialect, bypassing watermark routing.
 	DialectOverride string `json:"dialectOverride,omitempty"`
+	// UserRole is the role of the requesting user (e.g. "platform_trader",
+	// "compliance_officer"). Used by DetermineMaskingTier to block calc-term
+	// compilation when a referenced physical column's masking tier exceeds the
+	// passthrough threshold for the given role.
+	UserRole string `json:"userRole,omitempty"`
+	// ClearanceLevel is the clearance level of the requesting user
+	// (e.g. "CONFIDENTIAL"). Used by DetermineMaskingTier.
+	ClearanceLevel string `json:"clearanceLevel,omitempty"`
 }
 
 // SemanticSQLGenerationRequest defines a human-friendly semantic query format
@@ -156,6 +165,11 @@ type BORepository interface {
 	// which uses this to skip the tenant_id predicate on tables that don't
 	// have one instead of generating SQL that references a nonexistent column.
 	TableHasColumn(drivingTable, column string) bool
+	// GetCalcTermExpressions batch-fetches vm.Expression ASTs for the given
+	// catalog node IDs (which are calc-term semantic term IDs). Returns a map
+	// of nodeID → parsed Expression. Used by preloadCalcTerms to avoid N+1
+	// catalog queries.
+	GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error)
 }
 
 // BODefinition represents the metadata needed for SQL generation
@@ -180,6 +194,16 @@ type BOField struct {
 	Override          bool
 	Type              string // e.g. "reference", "string"
 	ReferenceBOID     string // if Type == "reference"
+	// TermType is "calculated" for calc-term catalog nodes (vm.Expression
+	// backed), empty for physical-column terms. The SQL generator uses this
+	// to detect calc terms and compile their expressions instead of looking
+	// up a physical column.
+	TermType string
+	// SensitivityTag is the PII/sensitivity classification of this field's
+	// physical column (e.g. "pii", "financial:confidential"). Used by
+	// DetermineMaskingTier to block calc-term compilation when the
+	// referenced column's masking tier exceeds the passthrough threshold.
+	SensitivityTag string
 }
 
 
@@ -423,6 +447,11 @@ type GenerationContext struct {
 
 	// RootTenantPredicate is the pre-built root table tenant boundary condition.
 	RootTenantPredicate string
+
+	// CalcTermConfigs is a preloaded map of field ID → compiled vm.Expression
+	// for all calc-term fields in the query. Populated by preloadCalcTerms
+	// before field resolution to avoid N+1 catalog queries.
+	CalcTermConfigs map[string]*vm.Expression
 }
 
 // GenerateSQL is the main entry point. It returns the generated SQL, the
@@ -445,6 +474,11 @@ func (g *BOSQLGenerator) GenerateSQL(req SQLGenerationRequest) (string, []interf
 	}
 	ctx.LoadedBOs[rootBO.ID] = rootBO
 	ctx.Aliases[""] = "t0" // Root alias (empty path)
+
+	// 2b. Preload calc-term expressions (batched, avoids N+1 catalog queries).
+	if err := g.preloadCalcTerms(ctx, rootBO); err != nil {
+		return "", nil, fmt.Errorf("failed to preload calc terms: %w", err)
+	}
 
 	// 3. Resolve Selected Fields (infers joins required for selected columns)
 	selectColumns, err := g.ResolveSelectedFields(ctx)
@@ -656,6 +690,88 @@ func (g *BOSQLGenerator) ResolvePathWithLabel(ctx *GenerationContext, path strin
 
 		// If this is the last part, we are done
 		if i == len(parts)-1 {
+			// Calc term: no PhysicalColumn, no TransformationSQL — compile
+			// the preloaded vm.Expression to SQL instead of failing.
+			if foundField.TermType == "calculated" {
+				if ctx.CalcTermConfigs == nil {
+					return "", "", fmt.Errorf("calc term %q has no preloaded expression — run preloadCalcTerms first", foundField.Name)
+				}
+				expr, ok := ctx.CalcTermConfigs[foundField.SemanticTermID]
+				if !ok {
+					return "", "", fmt.Errorf("calc term %q (node %s) not found in preloaded configs", foundField.Name, foundField.SemanticTermID)
+				}
+
+				const maxCalcTermDepth = 1
+				// seen maps fieldPath → true when that calc term is currently being
+				// resolved. An entry already present at entry means an ancestor call
+				// is already resolving this field (cycle).
+				// depth counts how many calc-term chaining levels have been entered
+				// (incremented when entering a referenced calc term via rCTRS).
+				seenPtr := &map[string]bool{}
+				depthPtr := new(int)
+				// Add the OUTER calc term to seen BEFORE CompileToSQL starts resolving,
+				// so that if the expression references the outer term (self-cycle),
+				// it's found in seen immediately.
+				(*seenPtr)[foundField.Name] = true
+				defer func() {
+					delete(*seenPtr, foundField.Name)
+				}()
+				var resolveCol func(fieldPath string) (string, error)
+				resolveCol = func(fieldPath string) (string, error) {
+					for _, f := range currentBO.Fields {
+						if f.Name == fieldPath || f.ID == fieldPath {
+							if f.TermType == "calculated" {
+								if (*seenPtr)[fieldPath] {
+									return "", fmt.Errorf("cycle detected: calc term %q references %q which is already being resolved", foundField.Name, fieldPath)
+								}
+								(*seenPtr)[fieldPath] = true
+								*depthPtr++
+								defer func() {
+									delete(*seenPtr, fieldPath)
+									*depthPtr--
+								}()
+								if *depthPtr > maxCalcTermDepth {
+									return "", fmt.Errorf("calc term %q exceeds max chaining depth (%d); referenced term %q is a calc term", foundField.Name, maxCalcTermDepth, fieldPath)
+								}
+								chainExpr, chainOk := ctx.CalcTermConfigs[f.SemanticTermID]
+								if !chainOk {
+									return "", fmt.Errorf("calc term %q references calc term %q which has no preloaded expression", foundField.Name, fieldPath)
+								}
+								chainSQL, chainErr := g.resolveCalcTermToSQL(chainExpr, currentAlias, resolveCol, *seenPtr, *depthPtr)
+								if chainErr != nil {
+									return "", chainErr
+								}
+								return chainSQL, nil
+							}
+							// Masking check: physical column referenced by a calc term with a sensitivity tag
+							if foundField.TermType == "calculated" && f.SensitivityTag != "" {
+								tier := DetermineMaskingTier(f.SensitivityTag, ctx.Request.UserRole, ctx.Request.ClearanceLevel)
+								if tier != MaskingTierPassthrough {
+									return "", fmt.Errorf("calculated term %q references masked column %q (tier %v)", foundField.Name, f.PhysicalColumn, tier)
+								}
+							}
+							if f.PhysicalColumn == "" {
+								return "", fmt.Errorf("calc term references field %q which has no physical column", fieldPath)
+							}
+							parts := strings.Split(f.PhysicalColumn, ".")
+							return parts[len(parts)-1], nil
+						}
+					}
+					return "", fmt.Errorf("field %q not found in BO %q", fieldPath, currentBO.ID)
+				}
+
+				sqlExpr, err := g.resolveCalcTermToSQL(expr, currentAlias, resolveCol, *seenPtr, *depthPtr)
+				if err != nil {
+					return "", "", fmt.Errorf("compile calc term %q: %w", foundField.Name, err)
+				}
+
+				label := foundField.DisplayName
+				if label == "" {
+					label = foundField.Name
+				}
+				return sqlExpr, label, nil
+			}
+
 			if foundField.PhysicalColumn == "" && foundField.TransformationSQL == "" {
 				return "", "", fmt.Errorf("no physical column mapping for field '%s'", foundField.ID)
 			}
@@ -793,6 +909,15 @@ func (g *BOSQLGenerator) ConvertFilters(ctx *GenerationContext) (string, error) 
 
 	for _, filter := range ctx.Request.Filters {
 		fieldPath := filter.FieldID
+
+		// Calc-term filter rejection: calc terms compile to SQL expressions
+		// that may contain aggregates (SUM, etc.) which are invalid in WHERE
+		// clauses. WHERE-clause compilation for calc terms is future scope.
+		for _, f := range ctx.RootBODef.Fields {
+			if f.ID == fieldPath && f.TermType == "calculated" {
+				return "", fmt.Errorf("filter on calc term %q is not supported — calc terms cannot be used in WHERE clauses", f.Name)
+			}
+		}
 
 		sqlExpr, err := g.ResolvePath(ctx, fieldPath)
 		if err != nil {
@@ -1066,4 +1191,60 @@ func (g *BOSQLGenerator) CompileValidationRuleSQL(compReq ValidationRuleCompilat
 		Args:           args,
 		PhysicalColumn: physicalCol,
 	}, nil
+}
+
+// preloadCalcTerms batch-fetches vm.Expression ASTs for all calc-term fields
+// in the BO definition. It queries catalog_node.config (which stores
+// CalcTermConfig.RuleAST) for every field with TermType == "calculated",
+// avoiding N+1 per-field catalog queries. The result is stored in
+// ctx.CalcTermConfigs keyed by field ID.
+func (g *BOSQLGenerator) preloadCalcTerms(ctx *GenerationContext, boDef *BODefinition) error {
+	var calcNodeIDs []string
+	for _, f := range boDef.Fields {
+		if f.TermType == "calculated" && f.SemanticTermID != "" {
+			calcNodeIDs = append(calcNodeIDs, f.SemanticTermID)
+		}
+	}
+	if len(calcNodeIDs) == 0 {
+		return nil
+	}
+
+	exprs, err := g.BORepository.GetCalcTermExpressions(calcNodeIDs)
+	if err != nil {
+		return fmt.Errorf("preload calc terms: %w", err)
+	}
+	ctx.CalcTermConfigs = exprs
+	return nil
+}
+
+// resolveCalcTermToSQL compiles a calc-term's vm.Expression to a SQL
+// expression string, substituting ${alias} for each resolved field reference.
+// The resolveColumn closure maps FieldRef.Path → physical column expression
+// (e.g., "t0.revenue"), so the compiled SQL references real table columns.
+//
+// Masking: for each physical column referenced by the expression, the caller
+// should verify that the column is below the masking threshold before calling
+// this function. The masking check belongs in the caller (ResolvePathWithLabel)
+// because it needs access to the tenant context.
+func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string, resolveColumn vm.ColumnResolver, parentSeen map[string]bool, depth int) (string, error) {
+	// Wrap the caller's resolveColumn to prefix columns with the table alias.
+	// The expression's FieldRef.Path values are semantic term names; the
+	// caller's resolver maps them to physical column names. We prefix with
+	// the alias to produce "t0.column_name" in the final SQL.
+	aliasedResolver := func(fieldPath string) (string, error) {
+		col, err := resolveColumn(fieldPath)
+		if err != nil {
+			return "", err
+		}
+		// If the resolver returned a bare column name (no dot), prefix
+		// with the alias. If it already has a dot (fully qualified),
+		// leave it — the caller already specified the table.
+		if !strings.Contains(col, ".") {
+			return alias + "." + col, nil
+		}
+		return col, nil
+	}
+
+	sql, err := vm.CompileToSQL(expr, aliasedResolver)
+	return sql, err
 }
