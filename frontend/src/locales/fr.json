@@ -454,6 +454,76 @@
       "noneEver": "Aucune modification n'a encore été proposée."
     }
   },
+  "stagingBindings": {
+    "title": "Liaisons de staging",
+    "subtitle": "Quel champ de l'objet métier alimente chaque colonne de staging du fournisseur - pour que les règles de l'objet contrôlent les lignes de staging et que la maîtrise les lise dans les termes de l'objet. Les modifications exigent l'approbation d'une autre personne.",
+    "new": "Proposer une liaison",
+    "cancel": "Annuler",
+    "empty": "Aucune liaison de staging pour l'instant.",
+    "changePending": "Modification en attente",
+    "proposeChange": "Proposer une modification",
+    "proposeDelete": "Proposer sa suppression",
+    "confirmDelete": "Proposer de supprimer la liaison de {{table}} à {{bo}} ? Elle n'est supprimée qu'après approbation d'un autre administrateur.",
+    "fieldCount_one": "{{count}} champ",
+    "fieldCount_other": "{{count}} champs",
+    "tabs": {
+      "bindings": "Liaisons",
+      "approvals": "Approbations",
+      "history": "Historique"
+    },
+    "columns": {
+      "stagingTable": "Table de staging",
+      "businessObject": "Objet métier",
+      "fields": "Champs",
+      "origin": "Origine",
+      "updated": "Mis à jour"
+    },
+    "origin": {
+      "core": "Cœur (copie maîtresse)",
+      "tenant": "Ce locataire"
+    },
+    "status": {
+      "pending": "En attente",
+      "applied": "Appliquée",
+      "rejected": "Rejetée",
+      "withdrawn": "Retirée"
+    },
+    "editor": {
+      "newTitle": "Proposer une liaison de staging",
+      "editTitle": "Proposer une modification de la liaison",
+      "makerChecker": "Rien ne change tant qu'un autre administrateur n'a pas approuvé votre proposition.",
+      "mapping": "Correspondance des champs ({{bound}} sur {{total}} liés)",
+      "suggest": "Suggérer",
+      "field": "Champ de l'objet métier",
+      "column": "Colonne de staging",
+      "notBound": "Non lié",
+      "columnFor": "Colonne de staging pour {{field}}",
+      "suggested": "Suggéré {{pct}} %",
+      "reason": "Motif",
+      "reasonHelp": "Pourquoi cette modification - visible par l'approbateur et conservée dans l'audit.",
+      "propose": "Proposer"
+    },
+    "approvals": {
+      "none": "Rien en attente d'approbation.",
+      "proposedBy": "Proposé par {{who}} · {{when}}",
+      "yours": "Votre proposition - un autre administrateur doit l'approuver.",
+      "withdraw": "Retirer",
+      "comment": "Commentaire",
+      "approve": "Approuver",
+      "reject": "Rejeter",
+      "deleteBinding": "Supprimer cette liaison",
+      "noChange": "Aucune modification de champ",
+      "unbound": "non lié"
+    },
+    "history": {
+      "when": "Proposée",
+      "change": "Modification",
+      "status": "Statut",
+      "maker": "Proposée par",
+      "checker": "Revue par",
+      "delete": "Supprimer la liaison"
+    }
+  },
   "schedules": {
     "title": "Planifications",
     "subtitle": "Tout ce qui s'exécute selon un horaire (rapports, requêtes enregistrées, pipelines) au même endroit, selon vos calendriers ouvrés.",

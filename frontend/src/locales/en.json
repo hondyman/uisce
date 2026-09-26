@@ -326,6 +326,76 @@
       "noneEver": "No changes have been proposed yet."
     }
   },
+  "stagingBindings": {
+    "title": "Staging bindings",
+    "subtitle": "Which business object field each vendor staging column feeds - so the object's rules check staging rows, and mastering reads them in the object's terms. Changes need a second person's approval.",
+    "new": "Propose binding",
+    "cancel": "Cancel",
+    "empty": "No staging bindings yet.",
+    "changePending": "Change pending",
+    "proposeChange": "Propose a change",
+    "proposeDelete": "Propose removing it",
+    "confirmDelete": "Propose removing the binding of {{table}} to {{bo}}? It is removed only when another administrator approves.",
+    "fieldCount_one": "{{count}} field",
+    "fieldCount_other": "{{count}} fields",
+    "tabs": {
+      "bindings": "Bindings",
+      "approvals": "Approvals",
+      "history": "History"
+    },
+    "columns": {
+      "stagingTable": "Staging table",
+      "businessObject": "Business object",
+      "fields": "Fields",
+      "origin": "Origin",
+      "updated": "Updated"
+    },
+    "origin": {
+      "core": "Core (gold copy)",
+      "tenant": "This tenant"
+    },
+    "status": {
+      "pending": "Pending",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "withdrawn": "Withdrawn"
+    },
+    "editor": {
+      "newTitle": "Propose a staging binding",
+      "editTitle": "Propose a change to the binding",
+      "makerChecker": "Nothing changes until another administrator approves your proposal.",
+      "mapping": "Field mapping ({{bound}} of {{total}} bound)",
+      "suggest": "Suggest",
+      "field": "Business object field",
+      "column": "Staging column",
+      "notBound": "Not bound",
+      "columnFor": "Staging column for {{field}}",
+      "suggested": "Suggested {{pct}}%",
+      "reason": "Reason",
+      "reasonHelp": "Why this change - shown to the approver and kept in the audit trail.",
+      "propose": "Propose"
+    },
+    "approvals": {
+      "none": "Nothing waiting for approval.",
+      "proposedBy": "Proposed by {{who}} · {{when}}",
+      "yours": "Your proposal - another administrator must approve it.",
+      "withdraw": "Withdraw",
+      "comment": "Comment",
+      "approve": "Approve",
+      "reject": "Reject",
+      "deleteBinding": "Remove this binding",
+      "noChange": "No field changes",
+      "unbound": "unbound"
+    },
+    "history": {
+      "when": "Proposed",
+      "change": "Change",
+      "status": "Status",
+      "maker": "Proposed by",
+      "checker": "Reviewed by",
+      "delete": "Remove binding"
+    }
+  },
   "schedules": {
     "title": "Schedules",
     "subtitle": "Everything that runs on a timetable - reports, saved queries, pipelines - in one place, on your business calendars.",

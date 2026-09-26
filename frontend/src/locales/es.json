@@ -454,6 +454,76 @@
       "noneEver": "Todavía no se ha propuesto ningún cambio."
     }
   },
+  "stagingBindings": {
+    "title": "Vínculos de staging",
+    "subtitle": "Qué campo del objeto de negocio alimenta cada columna de staging del proveedor, para que las reglas del objeto comprueben las filas de staging y la masterización las lea en términos del objeto. Los cambios requieren la aprobación de otra persona.",
+    "new": "Proponer vínculo",
+    "cancel": "Cancelar",
+    "empty": "Aún no hay vínculos de staging.",
+    "changePending": "Cambio pendiente",
+    "proposeChange": "Proponer un cambio",
+    "proposeDelete": "Proponer su eliminación",
+    "confirmDelete": "¿Proponer eliminar el vínculo de {{table}} con {{bo}}? Solo se elimina cuando otro administrador lo apruebe.",
+    "fieldCount_one": "{{count}} campo",
+    "fieldCount_other": "{{count}} campos",
+    "tabs": {
+      "bindings": "Vínculos",
+      "approvals": "Aprobaciones",
+      "history": "Historial"
+    },
+    "columns": {
+      "stagingTable": "Tabla de staging",
+      "businessObject": "Objeto de negocio",
+      "fields": "Campos",
+      "origin": "Origen",
+      "updated": "Actualizado"
+    },
+    "origin": {
+      "core": "Núcleo (copia maestra)",
+      "tenant": "Este inquilino"
+    },
+    "status": {
+      "pending": "Pendiente",
+      "applied": "Aplicado",
+      "rejected": "Rechazado",
+      "withdrawn": "Retirado"
+    },
+    "editor": {
+      "newTitle": "Proponer un vínculo de staging",
+      "editTitle": "Proponer un cambio al vínculo",
+      "makerChecker": "Nada cambia hasta que otro administrador apruebe su propuesta.",
+      "mapping": "Asignación de campos ({{bound}} de {{total}} vinculados)",
+      "suggest": "Sugerir",
+      "field": "Campo del objeto de negocio",
+      "column": "Columna de staging",
+      "notBound": "Sin vincular",
+      "columnFor": "Columna de staging para {{field}}",
+      "suggested": "Sugerido {{pct}} %",
+      "reason": "Motivo",
+      "reasonHelp": "Por qué este cambio: se muestra al aprobador y queda en la auditoría.",
+      "propose": "Proponer"
+    },
+    "approvals": {
+      "none": "Nada pendiente de aprobación.",
+      "proposedBy": "Propuesto por {{who}} · {{when}}",
+      "yours": "Su propuesta: debe aprobarla otro administrador.",
+      "withdraw": "Retirar",
+      "comment": "Comentario",
+      "approve": "Aprobar",
+      "reject": "Rechazar",
+      "deleteBinding": "Eliminar este vínculo",
+      "noChange": "Sin cambios de campos",
+      "unbound": "sin vincular"
+    },
+    "history": {
+      "when": "Propuesto",
+      "change": "Cambio",
+      "status": "Estado",
+      "maker": "Propuesto por",
+      "checker": "Revisado por",
+      "delete": "Eliminar vínculo"
+    }
+  },
   "schedules": {
     "title": "Programaciones",
     "subtitle": "Todo lo que se ejecuta con horario (informes, consultas guardadas, canalizaciones) en un solo lugar, según sus calendarios laborales.",
