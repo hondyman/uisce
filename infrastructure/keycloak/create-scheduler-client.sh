@@ -85,9 +85,21 @@ if [[ -z "${KC_ADMIN}" || -z "${KC_ADMIN_PASS}" ]]; then
   [[ -n "${KC_ADMIN}" && -n "${KC_ADMIN_PASS}" ]] || { echo "set KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASS, or run this in a terminal to be asked (not needed for --dry-run)" >&2; exit 2; }
 fi
 
-TOKEN="$("${CURL[@]}" -d grant_type=password -d client_id=admin-cli \
+# Keycloak's reason is shown if the admin login is refused (it never
+# contains the password): 401 is a wrong password; 400 is usually a locked
+# account ("temporarily disabled") or a pending required action.
+LOGIN_CURL=(curl -sS)
+[[ "${INSECURE}" == "true" ]] && LOGIN_CURL+=(-k)
+LOGIN="$("${LOGIN_CURL[@]}" -w '\n%{http_code}' -d grant_type=password -d client_id=admin-cli \
   --data-urlencode "username=${KC_ADMIN}" --data-urlencode "password=${KC_ADMIN_PASS}" \
-  "${BASE}/realms/master/protocol/openid-connect/token" | jq -r .access_token)"
+  "${BASE}/realms/master/protocol/openid-connect/token")"
+CODE="${LOGIN##*$'\n'}"; LOGIN="${LOGIN%$'\n'*}"
+if [[ "${CODE}" != 200 ]]; then
+  echo "Keycloak refused the admin login (HTTP ${CODE}): $(jq -r '[.error, .error_description] | map(select(. != null)) | join(": ")' <<<"${LOGIN}" 2>/dev/null)" >&2
+  exit 3
+fi
+TOKEN="$(jq -r .access_token <<<"${LOGIN}")"
+unset LOGIN
 api() { local m="$1" p="$2"; shift 2; "${CURL[@]}" -X "$m" -H "Authorization: Bearer ${TOKEN}" -H 'Content-Type: application/json' "${BASE}/admin/realms/${KC_REALM}${p}" "$@"; }
 
 for role in uisce_service_account schedule_trigger; do
