@@ -61,6 +61,9 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 	if s.SavedQueryHandler != nil {
 		runners.Register(&savedQueryRunner{h: s.SavedQueryHandler})
 	}
+	if s.dataPipelineRunner != nil {
+		runners.Register(s.dataPipelineRunner)
+	}
 	s.ScheduleRunners = runners
 
 	store := &schedule.Store{DB: sqlxDB}

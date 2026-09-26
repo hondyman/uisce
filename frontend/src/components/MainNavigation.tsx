@@ -350,7 +350,7 @@ const categoryConfigs: CategoryConfig[] = [
     label: 'Operations',
     key: 'workflow',
     icon: <PlayCircleOutlineIcon />,
-    defaultPath: '/scheduler-intelligence',
+    defaultPath: '/automation/schedules',
     color: {
       primary: '#00695C',
       light: '#E0F2F1',
@@ -362,10 +362,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Scheduler',
         icon: <TimelineIcon />,
         items: [
-          { label: 'Intelligence Console', path: '/scheduler-intelligence', icon: <AutoFixHighIcon />, description: 'AI-powered scheduler', badge: { label: 'AI', color: 'info' } },
-          { label: 'Jobs', path: '/scheduler/jobs', icon: <TimelineIcon />, description: 'Job definitions' },
-          { label: 'Executions', path: '/scheduler/executions', icon: <PlayCircleOutlineIcon />, description: 'Run history' },
-          { label: 'Calendars', path: '/scheduler/calendars', icon: <CategoryIcon />, description: 'Business calendars' },
+          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Schedules, run history and business calendars' },
         ]
       },
       {

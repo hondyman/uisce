@@ -218,6 +218,7 @@ type Server struct {
 	// The one scheduler (internal/schedule) and its runners by target kind.
 	ScheduleService         *schedule.Service
 	ScheduleRunners         *schedule.Registry
+	dataPipelineRunner      *dataPipelineRunner
 	BusinessObjectService   *catalogmeta.BusinessObjectService
 	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	QueryHandler            *handlers.QueryHandler
@@ -236,7 +237,6 @@ type Server struct {
 	RAGHandler              *RAGHandler
 	EventBus                EventBus
 	ExportHandlers          *handlers.ExportHandlers
-	SchedulerHandlers       *handlers.SchedulerHandlers
 	auditService            *audit.ChannelAuditService
 	semanticCache           *cache.SemanticCache
 
@@ -1008,8 +1008,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		CalcHandler: nil, // Will be set after initialization
 
-		ExportHandlers:    nil, // Will be set after initialization
-		SchedulerHandlers: nil, // Will be set after initialization
+		ExportHandlers: nil, // Will be set after initialization
 	}
 
 	// Register trace proxy and metrics endpoints
@@ -1189,16 +1188,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	exportService := services.NewPostgresExportService(db, exportStoragePath, exportURLBasePath)
 	srv.ExportHandlers = handlers.NewExportHandlers(exportService)
 
-	// Initialize Job Queue for async operations
-	jobQueue := services.NewPostgresJobQueue(db)
-
-	schedulerService := services.NewPostgresSchedulerService(db)
-	srv.SchedulerHandlers = handlers.NewSchedulerHandlers(schedulerService)
-
-	// Start Scheduler background loop
-	if err := schedulerService.Start(context.Background(), jobQueue); err != nil {
-		log.Printf("[Scheduler] Warning: Failed to start background loop: %v", err)
-	}
+	// The old in-process scheduler (S1: an unlocked every-minute poll loop in
+	// every API replica) is retired; everything schedules through
+	// internal/schedule (Temporal Schedules, /api/schedules).
 
 	// Initialize NLQ Service
 	nlqService := services.NewNLQService(sqlxDB, llmProvider, searchSvc, reasoningEngine, nil)
@@ -1747,9 +1739,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Register Async Feature Routes
 		if srv.ExportHandlers != nil {
 			routes.RegisterExports(r, srv.ExportHandlers)
-		}
-		if srv.SchedulerHandlers != nil {
-			routes.RegisterScheduler(r, srv.SchedulerHandlers)
 		}
 		srv.registerAdminRoutes(r)
 		srv.registerLineageRoutes(r)

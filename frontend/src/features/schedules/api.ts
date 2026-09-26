@@ -99,7 +99,11 @@ export interface RenderedError {
 const BASE = '/api/schedules';
 
 export const schedulesApi = {
-  list: () => apiClient<{ schedules: Schedule[] }>(`${BASE}/`),
+  /** All schedules, or only those of one target (kind + ref). */
+  list: (target?: { kind: string; ref: string }) =>
+    apiClient<{ schedules: Schedule[] }>(
+      target ? `${BASE}/?${new URLSearchParams({ kind: target.kind, ref: target.ref })}` : `${BASE}/`,
+    ),
   get: (id: string) => apiClient<Schedule>(`${BASE}/${id}`),
   create: (input: ScheduleInput) => apiClient<Schedule>(`${BASE}/`, { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: ScheduleInput) =>

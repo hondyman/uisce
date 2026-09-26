@@ -220,15 +220,3 @@ func (rs *Routes) RegisterExports(r chi.Router, h *handlers.ExportHandlers) {
 		r.Get("/", h.ListExports)
 	})
 }
-
-// RegisterScheduler mounts the job scheduler endpoints
-func (rs *Routes) RegisterScheduler(r chi.Router, h *handlers.SchedulerHandlers) {
-	r.Route("/v1/schedules", func(r chi.Router) {
-		r.Post("/", h.CreateScheduledJob)
-		r.Get("/", h.ListSchedules)
-		r.Get("/{scheduleId}", h.GetSchedule)
-		r.Post("/{scheduleId}/pause", h.PauseSchedule)
-		r.Post("/{scheduleId}/resume", h.ResumeSchedule)
-		r.Delete("/{scheduleId}", h.DeleteSchedule)
-	})
-}
