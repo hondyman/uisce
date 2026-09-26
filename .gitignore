@@ -51,6 +51,8 @@ yarn-error.log*
 .env
 .env.local
 .env.*.local
+# Temp files written by scripts/infisical-bootstrap.sh (contain secrets)
+.env*.tmp.*
 .env.mesh
 
 # IDE and editor files
