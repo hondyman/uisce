@@ -12,7 +12,7 @@
  */
 
 import { getSelectedRegion } from './region';
-import { readCachedSelection } from '../utils/tenantScope';
+import { readCachedSelection, whenTenantScopeReady } from '../utils/tenantScope';
 import { acceptLanguage, parseCatalogError, type CatalogErrorBody } from '../utils/catalogError';
 
 /**
@@ -98,6 +98,12 @@ export async function apiFetch(
 ): Promise<Response> {
   const headers = new Headers(init.headers || {});
 
+  // Never scope a request before the Operating Scope is restored.
+  if (!headers.has('X-Tenant-Datasource-ID')) {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    await whenTenantScopeReady(url);
+  }
+
   // Inject tenant headers automatically — but only when the caller has NOT
   // already supplied a value for that header. Caller-supplied values win,
   // so a component that has the React tenant/datasource in scope can pass
@@ -146,10 +152,12 @@ export function getApiClient(): AxiosInstance {
     axiosInstance = axios.create();
 
     // Request interceptor: inject tenant + region headers
-    axiosInstance.interceptors.request.use((config: any) => {
+    axiosInstance.interceptors.request.use(async (config: any) => {
       if (!config.headers) {
         config.headers = {};
       }
+
+      await whenTenantScopeReady(config.url ?? '');
 
       const tenantHeaders = getTenantHeadersInternal();
       Object.entries(tenantHeaders).forEach(([key, value]) => {

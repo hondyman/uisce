@@ -1,4 +1,4 @@
-import { getRequiredTenantScope, hasTenantScope, readCachedSelection } from './tenantScope';
+import { getRequiredTenantScope, hasTenantScope, readCachedSelection, whenTenantScopeReady } from './tenantScope';
 import resolveApiUrl from './resolveApiUrl';
 import { getSelectedRegion } from '../lib/region';
 import { acceptLanguage, CatalogError, parseCatalogError } from './catalogError';
@@ -29,6 +29,11 @@ export async function apiClient<T = Response>(input: RequestInfo | URL, init?: R
         if (!headers.has('X-Tenant-Region')) {
             const region = getSelectedRegion();
             if (region) headers.set('X-Tenant-Region', region);
+        }
+
+        // Never scope a request before the Operating Scope is restored.
+        if (!headers.has('X-Tenant-Datasource-ID')) {
+            await whenTenantScopeReady(path);
         }
 
         try {

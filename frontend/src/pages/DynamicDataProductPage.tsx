@@ -46,11 +46,13 @@ export const DynamicDataProductPage: React.FC = () => {
   const { control, handleSubmit, reset } = useForm();
 
   const fetchPageMetadataAndData = async () => {
+    // No tenant selected yet: keep loading; the effect re-runs when one is.
+    const tenantId = tenant?.id;
+    if (!tenantId) return;
     setLoading(true);
     try {
       // Step 1: Fetch runtime layout configurations matching our route parameters
-      // We pass the active tenant-id as a query param or header (assuming US-WEST default or Northwind tenant context)
-      const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111"; // Default to seed tenant id
+      // We pass the active tenant-id as a query param or header
       const metaRes = await fetch(`/api/v1/layout/pages/${pageKey}/resolve?tenant_id=${tenantId}`);
       if (!metaRes.ok) throw new Error("Target page blueprint could not be processed by registry.");
       const metaData: PageBlueprint = await metaRes.json();
@@ -88,7 +90,11 @@ export const DynamicDataProductPage: React.FC = () => {
 
   const handleFormSubmit = async (data: any) => {
     const method = selectedRecord ? 'PUT' : 'POST';
-    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
+    const tenantId = tenant?.id;
+    if (!tenantId) {
+      setError("Select a tenant in Operating Scope first.");
+      return;
+    }
     const endpoint = selectedRecord 
       ? `/api/v1/data/${blueprint.page_key}/v1.0.0/${selectedRecord.id}?tenant_id=${tenantId}`
       : `/api/v1/data/${blueprint.page_key}/v1.0.0?tenant_id=${tenantId}`;
@@ -113,7 +119,11 @@ export const DynamicDataProductPage: React.FC = () => {
   };
 
   const handleDeleteRecord = async (id: any) => {
-    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
+    const tenantId = tenant?.id;
+    if (!tenantId) {
+      setError("Select a tenant in Operating Scope first.");
+      return;
+    }
     const endpoint = `/api/v1/data/${blueprint.page_key}/v1.0.0/${id}?tenant_id=${tenantId}`;
     try {
       const response = await fetch(endpoint, {
