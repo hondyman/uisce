@@ -1,5 +1,17 @@
 # Discovery Pass — Unauthenticated Route Reachability (2026-09-07)
 
+> **Amendment (2026-09-08):** this is a snapshot, not a live view — 3 of
+> the 93 unauthenticated `200`s below are already closed, ahead of the
+> gate: `GET /api/tenants/all`, `GET /api/tenants/gold-copy`, and
+> `GET /_routes` (PR #31, `80c95e1b9`; 401/403 split corrected in PR #33,
+> `f4fdacf0d`). The route-group hypothesis raised during triage was
+> checked and killed — see `INCIDENT_REPORT_20260906.md`'s 2026-09-08
+> entry: there is exactly one auth middleware on the whole router
+> (enrichment-only), no per-group gate was ever omitted, and the
+> clustering below is file-level (one handler file lacking a check), not
+> route-group-level. The table below is left as originally probed; treat
+> any row for the three routes above as historical, not current.
+
 Read-only reconnaissance for Fix 2 (the route-layer authentication gate).
 This is the allowlist input, produced by observation rather than by what
 breaks after enforcement — per the agreed rollout: discovery pass (this
