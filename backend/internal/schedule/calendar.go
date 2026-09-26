@@ -20,12 +20,12 @@ type Calendars interface {
 
 // CalendarInfo describes a calendar a schedule can use.
 type CalendarInfo struct {
-	Code           string `json:"code"`
-	Name           string `json:"name"`
-	Owner          string `json:"owner"` // core | tenant
-	FirstDate      string `json:"first_date,omitempty"`
-	LastDate       string `json:"last_date,omitempty"`
-	HasTenantLayer bool   `json:"has_tenant_layer"`
+	Code           string `db:"code" json:"code"`
+	Name           string `db:"name" json:"name"`
+	Owner          string `db:"owner" json:"owner"` // core | tenant
+	FirstDate      string `db:"first_date" json:"first_date,omitempty"`
+	LastDate       string `db:"last_date" json:"last_date,omitempty"`
+	HasTenantLayer bool   `db:"has_tenant_layer" json:"has_tenant_layer"`
 }
 
 // MDMCalendars reads mdm.calendar_master / calendar_day / calendar_hierarchy
