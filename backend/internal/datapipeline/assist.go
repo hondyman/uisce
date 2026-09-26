@@ -23,6 +23,8 @@ type RuleInfo struct {
 	Name        string `json:"name"`
 	Severity    string `json:"severity"`
 	Description string `json:"description,omitempty"`
+	// Fields the rule reads (top-level business object fields).
+	Fields []string `json:"fields,omitempty"`
 }
 
 // PlatformCatalog is what exists for the requesting tenant. Implementations
@@ -132,13 +134,37 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 			if rerr != nil {
 				continue
 			}
-			known := map[string]bool{}
+			known := map[string]RuleInfo{}
 			for _, r := range rules {
-				known[r.ID] = true
+				known[r.ID] = r
 			}
+			// Rules read business object fields: the rows reaching this step
+			// must carry them, or every row is rejected at run time.
+			have := fieldsReaching(spec, n.ID, fieldsOf)
 			for _, id := range c.RuleIDs {
-				if !known[id] {
+				r, ok := known[id]
+				if !ok {
 					add(n.ID, "rule %q is not an active rule of %s", id, c.BOKey)
+					continue
+				}
+				if have == nil {
+					continue
+				}
+				var missing []string
+				for _, f := range r.Fields {
+					if !have[f] {
+						missing = append(missing, f)
+					}
+				}
+				if len(missing) > 0 {
+					add(n.ID, "rule %q reads %s field(s) %s, which the rows here don't have - map them to %s's fields before this step",
+						r.Name, c.BOKey, strings.Join(missing, ", "), c.BOKey)
+				}
+			}
+			if sink := downstreamSinkOf(spec, n.ID); sink != nil && sink.Type == NodeBOSink {
+				var sc BOSinkConfig
+				if json.Unmarshal(sink.Config, &sc) == nil && sc.BOKey != "" && sc.BOKey != c.BOKey {
+					add(n.ID, "these are %s rules, but the rows are loaded into %s", c.BOKey, sc.BOKey)
 				}
 			}
 		case NodeFileSource:
@@ -559,3 +585,60 @@ func parseAssistant(raw string) (*AssistResponse, error) {
 // AuthoringGuide is the pipeline document format and step reference given to
 // the assistant; MCP clients get the same text.
 func AuthoringGuide() string { return assistInstructions }
+
+// fieldsReaching is the set of fields rows carry when they reach node id,
+// following its single upstream path: a map's targets, a file's columns or a
+// business object's fields; steps in between pass fields through. nil when
+// it can't be known (several inputs, a map keeping unmapped columns, an
+// inferred file contract) - callers then skip field checks rather than guess.
+func fieldsReaching(spec *Spec, id string, boFields func(string) map[string]bool) map[string]bool {
+	parents := map[string][]string{}
+	for _, e := range spec.Edges {
+		parents[e.To] = append(parents[e.To], e.From)
+	}
+	byID := map[string]*Node{}
+	for i := range spec.Nodes {
+		byID[spec.Nodes[i].ID] = &spec.Nodes[i]
+	}
+	seen := map[string]bool{}
+	cur := id
+	for {
+		ps := parents[cur]
+		if len(ps) != 1 || seen[ps[0]] || byID[ps[0]] == nil {
+			return nil
+		}
+		cur = ps[0]
+		seen[cur] = true
+		n := byID[cur]
+		switch n.Type {
+		case NodeMap:
+			var c MapConfig
+			if json.Unmarshal(n.Config, &c) != nil || c.KeepUnmapped {
+				return nil
+			}
+			out := map[string]bool{}
+			for _, m := range c.Fields {
+				if m.To != "" {
+					out[m.To] = true
+				}
+			}
+			return out
+		case NodeFileSource:
+			var c FileSourceConfig
+			if json.Unmarshal(n.Config, &c) != nil || len(c.Columns) == 0 {
+				return nil
+			}
+			out := map[string]bool{}
+			for _, col := range c.Columns {
+				out[col.Name] = true
+			}
+			return out
+		case NodeBOSource:
+			var c BOSourceConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				return nil
+			}
+			return boFields(c.BOKey)
+		}
+	}
+}

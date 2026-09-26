@@ -47,6 +47,7 @@ type CatalogRuleChecker struct {
 type loadedRule struct {
 	id, name, severity string
 	node               vm.RuleNode
+	fields             []string // top-level fields the rule reads
 }
 
 // ForRun returns a checker with an empty cache sharing the rule source.
@@ -79,7 +80,7 @@ func (c *CatalogRuleChecker) load(ctx context.Context, tenantID string, ids []st
 		if err := json.Unmarshal(desc.RuleAST, &node); err != nil {
 			return nil, fmt.Errorf("rule %q: stored rule_ast did not parse: %w", desc.Name, err)
 		}
-		rs = append(rs, loadedRule{id: raw, name: desc.Name, severity: strings.ToUpper(desc.Severity), node: node})
+		rs = append(rs, loadedRule{id: raw, name: desc.Name, severity: strings.ToUpper(desc.Severity), node: node, fields: topLevel(vm.FieldRefs(node))})
 	}
 	if c.cache == nil {
 		c.cache = map[string][]loadedRule{}
@@ -96,6 +97,14 @@ func (c *CatalogRuleChecker) Check(ctx context.Context, tenantID string, ids []s
 	ev := vm.NewAdvancedEvaluator()
 	var out []RuleFailure
 	for _, r := range rs {
+		// A field the rule reads that is not in the row is never a pass or a
+		// fail of the rule: the row isn't in the rule's terms (e.g. staging
+		// columns, not business object fields). Reject it and say which.
+		if missing := missingFields(r.fields, data); len(missing) > 0 {
+			out = append(out, RuleFailure{RuleID: r.id, RuleName: r.name, Severity: models.ValidationRuleSeverityBlock,
+				Message: fmt.Sprintf("reads %s, which this row does not have", strings.Join(missing, ", "))})
+			continue
+		}
 		ok, err := ev.Evaluate(r.node, data)
 		switch {
 		case err != nil:
@@ -165,4 +174,26 @@ func (p *ruleCheckProc) Process(ctx context.Context, rows []Row) (Result, error)
 		}
 	}
 	return res, nil
+}
+
+// topLevel drops nested paths (a.b), which resolve through related data
+// rather than the row itself.
+func topLevel(fields []string) []string {
+	out := fields[:0:0]
+	for _, f := range fields {
+		if !strings.Contains(f, ".") {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func missingFields(fields []string, data map[string]any) []string {
+	var missing []string
+	for _, f := range fields {
+		if _, ok := data[f]; !ok {
+			missing = append(missing, f)
+		}
+	}
+	return missing
 }

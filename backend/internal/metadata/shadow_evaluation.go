@@ -910,10 +910,8 @@ var knownTransientContextFields = map[string]bool{
 // (see the call site's comment for why this can't be fixed inside
 // ConditionEvaluator itself, which the whole engine shares).
 func unresolvedFieldRefs(node vm.RuleNode, data map[string]interface{}) []string {
-	refs := make(map[string]bool)
-	collectRuleFieldRefs(node, refs)
 	var missing []string
-	for f := range refs {
+	for _, f := range vm.FieldRefs(node) {
 		if strings.Contains(f, ".") {
 			continue // nested paths are HierarchyResolver's concern, not this check's
 		}
@@ -925,45 +923,6 @@ func unresolvedFieldRefs(node vm.RuleNode, data map[string]interface{}) []string
 		}
 	}
 	return missing
-}
-
-func collectRuleFieldRefs(node vm.RuleNode, out map[string]bool) {
-	switch node.Type {
-	case vm.NodeTypeGroup:
-		if node.Group != nil {
-			for _, c := range node.Group.Conditions {
-				collectRuleFieldRefs(c, out)
-			}
-		}
-	case vm.NodeTypeCondition:
-		if node.Condition != nil {
-			f := node.Condition.Field
-			if node.Condition.FieldPath != "" {
-				f = node.Condition.FieldPath
-			}
-			if f != "" {
-				out[f] = true
-			}
-		}
-	case vm.NodeTypeExpression:
-		if node.Expression != nil {
-			collectExprFieldRefs(node.Expression.Root, out)
-		}
-	}
-}
-
-func collectExprFieldRefs(n vm.ExprNode, out map[string]bool) {
-	switch t := n.(type) {
-	case *vm.BinaryExpr:
-		collectExprFieldRefs(t.Left, out)
-		collectExprFieldRefs(t.Right, out)
-	case *vm.FieldRef:
-		out[t.Path] = true
-	case *vm.FuncCall:
-		for _, a := range t.Args {
-			collectExprFieldRefs(a, out)
-		}
-	}
 }
 
 // normalizeScanned is coerceNumeric's counterpart for values that come

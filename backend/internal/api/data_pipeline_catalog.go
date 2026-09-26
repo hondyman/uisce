@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sort"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
 	"github.com/hondyman/uisce/backend/internal/handlers"
 	catalogmeta "github.com/hondyman/uisce/backend/internal/metadata"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
@@ -92,7 +94,8 @@ func (c *pipelineCatalog) Rules(ctx context.Context, boKey string) ([]datapipeli
 	var out []datapipeline.RuleInfo
 	for _, r := range list {
 		if r.IsActive {
-			out = append(out, datapipeline.RuleInfo{ID: r.ID.String(), Name: r.Name, Severity: r.Severity, Description: r.Description})
+			out = append(out, datapipeline.RuleInfo{ID: r.ID.String(), Name: r.Name, Severity: r.Severity, Description: r.Description,
+				Fields: ruleFields(r.RuleAST)})
 		}
 	}
 	return out, nil
@@ -141,4 +144,20 @@ func (h *BOCRUDHandler) schemaFields(r *http.Request, boKey string) ([]boSchemaF
 		return nil, err
 	}
 	return resp.Fields, nil
+}
+
+// ruleFields is the top-level fields a stored rule reads (nil when its AST
+// doesn't parse; the run reports that rule as unevaluable).
+func ruleFields(ast json.RawMessage) []string {
+	var node vm.RuleNode
+	if json.Unmarshal(ast, &node) != nil {
+		return nil
+	}
+	var out []string
+	for _, f := range vm.FieldRefs(node) {
+		if !strings.Contains(f, ".") {
+			out = append(out, f)
+		}
+	}
+	return out
 }

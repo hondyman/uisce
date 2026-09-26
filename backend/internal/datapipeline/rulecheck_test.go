@@ -86,3 +86,38 @@ func TestCatalogRuleChecker(t *testing.T) {
 		t.Error("inactive rule must error")
 	}
 }
+
+// A row that is not in the rule's terms - here staging columns (isin_cd)
+// where the rule reads the business object field Isin - is rejected with the
+// missing field named, whatever the rule's severity, never evaluated: a
+// missing field would otherwise read as an ordinary pass or fail.
+func TestCatalogRuleCheckerMissingField(t *testing.T) {
+	warnOnly := rule("t1", "ISIN present", "WARN", `{"type":"group","operator":"OR","conditions":[
+		{"type":"condition","field":"Isin","operator":"is_null"},
+		{"type":"condition","field":"Isin","operator":"matches_regex","value":"^[A-Z]{2}[A-Z0-9]{9}[0-9]$"}]}`)
+	nested := rule("t1", "Issuer active", "BLOCK", `{"type":"condition","field":"issuer.status","operator":"=","value":"A"}`)
+	src := &fakeRules{byID: map[uuid.UUID]*models.ValidationRuleDescriptor{warnOnly.ID: warnOnly, nested.ID: nested}}
+	c := &CatalogRuleChecker{Rules: src}
+	ctx := context.Background()
+
+	fails, err := c.Check(ctx, "t1", []string{warnOnly.ID.String()}, map[string]any{"isin_cd": "US0378331005"})
+	if err != nil || len(fails) != 1 {
+		t.Fatalf("staging-shaped row: %+v %v", fails, err)
+	}
+	if fails[0].Severity != models.ValidationRuleSeverityBlock || !strings.Contains(fails[0].Message, "Isin") {
+		t.Errorf("want a BLOCK naming Isin, got %+v", fails[0])
+	}
+
+	// The same rule on a row in its terms evaluates normally.
+	if fails, _ := c.Check(ctx, "t1", []string{warnOnly.ID.String()}, map[string]any{"Isin": "US0378331005"}); len(fails) != 0 {
+		t.Errorf("row in the rule's terms: %+v", fails)
+	}
+
+	// Nested paths resolve through related data, not the row: not flagged here.
+	fails, _ = c.Check(ctx, "t1", []string{nested.ID.String()}, map[string]any{})
+	for _, f := range fails {
+		if strings.Contains(f.Message, "does not have") {
+			t.Errorf("nested path flagged as missing: %+v", f)
+		}
+	}
+}
