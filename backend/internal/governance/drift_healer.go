@@ -41,16 +41,16 @@ func (s *SelfHealingService) HandleCompileFailure(
 	}
 
 	candidateQuery := `
-		SELECT attribute_name, similarity(attribute_name, $1) AS score
-		FROM public.tenant_custom_attributes
-		WHERE tenant_id = $2 AND bo_id = $3
+		SELECT field_cd, similarity(field_cd, $1) AS score
+		FROM public.attribute_def
+		WHERE tenant_id = $2 AND is_active
 		ORDER BY score DESC
 		LIMIT 1;
 	`
 
 	var proposedField string
 	var score float64
-	err := s.db.QueryRowContext(ctx, candidateQuery, missingSymbol, tenantID, boID).
+	err := s.db.QueryRowContext(ctx, candidateQuery, missingSymbol, tenantID).
 		Scan(&proposedField, &score)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("no candidate attributes found for tenant=%s bo=%s", tenantID, boID)

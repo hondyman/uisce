@@ -62,7 +62,7 @@ func (e *ImpactEngine) RunPreFlightSimulation(ctx context.Context, pkg UpgradePa
 	for _, delta := range pkg.CoreDeltas {
 		if delta.ChangeType == "TYPE_CHANGED" && e.db != nil {
 			// Query tenants that have custom attributes or formulas referencing this field
-			query := `SELECT tenant_id, attribute_name FROM public.tenant_custom_attributes WHERE bo_id = $1 AND attribute_name = $2`
+			query := `SELECT tenant_id::text, field_cd FROM public.attribute_def WHERE entity_type = $1 AND field_cd = $2 AND is_active`
 			rows, err := e.db.QueryContext(ctx, query, delta.TargetBOID, delta.FieldName)
 			if err == nil {
 				defer rows.Close()
