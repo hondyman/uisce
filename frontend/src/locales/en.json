@@ -388,6 +388,20 @@
       "failed": "Failed",
       "skipped": "Skipped"
     },
+    "filters": {
+      "search": "Search",
+      "searchSchedules": "Search by name, target, calendar or timing",
+      "searchRuns": "Search by schedule, target or error code",
+      "allKinds": "All targets",
+      "allStatuses": "All statuses",
+      "allStates": "Active and paused",
+      "active": "Active",
+      "paused": "Paused",
+      "from": "From",
+      "to": "To",
+      "clear": "Clear filters",
+      "noMatches": "Nothing matches these filters."
+    },
     "runs": {
       "when": "Scheduled for",
       "schedule": "Schedule",

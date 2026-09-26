@@ -92,7 +92,7 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
       <DialogTitle>{schedule ? t('schedules.editor.editTitle') : t('schedules.editor.newTitle')}</DialogTitle>
       <DialogContent dividers>
         <Stack spacing={2.5}>
-          <TextField label={t('schedules.editor.name')} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+          <TextField label={t('schedules.editor.name')} value={name} onChange={(e) => setName(e.target.value)} />
 
           {!fixedTarget && (
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>

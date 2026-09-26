@@ -71,6 +71,15 @@ export interface Upcoming {
   half_day?: boolean;
 }
 
+/** Run history filters; `q` matches schedule name, target kind, error code or run id; dates are YYYY-MM-DD, `to` inclusive. */
+export interface RunFilter {
+  q?: string;
+  status?: string;
+  kind?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface Run {
   id: string;
   schedule_id: string;
@@ -117,9 +126,9 @@ export const schedulesApi = {
   calendars: () => apiClient<{ calendars: CalendarInfo[] }>(`${BASE}/calendars`),
   preview: (timing: Timing, count = 8) =>
     apiClient<{ upcoming: Upcoming[] }>(`${BASE}/preview`, { method: 'POST', body: JSON.stringify({ timing, count }) }),
-  runs: (scheduleId?: string, status?: string) => {
+  runs: (scheduleId?: string, filter: RunFilter = {}) => {
     const qs = new URLSearchParams();
-    if (status) qs.set('status', status);
+    for (const [k, v] of Object.entries(filter)) if (v) qs.set(k, v);
     const path = scheduleId ? `${BASE}/${scheduleId}/runs` : `${BASE}/runs`;
     return apiClient<{ runs: Run[] }>(`${path}?${qs}`);
   },

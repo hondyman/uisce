@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -316,6 +317,9 @@ const runCols = `r.id::text, r.schedule_id::text, s.name AS schedule_name, r.tar
 type RunFilter struct {
 	ScheduleID string
 	Status     string
+	Kind       string    // target kind, e.g. data_pipeline
+	Query      string    // matches schedule name, target kind, error code or run id
+	From, To   time.Time // scheduled_for in [From, To); zero = open
 	Limit      int
 }
 
@@ -329,7 +333,11 @@ func (s *Store) Runs(ctx context.Context, tenantID string, f RunFilter) ([]Run, 
 		return tx.SelectContext(ctx, &out, `SELECT `+runCols+` FROM public.schedule_runs r
 			JOIN public.schedules s ON s.id = r.schedule_id
 			WHERE r.tenant_id::text = $1 AND ($2 = '' OR r.schedule_id::text = $2) AND ($3 = '' OR r.status = $3)
-			ORDER BY r.scheduled_for DESC LIMIT $4`, tenantID, f.ScheduleID, f.Status, limit)
+			  AND ($4 = '' OR r.target_kind = $4)
+			  AND ($5 = '' OR s.name ILIKE $5 OR r.target_kind ILIKE $5 OR r.error_code ILIKE $5 OR r.id::text ILIKE $5)
+			  AND ($6::timestamptz IS NULL OR r.scheduled_for >= $6) AND ($7::timestamptz IS NULL OR r.scheduled_for < $7)
+			ORDER BY r.scheduled_for DESC LIMIT $8`,
+			tenantID, f.ScheduleID, f.Status, f.Kind, likePattern(f.Query), timeOrNil(f.From), timeOrNil(f.To), limit)
 	})
 	if out == nil {
 		out = []Run{}
@@ -428,4 +436,21 @@ func (s *Store) Output(ctx context.Context, tenantID, runID string) (*RunOutput,
 		return nil, msgNoOutput(runID)
 	}
 	return &out, err
+}
+
+// likePattern makes a case-insensitive "contains" pattern, escaping LIKE's
+// wildcards so user input matches literally; "" matches everything.
+func likePattern(q string) string {
+	q = strings.TrimSpace(q)
+	if q == "" {
+		return ""
+	}
+	return "%" + strings.NewReplacer(`\`, `\\`, "%", `\%`, "_", `\_`).Replace(q) + "%"
+}
+
+func timeOrNil(t time.Time) *time.Time {
+	if t.IsZero() {
+		return nil
+	}
+	return &t
 }
