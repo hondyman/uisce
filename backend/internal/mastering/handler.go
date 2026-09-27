@@ -158,7 +158,8 @@ func (h *Handler) golden(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) goldenByID(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
-		d, err := h.Engine.GoldenByID(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"))
+		version, _ := strconv.Atoi(r.URL.Query().Get("version"))
+		d, err := h.Engine.GoldenByID(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), version)
 		return map[string]any{"golden": d}, http.StatusOK, err
 	})
 }

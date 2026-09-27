@@ -66,6 +66,8 @@ export interface Candidate {
 export interface GoldenDetail {
   id: string;
   code: string;
+  /** The version the fields and decisions are for. */
+  selected_version: number;
   versions: { id: string; version: number; status: GoldenStatus; is_current: boolean; attributes: Record<string, unknown>;
     winning_sources: Record<string, string>; dq_score?: number; identity_confidence?: number; knowledge_at: string; published_at?: string }[];
   fields: { name: string; value?: string; source?: string; source_key?: string; confidence?: number }[];
@@ -194,7 +196,8 @@ export const masteringApi = {
     return { run };
   },
   golden: (entity: string, f: { q?: string; status?: string }) => apiClient<{ golden: GoldenSummary[] }>(`${BASE}/${entity}/golden${qs(f)}`),
-  goldenById: (entity: string, id: string) => apiClient<{ golden: GoldenDetail }>(`${BASE}/${entity}/golden/${id}`),
+  goldenById: (entity: string, id: string, version?: number) =>
+    apiClient<{ golden: GoldenDetail }>(`${BASE}/${entity}/golden/${id}${version ? `?version=${version}` : ''}`),
   exceptions: (entity: string, status?: string) => apiClient<{ exceptions: ExceptionRow[] }>(`${BASE}/${entity}/exceptions${qs({ status })}`),
   resolve: (entity: string, id: string, status: 'RESOLVED' | 'WAIVED', note?: string) =>
     apiClient<{ ok: boolean }>(`${BASE}/${entity}/exceptions/${id}/resolve`, post({ status, note })),
