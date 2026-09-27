@@ -69,6 +69,7 @@ export function NodeConfigPanel(props: NodeConfigPanelProps) {
       {node.type === 'bo_sink' && <BOSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'staging_sink' && <StagingSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'file_sink' && <FileSinkForm cfg={cfg} set={set} />}
+      {node.type === 'iceberg_sink' && <IcebergSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
     </Stack>
   );
 }
@@ -506,6 +507,41 @@ function FileSinkForm({ cfg, set }: FormProps<'file_sink'>) {
           </TextField>
         )}
       </Stack>
+    </Stack>
+  );
+}
+
+function IcebergSinkForm({ cfg, set, fields }: FormProps<'iceberg_sink'> & { fields: Column[] }) {
+  return (
+    <Stack spacing={2}>
+      <Hint>
+        Store rows directly as columnar Parquet in the Iceberg data lakehouse (S3/MinIO cold storage).
+        Provides a cheap historical raw archive queryable via StarRocks.
+      </Hint>
+      <TextField
+        size="small"
+        label="Namespace / Catalog DB"
+        placeholder="default"
+        value={cfg.namespace ?? 'default'}
+        onChange={e => set({ namespace: e.target.value })}
+      />
+      <TextField
+        size="small"
+        label="Table name"
+        placeholder="factset_security_raw"
+        value={cfg.table ?? ''}
+        onChange={e => set({ table: e.target.value })}
+      />
+      {fields.length > 0 && (
+        <Autocomplete
+          multiple
+          options={fields.map(f => f.name)}
+          value={cfg.partition_by ?? []}
+          onChange={(_, val) => set({ partition_by: val })}
+          renderInput={params => <TextField {...params} size="small" label="Partition columns" placeholder="e.g. as_of_date" />}
+        />
+      )}
+      <Chip size="small" label="Format: Parquet (Iceberg REST)" sx={{ alignSelf: 'flex-start' }} />
     </Stack>
   );
 }

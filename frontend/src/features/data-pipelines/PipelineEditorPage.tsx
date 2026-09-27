@@ -44,6 +44,7 @@ export function defaultConfig(kind: NodeKind): NodeConfigs[NodeKind] {
     case 'bo_sink': return { bo_key: '', mode: 'create' };
     case 'staging_sink': return { table: '', source_cd: '', domain: '' };
     case 'file_sink': return { uri: '', format: 'csv' };
+    case 'iceberg_sink': return { namespace: 'default', table: '', partition_by: [], format: 'parquet' };
   }
 }
 
@@ -59,6 +60,7 @@ export function summarize(n: SpecNode): string {
     case 'bo_sink': return c.bo_key ? `${c.mode === 'upsert' ? 'update or create' : 'create'} ${c.bo_key}${c.dry_run ? ' (rehearsal)' : ''}` : '';
     case 'staging_sink': return c.table ? `${c.table}${c.source_cd ? ` · ${c.source_cd}/${c.domain}` : ''}` : '';
     case 'file_sink': return c.uri ? `${c.uri} (${c.format})` : '';
+    case 'iceberg_sink': return c.table ? `${c.namespace || 'default'}.${c.table} (iceberg)` : '';
   }
   return '';
 }
@@ -202,7 +204,7 @@ export default function PipelineEditorPage() {
     const node: SpecNode = { id: newId, type: t.type, label: t.label, config: defaultConfig(t.type), position: pos };
     const edges = [...spec.edges];
     // Chain after the selected step when that makes sense.
-    if (sel && NODE_META[sel.type].category !== 'destination' && t.category !== 'source') edges.push({ from: sel.id, to: newId });
+    if (sel && (NODE_META[sel.type]?.category ?? 'step') !== 'destination' && t.category !== 'source') edges.push({ from: sel.id, to: newId });
     update({ ...spec, nodes: [...spec.nodes, node], edges });
     setSelected(newId);
   };

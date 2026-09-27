@@ -32,6 +32,7 @@ const (
 	NodeBOSink      = "bo_sink"
 	NodeStagingSink = "staging_sink"
 	NodeFileSink    = "file_sink"
+	NodeIcebergSink = "iceberg_sink"
 )
 
 // Error policies (data_pipeline_definitions.error_policy).
@@ -165,6 +166,15 @@ type FileSinkConfig struct {
 	Delimiter string `json:"delimiter,omitempty"`
 }
 
+// IcebergSinkConfig exports rows directly to the Iceberg / Parquet lakehouse
+// storage (S3/MinIO) and registers the table via the Lakekeeper REST catalog.
+type IcebergSinkConfig struct {
+	Namespace   string   `json:"namespace"`    // catalog namespace (e.g. default or tenant_code)
+	Table       string   `json:"table"`        // iceberg table name
+	PartitionBy []string `json:"partition_by"` // optional partition columns
+	Format      string   `json:"format"`       // default parquet
+}
+
 // --- validation -------------------------------------------------------
 
 // Validate checks structure: unique ids, known types, edges reference nodes,
@@ -198,7 +208,7 @@ func (s *Spec) Validate() []error {
 		switch n.Type {
 		case NodeFileSource, NodeBOSource:
 			sources++
-		case NodeBOSink, NodeFileSink, NodeStagingSink:
+		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink:
 			sinks++
 		case NodeValidate, NodeMap, NodeRuleCheck:
 		default:
@@ -404,6 +414,14 @@ func validateNodeConfig(n *Node) []error {
 		}
 		if !validFormat(c.Format) {
 			add("format must be csv, json or parquet")
+		}
+	case NodeIcebergSink:
+		var c IcebergSinkConfig
+		if !decode(&c) {
+			return errs
+		}
+		if c.Table == "" {
+			add("table is required")
 		}
 	}
 	return errs

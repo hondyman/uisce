@@ -36,6 +36,7 @@ func Palette(d Deps) []NodeType {
 		{NodeMap, "Map fields", "step", "Rename fields and apply simple transforms (trim, dates, numbers, lookups).", true, ""},
 		{NodeBOSink, "Write business object", "destination", "Create or update business object records. Every record goes through the object's rules.", bo, boWhy},
 		{NodeStagingSink, "Load staging table", "destination", "Bulk-load rows into a staging table, tracked as a load run (re-running the same run is safe).", staging, stagingWhy},
+		{NodeIcebergSink, "Export to Iceberg Lakehouse", "destination", "Write rows to an Apache Iceberg table as Parquet in object storage (MinIO/S3).", files, filesWhy},
 		{NodeFileSink, "Export a file", "destination", "Write the rows to a CSV, JSON or Parquet file.", files, filesWhy},
 	}
 }
