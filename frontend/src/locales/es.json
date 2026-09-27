@@ -477,7 +477,8 @@
       "runs": "Ejecuciones",
       "exceptions": "Excepciones",
       "review": "Revisión de coincidencias",
-      "overrides": "Anulaciones"
+      "overrides": "Anulaciones",
+      "prices": "Precios maestros"
     },
     "golden": {
       "search": "Buscar código o nombre",
@@ -560,7 +561,8 @@
       "published": "Publicados",
       "held_for_review": "Retenidos",
       "unchanged": "Sin cambios",
-      "exceptions": "Excepciones"
+      "exceptions": "Excepciones",
+      "restated": "Reexpresados"
     },
     "exceptions": {
       "status": "Mostrar",
@@ -586,7 +588,14 @@
       "ANOMALY": "Anomalía",
       "MISSING_SOURCE_KEY": "Sin clave de origen",
       "MASTERING_FAILED": "No maestrizado",
-      "NOT_AN_ID": "No es un id"
+      "NOT_AN_ID": "No es un id",
+      "UNRESOLVED_INSTRUMENT": "Instrumento no resuelto",
+      "UNKNOWN_PRICE_TYPE": "Tipo de precio desconocido",
+      "NO_VALUATION_DATE": "Sin fecha de valoración",
+      "CURRENCY_MISMATCH": "Divisa no coincidente",
+      "DAY_OVER_DAY": "Variación diaria",
+      "SELECTION_HOLD": "Retenido por regla de selección",
+      "SELECTION_FLAG": "Aviso de regla de selección"
     },
     "review": {
       "requested": "Unión solicitada; se realizará cuando se apruebe.",
@@ -689,6 +698,33 @@
       "own": "Establecida por {{by}}.",
       "adminsOnly": "Solo los administradores pueden cambiar la política.",
       "save": "Guardar política"
+    },
+    "prices": {
+      "date": "Fecha de valoración",
+      "search": "Buscar código o nombre del instrumento",
+      "type": "Tipo de precio",
+      "instrument": "Instrumento",
+      "price": "Precio",
+      "change": "Variación diaria",
+      "winner": "Ganador · fuentes",
+      "spread": "Dispersión",
+      "sourcesHelp": "Fuente ganadora y cuántas fuentes cotizaron ({{n}})",
+      "empty": "No hay precios maestros para esta fecha. Maestrice una carga de precios para crearlos.",
+      "won": "ganó",
+      "excluded": "excluido: {{why}}",
+      "viewingVersion": "Versión {{v}} ({{at}}). La última es la versión {{latest}}.",
+      "previous": "Se mantiene el precio anterior",
+      "prior": "Precio maestro anterior {{value}} el {{date}}",
+      "moved": "variación {{pct}}%",
+      "quotes": "Todas las cotizaciones consideradas",
+      "diff": "vs maestro",
+      "rank": "Rango",
+      "ranking": "Orden: {{order}}",
+      "thresholds": "umbrales aviso {{w}}% / error {{e}}% / crítico {{c}}%",
+      "controls": "Controles",
+      "control": "{{control}}: {{pct}}% ({{level}}, {{action}})",
+      "variances": "Fuentes en desacuerdo",
+      "bitemporal": "Cada versión se guarda con el momento en que se conoció: se puede consultar qué precio se creía en cualquier momento."
     }
   },
   "stagingBindings": {
@@ -747,7 +783,11 @@
       "suggested": "Sugerido {{pct}} %",
       "reason": "Motivo",
       "reasonHelp": "Por qué este cambio: se muestra al aprobador y queda en la auditoría.",
-      "propose": "Proponer"
+      "propose": "Proponer",
+      "seriesValue": "Precio {{type}}",
+      "priceType": "Tipo de precio",
+      "priceTypeHelp": "Una columna con precios de este tipo",
+      "addPriceColumn": "Añadir columna de precio"
     },
     "approvals": {
       "none": "Nada pendiente de aprobación.",

@@ -1,6 +1,8 @@
 # Price master — time-series mastering design
 
-Status: **decided** (2026-09-27, see *Decisions*); build follows the Security master.
+Status: **slices 1-3 built** (2026-09-27): the TIMESERIES profile kind, the PRICE profile, set-based
+canonicalize / resolve / observe / survive / publish, day-over-day, cross-source and currency controls,
+and the console's price views (see *Built*). Decisions below.
 Companion to [mdm-mastering-blueprint.md](mdm-mastering-blueprint.md), which covers record mastering
 (Product; security and benchmark reference data follow the same model).
 
@@ -175,3 +177,30 @@ Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
    prices.
 6. **Postgres (crims) set-based**, with a Postgres dialect added to the rule VM's function library for
    pushdown; Go evaluation over chunks as the fallback.
+
+## Built (slices 1-3)
+
+- **crims `0018_price_master_profile`** - `mastering_entity.kind`; every price foreign key on the one
+  registry (`mdm.source_systems`), `mdm.price_source` keeps price settings and points at its registry source;
+  `uq_pgr_current` (one current golden version per key); vendor staging `staging.bbg_price`, `rdp_price`,
+  `ice_price`; the PRICE profile, source priority (Bloomberg first; ICE first for fixed income), variance
+  thresholds (`*` and Equity 5/10/25%, FixedIncome 1/3/10%), the price survivorship rule and policy.
+- **alpha `20261101_001_price_business_object`** - the Price business object over `mdm.price_golden_record`
+  (20 fields named by semantic term, MAPS_TO lineage), messages 9400-37..40.
+- **Binding** - a vendor file binds to Price with `ValuationDate`, `Currency`, the identifiers (`id:<TYPE>`),
+  `@source_key`, `@as_of`, and either one `value:<PRICE TYPE>` key per price column (a wide row is several
+  prices) or `Price` + `PriceTypeCd` (one row per price, vendor codes mapped by `mdm.price_type_mapping`).
+- **Engine** (`internal/mastering/timeseries.go`) - per load: one INSERT ... SELECT canonicalizes and
+  resolves every quote by the security master's identifiers (`UNRESOLVED_INSTRUMENT` otherwise); observations
+  are upserted with restatements kept in `mdm.price_history`; survivorship runs per key in chunks of 2,000
+  keys (two reads, three writes per chunk) with the layered model - scoped ranking, staleness per source
+  measured against the valuation date, the selection rule with `threshold` in its context; controls:
+  day-over-day (warning flagged; error FLAG and critical HOLD by default, per profile), cross-source variance
+  events, currency mismatch (quote excluded and flagged); a new golden version only when the candidates,
+  winner, value or status change; compact provenance in `golden_attributes`.
+- **Console** - for a time-series entity: golden prices by valuation date (change, winner, spread, status),
+  a price drawer (every quote considered and why, controls, disagreeing sources, versions), price
+  exceptions; match review and overrides are record-master only (message 9400-40).
+
+Next: stale and missing-price controls and the expected universe (slice 4), cutoffs and finalization,
+overrides as MANUAL observations, vendor challenges, date partitioning, the Postgres rule dialect.

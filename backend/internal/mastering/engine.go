@@ -92,7 +92,10 @@ type Counts struct {
 	Published     int `json:"published"`
 	HeldForReview int `json:"held_for_review"`
 	Unchanged     int `json:"unchanged"`
-	Exceptions    int `json:"exceptions"`
+	// Restated: observations that replaced a value their source had
+	// already reported for the same key (time-series profiles).
+	Restated   int `json:"restated,omitempty"`
+	Exceptions int `json:"exceptions"`
 }
 
 const runCols = `id::text, entity_cd, load_run_id::text, source_system_id::text, idempotency_key, trigger_kind,
@@ -273,6 +276,9 @@ type runner struct {
 }
 
 func (r *runner) execute() error {
+	if r.p.timeSeries() {
+		return r.executeSeries()
+	}
 	ctx, tx := r.ctx, r.tx
 
 	// The load and its source system.
