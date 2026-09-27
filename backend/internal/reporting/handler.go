@@ -490,26 +490,12 @@ func (h *Handler) ListSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID, datasourceID := getTenantContext(r)
-	userID := getUserID(r)
-
-	var sched ReportSchedule
-	if err := json.NewDecoder(r.Body).Decode(&sched); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	sched.TenantID = tenantID
-	sched.TenantDatasourceID = datasourceID
-	sched.CreatedBy = userID
-
-	if err := h.service.CreateSchedule(ctx, &sched); err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	respondJSON(w, http.StatusCreated, sched)
+	// Slice 4: legacy semantic-reporting schedule creates are closed.
+	// Use POST /api/schedules with target.kind=report.
+	respondJSON(w, http.StatusGone, map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Create schedules at POST /api/schedules with target.kind=report (and delivery fields in target.params).",
+	})
 }
 
 func (h *Handler) GetSchedule(w http.ResponseWriter, r *http.Request) {

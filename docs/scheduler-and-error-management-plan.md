@@ -23,7 +23,7 @@ Reachability is from `deadcode ./cmd/...`; row counts are read-only probes of `a
 
 | # | Where | What it does | State |
 |---|---|---|---|
-| S1 | `services.PostgresSchedulerService` + `handlers.SchedulerHandlers` (`/api/v1/schedules`), `edm.scheduled_jobs` | in-process `@every 1m` poll → async job queue | **live and unsafe**: no row locking (every API replica fires the same job); `next_run_at` is only advanced when the enqueue *fails*, so a due job re-fires every minute forever |
+| S1 | `services.PostgresSchedulerService` + `handlers.SchedulerHandlers` (`/api/v1/schedules`), `edm.scheduled_jobs` | in-process `@every 1m` poll → async job queue | **retired (Slice 4)**: Go poll/service removed; `edm.scheduled_jobs` schema residue only; UI `/scheduler/*` redirects to `/automation/schedules` |
 | S2 | `api.SchedulerHandlers` (`/api/scheduler/jobs,dags,…`) + `internal/scheduler_intelligence` (`scheduled_jobs`, `scheduled_dags`, changesets+approvals, AI suggestions, blast radius, residency) | job/DAG scheduler with a governance layer; "Scheduler Intelligence" console | live (≈100 of 148 funcs reachable; `ai/` 109 of 123 dead). Reads the actor from a client-supplied `X-User-ID` header |
 | S3 | `internal/reporting` report schedules (`report_schedules`, `tenant_exchange_calendars`, holidays, business-day offset, unscheduled-day behaviour, bursting) | richest timing model | CRUD live, **never fires**: `ProcessDueSchedules` has no caller. Tables not even applied on `alpha` |
 | S4 | `data_explorer.saved_query_schedule` (query builder) | metadata only | migration says "dispatching is not yet wired" |

@@ -177,44 +177,18 @@ type CreateScheduleRequest struct {
 }
 
 func (h *ReportScheduleHandler) CreateSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := h.resolveTenantID(r)
-	if err != nil {
+	// Slice 4: stop new writes on the legacy report_schedules path.
+	// Use POST /api/schedules with target.kind=report instead.
+	if _, err := h.resolveTenantID(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	var req CreateScheduleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	scheduleID := uuid.New()
-	notificationJSON, _ := json.Marshal(map[string]bool{
-		"in_app": req.NotifyInApp,
-		"email":  req.NotifyEmail,
-	})
-
-	_, err = h.db.ExecContext(r.Context(), `
-		INSERT INTO public.report_schedules (
-			id, tenant_id, schedule_name, cron_expression, region,
-			unscheduled_behavior, business_day_offset, burst_dimension,
-			export_format, notification_channels, is_active
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
-	`, scheduleID, tenantID, req.ScheduleName, req.CronExpression, req.Region,
-		req.UnscheduledBehavior, req.BusinessDayOffset, req.BurstDimension,
-		req.ExportFormat, notificationJSON)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":      scheduleID,
-		"message": "Schedule created successfully",
+	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Create schedules at POST /api/schedules with target.kind=report (and delivery fields in target.params).",
 	})
 }
 

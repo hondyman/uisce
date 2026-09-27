@@ -78,19 +78,19 @@ func TestReportScheduleAPI_CreateValidation(t *testing.T) {
 	userID := "user-123"
 	tmplID := uuid.New().String()
 
-	t.Run("CreateSchedule - Empty Name (400 Bad Request)", func(t *testing.T) {
+	t.Run("CreateSchedule - Legacy creates retired (410 Gone)", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]interface{}{
-			"schedule_name":   "",
+			"schedule_name":   "Daily Valuation",
 			"cron_expression": "0 8 * * 1-5",
 		})
 		req := authRequest(http.MethodPost, "/api/v1/reports/"+tmplID+"/schedules", payload, tenantID, userID)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "schedule_name is required")
+		assert.Equal(t, http.StatusGone, w.Code)
+		assert.Contains(t, w.Body.String(), "legacy_report_schedules_retired")
 	})
 
-	t.Run("CreateSchedule - Empty Cron Expression (400 Bad Request)", func(t *testing.T) {
+	t.Run("CreateSchedule - Empty Cron Expression also Gone (410)", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"schedule_name":   "Daily Valuation",
 			"cron_expression": "",
@@ -98,11 +98,11 @@ func TestReportScheduleAPI_CreateValidation(t *testing.T) {
 		req := authRequest(http.MethodPost, "/api/v1/reports/"+tmplID+"/schedules", payload, tenantID, userID)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "cron_expression is required")
+		assert.Equal(t, http.StatusGone, w.Code)
+		assert.Contains(t, w.Body.String(), "legacy_report_schedules_retired")
 	})
 
-	t.Run("CreateSchedule - Invalid UUID in path (400 Bad Request)", func(t *testing.T) {
+	t.Run("CreateSchedule - Invalid UUID in path also Gone (410)", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"schedule_name":   "Daily Valuation",
 			"cron_expression": "0 8 * * 1-5",
@@ -110,7 +110,7 @@ func TestReportScheduleAPI_CreateValidation(t *testing.T) {
 		req := authRequest(http.MethodPost, "/api/v1/reports/invalid-uuid/schedules", payload, tenantID, userID)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
+		assert.Equal(t, http.StatusGone, w.Code)
 	})
 }
 
@@ -123,34 +123,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 	tmplID := uuid.New()
 	schedID := uuid.New()
 
-	t.Run("CreateSchedule - Success (201 Created)", func(t *testing.T) {
-		// Mock gold copy resolution
-		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
-			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
-
-		// Mock template visibility check
-		mock.ExpectQuery(`SELECT id, tenant_id, template_name, is_active, is_personal, created_by_id FROM public\.report_templates WHERE id = \$1 AND is_active = true AND tenant_id IN \(\$2, \$3\)`).
-			WithArgs(tmplID, tenantID, goldCopyID, userID).
-			WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "template_name", "is_active", "is_personal", "created_by_id"}).
-				AddRow(tmplID, tenantID, "Daily Report", true, false, nil))
-
-		// Mock insert schedule
-		now := time.Now()
-		mock.ExpectQuery(`INSERT INTO public\.report_schedules`).
-			WillReturnRows(sqlmock.NewRows([]string{
-				"id", "tenant_id", "report_definition_id", "owner_id", "schedule_name",
-				"cron_expression", "region", "calendar_id", "start_of_day_time",
-				"unscheduled_behavior", "business_day_offset", "burst_dimension",
-				"export_format", "notification_channels", "is_active", "deleted_at",
-				"last_run_at", "next_run_at", "created_at",
-			}).AddRow(
-				schedID, tenantID, tmplID, userID, "Daily Valuation",
-				"0 8 * * 1-5", "us-west", nil, "08:00:00",
-				"SKIP", 0, "client_id",
-				"PDF", []byte(`{"in_app":true,"email":false}`), true, nil,
-				nil, nil, now,
-			))
-
+	t.Run("CreateSchedule - Legacy creates retired (410 Gone)", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"schedule_name":   "Daily Valuation",
 			"cron_expression": "0 8 * * 1-5",
@@ -162,22 +135,12 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusCreated, w.Code)
-		var resp map[string]interface{}
-		_ = json.Unmarshal(w.Body.Bytes(), &resp)
-		assert.Equal(t, schedID.String(), resp["id"])
-		assert.Equal(t, tmplID.String(), resp["report_definition_id"])
+		assert.Equal(t, http.StatusGone, w.Code)
+		assert.Contains(t, w.Body.String(), "legacy_report_schedules_retired")
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 
-	t.Run("CreateSchedule - Template Invisible / Non-Owner Personal (404 Not Found)", func(t *testing.T) {
-		mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
-			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldCopyID))
-
-		// Template query returns sql.ErrNoRows
-		mock.ExpectQuery(`SELECT id, tenant_id, template_name, is_active, is_personal, created_by_id FROM public\.report_templates`).
-			WillReturnError(sql.ErrNoRows)
-
+	t.Run("CreateSchedule - Gone even when template would be invisible", func(t *testing.T) {
 		payload, _ := json.Marshal(map[string]interface{}{
 			"schedule_name":   "Secret Sched",
 			"cron_expression": "0 8 * * 1-5",
@@ -187,7 +150,7 @@ func TestReportScheduleAPI_SqlmockScenarios(t *testing.T) {
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusNotFound, w.Code)
+		assert.Equal(t, http.StatusGone, w.Code)
 		assert.NoError(t, mock.ExpectationsWereMet())
 	})
 

@@ -90,16 +90,6 @@ import ValuesProfileEditor from "./pages/investment/ValuesProfileEditor";
 // Crypto Platform
 import CryptoDashboard from "./features/crypto/CryptoDashboard";
 import CryptoPortfolioCenter from "./features/crypto/CryptoPortfolioCenter";
-// Scheduler imports
-import {
-  SchedulerDashboardPage,
-  DependencyVisualizerPage,
-  NotificationTemplatesPage,
-  NotificationTemplateEditorPage as SchedulerNotificationTemplateEditorPage,
-  ComplianceDashboardPage,
-} from "./features/scheduler";
-// Scheduler Intelligence Console
-import SchedulerConsolePage from "./pages/scheduler/SchedulerConsolePage";
 // Secrets Management
 import {
   SecretsConfigPage,
@@ -402,7 +392,9 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             OPERATIONS - Scheduling and workflows
             ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="scheduler-intelligence" element={<ProtectedRoute><SchedulerConsolePage /></ProtectedRoute>} />
+        {/* S2 Scheduler Intelligence console deferred (D1): redirect to the one Schedules console. */}
+        <Route path="scheduler-intelligence" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
+        <Route path="scheduler-intelligence/*" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         {/* The S1 job scheduler was retired: schedules, runs and calendars live on the one scheduler. */}
         <Route path="scheduler/*" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         

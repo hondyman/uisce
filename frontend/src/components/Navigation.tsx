@@ -78,12 +78,12 @@ const SCHEDULER_MENU: MenuGroup = {
   label: 'Scheduler',
   items: [
     { id: 'scheduler-dashboard', label: 'Dashboard', description: 'Scheduler overview and metrics.', to: '/scheduler', icon: '📊' },
-    { id: 'scheduler-jobs', label: 'Jobs', description: 'Manage scheduled jobs.', to: '/scheduler/jobs', icon: '📋' },
-    { id: 'scheduler-executions', label: 'Executions', description: 'View job execution history.', to: '/scheduler/executions', icon: '▶️' },
-    { id: 'scheduler-dependencies', label: 'Dependencies', description: 'Visualize job dependencies.', to: '/scheduler/dependencies', icon: '🔗' },
-    { id: 'scheduler-calendars', label: 'Business Calendars', description: 'Manage business calendars.', to: '/scheduler/calendars', icon: '📅' },
-    { id: 'scheduler-notifications', label: 'Notifications', description: 'Configure notification templates.', to: '/scheduler/notifications', icon: '🔔' },
-    { id: 'scheduler-compliance', label: 'Compliance', description: 'Audit logs and compliance reports.', to: '/scheduler/compliance', icon: '📊' },
+    { id: 'scheduler-jobs', label: 'Schedules', description: 'Schedules, run history and business calendars.', to: '/automation/schedules', icon: '📋' },
+    { id: 'scheduler-executions', label: 'Run history', description: 'View schedule run history.', to: '/automation/schedules', icon: '▶️' },
+    { id: 'scheduler-dependencies', label: 'Schedules', description: 'Schedules console (dependencies live with targets).', to: '/automation/schedules', icon: '🔗' },
+    { id: 'scheduler-calendars', label: 'Business Calendars', description: 'Business calendars on the Schedules console.', to: '/automation/schedules', icon: '📅' },
+    { id: 'scheduler-notifications', label: 'Schedules', description: 'Schedules console.', to: '/automation/schedules', icon: '🔔' },
+    { id: 'scheduler-compliance', label: 'Schedules', description: 'Schedules console.', to: '/automation/schedules', icon: '📊' },
   ]
 };
 
