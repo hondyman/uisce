@@ -112,6 +112,7 @@ func (e *Engine) Golden(ctx context.Context, tenantID, entity string, f GoldenFi
 type GoldenDetail struct {
 	ID       string          `json:"id"`
 	Code     string          `json:"code"`
+	Name     *string         `json:"name,omitempty"`
 	Versions []GoldenVersion `json:"versions"`
 	// Selected is the version the fields and decisions are for.
 	Selected    int               `json:"selected_version"`
@@ -198,12 +199,18 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string, ve
 	}
 	d := &GoldenDetail{ID: id}
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
-		if err := tx.GetContext(ctx, &d.Code, fmt.Sprintf(`SELECT %s FROM %s WHERE %s::text = $1 AND %s`, qi(p.AnchorCodeColumn), qi(p.AnchorTable), qi(p.entityCol()), p.current("")), id); err != nil {
+		var head struct {
+			Code string  `db:"code"`
+			Name *string `db:"name"`
+		}
+		if err := tx.GetContext(ctx, &head, fmt.Sprintf(`SELECT %s AS code, to_jsonb(a)->>%s AS name FROM %s a WHERE a.%s::text = $1 AND %s`,
+			qi(p.AnchorCodeColumn), pq.QuoteLiteral(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a")), id); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return msgNoGolden(id)
 			}
 			return err
 		}
+		d.Code, d.Name = head.Code, head.Name
 		key := p.keyColumn()
 		if err := tx.SelectContext(ctx, &d.Versions, fmt.Sprintf(`SELECT id::text, golden_version, status, is_current, golden_attributes,
 				winning_sources, overall_dq_score, identity_confidence, knowledge_timestamp, published_at
