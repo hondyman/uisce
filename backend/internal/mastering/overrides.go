@@ -82,9 +82,13 @@ func (e *Engine) GetPolicy(ctx context.Context, tenantID, entity string) (*Polic
 		return nil, err
 	}
 	var p *Policy
+	var anchor map[string]string
 	err = e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
 		var err error
-		p, err = getPolicy(ctx, tx, tenantID, entity)
+		if p, err = getPolicy(ctx, tx, tenantID, entity); err != nil {
+			return err
+		}
+		anchor, err = columns(ctx, tx, cfg.profile.AnchorTable)
 		return err
 	})
 	if err != nil {
@@ -105,7 +109,9 @@ func (e *Engine) GetPolicy(ctx context.Context, tenantID, entity string) (*Polic
 		}
 	}
 	for a := range seen {
-		p.Attributes = append(p.Attributes, a)
+		if overridable(cfg.profile, anchor, a) {
+			p.Attributes = append(p.Attributes, a)
+		}
 	}
 	sort.Strings(p.Attributes)
 	return p, nil
@@ -512,7 +518,7 @@ func (r *runner) currentAttrs(golden string) (map[string]any, error) {
 // knownAttribute: an attribute the entity masters (on the golden record,
 // in a survivorship rule, or mapped from the business object).
 func (r *runner) knownAttribute(attr string, current map[string]any) bool {
-	if !ident.MatchString(attr) {
+	if !ident.MatchString(attr) || !overridable(r.p, r.anchorCols, attr) {
 		return false
 	}
 	if _, ok := current[attr]; ok {
@@ -523,6 +529,17 @@ func (r *runner) knownAttribute(attr string, current map[string]any) bool {
 	}
 	_, ok := r.attrField[attr]
 	return ok
+}
+
+// overridable: a steward may override business attributes, never the
+// record's identity (its id, tenant, minted code) or a raw id column (a
+// foreign key is overridden through its reference's code instead).
+func overridable(p *Profile, anchor map[string]string, attr string) bool {
+	switch attr {
+	case "id", "tenant_id", p.AnchorCodeColumn, "created_at", "updated_at":
+		return false
+	}
+	return anchor[attr] != "uuid"
 }
 
 // checkOverrideValue: a reference attribute takes an internal code; a
