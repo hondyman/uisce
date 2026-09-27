@@ -119,7 +119,7 @@ excluded, by rule name and version) and every competing value with its as-of tim
 whether it passed the selection rule.
 
 Open: per-asset-class thresholds (needs a conditional in the rule language, or rules scoped by class);
-price mastering is time-series (instrument x date x price type) and needs a set-based mode of the engine.
+price mastering is time-series (instrument x date x price type) and needs a set-based mode of the engine - see [mdm-price-mastering-design.md](mdm-price-mastering-design.md), which also resolves per-asset-class thresholds as threshold rows in the selection context.
 
 ## Governance
 
