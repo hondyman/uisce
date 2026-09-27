@@ -3,6 +3,7 @@ package datapipeline
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -21,16 +22,17 @@ import (
 // nothing. Tables are row-level-secured by app.current_tenant, which every
 // transaction sets.
 type stagingSink struct {
-	cfg    StagingSinkConfig
-	db     *sql.DB
-	tenant string
-	runID  string
-	skip   bool // run_ref already COMPLETED, or a dry run
-	dryRun bool
-	cols   map[string]string // row field -> staging column
-	valid  map[string]bool   // real columns of the table
-	shape  map[string]colShape
-	loaded int
+	cfg        StagingSinkConfig
+	db         *sql.DB
+	tenant     string
+	runID      string
+	skip       bool // run_ref already COMPLETED, or a dry run
+	dryRun     bool
+	cols       map[string]string // row field -> staging column
+	valid      map[string]bool   // real columns of the table
+	shape      map[string]colShape
+	loaded     int
+	foldExtras bool // pack unmapped CSV fields into custom_attributes JSONB
 }
 
 func newStagingSink(n Node, db *sql.DB) (Processor, error) {
@@ -154,14 +156,41 @@ func (s *stagingSink) Open(ctx context.Context, rc *RunContext) error {
 func (s *stagingSink) columnsFor(rows []Row) ([]string, []string, error) {
 	if s.cols == nil {
 		s.cols = map[string]string{}
+		hasExtras := false
 		for f := range rows[0].Data {
-			if !s.valid[f] {
-				return nil, nil, fmt.Errorf("field %q has no column in %s (map it, or add the column)", f, s.cfg.Table)
-			}
 			if strings.HasPrefix(f, "_") || f == "tenant_id" {
 				return nil, nil, fmt.Errorf("field %q would overwrite a load-tracking column", f)
 			}
-			s.cols[f] = f
+			if s.valid[f] {
+				s.cols[f] = f
+				continue
+			}
+			// MDM staging tables carry custom_attributes JSONB — fold unknown
+			// CSV/queue keys into it (Account/Security dual-registry pattern).
+			if s.valid["custom_attributes"] {
+				hasExtras = true
+				continue
+			}
+			return nil, nil, fmt.Errorf("field %q has no column in %s (map it, or add the column)", f, s.cfg.Table)
+		}
+		if hasExtras {
+			s.cols["custom_attributes"] = "custom_attributes"
+			s.foldExtras = true
+		}
+	}
+	// MDM staging tables often have source_system NOT NULL. When the sink's
+	// SourceCd is set and the column exists but is unmapped, inject it so
+	// Account / Product loads do not fail on the NOT NULL constraint.
+	if s.cfg.SourceCd != "" && s.valid["source_system"] {
+		mapped := false
+		for _, col := range s.cols {
+			if col == "source_system" {
+				mapped = true
+				break
+			}
+		}
+		if !mapped {
+			s.cols["__source_cd"] = "source_system"
 		}
 	}
 	fields := make([]string, 0, len(s.cols))
@@ -191,6 +220,7 @@ func (s *stagingSink) Process(ctx context.Context, rows []Row) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	s.foldCustomExtras(rows)
 	// Reject, row by row, values the table cannot hold - one bad value must
 	// not fail the whole load with a database error.
 	var res Result
@@ -228,7 +258,25 @@ func (s *stagingSink) Process(ctx context.Context, rows []Row) (Result, error) {
 		for _, r := range rows {
 			args := []any{s.runID, r.Num, s.tenant}
 			for _, f := range fields {
-				args = append(args, r.Data[f])
+				if f == "__source_cd" {
+					args = append(args, s.cfg.SourceCd)
+					continue
+				}
+				v := r.Data[f]
+				col := s.cols[f]
+				if f == "custom_attributes" || col == "custom_attributes" {
+					switch t := v.(type) {
+					case map[string]any:
+						b, _ := json.Marshal(t)
+						v = string(b)
+					case json.RawMessage:
+						v = string(t)
+					}
+				}
+				if col == "asset_class" || f == "asset_class" {
+					v = normalizeAssetClass(v)
+				}
+				args = append(args, v)
 			}
 			if _, err := stmt.ExecContext(ctx, args...); err != nil {
 				stmt.Close()
@@ -262,8 +310,85 @@ type colShape struct {
 
 // fits checks a row's mapped values against the target columns and returns
 // the first field that does not fit, with a plain reason.
+// foldCustomExtras packs row keys that are not staging columns into
+// custom_attributes (when that JSONB column exists).
+func (s *stagingSink) foldCustomExtras(rows []Row) {
+	if !s.foldExtras || !s.valid["custom_attributes"] {
+		return
+	}
+	for i := range rows {
+		extras := map[string]any{}
+		switch existing := rows[i].Data["custom_attributes"].(type) {
+		case map[string]any:
+			for k, v := range existing {
+				extras[k] = v
+			}
+		case string:
+			_ = json.Unmarshal([]byte(existing), &extras)
+			if extras == nil {
+				extras = map[string]any{}
+			}
+		case json.RawMessage:
+			_ = json.Unmarshal(existing, &extras)
+			if extras == nil {
+				extras = map[string]any{}
+			}
+		}
+		for k, v := range rows[i].Data {
+			if k == "custom_attributes" || k == "__source_cd" || k == "source_system" || k == "tenant_id" {
+				continue
+			}
+			if strings.HasPrefix(k, "_") {
+				continue
+			}
+			if s.valid[k] {
+				continue
+			}
+			extras[k] = v
+			delete(rows[i].Data, k)
+		}
+		rows[i].Data["custom_attributes"] = extras
+	}
+}
+
+// normalizeAssetClass maps common steward spellings onto mdm.security_master CHECK values.
+func normalizeAssetClass(v any) any {
+	if v == nil {
+		return v
+	}
+	s := strings.TrimSpace(fmt.Sprint(v))
+	if s == "" {
+		return v
+	}
+	key := strings.ToLower(strings.ReplaceAll(s, "_", " "))
+	key = strings.Join(strings.Fields(key), " ")
+	switch key {
+	case "equity", "equities", "stock", "stocks":
+		return "Equity"
+	case "fixed income", "fixedincome", "bond", "bonds", "fi":
+		return "FixedIncome"
+	case "fund", "funds", "mutual fund", "etf":
+		return "Fund"
+	case "derivative", "derivatives", "option", "future", "swap":
+		return "Derivative"
+	case "fx", "forex", "currency", "currencies":
+		return "FX"
+	case "commodity", "commodities":
+		return "Commodity"
+	}
+	// Already canonical?
+	switch s {
+	case "Equity", "FixedIncome", "Fund", "Derivative", "FX", "Commodity":
+		return s
+	}
+	return v
+}
+
 func (s *stagingSink) fits(fields []string, r Row) (string, string) {
 	for _, f := range fields {
+		if f == "__source_cd" {
+			continue
+		}
 		v := r.Data[f]
 		if v == nil {
 			continue

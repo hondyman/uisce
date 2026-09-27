@@ -40,10 +40,28 @@ type PlatformCatalog interface {
 	StagingBinding(ctx context.Context, boKey, table string) (map[string]string, error)
 }
 
+// Issue severities for design-time validation.
+const (
+	IssueError   = "error"
+	IssueWarning = "warning"
+)
+
 // Issue is a problem on a node (NodeID empty: the whole pipeline).
+// Severity defaults to error when empty (backward compatible).
 type Issue struct {
-	NodeID  string `json:"node_id,omitempty"`
-	Message string `json:"message"`
+	NodeID   string `json:"node_id,omitempty"`
+	Message  string `json:"message"`
+	Severity string `json:"severity,omitempty"` // error | warning
+}
+
+// HasErrors reports whether any issue is a hard error (empty severity counts as error).
+func HasErrors(issues []Issue) bool {
+	for _, i := range issues {
+		if i.Severity == "" || i.Severity == IssueError {
+			return true
+		}
+	}
+	return false
 }
 
 // Check is structural validation plus grounding: every business object,
@@ -58,7 +76,12 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 	if cat == nil {
 		return out
 	}
-	add := func(node, f string, a ...any) { out = append(out, Issue{NodeID: node, Message: fmt.Sprintf(f, a...)}) }
+	add := func(node, f string, a ...any) {
+		out = append(out, Issue{NodeID: node, Message: fmt.Sprintf(f, a...), Severity: IssueError})
+	}
+	warn := func(node, f string, a ...any) {
+		out = append(out, Issue{NodeID: node, Message: fmt.Sprintf(f, a...), Severity: IssueWarning})
+	}
 
 	bos, err := cat.BusinessObjects(ctx)
 	boKnown := map[string]bool{}
@@ -188,7 +211,12 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 			}
 		case NodeFileSource:
 			var c FileSourceConfig
-			if json.Unmarshal(n.Config, &c) != nil || c.URI == "" {
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			if strings.TrimSpace(c.URI) == "" {
+				// Steward templates are valid until a file is uploaded at run time.
+				warn(n.ID, "upload a file before running (uri is empty)")
 				continue
 			}
 			if files == nil {
@@ -232,6 +260,70 @@ func Check(ctx context.Context, cat PlatformCatalog, spec *Spec) []Issue {
 				if !cols[col] {
 					add(n.ID, "%s: %s has no column %q", field, c.Table, col)
 				}
+			}
+		case NodeMasterSink:
+			var c MasterSinkConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			entity := strings.ToUpper(strings.TrimSpace(c.EntityType))
+			if entity == "" {
+				add(n.ID, "entity_type is required (ACCOUNT|SECURITY|PARTY)")
+				continue
+			}
+			if entity != "ACCOUNT" && entity != "SECURITY" && entity != "PARTY" {
+				add(n.ID, "entity_type %q is not supported yet (ACCOUNT|SECURITY|PARTY)", c.EntityType)
+				continue
+			}
+			table := c.StagingTable
+			if table == "" {
+				switch entity {
+				case "SECURITY":
+					table = "staging.security_data"
+				case "PARTY":
+					table = "staging.party_data"
+				default:
+					table = "staging.account_data"
+				}
+			}
+			if tables == nil {
+				list, terr := cat.StagingTables(ctx)
+				if terr != nil {
+					continue
+				}
+				tables = map[string]map[string]bool{}
+				for _, t := range list {
+					cols := map[string]bool{}
+					for _, col := range t.Columns {
+						cols[col.Name] = true
+					}
+					tables[t.Table] = cols
+				}
+			}
+			if _, ok := tables[table]; !ok {
+				add(n.ID, "there is no loadable staging table %s — ensure it has _load_run_id and _source_row_num", table)
+			}
+		case NodeQueueSource:
+			var c QueueSourceConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			if !validQueueBroker(c.Broker) {
+				add(n.ID, "broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+			}
+			if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+				add(n.ID, "topic_or_queue is required")
+			}
+		case NodeQueueSink:
+			var c QueueSinkConfig
+			if json.Unmarshal(n.Config, &c) != nil {
+				continue
+			}
+			if !validQueueBroker(c.Broker) {
+				add(n.ID, "broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+			}
+			if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+				add(n.ID, "topic_or_queue is required")
 			}
 		}
 	}
@@ -295,13 +387,24 @@ func downstreamSinkOf(spec *Spec, id string) *Node {
 }
 
 func issueFromError(e error) Issue {
-	msg := e.Error()
-	if strings.HasPrefix(msg, `node "`) {
-		if end := strings.Index(msg[6:], `"`); end >= 0 {
-			return Issue{NodeID: msg[6 : 6+end], Message: strings.TrimPrefix(msg[6+end+1:], ": ")}
+	raw := e.Error()
+	sev := IssueError
+	// Design-time: empty file URI is a steward warning, not a hard error.
+	uriWarn := strings.Contains(raw, "uri is required")
+	if uriWarn {
+		sev = IssueWarning
+	}
+	nodeID, msg := "", raw
+	if strings.HasPrefix(raw, `node "`) {
+		if end := strings.Index(raw[6:], `"`); end >= 0 {
+			nodeID = raw[6 : 6+end]
+			msg = strings.TrimPrefix(raw[6+end+1:], ": ")
 		}
 	}
-	return Issue{Message: msg}
+	if uriWarn {
+		msg = "upload a file before running (uri is empty)"
+	}
+	return Issue{NodeID: nodeID, Message: msg, Severity: sev}
 }
 
 // --- assistant ---------------------------------------------------------------

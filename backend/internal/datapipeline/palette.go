@@ -28,14 +28,19 @@ func Palette(d Deps) []NodeType {
 	bo, boWhy := avail(d.BO != nil, "business object access is not configured")
 	rules, rulesWhy := avail(d.Rules != nil, "the rule engine is not configured")
 	staging, stagingWhy := avail(d.StagingDB != nil, "the staging database is not configured")
+	master, masterWhy := avail(d.StagingDB != nil && d.AlphaDB != nil, "master_sink needs the staging database and alpha control-plane database")
+	queues, queuesWhy := avail(d.Queues != nil, "queue brokers are not configured")
 	return []NodeType{
 		{NodeFileSource, "Read a file", "source", "Read a CSV, JSON or Parquet file you uploaded. Define its columns once; every row is checked against them.", files, filesWhy},
 		{NodeBOSource, "Read business object", "source", "Read records of a business object, optionally filtered.", bo, boWhy},
+		{NodeQueueSource, "Read a queue", "source", "Pull a bounded batch from Kafka/Redpanda, AWS SQS, or Azure Service Bus. Credentials come from environment variables — never from the pipeline Spec.", queues, queuesWhy},
 		{NodeValidate, "Check required and unique", "step", "Reject rows missing required values, or repeating a key.", true, ""},
 		{NodeRuleCheck, "Apply validation rules", "step", "Run rules from the rules catalog. Blocking rules reject the row; warnings are recorded.", rules, rulesWhy},
 		{NodeMap, "Map fields", "step", "Rename fields and apply simple transforms (trim, dates, numbers, lookups).", true, ""},
 		{NodeBOSink, "Write business object", "destination", "Create or update business object records. Every record goes through the object's rules.", bo, boWhy},
 		{NodeStagingSink, "Load staging table", "destination", "Bulk-load rows into a staging table, tracked as a load run (re-running the same run is safe).", staging, stagingWhy},
+		{NodeMasterSink, "Master from staging", "destination", "Promote staging rows into the MDM master using semantic-term source hierarchy (Account pilot).", master, masterWhy},
+		{NodeQueueSink, "Publish to a queue", "destination", "Publish each row as JSON to Kafka/Redpanda, AWS SQS, or Azure Service Bus.", queues, queuesWhy},
 		{NodeFileSink, "Export a file", "destination", "Write the rows to a CSV, JSON or Parquet file.", files, filesWhy},
 	}
 }

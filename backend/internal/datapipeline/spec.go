@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var stagingTableRE = regexp.MustCompile(`^staging\.[a-z_][a-z0-9_]*$`)
@@ -26,11 +27,14 @@ const SpecVersion = 1
 const (
 	NodeFileSource  = "file_source"
 	NodeBOSource    = "bo_source"
+	NodeQueueSource = "queue_source"
 	NodeValidate    = "validate"
 	NodeRuleCheck   = "rule_check"
 	NodeMap         = "map"
 	NodeBOSink      = "bo_sink"
 	NodeStagingSink = "staging_sink"
+	NodeMasterSink  = "master_sink"
+	NodeQueueSink   = "queue_sink"
 	NodeFileSink    = "file_sink"
 )
 
@@ -158,6 +162,49 @@ type StagingSinkConfig struct {
 	Columns map[string]string `json:"columns,omitempty"`
 }
 
+// QueueSourceConfig pulls a bounded batch from a message queue/topic.
+// Credentials come from environment variable names in the Spec — never literals.
+type QueueSourceConfig struct {
+	Broker        string `json:"broker"`                   // kafka|redpanda|aws_sqs|azure_servicebus
+	TopicOrQueue  string `json:"topic_or_queue"`           // Kafka topic or queue name/URL
+	Format        string `json:"format,omitempty"`         // json (default)
+	ConsumerGroup string `json:"consumer_group,omitempty"` // Kafka consumer group
+	MaxMessages   int    `json:"max_messages,omitempty"`   // default 1000
+	IdleTimeoutMS int    `json:"idle_timeout_ms,omitempty"` // stop after idle; default 3000
+	// BrokersEnv names the env var holding Kafka brokers (default KAFKA_BROKERS).
+	BrokersEnv string `json:"brokers_env,omitempty"`
+	// QueueURLEnv names the env var holding the SQS queue URL (default AWS_SQS_QUEUE_URL)
+	// when topic_or_queue is empty.
+	QueueURLEnv string `json:"queue_url_env,omitempty"`
+	// ConnectionStringEnv names the env var for Azure Service Bus connection string
+	// (default AZURE_SERVICEBUS_CONNECTION_STRING).
+	ConnectionStringEnv string `json:"connection_string_env,omitempty"`
+	Region              string `json:"region,omitempty"` // AWS region
+}
+
+// QueueSinkConfig publishes each row as a JSON message to a queue/topic.
+type QueueSinkConfig struct {
+	Broker              string `json:"broker"`
+	TopicOrQueue        string `json:"topic_or_queue"`
+	Format              string `json:"format,omitempty"`
+	KeyField            string `json:"key_field,omitempty"` // Kafka partition key from row field
+	BrokersEnv          string `json:"brokers_env,omitempty"`
+	QueueURLEnv         string `json:"queue_url_env,omitempty"`
+	ConnectionStringEnv string `json:"connection_string_env,omitempty"`
+	Region              string `json:"region,omitempty"`
+	DryRun              bool   `json:"dry_run,omitempty"`
+}
+
+// MasterSinkConfig promotes staging rows into an MDM master using semantic
+// survivorship rules from alpha. Pilot entity: ACCOUNT → mdm.account_master.
+type MasterSinkConfig struct {
+	EntityType           string `json:"entity_type"`                      // ACCOUNT (pilot)
+	StagingTable         string `json:"staging_table,omitempty"`          // default staging.account_data
+	BatchSize            int    `json:"batch_size,omitempty"`             // default 100
+	RequireSemanticTerms bool   `json:"require_semantic_terms,omitempty"` // default true for ACCOUNT
+	DryRun               bool   `json:"dry_run,omitempty"`
+}
+
 // FileSinkConfig exports rows to a file via the DataFusion engine.
 type FileSinkConfig struct {
 	URI       string `json:"uri"`
@@ -196,9 +243,9 @@ func (s *Spec) Validate() []error {
 		}
 		ids[n.ID] = n
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeQueueSource:
 			sources++
-		case NodeBOSink, NodeFileSink, NodeStagingSink:
+		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeMasterSink, NodeQueueSink:
 			sinks++
 		case NodeValidate, NodeMap, NodeRuleCheck:
 		default:
@@ -232,7 +279,7 @@ func (s *Spec) Validate() []error {
 	}
 	for id, n := range ids {
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeQueueSource:
 			if in[id] > 0 {
 				add("node %q: source cannot have inputs", id)
 			}
@@ -316,9 +363,8 @@ func validateNodeConfig(n *Node) []error {
 		if !decode(&c) {
 			return errs
 		}
-		if c.URI == "" {
-			add("uri is required")
-		}
+		// Empty URI is a steward warning (Check), not a structural error — templates
+		// must validate before a file is uploaded.
 		if !validFormat(c.Format) {
 			add("format must be csv, json or parquet")
 		}
@@ -394,6 +440,48 @@ func validateNodeConfig(n *Node) []error {
 		if c.SourceCd == "" || c.Domain == "" {
 			add("source_cd and domain are required")
 		}
+	case NodeMasterSink:
+		var c MasterSinkConfig
+		if !decode(&c) {
+			return errs
+		}
+		et := strings.ToUpper(strings.TrimSpace(c.EntityType))
+		if et == "" {
+			add("entity_type is required")
+		} else if et != "ACCOUNT" && et != "SECURITY" && et != "PARTY" {
+			add("entity_type %q is not supported yet (ACCOUNT|SECURITY|PARTY)", c.EntityType)
+		}
+		if c.StagingTable != "" && !stagingTableRE.MatchString(c.StagingTable) {
+			add("staging_table must be staging.<name> when set")
+		}
+	case NodeQueueSource:
+		var c QueueSourceConfig
+		if !decode(&c) {
+			return errs
+		}
+		if !validQueueBroker(c.Broker) {
+			add("broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+		}
+		if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+			add("topic_or_queue is required (or queue_url_env for SQS)")
+		}
+		if c.Format != "" && c.Format != "json" {
+			add("format must be json when set")
+		}
+	case NodeQueueSink:
+		var c QueueSinkConfig
+		if !decode(&c) {
+			return errs
+		}
+		if !validQueueBroker(c.Broker) {
+			add("broker must be kafka, redpanda, aws_sqs, or azure_servicebus")
+		}
+		if strings.TrimSpace(c.TopicOrQueue) == "" && c.QueueURLEnv == "" {
+			add("topic_or_queue is required (or queue_url_env for SQS)")
+		}
+		if c.Format != "" && c.Format != "json" {
+			add("format must be json when set")
+		}
 	case NodeFileSink:
 		var c FileSinkConfig
 		if !decode(&c) {
@@ -412,6 +500,14 @@ func validateNodeConfig(n *Node) []error {
 func validType(t string) bool {
 	switch t {
 	case "string", "int", "float", "decimal", "bool", "date", "timestamp":
+		return true
+	}
+	return false
+}
+
+func validQueueBroker(b string) bool {
+	switch strings.ToLower(strings.TrimSpace(b)) {
+	case "kafka", "redpanda", "aws_sqs", "azure_servicebus":
 		return true
 	}
 	return false

@@ -138,7 +138,7 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		n := nodes[id]
 		stats[id] = &NodeStats{NodeID: id, Label: n.Label, Type: n.Type, OrderIndex: i, Status: "COMPLETED"}
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeQueueSource:
 		default:
 			p, err := f.Processor(n)
 			if err != nil {
@@ -240,7 +240,7 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 	var runErr error
 	for _, id := range order {
 		n := nodes[id]
-		if n.Type != NodeFileSource && n.Type != NodeBOSource {
+		if n.Type != NodeFileSource && n.Type != NodeBOSource && n.Type != NodeQueueSource {
 			continue
 		}
 		src, err := f.Source(n)
