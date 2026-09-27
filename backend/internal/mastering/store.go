@@ -105,12 +105,15 @@ func (e *Engine) Golden(ctx context.Context, tenantID, entity string, f GoldenFi
 	return out, err
 }
 
-// GoldenDetail is a golden record with its provenance: every version, the
-// current fields and where each came from, its sources and identifiers.
+// GoldenDetail is a golden record with its provenance: every version, one
+// version's fields and where each came from (the latest unless another is
+// asked for), its sources and identifiers.
 type GoldenDetail struct {
-	ID          string            `json:"id"`
-	Code        string            `json:"code"`
-	Versions    []GoldenVersion   `json:"versions"`
+	ID       string          `json:"id"`
+	Code     string          `json:"code"`
+	Versions []GoldenVersion `json:"versions"`
+	// Selected is the version the fields and decisions are for.
+	Selected    int               `json:"selected_version"`
 	Fields      []GoldenField     `json:"fields"`
 	Sources     []Xref            `json:"sources"`
 	Identifiers []Identifier      `json:"identifiers"`
@@ -180,7 +183,8 @@ type SurvivalLogRow struct {
 }
 
 // GoldenByID returns a golden record's provenance.
-func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string) (*GoldenDetail, error) {
+// version 0 is the latest.
+func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string, version int) (*GoldenDetail, error) {
 	p, err := e.profile(ctx, tenantID, entity)
 	if err != nil {
 		return nil, err
@@ -200,15 +204,28 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string) (*
 			return err
 		}
 		if len(d.Versions) > 0 {
+			sel := d.Versions[0]
+			if version > 0 {
+				found := false
+				for _, v := range d.Versions {
+					if v.Version == version {
+						sel, found = v, true
+					}
+				}
+				if !found {
+					return msgNoVersion(id, version)
+				}
+			}
+			d.Selected = sel.Version
 			if err := tx.SelectContext(ctx, &d.Fields, fmt.Sprintf(`SELECT f.field_name, f.field_value, s.code AS source, f.source_field, f.confidence
 				FROM %s f LEFT JOIN mdm.source_systems s ON s.id = f.source_system_id
-				WHERE f.golden_record_id::text = $1 ORDER BY f.field_name`, p.table("golden_field")), d.Versions[0].ID); err != nil {
+				WHERE f.golden_record_id::text = $1 ORDER BY f.field_name`, p.table("golden_field")), sel.ID); err != nil {
 				return err
 			}
 			if err := tx.SelectContext(ctx, &d.Decisions, fmt.Sprintf(`SELECT l.golden_version, l.field_name, l.winning_value, s.code AS source,
 					l.competing_values, l.decision_reason
 				FROM %s l LEFT JOIN mdm.source_systems s ON s.id = l.winning_source_id
-				WHERE l.%s::text = $1 AND l.golden_version = $2 ORDER BY l.field_name`, p.table("survivorship_log"), key), id, d.Versions[0].Version); err != nil {
+				WHERE l.%s::text = $1 AND l.golden_version = $2 ORDER BY l.field_name`, p.table("survivorship_log"), key), id, sel.Version); err != nil {
 				return err
 			}
 		}

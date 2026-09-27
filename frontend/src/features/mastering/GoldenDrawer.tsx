@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useEffect, useState } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Box, Chip, Collapse, Divider, Drawer, IconButton, LinearProgress, Stack, Table, TableBody, TableCell, TableHead, TableRow,
+  Alert, Box, Button, Chip, Collapse, Divider, Drawer, IconButton, LinearProgress, Stack, Table, TableBody, TableCell, TableHead, TableRow,
   Tooltip, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -18,8 +18,10 @@ import { OverrideDialog, OverrideStatusChip } from './overrides';
 const show = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
 
 /** One attribute: the surviving value, its source and why, and every competing value. */
-function FieldRow({ f, decision, onOverride, overridden }: {
-  f: GoldenDetail['fields'][number]; decision?: GoldenDetail['decisions'][number]; onOverride: () => void; overridden: boolean;
+function FieldRow({ f, decision, onOverride, overridden, change }: {
+  f: GoldenDetail['fields'][number]; decision?: GoldenDetail['decisions'][number]; onOverride?: () => void; overridden: boolean;
+  /** The value in the version before this one, when it differs. */
+  change?: { before: unknown };
 }) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -28,7 +30,14 @@ function FieldRow({ f, decision, onOverride, overridden }: {
     <>
       <TableRow hover>
         <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{f.name}</TableCell>
-        <TableCell><Typography variant="body2" fontWeight={500}>{show(f.value)}</Typography></TableCell>
+        <TableCell>
+          <Typography variant="body2" fontWeight={500}>{show(f.value)}</Typography>
+          {change && (
+            <Typography variant="caption" color="info.main" component="div">
+              {t('mastering.golden.was', { v: showValue(change.before) })}
+            </Typography>
+          )}
+        </TableCell>
         <TableCell sx={{ whiteSpace: 'nowrap' }}>
           {overridden
             ? <Chip size="small" color="secondary" label={t('mastering.overrides.steward')} />
@@ -41,9 +50,11 @@ function FieldRow({ f, decision, onOverride, overridden }: {
           </Tooltip>
         </TableCell>
         <TableCell padding="none" sx={{ whiteSpace: 'nowrap' }}>
-          <Tooltip title={t('mastering.overrides.action', { field: f.name })}>
-            <IconButton size="small" onClick={onOverride} aria-label={t('mastering.overrides.action', { field: f.name })}><EditIcon fontSize="small" /></IconButton>
-          </Tooltip>
+          {onOverride && (
+            <Tooltip title={t('mastering.overrides.action', { field: f.name })}>
+              <IconButton size="small" onClick={onOverride} aria-label={t('mastering.overrides.action', { field: f.name })}><EditIcon fontSize="small" /></IconButton>
+            </Tooltip>
+          )}
           {decision && (
             <IconButton size="small" onClick={() => setOpen(!open)} aria-label={t('mastering.golden.why', { field: f.name })}>
               {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -104,9 +115,26 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 /** A golden record's provenance: fields and why, identifiers, sources, versions, open exceptions. */
 export default function GoldenDrawer({ entity, id, onClose }: { entity: string; id: string | null; onClose: () => void }) {
   const { t, i18n } = useTranslation();
-  const q = useQuery({ queryKey: ['mastering-golden', entity, id], queryFn: () => masteringApi.goldenById(entity, id!), enabled: !!id });
+  // The version on show: undefined is the latest.
+  const [version, setVersion] = useState<number | undefined>();
+  useEffect(() => setVersion(undefined), [id]);
+  const q = useQuery({
+    queryKey: ['mastering-golden', entity, id, version ?? 'latest'], queryFn: () => masteringApi.goldenById(entity, id!, version),
+    enabled: !!id, placeholderData: keepPreviousData,
+  });
   const d = q.data?.golden;
-  const current = d?.versions[0];
+  const latest = d?.versions[0];
+  const idx = d ? Math.max(0, d.versions.findIndex((v) => v.version === d.selected_version)) : 0;
+  const current = d?.versions[idx];
+  const historical = !!d && !!latest && d.selected_version !== latest.version;
+  // What this version changed: its values against the version before it.
+  const before = d?.versions[idx + 1]?.attributes;
+  const changes = new Map<string, { before: unknown }>();
+  if (current && before) {
+    for (const k of new Set([...Object.keys(current.attributes ?? {}), ...Object.keys(before)])) {
+      if (JSON.stringify(current.attributes?.[k] ?? null) !== JSON.stringify(before[k] ?? null)) changes.set(k, { before: before[k] });
+    }
+  }
   const name = current?.attributes?.name as string | undefined;
   const decisionFor = new Map((d?.decisions ?? []).map((x) => [x.field, x]));
   const overrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'golden', id], queryFn: () => masteringApi.overrides(entity, { golden: id! }), enabled: !!id });
@@ -135,9 +163,23 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
           </Stack>
         )}
 
+        {historical && current && latest && (
+          <Alert severity="info" sx={{ mt: 2 }}
+            action={<Button color="inherit" size="small" onClick={() => setVersion(undefined)}>{t('mastering.golden.backToLatest')}</Button>}>
+            {t('mastering.golden.viewingVersion', { v: current.version, latest: latest.version, at: fmt(current.published_at ?? current.knowledge_at, i18n.language) })}
+          </Alert>
+        )}
+
         {d && (
           <>
-            <Section title={t('mastering.golden.fields')}>
+            {before && (
+              <Typography variant="caption" color="text.secondary" component="div" sx={{ mt: 2 }}>
+                {changes.size === 0
+                  ? t('mastering.golden.noChanges', { v: d.versions[idx + 1].version })
+                  : t('mastering.golden.changes', { count: changes.size, v: d.versions[idx + 1].version })}
+              </Typography>
+            )}
+            <Section title={historical ? t('mastering.golden.fieldsAt', { v: d.selected_version }) : t('mastering.golden.fields')}>
               <Table size="small">
                 <TableHead>
                   <TableRow>
@@ -150,8 +192,9 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
                 </TableHead>
                 <TableBody>
                   {d.fields.map((f) => (
-                    <FieldRow key={f.name} f={f} decision={decisionFor.get(f.name)} overridden={activeAttrs.has(f.name)}
-                      onOverride={() => setEditing({ attribute: f.name, current: f.value })} />
+                    <FieldRow key={f.name} f={f} decision={decisionFor.get(f.name)} overridden={!historical && activeAttrs.has(f.name)}
+                      change={changes.get(f.name)}
+                      onOverride={historical ? undefined : () => setEditing({ attribute: f.name, current: f.value })} />
                   ))}
                 </TableBody>
               </Table>
@@ -185,12 +228,14 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
               </Table>
             </Section>
 
-            <Section title={t('mastering.golden.versions')}>
+            <Section title={t('mastering.golden.versionsHelp')}>
               <Table size="small">
                 <TableBody>
                   {d.versions.map((v) => (
-                    <TableRow key={v.id}>
-                      <TableCell>v{v.version}</TableCell>
+                    <TableRow key={v.id} hover selected={v.version === d.selected_version} sx={{ cursor: 'pointer' }}
+                      onClick={() => setVersion(v.version === latest?.version ? undefined : v.version)}
+                      aria-label={t('mastering.golden.openVersion', { v: v.version })}>
+                      <TableCell>v{v.version}{v.version === d.selected_version && <Chip size="small" sx={{ ml: 1 }} label={t('mastering.golden.showing')} />}</TableCell>
                       <TableCell><GoldenStatusChip status={v.status} /></TableCell>
                       <TableCell>{t('mastering.golden.dq', { v: show(v.dq_score) })}</TableCell>
                       <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmt(v.published_at ?? v.knowledge_at, i18n.language)}</TableCell>
