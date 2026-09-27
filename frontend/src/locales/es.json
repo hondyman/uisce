@@ -503,7 +503,17 @@
       "openExceptions": "Excepciones abiertas",
       "version": "Versión {{v}}",
       "dq": "CD {{v}}",
-      "identity": "Identidad {{v}}"
+      "identity": "Identidad {{v}}",
+      "was": "antes {{v}}",
+      "backToLatest": "Ver la última",
+      "viewingVersion": "Versión {{v}} ({{at}}). La última es la versión {{latest}}; las anulaciones se aplican solo a la última.",
+      "noChanges": "Mismos valores que la versión {{v}}.",
+      "changes_one": "{{count}} valor cambió respecto a la versión {{v}}.",
+      "changes_other": "{{count}} valores cambiaron respecto a la versión {{v}}.",
+      "fieldsAt": "Valores en la versión {{v}}",
+      "openVersion": "Ver la versión {{v}}",
+      "showing": "visible",
+      "versionsHelp": "Versiones: seleccione una para ver sus valores"
     },
     "goldenStatus": {
       "PUBLISHED": "Publicado",

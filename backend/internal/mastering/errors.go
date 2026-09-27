@@ -76,6 +76,9 @@ func msgMergeDecided(s string) *msgcat.Error { return m(34, s).WithStatus(http.S
 func msgNoBOBinding(bo, binding string) *msgcat.Error {
 	return m(36, bo, binding).WithStatus(http.StatusNotFound)
 }
+func msgNoVersion(id string, v int) *msgcat.Error {
+	return m(41, id, v).WithStatus(http.StatusNotFound)
+}
 func msgMergeApprovalsUnavailable() *msgcat.Error {
 	return m(35).WithStatus(http.StatusServiceUnavailable)
 }

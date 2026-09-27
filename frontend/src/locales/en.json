@@ -375,7 +375,17 @@
       "openExceptions": "Open exceptions",
       "version": "Version {{v}}",
       "dq": "DQ {{v}}",
-      "identity": "Identity {{v}}"
+      "identity": "Identity {{v}}",
+      "was": "was {{v}}",
+      "backToLatest": "Show latest",
+      "viewingVersion": "Showing version {{v}} ({{at}}). The latest is version {{latest}}; overrides apply to the latest only.",
+      "noChanges": "Same values as version {{v}}.",
+      "changes_one": "{{count}} value changed from version {{v}}.",
+      "changes_other": "{{count}} values changed from version {{v}}.",
+      "fieldsAt": "Values at version {{v}}",
+      "openVersion": "Show version {{v}}",
+      "showing": "showing",
+      "versionsHelp": "Versions - select one to see its values"
     },
     "goldenStatus": {
       "PUBLISHED": "Published",
