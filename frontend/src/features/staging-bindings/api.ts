@@ -11,8 +11,10 @@ export interface Binding {
   staging_table: string;
   fields: Record<string, string>;
   version: number;
-  /** core: inherited from the gold copy (read-only here); tenant: this tenant's own. */
+  /** core: the gold copy's; tenant: a tenant's own. */
   origin: 'core' | 'tenant';
+  /** Not this tenant's own (a core binding seen from a tenant): read-only here. */
+  inherited: boolean;
   updated_at: string;
 }
 

@@ -361,6 +361,15 @@
       "withdrawn": "Withdrawn"
     },
     "editor": {
+      "masteringKeys": "Mastering keys",
+      "masteringKeysHelp": "What mastering reads from this source besides fields: its own record key (links a re-delivered record to the same golden record), its as-of time, and its identifiers (matched deterministically).",
+      "sourceKey": "Source record key",
+      "asOf": "Source as-of time",
+      "identifier": "Identifier: {{type}}",
+      "identifierType": "Identifier type",
+      "addIdentifier": "Add identifier",
+      "remove": "Remove",
+      "removeIdentifier": "Remove identifier {{type}}",
       "newTitle": "Propose a staging binding",
       "editTitle": "Propose a change to the binding",
       "makerChecker": "Nothing changes until another administrator approves your proposal.",

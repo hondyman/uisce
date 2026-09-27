@@ -119,7 +119,10 @@ func (ed *Editor) Propose(ctx context.Context, a Actor, p Proposal) (*Change, er
 				known[n] = true
 			}
 			for _, f := range sortedKeys(p.Fields) {
-				if !known[f] {
+				if IsMasteringKey(f) {
+					continue
+				}
+				if !known[f] || looksLikeMasteringKey(f) {
 					return msgNoField(p.BOKey, f)
 				}
 			}

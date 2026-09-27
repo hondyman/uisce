@@ -10,6 +10,12 @@ import { CatalogErrorAlert } from '../message-catalog/parts';
 import { Column, pipelinesApi, platformApi, Suggestion } from '../data-pipelines/api';
 import { Binding, stagingBindingsApi } from './api';
 
+/** Keys mastering reads from a source besides BO fields (see stagingbind/keys.go). */
+export const SOURCE_KEY = '@source_key';
+export const AS_OF_KEY = '@as_of';
+const IDENTIFIER_TYPES = ['ISIN', 'CUSIP', 'SEDOL', 'LEI', 'FIGI', 'BLOOMBERG_ID', 'TICKER', 'RIC', 'PROVIDER_CODE', 'INTERNAL'];
+export const isMasteringKey = (k: string) => k === SOURCE_KEY || k === AS_OF_KEY || /^id:[A-Z][A-Z0-9_]{1,39}$/.test(k);
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -29,6 +35,7 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
   const [mapping, setMapping] = useState<Record<string, string>>(binding?.fields ?? {});
   const [suggested, setSuggested] = useState<Record<string, Suggestion>>({});
   const [reason, setReason] = useState('');
+  const [newIdType, setNewIdType] = useState<string | null>(null);
 
   const bos = useQuery({ queryKey: ['sb-bos'], queryFn: platformApi.businessObjects, enabled: open });
   const tables = useQuery({ queryKey: ['sb-staging-tables'], queryFn: pipelinesApi.stagingTables, enabled: open });
@@ -37,6 +44,30 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
   const fields = useMemo(() => (schema.data?.fields ?? []).map((f) => ({ name: f.name, label: f.displayName || f.name, type: f.type })), [schema.data]);
   const columns = useMemo(() => tables.data?.find((x) => x.table === table)?.columns ?? [], [tables.data, table]);
   const bound = Object.entries(mapping).filter(([, c]) => !!c);
+  const boundFields = bound.filter(([k]) => !isMasteringKey(k)).length;
+  // Source key and as-of always offered; identifiers as the user adds them.
+  const keyRows = useMemo(() => [SOURCE_KEY, AS_OF_KEY,
+    ...Object.keys(mapping).filter((k) => k.startsWith('id:')).sort()], [mapping]);
+  const keyLabel = (k: string) => k === SOURCE_KEY ? t('stagingBindings.editor.sourceKey')
+    : k === AS_OF_KEY ? t('stagingBindings.editor.asOf') : t('stagingBindings.editor.identifier', { type: k.slice(3) });
+  const addIdentifier = () => {
+    const typ = (newIdType ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(typ)) return;
+    setMapping((m) => (`id:${typ}` in m ? m : { ...m, [`id:${typ}`]: '' }));
+    setNewIdType(null);
+  };
+  const columnPicker = (key: string, label: string) => (
+    <Autocomplete
+      size="small" sx={{ flex: 1 }}
+      options={columns.map((c) => c.name)}
+      value={mapping[key] || null}
+      onChange={(_, v) => setMapping((m) => ({ ...m, [key]: v ?? '' }))}
+      renderInput={(params) => (
+        <TextField {...params} placeholder={t('stagingBindings.editor.notBound')}
+          inputProps={{ ...params.inputProps, 'aria-label': t('stagingBindings.editor.columnFor', { field: label }) }} />
+      )}
+    />
+  );
 
   // A new object or table starts from nothing (an edit keeps its binding).
   useEffect(() => {
@@ -97,7 +128,7 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
             <Box>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
                 <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                  {t('stagingBindings.editor.mapping', { bound: bound.length, total: fields.length })}
+                  {t('stagingBindings.editor.mapping', { bound: boundFields, total: fields.length })}
                 </Typography>
                 <Button size="small" startIcon={<AutoFixHighIcon />} onClick={() => suggest.mutate()}
                   disabled={suggest.isPending || columns.length === 0 || fields.length === 0}>
@@ -126,16 +157,7 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
                           </TableCell>
                           <TableCell>
                             <Stack direction="row" spacing={1} alignItems="center">
-                              <Autocomplete
-                                size="small" sx={{ flex: 1 }}
-                                options={columns.map((c) => c.name)}
-                                value={value || null}
-                                onChange={(_, v) => setMapping((m) => ({ ...m, [f.name]: v ?? '' }))}
-                                renderInput={(params) => (
-                                  <TextField {...params} placeholder={t('stagingBindings.editor.notBound')}
-                                    inputProps={{ ...params.inputProps, 'aria-label': t('stagingBindings.editor.columnFor', { field: f.label }) }} />
-                                )}
-                              />
+                              {columnPicker(f.name, f.label)}
                               {s && s.from === value && (
                                 <Tooltip title={s.reason}>
                                   <Chip size="small" variant="outlined" color={s.confidence >= 0.8 ? 'success' : 'warning'}
@@ -150,6 +172,47 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
                   </TableBody>
                 </Table>
               </TableContainer>
+
+              <Typography variant="subtitle2" sx={{ mt: 2 }}>{t('stagingBindings.editor.masteringKeys')}</Typography>
+              <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+                {t('stagingBindings.editor.masteringKeysHelp')}
+              </Typography>
+              <Table size="small" sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
+                <TableBody>
+                  {keyRows.map((k) => (
+                    <TableRow key={k} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={500}>{keyLabel(k)}</Typography>
+                        <Typography variant="caption" color="text.secondary" fontFamily="monospace">{k}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ width: '45%' }}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          {columnPicker(k, keyLabel(k))}
+                          {k.startsWith('id:') && (
+                            <Button size="small" color="inherit" aria-label={t('stagingBindings.editor.removeIdentifier', { type: k.slice(3) })}
+                              onClick={() => setMapping((m) => { const next = { ...m }; delete next[k]; return next; })}>
+                              {t('stagingBindings.editor.remove')}
+                            </Button>
+                          )}
+                        </Stack>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                <Autocomplete
+                  freeSolo size="small" sx={{ width: 240 }}
+                  options={IDENTIFIER_TYPES.filter((x) => !(`id:${x}` in mapping))}
+                  value={newIdType}
+                  onChange={(_, v) => setNewIdType(v)}
+                  onInputChange={(_, v) => setNewIdType(v)}
+                  renderInput={(params) => <TextField {...params} label={t('stagingBindings.editor.identifierType')} />}
+                />
+                <Button size="small" onClick={addIdentifier} disabled={!newIdType?.trim()}>
+                  {t('stagingBindings.editor.addIdentifier')}
+                </Button>
+              </Stack>
             </Box>
           )}
 
