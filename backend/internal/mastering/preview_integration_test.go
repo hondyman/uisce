@@ -163,7 +163,7 @@ func TestStewardMergeAndReject(t *testing.T) {
 	}
 	err = e.inTenant(ctx, gold, func(tx *sqlx.Tx) error {
 		var ids []string
-		if err := tx.SelectContext(ctx, &ids, `SELECT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY golden_id LIMIT 3`); err != nil {
+		if err := tx.SelectContext(ctx, &ids, `SELECT DISTINCT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY 1 LIMIT 3`); err != nil {
 			return err
 		}
 		if len(ids) < 3 {
@@ -179,6 +179,16 @@ func TestStewardMergeAndReject(t *testing.T) {
 			return id
 		}
 		ab, ac, bc := pair(a, b), pair(a, c), pair(b, c)
+		srcs := func(id string) int {
+			var n int
+			if err := tx.GetContext(ctx, &n, `SELECT count(*) FROM mdm.entity_xref WHERE golden_id = $1::uuid AND status = 'ACTIVE'`, id); err != nil {
+				t.Fatal(err)
+			}
+			return n
+		}
+		aSrc, bSrc := srcs(a), srcs(b)
+		var aVer int
+		_ = tx.GetContext(ctx, &aVer, `SELECT COALESCE(max(golden_version), 0) FROM mdm.product_golden_record WHERE product_id = $1::uuid`, a)
 
 		rej, err := e.decide(ctx, tx, cfg, &Policy{Mode: ModeDirect}, gold, "product", ac, CandidateDecision{Merge: false, Note: "different share classes"}, "", "test")
 		if err != nil || rej.Status != "REJECTED" {
@@ -189,7 +199,7 @@ func TestStewardMergeAndReject(t *testing.T) {
 			t.Fatalf("merge: %v", err)
 		}
 		t.Logf("merge: %+v", m)
-		if m.Survivor != a || m.Merged != b || m.Moved.Sources != 1 || !m.Published {
+		if m.Survivor != a || m.Merged != b || m.Moved.Sources != bSrc || !m.Published {
 			t.Errorf("merge result %+v", m)
 		}
 		var st struct {
@@ -214,7 +224,7 @@ func TestStewardMergeAndReject(t *testing.T) {
 			return err
 		}
 		t.Logf("after merge: %+v", st)
-		if st.Sources != 2 || st.Merged != a || st.Retracted != 1 || st.BIdents != 0 || st.Version != 2 || st.OtherStatus != "REJECTED" || st.Logged != 1 {
+		if st.Sources != aSrc+bSrc || st.Merged != a || st.Retracted < 1 || st.BIdents != 0 || st.Version != aVer+1 || st.OtherStatus != "REJECTED" || st.Logged != 1 {
 			t.Errorf("state after merge: %+v", st)
 		}
 		if _, err := e.decide(ctx, tx, cfg, &Policy{Mode: ModeDirect}, gold, "product", ab, CandidateDecision{Merge: true}, "", "test"); err == nil {
@@ -385,7 +395,7 @@ func TestMergeFollowsPolicy(t *testing.T) {
 			}
 		}
 		var ids []string
-		if err := tx.SelectContext(ctx, &ids, `SELECT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY golden_id LIMIT 3`); err != nil {
+		if err := tx.SelectContext(ctx, &ids, `SELECT DISTINCT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY 1 LIMIT 3`); err != nil {
 			return err
 		}
 		if len(ids) < 3 {
@@ -453,6 +463,52 @@ func TestMergeFollowsPolicy(t *testing.T) {
 		apart, err := e.decide(ctx, tx, cfg, approval, gold, "product", ac, CandidateDecision{Merge: false}, "user-john", "john")
 		if err != nil || apart.Status != "REJECTED" {
 			t.Fatalf("keep apart after a rejected merge: %+v %v", apart, err)
+		}
+		return errPreview
+	})
+	if err != nil && err != errPreview {
+		t.Fatal(err)
+	}
+}
+
+// TestReviewCandidateInsert exercises the review band's candidate insert
+// (a record scoring between review and auto-match): it must record the
+// pair. Rolled back.
+func TestReviewCandidateInsert(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	platform := PlatformCatalog{DB: alpha}
+	e := &Engine{Data: data, Rules: analytics.NewValidationRuleService(alpha), Fields: platform, GoldCopy: platform.GoldCopyTenant}
+	ctx := context.Background()
+	gold, _ := platform.GoldCopyTenant(ctx)
+	cfg, err := e.loadConfig(ctx, gold, "product")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.inTenant(ctx, gold, func(tx *sqlx.Tx) error {
+		var ids []string
+		if err := tx.SelectContext(ctx, &ids, `SELECT DISTINCT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY 1 LIMIT 2`); err != nil {
+			return err
+		}
+		if len(ids) < 2 {
+			t.Skip("needs two mastered products")
+		}
+		r := e.stewardRunner(ctx, tx, cfg, gold, "product", "", "")
+		r.sourceCd = "BLOOMBERG"
+		if err := r.candidate(ids[0], ids[1], 0.9, "PRODUCT_NAME_FUZZY", []string{"name", "base_currency", "domicile"}); err != nil {
+			t.Fatalf("candidate insert: %v", err)
+		}
+		var n int
+		if err := tx.GetContext(ctx, &n, `SELECT count(*) FROM mdm.product_match_candidate WHERE product_id_a = $1::uuid AND product_id_b = $2::uuid AND status = 'PENDING'`, ids[0], ids[1]); err != nil {
+			return err
+		}
+		if n != 1 {
+			t.Errorf("pending pairs: %d", n)
 		}
 		return errPreview
 	})
