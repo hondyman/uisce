@@ -22,6 +22,8 @@ export interface Counts {
   published: number; held_for_review: number; unchanged: number; exceptions: number;
   /** Observations that replaced a value their source had already reported (prices). */
   restated?: number;
+  /** Later dates re-checked because an earlier golden price changed (prices). */
+  rechecked?: number;
 }
 
 export type RunStatus = 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';

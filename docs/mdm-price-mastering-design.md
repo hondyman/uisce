@@ -210,5 +210,11 @@ Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
 - **Related types** - a price only one source quotes is checked against the golden prices of the types that
   should agree with it (default `[LAST, OFFICIAL_CLOSE]`, `[BID, MID, ASK]`): error flagged, critical held.
 
+- **Restatement cascade** - when a date's current golden price changes (a new value, a first publication, a
+  steward's price set or cleared), the next priced date of that instrument and price type is re-checked against
+  it: a new version records the new prior and control outcome, its superseded control exceptions are resolved and
+  the new check raises its own; if that date's own value changes the one after is re-checked in turn.
+  Day-over-day compares only with a prior at most `max_gap_days` old (default 7), which also bounds the cascade.
+
 Next: stale and missing-price controls and the expected universe (slice 4), cutoffs and finalization,
 overrides as MANUAL observations, vendor challenges, date partitioning, the Postgres rule dialect.
