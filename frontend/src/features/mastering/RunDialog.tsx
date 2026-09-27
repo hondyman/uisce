@@ -77,8 +77,10 @@ export default function RunDialog({ profile, open, onClose, onDone }: {
                   <Box>
                     <Typography variant="body2">{l.source} · {l.run_ref ?? l.id.slice(0, 8)} · {fmt(l.started_at, i18n.language)}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {l.received_rows !== undefined ? t('mastering.runDialog.rows', { n: l.received_rows }) : ''}
-                      {l.mastering_status ? ` · ${t('mastering.runDialog.mastered', { status: t(`mastering.runStatus.${l.mastering_status}`) })}` : ''}
+                      {[
+                        l.received_rows !== undefined && l.received_rows !== null ? t('mastering.runDialog.rows', { n: l.received_rows }) : '',
+                        l.mastering_status ? t('mastering.runDialog.mastered', { status: t(`mastering.runStatus.${l.mastering_status}`) }) : '',
+                      ].filter(Boolean).join(' · ')}
                     </Typography>
                   </Box>
                 </MenuItem>
