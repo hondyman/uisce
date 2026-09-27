@@ -712,11 +712,13 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 		SELECT k.key AS k, p.source_id::text, COALESCE(p.custom_attributes->>'source_row_id', p.id::text) AS source_key,
 			p.value, p.currency, p.source_timestamp AS as_of, p.is_official,
 			COALESCE((SELECT jsonb_build_object('asset_class', to_jsonb(a)->>'asset_class', 'sub_asset_class', to_jsonb(a)->>'sub_asset_class',
-				'currency', to_jsonb(a)->>'currency') FROM %s a WHERE a.%s = k.eid AND %s LIMIT 1), '{}'::jsonb) AS instrument
+				'currency', to_jsonb(a)->>'currency', 'code', to_jsonb(a)->>%s, 'name', to_jsonb(a)->>%s)
+				FROM %s a WHERE a.%s = k.eid AND %s LIMIT 1), '{}'::jsonb) AS instrument
 		FROM k JOIN mdm.price_type pt ON pt.price_type_cd = k.pt
 		JOIN mdm.price p ON p.price_entity_type = k.et AND p.price_entity_id = k.eid AND p.price_type_id = pt.id
 			AND p.price_date = k.d AND p.is_current
-		ORDER BY k.key, p.source_id`, keyset, qi(inst.AnchorTable), qi(inst.entityCol()), inst.current("a")), kj); err != nil {
+		ORDER BY k.key, p.source_id`, keyset, pq.QuoteLiteral(inst.AnchorCodeColumn), pq.QuoteLiteral(inst.Settings.NameAttribute),
+		qi(inst.AnchorTable), qi(inst.entityCol()), inst.current("a")), kj); err != nil {
 		return fmt.Errorf("candidates: %w", err)
 	}
 	var states []goldenState
@@ -776,6 +778,12 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 	var raw map[string]string
 	_ = json.Unmarshal(cands[0].Instrument, &raw)
 	facts = instrumentFacts{AssetClass: raw["asset_class"], SubType: raw["sub_asset_class"], Currency: strings.ToUpper(raw["currency"])}
+	// How messages name the price: the instrument's code and name.
+	label := k.EntityID
+	if raw["code"] != "" {
+		label = strings.TrimSpace(raw["code"] + " " + raw["name"])
+	}
+	label = fmt.Sprintf("%s %s %s", label, k.PriceType, k.Date)
 
 	// End of the valuation date: what staleness and age are measured against.
 	valDate, _ := time.Parse("2006-01-02", k.Date)
@@ -809,7 +817,7 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 		}
 		ccy := strings.ToUpper(c.Currency.String)
 		if facts.Currency != "" && ccy != "" && ccy != facts.Currency {
-			msg := fmt.Sprintf("%s %s %s: %s quoted in %s, the instrument is in %s", k.EntityID, k.PriceType, k.Date, code, ccy, facts.Currency)
+			msg := fmt.Sprintf("%s: %s quoted in %s, the instrument is in %s", label, code, ccy, facts.Currency)
 			src := c.SourceID
 			issue(&src, "CURRENCY_MISMATCH", "WARNING", msg)
 			if !strings.EqualFold(ctl.CurrencyMismatch, "FLAG") {
@@ -851,7 +859,7 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 		if is.Severity == SevError {
 			sev = "ERROR"
 		}
-		issue(nil, is.Code, sev, fmt.Sprintf("%s %s %s: %s", k.EntityID, k.PriceType, k.Date, is.Message))
+		issue(nil, is.Code, sev, fmt.Sprintf("%s: %s", label, is.Message))
 		if is.Code == IssueSelectionHold || is.Code == IssueAnomaly || is.Severity == SevError {
 			status = "REVIEW"
 		}
@@ -894,7 +902,7 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 			if lvl != "WARNING" {
 				sev = "ERROR"
 			}
-			msg := fmt.Sprintf("%s %s %s: %.4g moved %.2f%% from %.4g on %s (%s threshold)", k.EntityID, k.PriceType, k.Date,
+			msg := fmt.Sprintf("%s: %.4g moved %.2f%% from %.4g on %s (%s threshold)", label,
 				value, pct, st.PriorValue.Float64, st.PriorDate.String, strings.ToLower(lvl))
 			if action == "HOLD" {
 				status = "REVIEW"

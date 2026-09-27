@@ -135,7 +135,9 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 	// Day 1. The gilt from all three (one Refinitiv quote in the wrong
 	// currency); the equity from Bloomberg and Refinitiv, 30% apart; one
 	// Bloomberg quote for an instrument the master doesn't know.
-	d1 := "2026-09-24"
+	// Dates far from any real load: the transaction sees committed prices, and
+	// a real price for the same key would turn a test quote into a restatement.
+	d1 := "2001-06-04"
 	bbg1 := load("BLOOMBERG", "staging.bbg_price",
 		bbgCols+` VALUES ($1, $2, $3, 'BBGTESTGILT1', '`+gilt+`', '`+d1+`', 'GBP', NULL, 99.50, 100.00, 99.75, '`+d1+` 17:30+00')`,
 		bbgCols+` VALUES ($1, $2, $3, 'BBGTESTEQTY1', '`+equity+`', '`+d1+`', 'GBP', 100.00, NULL, NULL, NULL, '`+d1+` 16:35+00')`,
@@ -179,7 +181,7 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 
 	// Day 2: the gilt moves 4.3% (over the 3% fixed-income error threshold:
 	// published, flagged); the equity 40% (critical: held for a steward).
-	d2 := "2026-09-25"
+	d2 := "2001-06-05"
 	ice2 := load("ICE", "staging.ice_price",
 		iceCols+` VALUES ($1, $2, $3, 'ICETESTGILT1', '`+gilt+`', '`+d2+`', 'GBP', 103.80, 104.05, 104.30, '`+d2+` 16:00+00')`)
 	run("ice day 2", "staging.ice_price", ice2)
