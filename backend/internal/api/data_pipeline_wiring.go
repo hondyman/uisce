@@ -159,7 +159,9 @@ func (s *Server) masteringActor(r *http.Request) (mastering.Actor, error) {
 	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && !auth.ImpersonationActive {
 		for _, role := range auth.Roles {
 			switch role {
-			case "global_admin", "tenant_admin", "data_steward":
+			case "global_admin", "tenant_admin":
+				a.CanRun, a.Admin = true, true
+			case "data_steward":
 				a.CanRun = true
 			}
 		}

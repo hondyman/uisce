@@ -92,6 +92,45 @@ export interface MatchCandidate {
   status: string;
 }
 
+export type OverrideMode = 'APPROVAL' | 'DIRECT';
+export interface Policy {
+  entity_cd: string;
+  mode: OverrideMode;
+  approvals_required: number;
+  high_risk_attributes: string[];
+  high_risk_approvals: number;
+  updated_by?: string;
+  updated_at?: string;
+  inherited: boolean;
+  attributes?: string[];
+}
+
+export type OverrideStatus = 'PENDING' | 'APPLIED' | 'REJECTED' | 'WITHDRAWN';
+export interface Override {
+  id: string;
+  golden_id: string;
+  golden_code?: string;
+  golden_name?: string;
+  attribute: string;
+  action: 'SET' | 'CLEAR';
+  value?: unknown;
+  previous_value?: unknown;
+  reason: string;
+  mode: OverrideMode;
+  approvals_required: number;
+  approvals: number;
+  status: OverrideStatus;
+  active: boolean;
+  requested_by_name?: string;
+  requested_at: string;
+  applied_at?: string;
+  applied_version?: number;
+  voters?: string;
+  mine: boolean;
+  voted: boolean;
+}
+export interface OverrideRequest { attribute: string; action?: 'SET' | 'CLEAR'; value?: unknown; reason: string }
+
 export interface CandidateDecision { merge: boolean; keep?: 'a' | 'b'; note?: string }
 export interface DecisionResult {
   candidate_id: string;
@@ -137,8 +176,19 @@ export const masteringApi = {
   resolve: (entity: string, id: string, status: 'RESOLVED' | 'WAIVED', note?: string) =>
     apiClient<{ ok: boolean }>(`${BASE}/${entity}/exceptions/${id}/resolve`, post({ status, note })),
   candidates: (entity: string) => apiClient<{ candidates: MatchCandidate[] }>(`${BASE}/${entity}/candidates`),
+  policy: (entity: string) => apiClient<{ policy: Policy; can_edit: boolean }>(`${BASE}/${entity}/policy`),
+  setPolicy: (entity: string, p: Partial<Policy>) =>
+    apiClient<{ policy: Policy; can_edit: boolean }>(`${BASE}/${entity}/policy`, { method: 'PUT', body: JSON.stringify(p), headers: { 'Content-Type': 'application/json' } }),
+  overrides: (entity: string, f: { status?: string; golden?: string }) => apiClient<{ overrides: Override[] }>(`${BASE}/${entity}/overrides${qs(f)}`),
+  proposeOverride: (entity: string, goldenId: string, o: OverrideRequest) =>
+    apiClient<{ override: Override }>(`${BASE}/${entity}/golden/${goldenId}/overrides`, post(o)),
+  voteOverride: (entity: string, id: string, approve: boolean, comment?: string) =>
+    apiClient<{ override: Override }>(`${BASE}/${entity}/overrides/${id}/${approve ? 'approve' : 'reject'}`, post({ comment })),
+  withdrawOverride: (entity: string, id: string) => apiClient<{ override: Override }>(`${BASE}/${entity}/overrides/${id}/withdraw`, { method: 'POST' }),
   decide: (entity: string, id: string, d: CandidateDecision) =>
     apiClient<{ decision: DecisionResult }>(`${BASE}/${entity}/candidates/${id}/decide`, post(d)),
 };
 
 export const pct = (v?: number) => (v === undefined || v === null ? '—' : `${Math.round(v * 100)}%`);
+
+export const showValue = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));

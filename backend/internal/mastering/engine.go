@@ -260,7 +260,10 @@ type runner struct {
 	raised      []Issue // exceptions raised this run
 	// force publishes a new version even when the values are unchanged
 	// (a steward merge changes the sources behind them).
-	force      bool
+	force bool
+	// overrides: the data plane has the overrides tables (crims 0013), so
+	// active overrides apply; before that migration mastering runs without.
+	overrides  bool
 	unmastered []string // bound fields with no golden column
 }
 
@@ -360,6 +363,9 @@ func (r *runner) prepare() (map[string]string, error) {
 	}
 	r.identifiers = r.p.IdentifierTable != nil
 	r.touched = map[string]bool{}
+	if err := r.tx.GetContext(r.ctx, &r.overrides, `SELECT to_regclass('mdm.golden_override') IS NOT NULL`); err != nil {
+		return nil, err
+	}
 	return fieldAttr, nil
 }
 

@@ -1,8 +1,11 @@
 package mastering
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+
+	"github.com/lib/pq"
 
 	"github.com/hondyman/uisce/backend/internal/msgcat"
 )
@@ -43,6 +46,31 @@ func msgNoCandidate(id string) *msgcat.Error {
 func msgCandidateDecided(id, status string) *msgcat.Error {
 	return m(15, id, status).WithStatus(http.StatusConflict)
 }
+func msgBadPolicy() *msgcat.Error                { return m(16) }
+func msgUnknownAttribute(a string) *msgcat.Error { return m(17, a) }
+func msgOverrideReason() *msgcat.Error           { return m(18) }
+func msgOverrideValue(a string) *msgcat.Error    { return m(19, a) }
+func msgOverrideCode(v, a string) *msgcat.Error  { return m(20, v, a) }
+func msgNothingToClear(a string) *msgcat.Error   { return m(21, a) }
+func msgOverridePending(a string) *msgcat.Error {
+	return m(22, a).WithStatus(http.StatusConflict)
+}
+func msgNoOverride(id string) *msgcat.Error {
+	return m(23, id).WithStatus(http.StatusNotFound)
+}
+func msgOverrideDecided(s string) *msgcat.Error {
+	return m(24, s).WithStatus(http.StatusConflict)
+}
+func msgOwnOverride() *msgcat.Error  { return m(25).WithStatus(http.StatusForbidden) }
+func msgAlreadyVoted() *msgcat.Error { return m(26).WithStatus(http.StatusConflict) }
+func msgNotProposer() *msgcat.Error  { return m(27).WithStatus(http.StatusForbidden) }
+func msgNotAdmin() *msgcat.Error     { return m(28).WithStatus(http.StatusForbidden) }
+
+func isUniqueViolation(err error) bool {
+	var pe *pq.Error
+	return errors.As(err, &pe) && pe.Code == "23505"
+}
+
 func msgNoException(id string) *msgcat.Error {
 	return m(13, id).WithStatus(http.StatusNotFound)
 }
