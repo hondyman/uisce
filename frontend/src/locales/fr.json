@@ -732,6 +732,27 @@
       "changeOverride": "Modifier ou retirer le prix du gestionnaire",
       "stewardPrice": "Prix du gestionnaire",
       "pending": "Proposé {{value}}, en attente d’approbation"
+    },
+    "compare": {
+      "values": "Valeurs",
+      "sideBySide": "Côte à côte",
+      "title": "Toutes les sources, côte à côte (version {{v}})",
+      "term": "Terme",
+      "golden": "Valeur de référence",
+      "selection": "Comment elle a été retenue",
+      "selected": "Valeur retenue",
+      "excluded": "Exclue par une règle de sélection",
+      "help": "Survolez une valeur pour voir pourquoi elle a été exclue.",
+      "strategy": {
+        "SOURCE_PRIORITY": "Priorité de source",
+        "PROVIDER_AUTHORITATIVE": "Fournisseur de référence",
+        "MOST_RECENT": "La plus récente",
+        "MOST_FREQUENT": "La plus fréquente",
+        "MOST_COMPLETE": "La plus complète",
+        "CONSERVATIVE_MIN": "Minimum",
+        "CONSERVATIVE_MAX": "Maximum",
+        "OVERRIDE": "Substitution du gestionnaire"
+      }
     }
   },
   "stagingBindings": {

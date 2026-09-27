@@ -604,6 +604,27 @@
       "changeOverride": "Change or clear the steward price",
       "stewardPrice": "Steward price",
       "pending": "Proposed {{value}}, awaiting approval"
+    },
+    "compare": {
+      "values": "Values",
+      "sideBySide": "Side by side",
+      "title": "Every source, side by side (version {{v}})",
+      "term": "Term",
+      "golden": "Golden value",
+      "selection": "How it was selected",
+      "selected": "Selected value",
+      "excluded": "Excluded by a selection rule",
+      "help": "Hover a value for why it was excluded.",
+      "strategy": {
+        "SOURCE_PRIORITY": "Source priority",
+        "PROVIDER_AUTHORITATIVE": "Authoritative provider",
+        "MOST_RECENT": "Most recent",
+        "MOST_FREQUENT": "Most frequent",
+        "MOST_COMPLETE": "Most complete",
+        "CONSERVATIVE_MIN": "Lowest",
+        "CONSERVATIVE_MAX": "Highest",
+        "OVERRIDE": "Steward override"
+      }
     }
   },
   "stagingBindings": {
