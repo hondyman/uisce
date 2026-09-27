@@ -187,4 +187,5 @@ func (c *Counts) add(o Counts) {
 	c.HeldForReview += o.HeldForReview
 	c.Unchanged += o.Unchanged
 	c.Exceptions += o.Exceptions
+	c.Restated += o.Restated
 }

@@ -77,7 +77,9 @@ func TestChangeJSONFlattensAudit(t *testing.T) {
 func TestMasteringKeys(t *testing.T) {
 	for key, ok := range map[string]bool{
 		"id:ISIN": true, "id:BLOOMBERG_ID": true, SourceKey: true, AsOfKey: true,
+		"value:OFFICIAL_CLOSE": true, "value:BID": true,
 		"id:isin": false, "id:": false, "id:I": false, "@sourcekey": false, "ProductName": false,
+		"value:bid": false, "value:": false,
 	} {
 		if IsMasteringKey(key) != ok {
 			t.Errorf("%q: want %v", key, ok)
@@ -86,7 +88,10 @@ func TestMasteringKeys(t *testing.T) {
 	if typ, _ := IdentifierType("id:CUSIP"); typ != "CUSIP" {
 		t.Errorf("type: %q", typ)
 	}
-	if !looksLikeMasteringKey("@sourcekey") || !looksLikeMasteringKey("id:isin") || looksLikeMasteringKey("ProductName") {
+	if typ, _ := ValueType("value:NAV"); typ != "NAV" {
+		t.Errorf("value type: %q", typ)
+	}
+	if !looksLikeMasteringKey("@sourcekey") || !looksLikeMasteringKey("id:isin") || !looksLikeMasteringKey("value:bid") || looksLikeMasteringKey("ProductName") {
 		t.Error("a malformed mastering key must not be looked up as a field")
 	}
 }

@@ -349,7 +349,8 @@
       "runs": "Runs",
       "exceptions": "Exceptions",
       "review": "Match review",
-      "overrides": "Overrides"
+      "overrides": "Overrides",
+      "prices": "Golden prices"
     },
     "golden": {
       "search": "Search code or name",
@@ -432,7 +433,8 @@
       "published": "Published",
       "held_for_review": "Held",
       "unchanged": "Unchanged",
-      "exceptions": "Exceptions"
+      "exceptions": "Exceptions",
+      "restated": "Restated"
     },
     "exceptions": {
       "status": "Show",
@@ -458,7 +460,14 @@
       "ANOMALY": "Anomaly",
       "MISSING_SOURCE_KEY": "No source key",
       "MASTERING_FAILED": "Not mastered",
-      "NOT_AN_ID": "Not an id"
+      "NOT_AN_ID": "Not an id",
+      "UNRESOLVED_INSTRUMENT": "Unresolved instrument",
+      "UNKNOWN_PRICE_TYPE": "Unknown price type",
+      "NO_VALUATION_DATE": "No valuation date",
+      "CURRENCY_MISMATCH": "Currency mismatch",
+      "DAY_OVER_DAY": "Day-over-day move",
+      "SELECTION_HOLD": "Held by selection rule",
+      "SELECTION_FLAG": "Selection rule flag"
     },
     "review": {
       "requested": "Merge requested; it happens when approved.",
@@ -561,6 +570,33 @@
       "own": "Set by {{by}}.",
       "adminsOnly": "Only administrators can change the policy.",
       "save": "Save policy"
+    },
+    "prices": {
+      "date": "Valuation date",
+      "search": "Search instrument code or name",
+      "type": "Price type",
+      "instrument": "Instrument",
+      "price": "Price",
+      "change": "Day change",
+      "winner": "Winner · sources",
+      "spread": "Spread",
+      "sourcesHelp": "Winning source and how many sources quoted it ({{n}})",
+      "empty": "No golden prices for this date. Master a price load to create them.",
+      "won": "won",
+      "excluded": "excluded: {{why}}",
+      "viewingVersion": "Showing version {{v}} ({{at}}). The latest is version {{latest}}.",
+      "previous": "Previous price kept",
+      "prior": "Prior golden price {{value}} on {{date}}",
+      "moved": "moved {{pct}}%",
+      "quotes": "Every quote considered",
+      "diff": "vs golden",
+      "rank": "Rank",
+      "ranking": "Ranking: {{order}}",
+      "thresholds": "thresholds warning {{w}}% / error {{e}}% / critical {{c}}%",
+      "controls": "Controls",
+      "control": "{{control}}: {{pct}}% ({{level}}, {{action}})",
+      "variances": "Sources that disagree",
+      "bitemporal": "Every version is kept with when it was known: what the price was believed to be at any time can be read back."
     }
   },
   "stagingBindings": {
@@ -619,7 +655,11 @@
       "suggested": "Suggested {{pct}}%",
       "reason": "Reason",
       "reasonHelp": "Why this change - shown to the approver and kept in the audit trail.",
-      "propose": "Propose"
+      "propose": "Propose",
+      "seriesValue": "{{type}} price",
+      "priceType": "Price type",
+      "priceTypeHelp": "A column holding prices of this type",
+      "addPriceColumn": "Add price column"
     },
     "approvals": {
       "none": "Nothing waiting for approval.",

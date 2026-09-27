@@ -477,7 +477,8 @@
       "runs": "Exécutions",
       "exceptions": "Exceptions",
       "review": "Revue des rapprochements",
-      "overrides": "Dérogations"
+      "overrides": "Dérogations",
+      "prices": "Prix de référence"
     },
     "golden": {
       "search": "Rechercher un code ou un nom",
@@ -560,7 +561,8 @@
       "published": "Publiés",
       "held_for_review": "Retenus",
       "unchanged": "Inchangés",
-      "exceptions": "Exceptions"
+      "exceptions": "Exceptions",
+      "restated": "Retraités"
     },
     "exceptions": {
       "status": "Afficher",
@@ -586,7 +588,14 @@
       "ANOMALY": "Anomalie",
       "MISSING_SOURCE_KEY": "Pas de clé source",
       "MASTERING_FAILED": "Non traité",
-      "NOT_AN_ID": "Pas un identifiant"
+      "NOT_AN_ID": "Pas un identifiant",
+      "UNRESOLVED_INSTRUMENT": "Instrument non résolu",
+      "UNKNOWN_PRICE_TYPE": "Type de prix inconnu",
+      "NO_VALUATION_DATE": "Sans date de valorisation",
+      "CURRENCY_MISMATCH": "Devise différente",
+      "DAY_OVER_DAY": "Variation journalière",
+      "SELECTION_HOLD": "Retenu par la règle de sélection",
+      "SELECTION_FLAG": "Alerte de règle de sélection"
     },
     "review": {
       "requested": "Fusion demandée ; elle aura lieu une fois approuvée.",
@@ -689,6 +698,33 @@
       "own": "Définie par {{by}}.",
       "adminsOnly": "Seuls les administrateurs peuvent modifier la politique.",
       "save": "Enregistrer la politique"
+    },
+    "prices": {
+      "date": "Date de valorisation",
+      "search": "Rechercher le code ou le nom de l'instrument",
+      "type": "Type de prix",
+      "instrument": "Instrument",
+      "price": "Prix",
+      "change": "Variation du jour",
+      "winner": "Gagnant · sources",
+      "spread": "Écart",
+      "sourcesHelp": "Source gagnante et nombre de sources ayant coté ({{n}})",
+      "empty": "Aucun prix de référence pour cette date. Traitez un chargement de prix pour en créer.",
+      "won": "retenu",
+      "excluded": "exclu : {{why}}",
+      "viewingVersion": "Version {{v}} ({{at}}). La dernière est la version {{latest}}.",
+      "previous": "Prix précédent conservé",
+      "prior": "Prix de référence précédent {{value}} le {{date}}",
+      "moved": "variation {{pct}} %",
+      "quotes": "Toutes les cotations considérées",
+      "diff": "vs référence",
+      "rank": "Rang",
+      "ranking": "Classement : {{order}}",
+      "thresholds": "seuils alerte {{w}} % / erreur {{e}} % / critique {{c}} %",
+      "controls": "Contrôles",
+      "control": "{{control}} : {{pct}} % ({{level}}, {{action}})",
+      "variances": "Sources en désaccord",
+      "bitemporal": "Chaque version est conservée avec le moment où elle était connue : le prix retenu à tout instant peut être relu."
     }
   },
   "stagingBindings": {
@@ -747,7 +783,11 @@
       "suggested": "Suggéré {{pct}} %",
       "reason": "Motif",
       "reasonHelp": "Pourquoi cette modification - visible par l'approbateur et conservée dans l'audit.",
-      "propose": "Proposer"
+      "propose": "Proposer",
+      "seriesValue": "Prix {{type}}",
+      "priceType": "Type de prix",
+      "priceTypeHelp": "Une colonne contenant des prix de ce type",
+      "addPriceColumn": "Ajouter une colonne de prix"
     },
     "approvals": {
       "none": "Rien en attente d'approbation.",

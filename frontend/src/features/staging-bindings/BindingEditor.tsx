@@ -14,7 +14,10 @@ import { Binding, stagingBindingsApi } from './api';
 export const SOURCE_KEY = '@source_key';
 export const AS_OF_KEY = '@as_of';
 const IDENTIFIER_TYPES = ['ISIN', 'CUSIP', 'SEDOL', 'LEI', 'FIGI', 'BLOOMBERG_ID', 'TICKER', 'RIC', 'PROVIDER_CODE', 'INTERNAL'];
-export const isMasteringKey = (k: string) => k === SOURCE_KEY || k === AS_OF_KEY || /^id:[A-Z][A-Z0-9_]{1,39}$/.test(k);
+/** Price types a time-series (price) binding can bind a column to, as value:<TYPE>. */
+const PRICE_TYPES = ['LAST', 'OFFICIAL_CLOSE', 'BID', 'ASK', 'MID', 'NAV', 'EVALUATED', 'CLEAN_PRICE', 'DIRTY_PRICE', 'SETTLEMENT'];
+export const isMasteringKey = (k: string) => k === SOURCE_KEY || k === AS_OF_KEY || /^(id|value):[A-Z][A-Z0-9_]{1,39}$/.test(k);
+const isKeyed = (k: string) => k.startsWith('id:') || k.startsWith('value:');
 
 interface Props {
   open: boolean;
@@ -36,6 +39,7 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
   const [suggested, setSuggested] = useState<Record<string, Suggestion>>({});
   const [reason, setReason] = useState('');
   const [newIdType, setNewIdType] = useState<string | null>(null);
+  const [newValueType, setNewValueType] = useState<string | null>(null);
 
   const bos = useQuery({ queryKey: ['sb-bos'], queryFn: platformApi.businessObjects, enabled: open });
   const tables = useQuery({ queryKey: ['sb-staging-tables'], queryFn: pipelinesApi.stagingTables, enabled: open });
@@ -45,11 +49,22 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
   const columns = useMemo(() => tables.data?.find((x) => x.table === table)?.columns ?? [], [tables.data, table]);
   const bound = Object.entries(mapping).filter(([, c]) => !!c);
   const boundFields = bound.filter(([k]) => !isMasteringKey(k)).length;
-  // Source key and as-of always offered; identifiers as the user adds them.
+  // Source key and as-of always offered; identifiers and price columns as the user adds them.
   const keyRows = useMemo(() => [SOURCE_KEY, AS_OF_KEY,
-    ...Object.keys(mapping).filter((k) => k.startsWith('id:')).sort()], [mapping]);
+    ...Object.keys(mapping).filter((k) => k.startsWith('id:')).sort(),
+    ...Object.keys(mapping).filter((k) => k.startsWith('value:')).sort()], [mapping]);
   const keyLabel = (k: string) => k === SOURCE_KEY ? t('stagingBindings.editor.sourceKey')
-    : k === AS_OF_KEY ? t('stagingBindings.editor.asOf') : t('stagingBindings.editor.identifier', { type: k.slice(3) });
+    : k === AS_OF_KEY ? t('stagingBindings.editor.asOf')
+      : k.startsWith('value:') ? t('stagingBindings.editor.seriesValue', { type: k.slice(6) })
+        : t('stagingBindings.editor.identifier', { type: k.slice(3) });
+  // Price columns are for a time-series (price) object.
+  const offersValues = boKey === 'price' || Object.keys(mapping).some((k) => k.startsWith('value:'));
+  const addValue = () => {
+    const typ = (newValueType ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(typ)) return;
+    setMapping((m) => (`value:${typ}` in m ? m : { ...m, [`value:${typ}`]: '' }));
+    setNewValueType(null);
+  };
   const addIdentifier = () => {
     const typ = (newIdType ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
     if (!/^[A-Z][A-Z0-9_]{1,39}$/.test(typ)) return;
@@ -188,8 +203,8 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
                       <TableCell sx={{ width: '45%' }}>
                         <Stack direction="row" spacing={1} alignItems="center">
                           {columnPicker(k, keyLabel(k))}
-                          {k.startsWith('id:') && (
-                            <Button size="small" color="inherit" aria-label={t('stagingBindings.editor.removeIdentifier', { type: k.slice(3) })}
+                          {isKeyed(k) && (
+                            <Button size="small" color="inherit" aria-label={t('stagingBindings.editor.removeIdentifier', { type: k.slice(k.indexOf(':') + 1) })}
                               onClick={() => setMapping((m) => { const next = { ...m }; delete next[k]; return next; })}>
                               {t('stagingBindings.editor.remove')}
                             </Button>
@@ -213,6 +228,21 @@ export default function BindingEditor({ open, onClose, binding }: Props) {
                   {t('stagingBindings.editor.addIdentifier')}
                 </Button>
               </Stack>
+              {offersValues && (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                  <Autocomplete
+                    freeSolo size="small" sx={{ width: 240 }}
+                    options={PRICE_TYPES.filter((x) => !(`value:${x}` in mapping))}
+                    value={newValueType}
+                    onChange={(_, v) => setNewValueType(v)}
+                    onInputChange={(_, v) => setNewValueType(v)}
+                    renderInput={(params) => <TextField {...params} label={t('stagingBindings.editor.priceType')} helperText={t('stagingBindings.editor.priceTypeHelp')} />}
+                  />
+                  <Button size="small" onClick={addValue} disabled={!newValueType?.trim()}>
+                    {t('stagingBindings.editor.addPriceColumn')}
+                  </Button>
+                </Stack>
+              )}
             </Box>
           )}
 

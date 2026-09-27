@@ -10,7 +10,7 @@ import { stagingBindingsApi } from '../staging-bindings/api';
 import { fmt } from '../schedules/api';
 import { Counts, masteringApi, Preview, Profile, Run } from './api';
 
-const COUNT_KEYS: (keyof Counts)[] = ['records', 'invalid', 'xref', 'deterministic', 'fuzzy', 'review', 'new', 'conflicts', 'published', 'held_for_review', 'unchanged', 'exceptions'];
+const COUNT_KEYS: (keyof Counts)[] = ['records', 'invalid', 'xref', 'deterministic', 'fuzzy', 'review', 'new', 'restated', 'conflicts', 'published', 'held_for_review', 'unchanged', 'exceptions'];
 
 export function CountChips({ counts }: { counts: Partial<Counts> }) {
   const { t } = useTranslation();
