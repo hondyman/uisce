@@ -224,8 +224,13 @@ func (r *runner) bestFuzzy(mr MatchRule, rec *Record) (string, float64, error) {
 	for _, f := range exact {
 		sel = append(sel, fmt.Sprintf("%s::text AS %s", qi(f), qi("val_"+f)))
 	}
-	q := fmt.Sprintf(`SELECT %s FROM %s WHERE %s %% $1 ORDER BY similarity(%s::text, $1) DESC LIMIT 5`,
-		strings.Join(sel, ", "), qi(r.p.AnchorTable), qi(r.p.Settings.NameAttribute), qi(r.p.Settings.NameAttribute))
+	// A record merged into another is no longer a match for anything.
+	live := ""
+	if _, ok := r.anchorCols["merged_into_id"]; ok {
+		live = " AND merged_into_id IS NULL"
+	}
+	q := fmt.Sprintf(`SELECT %s FROM %s WHERE %s %% $1%s ORDER BY similarity(%s::text, $1) DESC LIMIT 5`,
+		strings.Join(sel, ", "), qi(r.p.AnchorTable), qi(r.p.Settings.NameAttribute), live, qi(r.p.Settings.NameAttribute))
 	rows, err := r.tx.QueryxContext(r.ctx, q, args...)
 	if err != nil {
 		return "", 0, err
@@ -472,7 +477,7 @@ func (r *runner) masterOne(golden string) error {
 	}
 
 	// Idempotent: the same attributes and status publish nothing new.
-	if hasPrev && prev.Status == status && sameJSON(previous, attrs) {
+	if hasPrev && !r.force && prev.Status == status && sameJSON(previous, attrs) {
 		r.counts.Unchanged++
 		return nil
 	}

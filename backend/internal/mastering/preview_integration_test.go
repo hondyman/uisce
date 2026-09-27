@@ -139,3 +139,88 @@ func TestPendingLoads(t *testing.T) {
 	}
 	t.Logf("pending loads: %v", loads)
 }
+
+// TestStewardMergeAndReject raises a possible-duplicate pair between two
+// real golden products, merges it and rejects another, all in a rolled-back
+// transaction.
+func TestStewardMergeAndReject(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	platform := PlatformCatalog{DB: alpha}
+	e := &Engine{Data: data, Rules: analytics.NewValidationRuleService(alpha), Fields: platform, GoldCopy: platform.GoldCopyTenant}
+	ctx := context.Background()
+	gold, _ := platform.GoldCopyTenant(ctx)
+	cfg, err := e.loadConfig(ctx, gold, "product")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.inTenant(ctx, gold, func(tx *sqlx.Tx) error {
+		var ids []string
+		if err := tx.SelectContext(ctx, &ids, `SELECT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY golden_id LIMIT 3`); err != nil {
+			return err
+		}
+		if len(ids) < 3 {
+			t.Skip("needs three mastered products")
+		}
+		a, b, c := ids[0], ids[1], ids[2]
+		pair := func(x, y string) string {
+			var id string
+			if err := tx.GetContext(ctx, &id, `INSERT INTO mdm.product_match_candidate (tenant_id, match_rule_id, product_id_a, product_id_b, overall_score)
+				SELECT $1::uuid, id, $2::uuid, $3::uuid, 0.85 FROM mdm.product_match_rule WHERE rule_cd = 'PRODUCT_NAME_FUZZY' LIMIT 1 RETURNING id::text`, gold, x, y); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		ab, ac, bc := pair(a, b), pair(a, c), pair(b, c)
+
+		rej, err := e.decide(ctx, tx, cfg, gold, "product", ac, CandidateDecision{Merge: false, Note: "different share classes"}, "", "test")
+		if err != nil || rej.Status != "REJECTED" {
+			t.Fatalf("reject: %+v %v", rej, err)
+		}
+		m, err := e.decide(ctx, tx, cfg, gold, "product", ab, CandidateDecision{Merge: true, Note: "same fund"}, "", "test")
+		if err != nil {
+			t.Fatalf("merge: %v", err)
+		}
+		t.Logf("merge: %+v", m)
+		if m.Survivor != a || m.Merged != b || m.Moved.Sources != 1 || !m.Published {
+			t.Errorf("merge result %+v", m)
+		}
+		var st struct {
+			Sources     int    `db:"sources"`
+			Merged      string `db:"merged"`
+			Retracted   int    `db:"retracted"`
+			Idents      int    `db:"idents"`
+			BIdents     int    `db:"bidents"`
+			Version     int    `db:"version"`
+			OtherStatus string `db:"other"`
+			Logged      int    `db:"logged"`
+		}
+		if err := tx.GetContext(ctx, &st, `SELECT
+			(SELECT count(*) FROM mdm.entity_xref WHERE golden_id = $1::uuid AND status = 'ACTIVE') AS sources,
+			(SELECT COALESCE(merged_into_id::text, '') FROM mdm.product WHERE id = $2::uuid) AS merged,
+			(SELECT count(*) FROM mdm.product_golden_record WHERE product_id = $2::uuid AND status = 'RETRACTED') AS retracted,
+			(SELECT count(*) FROM mdm.product_identifier WHERE product_id = $1::uuid AND effective_to IS NULL) AS idents,
+			(SELECT count(*) FROM mdm.product_identifier WHERE product_id = $2::uuid AND effective_to IS NULL) AS bidents,
+			(SELECT max(golden_version) FROM mdm.product_golden_record WHERE product_id = $1::uuid AND is_current) AS version,
+			(SELECT status FROM mdm.product_match_candidate WHERE id = $3::uuid) AS other,
+			(SELECT count(*) FROM mdm.product_merge_log WHERE merged_product_id = $2::uuid) AS logged`, a, b, bc); err != nil {
+			return err
+		}
+		t.Logf("after merge: %+v", st)
+		if st.Sources != 2 || st.Merged != a || st.Retracted != 1 || st.BIdents != 0 || st.Version != 2 || st.OtherStatus != "REJECTED" || st.Logged != 1 {
+			t.Errorf("state after merge: %+v", st)
+		}
+		if _, err := e.decide(ctx, tx, cfg, gold, "product", ab, CandidateDecision{Merge: true}, "", "test"); err == nil {
+			t.Error("a decided pair must not be decided again")
+		}
+		return errPreview
+	})
+	if err != nil && err != errPreview {
+		t.Fatal(err)
+	}
+}

@@ -37,6 +37,12 @@ func msgNoGolden(id string) *msgcat.Error {
 func msgUnknownSource(cd string) *msgcat.Error { return m(10, cd) }
 func msgNeedTable() *msgcat.Error              { return m(11) }
 func msgBadResolution(s string) *msgcat.Error  { return m(12, s) }
+func msgNoCandidate(id string) *msgcat.Error {
+	return m(14, id).WithStatus(http.StatusNotFound)
+}
+func msgCandidateDecided(id, status string) *msgcat.Error {
+	return m(15, id, status).WithStatus(http.StatusConflict)
+}
 func msgNoException(id string) *msgcat.Error {
 	return m(13, id).WithStatus(http.StatusNotFound)
 }

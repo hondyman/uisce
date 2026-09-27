@@ -40,6 +40,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Get("/candidates", h.candidates)
 			r.Get("/loads", h.loads)
 			r.Post("/exceptions/{id}/resolve", h.resolve)
+			r.Post("/candidates/{id}/decide", h.decide)
 		})
 	})
 }
@@ -179,5 +180,22 @@ func (h *Handler) resolve(w http.ResponseWriter, r *http.Request) {
 		}
 		err := h.Engine.ResolveException(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), in.Status, in.Note, a.Name)
 		return map[string]any{"ok": err == nil}, http.StatusOK, err
+	})
+}
+
+// decide: a steward merges a possible duplicate pair or says they differ.
+func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.CanRun {
+			return nil, 0, msgNotAllowed()
+		}
+		var d CandidateDecision
+		dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<16))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&d); err != nil {
+			return nil, 0, msgcat.MalformedJSON().Wrap(err)
+		}
+		res, err := h.Engine.DecideCandidate(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), d, a.UserID, a.Name)
+		return map[string]any{"decision": res}, http.StatusOK, err
 	})
 }

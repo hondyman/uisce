@@ -257,8 +257,11 @@ type runner struct {
 	touched     map[string]bool // golden ids to survive + publish
 	rules       *RuleSet
 	identifiers bool
-	raised      []Issue  // exceptions raised this run
-	unmastered  []string // bound fields with no golden column
+	raised      []Issue // exceptions raised this run
+	// force publishes a new version even when the values are unchanged
+	// (a steward merge changes the sources behind them).
+	force      bool
+	unmastered []string // bound fields with no golden column
 }
 
 func (r *runner) execute() error {
@@ -290,21 +293,8 @@ func (r *runner) execute() error {
 	if _, ok := binding[stagingbind.SourceKey]; !ok {
 		return msgNoSourceKey(r.req.StagingTable)
 	}
-	fieldAttr, err := r.e.Fields.AttrFields(ctx, r.tenant, r.p.BOKey, r.p.AnchorTable)
+	fieldAttr, err := r.prepare()
 	if err != nil {
-		return err
-	}
-	r.attrField = map[string]string{}
-	for f, a := range fieldAttr {
-		r.attrField[a] = f
-		if ref, ok := r.p.referenceFor(a); ok {
-			r.attrField[ref.Attribute] = f
-		}
-	}
-	if r.rules, err = loadRules(ctx, r.e.Rules, r.tenant, r.p.BOKey); err != nil {
-		return err
-	}
-	if r.anchorCols, err = columns(ctx, tx, r.p.AnchorTable); err != nil {
 		return err
 	}
 	stagingCols, err := columns(ctx, tx, r.req.StagingTable)
@@ -314,11 +304,6 @@ func (r *runner) execute() error {
 	if len(stagingCols) == 0 {
 		return msgNoBinding(r.req.StagingTable, r.p.BOKey)
 	}
-	if err := r.loadRefIDs(); err != nil {
-		return err
-	}
-	r.identifiers = r.p.IdentifierTable != nil
-	r.touched = map[string]bool{}
 
 	canon := &Canonicalizer{Profile: r.p, Binding: binding, FieldAttr: fieldAttr, ColumnTypes: stagingCols}
 	r.unmastered = canon.Unmastered()
@@ -347,6 +332,35 @@ func (r *runner) execute() error {
 		}
 	}
 	return nil
+}
+
+// prepare loads what surviving and publishing need, whatever started the
+// work (a load, or a steward's merge): the BO field <-> golden attribute
+// map, the rules, the anchor's columns and the reference ids.
+func (r *runner) prepare() (map[string]string, error) {
+	fieldAttr, err := r.e.Fields.AttrFields(r.ctx, r.tenant, r.p.BOKey, r.p.AnchorTable)
+	if err != nil {
+		return nil, err
+	}
+	r.attrField = map[string]string{}
+	for f, a := range fieldAttr {
+		r.attrField[a] = f
+		if ref, ok := r.p.referenceFor(a); ok {
+			r.attrField[ref.Attribute] = f
+		}
+	}
+	if r.rules, err = loadRules(r.ctx, r.e.Rules, r.tenant, r.p.BOKey); err != nil {
+		return nil, err
+	}
+	if r.anchorCols, err = columns(r.ctx, r.tx, r.p.AnchorTable); err != nil {
+		return nil, err
+	}
+	if err := r.loadRefIDs(); err != nil {
+		return nil, err
+	}
+	r.identifiers = r.p.IdentifierTable != nil
+	r.touched = map[string]bool{}
+	return fieldAttr, nil
 }
 
 // columns lists a table's columns and data types (empty: no such table).
