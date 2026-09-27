@@ -44,6 +44,9 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Get("/loads", h.loads)
 			r.Post("/exceptions/{id}/resolve", h.resolve)
 			r.Post("/candidates/{id}/decide", h.decide)
+			r.Post("/merges/{id}/approve", h.voteMerge(true))
+			r.Post("/merges/{id}/reject", h.voteMerge(false))
+			r.Post("/merges/{id}/withdraw", h.withdrawMerge)
 			r.Get("/policy", h.getPolicy)
 			r.Put("/policy", h.setPolicy)
 			r.Get("/overrides", h.overrides)
@@ -162,7 +165,7 @@ func (h *Handler) exceptions(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) candidates(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
-		l, err := h.Engine.Candidates(r.Context(), a.TenantID, chi.URLParam(r, "entity"), r.URL.Query().Get("status"), limit(r))
+		l, err := h.Engine.Candidates(r.Context(), a.TenantID, chi.URLParam(r, "entity"), r.URL.Query().Get("status"), a.UserID, limit(r))
 		return map[string]any{"candidates": l}, http.StatusOK, err
 	})
 }
@@ -289,5 +292,30 @@ func (h *Handler) withdrawOverride(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		o, err := h.Engine.WithdrawOverride(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), a.UserID)
 		return map[string]any{"override": o}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) voteMerge(approve bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.with(w, r, func(a Actor) (any, int, error) {
+			if !a.CanRun {
+				return nil, 0, msgNotAllowed()
+			}
+			var in struct {
+				Comment string `json:"comment"`
+			}
+			if err := decodeBody(r, &in); err != nil {
+				return nil, 0, err
+			}
+			res, err := h.Engine.DecideMerge(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), approve, in.Comment, a.UserID, a.Name)
+			return map[string]any{"decision": res}, http.StatusOK, err
+		})
+	}
+}
+
+func (h *Handler) withdrawMerge(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		err := h.Engine.WithdrawMerge(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), a.UserID)
+		return map[string]any{"ok": err == nil}, http.StatusOK, err
 	})
 }

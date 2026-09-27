@@ -25,10 +25,12 @@ type CandidateDecision struct {
 // DecisionResult is what a steward's decision did.
 type DecisionResult struct {
 	Candidate string `json:"candidate_id"`
-	Status    string `json:"status"` // APPROVED (merged) | REJECTED
-	Survivor  string `json:"survivor_id,omitempty"`
-	Merged    string `json:"merged_id,omitempty"`
-	Moved     struct {
+	Status    string `json:"status"` // APPROVED (merged) | REJECTED | PENDING_APPROVAL (a merge request)
+	// MergeRequest is the request awaiting approval (PENDING_APPROVAL).
+	MergeRequest string `json:"merge_request_id,omitempty"`
+	Survivor     string `json:"survivor_id,omitempty"`
+	Merged       string `json:"merged_id,omitempty"`
+	Moved        struct {
 		Sources     int `json:"sources"`
 		Identifiers int `json:"identifiers"`
 	} `json:"moved"`
@@ -49,16 +51,23 @@ func (e *Engine) DecideCandidate(ctx context.Context, tenantID, entity, id strin
 	if err != nil {
 		return nil, err
 	}
+	var pol *Policy
+	if err := e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
+		pol, err = getPolicy(ctx, tx, tenantID, entity)
+		return err
+	}); err != nil {
+		return nil, err
+	}
 	var res *DecisionResult
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
 		var err error
-		res, err = e.decide(ctx, tx, cfg, tenantID, entity, id, d, actorID, actorName)
+		res, err = e.decide(ctx, tx, cfg, pol, tenantID, entity, id, d, actorID, actorName)
 		return err
 	})
 	return res, err
 }
 
-func (e *Engine) decide(ctx context.Context, tx *sqlx.Tx, cfg *config, tenantID, entity, id string, d CandidateDecision, actorID, actorName string) (*DecisionResult, error) {
+func (e *Engine) decide(ctx context.Context, tx *sqlx.Tx, cfg *config, pol *Policy, tenantID, entity, id string, d CandidateDecision, actorID, actorName string) (*DecisionResult, error) {
 	p := cfg.profile
 	res := &DecisionResult{Candidate: id}
 	err := func() error {
@@ -88,51 +97,82 @@ func (e *Engine) decide(ctx context.Context, tx *sqlx.Tx, cfg *config, tenantID,
 		}
 		if !d.Merge {
 			res.Status = "REJECTED"
+			// A merge waiting for approval on this pair is overruled.
+			var hasReq bool
+			if err := tx.GetContext(ctx, &hasReq, `SELECT to_regclass('mdm.golden_merge_request') IS NOT NULL`); err != nil {
+				return err
+			}
+			if hasReq {
+				if _, err := tx.ExecContext(ctx, `UPDATE mdm.golden_merge_request SET status = 'REJECTED', decided_at = now()
+					WHERE candidate_id::text = $1 AND status = 'PENDING'`, id); err != nil {
+					return err
+				}
+			}
 			return review("REJECTED")
 		}
 
-		survivor, merged := c.A, c.B
-		if strings.EqualFold(d.Keep, "b") {
-			survivor, merged = c.B, c.A
+		// A merge follows the entity's policy: under APPROVAL it becomes a
+		// request others approve; under DIRECT it happens now.
+		if pol.required("") > 0 {
+			return e.requestMerge(ctx, tx, p, tenantID, id, d, actorID, actorName, pol.required(""), res)
 		}
-		res.Status, res.Survivor, res.Merged = "APPROVED", survivor, merged
-
-		r := &runner{e: e, tx: tx, ctx: ctx, tenant: tenantID, cfg: cfg, p: p, run: &Run{ID: uuid.NewString()},
-			req: RunRequest{Entity: entity, StartedByID: actorID, StartedBy: actorName}, counts: &Counts{}, stage: new(string)}
-		if _, err := r.prepare(); err != nil {
-			return err
-		}
-		r.force = true
-		reversal, err := r.mergeInto(survivor, merged, res)
-		if err != nil {
-			return err
-		}
-		if err := review("APPROVED"); err != nil {
-			return err
-		}
-		// Other open pairs with the merged record now concern the survivor.
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %[1]s SET status = 'REJECTED', reviewed_by = $3::uuid, reviewed_at = now(),
-				review_note = 'Merged into ' || $2 || ' by candidate ' || $4
-			WHERE status IN ('PENDING', 'DEFERRED') AND id::text <> $4 AND (%[2]s::text = $1 OR %[3]s::text = $1)`,
-			p.table("match_candidate"), qi(p.TablePrefix+"_id_a"), qi(p.TablePrefix+"_id_b")), merged, survivor, reviewer, id); err != nil {
-			return err
-		}
-		raw, _ := json.Marshal(reversal)
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, %s, merge_type, match_candidate_id, merge_reason,
-				merged_by, reversible, reversal_data, custom_attributes)
-			VALUES ($1::uuid, $2::uuid, $3::uuid, 'STEWARD', $4::uuid, NULLIF($5, ''), $6::uuid, true, $7, jsonb_build_object('merged_by_name', $8::text))`,
-			p.table("merge_log"), qi("surviving_"+p.TablePrefix+"_id"), qi("merged_"+p.TablePrefix+"_id")),
-			tenantID, survivor, merged, id, truncate(note, 255), reviewer, raw, actorName); err != nil {
-			return err
-		}
-		// A new version from every source now linked to the survivor.
-		if err := r.masterOne(survivor); err != nil {
-			return err
-		}
-		res.Published = r.counts.Published > 0
-		return nil
+		return e.applyMerge(ctx, tx, cfg, tenantID, entity, id, c.A, c.B, d.Keep, note, actorID, actorName, "", res)
 	}()
 	return res, err
+}
+
+// applyMerge merges the pair: requester asked for it, approvers (if any)
+// approved it; both are recorded on the merge log.
+func (e *Engine) applyMerge(ctx context.Context, tx *sqlx.Tx, cfg *config, tenantID, entity, candidateID, a, b, keep, note, requesterID, requesterName, approvers string, res *DecisionResult) error {
+	p := cfg.profile
+	survivor, merged := a, b
+	if strings.EqualFold(keep, "b") {
+		survivor, merged = b, a
+	}
+	res.Status, res.Survivor, res.Merged = "APPROVED", survivor, merged
+	reviewer := nullUUID(requesterID)
+	reviewNote := note
+	if approvers != "" {
+		reviewNote = strings.TrimSpace(note + " (approved by " + approvers + ")")
+	}
+
+	r := &runner{e: e, tx: tx, ctx: ctx, tenant: tenantID, cfg: cfg, p: p, run: &Run{ID: uuid.NewString()},
+		req: RunRequest{Entity: entity, StartedByID: requesterID, StartedBy: requesterName}, counts: &Counts{}, stage: new(string)}
+	if _, err := r.prepare(); err != nil {
+		return err
+	}
+	r.force = true
+	reversal, err := r.mergeInto(survivor, merged, res)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET status = 'APPROVED', reviewed_by = $2::uuid, reviewed_at = now(),
+			review_note = NULLIF($3, ''), custom_attributes = custom_attributes || jsonb_build_object('reviewed_by_name', $4::text, 'approved_by', $5::text)
+		WHERE id::text = $1`, p.table("match_candidate")), candidateID, reviewer, reviewNote, requesterName, approvers); err != nil {
+		return err
+	}
+	// Other open pairs with the merged record now concern the survivor.
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %[1]s SET status = 'REJECTED', reviewed_by = $3::uuid, reviewed_at = now(),
+			review_note = 'Merged into ' || $2 || ' by candidate ' || $4
+		WHERE status IN ('PENDING', 'DEFERRED') AND id::text <> $4 AND (%[2]s::text = $1 OR %[3]s::text = $1)`,
+		p.table("match_candidate"), qi(p.TablePrefix+"_id_a"), qi(p.TablePrefix+"_id_b")), merged, survivor, reviewer, candidateID); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(reversal)
+	if _, err := tx.ExecContext(ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, %s, merge_type, match_candidate_id, merge_reason,
+			merged_by, reversible, reversal_data, custom_attributes)
+		VALUES ($1::uuid, $2::uuid, $3::uuid, 'STEWARD', $4::uuid, NULLIF($5, ''), $6::uuid, true, $7,
+			jsonb_build_object('merged_by_name', $8::text, 'approved_by', NULLIF($9, '')))`,
+		p.table("merge_log"), qi("surviving_"+p.TablePrefix+"_id"), qi("merged_"+p.TablePrefix+"_id")),
+		tenantID, survivor, merged, candidateID, truncate(note, 255), reviewer, raw, requesterName, approvers); err != nil {
+		return err
+	}
+	// A new version from every source now linked to the survivor.
+	if err := r.masterOne(survivor); err != nil {
+		return err
+	}
+	res.Published = r.counts.Published > 0
+	return nil
 }
 
 // mergeReversal is what unmerging needs: which links and identifiers moved.

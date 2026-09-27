@@ -196,6 +196,7 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
   const [keep, setKeep] = useState<'a' | 'b'>('a');
   const [note, setNote] = useState('');
   const [done, setDone] = useState<DecisionResult | null>(null);
+  const policy = useQuery({ queryKey: ['mastering', 'policy', entity], queryFn: () => masteringApi.policy(entity) });
   const decide = useMutation({
     mutationFn: () => masteringApi.decide(entity, deciding!.c.id, { merge: deciding!.merge, keep, note: note.trim() || undefined }),
     onSuccess: (r) => {
@@ -205,6 +206,13 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
     },
   });
   const open = (c: MatchCandidate, merge: boolean) => { setDeciding({ c, merge }); setKeep('a'); setNote(''); decide.reset(); };
+  const vote = useMutation({
+    mutationFn: ({ c, a }: { c: MatchCandidate; a: 'approve' | 'reject' | 'withdraw' }) =>
+      a === 'withdraw'
+        ? masteringApi.withdrawMerge(entity, c.merge_request!.id).then(() => null)
+        : masteringApi.voteMerge(entity, c.merge_request!.id, a === 'approve').then((r) => r.decision),
+    onSuccess: (d) => { if (d) setDone(d); qc.invalidateQueries({ queryKey: ['mastering'] }); },
+  });
   const rows = list.data?.candidates ?? [];
   return (
     <>
@@ -213,11 +221,14 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setDone(null)}>
           {done.status === 'APPROVED'
             ? t('mastering.review.merged', { sources: done.moved.sources, identifiers: done.moved.identifiers })
+            : done.status === 'PENDING_APPROVAL' ? t('mastering.review.requested')
+            : done.status === 'MERGE_REJECTED' ? t('mastering.review.mergeRejected')
             : t('mastering.review.rejected')}
         </Alert>
       )}
       {list.isLoading && <LinearProgress />}
       {list.error && <CatalogErrorAlert error={list.error} />}
+      {vote.error && <Box sx={{ mb: 2 }}><CatalogErrorAlert error={vote.error} /></Box>}
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">
           <TableHead>
@@ -237,8 +248,32 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
                 <TableCell align="right">{pct(c.score)}</TableCell>
                 <TableCell>{c.rule}</TableCell>
                 <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
-                  <Button size="small" variant="outlined" onClick={() => open(c, true)}>{t('mastering.review.merge')}</Button>
-                  <Button size="small" color="inherit" sx={{ ml: 1 }} onClick={() => open(c, false)}>{t('mastering.review.notSame')}</Button>
+                  {c.merge_request ? (
+                    <Stack spacing={0.5} alignItems="flex-end">
+                      <Typography variant="caption">
+                        {t('mastering.review.mergeRequested', {
+                          by: c.merge_request.requested_by_name ?? '—',
+                          keep: c.merge_request.keep === 'a' ? c.a_code : c.b_code,
+                          n: c.merge_request.approvals, of: c.merge_request.approvals_required,
+                        })}
+                      </Typography>
+                      {c.merge_request.mine ? (
+                        <Button size="small" color="inherit" disabled={vote.isPending} onClick={() => vote.mutate({ c, a: 'withdraw' })}>{t('mastering.overrides.withdraw')}</Button>
+                      ) : c.merge_request.voted ? (
+                        <Typography variant="caption" color="text.secondary">{t('mastering.overrides.youVoted')}</Typography>
+                      ) : (
+                        <Stack direction="row" spacing={1}>
+                          <Button size="small" variant="contained" disabled={vote.isPending} onClick={() => vote.mutate({ c, a: 'approve' })}>{t('mastering.review.approveMerge')}</Button>
+                          <Button size="small" color="error" disabled={vote.isPending} onClick={() => vote.mutate({ c, a: 'reject' })}>{t('mastering.overrides.reject')}</Button>
+                        </Stack>
+                      )}
+                    </Stack>
+                  ) : (
+                    <>
+                      <Button size="small" variant="outlined" onClick={() => open(c, true)}>{t('mastering.review.merge')}</Button>
+                      <Button size="small" color="inherit" sx={{ ml: 1 }} onClick={() => open(c, false)}>{t('mastering.review.notSame')}</Button>
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -252,6 +287,9 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
           {deciding?.merge ? (
             <>
               <Typography variant="body2" sx={{ mb: 2 }}>{t('mastering.review.mergeHelp')}</Typography>
+              {policy.data && policy.data.policy.mode === 'APPROVAL' && (
+                <Alert severity="info" sx={{ mb: 2 }}>{t('mastering.review.needsApproval', { count: policy.data.policy.approvals_required })}</Alert>
+              )}
               <RadioGroup value={keep} onChange={(e) => setKeep(e.target.value as 'a' | 'b')}>
                 <FormControlLabel value="a" control={<Radio size="small" />}
                   label={t('mastering.review.keep', { code: deciding.c.a_code, name: deciding.c.a_name ?? '' })} />
@@ -303,7 +341,7 @@ export default function MasteringPage() {
   const pendingOverrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'PENDING'], queryFn: () => masteringApi.overrides(entity, { status: 'PENDING' }), enabled: !!entity });
   const toDecide = (pendingOverrides.data?.overrides ?? []).filter((o) => !o.mine && !o.voted).length;
   const openCount = exceptions.data?.exceptions.length ?? 0;
-  const reviewCount = candidates.data?.candidates.length ?? 0;
+  const reviewCount = (candidates.data?.candidates ?? []).filter((c) => !c.merge_request || (!c.merge_request.mine && !c.merge_request.voted)).length;
 
   const badge = (label: string, n: number) => (
     <Badge color="warning" badgeContent={n} sx={{ pr: n ? 1.5 : 0 }}>{label}</Badge>
