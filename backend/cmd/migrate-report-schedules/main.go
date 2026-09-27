@@ -11,6 +11,7 @@
 //
 //	go run ./cmd/migrate-report-schedules --dry-run
 //	go run ./cmd/migrate-report-schedules
+//	go run ./cmd/migrate-report-schedules --reapply-core   # Temporal Apply for existing core rows
 package main
 
 import (
@@ -49,6 +50,7 @@ type legacyRow struct {
 func main() {
 	dry := flag.Bool("dry-run", false, "print the plan; do not write")
 	applyEngine := flag.Bool("apply-engine", true, "register timetable schedules with Temporal after insert")
+	reapplyCore := flag.Bool("reapply-core", false, "Apply Temporal for existing enabled core schedules (no legacy copy)")
 	flag.Parse()
 
 	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -68,8 +70,9 @@ func main() {
 	}
 	defer db.Close()
 
+	needEngine := *reapplyCore || (!*dry && *applyEngine)
 	var engine schedule.Engine
-	if !*dry && *applyEngine {
+	if needEngine && !*dry {
 		tc, err := temporalclient.NewClientWithRetry()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "temporal:", err)
@@ -81,6 +84,10 @@ func main() {
 	}
 
 	store := &schedule.Store{DB: db}
+	if *reapplyCore {
+		os.Exit(reapply(ctx, db, store, engine, *dry))
+	}
+
 	rows, err := listLegacy(ctx, db)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "list:", err)
@@ -153,6 +160,58 @@ func main() {
 	if failed > 0 {
 		os.Exit(1)
 	}
+}
+
+func reapply(ctx context.Context, db *sqlx.DB, store *schedule.Store, engine schedule.Engine, dry bool) int {
+	type ref struct {
+		ID       string `db:"id"`
+		TenantID string `db:"tenant_id"`
+		Name     string `db:"name"`
+		Kind     string `db:"target_kind"`
+		Mode     string `db:"trigger_mode"`
+		Enabled  bool   `db:"enabled"`
+	}
+	var refs []ref
+	// Admin connection: bypass RLS for the inventory query only.
+	if err := db.SelectContext(ctx, &refs, `
+		SELECT id::text, tenant_id::text, name, target_kind, trigger_mode, enabled
+		FROM public.schedules
+		WHERE deleted_at IS NULL AND enabled = true AND trigger_mode = 'timetable'
+		ORDER BY created_at`); err != nil {
+		fmt.Fprintln(os.Stderr, "list core:", err)
+		return 1
+	}
+	fmt.Printf("core enabled timetable schedules: %d\n", len(refs))
+	var okN, failN int
+	for _, r := range refs {
+		fmt.Printf("%s %s %q kind=%s\n", map[bool]string{true: "plan", false: "apply"}[dry], r.ID, r.Name, r.Kind)
+		if dry {
+			okN++
+			continue
+		}
+		if engine == nil {
+			fmt.Fprintln(os.Stderr, "engine required for --reapply-core")
+			return 1
+		}
+		sc, err := store.Get(ctx, r.TenantID, r.ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "get %s: %v\n", r.ID, err)
+			failN++
+			continue
+		}
+		if err := engine.Apply(ctx, sc); err != nil {
+			fmt.Fprintf(os.Stderr, "apply %s: %v\n", r.ID, err)
+			failN++
+			continue
+		}
+		fmt.Printf("ok    %s Temporal schedule-%s-%s\n", r.ID, r.TenantID, r.ID)
+		okN++
+	}
+	fmt.Printf("done reapply ok=%d failed=%d dry_run=%v\n", okN, failN, dry)
+	if failN > 0 {
+		return 1
+	}
+	return 0
 }
 
 func listLegacy(ctx context.Context, db *sqlx.DB) ([]legacyRow, error) {
