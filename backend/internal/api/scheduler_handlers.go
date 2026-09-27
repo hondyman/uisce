@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/libs/jwt-middleware"
 )
@@ -36,25 +37,27 @@ func (h *SchedulerHandlers) Service() *si.Service {
 	return h.service
 }
 
-// RegisterRoutes registers all scheduler routes
+// RegisterRoutes registers all scheduler routes.
+// Mutating job/DAG/AI routes are retired (410): the one scheduler is /api/schedules.
+// Reads remain for observability until Slice 5 removes S2 tables.
 func (h *SchedulerHandlers) RegisterRoutes(r chi.Router) {
 	r.Route("/scheduler", func(r chi.Router) {
 		// Jobs
 		r.Get("/jobs", h.ListJobs)
-		r.Post("/jobs", h.CreateJob)
+		r.Post("/jobs", h.retiredMutator)
 		r.Get("/jobs/{id}", h.GetJob)
-		r.Patch("/jobs/{id}", h.UpdateJob)
-		r.Delete("/jobs/{id}", h.DeleteJob)
-		r.Post("/jobs/{id}/run", h.TriggerJob)
+		r.Patch("/jobs/{id}", h.retiredMutator)
+		r.Delete("/jobs/{id}", h.retiredMutator)
+		r.Post("/jobs/{id}/run", h.retiredMutator)
 		r.Get("/jobs/{id}/runs", h.GetJobRuns)
 
 		// DAGs
 		r.Get("/dags", h.ListDAGs)
-		r.Post("/dags", h.CreateDAG)
+		r.Post("/dags", h.retiredMutator)
 		r.Get("/dags/{id}", h.GetDAG)
-		r.Patch("/dags/{id}", h.UpdateDAG)
-		r.Delete("/dags/{id}", h.DeleteDAG)
-		r.Post("/dags/{id}/run", h.TriggerDAG)
+		r.Patch("/dags/{id}", h.retiredMutator)
+		r.Delete("/dags/{id}", h.retiredMutator)
+		r.Post("/dags/{id}/run", h.retiredMutator)
 		r.Get("/dags/{id}/runs", h.GetDAGRuns)
 
 		// Runs
@@ -63,11 +66,27 @@ func (h *SchedulerHandlers) RegisterRoutes(r chi.Router) {
 
 		// AI Suggestions
 		r.Get("/ai/suggestions", h.GetAISuggestions)
-		r.Post("/ai/suggestions/{id}/accept", h.AcceptAISuggestion)
-		r.Post("/ai/suggestions/{id}/dismiss", h.DismissAISuggestion)
+		r.Post("/ai/suggestions/{id}/accept", h.retiredMutator)
+		r.Post("/ai/suggestions/{id}/dismiss", h.retiredMutator)
 
 		// Stats
 		r.Get("/stats", h.GetStats)
+	})
+}
+
+// retiredMutator closes S2 job/DAG/AI writes. Use POST /api/schedules instead.
+func (h *SchedulerHandlers) retiredMutator(w http.ResponseWriter, r *http.Request) {
+	_, hasAuth := security.AuthInfoFromContext(r.Context())
+	if jwtmiddleware.GetClaimsFromContext(r) == nil && !hasAuth {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "scheduler_intelligence_mutations_retired",
+		"message": "Create and run schedules at /api/schedules (the platform scheduler). Job/DAG mutations on /scheduler are closed.",
 	})
 }
 
