@@ -634,7 +634,7 @@
   },
   "schedules": {
     "title": "Schedules",
-    "subtitle": "Everything that runs on a timetable - reports, saved queries, pipelines - in one place, on your business calendars.",
+    "subtitle": "The platform scheduler (former Scheduler Intelligence): reports, saved queries, pipelines and mastering — one timetable, one run history, business calendars.",
     "new": "New schedule",
     "tabs": {
       "schedules": "Schedules",

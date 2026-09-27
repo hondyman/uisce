@@ -762,7 +762,7 @@
   },
   "schedules": {
     "title": "Programaciones",
-    "subtitle": "Todo lo que se ejecuta con horario (informes, consultas guardadas, canalizaciones) en un solo lugar, según sus calendarios laborales.",
+    "subtitle": "El planificador de la plataforma (antes Scheduler Intelligence): informes, consultas guardadas, canalizaciones y maestrización — un horario, un historial, calendarios laborales.",
     "new": "Nueva programación",
     "tabs": {
       "schedules": "Programaciones",

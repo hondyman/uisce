@@ -762,7 +762,7 @@
   },
   "schedules": {
     "title": "Planifications",
-    "subtitle": "Tout ce qui s'exécute selon un horaire (rapports, requêtes enregistrées, pipelines) au même endroit, selon vos calendriers ouvrés.",
+    "subtitle": "Le planificateur de la plateforme (ex-Scheduler Intelligence) : rapports, requêtes enregistrées, pipelines et mastering — un horaire, un historique, calendriers ouvrés.",
     "new": "Nouvelle planification",
     "tabs": {
       "schedules": "Planifications",
