@@ -370,3 +370,33 @@ func TestSelectionMinPeers(t *testing.T) {
 		t.Errorf("two peers: the outlier is excluded: %+v", d["price"])
 	}
 }
+
+func TestProfileLayouts(t *testing.T) {
+	p := productProfile(t)
+	if p.entityCol() != "id" || p.current("a") != "true" || p.bitemporal() {
+		t.Errorf("product anchor: %s %s", p.entityCol(), p.current("a"))
+	}
+	id := p.ident()
+	if id.KeyColumn != "product_id" || id.identActive("i") != `i."effective_to" IS NULL` || id.identRetire() != `"effective_to" = CURRENT_DATE` {
+		t.Errorf("product identifiers: %+v %s", id, id.identActive("i"))
+	}
+	s := *p
+	s.RawSettings = json.RawMessage(`{"entity_id_column": "master_id", "versioning": "bitemporal",
+		"identifiers": {"key_column": "security_id", "type_column": "id_type", "value_column": "id_value",
+		"source_column": "source_system_id", "source_is_id": true, "active_column": "is_valid", "active_is_flag": true}}`)
+	if err := s.decode(); err != nil {
+		t.Fatal(err)
+	}
+	if s.entityCol() != "master_id" || s.current("a") != `a."valid_to" IS NULL` {
+		t.Errorf("security anchor: %s %s", s.entityCol(), s.current("a"))
+	}
+	si := s.ident()
+	if si.identActive("") != `"is_valid"` || si.identRetire() != `"is_valid" = false` || !si.SourceIsID {
+		t.Errorf("security identifiers: %+v", si)
+	}
+	bad := *p
+	bad.RawSettings = json.RawMessage(`{"versioning": "sideways"}`)
+	if err := bad.decode(); err == nil {
+		t.Error("an unknown versioning must be refused")
+	}
+}

@@ -24,7 +24,9 @@ type BindingSource interface {
 // FieldMapper maps a BO's fields to the anchor table columns they master
 // (their MAPS_TO columns).
 type FieldMapper interface {
-	AttrFields(ctx context.Context, tenantID, boKey, anchorTable string) (map[string]string, error)
+	// binding: the BO binding over the anchor, by name ("" = the BO's
+	// canonical MAPS_TO map for the anchor table).
+	AttrFields(ctx context.Context, tenantID, boKey, anchorTable, binding string) (map[string]string, error)
 }
 
 // Engine runs mastering. Data is the tenant's data plane (crims).
@@ -342,7 +344,7 @@ func (r *runner) execute() error {
 // work (a load, or a steward's merge): the BO field <-> golden attribute
 // map, the rules, the anchor's columns and the reference ids.
 func (r *runner) prepare() (map[string]string, error) {
-	fieldAttr, err := r.e.Fields.AttrFields(r.ctx, r.tenant, r.p.BOKey, r.p.AnchorTable)
+	fieldAttr, err := r.e.Fields.AttrFields(r.ctx, r.tenant, r.p.BOKey, r.p.AnchorTable, r.p.Settings.BOBinding)
 	if err != nil {
 		return nil, err
 	}
@@ -611,4 +613,11 @@ func decodeCounts(r *Run, c *Counts) error {
 		return nil
 	}
 	return json.Unmarshal(r.RawCounts, c)
+}
+
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

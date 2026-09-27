@@ -91,15 +91,15 @@ func (e *Engine) Golden(ctx context.Context, tenantID, entity string, f GoldenFi
 	out := []GoldenSummary{}
 	name := qi(p.Settings.NameAttribute)
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT a.id::text AS id, a.%[1]s AS code, a.%[2]s::text AS name,
+		return tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT a.%[6]s::text AS id, a.%[1]s AS code, a.%[2]s::text AS name,
 				g.golden_version, g.status, g.is_current, g.overall_dq_score, g.identity_confidence, g.winning_sources, g.knowledge_timestamp,
-				(SELECT count(*) FROM mdm.entity_xref x WHERE x.entity_cd = $1 AND x.golden_id = a.id AND x.status = 'ACTIVE') AS sources
+				(SELECT count(*) FROM mdm.entity_xref x WHERE x.entity_cd = $1 AND x.golden_id = a.%[6]s AND x.status = 'ACTIVE') AS sources
 			FROM %[3]s a
-			JOIN LATERAL (SELECT * FROM %[4]s g WHERE g.%[5]s = a.id ORDER BY g.golden_version DESC LIMIT 1) g ON true
-			WHERE ($2 = '' OR a.%[1]s ILIKE '%%' || $2 || '%%' OR a.%[2]s::text ILIKE '%%' || $2 || '%%')
+			JOIN LATERAL (SELECT * FROM %[4]s g WHERE g.%[5]s = a.%[6]s ORDER BY g.golden_version DESC LIMIT 1) g ON true
+			WHERE %[7]s AND ($2 = '' OR a.%[1]s ILIKE '%%' || $2 || '%%' OR a.%[2]s::text ILIKE '%%' || $2 || '%%')
 			  AND ($3 = '' OR g.status = $3)
 			ORDER BY g.knowledge_timestamp DESC LIMIT $4`,
-			qi(p.AnchorCodeColumn), name, qi(p.AnchorTable), p.table("golden_record"), p.keyColumn()),
+			qi(p.AnchorCodeColumn), name, qi(p.AnchorTable), p.table("golden_record"), p.keyColumn(), qi(p.entityCol()), p.current("a")),
 			p.EntityCd, strings.TrimSpace(f.Q), strings.ToUpper(f.Status), f.Limit)
 	})
 	return out, err
@@ -187,7 +187,7 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string) (*
 	}
 	d := &GoldenDetail{ID: id}
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
-		if err := tx.GetContext(ctx, &d.Code, fmt.Sprintf(`SELECT %s FROM %s WHERE id::text = $1`, qi(p.AnchorCodeColumn), qi(p.AnchorTable)), id); err != nil {
+		if err := tx.GetContext(ctx, &d.Code, fmt.Sprintf(`SELECT %s FROM %s WHERE %s::text = $1 AND %s`, qi(p.AnchorCodeColumn), qi(p.AnchorTable), qi(p.entityCol()), p.current("")), id); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return msgNoGolden(id)
 			}
@@ -219,8 +219,18 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string) (*
 			return err
 		}
 		if p.IdentifierTable != nil {
-			if err := tx.SelectContext(ctx, &d.Identifiers, fmt.Sprintf(`SELECT id_type, id_value, is_primary, source FROM %s
-				WHERE %s::text = $1 AND effective_to IS NULL ORDER BY is_primary DESC, id_type`, qi(*p.IdentifierTable), key), id); err != nil {
+			ids := p.ident()
+			primary := "false"
+			if ids.PrimaryColumn != "" {
+				primary = qi(ids.PrimaryColumn)
+			}
+			source := qi(ids.SourceColumn) + "::text"
+			if ids.SourceIsID {
+				source = fmt.Sprintf("(SELECT s.code FROM mdm.source_systems s WHERE s.id = i.%s)", qi(ids.SourceColumn))
+			}
+			if err := tx.SelectContext(ctx, &d.Identifiers, fmt.Sprintf(`SELECT i.%s AS id_type, i.%s AS id_value, %s AS is_primary, %s AS source FROM %s i
+				WHERE i.%s::text = $1 AND %s ORDER BY 3 DESC, 1`, qi(ids.TypeColumn), qi(ids.ValueColumn), primary, source, qi(*p.IdentifierTable),
+				qi(ids.KeyColumn), ids.identActive("i")), id); err != nil {
 				return err
 			}
 		}
@@ -309,10 +319,10 @@ func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status, actor
 		if err := tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT c.id::text, c.%[1]s::text AS a, pa.%[3]s AS a_code, pa.%[4]s::text AS a_name,
 				c.%[2]s::text AS b, pb.%[3]s AS b_code, pb.%[4]s::text AS b_name, c.overall_score, r.rule_cd, c.matched_keys, c.status
 			FROM %[5]s c
-			LEFT JOIN %[6]s pa ON pa.id = c.%[1]s LEFT JOIN %[6]s pb ON pb.id = c.%[2]s
+			LEFT JOIN %[6]s pa ON pa.%[8]s = c.%[1]s AND %[9]s LEFT JOIN %[6]s pb ON pb.%[8]s = c.%[2]s AND %[10]s
 			LEFT JOIN %[7]s r ON r.id = c.match_rule_id
 			WHERE c.status = $1 ORDER BY c.overall_score DESC LIMIT $2`,
-			a, b, code, name, p.table("match_candidate"), qi(p.AnchorTable), p.table("match_rule")), strings.ToUpper(status), limit); err != nil {
+			a, b, code, name, p.table("match_candidate"), qi(p.AnchorTable), p.table("match_rule"), qi(p.entityCol()), p.current("pa"), p.current("pb")), strings.ToUpper(status), limit); err != nil {
 			return err
 		}
 		var ok bool
