@@ -129,6 +129,9 @@ func (e *Engine) applyMerge(ctx context.Context, tx *sqlx.Tx, cfg *config, tenan
 	if strings.EqualFold(keep, "b") {
 		survivor, merged = b, a
 	}
+	if survivor == merged {
+		return msgCandidateDecided(candidateID, "SAME_RECORD")
+	}
 	res.Status, res.Survivor, res.Merged = "APPROVED", survivor, merged
 	reviewer := nullUUID(requesterID)
 	reviewNote := note

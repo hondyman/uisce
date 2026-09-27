@@ -390,7 +390,7 @@ func (r *runner) candidate(existing, created string, score float64, ruleCd strin
 	custom, _ := json.Marshal(map[string]any{"run_id": r.run.ID, "source": r.sourceCd})
 	_, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, match_rule_id, %s, %s, overall_score, deterministic_match, matched_keys, custom_attributes)
 		SELECT $1::uuid, id, $2::uuid, $3::uuid, $4, false, $5, $6 FROM %s WHERE rule_cd = $7
-		ORDER BY (tenant_id::text = $1) DESC LIMIT 1`, r.p.table("match_candidate"), qi(r.p.TablePrefix+"_id_a"), qi(r.p.TablePrefix+"_id_b"), r.p.table("match_rule")),
+		ORDER BY (tenant_id = $1::uuid) DESC LIMIT 1`, r.p.table("match_candidate"), qi(r.p.TablePrefix+"_id_a"), qi(r.p.TablePrefix+"_id_b"), r.p.table("match_rule")),
 		r.tenant, existing, created, score, keys, custom, ruleCd)
 	return err
 }
