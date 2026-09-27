@@ -51,6 +51,12 @@ type Settings struct {
 	// an attribute (golden_record column -> attribute), e.g.
 	// product_golden_record.product_type_cd. UNKNOWN when not supplied.
 	RecordColumns map[string]string `json:"record_columns"`
+	// FieldGroups puts attributes in the source-priority field groups of
+	// mdm.<prefix>_source_priority (name -> NAME); an attribute in no group
+	// is ranked by DefaultFieldGroup. This ranking is every attribute's
+	// default when it has no survivorship rule.
+	FieldGroups       map[string]string `json:"field_groups"`
+	DefaultFieldGroup string            `json:"default_field_group"`
 }
 
 // Reference turns a code into a foreign key of the anchor table. A source's
@@ -126,6 +132,11 @@ func (p *Profile) decode() error {
 func (p *Profile) table(suffix string) string {
 	schema := strings.SplitN(p.AnchorTable, ".", 2)[0]
 	return qi(schema) + "." + qi(p.TablePrefix+"_"+suffix)
+}
+
+// plainTable is table() unquoted, for to_regclass (names are validated).
+func (p *Profile) plainTable(suffix string) string {
+	return strings.SplitN(p.AnchorTable, ".", 2)[0] + "." + p.TablePrefix + "_" + suffix
 }
 
 // keyColumn is the anchor id column in the mdm.<prefix>_* tables.

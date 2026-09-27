@@ -256,6 +256,7 @@ type runner struct {
 	refIDs      map[string]map[string]string
 	touched     map[string]bool // golden ids to survive + publish
 	rules       *RuleSet
+	selRules    map[string]rule // selection rules by id
 	identifiers bool
 	raised      []Issue // exceptions raised this run
 	// force publishes a new version even when the values are unchanged
@@ -353,6 +354,9 @@ func (r *runner) prepare() (map[string]string, error) {
 		}
 	}
 	if r.rules, err = loadRules(r.ctx, r.e.Rules, r.tenant, r.p.BOKey); err != nil {
+		return nil, err
+	}
+	if r.selRules, err = loadSelectionRules(r.ctx, r.e.Rules, r.tenant, r.p.BOKey); err != nil {
 		return nil, err
 	}
 	if r.anchorCols, err = columns(r.ctx, r.tx, r.p.AnchorTable); err != nil {

@@ -71,7 +71,10 @@ function FieldRow({ f, decision, onOverride, overridden }: {
                         <TableCell>
                           {c.source} <Typography component="span" variant="caption" color="text.secondary" fontFamily="monospace">{c.source_key}</Typography>
                         </TableCell>
-                        <TableCell>{show(c.value)}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" sx={c.selected === false ? { textDecoration: 'line-through', color: 'text.secondary' } : undefined}>{show(c.value)}</Typography>
+                          {c.note && <Typography variant="caption" color="warning.main" component="div">{c.note}</Typography>}
+                        </TableCell>
                         <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           {fmt(c.as_of, i18n.language)}
                           {c.stale && <Chip size="small" color="warning" variant="outlined" sx={{ ml: 1 }} label={t('mastering.golden.stale')} />}

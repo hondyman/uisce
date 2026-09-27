@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 func productProfile(t *testing.T) *Profile {
@@ -104,7 +106,7 @@ func TestSurvivePriorityStalenessAndProvenance(t *testing.T) {
 		"base_currency": {Strategy: "SOURCE_PRIORITY", Priority: []string{"BLOOMBERG", "REFINITIV", "FACTSET"}, StalenessSec: 86400},
 		"aum":           {Strategy: "MOST_RECENT", TolerancePct: 25},
 	}
-	d, issues := Survive(contribs, rules, map[string]any{"aum": 60.0}, now)
+	d, issues := Survive(contribs, rules, map[string]any{"aum": 60.0}, now, nil)
 
 	// Bloomberg ranks first but is stale: the fresh Refinitiv value wins.
 	if d["name"].Value != "Global Equity Fund" || d["name"].Winner.SourceCd != "REFINITIV" || d["name"].RuleID != "r-name" {
@@ -126,7 +128,7 @@ func TestSurvivePriorityStalenessAndProvenance(t *testing.T) {
 func TestSurviveAllStaleStillSurvives(t *testing.T) {
 	now := time.Now()
 	d, _ := Survive([]Contribution{{SourceCd: "FACTSET", AsOf: now.Add(-48 * time.Hour), Attrs: map[string]any{"domicile": "IE"}}},
-		map[string]SurvivalRule{"domicile": {Strategy: "SOURCE_PRIORITY", Priority: []string{"BLOOMBERG"}, StalenessSec: 3600}}, nil, now)
+		map[string]SurvivalRule{"domicile": {Strategy: "SOURCE_PRIORITY", Priority: []string{"BLOOMBERG"}, StalenessSec: 3600}}, nil, now, nil)
 	if d["domicile"].Value != "IE" || !strings.Contains(d["domicile"].Reason, "stale") || d["domicile"].Confidence != 0.5 {
 		t.Errorf("an old feed must not blank a value, but is flagged: %+v", d["domicile"])
 	}
@@ -138,7 +140,7 @@ func TestSurviveAuthoritative(t *testing.T) {
 		{SourceCd: "FACTSET", AsOf: now, Attrs: map[string]any{"inception_date": "2013-01-17"}},
 		{SourceCd: "BLOOMBERG", AsOf: now.Add(-time.Minute), Attrs: map[string]any{"inception_date": "2013-01-18"}},
 	}
-	d, _ := Survive(c, map[string]SurvivalRule{"inception_date": {Strategy: "PROVIDER_AUTHORITATIVE", Priority: []string{"BLOOMBERG"}}}, nil, now)
+	d, _ := Survive(c, map[string]SurvivalRule{"inception_date": {Strategy: "PROVIDER_AUTHORITATIVE", Priority: []string{"BLOOMBERG"}}}, nil, now, nil)
 	if d["inception_date"].Winner.SourceCd != "BLOOMBERG" {
 		t.Errorf("the authoritative provider wins over a more recent one: %+v", d["inception_date"])
 	}
@@ -229,5 +231,142 @@ func TestJSONTextMatchesPostgres(t *testing.T) {
 		if got := jsonText(v); got != want {
 			t.Errorf("%v: got %q want %q", v, got, want)
 		}
+	}
+}
+
+func TestDefaultHierarchyAndNewStrategies(t *testing.T) {
+	now := time.Now()
+	c := []Contribution{
+		{SourceCd: "FACTSET", AsOf: now, Attrs: map[string]any{"name": "Uisce Global Equity Income Fund", "domicile": "IE", "manager_name": "Uisce AM"}},
+		{SourceCd: "BLOOMBERG", AsOf: now.Add(-time.Minute), Attrs: map[string]any{"name": "UISCE GLOBAL EQ INC", "domicile": "IE", "manager_name": "Uisce Asset Management"}},
+		{SourceCd: "REFINITIV", AsOf: now.Add(-2 * time.Minute), Attrs: map[string]any{"name": "Uisce Global Equity Income", "domicile": "LU", "manager_name": "Uisce AM"}},
+	}
+	hier := func(attr string) []string {
+		if attr == "name" {
+			return []string{"REFINITIV", "BLOOMBERG", "FACTSET"}
+		}
+		return []string{"BLOOMBERG", "REFINITIV", "FACTSET"}
+	}
+	d, _ := Survive(c, map[string]SurvivalRule{
+		"domicile":     {Strategy: "MOST_FREQUENT"},
+		"manager_name": {Strategy: "MOST_COMPLETE"},
+	}, nil, now, &SurviveOptions{Hierarchy: hier})
+	// No rule: the entity hierarchy decides, not recency.
+	if d["name"].Winner.SourceCd != "REFINITIV" || !strings.Contains(d["name"].Reason, "entity hierarchy") {
+		t.Errorf("name: %+v", d["name"])
+	}
+	if d["domicile"].Value != "IE" || !strings.Contains(d["domicile"].Reason, "2 of 3") {
+		t.Errorf("most frequent: %+v", d["domicile"])
+	}
+	if d["manager_name"].Value != "Uisce Asset Management" {
+		t.Errorf("most complete: %+v", d["manager_name"])
+	}
+	// No rule and no hierarchy: recency, as before.
+	d, _ = Survive(c, nil, nil, now, nil)
+	if d["name"].Winner.SourceCd != "FACTSET" {
+		t.Errorf("no hierarchy: %+v", d["name"])
+	}
+}
+
+// A price-style gate: Bloomberg first, unless it is more than 20% from the
+// median of the other sources - written as a selection rule on the rule
+// engine, evaluated through selector().
+func TestSelectionRuleConsensusGate(t *testing.T) {
+	few, _ := vm.ParseExpression("COUNT(peers.value) < 2")
+	near, _ := vm.ParseExpression("ABS(value - MEDIAN(peers.value)) <= 0.2 * MEDIAN(peers.value)")
+	gate := vm.RuleNode{Type: vm.NodeTypeGroup, Group: &vm.RuleGroup{Operator: "OR", Conditions: []vm.RuleNode{
+		{Type: vm.NodeTypeExpression, Expression: few}, {Type: vm.NodeTypeExpression, Expression: near}}}}
+	sel := selector(map[string]rule{"r-gate": {id: "r-gate", name: "price.consensus_20pct", node: gate, version: "2026-09-27T00:00:00Z"}})
+	now := time.Now()
+	prices := func(bbg float64) []Contribution {
+		return []Contribution{
+			{SourceCd: "BLOOMBERG", SourceKey: "B", AsOf: now, Attrs: map[string]any{"price": bbg}},
+			{SourceCd: "REFINITIV", SourceKey: "R", AsOf: now, Attrs: map[string]any{"price": 100.0}},
+			{SourceCd: "FACTSET", SourceKey: "F", AsOf: now, Attrs: map[string]any{"price": 102.0}},
+		}
+	}
+	priceRule := SurvivalRule{ID: "s-price", Strategy: "SOURCE_PRIORITY", Priority: []string{"BLOOMBERG", "REFINITIV", "FACTSET"}, SelectionRuleID: "r-gate"}
+	opts := &SurviveOptions{Select: sel}
+
+	d, issues := Survive(prices(101), map[string]SurvivalRule{"price": priceRule}, nil, now, opts)
+	if d["price"].Winner.SourceCd != "BLOOMBERG" || len(issues) != 0 {
+		t.Errorf("in line with the others: %+v %+v", d["price"], issues)
+	}
+
+	d, issues = Survive(prices(128), map[string]SurvivalRule{"price": priceRule}, nil, now, opts)
+	if d["price"].Winner.SourceCd != "REFINITIV" || !strings.Contains(d["price"].Reason, "excluded BLOOMBERG") {
+		t.Errorf("outlier excluded, next ranked wins: %+v", d["price"])
+	}
+	for _, c := range d["price"].Competing {
+		if c.SourceCd == "BLOOMBERG" && (c.Selected == nil || *c.Selected || !strings.Contains(c.Note, "price.consensus_20pct")) {
+			t.Errorf("the excluded candidate keeps its reason: %+v", c)
+		}
+	}
+
+	flag := priceRule
+	flag.SelectionMode = "FLAG"
+	d, issues = Survive(prices(128), map[string]SurvivalRule{"price": flag}, nil, now, opts)
+	if d["price"].Winner.SourceCd != "BLOOMBERG" || len(issues) != 1 || issues[0].Code != IssueSelectionFlag {
+		t.Errorf("flag only: %+v %+v", d["price"], issues)
+	}
+
+	// Nobody passes a rule that fails for all: hold the previous value.
+	never, _ := vm.ParseExpression("value < 0")
+	hold := SurvivalRule{ID: "s", Strategy: "SOURCE_PRIORITY", SelectionRuleID: "r-never"}
+	selNever := selector(map[string]rule{"r-never": {id: "r-never", name: "never", node: vm.RuleNode{Type: vm.NodeTypeExpression, Expression: never}}})
+	d, issues = Survive(prices(101), map[string]SurvivalRule{"price": hold}, map[string]any{"price": 99.5}, now, &SurviveOptions{Select: selNever})
+	if !d["price"].Held || d["price"].Value != 99.5 || len(issues) != 1 || issues[0].Code != IssueSelectionHold {
+		t.Errorf("hold: %+v %+v", d["price"], issues)
+	}
+	allow := hold
+	allow.OnNoneSelected = "ALLOW"
+	d, issues = Survive(prices(101), map[string]SurvivalRule{"price": allow}, map[string]any{"price": 99.5}, now, &SurviveOptions{Select: selNever})
+	if d["price"].Held || d["price"].Value != 101.0 || len(issues) != 1 || issues[0].Code != IssueSelectionFlag {
+		t.Errorf("allow: %+v %+v", d["price"], issues)
+	}
+
+	// An unknown or broken rule never reads as a pass.
+	d, _ = Survive(prices(101), map[string]SurvivalRule{"price": {SelectionRuleID: "missing"}}, map[string]any{"price": 99.5}, now, opts)
+	if !d["price"].Held {
+		t.Errorf("a rule that can't be evaluated must not pass: %+v", d["price"])
+	}
+}
+
+// The context a selection rule reads.
+func TestSelectionContextData(t *testing.T) {
+	now := time.Now()
+	c := Candidate{SourceCd: "BLOOMBERG", SourceKey: "B", Value: 101.0, AsOf: now.Add(-2 * time.Hour), record: map[string]any{"asset_class": "Equity"}}
+	p := Candidate{SourceCd: "REFINITIV", Value: 100.0, AsOf: now}
+	d := SelectionContext{Candidate: c, Peers: []Candidate{p}, All: []Candidate{c, p}, Previous: 99.0, Now: now, Ranking: []string{"BLOOMBERG", "REFINITIV"}}.Data()
+	if d["value"] != 101.0 || d["age_hours"] != 2.0 || d["rank"] != 1.0 || d["has_previous"] != true || len(d["peers"].([]any)) != 1 {
+		t.Errorf("context: %+v", d)
+	}
+	if d["record"].(map[string]any)["asset_class"] != "Equity" {
+		t.Errorf("record: %+v", d["record"])
+	}
+}
+
+// The same gate as one expression, with the "too few peers" half as the
+// rule's minimum-peers setting.
+func TestSelectionMinPeers(t *testing.T) {
+	near, err := vm.ParseExpression("ABS(value - MEDIAN(peers.value)) <= 0.2 * MEDIAN(peers.value)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sel := selector(map[string]rule{"g": {id: "g", name: "price.consensus_20pct", node: vm.RuleNode{Type: vm.NodeTypeExpression, Expression: near}}})
+	now := time.Now()
+	gate := SurvivalRule{Strategy: "SOURCE_PRIORITY", Priority: []string{"BLOOMBERG", "REFINITIV"}, SelectionRuleID: "g", SelectionMinPeers: 2}
+	two := []Contribution{
+		{SourceCd: "BLOOMBERG", AsOf: now, Attrs: map[string]any{"price": 128.0}},
+		{SourceCd: "REFINITIV", AsOf: now, Attrs: map[string]any{"price": 100.0}},
+	}
+	d, issues := Survive(two, map[string]SurvivalRule{"price": gate}, nil, now, &SurviveOptions{Select: sel})
+	if d["price"].Winner.SourceCd != "BLOOMBERG" || len(issues) != 0 || !strings.Contains(d["price"].Reason, "not applied") {
+		t.Errorf("one peer: the gate doesn't apply: %+v %+v", d["price"], issues)
+	}
+	three := append(two, Contribution{SourceCd: "FACTSET", AsOf: now, Attrs: map[string]any{"price": 101.0}})
+	d, _ = Survive(three, map[string]SurvivalRule{"price": gate}, nil, now, &SurviveOptions{Select: sel})
+	if d["price"].Winner.SourceCd != "REFINITIV" {
+		t.Errorf("two peers: the outlier is excluded: %+v", d["price"])
 	}
 }

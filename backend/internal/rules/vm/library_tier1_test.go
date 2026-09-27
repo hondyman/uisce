@@ -214,3 +214,60 @@ func mustDate(t *testing.T, s string) time.Time {
 	}
 	return d
 }
+
+func TestABS_COUNT(t *testing.T) {
+	abs, _ := LookupFunction("ABS")
+	if got, err := abs.Native([]any{-3.5}); err != nil || got.(float64) != 3.5 {
+		t.Errorf("ABS(-3.5) = %v %v", got, err)
+	}
+	count, _ := LookupFunction("COUNT")
+	if got, _ := count.Native([]any{[]any{1.0, nil, "x", 2.0}}); got.(float64) != 3 {
+		t.Errorf("COUNT skips nulls, counts any value: %v", got)
+	}
+	if got, _ := count.Native([]any{[]any{}}); got.(float64) != 0 {
+		t.Errorf("COUNT of nothing: %v", got)
+	}
+	for _, name := range []string{"ABS", "COUNT"} {
+		if spec, _ := LookupFunction(name); !spec.Pushdownable(DialectStarRocks) {
+			t.Errorf("%s should push down", name)
+		}
+	}
+}
+
+// A consensus gate written in the rule language: pass when there are too
+// few peers to judge, else when the value is within 20% of their median.
+func TestConsensusGateExpression(t *testing.T) {
+	few, err := ParseExpression("COUNT(peers.value) < 2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	near, err := ParseExpression("ABS(value - MEDIAN(peers.value)) <= 0.2 * MEDIAN(peers.value)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := RuleNode{Type: NodeTypeGroup, Group: &RuleGroup{Operator: "OR", Conditions: []RuleNode{
+		{Type: NodeTypeExpression, Expression: few}, {Type: NodeTypeExpression, Expression: near}}}}
+	ev := NewAdvancedEvaluator()
+	peers := func(vals ...float64) []any {
+		out := []any{}
+		for _, v := range vals {
+			out = append(out, map[string]any{"value": v})
+		}
+		return out
+	}
+	for _, c := range []struct {
+		value float64
+		peers []any
+		want  bool
+	}{
+		{100, peers(98, 101, 99), true},  // within 20% of 99
+		{128, peers(98, 101, 99), false}, // 29% off
+		{128, peers(98), true},           // one peer: not enough to judge
+		{128, peers(), true},             // none: not enough to judge
+	} {
+		got, err := ev.Evaluate(gate, map[string]any{"value": c.value, "peers": c.peers})
+		if err != nil || got != c.want {
+			t.Errorf("value %v peers %v: got %v %v, want %v", c.value, c.peers, got, err, c.want)
+		}
+	}
+}

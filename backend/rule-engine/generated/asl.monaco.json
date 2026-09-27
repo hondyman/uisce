@@ -32,6 +32,11 @@
   ],
   "snippets": [
     {
+      "label": "ABS",
+      "insert": "ABS()",
+      "detail": "(x number) -\u003e number - Absolute value - e.g. the size of a deviation, whichever side it falls on."
+    },
+    {
       "label": "AVG",
       "insert": "AVG()",
       "detail": "(values number[]) -\u003e number - Average of a numeric field across grouped rows."
@@ -40,6 +45,11 @@
       "label": "CORREL",
       "insert": "CORREL()",
       "detail": "(x number[], y number[]) -\u003e number - Pearson correlation coefficient between two series, in [-1, 1]. Scale-invariant - sample vs. population normalization cancels, so this needs no such convention note."
+    },
+    {
+      "label": "COUNT",
+      "insert": "COUNT()",
+      "detail": "(values any[]) -\u003e number - Number of values present (nulls not counted) - of a field across grouped rows, or of a collection such as the other sources' values."
     },
     {
       "label": "COVARIANCE_S",
@@ -450,20 +460,6 @@
       "\"expression\"",
       "\"group\""
     ],
-    "ScheduleStatus": [
-      "\"active\"",
-      "\"completed\"",
-      "\"disabled\"",
-      "\"failed\"",
-      "\"paused\""
-    ],
-    "ScheduleType": [
-      "\"cron\"",
-      "\"daily\"",
-      "\"monthly\"",
-      "\"once\"",
-      "\"weekly\""
-    ],
     "TenantTier": [
       "0",
       "1",
@@ -509,6 +505,16 @@
   },
   "functions": [
     {
+      "name": "ABS",
+      "signature": "(x number) -\u003e number",
+      "category": "math",
+      "description": "Absolute value - e.g. the size of a deviation, whichever side it falls on.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
       "name": "AVG",
       "signature": "(values number[]) -\u003e number",
       "category": "aggregation",
@@ -523,6 +529,16 @@
       "signature": "(x number[], y number[]) -\u003e number",
       "category": "statistics",
       "description": "Pearson correlation coefficient between two series, in [-1, 1]. Scale-invariant - sample vs. population normalization cancels, so this needs no such convention note.",
+      "noClosedForm": false,
+      "pushdown": {
+        "starrocks": true
+      }
+    },
+    {
+      "name": "COUNT",
+      "signature": "(values any[]) -\u003e number",
+      "category": "aggregation",
+      "description": "Number of values present (nulls not counted) - of a field across grouped rows, or of a collection such as the other sources' values.",
       "noClosedForm": false,
       "pushdown": {
         "starrocks": true

@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Container, Typography, Paper, Button, TextField,
-  MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip,
-  Divider, CircularProgress, Breadcrumbs, Link as MuiLink,
-  ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails,
-  Avatar, Tooltip, IconButton,
+  Box, Container, Typography, Paper, Button, TextField, MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip, Divider, CircularProgress, Breadcrumbs, Link as MuiLink, ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails, Avatar, Tooltip, IconButton,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -714,10 +710,29 @@ const AdvancedRuleBuilderPage: React.FC = () => {
               <MenuItem value="validation">validation</MenuItem>
               <MenuItem value="mdm">mdm</MenuItem>
               <MenuItem value="compliance">compliance</MenuItem>
+              <MenuItem value="survivorship">survivorship (MDM selection)</MenuItem>
             </Select>
           </FormControl>
           <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} disabled={mode === 'expression'} />
         </Stack>
+
+        {domain === 'survivorship' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              A survivorship (selection) rule decides whether one source's value may be chosen for a golden record.
+              It is never run on records; attach it to an attribute's survivorship rule. It reads:
+            </Typography>
+            <Typography variant="body2" component="div" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+              value, source, source_key, age_hours, stale, rank - this candidate<br />
+              peers.value, peers.source, peers.age_hours, peers.stale, peers.rank - the other sources (use COUNT, MEDIAN, AVG, MIN, MAX, STDEV_P, PERCENTILE)<br />
+              all.* - every source; previous, has_previous - the current golden value; record.* - this source's record
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Example: <code>ABS(value - MEDIAN(peers.value)) &lt;= 0.2 * MEDIAN(peers.value)</code> - within 20% of the other sources' median
+              (set the survivorship rule's minimum peers to 2).
+            </Typography>
+          </Alert>
+        )}
 
         {mode === 'structured' && (
           <Button

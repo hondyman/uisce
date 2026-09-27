@@ -461,7 +461,8 @@ func (r *runner) masterOne(golden string) error {
 	if r.e.Now != nil {
 		now = r.e.Now()
 	}
-	decisions, anomalies := Survive(cs, r.cfg.survival, current, now)
+	decisions, anomalies := Survive(cs, r.cfg.survival, current, now,
+		&SurviveOptions{Hierarchy: r.cfg.rankingFor, Select: selector(r.selRules)})
 	// A steward's active override wins over the sources (and is never an
 	// anomaly: it was decided, not reported).
 	if err := r.applyOverrides(golden, decisions); err != nil {
@@ -477,13 +478,20 @@ func (r *runner) masterOne(golden string) error {
 	attrs := make(map[string]any, len(decisions))
 	winners := map[string]string{}
 	for a, d := range decisions {
+		if d.Value == nil {
+			// Held with nothing to keep: the attribute has no value yet.
+			delete(decisions, a)
+			continue
+		}
 		attrs[a] = d.Value
 		winners[a] = d.Winner.SourceCd
 	}
 	issues := append(anomalies, r.rules.Golden(inFields(attrs, r.attrField))...)
 	status := "PUBLISHED"
 	for _, is := range issues {
-		if is.Severity == SevError || is.Code == "ANOMALY" {
+		// A held value (an anomaly, or nothing passing a selection rule)
+		// waits for a steward: the version is recorded, not current.
+		if is.Severity == SevError || is.Code == IssueAnomaly || is.Code == IssueSelectionHold {
 			status = "REVIEW"
 		}
 	}

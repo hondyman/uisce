@@ -12191,18 +12191,6 @@
       ],
       "type": "object"
     },
-    "PostgresSchedulerService": {
-      "description": "PostgresSchedulerService implements SchedulerService",
-      "properties": {
-        "cron": {},
-        "db": {}
-      },
-      "required": [
-        "db",
-        "cron"
-      ],
-      "type": "object"
-    },
     "PreAggConfig": {
       "description": "PreAggregation node config (stored in catalog_node.config)",
       "properties": {
@@ -14517,115 +14505,6 @@
       },
       "required": [
         "repo"
-      ],
-      "type": "object"
-    },
-    "ScheduleStatus": {
-      "enum": [
-        "active",
-        "completed",
-        "disabled",
-        "failed",
-        "paused"
-      ],
-      "type": "string"
-    },
-    "ScheduleType": {
-      "enum": [
-        "daily",
-        "monthly",
-        "once",
-        "weekly"
-      ],
-      "type": "string"
-    },
-    "ScheduledJob": {
-      "description": "ScheduledJob represents a scheduled job",
-      "properties": {
-        "CreatedAt": {},
-        "CreatedBy": {},
-        "CronExpression": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "EndTime": {},
-        "FailureCount": {
-          "type": "number"
-        },
-        "ID": {},
-        "IsActive": {
-          "type": "boolean"
-        },
-        "JobTemplate": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "LastRunAt": {},
-        "MaxRetries": {
-          "type": "number"
-        },
-        "MaxRunDuration": {
-          "type": "number"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "NextRunAt": {},
-        "OperationType": {
-          "type": "string"
-        },
-        "Priority": {
-          "type": "number"
-        },
-        "RetryOnFailure": {
-          "type": "boolean"
-        },
-        "RunCount": {
-          "type": "number"
-        },
-        "ScheduleType": {
-          "$ref": "#/definitions/ScheduleType"
-        },
-        "StartTime": {},
-        "Status": {
-          "$ref": "#/definitions/ScheduleStatus"
-        },
-        "SuccessCount": {
-          "type": "number"
-        },
-        "TenantID": {},
-        "Timezone": {
-          "type": "string"
-        },
-        "UpdatedAt": {}
-      },
-      "required": [
-        "ID",
-        "TenantID",
-        "OperationType",
-        "JobTemplate",
-        "ScheduleType",
-        "StartTime",
-        "EndTime",
-        "CronExpression",
-        "Timezone",
-        "MaxRunDuration",
-        "RetryOnFailure",
-        "MaxRetries",
-        "Status",
-        "IsActive",
-        "LastRunAt",
-        "NextRunAt",
-        "RunCount",
-        "SuccessCount",
-        "FailureCount",
-        "Name",
-        "Description",
-        "Priority",
-        "CreatedBy",
-        "CreatedAt",
-        "UpdatedAt"
       ],
       "type": "object"
     },

@@ -22,6 +22,20 @@ type config struct {
 	sources  map[string]string // source system code -> id
 	// vendorCodes[ref attribute][source id][VENDOR CODE] = internal code
 	vendorCodes map[string]map[string]map[string]string
+	// hierarchy[FIELD_GROUP] = source codes, best first
+	hierarchy map[string][]string
+}
+
+// rankingFor is the entity's source ranking for an attribute: its field
+// group's, else the default group's.
+func (c *config) rankingFor(attr string) []string {
+	s := c.profile.Settings
+	if g, ok := s.FieldGroups[attr]; ok {
+		if r := c.hierarchy[strings.ToUpper(g)]; len(r) > 0 {
+			return r
+		}
+	}
+	return c.hierarchy[strings.ToUpper(s.DefaultFieldGroup)]
 }
 
 // inConfig runs fn with the gold copy readable as the shared reference
@@ -84,7 +98,8 @@ func getProfile(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*Pro
 }
 
 func (e *Engine) loadConfig(ctx context.Context, tenantID, entity string) (*config, error) {
-	c := &config{survival: map[string]SurvivalRule{}, sources: map[string]string{}, vendorCodes: map[string]map[string]map[string]string{}}
+	c := &config{survival: map[string]SurvivalRule{}, sources: map[string]string{}, vendorCodes: map[string]map[string]map[string]string{},
+		hierarchy: map[string][]string{}}
 	err := e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
 		p, err := getProfile(ctx, tx, tenantID, entity)
 		if err != nil {
@@ -113,18 +128,58 @@ func (e *Engine) loadConfig(ctx context.Context, tenantID, entity string) (*conf
 			Vendors   json.RawMessage `db:"priority_vendors"`
 			Tolerance sql.NullFloat64 `db:"anomaly_tolerance_pct"`
 			Staleness sql.NullInt64   `db:"staleness_max_age_sec"`
+			Selection string          `db:"selection_rule_id"`
+			SelMode   string          `db:"selection_mode"`
+			OnNone    string          `db:"on_none_selected"`
+			MinPeers  int             `db:"selection_min_peers"`
 		}
+		// The selection columns come from crims 0015; read through to_jsonb
+		// so a data plane without them still masters.
 		if err := tx.SelectContext(ctx, &surv, `SELECT DISTINCT ON (attribute_name) id::text, attribute_name, strategy,
-				COALESCE(priority_vendors, '[]'::jsonb) AS priority_vendors, anomaly_tolerance_pct, staleness_max_age_sec
-			FROM mdm.survivorship_rule WHERE entity_type = $2 AND is_active
+				COALESCE(priority_vendors, '[]'::jsonb) AS priority_vendors, anomaly_tolerance_pct, staleness_max_age_sec,
+				COALESCE(to_jsonb(r)->>'selection_rule_id', '') AS selection_rule_id,
+				COALESCE(to_jsonb(r)->>'selection_mode', '') AS selection_mode,
+				COALESCE(to_jsonb(r)->>'on_none_selected', '') AS on_none_selected,
+				COALESCE((to_jsonb(r)->>'selection_min_peers')::int, 0) AS selection_min_peers
+			FROM mdm.survivorship_rule r WHERE entity_type = $2 AND is_active
 			ORDER BY attribute_name, (tenant_id::text = $1) DESC`, tenantID, p.EntityCd); err != nil {
 			return fmt.Errorf("survivorship rules: %w", err)
 		}
 		for _, s := range surv {
 			r := SurvivalRule{ID: s.ID, Attribute: s.Attribute, Strategy: strings.ToUpper(s.Strategy),
-				TolerancePct: s.Tolerance.Float64, StalenessSec: int(s.Staleness.Int64)}
+				TolerancePct: s.Tolerance.Float64, StalenessSec: int(s.Staleness.Int64),
+				SelectionRuleID: s.Selection, SelectionMode: strings.ToUpper(s.SelMode), OnNoneSelected: strings.ToUpper(s.OnNone), SelectionMinPeers: s.MinPeers}
 			_ = json.Unmarshal(s.Vendors, &r.Priority)
 			c.survival[s.Attribute] = r
+		}
+
+		// The entity's source hierarchy, by field group: rows not scoped to a
+		// type or class (to_jsonb keeps this generic across entities).
+		var hasPriority bool
+		if err := tx.GetContext(ctx, &hasPriority, `SELECT to_regclass($1) IS NOT NULL`, p.plainTable("source_priority")); err != nil {
+			return err
+		}
+		if hasPriority {
+			// Order within each group by priority.
+			var ordered []struct {
+				Group string `db:"field_group"`
+				Code  string `db:"code"`
+			}
+			if err := tx.SelectContext(ctx, &ordered, fmt.Sprintf(`SELECT upper(x.field_group) AS field_group, s.code
+				FROM %s x JOIN mdm.source_systems s ON s.id = x.source_system_id
+				WHERE COALESCE((to_jsonb(x)->>'is_active')::boolean, true)
+				  AND COALESCE(to_jsonb(x)->>'product_type_cd', '') = '' AND COALESCE(to_jsonb(x)->>'asset_class_cd', '') = ''
+				ORDER BY upper(x.field_group), (x.tenant_id::text = $1) DESC, x.priority, s.code`, p.table("source_priority")), tenantID); err != nil {
+				return fmt.Errorf("source priority: %w", err)
+			}
+			seen := map[string]bool{}
+			for _, o := range ordered {
+				if seen[o.Group+"|"+o.Code] {
+					continue
+				}
+				seen[o.Group+"|"+o.Code] = true
+				c.hierarchy[o.Group] = append(c.hierarchy[o.Group], strings.ToUpper(o.Code))
+			}
 		}
 
 		var srcs []struct {

@@ -86,6 +86,41 @@ Today `MDMStewardHandler.ApplyOverride` applies at once and `GetExceptions`
 takes the tenant from a header or query parameter; both are fixed in the
 overrides slice (the tenant comes from the token only).
 
+## Survivorship: layered, one rule engine
+
+Declarative first; expressions only where a ranking can't say it; stewards for true exceptions.
+No survivorship-specific expression engine: selection rules are catalog rules on `internal/rules/vm`.
+
+1. **Entity hierarchy (default).** `mdm.<prefix>_source_priority` ranks sources per *field group*
+   (NAME, DATES, CLASSIFICATION, ...). The profile maps attributes to groups
+   (`settings.field_groups`, `default_field_group`). An attribute with no survivorship rule is decided
+   by its group's ranking - never silently by recency.
+2. **Per-attribute rule** (`mdm.survivorship_rule`): SOURCE_PRIORITY (its own ranking, else the
+   hierarchy), PROVIDER_AUTHORITATIVE, MOST_RECENT, MOST_FREQUENT, MOST_COMPLETE, CONSERVATIVE_MIN/MAX;
+   plus staleness (fresh beats stale, stale never blanks) and an anomaly tolerance against the previous
+   golden value.
+3. **Selection rule** (`survivorship_rule.selection_rule_id`): a catalog rule in domain `survivorship`
+   each candidate must satisfy to be chosen, evaluated per candidate against the others. It reads
+   `value, source, source_key, age_hours, stale, rank`, the other candidates as `peers.*` (so the
+   VM's aggregates apply: `COUNT, MEDIAN, AVG, MIN, MAX, STDEV_P, PERCENTILE`), `all.*`, `previous`,
+   `has_previous` and `record.*` (the candidate's source record). Example - Bloomberg first unless it
+   is more than 20% from the other sources' median:
+   `ABS(value - MEDIAN(peers.value)) <= 0.2 * MEDIAN(peers.value)` with `selection_min_peers = 2`.
+   - `selection_mode`: ENFORCE (a failing candidate can't win; the next ranked does) or FLAG (report only
+     - start here when the peers may be wrong together).
+   - `on_none_selected`: HOLD (keep the previous value, version in REVIEW, steward asked) or ALLOW.
+   - A rule that can't be evaluated never counts as a pass.
+   - Survivorship-domain rules are never run as record validation (`ListByBO` without a domain excludes
+     them); they are authored, governed and versioned like every catalog rule.
+4. **Stewards**: overrides and merges under the entity's policy.
+
+Every decision records the winning source, the reason (including which sources a selection rule
+excluded, by rule name and version) and every competing value with its as-of time, staleness and
+whether it passed the selection rule.
+
+Open: per-asset-class thresholds (needs a conditional in the rule language, or rules scoped by class);
+price mastering is time-series (instrument x date x price type) and needs a set-based mode of the engine.
+
 ## Governance
 
 - Changes to bindings, rules and golden overrides go through maker-checker
