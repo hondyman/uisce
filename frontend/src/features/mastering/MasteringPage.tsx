@@ -39,7 +39,8 @@ function GoldenTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
         <TextField size="small" sx={{ flex: 1, maxWidth: 420 }} placeholder={t('mastering.golden.search')} value={q} onChange={(e) => setQ(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
-        <TextField select size="small" sx={{ minWidth: 180 }} label={t('mastering.golden.status')} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <TextField select size="small" sx={{ minWidth: 180 }} label={t('mastering.golden.status')} value={status} onChange={(e) => setStatus(e.target.value)}
+          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
           <MenuItem value="">{t('mastering.all')}</MenuItem>
           {(['PUBLISHED', 'REVIEW'] as const).map((s) => <MenuItem key={s} value={s}>{t(`mastering.goldenStatus.${s}`)}</MenuItem>)}
         </TextField>
@@ -137,7 +138,8 @@ function ExceptionsTab({ entity, onOpen }: { entity: string; onOpen: (id: string
   return (
     <>
       <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <TextField select size="small" sx={{ minWidth: 200 }} label={t('mastering.exceptions.status')} value={status} onChange={(e) => setStatus(e.target.value)}>
+        <TextField select size="small" sx={{ minWidth: 200 }} label={t('mastering.exceptions.status')} value={status} onChange={(e) => setStatus(e.target.value)}
+          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
           <MenuItem value="">{t('mastering.exceptions.open')}</MenuItem>
           {(['RESOLVED', 'WAIVED'] as const).map((s) => <MenuItem key={s} value={s}>{t(`mastering.exceptionStatus.${s}`)}</MenuItem>)}
         </TextField>
