@@ -43,7 +43,9 @@ func (p *Policy) required(attr string) int {
 		return 0
 	}
 	for _, a := range p.HighRiskAttributes {
-		if a == attr {
+		// A price override's attribute is TYPE@date: a high-risk price type
+		// covers every date.
+		if a == attr || strings.HasPrefix(attr, a+"@") {
 			return max(p.HighRiskApprovals, p.ApprovalsRequired)
 		}
 	}
@@ -93,6 +95,13 @@ func (e *Engine) GetPolicy(ctx context.Context, tenantID, entity string) (*Polic
 	})
 	if err != nil {
 		return nil, err
+	}
+	if cfg.profile.timeSeries() {
+		// A price is overridden per price type (and date).
+		err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
+			return tx.SelectContext(ctx, &p.Attributes, `SELECT price_type_cd FROM mdm.price_type WHERE is_active ORDER BY display_order, price_type_cd`)
+		})
+		return p, err
 	}
 	seen := map[string]bool{}
 	for a := range cfg.survival {
@@ -200,6 +209,9 @@ type Override struct {
 	AppliedAt         *time.Time      `db:"applied_at" json:"applied_at,omitempty"`
 	AppliedVersion    *int            `db:"applied_version" json:"applied_version,omitempty"`
 	Voters            *string         `db:"voters" json:"voters,omitempty"`
+	// OpenID is what the console opens for it: the golden price's latest
+	// version for a price override (a record override opens golden_id).
+	OpenID *string `db:"open_id" json:"open_id,omitempty"`
 	// Mine: the caller proposed it (may withdraw, may not vote). Voted:
 	// the caller already voted.
 	Mine  bool `db:"-" json:"mine"`
@@ -265,6 +277,9 @@ func (e *Engine) proposeOverride(ctx context.Context, tx *sqlx.Tx, cfg *config, 
 	if err := in.normalize(); err != nil {
 		return nil, err
 	}
+	if cfg.profile.timeSeries() {
+		return e.proposePriceOverride(ctx, tx, cfg, pol, tenantID, entity, goldenID, in, actorID, actorName)
+	}
 	var out *Override
 	err := func() error {
 		r := e.stewardRunner(ctx, tx, cfg, tenantID, entity, actorID, actorName)
@@ -320,7 +335,7 @@ func (e *Engine) proposeOverride(ctx context.Context, tx *sqlx.Tx, cfg *config, 
 				return err
 			}
 		}
-		out, err = getOverride(ctx, tx, cfg.profile, id, actorID)
+		out, err = getOverride(ctx, tx, cfg.profile, instrumentOf(cfg), id, actorID)
 		return err
 	}()
 	return out, err
@@ -386,15 +401,17 @@ func (e *Engine) decideOverride(ctx context.Context, tx *sqlx.Tx, cfg *config, t
 			}
 			if n >= o.Need {
 				r := e.stewardRunner(ctx, tx, cfg, tenantID, entity, actorID, actorName)
-				if _, err := r.prepare(); err != nil {
-					return err
+				if !cfg.profile.timeSeries() {
+					if _, err := r.prepare(); err != nil {
+						return err
+					}
 				}
 				if err := r.applyOverride(id); err != nil {
 					return err
 				}
 			}
 		}
-		out, err = getOverride(ctx, tx, cfg.profile, id, actorID)
+		out, err = getOverride(ctx, tx, cfg.profile, instrumentOf(cfg), id, actorID)
 		return err
 	}()
 	return out, err
@@ -402,7 +419,7 @@ func (e *Engine) decideOverride(ctx context.Context, tx *sqlx.Tx, cfg *config, t
 
 // WithdrawOverride: the proposer takes back a pending request.
 func (e *Engine) WithdrawOverride(ctx context.Context, tenantID, entity, id, actorID string) (*Override, error) {
-	p, err := e.profile(ctx, tenantID, entity)
+	p, inst, err := e.seriesProfiles(ctx, tenantID, entity)
 	if err != nil {
 		return nil, err
 	}
@@ -416,7 +433,7 @@ func (e *Engine) WithdrawOverride(ctx context.Context, tenantID, entity, id, act
 		if n, _ := res.RowsAffected(); n == 0 {
 			return msgNotProposer()
 		}
-		out, err = getOverride(ctx, tx, p, id, actorID)
+		out, err = getOverride(ctx, tx, p, inst, id, actorID)
 		return err
 	})
 	return out, err
@@ -424,7 +441,7 @@ func (e *Engine) WithdrawOverride(ctx context.Context, tenantID, entity, id, act
 
 // Overrides lists override requests: by status ("" = all) and golden record.
 func (e *Engine) Overrides(ctx context.Context, tenantID, entity, status, goldenID, actorID string, limit int) ([]Override, error) {
-	p, err := e.profile(ctx, tenantID, entity)
+	p, inst, err := e.seriesProfiles(ctx, tenantID, entity)
 	if err != nil {
 		return nil, err
 	}
@@ -433,11 +450,9 @@ func (e *Engine) Overrides(ctx context.Context, tenantID, entity, status, golden
 	}
 	out := []Override{}
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
-		err := tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name
-			FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s
+		err := tx.SelectContext(ctx, &out, overrideSelect(p, inst)+`
 			WHERE o.entity_cd = $1 AND ($2 = '' OR o.status = $2 OR ($2 = 'ACTIVE' AND o.active)) AND ($3 = '' OR o.golden_id::text = $3)
 			ORDER BY (o.status = 'PENDING') DESC, o.requested_at DESC LIMIT $4`,
-			overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a")),
 			p.EntityCd, strings.ToUpper(status), goldenID, limit)
 		if err != nil {
 			return err
@@ -447,11 +462,25 @@ func (e *Engine) Overrides(ctx context.Context, tenantID, entity, status, golden
 	return out, err
 }
 
-func getOverride(ctx context.Context, tx *sqlx.Tx, p *Profile, id, actorID string) (*Override, error) {
+// overrideSelect selects overrides with the record they are about: the
+// golden record, or for a price the instrument (inst) and the price to open.
+func overrideSelect(p, inst *Profile) string {
+	if p.timeSeries() && inst != nil {
+		return fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name,
+				(SELECT g.id::text FROM mdm.price_golden_record g WHERE g.price_entity_id = o.golden_id
+					AND g.price_type_cd = split_part(o.attribute, '@', 1) AND g.price_date::text = split_part(o.attribute, '@', 2)
+					ORDER BY g.golden_version DESC LIMIT 1) AS open_id
+			FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s`,
+			overrideCols, qi(inst.AnchorCodeColumn), qi(inst.Settings.NameAttribute), qi(inst.AnchorTable), qi(inst.entityCol()), inst.current("a"))
+	}
+	return fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name, NULL::text AS open_id
+		FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s`,
+		overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a"))
+}
+
+func getOverride(ctx context.Context, tx *sqlx.Tx, p, inst *Profile, id, actorID string) (*Override, error) {
 	var o []Override
-	if err := tx.SelectContext(ctx, &o, fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name
-		FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s WHERE o.id::text = $1`,
-		overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a")), id); err != nil {
+	if err := tx.SelectContext(ctx, &o, overrideSelect(p, inst)+` WHERE o.id::text = $1`, id); err != nil {
 		return nil, err
 	}
 	if len(o) == 0 {
@@ -567,6 +596,9 @@ func (r *runner) checkOverrideValue(attr string, v any) error {
 // ends the active one; then the golden record is re-survived and a new
 // version published with the override in its provenance.
 func (r *runner) applyOverride(id string) error {
+	if r.p.timeSeries() {
+		return r.applyPriceOverride(id)
+	}
 	ctx, tx := r.ctx, r.tx
 	var o struct {
 		Golden string `db:"golden_id"`

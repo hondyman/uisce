@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert, Box, Chip, Drawer, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell,
+  Alert, Box, Button, Chip, Drawer, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
@@ -11,6 +11,7 @@ import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
 import { masteringApi, pct, PriceCandidate } from './api';
 import { GoldenStatusChip } from './parts';
+import { OverrideDialog, OverrideStatusChip } from './overrides';
 
 const PRICE_TYPES = ['LAST', 'OFFICIAL_CLOSE', 'BID', 'MID', 'ASK', 'NAV', 'EVALUATED'];
 
@@ -172,6 +173,16 @@ export function PriceDrawer({ entity, id, onClose }: { entity: string; id: strin
   const historical = !!v && !!latest && v.version !== latest.version;
   const prov = v?.provenance;
   const th = prov?.threshold;
+  // The steward's decisions on this price (overrides keyed TYPE@date).
+  const attr = d ? `${d.price_type}@${d.date}` : '';
+  const ovs = useQuery({
+    queryKey: ['mastering', 'overrides', entity, 'golden', d?.entity_id], queryFn: () => masteringApi.overrides(entity, { golden: d!.entity_id }),
+    enabled: !!d,
+  });
+  const mine = (ovs.data?.overrides ?? []).filter((o) => o.attribute === attr);
+  const active = mine.find((o) => o.active);
+  const pending = mine.find((o) => o.status === 'PENDING');
+  const [deciding, setDeciding] = useState(false);
 
   return (
     <Drawer anchor="right" open={!!id} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', md: 760 } } }}>
@@ -196,6 +207,15 @@ export function PriceDrawer({ entity, id, onClose }: { entity: string; id: strin
               {v.is_stale && <Chip size="small" color="warning" variant="outlined" label={t('mastering.golden.stale')} />}
               <Chip size="small" variant="outlined" label={`${t('mastering.golden.confidence')} ${pct(v.confidence)}`} />
             </Stack>
+            {!historical && (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 2 }}>
+                <Button size="small" variant={latest!.status === 'REVIEW' ? 'contained' : 'outlined'} disabled={!!pending} onClick={() => setDeciding(true)}>
+                  {latest!.status === 'REVIEW' ? t('mastering.prices.decideHeld') : active ? t('mastering.prices.changeOverride') : t('mastering.prices.correct')}
+                </Button>
+                {active && <Chip size="small" color="secondary" label={t('mastering.prices.stewardPrice')} />}
+                {pending && <><OverrideStatusChip o={pending} /><Typography variant="caption" color="text.secondary">{t('mastering.prices.pending', { value: String(pending.value ?? '—') })}</Typography></>}
+              </Stack>
+            )}
             {historical && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 {t('mastering.prices.viewingVersion', { v: v.version, latest: latest!.version, at: fmt(v.knowledge_at, i18n.language) })}
@@ -291,6 +311,10 @@ export function PriceDrawer({ entity, id, onClose }: { entity: string; id: strin
           </>
         )}
       </Box>
+      {d && latest && deciding && (
+        <OverrideDialog entity={entity} goldenId={d.id} attribute={attr} current={String(latest.value)} hasActive={!!active}
+          open={deciding} onClose={() => setDeciding(false)} />
+      )}
     </Drawer>
   );
 }

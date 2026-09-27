@@ -43,7 +43,7 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 			"staging.ice_price": {"@source_key": "ice_id", "id:ISIN": "isin", "id:CUSIP": "cusip", "ValuationDate": "pricing_date",
 				"Currency": "currency", "@as_of": "evaluated_at", "value:BID": "bid_price", "value:MID": "mid_price", "value:ASK": "ask_price"},
 			"staging.rdp_price": {"@source_key": "ric", "id:ISIN": "isin", "id:CUSIP": "cusip", "id:RIC": "ric", "ValuationDate": "trade_date",
-				"Currency": "currency", "@as_of": "value_ts", "value:LAST": "trdprc_1", "value:BID": "bid", "value:ASK": "ask", "value:MID": "mid_price"},
+				"Currency": "currency", "@as_of": "value_ts", "value:LAST": "trdprc_1", "value:OFFICIAL_CLOSE": "official_close", "value:BID": "bid", "value:ASK": "ask", "value:MID": "mid_price"},
 		}}
 
 	tx, err := data.BeginTxx(ctx, nil)
@@ -130,7 +130,7 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 
 	const bbgCols = `(_load_run_id, _source_row_num, tenant_id, id_bb_global, id_isin, px_date, crncy, px_last, px_bid, px_ask, px_mid, last_update_dt)`
 	const iceCols = `(_load_run_id, _source_row_num, tenant_id, ice_id, isin, pricing_date, currency, bid_price, mid_price, ask_price, evaluated_at)`
-	const rdpCols = `(_load_run_id, _source_row_num, tenant_id, ric, isin, trade_date, currency, trdprc_1, bid, ask, mid_price, value_ts)`
+	const rdpCols = `(_load_run_id, _source_row_num, tenant_id, ric, isin, trade_date, currency, trdprc_1, bid, ask, mid_price, value_ts, official_close)`
 
 	// Day 1. The gilt from all three (one Refinitiv quote in the wrong
 	// currency); the equity from Bloomberg and Refinitiv, 30% apart; one
@@ -150,8 +150,8 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 		iceCols+` VALUES ($1, $2, $3, 'ICETESTGILT1', '`+gilt+`', '`+d1+`', 'GBP', 99.52, 99.76, 100.01, '`+d1+` 16:00+00')`)
 	run("ice day 1", "staging.ice_price", ice1)
 	rdp1 := load("REFINITIV", "staging.rdp_price",
-		rdpCols+` VALUES ($1, $2, $3, 'GB5YT=RR', '`+gilt+`', '`+d1+`', 'EUR', NULL, 115.00, 116.00, 115.50, '`+d1+` 17:00+00')`,
-		rdpCols+` VALUES ($1, $2, $3, 'UISC.L', '`+equity+`', '`+d1+`', 'GBP', 130.00, NULL, NULL, NULL, '`+d1+` 16:40+00')`)
+		rdpCols+` VALUES ($1, $2, $3, 'GB5YT=RR', '`+gilt+`', '`+d1+`', 'EUR', NULL, 115.00, 116.00, 115.50, '`+d1+` 17:00+00', NULL)`,
+		rdpCols+` VALUES ($1, $2, $3, 'UISC.L', '`+equity+`', '`+d1+`', 'GBP', 130.00, NULL, NULL, NULL, '`+d1+` 16:40+00', 130.00)`)
 	run("refinitiv day 1", "staging.rdp_price", rdp1)
 
 	// Fixed income ranks ICE first; equities Bloomberg first.
@@ -170,6 +170,14 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 	if n := count(`SELECT count(*) FROM mdm.price_exception WHERE exception_type = 'UNRESOLVED_INSTRUMENT'
 			AND custom_attributes->>'source_row_id' LIKE 'BBGTESTUNKN1|%' AND exception_description LIKE '%ISIN XS9999999999%'`); n != 1 {
 		t.Errorf("unresolved quote: %d exceptions, want 1", n)
+	}
+	// Only Refinitiv quotes the official close, 30% from the golden last
+	// price: held, not published unchallenged.
+	if g := latest(equityID, "OFFICIAL_CLOSE", d1); g.Status != "REVIEW" || g.Current {
+		t.Errorf("single-source official close 30%% from the last price: %+v, want held", g)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_exception WHERE exception_type = 'RELATED_TYPE_DIVERGENCE' AND price_entity_id::text = $1 AND price_date = $2::date`, equityID, d1); n != 1 {
+		t.Errorf("related-type divergence exceptions: %d, want 1", n)
 	}
 	var excluded bool
 	_ = tx.GetContext(ctx, &excluded, `SELECT EXISTS (SELECT 1 FROM mdm.price_golden_record g, jsonb_array_elements(g.golden_attributes->'candidates') c
@@ -199,6 +207,43 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 	}
 	if c.HeldForReview != 1 {
 		t.Errorf("bloomberg day 2: %+v, want 1 held", c)
+	}
+
+	// A steward releases the held price at its value (direct policy here):
+	// published as the steward's price, its exceptions resolved.
+	held := latest(equityID, "LAST", d2)
+	var heldID string
+	if err := tx.GetContext(ctx, &heldID, `SELECT id::text FROM mdm.price_golden_record WHERE price_entity_id::text = $1 AND price_type_cd = 'LAST'
+		AND price_date = $2::date ORDER BY golden_version DESC LIMIT 1`, equityID, d2); err != nil {
+		t.Fatal(err)
+	}
+	direct := &Policy{EntityCd: "PRICE", Mode: ModeDirect}
+	steward := uuid.NewString()
+	o, err := e.proposePriceOverride(ctx, tx, cfg, direct, gold, "price", heldID,
+		OverrideRequest{Action: "SET", Value: []byte("140"), Reason: "Confirmed with the exchange: rights issue"}, steward, "Test Steward")
+	if err != nil {
+		t.Fatalf("accept held price: %v", err)
+	}
+	if o.Status != "APPLIED" || !o.Active || o.OpenID == nil || o.Attribute != "LAST@"+d2 {
+		t.Errorf("override: %+v", o)
+	}
+	if g := latest(equityID, "LAST", d2); g.Status != "PUBLISHED" || !g.Current || g.Value != 140 || g.Winner != "MANUAL" || g.Version != held.Version+1 {
+		t.Errorf("after accepting: %+v, want v%d 140 MANUAL published current", g, held.Version+1)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_exception WHERE price_entity_id::text = $1 AND price_date = $2::date AND status = 'OPEN'
+			AND custom_attributes->>'price_type' = 'LAST'`, equityID, d2); n != 0 {
+		t.Errorf("open exceptions after the steward's decision: %d", n)
+	}
+	// Cleared, the vendors' price is held again: nothing is current.
+	if _, err := e.proposePriceOverride(ctx, tx, cfg, direct, gold, "price", heldID,
+		OverrideRequest{Action: "CLEAR", Reason: "Back to the vendors"}, steward, "Test Steward"); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if g := latest(equityID, "LAST", d2); g.Status != "REVIEW" || g.Current {
+		t.Errorf("after clearing: %+v, want held (REVIEW, not current)", g)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_golden_record WHERE price_entity_id::text = $1 AND price_type_cd = 'LAST' AND price_date = $2::date AND is_current`, equityID, d2); n != 0 {
+		t.Errorf("current versions after clearing: %d, want 0", n)
 	}
 
 	// Bloomberg restates day 1's equity close: a new observation linked to

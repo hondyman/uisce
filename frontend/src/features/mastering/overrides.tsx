@@ -137,7 +137,7 @@ export function OverridesTab({ entity, onOpen }: { entity: string; onOpen: (id: 
             {rows.map((o) => (
               <TableRow key={o.id} hover>
                 <TableCell>
-                  <Button size="small" onClick={() => onOpen(o.golden_id)}>{o.golden_code ?? o.golden_id.slice(0, 8)}</Button>
+                  <Button size="small" onClick={() => onOpen(o.open_id ?? o.golden_id)}>{o.golden_code ?? o.golden_id.slice(0, 8)}</Button>
                   <Typography variant="caption" color="text.secondary" component="div">{o.golden_name}</Typography>
                 </TableCell>
                 <TableCell>

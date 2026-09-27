@@ -271,7 +271,10 @@ type runner struct {
 	force bool
 	// overrides: the data plane has the overrides tables (crims 0013), so
 	// active overrides apply; before that migration mastering runs without.
-	overrides  bool
+	overrides        bool
+	overridesChecked bool
+	// siblings: current golden prices by entity|type|date (time series).
+	siblings   map[string]float64
 	unmastered []string // bound fields with no golden column
 }
 
