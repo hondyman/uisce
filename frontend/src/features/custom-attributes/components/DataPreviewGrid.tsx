@@ -59,8 +59,10 @@ export function DataPreviewGrid({
     );
   }
 
-  const customCols = preview.columns.filter((c) => c.source !== 'CORE');
-  const coreCols = preview.columns
+  const columns = preview.columns ?? [];
+  const rows = preview.rows ?? [];
+  const customCols = columns.filter((c) => c.source !== 'CORE');
+  const coreCols = columns
     .filter((c) => c.source === 'CORE')
     .filter((c) => ['id', 'product_cd', 'name', 'status_id', 'is_active'].includes(c.key))
     .slice(0, 4);
@@ -70,7 +72,7 @@ export function DataPreviewGrid({
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="subtitle2">Data preview</Typography>
-        <Chip size="small" label={`Rows ${preview.showing} of ${preview.total}`} />
+        <Chip size="small" label={`Rows ${preview.showing ?? rows.length} of ${preview.total ?? 0}`} />
         <Typography variant="caption" color="text.secondary">
           Read-only · values are edited via Business Object
         </Typography>
@@ -104,7 +106,7 @@ export function DataPreviewGrid({
             </TableRow>
           </TableHead>
           <TableBody>
-            {preview.rows.map((row, idx) => (
+            {rows.map((row, idx) => (
               <TableRow
                 key={String(row.id ?? idx)}
                 hover
@@ -130,7 +132,7 @@ export function DataPreviewGrid({
                 ))}
               </TableRow>
             ))}
-            {preview.rows.length === 0 && (
+            {rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={Math.max(visible.length, 1)}>
                   <Typography color="text.secondary">No rows for this tenant.</Typography>

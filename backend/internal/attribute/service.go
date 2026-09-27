@@ -47,31 +47,42 @@ func (s *Service) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(tx
 	return tx.Commit()
 }
 
-func (s *Service) List(ctx context.Context, tenantID uuid.UUID, entityType string, includeInactive bool) ([]AttributeDef, error) {
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID, entityType string, includeInactive bool, appliesToType string) ([]AttributeDef, error) {
 	var out []AttributeDef
 	err := s.withTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
 		q := `
-			SELECT id, tenant_id, core_id, is_shadow, entity_type, table_ref, field_cd,
-			       name, COALESCE(description, '') AS description, data_type, json_path,
-			       is_required, is_searchable, is_pii,
-			       validation_rules, picklist_values, default_value,
-			       display_order, COALESCE(section, '') AS section, is_active,
-			       origin, semantic_term_id, created_at, updated_at
-			FROM public.attribute_def_effective
-			WHERE entity_type = $1`
+			SELECT a.id, a.tenant_id, a.core_id, a.is_shadow, a.entity_type, a.table_ref, a.field_cd,
+			       a.name, COALESCE(a.description, '') AS description, a.data_type, a.json_path,
+			       a.is_required, a.is_searchable, a.is_pii,
+			       a.validation_rules, a.picklist_values, a.default_value,
+			       a.display_order, COALESCE(a.section, '') AS section, a.is_active,
+			       a.origin, a.semantic_term_id, a.created_at, a.updated_at,
+			       COALESCE(cn.node_name, '') AS semantic_term_name,
+			       COALESCE(a.applies_to_types, '[]'::jsonb) AS applies_to_types
+			FROM public.attribute_def_effective a
+			LEFT JOIN public.catalog_node cn ON cn.id = a.semantic_term_id
+			WHERE a.entity_type = $1`
+		args := []any{entityType}
 		if !includeInactive {
-			q += ` AND is_active`
+			q += ` AND a.is_active`
 		}
-		q += ` ORDER BY display_order, field_cd`
+		if appliesToType != "" {
+			args = append(args, `["`+strings.ReplaceAll(appliesToType, `"`, ``)+`"]`)
+			q += fmt.Sprintf(` AND (
+				jsonb_array_length(COALESCE(a.applies_to_types, '[]'::jsonb)) = 0
+				OR COALESCE(a.applies_to_types, '[]'::jsonb) @> $%d::jsonb
+			)`, len(args))
+		}
+		q += ` ORDER BY a.display_order, a.field_cd`
 
-		rows, err := tx.QueryxContext(ctx, q, entityType)
+		rows, err := tx.QueryxContext(ctx, q, args...)
 		if err != nil {
 			return err
 		}
 		defer rows.Close()
 
 		for rows.Next() {
-			def, err := scanDef(rows)
+			def, err := scanDefWithTermName(rows)
 			if err != nil {
 				return err
 			}
@@ -142,11 +153,11 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 			INSERT INTO public.attribute_def (
 				tenant_id, entity_type, table_ref, field_cd, name, description, data_type,
 				json_path, is_required, is_searchable, is_pii, validation_rules, picklist_values,
-				default_value, display_order, section, semantic_term_id
+				default_value, display_order, section, semantic_term_id, applies_to_types
 			) VALUES (
 				$1,$2,$3,$4,$5,$6,$7,
 				$8,$9,$10,$11,$12::jsonb,$13::jsonb,
-				$14,$15,$16,$17
+				$14,$15,$16,$17,$18::jsonb
 			)
 			RETURNING id, tenant_id, core_id, is_shadow, entity_type, table_ref, field_cd,
 			          name, COALESCE(description,'') AS description, data_type, json_path,
@@ -156,7 +167,7 @@ func (s *Service) Create(ctx context.Context, tenantID uuid.UUID, in CreateInput
 			          semantic_term_id, created_at, updated_at`,
 			tenantID, strings.ToUpper(in.EntityType), in.TableRef, fieldCd, in.Name, in.Description, dataType,
 			jsonPath, in.IsRequired, searchable, in.IsPII, string(vr), nullJSON(pl),
-			in.DefaultValue, in.DisplayOrder, in.Section, in.SemanticTermID,
+			in.DefaultValue, in.DisplayOrder, in.Section, in.SemanticTermID, nullJSON(mustJSON(in.AppliesToTypes)),
 		)
 		def, err := scanDefReturning(row)
 		if err != nil {
@@ -490,6 +501,45 @@ func scanDef(row interface {
 	return d, nil
 }
 
+func scanDefWithTermName(row interface {
+	Scan(dest ...any) error
+}) (AttributeDef, error) {
+	var d AttributeDef
+	var vr, pl, applies []byte
+	var origin sql.NullString
+	var termName string
+	err := row.Scan(
+		&d.ID, &d.TenantID, &d.CoreID, &d.IsShadow, &d.EntityType, &d.TableRef, &d.FieldCd,
+		&d.Name, &d.Description, &d.DataType, &d.JsonPath,
+		&d.IsRequired, &d.IsSearchable, &d.IsPII,
+		&vr, &pl, &d.DefaultValue,
+		&d.DisplayOrder, &d.Section, &d.IsActive,
+		&origin, &d.SemanticTermID, &d.CreatedAt, &d.UpdatedAt,
+		&termName, &applies,
+	)
+	if err != nil {
+		return d, err
+	}
+	_ = json.Unmarshal(vr, &d.ValidationRules)
+	if d.ValidationRules == nil {
+		d.ValidationRules = map[string]any{}
+	}
+	if len(pl) > 0 && string(pl) != "null" {
+		_ = json.Unmarshal(pl, &d.PicklistValues)
+	}
+	if len(applies) > 0 && string(applies) != "null" {
+		_ = json.Unmarshal(applies, &d.AppliesToTypes)
+	}
+	if d.AppliesToTypes == nil {
+		d.AppliesToTypes = []string{}
+	}
+	if origin.Valid {
+		d.Origin = origin.String
+	}
+	d.SemanticTermName = termName
+	return d, nil
+}
+
 func scanDefReturning(row interface {
 	Scan(dest ...any) error
 }) (AttributeDef, error) {
@@ -527,4 +577,18 @@ func nullJSON(b []byte) any {
 		return nil
 	}
 	return string(b)
+}
+
+func mustJSON(v any) []byte {
+	if v == nil {
+		return []byte("[]")
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte("[]")
+	}
+	if string(b) == "null" {
+		return []byte("[]")
+	}
+	return b
 }

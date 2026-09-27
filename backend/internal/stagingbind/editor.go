@@ -41,7 +41,8 @@ type Proposal struct {
 	BOKey        string            `json:"bo_key"`
 	StagingTable string            `json:"staging_table"`
 	Action       string            `json:"action,omitempty"` // upsert (default) | delete
-	Fields       map[string]string `json:"fields,omitempty"` // BO field -> staging column
+	Fields       map[string]string `json:"fields,omitempty"` // BO field -> staging column or JSON path expr
+	SourceType   string            `json:"source_type,omitempty"` // COLUMN (default) | JSON_PATH
 	Reason       string            `json:"reason,omitempty"`
 }
 
@@ -86,8 +87,9 @@ func (ed *Editor) Propose(ctx context.Context, a Actor, p Proposal) (*Change, er
 			have[c] = true
 		}
 		for _, f := range sortedKeys(p.Fields) {
-			if !have[p.Fields[f]] {
-				return nil, msgNoColumn(p.StagingTable, p.Fields[f])
+			col := TargetColumn(p.Fields[f])
+			if !have[col] {
+				return nil, msgNoColumn(p.StagingTable, col)
 			}
 		}
 	}
@@ -183,12 +185,13 @@ func (ed *Editor) Decide(ctx context.Context, a Actor, id string, approve bool, 
 				_, err = tx.ExecContext(ctx, `DELETE FROM public.staging_bindings
 					WHERE tenant_id::text = $1 AND bo_id::text = $2 AND staging_table = $3`, a.TenantID, c.BOID, c.StagingTable)
 			} else {
-				_, err = tx.ExecContext(ctx, `INSERT INTO public.staging_bindings (tenant_id, bo_id, staging_table, fields, applied_change_id)
-					VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid)
+				_, err = tx.ExecContext(ctx, `INSERT INTO public.staging_bindings (tenant_id, bo_id, staging_table, fields, source_type, applied_change_id)
+					VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid)
 					ON CONFLICT (tenant_id, bo_id, staging_table) DO UPDATE
-					SET fields = EXCLUDED.fields, applied_change_id = EXCLUDED.applied_change_id,
+					SET fields = EXCLUDED.fields, source_type = EXCLUDED.source_type,
+					    applied_change_id = EXCLUDED.applied_change_id,
 					    version = staging_bindings.version + 1, updated_at = now()`,
-					a.TenantID, c.BOID, c.StagingTable, jsonOrNil(c.Fields, true), id)
+					a.TenantID, c.BOID, c.StagingTable, jsonOrNil(c.Fields, true), inferSourceType(c.Fields), id)
 			}
 			if err != nil {
 				return err
@@ -245,6 +248,15 @@ func ownFields(ctx context.Context, tx *sqlx.Tx, tenantID, boID, table string) (
 	}
 	out := map[string]string{}
 	return out, json.Unmarshal(raw, &out)
+}
+
+func inferSourceType(fields map[string]string) string {
+	for _, v := range fields {
+		if strings.Contains(v, "->>") || strings.Contains(v, "->") {
+			return "JSON_PATH"
+		}
+	}
+	return "COLUMN"
 }
 
 func sameFields(a, b map[string]string) bool {

@@ -262,6 +262,8 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Data Pipelines', path: '/data/pipelines', icon: <AccountTreeIcon />, description: 'Load files and business objects visually', badge: { label: 'New', color: 'success' } },
           { label: 'Staging Bindings', path: '/data/staging-bindings', icon: <AccountTreeIcon />, description: 'Map vendor staging tables to business objects; approvals', badge: { label: 'New', color: 'success' } },
           { label: 'Mastering', path: '/data/mastering', icon: <AccountTreeIcon />, description: 'Golden records, provenance, runs, exceptions and match review', badge: { label: 'New', color: 'success' } },
+          { label: 'Survivorship', path: '/data/survivorship', icon: <AccountTreeIcon />, description: 'Source hierarchy rules by semantic term (GoldenSource / Market EDM / Asset Control)', badge: { label: 'New', color: 'success' } },
+          { label: 'Account Gold', path: '/data/account-gold', icon: <AccountTreeIcon />, description: 'Account gold copy: steward overrides, approvals, publish', badge: { label: 'New', color: 'success' } },
           { label: 'Manage Custom Fields', path: '/catalog/custom-fields', icon: <SchemaIcon />, description: 'Define custom_attributes and map semantic terms' },
         ]
       },
@@ -279,9 +281,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <CheckCircleIcon />,
         items: [
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
-          { label: 'Marketplace', path: '/marketplace', icon: <StoreIcon />, description: 'Components library' },
-          { label: 'UI Components', path: '/marketplace/components', icon: <CodeIcon />, description: 'Component marketplace' },
         ]
       },
       {

@@ -38,11 +38,14 @@ export function defaultConfig(kind: NodeKind): NodeConfigs[NodeKind] {
   switch (kind) {
     case 'file_source': return { uri: '', format: 'csv', has_header: true, columns: [] };
     case 'bo_source': return { bo_key: '', filters: [] };
+    case 'queue_source': return { broker: 'redpanda', topic_or_queue: '', format: 'json', max_messages: 1000, consumer_group: 'uisce-data-pipeline' };
     case 'validate': return { required: [], unique: [] };
     case 'rule_check': return { rule_ids: [] };
     case 'map': return { fields: [] };
     case 'bo_sink': return { bo_key: '', mode: 'create' };
     case 'staging_sink': return { table: '', source_cd: '', domain: '' };
+    case 'master_sink': return { entity_type: 'ACCOUNT', staging_table: 'staging.account_data', batch_size: 100, require_semantic_terms: true };
+    case 'queue_sink': return { broker: 'redpanda', topic_or_queue: '', format: 'json' };
     case 'file_sink': return { uri: '', format: 'csv' };
   }
 }
@@ -53,11 +56,14 @@ export function summarize(n: SpecNode): string {
   switch (n.type) {
     case 'file_source': return c.uri ? `${c.uri} · ${(c.columns ?? []).length} columns` : '';
     case 'bo_source': return c.bo_key ? `${c.bo_key}${c.filters?.length ? ` · ${c.filters.length} filter(s)` : ''}` : '';
+    case 'queue_source': return c.topic_or_queue ? `${c.broker} · ${c.topic_or_queue}` : (c.broker || '');
     case 'validate': return [c.required?.length && `${c.required.length} required`, c.unique?.length && `unique on ${c.unique.join('+')}`].filter(Boolean).join(' · ');
     case 'rule_check': return c.rule_ids?.length ? `${c.rule_ids.length} rule(s)${c.bo_key ? ` of ${c.bo_key}` : ''}` : '';
     case 'map': return c.fields?.length ? `${c.fields.length} field(s) mapped` : '';
     case 'bo_sink': return c.bo_key ? `${c.mode === 'upsert' ? 'update or create' : 'create'} ${c.bo_key}${c.dry_run ? ' (rehearsal)' : ''}` : '';
     case 'staging_sink': return c.table ? `${c.table}${c.source_cd ? ` · ${c.source_cd}/${c.domain}` : ''}` : '';
+    case 'master_sink': return c.entity_type ? `master ${c.entity_type}${c.staging_table ? ` ← ${c.staging_table}` : ''}` : '';
+    case 'queue_sink': return c.topic_or_queue ? `${c.broker} · ${c.topic_or_queue}` : (c.broker || '');
     case 'file_sink': return c.uri ? `${c.uri} (${c.format})` : '';
   }
   return '';

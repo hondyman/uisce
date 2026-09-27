@@ -9,6 +9,9 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import InboxIcon from '@mui/icons-material/Inbox';
+import OutboxIcon from '@mui/icons-material/Outbox';
 import type { NodeKind, NodeStats } from './api';
 
 /** One colour per category, shared by the canvas nodes and the palette. */
@@ -20,11 +23,14 @@ export function categoryColor(theme: Theme, category: 'source' | 'step' | 'desti
 export const NODE_META: Record<NodeKind, { icon: React.ReactElement; category: 'source' | 'step' | 'destination' }> = {
   file_source: { icon: <InsertDriveFileIcon fontSize="small" />, category: 'source' },
   bo_source: { icon: <BusinessIcon fontSize="small" />, category: 'source' },
+  queue_source: { icon: <InboxIcon fontSize="small" />, category: 'source' },
   validate: { icon: <FactCheckIcon fontSize="small" />, category: 'step' },
   rule_check: { icon: <GavelIcon fontSize="small" />, category: 'step' },
   map: { icon: <SwapHorizIcon fontSize="small" />, category: 'step' },
   bo_sink: { icon: <BusinessIcon fontSize="small" />, category: 'destination' },
   staging_sink: { icon: <TableChartIcon fontSize="small" />, category: 'destination' },
+  master_sink: { icon: <AccountTreeIcon fontSize="small" />, category: 'destination' },
+  queue_sink: { icon: <OutboxIcon fontSize="small" />, category: 'destination' },
   file_sink: { icon: <FileDownloadIcon fontSize="small" />, category: 'destination' },
 };
 

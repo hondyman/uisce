@@ -89,6 +89,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/simulation"
 	"github.com/hondyman/uisce/backend/internal/streaming"
 	"github.com/hondyman/uisce/backend/internal/succession"
+	"github.com/hondyman/uisce/backend/internal/survivorship"
 	"github.com/hondyman/uisce/backend/internal/taxplan"
 	"github.com/hondyman/uisce/backend/internal/telemetry/optimize"
 	temporal "github.com/hondyman/uisce/backend/internal/temporal"
@@ -1640,6 +1641,7 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		RegisterLookupsRoutes(r, db)
 
 		attribute.NewHandler(sqlxDB, attribute.AlphaValueDB{DB: sqlxDB}).RegisterRoutes(r)
+		survivorship.NewHandler(sqlxDB).RegisterRoutes(r)
 
 		upgradeSvc := upgrade.NewService(sqlxDB, handlers.SecurityContextDeps{})
 		impactEngine := upgrade.NewImpactEngine(sqlxDB)

@@ -77,7 +77,11 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	includeInactive := r.URL.Query().Get("include_inactive") == "true"
-	defs, err := h.svc.List(r.Context(), tenantID, entityType, includeInactive)
+	appliesTo := r.URL.Query().Get("account_type")
+	if appliesTo == "" {
+		appliesTo = r.URL.Query().Get("applies_to_type")
+	}
+	defs, err := h.svc.List(r.Context(), tenantID, entityType, includeInactive, appliesTo)
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
@@ -171,11 +175,12 @@ func (h *Handler) Preview(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	req := PreviewRequest{
-		TenantID:   tenantID,
-		EntityType: q.Get("entity_type"),
-		TableRef:   q.Get("table_ref"),
-		OrderBy:    q.Get("order_by"),
-		Limit:      50,
+		TenantID:    tenantID,
+		EntityType:  q.Get("entity_type"),
+		TableRef:    q.Get("table_ref"),
+		OrderBy:     q.Get("order_by"),
+		AccountType: q.Get("account_type"),
+		Limit:       50,
 	}
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)

@@ -2,14 +2,16 @@ import React, { useMemo } from 'react';
 import {
   Box,
   Button,
-  Chip,
   List,
   ListItemButton,
+  ListItemIcon,
   ListItemText,
   Typography,
   Divider,
+  Stack,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import { CoreIcon, CustomIcon } from '../../../components/common/CoreCustomIcons';
 import type { AttributeDef } from '../types';
 
 interface FieldListProps {
@@ -17,6 +19,10 @@ interface FieldListProps {
   selectedId?: string | null;
   onSelect: (field: AttributeDef) => void;
   onAdd: () => void;
+}
+
+function isCoreOrigin(field: AttributeDef): boolean {
+  return (field.origin || '').toUpperCase() === 'CORE';
 }
 
 export function FieldList({ fields, selectedId, onSelect, onAdd }: FieldListProps) {
@@ -36,9 +42,19 @@ export function FieldList({ fields, selectedId, onSelect, onAdd }: FieldListProp
         <Typography variant="subtitle2" color="text.secondary">
           CUSTOM FIELDS
         </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {fields.length} definition{fields.length === 1 ? '' : 's'}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            {fields.length} definition{fields.length === 1 ? '' : 's'}
+          </Typography>
+          <CustomIcon fontSize="small" />
+          <Typography variant="caption" color="text.secondary">
+            = tenant custom
+          </Typography>
+          <CoreIcon fontSize="small" />
+          <Typography variant="caption" color="text.secondary">
+            = core
+          </Typography>
+        </Stack>
       </Box>
       <Divider />
       <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -51,28 +67,31 @@ export function FieldList({ fields, selectedId, onSelect, onAdd }: FieldListProp
               {section}
             </Typography>
             <List dense disablePadding>
-              {items.map((field) => (
-                <ListItemButton
-                  key={field.id}
-                  selected={selectedId === field.id}
-                  onClick={() => onSelect(field)}
-                  sx={{ px: 2 }}
-                >
-                  <ListItemText
-                    primary={field.name}
-                    secondary={field.field_cd}
-                    primaryTypographyProps={{ variant: 'body2' }}
-                    secondaryTypographyProps={{ variant: 'caption' }}
-                  />
-                  <Chip
-                    size="small"
-                    label={field.origin === 'CORE' ? 'Core' : 'Custom'}
-                    color={field.origin === 'CORE' ? 'warning' : 'info'}
-                    variant="outlined"
-                    sx={{ ml: 1 }}
-                  />
-                </ListItemButton>
-              ))}
+              {items.map((field) => {
+                const core = isCoreOrigin(field);
+                return (
+                  <ListItemButton
+                    key={field.id}
+                    selected={selectedId === field.id}
+                    onClick={() => onSelect(field)}
+                    sx={{ px: 2 }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 32 }}>
+                      {core ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={field.name}
+                      secondary={
+                        field.semantic_term_id
+                          ? `${field.field_cd} · linked to semantic term`
+                          : field.field_cd
+                      }
+                      primaryTypographyProps={{ variant: 'body2' }}
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </ListItemButton>
+                );
+              })}
             </List>
           </Box>
         ))}

@@ -61,6 +61,7 @@ export function NodeConfigPanel(props: NodeConfigPanelProps) {
       <Divider />
       {node.type === 'file_source' && <FileSourceForm cfg={cfg} set={set} />}
       {node.type === 'bo_source' && <BOSourceForm cfg={cfg} set={set} />}
+      {node.type === 'queue_source' && <QueueSourceForm cfg={cfg} set={set} />}
       {node.type === 'validate' && <ValidateForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'rule_check' && <RuleCheckForm cfg={cfg} set={set} />}
       {node.type === 'map' && (
@@ -68,6 +69,8 @@ export function NodeConfigPanel(props: NodeConfigPanelProps) {
       )}
       {node.type === 'bo_sink' && <BOSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'staging_sink' && <StagingSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
+      {node.type === 'master_sink' && <MasterSinkForm cfg={cfg} set={set} />}
+      {node.type === 'queue_sink' && <QueueSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'file_sink' && <FileSinkForm cfg={cfg} set={set} />}
     </Stack>
   );
@@ -486,6 +489,123 @@ function StagingSinkForm({ cfg, set, fields }: FormProps<'staging_sink'> & { fie
           </Table>
         </Box>
       )}
+    </Stack>
+  );
+}
+
+const QUEUE_BROKERS = [
+  { v: 'redpanda', l: 'Redpanda / Kafka' },
+  { v: 'kafka', l: 'Kafka' },
+  { v: 'aws_sqs', l: 'AWS SQS' },
+  { v: 'azure_servicebus', l: 'Azure Service Bus' },
+] as const;
+
+function QueueSourceForm({ cfg, set }: FormProps<'queue_source'>) {
+  return (
+    <Stack spacing={2}>
+      <Hint>
+        Pull a bounded batch from a message queue. Broker credentials come from environment variables
+        (KAFKA_BROKERS, AWS credentials / AWS_SQS_QUEUE_URL, AZURE_SERVICEBUS_CONNECTION_STRING) — never from this Spec.
+      </Hint>
+      <TextField select size="small" label="Broker" value={cfg.broker ?? 'redpanda'}
+        onChange={e => set({ broker: e.target.value as never })}>
+        {QUEUE_BROKERS.map(b => <MenuItem key={b.v} value={b.v}>{b.l}</MenuItem>)}
+      </TextField>
+      <TextField size="small" label="Topic / queue" value={cfg.topic_or_queue ?? ''}
+        onChange={e => set({ topic_or_queue: e.target.value })}
+        helperText={cfg.broker === 'aws_sqs' ? 'SQS queue URL, or leave blank and set AWS_SQS_QUEUE_URL' : 'Kafka topic or Azure queue name'} />
+      {(cfg.broker === 'kafka' || cfg.broker === 'redpanda') && (
+        <TextField size="small" label="Consumer group" value={cfg.consumer_group ?? ''}
+          onChange={e => set({ consumer_group: e.target.value || undefined })} />
+      )}
+      <Stack direction="row" spacing={1}>
+        <TextField size="small" type="number" label="Max messages" value={cfg.max_messages ?? 1000}
+          onChange={e => set({ max_messages: Number(e.target.value) || 1000 })} />
+        <TextField size="small" type="number" label="Idle timeout (ms)" value={cfg.idle_timeout_ms ?? 3000}
+          onChange={e => set({ idle_timeout_ms: Number(e.target.value) || 3000 })} />
+      </Stack>
+      {cfg.broker === 'aws_sqs' && (
+        <TextField size="small" label="AWS region" value={cfg.region ?? ''}
+          onChange={e => set({ region: e.target.value || undefined })} placeholder="us-east-1" />
+      )}
+    </Stack>
+  );
+}
+
+function QueueSinkForm({ cfg, set, fields }: FormProps<'queue_sink'> & { fields: Column[] }) {
+  return (
+    <Stack spacing={2}>
+      <Hint>Publish each row as a JSON message. Credentials come from environment variables, never from this Spec.</Hint>
+      <TextField select size="small" label="Broker" value={cfg.broker ?? 'redpanda'}
+        onChange={e => set({ broker: e.target.value as never })}>
+        {QUEUE_BROKERS.map(b => <MenuItem key={b.v} value={b.v}>{b.l}</MenuItem>)}
+      </TextField>
+      <TextField size="small" label="Topic / queue" value={cfg.topic_or_queue ?? ''}
+        onChange={e => set({ topic_or_queue: e.target.value })} />
+      {(cfg.broker === 'kafka' || cfg.broker === 'redpanda') && (
+        <TextField select size="small" label="Partition key field (optional)" value={cfg.key_field ?? ''}
+          onChange={e => set({ key_field: e.target.value || undefined })}>
+          <MenuItem value=""><em>none</em></MenuItem>
+          {fields.map(f => <MenuItem key={f.name} value={f.name}>{f.name}</MenuItem>)}
+        </TextField>
+      )}
+      {cfg.broker === 'aws_sqs' && (
+        <TextField size="small" label="AWS region" value={cfg.region ?? ''}
+          onChange={e => set({ region: e.target.value || undefined })} placeholder="us-east-1" />
+      )}
+      <FormControlLabel
+        control={<Checkbox checked={!!cfg.dry_run} onChange={e => set({ dry_run: e.target.checked })} />}
+        label="Rehearsal only (do not publish)"
+      />
+    </Stack>
+  );
+}
+
+function MasterSinkForm({ cfg, set }: FormProps<'master_sink'>) {
+  return (
+    <Stack spacing={2}>
+      <Hint>
+        Promote pending staging rows into the MDM master using semantic-term source hierarchy
+        (GoldenSource / Market EDM / Asset Control). Configure rules under Build → Data → Survivorship.
+        Inbound rows only trigger the batch — content is read from staging.
+      </Hint>
+      <TextField
+        select size="small" label="Entity" value={cfg.entity_type ?? 'ACCOUNT'}
+        onChange={e => {
+          const entity_type = e.target.value;
+          const staging_table =
+            entity_type === 'SECURITY' ? 'staging.security_data'
+              : entity_type === 'PARTY' ? 'staging.party_data'
+                : 'staging.account_data';
+          set({ entity_type, staging_table });
+        }}
+      >
+        <MenuItem value="ACCOUNT">ACCOUNT</MenuItem>
+        <MenuItem value="SECURITY">SECURITY</MenuItem>
+        <MenuItem value="PARTY">PARTY</MenuItem>
+      </TextField>
+      <TextField
+        size="small" label="Staging table" value={cfg.staging_table ?? 'staging.account_data'}
+        onChange={e => set({ staging_table: e.target.value })}
+        helperText="Must be staging.<name>"
+      />
+      <TextField
+        size="small" type="number" label="Batch size" value={cfg.batch_size ?? 100}
+        onChange={e => set({ batch_size: Number(e.target.value) || 100 })}
+      />
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={cfg.require_semantic_terms !== false}
+            onChange={e => set({ require_semantic_terms: e.target.checked })}
+          />
+        }
+        label="Require semantic term bindings (warn when unbound)"
+      />
+      <FormControlLabel
+        control={<Checkbox checked={!!cfg.dry_run} onChange={e => set({ dry_run: e.target.checked })} />}
+        label="Rehearsal only (do not write masters)"
+      />
     </Stack>
   );
 }

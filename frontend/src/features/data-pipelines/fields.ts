@@ -33,6 +33,8 @@ export function fieldsOut(spec: Spec, id: string, lookup: SourceFieldLookup, see
     }
     case 'bo_source':
       return lookup(node) ?? [];
+    case 'queue_source':
+      return lookup(node) ?? [];
     case 'map': {
       const cfg = node.config as { fields?: { from: string; to: string; transform?: string }[]; keep_unmapped?: boolean };
       const inCols = fieldsIn(spec, id, lookup, seen);
@@ -76,7 +78,7 @@ export function downstreamSink(spec: Spec, id: string): SpecNode | undefined {
     const n = queue.shift()!;
     if (seen.has(n.id)) continue;
     seen.add(n.id);
-    if (n.type === 'bo_sink' || n.type === 'staging_sink' || n.type === 'file_sink') return n;
+    if (n.type === 'bo_sink' || n.type === 'staging_sink' || n.type === 'master_sink' || n.type === 'queue_sink' || n.type === 'file_sink') return n;
     if (n.type !== 'map') queue.push(...childrenOf(spec, n.id));
   }
   return undefined;

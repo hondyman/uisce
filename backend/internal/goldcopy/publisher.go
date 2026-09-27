@@ -117,6 +117,60 @@ func (p *Publisher) PublishPortfolioMasterGoldCopy(
 	return nil
 }
 
+// PublishAccountMasterGoldCopy emits a gold copy event for an account master record.
+func (p *Publisher) PublishAccountMasterGoldCopy(
+	ctx context.Context,
+	rec *AccountMasterRecord,
+	changeType string,
+	changeReason string,
+	publishedBy string,
+	correlationID string,
+) error {
+	dataHash := hashData(rec)
+	evt := &GoldCopyEvent{
+		EventID:       fmt.Sprintf("%s-gold.copy.account.%s-%d", rec.ID, changeType, time.Now().UnixMilli()),
+		EventType:     fmt.Sprintf("gold.copy.account.%s", changeType),
+		PublishedAt:   time.Now(),
+		PublishedBy:   publishedBy,
+		TenantID:      rec.TenantID,
+		EntityType:    "account",
+		EntityID:      rec.ID,
+		EntityKey:     rec.AccountCd,
+		Version:       rec.GoldVersion,
+		SemanticLayer: "account-master",
+		Data:          rec,
+		DataHash:      dataHash,
+		SchemaVersion: "1.0",
+		ChangeType:    changeType,
+		ChangeReason:  changeReason,
+		CorrelationID: correlationID,
+		Metadata: map[string]interface{}{
+			"confidence_score": rec.ConfidenceScore,
+			"account_type_cd":  rec.AccountTypeCd,
+			"semantic_path":    []string{"Account", "Party", "Mandate"},
+		},
+	}
+	payload, err := json.Marshal(evt)
+	if err != nil {
+		return fmt.Errorf("goldcopy publisher: marshal account event: %w", err)
+	}
+	msg := kafka.Message{
+		Key:   []byte(fmt.Sprintf("%s.account.%s", rec.TenantID, changeType)),
+		Value: payload,
+		Headers: []kafka.Header{
+			{Key: "entity_type", Value: []byte("account")},
+			{Key: "entity_id", Value: []byte(rec.ID.String())},
+			{Key: "tenant_id", Value: []byte(rec.TenantID.String())},
+			{Key: "event_type", Value: []byte(evt.EventType)},
+			{Key: "schema_version", Value: []byte("1.0")},
+		},
+	}
+	if err := p.writer.WriteMessages(ctx, msg); err != nil {
+		return fmt.Errorf("goldcopy publisher: write account message: %w", err)
+	}
+	return nil
+}
+
 // PublishGoldCopyRunResult emits a summary event for a completed gold copy build run.
 func (p *Publisher) PublishGoldCopyRunResult(ctx context.Context, result *GoldCopyRunResult) error {
 	payload, err := json.Marshal(map[string]interface{}{

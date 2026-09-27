@@ -50,6 +50,13 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest, valueDB Value
 			args = append(args, req.TableRef)
 			q += fmt.Sprintf(` AND table_ref = $%d`, len(args))
 		}
+		if req.AccountType != "" {
+			args = append(args, `["`+strings.ReplaceAll(req.AccountType, `"`, ``)+`"]`)
+			q += fmt.Sprintf(` AND (
+				jsonb_array_length(COALESCE(applies_to_types, '[]'::jsonb)) = 0
+				OR COALESCE(applies_to_types, '[]'::jsonb) @> $%d::jsonb
+			)`, len(args))
+		}
 		q += ` ORDER BY display_order, field_cd`
 
 		rows, err := tx.QueryxContext(ctx, q, args...)
@@ -74,6 +81,9 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest, valueDB Value
 	}
 	if tableRef == "" {
 		tableRef = req.TableRef
+	}
+	if tableRef == "" && strings.EqualFold(req.EntityType, "ACCOUNT") {
+		tableRef = "mdm.account_master"
 	}
 	if tableRef == "" {
 		return nil, fmt.Errorf("%w: could not resolve table_ref", ErrInvalidInput)
@@ -123,11 +133,28 @@ func (s *Service) Preview(ctx context.Context, req PreviewRequest, valueDB Value
 	if err != nil {
 		return nil, err
 	}
+	if result == nil {
+		result = []map[string]any{}
+	}
 
-	total, _ := countPreviewRows(ctx, conn, tableRef, req.TenantID)
+	hasTenantID := false
+	hasAccountType := false
+	for _, c := range coreCols {
+		if strings.EqualFold(c.Name, "tenant_id") {
+			hasTenantID = true
+		}
+		if strings.EqualFold(c.Name, "account_type_cd") {
+			hasAccountType = true
+		}
+	}
+	total, _ := countPreviewRows(ctx, conn, tableRef, req.TenantID, hasTenantID, req.AccountType, hasAccountType)
+	columns := buildColumnMeta(defs, coreCols)
+	if columns == nil {
+		columns = []ColumnMeta{}
+	}
 
 	return &PreviewResponse{
-		Columns: buildColumnMeta(defs, coreCols),
+		Columns: columns,
 		Rows:    result,
 		Total:   total,
 		Showing: len(result),
@@ -162,6 +189,14 @@ func loadCoreColumns(ctx context.Context, db *sqlx.DB, tableRef string) ([]CoreC
 	return cols, rows.Err()
 }
 
+func coreColumnSet(coreCols []CoreColumn) map[string]bool {
+	out := make(map[string]bool, len(coreCols))
+	for _, c := range coreCols {
+		out[strings.ToLower(c.Name)] = true
+	}
+	return out
+}
+
 func buildPreviewQuery(
 	req PreviewRequest,
 	tableRef string,
@@ -173,6 +208,7 @@ func buildPreviewQuery(
 		return "", nil, err
 	}
 	alias := "t"
+	cols := coreColumnSet(coreCols)
 	var selectExprs []string
 	for _, c := range coreCols {
 		ident, err := quoteIdent(c.Name)
@@ -192,8 +228,26 @@ func buildPreviewQuery(
 		return "", nil, fmt.Errorf("no columns to select")
 	}
 
-	args := []any{req.TenantID, req.Limit, req.Offset}
-	orderBy := fmt.Sprintf("%s.created_at DESC", alias)
+	var args []any
+	whereParts := []string{"TRUE"}
+	if cols["tenant_id"] {
+		args = append(args, req.TenantID)
+		whereParts = []string{fmt.Sprintf("%s.tenant_id = $%d", alias, len(args))}
+	}
+	if req.AccountType != "" && cols["account_type_cd"] {
+		args = append(args, req.AccountType)
+		whereParts = append(whereParts, fmt.Sprintf("%s.account_type_cd = $%d", alias, len(args)))
+	}
+	where := strings.Join(whereParts, " AND ")
+
+	orderBy := "1"
+	for _, candidate := range []string{"updated_at", "created_at", "id"} {
+		if cols[candidate] {
+			ident, _ := quoteIdent(candidate)
+			orderBy = fmt.Sprintf("%s.%s DESC", alias, ident)
+			break
+		}
+	}
 	if req.OrderBy != "" {
 		parts := strings.Fields(req.OrderBy)
 		col := parts[0]
@@ -201,32 +255,51 @@ func buildPreviewQuery(
 		if len(parts) > 1 && strings.EqualFold(parts[1], "DESC") {
 			dir = "DESC"
 		}
-		if ident, err := quoteIdent(col); err == nil {
-			orderBy = fmt.Sprintf("%s.%s %s", alias, ident, dir)
+		if cols[strings.ToLower(col)] {
+			if ident, err := quoteIdent(col); err == nil {
+				orderBy = fmt.Sprintf("%s.%s %s", alias, ident, dir)
+			}
 		}
 	}
+
+	args = append(args, req.Limit, req.Offset)
+	limitIdx := len(args) - 1
+	offsetIdx := len(args)
 
 	query := fmt.Sprintf(`
 		SELECT %s
 		FROM %s %s
-		WHERE %s.tenant_id = $1
+		WHERE %s
 		ORDER BY %s
-		LIMIT $2 OFFSET $3`,
+		LIMIT $%d OFFSET $%d`,
 		strings.Join(selectExprs, ", "),
-		tblSQL, alias, alias, orderBy,
+		tblSQL, alias,
+		where,
+		orderBy,
+		limitIdx, offsetIdx,
 	)
 	return query, args, nil
 }
 
-func countPreviewRows(ctx context.Context, conn *sqlx.Conn, tableRef string, tenantID uuid.UUID) (int64, error) {
+func countPreviewRows(ctx context.Context, conn *sqlx.Conn, tableRef string, tenantID uuid.UUID, hasTenantID bool, accountType string, hasAccountType bool) (int64, error) {
 	tblSQL, err := safeTableSQL(tableRef)
 	if err != nil {
 		return 0, err
 	}
+	where := []string{"TRUE"}
+	args := []any{}
+	if hasTenantID {
+		args = append(args, tenantID)
+		where = []string{fmt.Sprintf("t.tenant_id = $%d", len(args))}
+	}
+	if accountType != "" && hasAccountType {
+		args = append(args, accountType)
+		where = append(where, fmt.Sprintf("t.account_type_cd = $%d", len(args)))
+	}
 	var n int64
 	err = conn.QueryRowContext(ctx,
-		fmt.Sprintf(`SELECT count(*) FROM %s t WHERE t.tenant_id = $1`, tblSQL),
-		tenantID,
+		fmt.Sprintf(`SELECT count(*) FROM %s t WHERE %s`, tblSQL, strings.Join(where, " AND ")),
+		args...,
 	).Scan(&n)
 	return n, err
 }
@@ -236,7 +309,7 @@ func scanRowsAsMaps(rows *sqlx.Rows) ([]map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	var result []map[string]any
+	result := make([]map[string]any, 0)
 	for rows.Next() {
 		raw := make([]any, len(cols))
 		ptrs := make([]any, len(cols))

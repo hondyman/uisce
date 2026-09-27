@@ -10,12 +10,15 @@ import {
   Alert,
 } from '@mui/material';
 import { Info as InfoIcon } from '@mui/icons-material';
-import type { BusinessObject } from '../../types/entity-schema';
+interface SubtypeDialogBusinessObject {
+  displayName?: string;
+  driverTableName?: string;
+}
 
 interface SubtypeDialogProps {
   open: boolean;
   mode: 'add' | 'edit';
-  businessObject: BusinessObject | null;
+  businessObject: SubtypeDialogBusinessObject | null;
   editingSubtypeKey: string | null;
   subtypeDisplayName: string;
   subtypeName: string;
@@ -90,7 +93,13 @@ export function SubtypeDialog({
             variant="outlined"
           />
           <Alert severity="info" icon={<InfoIcon />}>
-            Subtypes inherit all core fields from {businessObject?.displayName} and can have their own additional fields.
+            Subtypes inherit the driving table and binding from {businessObject?.displayName || 'the parent'}
+            {businessObject?.driverTableName ? (
+              <>
+                {' '}(<code>{businessObject.driverTableName}</code>)
+              </>
+            ) : null}
+            , with an STI filter on <code>subtype_code</code> equal to the technical name. They also inherit core fields and can add their own.
           </Alert>
         </Stack>
       </DialogContent>

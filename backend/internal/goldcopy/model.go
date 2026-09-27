@@ -6,6 +6,39 @@ import (
 	"github.com/google/uuid"
 )
 
+// ─── Account Master ───────────────────────────────────────────────────────────
+
+// AccountMasterRecord is the gold-copy payload published for an Account.
+type AccountMasterRecord struct {
+	ID               uuid.UUID         `json:"id"`
+	TenantID         uuid.UUID         `json:"tenant_id"`
+	AccountCd        string            `json:"account_cd"`
+	AccountName      string            `json:"account_name"`
+	AccountTypeCd    string            `json:"account_type_cd"`
+	StatusCd         string            `json:"status_cd"`
+	BaseCurrency     string            `json:"base_currency,omitempty"`
+	Domicile         string            `json:"domicile,omitempty"`
+	CustomAttributes map[string]any    `json:"custom_attributes,omitempty"`
+	SourceSystems    map[string]string `json:"source_systems"`
+	ConfidenceScore  int               `json:"confidence_score"`
+	GoldVersion      int               `json:"gold_version"`
+	ValidFrom        time.Time         `json:"valid_from"`
+	ValidTo          *time.Time        `json:"valid_to,omitempty"`
+}
+
+// AccountFieldOverride is a steward override awaiting or granted approval.
+type AccountFieldOverride struct {
+	ID             uuid.UUID  `db:"id" json:"id"`
+	TenantID       uuid.UUID  `db:"tenant_id" json:"tenant_id"`
+	AccountCd      string     `db:"account_cd" json:"account_cd"`
+	SemanticTermID *uuid.UUID `db:"semantic_term_id" json:"semantic_term_id,omitempty"`
+	FieldCd        string     `db:"field_cd" json:"field_cd"`
+	OverrideValue  string     `db:"override_value" json:"override_value"`
+	Reason         string     `db:"reason" json:"reason"`
+	ApprovalStatus string     `db:"approval_status" json:"approval_status"`
+	ExpiresAt      *time.Time `db:"expires_at" json:"expires_at,omitempty"`
+}
+
 // ─── Portfolio Master ─────────────────────────────────────────────────────────
 
 // PortfolioMasterRecord is the full institutional portfolio metadata gold copy.

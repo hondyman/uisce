@@ -1,20 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Autocomplete,
   Box,
   Button,
+  CircularProgress,
   Divider,
   FormControl,
   FormControlLabel,
   InputLabel,
   MenuItem,
   Select,
+  Stack,
   Switch,
   TextField,
   Typography,
   Alert,
 } from '@mui/material';
+import { CoreIcon, CustomIcon } from '../../../components/common/CoreCustomIcons';
+import { apiFetch } from '../../../lib/apiClient';
 import type { AttributeDef, UpdateAttributeInput } from '../types';
-// UpdateAttributeInput used by save patch
 
 const DATA_TYPES = [
   'string',
@@ -26,12 +30,44 @@ const DATA_TYPES = [
   'json',
 ];
 
+interface SemanticTermOption {
+  id: string;
+  name: string;
+  displayName?: string;
+}
+
 interface FieldEditorProps {
   field: AttributeDef | null;
   saving?: boolean;
   error?: string | null;
   onSave: (id: string, patch: UpdateAttributeInput) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+}
+
+function isCoreOrigin(field: AttributeDef): boolean {
+  return (field.origin || '').toUpperCase() === 'CORE';
+}
+
+async function searchSemanticTerms(query: string): Promise<SemanticTermOption[]> {
+  if (!query || query.trim().length < 2) return [];
+  try {
+    const res = await apiFetch('/api/semantic-terms/search', {
+      method: 'POST',
+      body: JSON.stringify({ query: query.trim(), limit: 20 }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const rows = Array.isArray(data) ? data : data.results || data.terms || data.items || [];
+    return rows
+      .map((t: any) => ({
+        id: String(t.id || t.node_id || t.term_id || ''),
+        name: String(t.name || t.term_name || t.node_name || t.display_name || ''),
+        displayName: t.display_name || t.displayName || t.name || t.term_name,
+      }))
+      .filter((t: SemanticTermOption) => t.id && t.name);
+  } catch {
+    return [];
+  }
 }
 
 export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEditorProps) {
@@ -42,7 +78,10 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
   const [isRequired, setIsRequired] = useState(false);
   const [isSearchable, setIsSearchable] = useState(true);
   const [picklistText, setPicklistText] = useState('');
-  const [semanticTermId, setSemanticTermId] = useState('');
+  const [semanticTerm, setSemanticTerm] = useState<SemanticTermOption | null>(null);
+  const [termOptions, setTermOptions] = useState<SemanticTermOption[]>([]);
+  const [termQuery, setTermQuery] = useState('');
+  const [termLoading, setTermLoading] = useState(false);
   const [dirty, setDirty] = useState(false);
 
   useEffect(() => {
@@ -54,21 +93,49 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
     setIsRequired(field.is_required);
     setIsSearchable(field.is_searchable);
     setPicklistText((field.picklist_values || []).join('\n'));
-    setSemanticTermId(field.semantic_term_id || '');
+    if (field.semantic_term_id) {
+      setSemanticTerm({
+        id: field.semantic_term_id,
+        name: field.semantic_term_name || field.semantic_term_id,
+        displayName: field.semantic_term_name || undefined,
+      });
+    } else {
+      setSemanticTerm(null);
+    }
     setDirty(false);
   }, [field]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (termQuery.trim().length < 2) {
+      setTermOptions(semanticTerm ? [semanticTerm] : []);
+      return;
+    }
+    setTermLoading(true);
+    const handle = window.setTimeout(async () => {
+      const opts = await searchSemanticTerms(termQuery);
+      if (!cancelled) {
+        setTermOptions(opts);
+        setTermLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [termQuery, semanticTerm]);
+
+  const isCore = useMemo(() => (field ? isCoreOrigin(field) : false), [field]);
 
   if (!field) {
     return (
       <Box sx={{ p: 2 }}>
         <Typography color="text.secondary">
-          Select a field to edit its definition.
+          Select a field to edit its definition and link a semantic term.
         </Typography>
       </Box>
     );
   }
-
-  const isCore = field.origin === 'CORE';
 
   const handleSave = async () => {
     const picklist_values = picklistText
@@ -88,11 +155,10 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
       is_searchable: isSearchable,
       picklist_values: dataType === 'enum' || picklist_values.length ? picklist_values : [],
     };
-    const trimmedTerm = semanticTermId.trim();
-    if (!trimmedTerm && field.semantic_term_id) {
+    if (!semanticTerm && field.semantic_term_id) {
       patch.clear_semantic_term = true;
-    } else if (trimmedTerm) {
-      patch.semantic_term_id = trimmedTerm;
+    } else if (semanticTerm?.id) {
+      patch.semantic_term_id = semanticTerm.id;
     }
     await onSave(field.id, patch);
     setDirty(false);
@@ -101,11 +167,15 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       <Box sx={{ px: 2, py: 1.5 }}>
-        <Typography variant="subtitle1" fontWeight={600}>
-          {field.name}
-        </Typography>
+        <Stack direction="row" spacing={1} alignItems="center">
+          {isCore ? <CoreIcon fontSize="small" /> : <CustomIcon fontSize="small" />}
+          <Typography variant="subtitle1" fontWeight={600}>
+            {field.name}
+          </Typography>
+        </Stack>
         <Typography variant="caption" color="text.secondary">
-          {field.field_cd} · {field.origin || 'CUSTOM'}
+          {field.field_cd} · {isCore ? 'Core' : 'Custom'}
+          {field.semantic_term_id ? ' · semantic term linked' : ''}
         </Typography>
       </Box>
       <Divider />
@@ -113,7 +183,6 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
         {isCore && (
           <Alert severity="info">
             Core definitions are shared. Soft-delete and edits apply only to tenant-owned copies.
-            Create a tenant override by adding a field with the same code if needed.
           </Alert>
         )}
         {error && <Alert severity="error">{error}</Alert>}
@@ -224,39 +293,46 @@ export function FieldEditor({ field, saving, error, onSave, onDelete }: FieldEdi
           minRows={3}
         />
 
-        <TextField
-          label="Semantic Term ID"
-          value={semanticTermId}
-          onChange={(e) => {
-            setSemanticTermId(e.target.value);
+        <Autocomplete
+          options={termOptions}
+          loading={termLoading}
+          value={semanticTerm}
+          disabled={isCore}
+          filterOptions={(x) => x}
+          getOptionLabel={(o) => o.displayName || o.name || o.id}
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          onChange={(_, value) => {
+            setSemanticTerm(value);
             setDirty(true);
           }}
-          disabled={isCore}
-          fullWidth
-          size="small"
-          helperText="catalog_node id for the semantic term. BO fields using this term resolve to custom_attributes->>'field_cd'."
-          placeholder="uuid of semantic_term node"
+          onInputChange={(_, value, reason) => {
+            if (reason === 'input') setTermQuery(value);
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Semantic Term"
+              size="small"
+              helperText="Search and link a glossary semantic term. BO fields using this term resolve to custom_attributes->>'field_cd'."
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {termLoading ? <CircularProgress color="inherit" size={16} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
         />
-        {field.semantic_term_id && (
-          <Typography variant="caption" color="text.secondary">
-            Bound term: {field.semantic_term_name || field.semantic_term_id}
-          </Typography>
-        )}
       </Box>
       <Divider />
       <Box sx={{ p: 1.5, display: 'flex', gap: 1 }}>
-        <Button
-          variant="contained"
-          disabled={!dirty || saving || isCore}
-          onClick={handleSave}
-        >
+        <Button variant="contained" disabled={!dirty || saving || isCore} onClick={handleSave}>
           Save
         </Button>
-        <Button
-          color="error"
-          disabled={saving || isCore}
-          onClick={() => onDelete(field.id)}
-        >
+        <Button color="error" disabled={saving || isCore} onClick={() => onDelete(field.id)}>
           Deactivate
         </Button>
       </Box>

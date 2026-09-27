@@ -22,6 +22,7 @@ export interface AttributeDef {
   origin?: 'CORE' | 'CUSTOM' | string;
   semantic_term_id?: string | null;
   semantic_term_name?: string;
+  applies_to_types?: string[];
   created_at?: string;
   updated_at?: string;
 }

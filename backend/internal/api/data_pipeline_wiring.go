@@ -31,8 +31,13 @@ import (
 // (task queue datapipeline.TaskQueue) that shares these dependencies.
 func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *BOCRUDHandler) {
 	deps := datapipeline.Deps{
-		Rules: &datapipeline.CatalogRuleChecker{Rules: analytics.NewValidationRuleService(sqlxDB)}, // execution path
-		BO:    NewPipelineBOClient(bo),
+		Rules:   &datapipeline.CatalogRuleChecker{Rules: analytics.NewValidationRuleService(sqlxDB)}, // execution path
+		BO:      NewPipelineBOClient(bo),
+		AlphaDB: sqlxDB.DB, // control plane (attribute_def, semantic survivorship)
+		Queues: datapipeline.EnvQueueBroker{
+			SQS:   datapipeline.SQSQueueBroker{},
+			Azure: datapipeline.AzureServiceBusBroker{},
+		},
 	}
 	if u := os.Getenv("DATAPIPELINE_ENGINE_URL"); u != "" {
 		deps.Files = &datapipeline.HTTPFileEngine{BaseURL: u, Token: os.Getenv("DATAPIPELINE_ENGINE_TOKEN")}
@@ -45,6 +50,8 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 			log.Printf("[data-pipelines] staging database: %v (staging loads disabled)", err)
 		} else {
 			deps.StagingDB = db
+			// Account gold-copy / overrides share the tenant data plane.
+			NewAccountGoldHandler(sqlx.NewDb(db, "postgres")).RegisterRoutes(r)
 		}
 	} else {
 		log.Printf("[data-pipelines] DATAPIPELINE_STAGING_DSN not set: staging loads are disabled")

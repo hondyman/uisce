@@ -147,7 +147,7 @@ func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string
 		return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration", boID, backendID)
 	}
 
-	targetDB, err := connectToDatabaseFromDetails(ctx, connectionDetails)
+	targetDB, err := ConnectToDatabaseFromDetails(ctx, connectionDetails)
 	if err != nil {
 		return nil, fmt.Errorf("business object %s: cannot connect to its datasource %s: %w", boID, backendID, err)
 	}
@@ -330,7 +330,9 @@ func toInt(v interface{}) int {
 // BUSINESS OBJECT OPERATIONS (Central DB)
 // ============================================================================
 
-// CreateBusinessObject creates a new BO
+// CreateBusinessObject creates a new BO. When ParentID is set (Studio "Add New
+// Subtype"), the child inherits the parent's driving table and active bindings
+// (STI Pattern A) — subtypes do not require a separate driver table.
 func (s *BusinessObjectService) CreateBusinessObject(
 	ctx context.Context,
 	secCtx *security.Context,
@@ -387,7 +389,7 @@ func (s *BusinessObjectService) CreateBusinessObject(
 	id := uuid.New().String()
 	now := time.Now()
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] CreateBusinessObject START: datasourceID=%q parentID=%q req.Name=%q", datasourceIDStr, parentIDStr, req.Name)
+	logging.GetLogger().Sugar().Infof("[META-SERVICE] CreateBusinessObject START: datasourceID=%q parentID=%q req.Name=%q", datasourceIDStr, parentIDStr, req.Name)
 
 	bo := &models.BusinessObjectDefinition{
 		ID:              id,
@@ -414,36 +416,58 @@ func (s *BusinessObjectService) CreateBusinessObject(
 		IsActive:        true,
 	}
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] After init: bo.DatasourceID.Valid=%v bo.DatasourceID.String=%q bo.ParentID.Valid=%v", bo.DatasourceID.Valid, bo.DatasourceID.String, bo.ParentID.Valid)
+	// STI fence defaults (overridden from parent when present).
+	stiDiscriminator := "subtype_code"
+	stiFilter := technicalName
 
-	// Ensure subtypes always carry a datasource. Prefer request, otherwise inherit parent.
+	// Subtype create: inherit datasource + driving table from parent (STI).
+	var parent *models.BusinessObjectDefinition
 	if bo.ParentID.Valid {
-		logging.GetLogger().Sugar().Errorf("[META-SERVICE] ParentID valid, checking datasource inheritance")
+		var err error
+		parent, err = s.GetBusinessObject(ctx, secCtx, parentIDStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve parent business object: %w", err)
+		}
+
+		// Compound key: parentKey/subtypeTechName (matches seeded STI rows).
+		if parent.Key != "" && !strings.Contains(technicalName, "/") {
+			bo.Key = parent.Key + "/" + technicalName
+		}
+
 		if !bo.DatasourceID.Valid {
-			logging.GetLogger().Sugar().Errorf("[META-SERVICE] DatasourceID not valid, will inherit from parent")
-			if req.DatasourceID != "" {
-				bo.DatasourceID = sql.NullString{String: req.DatasourceID, Valid: true}
-			} else {
-				parent, err := s.GetBusinessObject(ctx, secCtx, req.ParentID)
-				if err != nil {
-					return nil, fmt.Errorf("failed to resolve parent datasource: %w", err)
-				}
-				if parent.DatasourceID.Valid && parent.DatasourceID.String != "" {
-					bo.DatasourceID = sql.NullString{String: parent.DatasourceID.String, Valid: true}
-				} else {
-					return nil, fmt.Errorf("missing datasource for subtype create (parent has none)")
-				}
+			if parent.DatasourceID.Valid && parent.DatasourceID.String != "" {
+				bo.DatasourceID = sql.NullString{String: parent.DatasourceID.String, Valid: true}
 			}
-		} else {
-			logging.GetLogger().Sugar().Errorf("[META-SERVICE] DatasourceID already valid: %q", bo.DatasourceID.String)
+		}
+
+		if !bo.DriverTableID.Valid {
+			if parent.DriverTableID.Valid && parent.DriverTableID.String != "" {
+				bo.DriverTableID = parent.DriverTableID
+				if bo.DriverTableName == "" {
+					bo.DriverTableName = parent.DriverTableName
+				}
+			} else if drivingNodeID, drivingName, ok := s.lookupDefaultBindingDrivingNode(ctx, parent.ID, tenantID); ok {
+				bo.DriverTableID = sql.NullString{String: drivingNodeID, Valid: true}
+				if bo.DriverTableName == "" {
+					bo.DriverTableName = drivingName
+				}
+			} else {
+				return nil, fmt.Errorf("cannot create subtype %q: parent has no driving table binding — bind the parent first", req.Name)
+			}
+		}
+
+		var parentDisc sql.NullString
+		_ = s.db.GetContext(ctx, &parentDisc, `
+			SELECT sti_discriminator_column FROM public.business_objects WHERE id = $1::uuid
+		`, parent.ID)
+		if parentDisc.Valid && parentDisc.String != "" {
+			stiDiscriminator = parentDisc.String
 		}
 	}
 
-	logging.GetLogger().Sugar().Errorf("[META-SERVICE] Final bo.DatasourceID: Valid=%v String=%q ABOUT TO INSERT", bo.DatasourceID.Valid, bo.DatasourceID.String)
-
 	// If cloning, copy fields and subtypes from source
-	if req.CloneFromKey != "" {
-		if err := s.cloneBO(ctx, tenantID, bo, req.CloneFromKey, userID); err != nil {
+	if cloneFromKeyStr != "" {
+		if err := s.cloneBO(ctx, tenantID, bo, cloneFromKeyStr, userID); err != nil {
 			return nil, err
 		}
 	}
@@ -457,20 +481,11 @@ func (s *BusinessObjectService) CreateBusinessObject(
 	// Resolve the four NOT NULL semantic-node references the real business_objects
 	// schema requires (classification_node_id, business_key_node_id,
 	// semantic_id_node_id, grain_node_id - all FK to catalog_node ON DELETE RESTRICT).
-	// No prior BO rows survive to copy the convention from (this tenant's were
-	// deleted for a clean re-scan), so this uses the most defensible bootstrap
-	// default for a straightforward entity table: the table's own driving-table
-	// node for classification, and its primary-key ("id") column node for the
-	// business key / semantic id / grain - one row per id is the correct grain
-	// for these tables. A richer semantic model (distinct classification taxonomy,
-	// composite business keys, etc.) should replace this once one exists.
+	// Bootstrap default: driving-table node for classification; PK "id" column
+	// node for business key / semantic id / grain.
 	var classificationNodeID, keyColumnNodeID string
 	if driverTableID != nil {
 		classificationNodeID = driverTableID.(string)
-		// Verify the driver table node itself actually exists (catalog scans have
-		// been observed to leave dangling parent_id references from an earlier,
-		// inconsistent node-ID generation pass) before trusting anything derived
-		// from it.
 		var exists string
 		_ = s.db.GetContext(ctx, &exists, `SELECT id FROM public.catalog_node WHERE id = $1::uuid`, classificationNodeID)
 		if exists == "" {
@@ -481,54 +496,262 @@ func (s *BusinessObjectService) CreateBusinessObject(
 				WHERE parent_id = $1::uuid AND node_name = 'id'
 				LIMIT 1
 			`, classificationNodeID)
-			// Fall back to the table node itself when its id-column node is
-			// missing/orphaned (same dangling-reference issue) - one BO per
-			// table is still a coherent grain even without a distinct PK-column
-			// node to point at.
 			if keyColumnNodeID == "" {
 				keyColumnNodeID = classificationNodeID
 			}
 		}
 	}
 	if classificationNodeID == "" || keyColumnNodeID == "" {
+		if bo.ParentID.Valid {
+			return nil, fmt.Errorf("cannot create subtype %q: parent driving table catalog node not found (has the datasource been scanned, and is the parent bound?)", req.Name)
+		}
 		return nil, fmt.Errorf("cannot create business object %q: driver table catalog node not found (has the datasource been scanned, and is driverTableId valid?)", req.Name)
 	}
 
-	// Insert BO
+	var parentIDArg interface{} = nil
+	if bo.ParentID.Valid {
+		parentIDArg = bo.ParentID.String
+	}
+	var stiDiscArg, stiFilterArg interface{} = nil, nil
+	if bo.ParentID.Valid {
+		stiDiscArg = stiDiscriminator
+		stiFilterArg = stiFilter
+	}
+
+	tx, err := s.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if err := dbpkg.ApplyTenantGUCs(ctx, tx.Tx, tenantID, ""); err != nil {
+		return nil, fmt.Errorf("failed to set tenant context: %w", err)
+	}
+
 	query := `
 		INSERT INTO public.business_objects (
 			id, tenant_id, model_id, bo_key, bo_name, description,
 			classification_node_id, business_key_node_id, semantic_id_node_id, grain_node_id,
 			driver_table_id, driver_table_name,
+			parent_id, sti_discriminator_column, active_subtype_filter,
 			created_at, updated_at,
 			is_active, is_core
 		) VALUES (
 			$1, $2, $1, $3, $4, $5,
 			$6, $7, $7, $7,
 			$8, $9,
-			$10, $10,
-			$11, $12
+			$10, $11, $12,
+			$13, $13,
+			$14, $15
 		)
 	`
 
-	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s driverTable=%v name=%s", bo.TenantID, driverTableID, bo.Name)
+	logging.GetLogger().Sugar().Warnf("[META BO SERVICE] Create scope: tenant=%s driverTable=%v name=%s parent=%v", bo.TenantID, driverTableID, bo.Name, parentIDArg)
 
-	_, err := s.db.ExecContext(ctx, query,
+	_, err = tx.ExecContext(ctx, query,
 		bo.ID, bo.TenantID, bo.Key, bo.DisplayName, bo.Description,
 		classificationNodeID, keyColumnNodeID,
 		driverTableID, bo.DriverTableName,
+		parentIDArg, stiDiscArg, stiFilterArg,
 		bo.CreatedAt,
 		bo.IsActive, bo.IsCore,
 	)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to create business object: %w", err)
+	}
+
+	if parent != nil {
+		// Fields first so field_bindings can remap by field_name onto child rows.
+		if err := s.cloneParentFieldsForSubtype(ctx, tx, tenantID, parent.ID, bo.ID); err != nil {
+			return nil, err
+		}
+		if err := s.cloneParentBindingsForSubtype(ctx, tx, tenantID, parent.ID, bo.ID, stiDiscriminator, stiFilter); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit business object create: %w", err)
 	}
 
 	// Log audit
 	s.logAudit(ctx, tenantID, "business_object", id, "create", nil, userID)
 
 	return bo, nil
+}
+
+// lookupDefaultBindingDrivingNode returns the parent's default (or first active)
+// binding driving node when driver_table_id is unset on the BO row.
+func (s *BusinessObjectService) lookupDefaultBindingDrivingNode(ctx context.Context, parentBOID, tenantID string) (nodeID, nodeName string, ok bool) {
+	type row struct {
+		DrivingNodeID string `db:"driving_node_id"`
+		NodeName      string `db:"node_name"`
+	}
+	var r row
+	err := s.db.GetContext(ctx, &r, `
+		SELECT b.driving_node_id::text, COALESCE(cn.node_name, '') AS node_name
+		FROM public.business_object_binding b
+		LEFT JOIN public.catalog_node cn ON cn.id = b.driving_node_id
+		WHERE b.bo_id = $1::uuid AND b.tenant_id = $2::uuid AND COALESCE(b.is_active, true)
+		ORDER BY b.is_default DESC, b.bo_binding_id
+		LIMIT 1
+	`, parentBOID, tenantID)
+	if err != nil || r.DrivingNodeID == "" {
+		return "", "", false
+	}
+	return r.DrivingNodeID, r.NodeName, true
+}
+
+// cloneParentBindingsForSubtype copies active parent bindings onto the subtype,
+// keeping the same driving_node_id and injecting an STI discriminator fence into base_sql.
+func (s *BusinessObjectService) cloneParentBindingsForSubtype(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	tenantID, parentBOID, childBOID, discriminatorCol, subtypeCode string,
+) error {
+	type parentBinding struct {
+		BackendID             string         `db:"backend_id"`
+		DrivingNodeID         string         `db:"driving_node_id"`
+		BaseSQL               sql.NullString `db:"base_sql"`
+		TemporalOverride      sql.NullString `db:"temporal_override"`
+		TemporalMode          sql.NullString `db:"temporal_mode"`
+		TemporalType          sql.NullString `db:"temporal_type"`
+		BindingName           sql.NullString `db:"binding_name"`
+		IsDefault             bool           `db:"is_default"`
+		IsCore                sql.NullBool   `db:"is_core"`
+		ClassificationNodeID  sql.NullString `db:"classification_node_id"`
+		BoBindingID           string         `db:"bo_binding_id"`
+	}
+
+	var parents []parentBinding
+	if err := tx.SelectContext(ctx, &parents, `
+		SELECT bo_binding_id::text, backend_id::text, driving_node_id::text, base_sql,
+		       temporal_override, temporal_mode, temporal_type, binding_name,
+		       is_default, is_core, classification_node_id::text
+		FROM public.business_object_binding
+		WHERE bo_id = $1::uuid AND tenant_id = $2::uuid AND COALESCE(is_active, true)
+		ORDER BY is_default DESC, bo_binding_id
+	`, parentBOID, tenantID); err != nil {
+		return fmt.Errorf("failed to load parent bindings for subtype clone: %w", err)
+	}
+	if len(parents) == 0 {
+		return nil
+	}
+
+	fence := fmt.Sprintf(`WHERE %s = %s`, quoteIdent(discriminatorCol), quoteStringLiteral(subtypeCode))
+
+	for i, pb := range parents {
+		newBindingID := uuid.New().String()
+		baseSQL := fence
+		if pb.BaseSQL.Valid && strings.TrimSpace(pb.BaseSQL.String) != "" {
+			existing := strings.TrimSpace(pb.BaseSQL.String)
+			if strings.Contains(strings.ToLower(existing), strings.ToLower(discriminatorCol)+" =") {
+				baseSQL = existing
+			} else if strings.HasPrefix(strings.ToUpper(existing), "WHERE ") {
+				baseSQL = existing + " AND " + quoteIdent(discriminatorCol) + " = " + quoteStringLiteral(subtypeCode)
+			} else {
+				baseSQL = existing + " " + fence
+			}
+		}
+
+		bindingName := pb.BindingName.String
+		if bindingName == "" {
+			bindingName = subtypeCode + " Binding"
+		} else if !strings.Contains(strings.ToLower(bindingName), strings.ToLower(subtypeCode)) {
+			bindingName = bindingName + " / " + subtypeCode
+		}
+
+		temporalMode := "NONE"
+		if pb.TemporalMode.Valid && pb.TemporalMode.String != "" {
+			temporalMode = pb.TemporalMode.String
+		} else if pb.TemporalOverride.Valid && pb.TemporalOverride.String != "" {
+			temporalMode = pb.TemporalOverride.String
+		}
+		temporalType := temporalMode
+		if pb.TemporalType.Valid && pb.TemporalType.String != "" {
+			temporalType = pb.TemporalType.String
+		}
+		isCore := false
+		if pb.IsCore.Valid {
+			isCore = pb.IsCore.Bool
+		}
+		// First cloned binding stays default when parent default is cloned; others false.
+		isDefault := i == 0 && pb.IsDefault
+
+		var classNode interface{} = nil
+		if pb.ClassificationNodeID.Valid && pb.ClassificationNodeID.String != "" {
+			classNode = pb.ClassificationNodeID.String
+		}
+
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO public.business_object_binding
+				(bo_binding_id, tenant_id, bo_id, backend_id, driving_node_id,
+				 binding_name, base_sql, temporal_mode, temporal_type, temporal_override,
+				 is_default, is_active, is_core, classification_node_id)
+			VALUES
+				($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid,
+				 $6, $7, $8, $9, $8,
+				 $10, true, $11, $12::uuid)
+		`, newBindingID, tenantID, childBOID, pb.BackendID, pb.DrivingNodeID,
+			bindingName, baseSQL, temporalMode, temporalType,
+			isDefault, isCore, classNode); err != nil {
+			return fmt.Errorf("failed to clone parent binding: %w", err)
+		}
+
+		// Remap field_bindings onto the new binding + child BO (fields cloned separately
+		// keep the same field_id only when we also clone fields; map by field_name).
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO public.field_bindings (
+				id, tenant_id, bo_id, binding_id, field_id,
+				source_node_id, source_type, transformation_type, transformation_sql, json_path, binding_status
+			)
+			SELECT gen_random_uuid(), $1::uuid, $2::uuid, $3::uuid, cf.id,
+				fb.source_node_id, fb.source_type, fb.transformation_type, fb.transformation_sql, fb.json_path, fb.binding_status
+			FROM public.field_bindings fb
+			JOIN public.business_object_fields pf ON pf.id = fb.field_id AND pf.bo_id = $4::uuid
+			JOIN public.business_object_fields cf ON cf.bo_id = $2::uuid AND cf.tenant_id = $1::uuid AND cf.field_name = pf.field_name
+			WHERE fb.binding_id = $5::uuid AND fb.bo_id = $4::uuid AND fb.tenant_id = $1::uuid
+		`, tenantID, childBOID, newBindingID, parentBOID, pb.BoBindingID); err != nil {
+			return fmt.Errorf("failed to clone field bindings for subtype: %w", err)
+		}
+	}
+	return nil
+}
+
+// cloneParentFieldsForSubtype copies parent field definitions onto the child BO
+// so the subtype Studio surface and SQL generator have local field rows.
+func (s *BusinessObjectService) cloneParentFieldsForSubtype(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	tenantID, parentBOID, childBOID string,
+) error {
+	_, err := tx.ExecContext(ctx, `
+		INSERT INTO public.business_object_fields (
+			id, tenant_id, bo_id, term_node_id, field_name, field_role, aggregation_type,
+			binding_requirement, eligibility_source, subtype_scope, is_exposed, inherits_defaults,
+			display_name, technical_name, data_type, is_required, is_system, description,
+			reference_entity, display_order, section_name, default_value, validation_rules, picklist_values
+		)
+		SELECT gen_random_uuid(), tenant_id, $1::uuid, term_node_id, field_name, field_role, aggregation_type,
+			binding_requirement, eligibility_source, COALESCE(subtype_scope, 'ALL'), is_exposed, inherits_defaults,
+			display_name, technical_name, data_type, is_required, is_system, description,
+			reference_entity, display_order, section_name, default_value, validation_rules, picklist_values
+		FROM public.business_object_fields
+		WHERE bo_id = $2::uuid AND tenant_id = $3::uuid
+		ON CONFLICT (tenant_id, bo_id, field_name) DO NOTHING
+	`, childBOID, parentBOID, tenantID)
+	if err != nil {
+		return fmt.Errorf("failed to clone parent fields for subtype: %w", err)
+	}
+	return nil
+}
+
+func quoteIdent(ident string) string {
+	return `"` + strings.ReplaceAll(ident, `"`, `""`) + `"`
+}
+
+func quoteStringLiteral(v string) string {
+	return `'` + strings.ReplaceAll(v, `'`, `''`) + `'`
 }
 
 // GetBusinessObject retrieves a BO by key or ID from either old or new schema
@@ -559,7 +782,7 @@ func (s *BusinessObjectService) GetBusinessObject(
 		       COALESCE(description, '') AS description, '' AS icon, is_core,
 		       '' AS clones_from, '' AS clone_parent_key,
 		       '' AS clone_parent_display_name, '' AS category,
-		       NULL::uuid AS parent_id,
+		       parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
 		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
 		       updated_at AS last_modified_at, '' AS last_modified_by,
@@ -646,7 +869,7 @@ func (s *BusinessObjectService) ListBusinessObjects(
 		       COALESCE(description, '') AS description, '' AS icon, is_core,
 		       '' AS clones_from, '' AS clone_parent_key,
 		       '' AS clone_parent_display_name, '' AS category,
-		       NULL::uuid AS parent_id,
+		       parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
 		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
 		       updated_at AS last_modified_at, '' AS last_modified_by,
@@ -717,7 +940,7 @@ func (s *BusinessObjectService) listCoreBusinessObjects(ctx context.Context, gol
 		       COALESCE(description, '') AS description, '' AS icon, is_core,
 		       '' AS clones_from, '' AS clone_parent_key,
 		       '' AS clone_parent_display_name, '' AS category,
-		       NULL::uuid AS parent_id,
+		       parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
 		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
 		       updated_at AS last_modified_at, '' AS last_modified_by,
@@ -743,7 +966,7 @@ func (s *BusinessObjectService) listTenantCustomBusinessObjects(ctx context.Cont
 		       COALESCE(description, '') AS description, '' AS icon, is_core,
 		       '' AS clones_from, '' AS clone_parent_key,
 		       '' AS clone_parent_display_name, '' AS category,
-		       NULL::uuid AS parent_id,
+		       parent_id,
 		       driver_table_id, COALESCE(driver_table_name, '') AS driver_table_name,
 		       CAST(0 AS int) AS instance_count, created_at, '' AS created_by,
 		       updated_at AS last_modified_at, '' AS last_modified_by,
@@ -1597,10 +1820,10 @@ func (s *BusinessObjectService) RenameSubtype(
 
 	// Also update in business_objects if it's a child BO
 	_, _ = s.db.ExecContext(ctx, `
-		UPDATE business_objects
-		SET name = $1, display_name = $1, last_modified_at = $2, last_modified_by = $3
-		WHERE (id = $4::uuid OR key = $4) AND parent_id = $5::uuid
-	`, newName, now, lastModifiedBy, subtypeKey, bo.ID)
+		UPDATE public.business_objects
+		SET bo_name = $1, updated_at = $2
+		WHERE (id = $3::uuid OR bo_key = $3) AND parent_id = $4::uuid
+	`, newName, now, subtypeKey, bo.ID)
 
 	// Log audit
 	s.logAudit(ctx, tenantID, "subtype", bo.ID, "rename", map[string]interface{}{
@@ -1683,8 +1906,8 @@ func (s *BusinessObjectService) DeleteSubtype(
 
 	// Also delete from business_objects table if it's a child BO
 	_, _ = s.db.ExecContext(ctx, `
-		DELETE FROM business_objects
-		WHERE (key = $1 OR id = CAST($2 AS uuid)) AND parent_id = $3::uuid
+		DELETE FROM public.business_objects
+		WHERE (bo_key = $1 OR id = CAST($2 AS uuid)) AND parent_id = $3::uuid
 	`, subtypeKey, subtypeKey, bo.ID)
 
 	// Log audit
@@ -1810,11 +2033,13 @@ func (s *BusinessObjectService) loadBOSubtypesAndFields(
 	// STRATEGY 1: Load child business objects via parent_id (inheritance pattern)
 	// We look for subtypes in EITHER the BO's tenant (e.g. gold copy) OR the viewer's tenant (custom extensions)
 	childBOQuery := `
-		SELECT id, key, name, display_name, COALESCE(technical_name, '') AS technical_name, 
-		       COALESCE(description, '') AS description, is_core, tenant_id, config
-		FROM business_objects
+		SELECT id, bo_key AS key, bo_name AS name, bo_name AS display_name,
+		       COALESCE(active_subtype_filter, '') AS technical_name,
+		       COALESCE(description, '') AS description, is_core, tenant_id,
+		       'null'::jsonb AS config
+		FROM public.business_objects
 		WHERE parent_id = $1::uuid AND (tenant_id = $2::uuid OR tenant_id = $3::uuid)
-		ORDER BY name
+		ORDER BY bo_name
 	`
 
 	type ChildBO struct {

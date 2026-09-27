@@ -252,7 +252,10 @@ func (h *DataPipelineHandler) validate(w http.ResponseWriter, r *http.Request) {
 		spec.Version = datapipeline.SpecVersion
 	}
 	issues := h.check(r, t, &spec)
-	dpJSON(w, http.StatusOK, map[string]any{"valid": len(issues) == 0, "issues": issues})
+	dpJSON(w, http.StatusOK, map[string]any{
+		"valid":  !datapipeline.HasErrors(issues),
+		"issues": issues,
+	})
 }
 
 // --- runs --------------------------------------------------------------------
@@ -269,7 +272,7 @@ func (h *DataPipelineHandler) startRunCore(r *http.Request, t, id string) (strin
 	if err != nil {
 		return "", err
 	}
-	if issues := h.check(r, t, &d.Spec); len(issues) > 0 {
+	if issues := h.check(r, t, &d.Spec); datapipeline.HasErrors(issues) {
 		return "", &errHasProblems{issues}
 	}
 	runID, err := h.store.CreateRun(r.Context(), t, d)
@@ -378,7 +381,7 @@ func (h *DataPipelineHandler) previewCore(r *http.Request, t string, spec datapi
 	if spec.Version == 0 {
 		spec.Version = datapipeline.SpecVersion
 	}
-	if issues := h.check(r, t, &spec); len(issues) > 0 {
+	if issues := h.check(r, t, &spec); datapipeline.HasErrors(issues) {
 		return nil, &errHasProblems{issues}
 	}
 	if rows <= 0 || rows > previewMaxRows {

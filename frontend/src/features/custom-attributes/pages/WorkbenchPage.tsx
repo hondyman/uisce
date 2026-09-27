@@ -5,7 +5,11 @@ import {
   Button,
   Chip,
   Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -23,11 +27,27 @@ import { FieldEditor } from '../components/FieldEditor';
 import { FieldList } from '../components/FieldList';
 import type { AttributeDef, CreateAttributeInput, PreviewResponse, UpdateAttributeInput } from '../types';
 
+const ACCOUNT_TYPES = [
+  'RETAIL',
+  'INSTITUTIONAL',
+  'CUSTODY',
+  'PENSION',
+  'RETIREMENT',
+  'TRUST',
+  'SMA',
+  'UMA',
+  'FAMILY_OFFICE',
+  'PRIVATE_WEALTH',
+  'INSURANCE',
+  'ENDOWMENT',
+];
+
 export default function WorkbenchPage() {
   const { entityType: entityTypeParam } = useParams();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const entityType = (entityTypeParam || '').toUpperCase();
   const tableRef = searchParams.get('table_ref') || guessTableRef(entityType);
+  const accountType = searchParams.get('account_type') || '';
 
   const [fields, setFields] = useState<AttributeDef[]>([]);
   const [selected, setSelected] = useState<AttributeDef | null>(null);
@@ -45,7 +65,9 @@ export default function WorkbenchPage() {
     setLoadingFields(true);
     setError(null);
     try {
-      const data = await listAttributes(entityType);
+      const data = await listAttributes(entityType, {
+        accountType: entityType === 'ACCOUNT' ? accountType || undefined : undefined,
+      });
       setFields(data);
       setSelected((prev) => {
         if (!prev) return data[0] || null;
@@ -56,7 +78,7 @@ export default function WorkbenchPage() {
     } finally {
       setLoadingFields(false);
     }
-  }, [entityType]);
+  }, [entityType, accountType]);
 
   const refreshPreview = useCallback(async () => {
     if (!entityType) return;
@@ -67,6 +89,7 @@ export default function WorkbenchPage() {
         entityType,
         tableRef,
         limit: 50,
+        accountType: entityType === 'ACCOUNT' ? accountType || undefined : undefined,
       });
       setPreview(data);
     } catch (e: any) {
@@ -78,7 +101,7 @@ export default function WorkbenchPage() {
     } finally {
       setLoadingPreview(false);
     }
-  }, [entityType, tableRef]);
+  }, [entityType, tableRef, accountType]);
 
   useEffect(() => {
     refreshFields();
@@ -140,6 +163,28 @@ export default function WorkbenchPage() {
         </Button>
         <Typography variant="h6">Custom Fields · {entityType}</Typography>
         <Chip size="small" label={tableRef} />
+        {entityType === 'ACCOUNT' && (
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Account type</InputLabel>
+            <Select
+              label="Account type"
+              value={accountType}
+              onChange={(e) => {
+                const next = new URLSearchParams(searchParams);
+                if (e.target.value) next.set('account_type', String(e.target.value));
+                else next.delete('account_type');
+                setSearchParams(next);
+              }}
+            >
+              <MenuItem value="">All types</MenuItem>
+              {ACCOUNT_TYPES.map((t) => (
+                <MenuItem key={t} value={t}>
+                  {t}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <Button size="small" disabled variant="outlined" sx={{ ml: 'auto' }}>
           Validate (soon)
         </Button>
@@ -219,6 +264,8 @@ function guessTableRef(entityType: string): string {
     CALENDAR: 'mdm.calendar_master',
     PRICE: 'mdm.price',
     CA_EVENT: 'mdm.ca_event',
+    ACCOUNT: 'mdm.account_master',
+    ORDER: 'foffice.order',
   };
   return map[entityType] || `mdm.${entityType.toLowerCase()}`;
 }

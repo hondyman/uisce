@@ -42,12 +42,9 @@ import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import EntityPickerPage from "./features/custom-attributes/pages/EntityPickerPage";
 import WorkbenchPage from "./features/custom-attributes/pages/WorkbenchPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
-import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
-import Marketplace from "./pages/marketplace/Marketplace";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
-import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
 import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
 import { DynamicDataProductPage } from "./pages/DynamicDataProductPage";
@@ -175,6 +172,8 @@ const PipelinesListPage = React.lazy(() => import('./features/data-pipelines/Pip
 const PipelineEditorPage = React.lazy(() => import('./features/data-pipelines/PipelineEditorPage'));
 const StagingBindingsPage = React.lazy(() => import('./features/staging-bindings/StagingBindingsPage'));
 const MasteringPage = React.lazy(() => import('./features/mastering/MasteringPage'));
+const SurvivorshipPage = React.lazy(() => import('./features/survivorship/SurvivorshipPage'));
+const AccountGoldPage = React.lazy(() => import('./features/account-gold/AccountGoldPage'));
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
@@ -295,6 +294,8 @@ function ProtectedApp() {
         <Route path="data/pipelines/:id" element={<ProtectedRoute><PipelineEditorPage /></ProtectedRoute>} />
         <Route path="data/staging-bindings" element={<ProtectedRoute><StagingBindingsPage /></ProtectedRoute>} />
         <Route path="data/mastering" element={<ProtectedRoute><MasteringPage /></ProtectedRoute>} />
+        <Route path="data/survivorship" element={<ProtectedRoute><SurvivorshipPage /></ProtectedRoute>} />
+        <Route path="data/account-gold" element={<ProtectedRoute><AccountGoldPage /></ProtectedRoute>} />
         <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         {/* System-wide validation-rule-nodes view (every BO, one page) -
@@ -305,14 +306,11 @@ function ProtectedApp() {
         <Route path="core/validation-rules/all" element={<ProtectedRoute><SystemValidationsPage /></ProtectedRoute>} />
         <Route path="core/calculated-fields" element={<ProtectedRoute><CalculatedFieldBuilderPage /></ProtectedRoute>} />
         <Route path="core/flow-builder" element={<ProtectedRoute><UisceBuilder /></ProtectedRoute>} />
-        <Route path="core/validation" element={<ProtectedRoute><InvestmentValidationPage /></ProtectedRoute>} />
         <Route path="query-builder/editor/:id?" element={<ProtectedRoute><SavedQueryEditor /></ProtectedRoute>} />
         <Route path="sql-studio" element={<ProtectedRoute><SqlStudioPage /></ProtectedRoute>} />
         <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />
         <Route path="pipelines" element={<ProtectedRoute><PipelinesPage /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-        <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
-        <Route path="marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             STUDIO - Low-code tools

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -34,8 +35,9 @@ type Binding struct {
 	BOKey        string            `db:"bo_key" json:"bo_key"`
 	BOName       string            `db:"bo_name" json:"bo_name"`
 	StagingTable string            `db:"staging_table" json:"staging_table"`
-	Fields       map[string]string `db:"-" json:"fields"` // BO field -> staging column
+	Fields       map[string]string `db:"-" json:"fields"` // BO field -> staging column or JSON path expr
 	RawFields    []byte            `db:"fields" json:"-"`
+	SourceType   string            `db:"source_type" json:"source_type"` // COLUMN | JSON_PATH
 	Version      int               `db:"version" json:"version"`
 	// Origin is "core" (the gold copy's, including in the gold copy itself)
 	// or "tenant". Inherited marks one that isn't this tenant's own, so it
@@ -113,7 +115,7 @@ func (s *Store) inTenant(ctx context.Context, tenantID string, fn func(*sqlx.Tx)
 const visible = `(sb.tenant_id::text = $1 OR sb.tenant_id = public.uisce_gold_copy_tenant_id())`
 
 const bindingCols = `sb.id::text, sb.tenant_id::text, bo.bo_key, COALESCE(bo.bo_name, bo.bo_key) AS bo_name, sb.staging_table,
-	sb.fields, sb.version, sb.updated_at,
+	sb.fields, COALESCE(sb.source_type, 'COLUMN') AS source_type, sb.version, sb.updated_at,
 	CASE WHEN sb.tenant_id = public.uisce_gold_copy_tenant_id() THEN 'core' ELSE 'tenant' END AS origin,
 	sb.tenant_id::text <> $1 AS inherited`
 
@@ -179,10 +181,27 @@ func resolve(ctx context.Context, tx *sqlx.Tx, tenantID, boKey, table string) (*
 
 func (b *Binding) decode() error {
 	b.Fields = map[string]string{}
+	if b.SourceType == "" {
+		b.SourceType = "COLUMN"
+	}
 	if len(b.RawFields) == 0 {
 		return nil
 	}
 	return json.Unmarshal(b.RawFields, &b.Fields)
+}
+
+// TargetColumn returns the physical staging column referenced by a binding
+// value. COLUMN targets are the value itself; JSON_PATH targets extract the
+// left-hand column from expressions like custom_attributes->>'trustee_ids'.
+func TargetColumn(expr string) string {
+	expr = strings.TrimSpace(expr)
+	if i := strings.Index(expr, "->>"); i > 0 {
+		return strings.TrimSpace(expr[:i])
+	}
+	if i := strings.Index(expr, "->"); i > 0 {
+		return strings.TrimSpace(expr[:i])
+	}
+	return expr
 }
 
 func (c *Change) decode() error {

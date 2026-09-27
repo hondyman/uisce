@@ -732,18 +732,19 @@ func (s *CatalogScanService) TestConnectionByID(ctx context.Context, datasourceI
 
 // connectToTargetDatabase establishes connection to a target database
 func (s *CatalogScanService) connectToTargetDatabase(ctx context.Context, connectionDetails string) (*sql.DB, error) {
-	return connectToDatabaseFromDetails(ctx, connectionDetails)
+	return ConnectToDatabaseFromDetails(ctx, connectionDetails)
 }
 
-// connectToDatabaseFromDetails opens (and pings) a *sql.DB for the given
+// ConnectToDatabaseFromDetails opens (and pings) a *sql.DB for the given
 // connection-details JSON, supporting the same shapes as the scan pipeline:
 // flat host/port/database/username/password, a DSN string, or key_pair
 // (mTLS) auth. Extracted from CatalogScanService.connectToTargetDatabase so
-// other callers in this package (e.g. BusinessObjectService, to run live
-// record queries against a binding's actual physical backend instead of
-// always using the alpha DB) can reuse the exact same, already-proven
+// other callers (e.g. BusinessObjectService, to run live record queries
+// against a binding's actual physical backend instead of always using the
+// alpha DB, and the catalog admin API for CRIMS sync) can reuse the exact
+// same, already-proven connection logic.
 // connection logic rather than re-deriving DSN/TLS handling.
-func connectToDatabaseFromDetails(ctx context.Context, connectionDetails string) (*sql.DB, error) {
+func ConnectToDatabaseFromDetails(ctx context.Context, connectionDetails string) (*sql.DB, error) {
 	// This struct is updated to match the nested JSON structure from the database
 	// AND the flat structure from the frontend ConnectionForm.
 	type ConnectionConfig struct {

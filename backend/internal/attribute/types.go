@@ -31,6 +31,7 @@ type AttributeDef struct {
 	Origin          string         `json:"origin,omitempty" db:"origin"` // CORE | CUSTOM
 	SemanticTermID  *uuid.UUID     `json:"semantic_term_id,omitempty" db:"semantic_term_id"`
 	SemanticTermName string        `json:"semantic_term_name,omitempty" db:"semantic_term_name"`
+	AppliesToTypes  []string       `json:"applies_to_types,omitempty" db:"-"`
 	CreatedAt       time.Time      `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time      `json:"updated_at" db:"updated_at"`
 }
@@ -52,6 +53,7 @@ type CreateInput struct {
 	DisplayOrder    int            `json:"display_order"`
 	Section         string         `json:"section"`
 	SemanticTermID  *uuid.UUID     `json:"semantic_term_id"`
+	AppliesToTypes  []string       `json:"applies_to_types"`
 }
 
 type UpdateInput struct {
@@ -68,6 +70,7 @@ type UpdateInput struct {
 	Section         *string         `json:"section"`
 	SemanticTermID  *uuid.UUID      `json:"semantic_term_id"`
 	ClearSemanticTerm bool          `json:"clear_semantic_term"`
+	AppliesToTypes  *[]string       `json:"applies_to_types"`
 }
 
 // JSONPathBinding describes how a semantic field projects into custom_attributes.
@@ -94,12 +97,13 @@ type EligibleEntity struct {
 }
 
 type PreviewRequest struct {
-	EntityType string
-	TableRef   string
-	TenantID   uuid.UUID
-	Limit      int
-	Offset     int
-	OrderBy    string
+	EntityType  string
+	TableRef    string
+	TenantID    uuid.UUID
+	Limit       int
+	Offset      int
+	OrderBy     string
+	AccountType string // optional discriminator for ACCOUNT (account_type_cd)
 }
 
 type PreviewResponse struct {

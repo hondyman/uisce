@@ -1176,12 +1176,17 @@ export default function BusinessObjectDetailsPage() {
 
     setSubtypeSaving(true);
     try {
+      // Backend inherits parent driver table + bindings when parent_id is set (STI).
+      // Do not send a separate driverTableId — subtypes share the parent's driving table.
       const body = {
         name: technicalName,
         displayName: normalizedDisplay || subtypeDisplayName,
         description: subtypeDescription,
         parent_id: id,
+        parentId: id,
+        technicalName,
         isCore: false,
+        datasourceId,
       };
 
       // Use raw fetch so we can surface the response body in the error toast.
@@ -1189,7 +1194,7 @@ export default function BusinessObjectDetailsPage() {
       const createResp = await fetch(createUrl, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify({ ...body, datasourceId }),
+        body: JSON.stringify(body),
       });
 
       if (!createResp.ok) {

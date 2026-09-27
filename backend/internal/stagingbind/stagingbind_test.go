@@ -28,6 +28,30 @@ func TestWhoMayAdminister(t *testing.T) {
 
 // Approval re-checks the binding against the one the change was proposed
 // on, so a change never overwrites a later edit.
+func TestTargetColumn(t *testing.T) {
+	if got := TargetColumn("account_cd"); got != "account_cd" {
+		t.Fatalf("got %q", got)
+	}
+	if got := TargetColumn("custom_attributes->>'trustee_ids'"); got != "custom_attributes" {
+		t.Fatalf("got %q", got)
+	}
+	if got := TargetColumn(" custom_attributes -> 'x' "); got != "custom_attributes" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestInferSourceType(t *testing.T) {
+	if got := inferSourceType(map[string]string{"AcctCd": "account_cd"}); got != "COLUMN" {
+		t.Fatalf("got %q", got)
+	}
+	if got := inferSourceType(map[string]string{
+		"AcctCd":     "account_cd",
+		"trustee_ids": "custom_attributes->>'trustee_ids'",
+	}); got != "JSON_PATH" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSameFields(t *testing.T) {
 	a := map[string]string{"Isin": "isin", "Cusip": "cusip"}
 	if !sameFields(a, map[string]string{"Cusip": "cusip", "Isin": "isin"}) {

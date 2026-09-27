@@ -30,10 +30,15 @@ export async function listEligibleEntities(): Promise<EligibleEntity[]> {
   return data.entities || [];
 }
 
-export async function listAttributes(entityType: string): Promise<AttributeDef[]> {
-  const res = await apiFetch(
-    `/api/v1/attributes?entity_type=${encodeURIComponent(entityType)}`,
-  );
+export async function listAttributes(
+  entityType: string,
+  opts?: { accountType?: string },
+): Promise<AttributeDef[]> {
+  const q = new URLSearchParams({ entity_type: entityType });
+  if (opts?.accountType) {
+    q.set('account_type', opts.accountType);
+  }
+  const res = await apiFetch(`/api/v1/attributes?${q.toString()}`);
   const data = await parseJSON<{ attributes: AttributeDef[] }>(res);
   return data.attributes || [];
 }
@@ -67,6 +72,7 @@ export async function previewAttributes(params: {
   tableRef?: string;
   limit?: number;
   offset?: number;
+  accountType?: string;
 }): Promise<PreviewResponse> {
   const q = new URLSearchParams({
     entity_type: params.entityType,
@@ -75,6 +81,9 @@ export async function previewAttributes(params: {
   });
   if (params.tableRef) {
     q.set('table_ref', params.tableRef);
+  }
+  if (params.accountType) {
+    q.set('account_type', params.accountType);
   }
   const res = await apiFetch(`/api/v1/attributes/preview?${q.toString()}`);
   return parseJSON<PreviewResponse>(res);

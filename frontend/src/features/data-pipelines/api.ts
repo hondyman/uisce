@@ -3,8 +3,8 @@ import apiClient from '../../utils/apiClient';
 // Mirrors backend/internal/datapipeline (spec.go and friends).
 
 export type NodeKind =
-  | 'file_source' | 'bo_source' | 'validate' | 'rule_check' | 'map'
-  | 'bo_sink' | 'staging_sink' | 'file_sink';
+  | 'file_source' | 'bo_source' | 'queue_source' | 'validate' | 'rule_check' | 'map'
+  | 'bo_sink' | 'staging_sink' | 'master_sink' | 'queue_sink' | 'file_sink';
 
 export type ColumnType = 'string' | 'int' | 'float' | 'decimal' | 'bool' | 'date' | 'timestamp';
 
@@ -15,11 +15,41 @@ export interface FieldMap { from: string; to: string; transform?: string; lookup
 export interface NodeConfigs {
   file_source: { uri: string; format: 'csv' | 'json' | 'parquet'; delimiter?: string; has_header?: boolean; columns?: Column[] };
   bo_source: { bo_key: string; filters?: Condition[]; limit?: number };
+  queue_source: {
+    broker: 'kafka' | 'redpanda' | 'aws_sqs' | 'azure_servicebus';
+    topic_or_queue: string;
+    format?: 'json';
+    consumer_group?: string;
+    max_messages?: number;
+    idle_timeout_ms?: number;
+    brokers_env?: string;
+    queue_url_env?: string;
+    connection_string_env?: string;
+    region?: string;
+  };
   validate: { required?: string[]; unique?: string[] };
   rule_check: { rule_ids: string[]; bo_key?: string /* editor-only: which BO's rules to pick from */ };
   map: { fields: FieldMap[]; keep_unmapped?: boolean };
   bo_sink: { bo_key: string; mode?: 'create' | 'upsert'; key_fields?: string[]; dry_run?: boolean };
   staging_sink: { table: string; source_cd: string; domain: string; run_ref?: string; columns?: Record<string, string> };
+  master_sink: {
+    entity_type: string;
+    staging_table?: string;
+    batch_size?: number;
+    require_semantic_terms?: boolean;
+    dry_run?: boolean;
+  };
+  queue_sink: {
+    broker: 'kafka' | 'redpanda' | 'aws_sqs' | 'azure_servicebus';
+    topic_or_queue: string;
+    format?: 'json';
+    key_field?: string;
+    brokers_env?: string;
+    queue_url_env?: string;
+    connection_string_env?: string;
+    region?: string;
+    dry_run?: boolean;
+  };
   file_sink: { uri: string; format: 'csv' | 'json' | 'parquet'; delimiter?: string };
 }
 
@@ -43,7 +73,7 @@ export interface Definition {
   id: string; name: string; description: string; spec: Spec;
   created_by: string; created_at: string; last_modified_at: string;
 }
-export interface Issue { node_id?: string; message: string }
+export interface Issue { node_id?: string; message: string; severity?: 'error' | 'warning' }
 export interface NodeType {
   type: NodeKind; label: string; category: 'source' | 'step' | 'destination';
   description: string; available: boolean; unavailable_reason?: string;
