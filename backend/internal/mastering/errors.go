@@ -73,6 +73,9 @@ func msgOwnMerge() *msgcat.Error             { return m(31).WithStatus(http.Stat
 func msgMergeVoted() *msgcat.Error           { return m(32).WithStatus(http.StatusConflict) }
 func msgNotMergeRequester() *msgcat.Error    { return m(33).WithStatus(http.StatusForbidden) }
 func msgMergeDecided(s string) *msgcat.Error { return m(34, s).WithStatus(http.StatusConflict) }
+func msgNoBOBinding(bo, binding string) *msgcat.Error {
+	return m(36, bo, binding).WithStatus(http.StatusNotFound)
+}
 func msgMergeApprovalsUnavailable() *msgcat.Error {
 	return m(35).WithStatus(http.StatusServiceUnavailable)
 }

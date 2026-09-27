@@ -98,9 +98,21 @@ func getProfile(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*Pro
 }
 
 func (e *Engine) loadConfig(ctx context.Context, tenantID, entity string) (*config, error) {
+	var c *config
+	err := e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
+		var err error
+		c, err = readConfig(ctx, tx, tenantID, entity)
+		return err
+	})
+	return c, err
+}
+
+// readConfig reads an entity's configuration in tx, which must see the
+// tenant's rows and the gold copy's (see inConfig).
+func readConfig(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*config, error) {
 	c := &config{survival: map[string]SurvivalRule{}, sources: map[string]string{}, vendorCodes: map[string]map[string]map[string]string{},
 		hierarchy: map[string][]string{}}
-	err := e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
+	err := func() error {
 		p, err := getProfile(ctx, tx, tenantID, entity)
 		if err != nil {
 			return err
@@ -168,7 +180,8 @@ func (e *Engine) loadConfig(ctx context.Context, tenantID, entity string) (*conf
 			if err := tx.SelectContext(ctx, &ordered, fmt.Sprintf(`SELECT upper(x.field_group) AS field_group, s.code
 				FROM %s x JOIN mdm.source_systems s ON s.id = x.source_system_id
 				WHERE COALESCE((to_jsonb(x)->>'is_active')::boolean, true)
-				  AND COALESCE(to_jsonb(x)->>'product_type_cd', '') = '' AND COALESCE(to_jsonb(x)->>'asset_class_cd', '') = ''
+				  AND COALESCE(to_jsonb(x)->>'product_type_cd', '') IN ('', '*', 'ALL')
+				  AND COALESCE(to_jsonb(x)->>'asset_class_cd', '') IN ('', '*', 'ALL')
 				ORDER BY upper(x.field_group), (x.tenant_id::text = $1) DESC, x.priority, s.code`, p.table("source_priority")), tenantID); err != nil {
 				return fmt.Errorf("source priority: %w", err)
 			}
@@ -217,7 +230,7 @@ func (e *Engine) loadConfig(ctx context.Context, tenantID, entity string) (*conf
 			c.vendorCodes[ref.Attribute] = bySrc
 		}
 		return nil
-	})
+	}()
 	return c, err
 }
 

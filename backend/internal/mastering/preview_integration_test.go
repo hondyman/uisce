@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
@@ -545,5 +546,120 @@ func TestHierarchyLoads(t *testing.T) {
 	}
 	if r := cfg.rankingFor("domicile"); len(r) == 0 || r[0] != "REFINITIV" {
 		t.Errorf("default group ranking: %v", r)
+	}
+}
+
+// TestSecurityMasterBitemporal masters securities through the generic
+// engine on the SECURITY profile (crims 0016, applied inside the rolled-back
+// transaction): bitemporal anchor with a stable master_id, identifiers in the
+// identifier-issuance layout, derived primary identifier, re-run no-op, and
+// a changed value closing the current version and inserting the next.
+func TestSecurityMasterBitemporal(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	platform := PlatformCatalog{DB: alpha}
+	ctx := context.Background()
+	gold, _ := platform.GoldCopyTenant(ctx)
+	e := &Engine{Data: data, Rules: analytics.NewValidationRuleService(alpha), Fields: platform, GoldCopy: platform.GoldCopyTenant,
+		Bindings: fixedBinding{"SecName": "security_name", "AssetClass": "asset_class", "AssetCrrncyCd": "currency",
+			"SecStatus": "status", "Isin": "isin", "Cusip": "cusip", "SecTypCd": "asset_class",
+			"id:ISIN": "isin", "id:CUSIP": "cusip", "id:FIGI": "figi", "@source_key": "source_row_id"}}
+
+	tx, err := data.BeginTxx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+	var have bool
+	_ = tx.GetContext(ctx, &have, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='mdm' AND table_name='security_master' AND column_name='master_id')`)
+	if !have {
+		if _, err := tx.ExecContext(ctx, crimsDDL(t, "0016_security_master_profile.up.sql")); err != nil {
+			t.Fatalf("0016: %v", err)
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_tenant', $1, true)`, gold); err != nil {
+		t.Fatal(err)
+	}
+	// A Bloomberg load of two securities.
+	var load string
+	if err := tx.GetContext(ctx, &load, `INSERT INTO staging._load_run (source_system_cd, domain, run_ref, status, tenant_id, started_at, completed_at)
+		VALUES ('BLOOMBERG', 'SECURITY', 'TEST-SEC-1', 'COMPLETED', $1::uuid, now(), now()) RETURNING id::text`, gold); err != nil {
+		t.Fatal(err)
+	}
+	insert := func(row int, key, isin, name, ccy string) {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO staging.security_data (tenant_id, source_system, source_row_id, load_run_id, _load_run_id, _source_row_num,
+				security_id, primary_identifier, isin, cusip, figi, security_name, asset_class, currency, status)
+			VALUES ($1::uuid, 'BLOOMBERG', $2, $3::uuid, $3::uuid, $4, $2, $5, $5, $6, NULL, $7, 'Equity', $8, 'Active')`,
+			gold, key, load, row, isin, "T"+key[len(key)-8:], name, ccy); err != nil {
+			t.Fatal(err)
+		}
+	}
+	insert(1, "BBGTEST0001", "XS0000TEST01", "Test Holdings Plc Ordinary", "GBP")
+	insert(2, "BBGTEST0002", "XS0000TEST02", "Test Industries AG", "EUR")
+
+	cfg, err := readConfig(ctx, tx, gold, "security")
+	if err != nil {
+		t.Fatalf("security profile: %v", err)
+	}
+	run := func(label string) Counts {
+		var c Counts
+		stage := ""
+		r := &runner{e: e, tx: tx, ctx: ctx, tenant: gold, cfg: cfg, p: cfg.profile, run: &Run{ID: uuid.NewString()},
+			req: RunRequest{Entity: "security", StagingTable: "staging.security_data", LoadRunID: load}, counts: &c, stage: &stage}
+		if err := r.execute(); err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		t.Logf("%s: %+v", label, c)
+		return c
+	}
+	first := run("first")
+	var why []string
+	_ = tx.SelectContext(ctx, &why, `SELECT exception_type || ': ' || exception_description FROM mdm.security_exception WHERE detected_at > now() - interval '1 minute'`)
+	for _, w := range why {
+		t.Logf("exception: %s", w)
+	}
+	if first.New != 2 || first.Published != 2 || first.Invalid != 0 {
+		t.Fatalf("first: %+v", first)
+	}
+	var master, code, primary string
+	var versions int
+	if err := tx.QueryRowxContext(ctx, `SELECT master_id::text, security_id, primary_identifier,
+			(SELECT count(*) FROM mdm.security_master x WHERE x.master_id = s.master_id)
+		FROM mdm.security_master s WHERE isin = 'XS0000TEST01' AND valid_to IS NULL`).Scan(&master, &code, &primary, &versions); err != nil {
+		t.Fatal(err)
+	}
+	var idents int
+	_ = tx.GetContext(ctx, &idents, `SELECT count(*) FROM mdm.security_identifier_issuance WHERE security_id = $1::uuid AND is_valid`, master)
+	t.Logf("minted %s (master %s) primary=%s versions=%d identifiers=%d", code, master, primary, versions, idents)
+	if !strings.HasPrefix(code, "SEC-") || primary != "XS0000TEST01" || versions != 1 || idents != 2 {
+		t.Errorf("minted security: code=%s primary=%s versions=%d identifiers=%d", code, primary, versions, idents)
+	}
+
+	second := run("rerun")
+	if second.Xref != 2 || second.Unchanged != 2 || second.Published != 0 {
+		t.Errorf("rerun must be a no-op: %+v", second)
+	}
+
+	// Bloomberg changes a name: the current version closes, the next inserts.
+	if _, err := tx.ExecContext(ctx, `UPDATE staging.security_data SET security_name = 'Test Holdings PLC' WHERE source_row_id = 'BBGTEST0001' AND _load_run_id = $1::uuid`, load); err != nil {
+		t.Fatal(err)
+	}
+	third := run("changed name")
+	if third.Published != 1 || third.Unchanged != 1 {
+		t.Errorf("changed name: %+v", third)
+	}
+	var rows, current int
+	var name string
+	_ = tx.GetContext(ctx, &rows, `SELECT count(*) FROM mdm.security_master WHERE master_id = $1::uuid`, master)
+	_ = tx.GetContext(ctx, &current, `SELECT count(*) FROM mdm.security_master WHERE master_id = $1::uuid AND valid_to IS NULL`, master)
+	_ = tx.GetContext(ctx, &name, `SELECT security_name FROM mdm.security_master WHERE master_id = $1::uuid AND valid_to IS NULL`, master)
+	t.Logf("after change: %d versions, %d current, name %q", rows, current, name)
+	if rows != 2 || current != 1 || name != "Test Holdings PLC" {
+		t.Errorf("bitemporal versions: rows=%d current=%d name=%q", rows, current, name)
 	}
 }

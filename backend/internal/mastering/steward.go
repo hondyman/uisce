@@ -221,34 +221,39 @@ func (r *runner) mergeInto(survivor, merged string, res *DecisionResult) (*merge
 	// Identifiers: the survivor gets any it doesn't hold; the merged
 	// record's are ended either way (an identifier names one record).
 	if p.IdentifierTable != nil {
-		key := p.keyColumn()
+		id := p.ident()
 		var ids []struct {
-			ID     string         `db:"id"`
-			Type   string         `db:"id_type"`
-			Value  string         `db:"id_value"`
-			Source sql.NullString `db:"source"`
+			ID     string `db:"id"`
+			Type   string `db:"id_type"`
+			Value  string `db:"id_value"`
+			Source string `db:"source"`
 		}
-		if err := tx.SelectContext(ctx, &ids, fmt.Sprintf(`SELECT id::text, id_type, id_value, source FROM %s
-			WHERE %s::text = $1 AND effective_to IS NULL`, qi(*p.IdentifierTable), key), merged); err != nil {
+		if err := tx.SelectContext(ctx, &ids, fmt.Sprintf(`SELECT id::text, %s AS id_type, %s AS id_value, COALESCE(%s::text, '') AS source FROM %s
+			WHERE %s::text = $1 AND %s`, qi(id.TypeColumn), qi(id.ValueColumn), qi(id.SourceColumn), qi(*p.IdentifierTable),
+			qi(id.KeyColumn), id.identActive("")), merged); err != nil {
 			return nil, err
 		}
 		for _, i := range ids {
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET effective_to = CURRENT_DATE WHERE id::text = $1`, qi(*p.IdentifierTable)), i.ID); err != nil {
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET %s WHERE id::text = $1`, qi(*p.IdentifierTable), id.identRetire()), i.ID); err != nil {
 				return nil, err
 			}
 			rev.Identifiers = append(rev.Identifiers, i.ID)
 			var held bool
-			if err := tx.GetContext(ctx, &held, fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE %s::text = $1 AND id_type = $2
-				AND id_value = $3 AND effective_to IS NULL)`, qi(*p.IdentifierTable), key), survivor, i.Type, i.Value); err != nil {
+			if err := tx.GetContext(ctx, &held, fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE %s::text = $1 AND %s = $2
+				AND %s = $3 AND %s)`, qi(*p.IdentifierTable), qi(id.KeyColumn), qi(id.TypeColumn), qi(id.ValueColumn), id.identActive("")),
+				survivor, i.Type, i.Value); err != nil {
 				return nil, err
 			}
 			if held {
 				continue
 			}
+			// Re-recorded against the survivor, as the same source reported it.
+			args := []any{r.tenant, survivor, i.Type, i.Value, nullIfEmpty(i.Source)}
+			if id.PrimaryColumn != "" {
+				args = append(args, false)
+			}
 			var nid string
-			if err := tx.GetContext(ctx, &nid, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, id_type, id_value, is_primary, source)
-				VALUES ($1::uuid, $2::uuid, $3, $4, false, $5) RETURNING id::text`, qi(*p.IdentifierTable), key),
-				r.tenant, survivor, i.Type, i.Value, i.Source); err != nil {
+			if err := tx.GetContext(ctx, &nid, r.identInsert()+" RETURNING id::text", args...); err != nil {
 				return nil, err
 			}
 			rev.NewIdents = append(rev.NewIdents, nid)
@@ -281,15 +286,13 @@ func (r *runner) mergeInto(survivor, merged string, res *DecisionResult) (*merge
 			}
 		}
 	}
-	if len(set) > 0 {
-		cols, args := []string{}, []any{merged}
-		for c, v := range set {
-			args = append(args, v)
-			cols = append(cols, fmt.Sprintf("%s = $%d", qi(c), len(args)))
+	for c, v := range p.Settings.MergedValues {
+		if _, ok := r.anchorCols[c]; ok {
+			set[c] = v
 		}
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET %s WHERE id::text = $1`, qi(p.AnchorTable), strings.Join(cols, ", ")), args...); err != nil {
-			return nil, err
-		}
+	}
+	if err := r.writeAnchor(merged, set); err != nil {
+		return nil, err
 	}
 	return rev, nil
 }

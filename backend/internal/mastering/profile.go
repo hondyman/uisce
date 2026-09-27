@@ -57,6 +57,36 @@ type Settings struct {
 	// default when it has no survivorship rule.
 	FieldGroups       map[string]string `json:"field_groups"`
 	DefaultFieldGroup string            `json:"default_field_group"`
+
+	// BOBinding names the business object's binding over the anchor, when
+	// the anchor isn't the BO's default binding (e.g. the Security BO: OMS
+	// instrument by default, "Security Master Binding" for the master). Its
+	// field bindings map BO fields to anchor columns.
+	BOBinding string `json:"bo_binding,omitempty"`
+
+	// EntityIDColumn is the anchor column holding the golden record's
+	// stable id - what golden records, identifiers and the cross-reference
+	// point at (default: id). A bitemporal anchor needs one that survives
+	// versions (e.g. master_id), since each version is a new row.
+	EntityIDColumn string `json:"entity_id_column"`
+	// Versioning of the anchor: "in_place" (default: rows are updated) or
+	// "bitemporal" (a change closes the current row - valid_to - and
+	// inserts the new version; only rows with valid_to null are current).
+	Versioning string `json:"versioning"`
+	// Identifiers describes the identifier table when its columns differ
+	// from the default (<prefix>_id, id_type, id_value, source code,
+	// effective_to, is_primary).
+	Identifiers *IdentifierSpec `json:"identifiers,omitempty"`
+	// Derived fills a required anchor column when minting from the first
+	// available of: id:<TYPE> (the record's identifier), @code (the minted
+	// code) or an attribute name. E.g. primary_identifier: [id:ISIN, id:FIGI, @code].
+	Derived map[string][]string `json:"derived,omitempty"`
+	// Required attributes a record must have to mint a golden record
+	// (a clear exception instead of a database error).
+	Required []string `json:"required,omitempty"`
+	// MergedValues are set on the anchor of a record merged into another
+	// (e.g. status: MERGED) - besides merged_into_id when the anchor has it.
+	MergedValues map[string]any `json:"merged_values,omitempty"`
 }
 
 // Reference turns a code into a foreign key of the anchor table. A source's
@@ -78,6 +108,20 @@ type Reference struct {
 	MapVendorColumn string `json:"map_vendor_column,omitempty"`
 	MapCodeColumn   string `json:"map_code_column,omitempty"`
 	Required        bool   `json:"required,omitempty"`
+}
+
+// IdentifierSpec is an identifier table's layout.
+type IdentifierSpec struct {
+	KeyColumn    string `json:"key_column"`    // the golden id column
+	TypeColumn   string `json:"type_column"`   // e.g. id_type
+	ValueColumn  string `json:"value_column"`  // e.g. id_value
+	SourceColumn string `json:"source_column"` // who reported it
+	SourceIsID   bool   `json:"source_is_id"`  // the source column holds the source system id (else its code)
+	// Active: an end-date column (active while null) or a flag column
+	// (active while true).
+	ActiveColumn  string `json:"active_column"`
+	ActiveIsFlag  bool   `json:"active_is_flag"`
+	PrimaryColumn string `json:"primary_column,omitempty"`
 }
 
 var (
@@ -113,6 +157,25 @@ func (p *Profile) decode() error {
 	for col, attr := range s.RecordColumns {
 		check(ident, col, attr)
 	}
+	if s.EntityIDColumn != "" {
+		check(ident, s.EntityIDColumn)
+	}
+	if s.Versioning != "" && s.Versioning != "in_place" && s.Versioning != "bitemporal" {
+		bad = append(bad, "versioning "+s.Versioning)
+	}
+	if s.Identifiers != nil {
+		i := s.Identifiers
+		check(ident, i.KeyColumn, i.TypeColumn, i.ValueColumn, i.SourceColumn, i.ActiveColumn)
+		if i.PrimaryColumn != "" {
+			check(ident, i.PrimaryColumn)
+		}
+	}
+	for col := range s.Derived {
+		check(ident, col)
+	}
+	for col := range s.MergedValues {
+		check(ident, col)
+	}
 	for _, r := range s.References {
 		check(ident, r.Column, r.Attribute, r.RefCodeColumn)
 		check(qualified, r.RefTable)
@@ -137,6 +200,56 @@ func (p *Profile) table(suffix string) string {
 // plainTable is table() unquoted, for to_regclass (names are validated).
 func (p *Profile) plainTable(suffix string) string {
 	return strings.SplitN(p.AnchorTable, ".", 2)[0] + "." + p.TablePrefix + "_" + suffix
+}
+
+// entityCol is the anchor column holding the golden record's stable id.
+func (p *Profile) entityCol() string {
+	if p.Settings.EntityIDColumn != "" {
+		return p.Settings.EntityIDColumn
+	}
+	return "id"
+}
+
+func (p *Profile) bitemporal() bool { return p.Settings.Versioning == "bitemporal" }
+
+// current is the condition for an anchor row being the current version
+// (always true for an in-place anchor), for alias ("" = unqualified).
+func (p *Profile) current(alias string) string {
+	if !p.bitemporal() {
+		return "true"
+	}
+	if alias != "" {
+		alias += "."
+	}
+	return alias + `"valid_to" IS NULL`
+}
+
+// ident is the identifier table's layout (the Product layout by default).
+func (p *Profile) ident() IdentifierSpec {
+	if s := p.Settings.Identifiers; s != nil {
+		return *s
+	}
+	return IdentifierSpec{KeyColumn: p.TablePrefix + "_id", TypeColumn: "id_type", ValueColumn: "id_value",
+		SourceColumn: "source", ActiveColumn: "effective_to", PrimaryColumn: "is_primary"}
+}
+
+// identActive is the condition for an identifier row being in force.
+func (i IdentifierSpec) identActive(alias string) string {
+	if alias != "" {
+		alias += "."
+	}
+	if i.ActiveIsFlag {
+		return alias + qi(i.ActiveColumn)
+	}
+	return alias + qi(i.ActiveColumn) + " IS NULL"
+}
+
+// identRetire ends an identifier row.
+func (i IdentifierSpec) identRetire() string {
+	if i.ActiveIsFlag {
+		return qi(i.ActiveColumn) + " = false"
+	}
+	return qi(i.ActiveColumn) + " = CURRENT_DATE"
 }
 
 // keyColumn is the anchor id column in the mdm.<prefix>_* tables.

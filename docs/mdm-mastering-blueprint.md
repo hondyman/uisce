@@ -86,6 +86,24 @@ Today `MDMStewardHandler.ApplyOverride` applies at once and `GetExceptions`
 takes the tenant from a header or query parameter; both are fixed in the
 overrides slice (the tenant comes from the token only).
 
+## Entity profiles: configuration, not code
+
+`mdm.mastering_entity.settings` describes how an entity's tables are laid out, so a new master is a
+profile row. Besides references, defaults, field groups and record columns:
+
+| Setting | Product | Security |
+|---|---|---|
+| `bo_binding` | (the BO's default binding) | `Security Master Binding` - the Security BO is one concept with two physical homes: the OMS instrument (default binding) and the master |
+| `entity_id_column` | `id` | `master_id` - stable across versions |
+| `versioning` | `in_place` | `bitemporal` - a change closes the current row (`valid_to`) and inserts the next; unchanged values write no version |
+| `identifiers` | `mdm.product_identifier` (id_type, id_value, source code, effective_to, is_primary) | `mdm.security_identifier_issuance` (source system id, `is_valid` flag) |
+| `derived` | - | `primary_identifier`: ISIN, else FIGI, CUSIP, SEDOL, the minted code |
+| `required` | - | security name, asset class, currency (a clear exception, not a database error) |
+| `merged_values` | (status MERGED via its reference) | `status: Inactive` |
+
+One vendor registry: `mdm.source_systems` (0016 repointed the security, issuer and xref foreign keys to it).
+Security matching is identifier-only; a similar name only raises a possible duplicate.
+
 ## Survivorship: layered, one rule engine
 
 Declarative first; expressions only where a ranking can't say it; stewards for true exceptions.

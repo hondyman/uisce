@@ -174,16 +174,17 @@ func (r *runner) identifierHits(types []string, rec *Record) ([]string, []string
 		args  = []any{}
 		keys  []string
 	)
+	id := r.p.ident()
 	for _, t := range types {
 		v, ok := rec.Identifiers[t]
 		if !ok {
 			continue
 		}
 		args = append(args, t, v)
-		c := fmt.Sprintf("(id_type = $%d AND id_value = $%d", len(args)-1, len(args))
+		c := fmt.Sprintf("(%s = $%d AND %s = $%d", qi(id.TypeColumn), len(args)-1, qi(id.ValueColumn), len(args))
 		if t == "PROVIDER_CODE" {
-			args = append(args, r.sourceCd)
-			c += fmt.Sprintf(" AND source = $%d", len(args))
+			args = append(args, r.identSource())
+			c += fmt.Sprintf(" AND %s::text = $%d", qi(id.SourceColumn), len(args))
 		}
 		conds = append(conds, c+")")
 		keys = append(keys, t)
@@ -193,8 +194,17 @@ func (r *runner) identifierHits(types []string, rec *Record) ([]string, []string
 	}
 	var hits []string
 	err := r.tx.SelectContext(r.ctx, &hits, fmt.Sprintf(`SELECT DISTINCT %s::text FROM %s
-		WHERE effective_to IS NULL AND (%s) ORDER BY 1`, r.p.keyColumn(), qi(*r.p.IdentifierTable), strings.Join(conds, " OR ")), args...)
+		WHERE %s AND (%s) ORDER BY 1`, qi(id.KeyColumn), qi(*r.p.IdentifierTable), id.identActive(""), strings.Join(conds, " OR ")), args...)
 	return hits, keys, err
+}
+
+// identSource is how the identifier table records the reporting source:
+// its system id or its code.
+func (r *runner) identSource() string {
+	if r.p.ident().SourceIsID {
+		return r.sourceID
+	}
+	return r.sourceCd
 }
 
 // bestFuzzy scores the record against the closest golden records by name
@@ -204,7 +214,7 @@ func (r *runner) bestFuzzy(mr MatchRule, rec *Record) (string, float64, error) {
 	if name == "" {
 		return "", 0, nil
 	}
-	sel := []string{"id::text AS id"}
+	sel := []string{qi(r.p.entityCol()) + "::text AS id"}
 	var trigram, exact []string
 	for _, k := range mr.FuzzyKeys {
 		if _, ok := r.anchorCols[k.Field]; !ok {
@@ -229,6 +239,7 @@ func (r *runner) bestFuzzy(mr MatchRule, rec *Record) (string, float64, error) {
 	if _, ok := r.anchorCols["merged_into_id"]; ok {
 		live = " AND merged_into_id IS NULL"
 	}
+	live += " AND " + r.p.current("")
 	q := fmt.Sprintf(`SELECT %s FROM %s WHERE %s %% $1%s ORDER BY similarity(%s::text, $1) DESC LIMIT 5`,
 		strings.Join(sel, ", "), qi(r.p.AnchorTable), qi(r.p.Settings.NameAttribute), live, qi(r.p.Settings.NameAttribute))
 	rows, err := r.tx.QueryxContext(r.ctx, q, args...)
@@ -274,13 +285,43 @@ func (r *runner) mint(rec *Record) (string, error) {
 	for k, v := range rec.Attrs {
 		attrs[k] = v
 	}
+	for _, a := range r.p.Settings.Required {
+		if v, ok := attrs[a]; !ok || v == nil || text(v) == "" {
+			return "", fmt.Errorf("%s is required to create a golden record and no source supplied it", a)
+		}
+	}
 	set, err := r.project(attrs, true)
 	if err != nil {
 		return "", err
 	}
-	set["id"] = id
+	// The stable id (the row id too, unless the anchor versions rows).
+	set[r.p.entityCol()] = id
 	set["tenant_id"] = r.tenant
-	set[r.p.AnchorCodeColumn] = r.p.CodePrefix + strings.ToUpper(strings.ReplaceAll(id, "-", "")[:10])
+	code := r.p.CodePrefix + strings.ToUpper(strings.ReplaceAll(id, "-", "")[:10])
+	set[r.p.AnchorCodeColumn] = code
+	// Derived columns: the first available of the listed sources.
+	for col, from := range r.p.Settings.Derived {
+		if _, ok := r.anchorCols[col]; !ok {
+			continue
+		}
+		for _, f := range from {
+			var v any
+			switch {
+			case f == "@code":
+				v = code
+			case strings.HasPrefix(f, "id:"):
+				if s := rec.Identifiers[strings.TrimPrefix(f, "id:")]; s != "" {
+					v = s
+				}
+			default:
+				v = attrs[f]
+			}
+			if v != nil && text(v) != "" {
+				set[col] = v
+				break
+			}
+		}
+	}
 	cols := make([]string, 0, len(set))
 	for c := range set {
 		cols = append(cols, c)
@@ -300,7 +341,8 @@ func (r *runner) mint(rec *Record) (string, error) {
 // update a reference no source supplies (e.g. a status a steward set) is
 // left as it is.
 func (r *runner) project(attrs map[string]any, minting bool) (map[string]any, error) {
-	protected := map[string]bool{"id": true, "tenant_id": true, r.p.AnchorCodeColumn: true, "created_at": true, "updated_at": true}
+	protected := map[string]bool{"id": true, "tenant_id": true, r.p.AnchorCodeColumn: true, r.p.entityCol(): true,
+		"created_at": true, "updated_at": true, "valid_from": true, "valid_to": true}
 	set := map[string]any{}
 	for a, v := range attrs {
 		isRef := false
@@ -336,6 +378,7 @@ func (r *runner) ensureIdentifiers(golden string, rec *Record) error {
 	if !r.identifiers || len(rec.Identifiers) == 0 {
 		return nil
 	}
+	id := r.p.ident()
 	types := make([]string, 0, len(rec.Identifiers))
 	for t := range rec.Identifiers {
 		types = append(types, t)
@@ -344,9 +387,10 @@ func (r *runner) ensureIdentifiers(golden string, rec *Record) error {
 	for _, t := range types {
 		v := rec.Identifiers[t]
 		var owner string
-		q := fmt.Sprintf(`SELECT %s::text FROM %s WHERE id_type = $1 AND id_value = $2 AND effective_to IS NULL
-			AND ($1 <> 'PROVIDER_CODE' OR source = $3) LIMIT 1`, r.p.keyColumn(), qi(*r.p.IdentifierTable))
-		err := r.tx.GetContext(r.ctx, &owner, q, t, v, r.sourceCd)
+		q := fmt.Sprintf(`SELECT %s::text FROM %s WHERE %s = $1 AND %s = $2 AND %s
+			AND ($1 <> 'PROVIDER_CODE' OR %s::text = $3) LIMIT 1`, qi(id.KeyColumn), qi(*r.p.IdentifierTable),
+			qi(id.TypeColumn), qi(id.ValueColumn), id.identActive(""), qi(id.SourceColumn))
+		err := r.tx.GetContext(r.ctx, &owner, q, t, v, r.identSource())
 		switch {
 		case err == nil && owner == golden:
 			continue
@@ -362,9 +406,7 @@ func (r *runner) ensureIdentifiers(golden string, rec *Record) error {
 		if _, err := r.tx.ExecContext(r.ctx, `SAVEPOINT ident`); err != nil {
 			return err
 		}
-		_, err = r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, id_type, id_value, is_primary, source)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6)`, qi(*r.p.IdentifierTable), r.p.keyColumn()),
-			r.tenant, golden, t, v, t == "ISIN", r.sourceCd)
+		_, err = r.tx.ExecContext(r.ctx, r.identInsert(), r.identInsertArgs(golden, t, v, t == "ISIN")...)
 		if err != nil {
 			// e.g. a type the identifier table doesn't accept: keep mastering.
 			if _, rbErr := r.tx.ExecContext(r.ctx, `ROLLBACK TO SAVEPOINT ident`); rbErr != nil {
@@ -381,6 +423,34 @@ func (r *runner) ensureIdentifiers(golden string, rec *Record) error {
 		}
 	}
 	return nil
+}
+
+// identInsert records an identifier for a golden record, in the table's
+// layout (args: tenant, golden, type, value, source[, primary][, active]).
+func (r *runner) identInsert() string {
+	id := r.p.ident()
+	cols := []string{"tenant_id", qi(id.KeyColumn), qi(id.TypeColumn), qi(id.ValueColumn), qi(id.SourceColumn)}
+	vals := []string{"$1::uuid", "$2::uuid", "$3", "$4", "$5"}
+	if id.SourceIsID {
+		vals[4] = "$5::uuid"
+	}
+	n := 5
+	if id.PrimaryColumn != "" {
+		n++
+		cols, vals = append(cols, qi(id.PrimaryColumn)), append(vals, fmt.Sprintf("$%d", n))
+	}
+	if id.ActiveIsFlag {
+		cols, vals = append(cols, qi(id.ActiveColumn)), append(vals, "true")
+	}
+	return fmt.Sprintf(`INSERT INTO %s (%s) VALUES (%s)`, qi(*r.p.IdentifierTable), strings.Join(cols, ", "), strings.Join(vals, ", "))
+}
+
+func (r *runner) identInsertArgs(golden, typ, value string, primary bool) []any {
+	args := []any{r.tenant, golden, typ, value, r.identSource()}
+	if r.p.ident().PrimaryColumn != "" {
+		args = append(args, primary)
+	}
+	return args
 }
 
 // candidate raises a possible duplicate for a steward: the new record and
@@ -486,7 +556,18 @@ func (r *runner) masterOne(golden string) error {
 		attrs[a] = d.Value
 		winners[a] = d.Winner.SourceCd
 	}
-	issues := append(anomalies, r.rules.Golden(inFields(attrs, r.attrField))...)
+	// Rules see the record as the BO does, including its own code (minted
+	// by mastering, so no source supplies it - e.g. "SecId is present").
+	ruleView := make(map[string]any, len(attrs)+1)
+	for k, v := range attrs {
+		ruleView[k] = v
+	}
+	var code string
+	if err := r.tx.GetContext(r.ctx, &code, fmt.Sprintf(`SELECT %s::text FROM %s WHERE %s::text = $1 AND %s LIMIT 1`,
+		qi(r.p.AnchorCodeColumn), qi(r.p.AnchorTable), qi(r.p.entityCol()), r.p.current("")), golden); err == nil {
+		ruleView[r.p.AnchorCodeColumn] = code
+	}
+	issues := append(anomalies, r.rules.Golden(inFields(ruleView, r.attrField))...)
 	status := "PUBLISHED"
 	for _, is := range issues {
 		// A held value (an anomaly, or nothing passing a selection rule)
@@ -673,6 +754,13 @@ func (r *runner) updateAnchor(golden string, attrs map[string]any, dq float64) e
 	if _, ok := r.anchorCols["updated_at"]; ok {
 		set["updated_at"] = time.Now().UTC()
 	}
+	return r.writeAnchor(golden, set)
+}
+
+// writeAnchor applies set to the golden record's anchor row. In place: an
+// update. Bitemporal: the current row is closed (valid_to) and a new
+// version inserted - a copy of it with set applied - so history is kept.
+func (r *runner) writeAnchor(golden string, set map[string]any) error {
 	if len(set) == 0 {
 		return nil
 	}
@@ -681,13 +769,71 @@ func (r *runner) updateAnchor(golden string, attrs map[string]any, dq float64) e
 		cols = append(cols, c)
 	}
 	sort.Strings(cols)
-	args := []any{golden}
-	parts := make([]string, len(cols))
-	for i, c := range cols {
-		args = append(args, set[c])
-		parts[i] = fmt.Sprintf("%s = $%d", qi(c), i+2)
+	ent := qi(r.p.entityCol())
+	if !r.p.bitemporal() {
+		args := []any{golden}
+		parts := make([]string, len(cols))
+		for i, c := range cols {
+			args = append(args, set[c])
+			parts[i] = fmt.Sprintf("%s = $%d", qi(c), i+2)
+		}
+		_, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`UPDATE %s SET %s WHERE %s::text = $1`, qi(r.p.AnchorTable), strings.Join(parts, ", "), ent), args...)
+		return err
 	}
-	_, err = r.tx.ExecContext(r.ctx, fmt.Sprintf(`UPDATE %s SET %s WHERE id::text = $1`, qi(r.p.AnchorTable), strings.Join(parts, ", ")), args...)
+	// Nothing actually changing (ignoring updated_at) writes no version.
+	var cmp []string
+	cargs := []any{golden}
+	for _, c := range cols {
+		if c == "updated_at" {
+			continue
+		}
+		cargs = append(cargs, jsonText(set[c]))
+		cmp = append(cmp, fmt.Sprintf("%s::text IS NOT DISTINCT FROM $%d", qi(c), len(cargs)))
+	}
+	if len(cmp) > 0 {
+		var same bool
+		if err := r.tx.GetContext(r.ctx, &same, fmt.Sprintf(`SELECT COALESCE(bool_and(%s), false) FROM %s WHERE %s::text = $1 AND %s`,
+			strings.Join(cmp, " AND "), qi(r.p.AnchorTable), ent, r.p.current("")), cargs...); err == nil && same {
+			return nil
+		}
+	}
+	// Close the current version, then insert its successor from it.
+	var rowID string
+	if err := r.tx.GetContext(r.ctx, &rowID, fmt.Sprintf(`UPDATE %s SET "valid_to" = now() WHERE %s::text = $1 AND %s RETURNING id::text`,
+		qi(r.p.AnchorTable), ent, r.p.current("")), golden); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return msgNoGolden(golden)
+		}
+		return err
+	}
+	all := make([]string, 0, len(r.anchorCols))
+	for c := range r.anchorCols {
+		all = append(all, c)
+	}
+	sort.Strings(all)
+	args := []any{rowID}
+	var into, from []string
+	for _, c := range all {
+		switch c {
+		case "id":
+			continue // a new row id (the column's default)
+		case "valid_from":
+			into, from = append(into, qi(c)), append(from, "now()")
+			continue
+		case "valid_to":
+			into, from = append(into, qi(c)), append(from, "NULL")
+			continue
+		}
+		into = append(into, qi(c))
+		if v, ok := set[c]; ok {
+			args = append(args, v)
+			from = append(from, fmt.Sprintf("$%d", len(args)))
+		} else {
+			from = append(from, "a."+qi(c))
+		}
+	}
+	_, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (%s) SELECT %s FROM %s a WHERE a.id::text = $1`,
+		qi(r.p.AnchorTable), strings.Join(into, ", "), strings.Join(from, ", "), qi(r.p.AnchorTable)), args...)
 	return err
 }
 

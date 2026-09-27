@@ -99,7 +99,7 @@ func (e *Engine) GetPolicy(ctx context.Context, tenantID, entity string) (*Polic
 		seen[a] = true
 	}
 	if e.Fields != nil {
-		if fa, err := e.Fields.AttrFields(ctx, tenantID, cfg.profile.BOKey, cfg.profile.AnchorTable); err == nil {
+		if fa, err := e.Fields.AttrFields(ctx, tenantID, cfg.profile.BOKey, cfg.profile.AnchorTable, cfg.profile.Settings.BOBinding); err == nil {
 			for _, a := range fa {
 				if ref, ok := cfg.profile.referenceFor(a); ok {
 					a = ref.Attribute
@@ -434,10 +434,10 @@ func (e *Engine) Overrides(ctx context.Context, tenantID, entity, status, golden
 	out := []Override{}
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
 		err := tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name
-			FROM mdm.golden_override o LEFT JOIN %s a ON a.id = o.golden_id
+			FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s
 			WHERE o.entity_cd = $1 AND ($2 = '' OR o.status = $2 OR ($2 = 'ACTIVE' AND o.active)) AND ($3 = '' OR o.golden_id::text = $3)
 			ORDER BY (o.status = 'PENDING') DESC, o.requested_at DESC LIMIT $4`,
-			overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable)),
+			overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a")),
 			p.EntityCd, strings.ToUpper(status), goldenID, limit)
 		if err != nil {
 			return err
@@ -450,8 +450,8 @@ func (e *Engine) Overrides(ctx context.Context, tenantID, entity, status, golden
 func getOverride(ctx context.Context, tx *sqlx.Tx, p *Profile, id, actorID string) (*Override, error) {
 	var o []Override
 	if err := tx.SelectContext(ctx, &o, fmt.Sprintf(`SELECT %s, a.%s AS golden_code, a.%s::text AS golden_name
-		FROM mdm.golden_override o LEFT JOIN %s a ON a.id = o.golden_id WHERE o.id::text = $1`,
-		overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable)), id); err != nil {
+		FROM mdm.golden_override o LEFT JOIN %s a ON a.%s = o.golden_id AND %s WHERE o.id::text = $1`,
+		overrideCols, qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute), qi(p.AnchorTable), qi(p.entityCol()), p.current("a")), id); err != nil {
 		return nil, err
 	}
 	if len(o) == 0 {
@@ -496,7 +496,8 @@ func (e *Engine) stewardRunner(ctx context.Context, tx *sqlx.Tx, cfg *config, te
 // currentAttrs is the golden record's latest attributes.
 func (r *runner) currentAttrs(golden string) (map[string]any, error) {
 	var code string
-	if err := r.tx.GetContext(r.ctx, &code, fmt.Sprintf(`SELECT %s FROM %s WHERE id::text = $1`, qi(r.p.AnchorCodeColumn), qi(r.p.AnchorTable)), golden); err != nil {
+	if err := r.tx.GetContext(r.ctx, &code, fmt.Sprintf(`SELECT %s FROM %s WHERE %s::text = $1 AND %s`, qi(r.p.AnchorCodeColumn), qi(r.p.AnchorTable),
+		qi(r.p.entityCol()), r.p.current("")), golden); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, msgNoGolden(golden)
 		}
@@ -536,7 +537,7 @@ func (r *runner) knownAttribute(attr string, current map[string]any) bool {
 // foreign key is overridden through its reference's code instead).
 func overridable(p *Profile, anchor map[string]string, attr string) bool {
 	switch attr {
-	case "id", "tenant_id", p.AnchorCodeColumn, "created_at", "updated_at":
+	case "id", "tenant_id", p.AnchorCodeColumn, p.entityCol(), "created_at", "updated_at", "valid_from", "valid_to":
 		return false
 	}
 	return anchor[attr] != "uuid"
