@@ -74,6 +74,7 @@ export interface Candidate {
 export interface GoldenDetail {
   id: string;
   code: string;
+  name?: string;
   /** The version the fields and decisions are for. */
   selected_version: number;
   versions: { id: string; version: number; status: GoldenStatus; is_current: boolean; attributes: Record<string, unknown>;
