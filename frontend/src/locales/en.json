@@ -434,7 +434,8 @@
       "held_for_review": "Held",
       "unchanged": "Unchanged",
       "exceptions": "Exceptions",
-      "restated": "Restated"
+      "restated": "Restated",
+      "rechecked": "Re-checked"
     },
     "exceptions": {
       "status": "Show",

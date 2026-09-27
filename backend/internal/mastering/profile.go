@@ -133,6 +133,10 @@ type SeriesControls struct {
 	DayOverDay struct {
 		Error    string `json:"error"`
 		Critical string `json:"critical"`
+		// MaxGapDays: the prior golden price must be at most this many
+		// days older (default 7) - a move against a months-old price is
+		// not a day-over-day move. It also bounds the restatement cascade.
+		MaxGapDays int `json:"max_gap_days,omitempty"`
 	} `json:"day_over_day"`
 	// CrossSource records a variance event for each source that disagrees
 	// with the golden value beyond the warning threshold.
@@ -146,6 +150,14 @@ type SeriesControls struct {
 	// instrument and date - beyond the error threshold it is flagged, beyond
 	// critical held. Default: [[LAST, OFFICIAL_CLOSE], [BID, MID, ASK]].
 	RelatedTypes [][]string `json:"related_types,omitempty"`
+}
+
+// maxGapDays is how far back a day-over-day prior may be.
+func (c SeriesControls) maxGapDays() int {
+	if c.DayOverDay.MaxGapDays > 0 {
+		return c.DayOverDay.MaxGapDays
+	}
+	return 7
 }
 
 func (c SeriesControls) related(priceType string) []string {
