@@ -130,7 +130,7 @@ second calendar store (`tenant_exchange_calendars`).
 | 1 | **msgcat** | `internal/msgcat` + error envelope middleware; pipeline, scheduler and BO write errors moved to catalog codes; guard test: no `err.Error()` to clients in migrated handlers |
 | 2 | **Scheduler core** | `internal/schedule` model, Temporal engine, calendar evaluation on MDM calendars, runners for pipeline + report + saved query; `schedule_runs`; API + MCP |
 | 3 | **Scheduler UI** | `<ScheduleEditor>` in report builder, query builder, pipeline editor; Schedules console |
-| 4 | **Retire the rest** | S1 deleted; creates/list/run 410; BurstingTab removed; migrate+reapply Temporal; **report_schedules/burst tables dropped** (20261112); S2/D1 still open |
+| 4 | **Retire the rest** | S1 deleted; creates/list/run 410; BurstingTab removed; migrate+reapply Temporal; report_schedules/burst dropped; **D1(a) Intelligence console = Schedules console**; S2 AI/DAG backend still Slice 5 |
 | 5 | **Workflows + DAGs** | workflow and job-DAG targets (S2's DAG model on the core) |
 | 6 | **Error management** | error log + fingerprint queue + console + routing |
 | 7 | **Error bot** | explain / suggest / cluster / incident / notify; autofix under policy |
@@ -144,7 +144,7 @@ Each slice ships with tests, a live check on the running backend, and a PR.
 
 * **D1 — Scheduler Intelligence (S2).** (a) Keep its console as the central Schedules
   console, rebuilt on the single core, keeping changesets/approvals, blast radius,
-  residency; or (b) new console, retire S2. *Recommended: (a).*
+  residency; or (b) new console, retire S2. *Recommended: (a). **Closed:** console cutover to `/automation/schedules` (SchedulesPage); S2 AI/DAG/backend remain for Slice 5.*
 * **D2 — Live environment.** Run the backend, worker and DataFusion engine against
   `alpha` and Temporal on 100.84.50.65, and **apply the new migrations to `alpha`**
   (additive only: new tables/columns; no drops). Where should the DataFusion engine

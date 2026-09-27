@@ -392,10 +392,10 @@ function ProtectedApp() {
         {/* ═══════════════════════════════════════════════════════════════════
             OPERATIONS - Scheduling and workflows
             ═══════════════════════════════════════════════════════════════════ */}
-        {/* S2 Scheduler Intelligence console deferred (D1): redirect to the one Schedules console. */}
+        {/* D1(a): Scheduler Intelligence console = Schedules console on /api/schedules. */}
         <Route path="scheduler-intelligence" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         <Route path="scheduler-intelligence/*" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
-        {/* The S1 job scheduler was retired: schedules, runs and calendars live on the one scheduler. */}
+        {/* S1/S7 job scheduler pages retired; same console. */}
         <Route path="scheduler/*" element={<Navigate to={`/${locale}/automation/schedules`} replace />} />
         
         <Route path="bp-console" element={<ProtectedRoute><BPConsolePage /></ProtectedRoute>} />

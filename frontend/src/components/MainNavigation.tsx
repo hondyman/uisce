@@ -296,7 +296,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Automation',
         icon: <EventRepeatIcon />,
         items: [
-          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Run reports and queries on business calendars', badge: { label: 'New', color: 'success' } },
+          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Platform scheduler — reports, queries, pipelines, run history (former Scheduler Intelligence)' },
         ]
       }
     ]
@@ -364,7 +364,7 @@ const categoryConfigs: CategoryConfig[] = [
         label: 'Scheduler',
         icon: <TimelineIcon />,
         items: [
-          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Schedules, run history and business calendars' },
+          { label: 'Schedules', path: '/automation/schedules', icon: <EventRepeatIcon />, description: 'Platform scheduler — schedules, run history, business calendars (former Scheduler Intelligence)' },
         ]
       },
       {
