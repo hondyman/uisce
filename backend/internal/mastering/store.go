@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/lib/pq"
 )
 
 // Profiles lists the mastered entities the tenant sees.
@@ -120,6 +121,11 @@ type GoldenDetail struct {
 	Exceptions  []ExceptionRow    `json:"exceptions"`
 	Decisions   []SurvivalLogRow  `json:"decisions"`
 	Anchor      map[string]string `json:"anchor,omitempty"`
+	// Terms names each attribute by the business object field (semantic
+	// term) mapped to it, for the side-by-side view.
+	Terms map[string]string `json:"terms,omitempty"`
+	// Rules names the survivorship rules the decisions cite (id -> label).
+	Rules map[string]string `json:"rules,omitempty"`
 }
 
 type GoldenVersion struct {
@@ -180,6 +186,7 @@ type SurvivalLogRow struct {
 	Source    *string         `db:"source" json:"source,omitempty"`
 	Competing json.RawMessage `db:"competing_values" json:"competing"`
 	Reason    *string         `db:"decision_reason" json:"reason,omitempty"`
+	RuleID    *string         `db:"rule_id" json:"rule_id,omitempty"`
 }
 
 // GoldenByID returns a golden record's provenance.
@@ -223,7 +230,7 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string, ve
 				return err
 			}
 			if err := tx.SelectContext(ctx, &d.Decisions, fmt.Sprintf(`SELECT l.golden_version, l.field_name, l.winning_value, s.code AS source,
-					l.competing_values, l.decision_reason
+					l.competing_values, l.decision_reason, l.rule_id::text
 				FROM %s l LEFT JOIN mdm.source_systems s ON s.id = l.winning_source_id
 				WHERE l.%s::text = $1 AND l.golden_version = $2 ORDER BY l.field_name`, p.table("survivorship_log"), key), id, sel.Version); err != nil {
 				return err
@@ -255,6 +262,10 @@ func (e *Engine) GoldenByID(ctx context.Context, tenantID, entity, id string, ve
 		d.Exceptions, err = exceptions(ctx, tx, p, "", id, 50)
 		return err
 	})
+	if err != nil {
+		return d, err
+	}
+	d.Terms, d.Rules = e.decisionLabels(ctx, tenantID, p, d.Decisions)
 	return d, err
 }
 
@@ -429,4 +440,45 @@ func (e *Engine) ResolveException(ctx context.Context, tenantID, entity, id, sta
 		}
 		return nil
 	})
+}
+
+// decisionLabels names what the side-by-side view shows: each attribute's
+// semantic term (the BO field mapped to it) and each cited survivorship
+// rule (attribute and strategy). Best effort: a missing catalog leaves the
+// attribute names as they are.
+func (e *Engine) decisionLabels(ctx context.Context, tenantID string, p *Profile, ds []SurvivalLogRow) (map[string]string, map[string]string) {
+	terms := map[string]string{}
+	if e.Fields != nil {
+		if fa, err := e.Fields.AttrFields(ctx, tenantID, p.BOKey, p.AnchorTable, p.Settings.BOBinding); err == nil {
+			for field, attr := range fa {
+				if ref, ok := p.referenceFor(attr); ok {
+					attr = ref.Attribute
+				}
+				if _, taken := terms[attr]; !taken || field < terms[attr] {
+					terms[attr] = field
+				}
+			}
+		}
+	}
+	rules := map[string]string{}
+	var ids []string
+	for _, d := range ds {
+		if d.RuleID != nil && *d.RuleID != "" {
+			ids = append(ids, *d.RuleID)
+		}
+	}
+	if len(ids) > 0 {
+		var rows []struct {
+			ID       string `db:"id"`
+			Attr     string `db:"attribute_name"`
+			Strategy string `db:"strategy"`
+		}
+		_ = e.inConfig(ctx, tenantID, func(tx *sqlx.Tx) error {
+			return tx.SelectContext(ctx, &rows, `SELECT id::text, attribute_name, strategy FROM mdm.survivorship_rule WHERE id::text = ANY($1)`, pq.Array(ids))
+		})
+		for _, r := range rows {
+			rules[r.ID] = r.Strategy + " rule for " + r.Attr
+		}
+	}
+	return terms, rules
 }
