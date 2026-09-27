@@ -136,7 +136,7 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
       if (JSON.stringify(current.attributes?.[k] ?? null) !== JSON.stringify(before[k] ?? null)) changes.set(k, { before: before[k] });
     }
   }
-  const name = current?.attributes?.name as string | undefined;
+  const name = d?.name ?? (current?.attributes?.name as string | undefined);
   const decisionFor = new Map((d?.decisions ?? []).map((x) => [x.field, x]));
   const overrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'golden', id], queryFn: () => masteringApi.overrides(entity, { golden: id! }), enabled: !!id });
   const activeAttrs = new Set((overrides.data?.overrides ?? []).filter((o) => o.active).map((o) => o.attribute));
