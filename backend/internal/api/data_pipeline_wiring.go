@@ -69,6 +69,7 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	}
 	(&mastering.Handler{Engine: engine, Catalog: s.MessageCatalog, ActorFrom: s.masteringActor}).RegisterRoutes(r)
 	s.MasteringEngine = engine
+	s.masteringRunner = &mastering.Runner{Engine: engine, Bindings: bindings}
 
 	store := &datapipeline.Store{DB: sqlxDB}
 	acts := &datapipeline.Activities{Store: store, Deps: deps}

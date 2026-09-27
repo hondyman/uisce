@@ -705,7 +705,8 @@
     "kinds": {
       "report": "Informe",
       "saved_query": "Consulta guardada",
-      "data_pipeline": "Canalización de datos"
+      "data_pipeline": "Canalización de datos",
+      "mastering": "Maestrización"
     },
     "when": {
       "external": "Disparada por un planificador externo",

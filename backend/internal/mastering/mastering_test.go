@@ -193,3 +193,23 @@ func TestSameJSONIsOrderFree(t *testing.T) {
 		t.Error("key order must not create a new version")
 	}
 }
+
+func TestParseTarget(t *testing.T) {
+	if e, tb, ok := ParseTarget("Product:staging.ff_product"); !ok || e != "product" || tb != "staging.ff_product" {
+		t.Errorf("got %q %q %v", e, tb, ok)
+	}
+	for _, bad := range []string{"product", "product:", ":staging.x", "product:mdm.product", "product:staging.x;drop", "product:staging.X"} {
+		if _, _, ok := ParseTarget(bad); ok {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
+}
+
+func TestCountsAdd(t *testing.T) {
+	var c Counts
+	c.add(Counts{Records: 22, Published: 9, Invalid: 13})
+	c.add(Counts{Records: 22, Unchanged: 9, Invalid: 13})
+	if c.Records != 44 || c.Published != 9 || c.Unchanged != 9 || c.Invalid != 26 {
+		t.Errorf("%+v", c)
+	}
+}

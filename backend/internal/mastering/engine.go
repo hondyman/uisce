@@ -581,3 +581,10 @@ func (r *runner) exception(goldenID, sourceKey string, is Issue) error {
 	r.raised = append(r.raised, is)
 	return nil
 }
+
+func decodeCounts(r *Run, c *Counts) error {
+	if len(r.RawCounts) == 0 {
+		return nil
+	}
+	return json.Unmarshal(r.RawCounts, c)
+}
