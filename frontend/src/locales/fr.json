@@ -595,7 +595,8 @@
       "CURRENCY_MISMATCH": "Devise différente",
       "DAY_OVER_DAY": "Variation journalière",
       "SELECTION_HOLD": "Retenu par la règle de sélection",
-      "SELECTION_FLAG": "Alerte de règle de sélection"
+      "SELECTION_FLAG": "Alerte de règle de sélection",
+      "RELATED_TYPE_DIVERGENCE": "Diverge d’un prix associé"
     },
     "review": {
       "requested": "Fusion demandée ; elle aura lieu une fois approuvée.",
@@ -724,7 +725,12 @@
       "controls": "Contrôles",
       "control": "{{control}} : {{pct}} % ({{level}}, {{action}})",
       "variances": "Sources en désaccord",
-      "bitemporal": "Chaque version est conservée avec le moment où elle était connue : le prix retenu à tout instant peut être relu."
+      "bitemporal": "Chaque version est conservée avec le moment où elle était connue : le prix retenu à tout instant peut être relu.",
+      "decideHeld": "Libérer ou corriger ce prix",
+      "correct": "Corriger ce prix",
+      "changeOverride": "Modifier ou retirer le prix du gestionnaire",
+      "stewardPrice": "Prix du gestionnaire",
+      "pending": "Proposé {{value}}, en attente d’approbation"
     }
   },
   "stagingBindings": {

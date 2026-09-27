@@ -140,6 +140,33 @@ type SeriesControls struct {
 	// CurrencyMismatch: EXCLUDE a quote in another currency than the
 	// instrument's from survivorship (flagged), or FLAG it only.
 	CurrencyMismatch string `json:"currency_mismatch"`
+	// RelatedTypes are price types that should agree (e.g. LAST and
+	// OFFICIAL_CLOSE; BID, MID and ASK): a price only one source quotes is
+	// checked against the golden prices of its related types for the same
+	// instrument and date - beyond the error threshold it is flagged, beyond
+	// critical held. Default: [[LAST, OFFICIAL_CLOSE], [BID, MID, ASK]].
+	RelatedTypes [][]string `json:"related_types,omitempty"`
+}
+
+func (c SeriesControls) related(priceType string) []string {
+	groups := c.RelatedTypes
+	if groups == nil {
+		groups = [][]string{{"LAST", "OFFICIAL_CLOSE"}, {"BID", "MID", "ASK"}}
+	}
+	for _, g := range groups {
+		for _, t := range g {
+			if t == priceType {
+				out := make([]string, 0, len(g)-1)
+				for _, o := range g {
+					if o != priceType {
+						out = append(out, o)
+					}
+				}
+				return out
+			}
+		}
+	}
+	return nil
 }
 
 func (p *Profile) timeSeries() bool { return p.Kind == KindTimeSeries }

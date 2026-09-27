@@ -83,3 +83,22 @@ func TestSelectionContextExtra(t *testing.T) {
 		t.Errorf("threshold: %v", d["threshold"])
 	}
 }
+
+func TestPriceOverridePolicy(t *testing.T) {
+	p := &Policy{Mode: ModeApproval, ApprovalsRequired: 1, HighRiskApprovals: 2, HighRiskAttributes: []string{"NAV"}}
+	if n := p.required("NAV@2026-09-26"); n != 2 {
+		t.Errorf("high-risk price type: %d approvals, want 2", n)
+	}
+	if n := p.required("LAST@2026-09-26"); n != 1 {
+		t.Errorf("other price type: %d, want 1", n)
+	}
+	if n := p.required("NAVIGATOR"); n != 1 {
+		t.Errorf("a record attribute that starts like a price type: %d, want 1", n)
+	}
+	if pt, d, ok := parsePriceAttr("OFFICIAL_CLOSE@2026-09-25"); !ok || pt != "OFFICIAL_CLOSE" || d != "2026-09-25" {
+		t.Errorf("parse: %s %s %v", pt, d, ok)
+	}
+	if _, _, ok := parsePriceAttr("LAST@yesterday"); ok {
+		t.Error("a date that is not a date must not parse")
+	}
+}

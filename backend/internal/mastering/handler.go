@@ -309,9 +309,6 @@ func (h *Handler) proposeOverride(w http.ResponseWriter, r *http.Request) {
 		if !a.CanRun {
 			return nil, 0, msgNotAllowed()
 		}
-		if err := h.recordOnly(r.Context(), a.TenantID, chi.URLParam(r, "entity")); err != nil {
-			return nil, 0, err
-		}
 		var in OverrideRequest
 		if err := decodeBody(r, &in); err != nil {
 			return nil, 0, err
