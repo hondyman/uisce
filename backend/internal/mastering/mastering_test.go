@@ -213,3 +213,13 @@ func TestCountsAdd(t *testing.T) {
 		t.Errorf("%+v", c)
 	}
 }
+
+func TestOverridableAttributes(t *testing.T) {
+	p := productProfile(t)
+	anchor := map[string]string{"id": "uuid", "product_cd": "character varying", "name": "character varying", "manager_id": "uuid", "aum": "numeric"}
+	for attr, want := range map[string]bool{"name": true, "aum": true, "product_type_cd": true, "id": false, "product_cd": false, "tenant_id": false, "manager_id": false} {
+		if got := overridable(p, anchor, attr); got != want {
+			t.Errorf("%s: got %v", attr, got)
+		}
+	}
+}
