@@ -658,7 +658,9 @@
       "report": "Report",
       "saved_query": "Saved query",
       "data_pipeline": "Data pipeline",
-      "mastering": "Mastering"
+      "mastering": "Mastering",
+      "workflow": "Workflow",
+      "job_dag": "Job DAG"
     },
     "when": {
       "external": "Triggered by an external scheduler",

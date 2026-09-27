@@ -38,44 +38,40 @@ func (h *SchedulerHandlers) Service() *si.Service {
 }
 
 // RegisterRoutes registers all scheduler routes.
-// Mutating job/DAG/AI routes are retired (410): the one scheduler is /api/schedules.
-// Reads remain for observability until Slice 5 removes S2 tables.
+// Slice 5: the entire /scheduler surface is retired (410). Use /api/schedules
+// with target.kind workflow | job_dag (and existing kinds). S2 tables remain
+// until a follow-up drop migration.
 func (h *SchedulerHandlers) RegisterRoutes(r chi.Router) {
 	r.Route("/scheduler", func(r chi.Router) {
-		// Jobs
-		r.Get("/jobs", h.ListJobs)
-		r.Post("/jobs", h.retiredMutator)
-		r.Get("/jobs/{id}", h.GetJob)
-		r.Patch("/jobs/{id}", h.retiredMutator)
-		r.Delete("/jobs/{id}", h.retiredMutator)
-		r.Post("/jobs/{id}/run", h.retiredMutator)
-		r.Get("/jobs/{id}/runs", h.GetJobRuns)
+		r.Get("/jobs", h.retiredSurface)
+		r.Post("/jobs", h.retiredSurface)
+		r.Get("/jobs/{id}", h.retiredSurface)
+		r.Patch("/jobs/{id}", h.retiredSurface)
+		r.Delete("/jobs/{id}", h.retiredSurface)
+		r.Post("/jobs/{id}/run", h.retiredSurface)
+		r.Get("/jobs/{id}/runs", h.retiredSurface)
 
-		// DAGs
-		r.Get("/dags", h.ListDAGs)
-		r.Post("/dags", h.retiredMutator)
-		r.Get("/dags/{id}", h.GetDAG)
-		r.Patch("/dags/{id}", h.retiredMutator)
-		r.Delete("/dags/{id}", h.retiredMutator)
-		r.Post("/dags/{id}/run", h.retiredMutator)
-		r.Get("/dags/{id}/runs", h.GetDAGRuns)
+		r.Get("/dags", h.retiredSurface)
+		r.Post("/dags", h.retiredSurface)
+		r.Get("/dags/{id}", h.retiredSurface)
+		r.Patch("/dags/{id}", h.retiredSurface)
+		r.Delete("/dags/{id}", h.retiredSurface)
+		r.Post("/dags/{id}/run", h.retiredSurface)
+		r.Get("/dags/{id}/runs", h.retiredSurface)
 
-		// Runs
-		r.Get("/runs/jobs/{id}", h.GetJobRun)
-		r.Get("/runs/dags/{id}", h.GetDAGRun)
+		r.Get("/runs/jobs/{id}", h.retiredSurface)
+		r.Get("/runs/dags/{id}", h.retiredSurface)
 
-		// AI Suggestions
-		r.Get("/ai/suggestions", h.GetAISuggestions)
-		r.Post("/ai/suggestions/{id}/accept", h.retiredMutator)
-		r.Post("/ai/suggestions/{id}/dismiss", h.retiredMutator)
+		r.Get("/ai/suggestions", h.retiredSurface)
+		r.Post("/ai/suggestions/{id}/accept", h.retiredSurface)
+		r.Post("/ai/suggestions/{id}/dismiss", h.retiredSurface)
 
-		// Stats
-		r.Get("/stats", h.GetStats)
+		r.Get("/stats", h.retiredSurface)
 	})
 }
 
-// retiredMutator closes S2 job/DAG/AI writes. Use POST /api/schedules instead.
-func (h *SchedulerHandlers) retiredMutator(w http.ResponseWriter, r *http.Request) {
+// retiredSurface closes S2 /scheduler. Use /api/schedules instead.
+func (h *SchedulerHandlers) retiredSurface(w http.ResponseWriter, r *http.Request) {
 	_, hasAuth := security.AuthInfoFromContext(r.Context())
 	if jwtmiddleware.GetClaimsFromContext(r) == nil && !hasAuth {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
@@ -85,8 +81,8 @@ func (h *SchedulerHandlers) retiredMutator(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
 	w.WriteHeader(http.StatusGone)
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   "scheduler_intelligence_mutations_retired",
-		"message": "Create and run schedules at /api/schedules (the platform scheduler). Job/DAG mutations on /scheduler are closed.",
+		"error":   "scheduler_intelligence_retired",
+		"message": "Use /api/schedules (kinds: report, saved_query, data_pipeline, mastering, workflow, job_dag). The /scheduler API is closed.",
 	})
 }
 
