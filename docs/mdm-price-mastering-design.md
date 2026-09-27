@@ -1,6 +1,6 @@
 # Price master — time-series mastering design
 
-Status: **proposal for review** (2026-09-27). Nothing here is built yet.
+Status: **decided** (2026-09-27, see *Decisions*); build follows the Security master.
 Companion to [mdm-mastering-blueprint.md](mdm-mastering-blueprint.md), which covers record mastering
 (Product; security and benchmark reference data follow the same model).
 
@@ -161,13 +161,17 @@ golden prices; they are not versioned per tick, and the EOD official price super
 7. **Intraday** from the stream.
 Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
 
-## Decisions needed
+## Decisions (2026-09-27)
 
-1. **Instrument identity** — which master do prices resolve to: the security golden records (a
-   Security mastering profile, which would come first) or the existing `orm.security` instruments?
-2. **Source registry** — keep price sources (`mdm.price_source`) separate from reference-data vendors
-   (`mdm.source_systems`), with each profile naming its registry, or unify them?
-3. **Scope and latency** — EOD first (recommended), intraday later?
-4. **Provisional prices** — publish provisional golden prices before cutoff, or only finals?
-5. **Provenance storage** — compact JSON on the golden row (recommended) or full per-candidate rows?
-6. **Where the heavy lifting runs** — Postgres (crims) set-based, or StarRocks for the batch?
+1. **Instrument identity** — a **self-contained Security master first** (its own golden records,
+   identifiers and cross-reference under the generic engine); prices resolve to security golden records.
+2. **One vendor registry** — a vendor is one source whatever it supplies: `BLOOMBERG` is the same source
+   for securities, prices, products and benchmarks (no `BBRG_PRICE` / `BBRG_SEC`). `mdm.source_systems`
+   is the registry; price-specific facts (cutoff time, time zone, quality tier, delivery) become price
+   settings of that source, and `mdm.price_source` is re-keyed to it.
+3. **End of day first**; intraday later.
+4. **Finals only** for end of day; provisional golden prices come with intraday.
+5. **Compact provenance** on the golden row; full log rows only for held, overridden or challenged
+   prices.
+6. **Postgres (crims) set-based**, with a Postgres dialect added to the rule VM's function library for
+   pushdown; Go evaluation over chunks as the fallback.
