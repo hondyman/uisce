@@ -488,10 +488,19 @@ func (r *runner) masterOne(golden string) error {
 		}
 	}
 
-	// Idempotent: the same attributes and status publish nothing new.
+	// Idempotent: the same attributes, status and contributing source
+	// values publish nothing new. A source that newly contributes (or
+	// changes what it says) is a new version even when it doesn't win, so
+	// the provenance shows every value that was considered.
 	if hasPrev && !r.force && prev.Status == status && sameJSON(previous, attrs) {
-		r.counts.Unchanged++
-		return nil
+		same, err := r.sameContributions(golden, prev.Version, decisions)
+		if err != nil {
+			return err
+		}
+		if same {
+			r.counts.Unchanged++
+			return nil
+		}
 	}
 
 	dq := dqScore(attrs, r.cfg.survival, issues)
@@ -550,6 +559,43 @@ func (r *runner) masterOne(golden string) error {
 	return nil
 }
 
+// sameContributions: the competing values recorded for the previous
+// version are the ones considered now (source, record and value per
+// attribute).
+func (r *runner) sameContributions(golden string, version int, decisions map[string]Decision) (bool, error) {
+	var before []string
+	if err := r.tx.SelectContext(r.ctx, &before, fmt.Sprintf(`SELECT l.field_name || '|' || COALESCE(c->>'source', '') || '|' || COALESCE(c->>'source_key', '') || '|' || COALESCE(c->>'value', '')
+		FROM %s l CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(l.competing_values) = 'array' THEN l.competing_values ELSE '[]'::jsonb END) c
+		WHERE l.%s::text = $1 AND l.golden_version = $2`, r.p.table("survivorship_log"), r.p.keyColumn()), golden, version); err != nil {
+		return false, err
+	}
+	now := map[string]bool{}
+	for a, d := range decisions {
+		for _, c := range d.Competing {
+			now[a+"|"+c.SourceCd+"|"+c.SourceKey+"|"+jsonText(c.Value)] = true
+		}
+	}
+	if len(before) != len(now) {
+		return false, nil
+	}
+	for _, k := range before {
+		if !now[k] {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+// jsonText renders a value as Postgres's ->> would (strings bare,
+// everything else as JSON).
+func jsonText(v any) string {
+	if s, ok := v.(string); ok {
+		return s
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
 // recordColumns fills golden-record columns the profile says come from an
 // attribute (e.g. product_type_cd on product_golden_record).
 func (r *runner) recordColumns(attrs map[string]any) ([]string, []any) {
@@ -593,7 +639,11 @@ func (r *runner) provenance(recordID, golden string, version int, decisions map[
 			r.tenant, recordID, a, text(d.Value), num, date, d.Winner.SourceID, truncate(d.Winner.SourceKey, 150), d.Confidence, d.RuleID); err != nil {
 			return err
 		}
-		competing, _ := json.Marshal(d.Competing)
+		comp := d.Competing
+		if comp == nil {
+			comp = []Candidate{}
+		}
+		competing, _ := json.Marshal(comp)
 		if _, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, golden_version, field_name, winning_source_id,
 				winning_value, competing_values, decision_reason)
 			VALUES ($1::uuid, $2::uuid, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8)`, r.p.table("survivorship_log"), r.p.keyColumn()),
