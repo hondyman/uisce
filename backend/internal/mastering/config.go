@@ -24,6 +24,8 @@ type config struct {
 	vendorCodes map[string]map[string]map[string]string
 	// hierarchy[FIELD_GROUP] = source codes, best first
 	hierarchy map[string][]string
+	// series: a time-series profile's configuration.
+	series *seriesConfig
 }
 
 // rankingFor is the entity's source ranking for an attribute: its field
@@ -79,6 +81,7 @@ func (e *Engine) inTenant(ctx context.Context, tenantID string, fn func(*sqlx.Tx
 
 const profileCols = `id::text, tenant_id::text, entity_cd, display_name, bo_key, table_prefix, anchor_table,
 	anchor_code_column, identifier_table, incoming_table, code_prefix, settings, is_active,
+	COALESCE(to_jsonb(mastering_entity)->>'kind', 'RECORD') AS kind,
 	tenant_id::text <> $1 AS inherited`
 
 func getProfile(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*Profile, error) {
@@ -118,20 +121,27 @@ func readConfig(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*con
 			return err
 		}
 		c.profile = p
+		if p.timeSeries() {
+			if c.series, err = readSeriesConfig(ctx, tx, tenantID, p); err != nil {
+				return err
+			}
+		}
 
 		// Match rules: per rule code, the tenant's own over the gold copy's.
-		if err := tx.SelectContext(ctx, &c.match, `SELECT DISTINCT ON (rule_cd) id::text, rule_cd, deterministic_keys, fuzzy_keys,
+		if !p.timeSeries() {
+			if err := tx.SelectContext(ctx, &c.match, `SELECT DISTINCT ON (rule_cd) id::text, rule_cd, deterministic_keys, fuzzy_keys,
 				threshold_auto_match, COALESCE(threshold_review, threshold_auto_match) AS threshold_review, priority
 			FROM `+p.table("match_rule")+` WHERE is_active
 			ORDER BY rule_cd, (tenant_id::text = $1) DESC`, tenantID); err != nil {
-			return fmt.Errorf("match rules: %w", err)
-		}
-		for i := range c.match {
-			if err := c.match[i].decode(); err != nil {
-				return msgBadProfile(p.EntityCd, fmt.Sprintf("match rule %s: %v", c.match[i].RuleCd, err))
+				return fmt.Errorf("match rules: %w", err)
 			}
+			for i := range c.match {
+				if err := c.match[i].decode(); err != nil {
+					return msgBadProfile(p.EntityCd, fmt.Sprintf("match rule %s: %v", c.match[i].RuleCd, err))
+				}
+			}
+			sortMatchRules(c.match)
 		}
-		sortMatchRules(c.match)
 
 		var surv []struct {
 			ID        string          `db:"id"`
@@ -167,11 +177,12 @@ func readConfig(ctx context.Context, tx *sqlx.Tx, tenantID, entity string) (*con
 
 		// The entity's source hierarchy, by field group: rows not scoped to a
 		// type or class (to_jsonb keeps this generic across entities).
+		// (A time-series profile ranks by its own scoped priority instead.)
 		var hasPriority bool
 		if err := tx.GetContext(ctx, &hasPriority, `SELECT to_regclass($1) IS NOT NULL`, p.plainTable("source_priority")); err != nil {
 			return err
 		}
-		if hasPriority {
+		if hasPriority && !p.timeSeries() {
 			// Order within each group by priority.
 			var ordered []struct {
 				Group string `db:"field_group"`

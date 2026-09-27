@@ -11,7 +11,8 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
-import { DecisionResult, ExceptionRow, masteringApi, MatchCandidate, pct, Profile, Run } from './api';
+import { DecisionResult, ExceptionRow, isSeries, masteringApi, MatchCandidate, pct, Profile, Run } from './api';
+import { PriceDrawer, PricesTab } from './prices';
 import GoldenDrawer from './GoldenDrawer';
 import { GoldenStatusChip, RunStatusChip } from './parts';
 import RunDialog, { CountChips } from './RunDialog';
@@ -334,9 +335,12 @@ export default function MasteringPage() {
   const list = profiles.data?.profiles ?? [];
   useEffect(() => { if (!entity && list.length) setEntity(list[0].entity_cd.toLowerCase()); }, [list, entity]);
   const profile: Profile | undefined = list.find((p) => p.entity_cd.toLowerCase() === entity);
+  // A time series (prices) has golden prices by date; no duplicates to review.
+  const series = isSeries(profile);
+  useEffect(() => { if (series && (tab === 'review' || tab === 'overrides')) setTab('golden'); }, [series, tab]);
 
   const exceptions = useQuery({ queryKey: ['mastering', 'exceptions', entity, ''], queryFn: () => masteringApi.exceptions(entity), enabled: !!entity });
-  const candidates = useQuery({ queryKey: ['mastering', 'candidates', entity], queryFn: () => masteringApi.candidates(entity), enabled: !!entity });
+  const candidates = useQuery({ queryKey: ['mastering', 'candidates', entity], queryFn: () => masteringApi.candidates(entity), enabled: !!entity && !series });
   const policy = useQuery({ queryKey: ['mastering', 'policy', entity], queryFn: () => masteringApi.policy(entity), enabled: !!entity });
   const pendingOverrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'PENDING'], queryFn: () => masteringApi.overrides(entity, { status: 'PENDING' }), enabled: !!entity });
   const toDecide = (pendingOverrides.data?.overrides ?? []).filter((o) => !o.mine && !o.voted).length;
@@ -384,13 +388,13 @@ export default function MasteringPage() {
         {entity && (
           <>
             <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }} variant="scrollable" allowScrollButtonsMobile>
-              <Tab value="golden" label={t('mastering.tabs.golden')} />
+              <Tab value="golden" label={series ? t('mastering.tabs.prices') : t('mastering.tabs.golden')} />
               <Tab value="runs" label={t('mastering.tabs.runs')} />
               <Tab value="exceptions" label={badge(t('mastering.tabs.exceptions'), openCount)} />
-              <Tab value="review" label={badge(t('mastering.tabs.review'), reviewCount)} />
-              <Tab value="overrides" label={badge(t('mastering.tabs.overrides'), toDecide)} />
+              {!series && <Tab value="review" label={badge(t('mastering.tabs.review'), reviewCount)} />}
+              {!series && <Tab value="overrides" label={badge(t('mastering.tabs.overrides'), toDecide)} />}
             </Tabs>
-            {tab === 'golden' && <GoldenTab entity={entity} onOpen={setGoldenId} />}
+            {tab === 'golden' && (series ? <PricesTab entity={entity} onOpen={setGoldenId} /> : <GoldenTab entity={entity} onOpen={setGoldenId} />)}
             {tab === 'runs' && <RunsTab entity={entity} />}
             {tab === 'exceptions' && <ExceptionsTab entity={entity} onOpen={setGoldenId} />}
             {tab === 'review' && <ReviewTab entity={entity} onOpen={setGoldenId} />}
@@ -398,7 +402,9 @@ export default function MasteringPage() {
           </>
         )}
       </Box>
-      {entity && <GoldenDrawer entity={entity} id={goldenId} onClose={() => setGoldenId(null)} />}
+      {entity && (series
+        ? <PriceDrawer entity={entity} id={goldenId} onClose={() => setGoldenId(null)} />
+        : <GoldenDrawer entity={entity} id={goldenId} onClose={() => setGoldenId(null)} />)}
       {entity && policyOpen && (
         <PolicyDialog entity={entity} open={policyOpen} onClose={() => setPolicyOpen(false)} />
       )}

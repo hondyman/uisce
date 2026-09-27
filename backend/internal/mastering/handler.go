@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -61,6 +62,25 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Post("/overrides/{id}/withdraw", h.withdrawOverride)
 		})
 	})
+}
+
+// timeSeries reports whether the entity is mastered as a time series.
+func (h *Handler) timeSeries(ctx context.Context, tenantID, entity string) (bool, error) {
+	p, err := h.Engine.profile(ctx, tenantID, entity)
+	if err != nil {
+		return false, err
+	}
+	return p.timeSeries(), nil
+}
+
+// recordOnly refuses a record-master action (match decisions, overrides of
+// a golden record) for a time-series entity.
+func (h *Handler) recordOnly(ctx context.Context, tenantID, entity string) error {
+	ts, err := h.timeSeries(ctx, tenantID, entity)
+	if err == nil && ts {
+		return msgTimeSeries(strings.ToUpper(entity))
+	}
+	return err
 }
 
 func (h *Handler) with(w http.ResponseWriter, r *http.Request, fn func(Actor) (any, int, error)) {
@@ -151,15 +171,32 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) golden(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		q := r.URL.Query()
-		l, err := h.Engine.Golden(r.Context(), a.TenantID, chi.URLParam(r, "entity"), GoldenFilter{Q: q.Get("q"), Status: q.Get("status"), Limit: limit(r)})
+		entity := chi.URLParam(r, "entity")
+		if ts, err := h.timeSeries(r.Context(), a.TenantID, entity); err != nil || ts {
+			if err != nil {
+				return nil, 0, err
+			}
+			l, err := h.Engine.GoldenPrices(r.Context(), a.TenantID, entity, PriceFilter{Date: q.Get("date"), Q: q.Get("q"),
+				Status: q.Get("status"), PriceType: q.Get("price_type"), Limit: limit(r)})
+			return map[string]any{"prices": l}, http.StatusOK, err
+		}
+		l, err := h.Engine.Golden(r.Context(), a.TenantID, entity, GoldenFilter{Q: q.Get("q"), Status: q.Get("status"), Limit: limit(r)})
 		return map[string]any{"golden": l}, http.StatusOK, err
 	})
 }
 
 func (h *Handler) goldenByID(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
+		entity := chi.URLParam(r, "entity")
+		if ts, err := h.timeSeries(r.Context(), a.TenantID, entity); err != nil || ts {
+			if err != nil {
+				return nil, 0, err
+			}
+			d, err := h.Engine.PriceDetailByID(r.Context(), a.TenantID, entity, chi.URLParam(r, "id"))
+			return map[string]any{"price": d}, http.StatusOK, err
+		}
 		version, _ := strconv.Atoi(r.URL.Query().Get("version"))
-		d, err := h.Engine.GoldenByID(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), version)
+		d, err := h.Engine.GoldenByID(r.Context(), a.TenantID, entity, chi.URLParam(r, "id"), version)
 		return map[string]any{"golden": d}, http.StatusOK, err
 	})
 }
@@ -209,6 +246,9 @@ func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		if !a.CanRun {
 			return nil, 0, msgNotAllowed()
+		}
+		if err := h.recordOnly(r.Context(), a.TenantID, chi.URLParam(r, "entity")); err != nil {
+			return nil, 0, err
 		}
 		var d CandidateDecision
 		dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<16))
@@ -268,6 +308,9 @@ func (h *Handler) proposeOverride(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		if !a.CanRun {
 			return nil, 0, msgNotAllowed()
+		}
+		if err := h.recordOnly(r.Context(), a.TenantID, chi.URLParam(r, "entity")); err != nil {
+			return nil, 0, err
 		}
 		var in OverrideRequest
 		if err := decodeBody(r, &in); err != nil {

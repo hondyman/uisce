@@ -33,6 +33,10 @@ type Profile struct {
 	CodePrefix       string          `db:"code_prefix" json:"code_prefix"`
 	RawSettings      json.RawMessage `db:"settings" json:"settings"`
 	IsActive         bool            `db:"is_active" json:"is_active"`
+	// Kind: RECORD (one golden record per entity, mastered record at a
+	// time) or TIMESERIES (one golden value per entity x series x date,
+	// mastered set-based per valuation date - the price master).
+	Kind string `db:"kind" json:"kind"`
 	// Inherited: the gold copy's profile, read-only for this tenant.
 	Inherited bool     `db:"inherited" json:"inherited"`
 	Settings  Settings `db:"-" json:"-"`
@@ -87,7 +91,58 @@ type Settings struct {
 	// MergedValues are set on the anchor of a record merged into another
 	// (e.g. status: MERGED) - besides merged_into_id when the anchor has it.
 	MergedValues map[string]any `json:"merged_values,omitempty"`
+
+	// Series configures a TIMESERIES profile.
+	Series *SeriesSettings `json:"series,omitempty"`
 }
+
+// Kinds of profile.
+const (
+	KindRecord     = "RECORD"
+	KindTimeSeries = "TIMESERIES"
+)
+
+// SeriesSettings configure a time-series (price) profile: what its values
+// are observed on and how a vendor row becomes observations.
+type SeriesSettings struct {
+	// EntityType is the price entity type observations are for (SECURITY).
+	EntityType string `json:"entity_type"`
+	// Instrument is the record profile whose golden records observations
+	// resolve to, through its identifier table (SECURITY).
+	Instrument string `json:"instrument"`
+	// IdentifierOrder: which identifier resolves a quote when a vendor row
+	// carries several (the first that resolves wins).
+	IdentifierOrder []string `json:"identifier_order"`
+	// BO fields a binding maps: the valuation date (required), the
+	// currency, and for vendor files with one row per price the value and
+	// its price type (else value:<TYPE> keys, one column per price type).
+	DateField     string `json:"date_field"`
+	CurrencyField string `json:"currency_field"`
+	ValueField    string `json:"value_field"`
+	TypeField     string `json:"type_field"`
+	// ObservationType recorded on each observation (EOD).
+	ObservationType string         `json:"observation_type"`
+	Controls        SeriesControls `json:"controls"`
+}
+
+// SeriesControls are the price-validation controls.
+type SeriesControls struct {
+	// DayOverDay: what an error or critical move against the prior date's
+	// golden value does - FLAG (publish, with an exception) or HOLD (the
+	// price waits for a steward). Warnings are always flagged.
+	DayOverDay struct {
+		Error    string `json:"error"`
+		Critical string `json:"critical"`
+	} `json:"day_over_day"`
+	// CrossSource records a variance event for each source that disagrees
+	// with the golden value beyond the warning threshold.
+	CrossSource bool `json:"cross_source"`
+	// CurrencyMismatch: EXCLUDE a quote in another currency than the
+	// instrument's from survivorship (flagged), or FLAG it only.
+	CurrencyMismatch string `json:"currency_mismatch"`
+}
+
+func (p *Profile) timeSeries() bool { return p.Kind == KindTimeSeries }
 
 // Reference turns a code into a foreign key of the anchor table. A source's
 // vendor code is first mapped to the internal code through MapTable (per
@@ -182,6 +237,27 @@ func (p *Profile) decode() error {
 		if r.MapTable != "" {
 			check(qualified, r.MapTable)
 			check(ident, r.MapSourceColumn, r.MapVendorColumn, r.MapCodeColumn)
+		}
+	}
+	if p.Kind == "" {
+		p.Kind = KindRecord
+	}
+	if p.Kind == KindTimeSeries {
+		if s.Series == nil {
+			return fmt.Errorf("mastering profile %s: a time-series profile needs settings.series", p.EntityCd)
+		}
+		sr := s.Series
+		if sr.EntityType == "" {
+			sr.EntityType = "SECURITY"
+		}
+		if sr.DateField == "" {
+			sr.DateField = "ValuationDate"
+		}
+		if sr.ObservationType == "" {
+			sr.ObservationType = "EOD"
+		}
+		if sr.Instrument == "" {
+			bad = append(bad, "series.instrument (empty)")
 		}
 	}
 	if len(bad) > 0 {

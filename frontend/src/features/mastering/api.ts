@@ -10,12 +10,18 @@ export interface Profile {
   anchor_table: string;
   inherited: boolean;
   is_active: boolean;
+  /** RECORD (one golden record per entity) or TIMESERIES (golden prices per date). */
+  kind?: 'RECORD' | 'TIMESERIES';
 }
+
+export const isSeries = (p?: Profile) => p?.kind === 'TIMESERIES';
 
 export interface Counts {
   records: number; valid: number; invalid: number;
   xref: number; deterministic: number; fuzzy: number; review: number; new: number; conflicts: number;
   published: number; held_for_review: number; unchanged: number; exceptions: number;
+  /** Observations that replaced a value their source had already reported (prices). */
+  restated?: number;
 }
 
 export type RunStatus = 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED';
@@ -75,6 +81,43 @@ export interface GoldenDetail {
   identifiers: { type: string; value: string; is_primary: boolean; source?: string }[];
   exceptions: ExceptionRow[];
   decisions: { version: number; field: string; value?: string; source?: string; competing: Candidate[]; reason?: string }[];
+}
+
+export interface PriceSummary {
+  id: string; entity_id: string; code?: string; name?: string;
+  price_type: string; date: string; value: number; currency?: string; winner?: string; sources: number;
+  variance_pct?: number; change_pct?: number; status: GoldenStatus; version: number; is_current: boolean; is_stale: boolean;
+  confidence?: number; updated_at: string;
+}
+
+export interface PriceList { date: string; dates: string[]; prices: PriceSummary[] }
+
+/** One source's quote as survivorship saw it (compact provenance). */
+export interface PriceCandidate {
+  source: string; value: number; currency?: string; as_of?: string; rank?: number; stale?: boolean;
+  selected?: boolean; note?: string; excluded?: string; diff_pct?: number;
+}
+
+export interface PriceProvenance {
+  price_type: string; strategy: string; reason: string; rule_id?: string; ranking: string[]; candidates: PriceCandidate[];
+  threshold: { type?: string; warning?: number; error?: number; critical?: number };
+  controls?: { control: string; level: string; action: string; pct: number }[] | null;
+  prior?: { date: string; value: number }; change_pct?: number; held?: boolean;
+  instrument?: { asset_class?: string; sub_asset_class?: string; currency?: string };
+}
+
+export interface PriceVersion {
+  id: string; version: number; value: number; currency?: string; winner?: string; status: GoldenStatus; is_current: boolean;
+  is_stale: boolean; confidence?: number; dq_score?: number; variance_pct?: number; knowledge_at: string; provenance: PriceProvenance;
+}
+
+export interface VarianceEvent {
+  id: string; source_a?: string; source_b?: string; price_a: number; price_b: number; variance_pct: number; severity: string; status: string;
+}
+
+export interface PriceDetail {
+  id: string; entity_id: string; code?: string; name?: string; price_type: string; date: string;
+  versions: PriceVersion[]; exceptions: ExceptionRow[]; variances: VarianceEvent[];
 }
 
 export interface ExceptionRow {
@@ -196,6 +239,9 @@ export const masteringApi = {
     return { run };
   },
   golden: (entity: string, f: { q?: string; status?: string }) => apiClient<{ golden: GoldenSummary[] }>(`${BASE}/${entity}/golden${qs(f)}`),
+  prices: (entity: string, f: { date?: string; q?: string; status?: string; price_type?: string }) =>
+    apiClient<{ prices: PriceList }>(`${BASE}/${entity}/golden${qs(f)}`),
+  priceById: (entity: string, id: string) => apiClient<{ price: PriceDetail }>(`${BASE}/${entity}/golden/${id}`),
   goldenById: (entity: string, id: string, version?: number) =>
     apiClient<{ golden: GoldenDetail }>(`${BASE}/${entity}/golden/${id}${version ? `?version=${version}` : ''}`),
   exceptions: (entity: string, status?: string) => apiClient<{ exceptions: ExceptionRow[] }>(`${BASE}/${entity}/exceptions${qs({ status })}`),

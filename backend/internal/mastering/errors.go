@@ -79,6 +79,12 @@ func msgNoBOBinding(bo, binding string) *msgcat.Error {
 func msgNoVersion(id string, v int) *msgcat.Error {
 	return m(41, id, v).WithStatus(http.StatusNotFound)
 }
+func msgNoPriceValues(table, field string) *msgcat.Error   { return m(37, table, field) }
+func msgNoValuationDate(table, field string) *msgcat.Error { return m(38, table, field) }
+func msgUnknownPriceTypes(types string) *msgcat.Error      { return m(39, types) }
+func msgTimeSeries(entity string) *msgcat.Error {
+	return m(40, entity).WithStatus(http.StatusBadRequest)
+}
 func msgMergeApprovalsUnavailable() *msgcat.Error {
 	return m(35).WithStatus(http.StatusServiceUnavailable)
 }

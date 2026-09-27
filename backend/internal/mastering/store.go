@@ -276,6 +276,9 @@ func exceptions(ctx context.Context, tx *sqlx.Tx, p *Profile, status, golden str
 	if limit <= 0 || limit > 500 {
 		limit = 200
 	}
+	if p.timeSeries() {
+		return priceExceptions(ctx, tx, status, limit)
+	}
 	out := []ExceptionRow{}
 	err := tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT x.id::text, x.%[1]s::text AS golden_id, x.identifier_value, x.exception_type, x.severity,
 			x.exception_description, s.code AS source, x.status, x.detected_at
@@ -322,6 +325,9 @@ func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status, actor
 	p, err := e.profile(ctx, tenantID, entity)
 	if err != nil {
 		return nil, err
+	}
+	if p.timeSeries() {
+		return []MatchCandidate{}, nil // a time series has no duplicates to review
 	}
 	if status == "" {
 		status = "PENDING"

@@ -33,6 +33,9 @@ type Contribution struct {
 	SourceKey string
 	AsOf      time.Time
 	Attrs     map[string]any
+	// Stale marks the contribution stale whatever the rule's staleness
+	// (e.g. older than its source is allowed to be).
+	Stale bool
 }
 
 // SurvivalRule is one attribute's survivorship rule (crims
@@ -96,6 +99,9 @@ type SelectionContext struct {
 	Previous  any
 	Now       time.Time
 	Ranking   []string
+	// Extra is more context for the rule, by name (e.g. threshold: the
+	// variance thresholds for the key's asset class and price type).
+	Extra map[string]any
 }
 
 // Data is the context as the rule engine reads it.
@@ -119,6 +125,11 @@ func (c SelectionContext) Data() map[string]any {
 	d["has_previous"] = c.Previous != nil
 	d["record"] = c.Candidate.record
 	d["attribute"] = c.Attribute
+	for k, v := range c.Extra {
+		if _, taken := d[k]; !taken {
+			d[k] = v
+		}
+	}
 	return d
 }
 
@@ -136,6 +147,8 @@ type SurviveOptions struct {
 	// Select evaluates selection rules (nil: rules are not evaluated, and
 	// an attribute with a selection rule is held for a steward).
 	Select SelectFunc
+	// Context is extra data selection rules read (SelectionContext.Extra).
+	Context map[string]any
 }
 
 // Issue codes survivorship raises.
@@ -185,7 +198,7 @@ func surviveAttr(attr string, contribs []Contribution, rule SurvivalRule, previo
 		if !ok || v == nil {
 			continue
 		}
-		stale := rule.StalenessSec > 0 && !c.AsOf.IsZero() && now.Sub(c.AsOf) > time.Duration(rule.StalenessSec)*time.Second
+		stale := c.Stale || rule.StalenessSec > 0 && !c.AsOf.IsZero() && now.Sub(c.AsOf) > time.Duration(rule.StalenessSec)*time.Second
 		all = append(all, Candidate{SourceID: c.SourceID, SourceCd: c.SourceCd, SourceKey: c.SourceKey, Value: v, AsOf: c.AsOf, Stale: stale, record: c.Attrs})
 	}
 
@@ -228,7 +241,7 @@ func surviveAttr(attr string, contribs []Contribution, rule SurvivalRule, previo
 					}
 				}
 				ok, name, err = opts.Select(rule.SelectionRuleID, SelectionContext{Attribute: attr, Candidate: all[i],
-					Rank: rankOf(ranking, all[i].SourceCd), Peers: peers, All: all, Previous: previous, Now: now, Ranking: ranking})
+					Rank: rankOf(ranking, all[i].SourceCd), Peers: peers, All: all, Previous: previous, Now: now, Ranking: ranking, Extra: opts.Context})
 			}
 			if name != "" {
 				ruleName = name
