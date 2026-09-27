@@ -516,3 +516,34 @@ func TestReviewCandidateInsert(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestHierarchyLoads: the entity's source hierarchy comes from
+// mdm.product_source_priority, by field group, best first.
+func TestHierarchyLoads(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	platform := PlatformCatalog{DB: alpha}
+	e := &Engine{Data: data, GoldCopy: platform.GoldCopyTenant}
+	gold, _ := platform.GoldCopyTenant(context.Background())
+	cfg, err := e.loadConfig(context.Background(), gold, "product")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("hierarchy: %v", cfg.hierarchy)
+	if got := strings.Join(cfg.hierarchy["NAME"], ">"); got != "REFINITIV>BLOOMBERG>FACTSET" {
+		t.Errorf("NAME: %s", got)
+	}
+	cfg.profile.Settings.FieldGroups = map[string]string{"name": "NAME"}
+	cfg.profile.Settings.DefaultFieldGroup = "IDENTITY"
+	if r := cfg.rankingFor("name"); len(r) == 0 || r[0] != "REFINITIV" {
+		t.Errorf("name ranking: %v", r)
+	}
+	if r := cfg.rankingFor("domicile"); len(r) == 0 || r[0] != "REFINITIV" {
+		t.Errorf("default group ranking: %v", r)
+	}
+}

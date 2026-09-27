@@ -30,10 +30,6 @@ export type RoleStatus = Active | Draft | Retired | Suspended;
 
 export type RoleType = Business | System | Technical;
 
-export type ScheduleStatus = active | completed | disabled | failed | paused;
-
-export type ScheduleType = daily | monthly | once | weekly;
-
 export type ScriptState = certified | deprecated | draft | published;
 
 export type Severity = error | hard_block | info | quarantine | warning;
@@ -4169,12 +4165,6 @@ export interface PostgresJobQueue {
   db: any;
 }
 
-/** PostgresSchedulerService implements SchedulerService */
-export interface PostgresSchedulerService {
-  cron: any;
-  db: any;
-}
-
 /** PreAggregation node config (stored in catalog_node.config) */
 export interface PreAggConfig {
   Calculations: string[];
@@ -4963,35 +4953,6 @@ export interface ScanResult {
 
 export interface ScenarioService {
   repo: ScenarioRepository;
-}
-
-/** ScheduledJob represents a scheduled job */
-export interface ScheduledJob {
-  CreatedAt: any;
-  CreatedBy: any;
-  CronExpression: string;
-  Description: string;
-  EndTime: any;
-  FailureCount: number;
-  ID: any;
-  IsActive: boolean;
-  JobTemplate: Record<string, any>;
-  LastRunAt: any;
-  MaxRetries: number;
-  MaxRunDuration: number;
-  Name: string;
-  NextRunAt: any;
-  OperationType: string;
-  Priority: number;
-  RetryOnFailure: boolean;
-  RunCount: number;
-  ScheduleType: ScheduleType;
-  StartTime: any;
-  Status: ScheduleStatus;
-  SuccessCount: number;
-  TenantID: any;
-  Timezone: string;
-  UpdatedAt: any;
 }
 
 /** Schema represents a schema within a database. */

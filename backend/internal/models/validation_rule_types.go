@@ -47,6 +47,11 @@ const (
 	ValidationRuleDomainDefault    = "validation"
 	ValidationRuleDomainMDM        = "mdm"
 	ValidationRuleDomainCompliance = "compliance"
+	// ValidationRuleDomainSurvivorship: selection rules - conditions a
+	// candidate value must meet to be chosen by MDM survivorship
+	// (internal/mastering). Never enforced on records; listed only when
+	// asked for by domain.
+	ValidationRuleDomainSurvivorship = "survivorship"
 
 	// Origin of a rule as seen by a tenant. A rule authored in the gold-copy tenant is "core": every
 	// tenant inherits it read-only. A rule authored in the tenant itself is "custom" and applies to
@@ -67,13 +72,13 @@ type ValidationRuleConfig struct {
 // UpsertValidationRuleRequest is the API request shape for creating or
 // updating a validation rule.
 type UpsertValidationRuleRequest struct {
-	TenantID    string          `json:"tenant_id"`
-	BOName      string          `json:"bo_name"`
-	Name        string          `json:"name"` // catalog_node.node_name
-	Description string          `json:"description,omitempty"`
-	Severity    string          `json:"severity"`
-	Timing      string          `json:"timing"`
-	Category    string          `json:"category,omitempty"`
+	TenantID    string `json:"tenant_id"`
+	BOName      string `json:"bo_name"`
+	Name        string `json:"name"` // catalog_node.node_name
+	Description string `json:"description,omitempty"`
+	Severity    string `json:"severity"`
+	Timing      string `json:"timing"`
+	Category    string `json:"category,omitempty"`
 	// Domain: "mdm" or "compliance" for the rulefabric-consolidation
 	// domain values; empty defaults to ValidationRuleDomainDefault
 	// ("validation") in the service layer.

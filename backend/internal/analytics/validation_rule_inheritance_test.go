@@ -85,7 +85,7 @@ func TestListByBO_GoldCopyTenantSeesOnlyItsOwn(t *testing.T) {
 	svc := NewValidationRuleService(sqlx.NewDb(db, "postgres"))
 	expectGold(mock, goldT)
 	mock.ExpectQuery(`FROM catalog_node n`).
-		WithArgs(sqlmock.AnyArg(), "party", "", models.ValidationRuleDomainDefault).
+		WithArgs(sqlmock.AnyArg(), "party", "", models.ValidationRuleDomainDefault, models.ValidationRuleDomainSurvivorship).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "node_name", "description", "properties", "config", "is_active", "tenant_id"}).
 			AddRow(ruleRow("mdm.party.required_terms", goldT, true)...))
 	got, err := svc.ListByBO(context.Background(), goldT, "party", "")

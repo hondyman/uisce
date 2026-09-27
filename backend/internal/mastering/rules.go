@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/hondyman/uisce/backend/internal/rules/vm"
@@ -22,7 +23,14 @@ type rule struct {
 	id, name, severity string
 	node               vm.RuleNode
 	fields             []string
+	version            string // when the rule last changed, for the audit trail
 }
+
+// DomainSurvivorship is the catalog rule domain of selection rules: the
+// conditions a candidate value must meet to be chosen (see survive.go).
+// They are catalog rules like any other - authored, governed and
+// evaluated the same way - but never run as record validation.
+const DomainSurvivorship = models.ValidationRuleDomainSurvivorship
 
 // RuleSet is the BO's active validation rules, parsed once per run. The same
 // rules run at every stage, in BO field names (the terms they were written
@@ -38,7 +46,7 @@ func loadRules(ctx context.Context, l RuleLister, tenantID, boKey string) (*Rule
 	}
 	rs := &RuleSet{}
 	for _, d := range descs {
-		if !d.IsActive {
+		if !d.IsActive || d.Domain == DomainSurvivorship {
 			continue
 		}
 		var node vm.RuleNode
@@ -54,6 +62,39 @@ func loadRules(ctx context.Context, l RuleLister, tenantID, boKey string) (*Rule
 		rs.rules = append(rs.rules, rule{id: d.ID.String(), name: d.Name, severity: strings.ToUpper(d.Severity), node: node, fields: fields})
 	}
 	return rs, nil
+}
+
+// loadSelectionRules: the entity's active selection rules by id.
+func loadSelectionRules(ctx context.Context, l RuleLister, tenantID, boKey string) (map[string]rule, error) {
+	descs, err := l.ListByBO(ctx, tenantID, boKey, DomainSurvivorship)
+	if err != nil {
+		return nil, fmt.Errorf("loading %s selection rules: %w", boKey, err)
+	}
+	out := map[string]rule{}
+	for _, d := range descs {
+		if !d.IsActive {
+			continue
+		}
+		var node vm.RuleNode
+		if err := json.Unmarshal(d.RuleAST, &node); err != nil {
+			return nil, fmt.Errorf("selection rule %q: stored rule_ast did not parse: %w", d.Name, err)
+		}
+		out[d.ID.String()] = rule{id: d.ID.String(), name: d.Name, node: node, version: d.UpdatedAt.UTC().Format(time.RFC3339)}
+	}
+	return out, nil
+}
+
+// selector evaluates selection rules on the one rule engine.
+func selector(rules map[string]rule) SelectFunc {
+	ev := vm.NewAdvancedEvaluator()
+	return func(ruleID string, ctx SelectionContext) (bool, string, error) {
+		r, ok := rules[ruleID]
+		if !ok {
+			return false, ruleID, fmt.Errorf("selection rule %s is not an active survivorship rule of this entity", ruleID)
+		}
+		pass, err := ev.Evaluate(r.node, ctx.Data())
+		return pass, fmt.Sprintf("%s (v%s)", r.name, r.version), err
+	}
 }
 
 // Canonical checks a record (in BO field names): only rules whose every

@@ -56,7 +56,12 @@ export interface GoldenSummary {
   updated_at: string;
 }
 
-export interface Candidate { source_id: string; source: string; source_key: string; value: unknown; as_of: string; stale?: boolean }
+export interface Candidate {
+  source_id: string; source: string; source_key: string; value: unknown; as_of: string; stale?: boolean;
+  /** Whether it passed the attribute's selection rule (absent: no selection rule). */
+  selected?: boolean;
+  note?: string;
+}
 
 export interface GoldenDetail {
   id: string;
