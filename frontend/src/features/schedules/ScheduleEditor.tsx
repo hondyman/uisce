@@ -23,6 +23,14 @@ interface Props {
   schedule?: Schedule;
   /** Fix the target (when embedded in a report or query editor). */
   fixedTarget?: { kind: string; ref: string; name?: string };
+  /**
+   * Optional kind-specific target.params editor (e.g. report bursting).
+   * Params are merged into ScheduleInput.target.params on save.
+   */
+  paramsSlot?: (ctx: {
+    params: Record<string, unknown>;
+    setParams: (next: Record<string, unknown>) => void;
+  }) => React.ReactNode;
 }
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -34,7 +42,7 @@ function useDebounced<T>(value: T, ms: number): T {
   return v;
 }
 
-export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }: Props) {
+export default function ScheduleEditor({ open, onClose, schedule, fixedTarget, paramsSlot }: Props) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const [name, setName] = useState(schedule?.name ?? fixedTarget?.name ?? '');
@@ -49,6 +57,7 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
   const [bd, setBd] = useState<number>(schedule?.timing.business_day ?? 1);
   const [enabled, setEnabled] = useState(schedule?.enabled ?? true);
   const [mode, setMode] = useState<TriggerMode>(schedule?.timing.mode ?? 'timetable');
+  const [params, setParams] = useState<Record<string, unknown>>(schedule?.target.params ?? {});
   const external = mode === 'external';
 
   const kinds = useQuery({ queryKey: ['sched-kinds'], queryFn: schedulesApi.kinds, enabled: open });
@@ -84,13 +93,17 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
 
   const save = useMutation({
     mutationFn: (input: ScheduleInput) => (schedule ? schedulesApi.update(schedule.id, input) : schedulesApi.create(input)),
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: ['sched-list'] });
+      qc.invalidateQueries({ queryKey: ['sched-list', input.target.kind, input.target.ref] });
       onClose();
     },
   });
 
-  const submit = () => save.mutate({ name, target: { kind, ref }, timing, enabled });
+  const submit = () => {
+    const targetParams = Object.keys(params).length > 0 ? params : undefined;
+    save.mutate({ name, target: { kind, ref, params: targetParams }, timing, enabled });
+  };
   const lang = i18n.language;
   const canSave = !!name.trim() && !!kind && !!ref && !needsCalendar && !save.isPending;
 
@@ -233,6 +246,13 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget }:
               ))}
             </Stack>
           </Box>}
+
+          {paramsSlot && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>{t('schedules.editor.delivery')}</Typography>
+              {paramsSlot({ params, setParams })}
+            </Box>
+          )}
 
           <FormControlLabel control={<Switch checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />}
             label={t('schedules.editor.enabled')} />

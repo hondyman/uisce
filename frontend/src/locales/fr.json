@@ -881,7 +881,20 @@
       "pickCalendar": "Choisissez un calendrier ouvré pour cette règle.",
       "nextRuns": "Prochaines exécutions",
       "halfDay": "Demi-journée",
-      "enabled": "Active"
+      "enabled": "Active",
+      "delivery": "Options de livraison"
+    },
+    "reportParams": {
+      "burstDimension": "Éclater par",
+      "burstHelp": "Une sortie par valeur distincte de ce champ (par ex. client_id).",
+      "exportFormat": "Format d’export",
+      "bothFormats": "PDF et Excel",
+      "notifyInApp": "Notifier dans l’application à la fin",
+      "notifyEmail": "Envoyer aussi un e-mail"
+    },
+    "embed": {
+      "schedule": "Planifier",
+      "scheduled": "Planifié"
     }
   }
 }

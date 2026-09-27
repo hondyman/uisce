@@ -727,65 +727,20 @@ func (h *ReportHandler) ListSchedulesForTemplate(w http.ResponseWriter, r *http.
 }
 
 // CreateScheduleForTemplate handles POST /api/v1/reports/{id}/schedules.
+// Slice 4: new report schedules must use POST /api/schedules with target.kind=report.
+// Existing rows remain readable/runnable until migrated; creates are closed.
 func (h *ReportHandler) CreateScheduleForTemplate(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, _, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	tmplIDStr := chi.URLParam(r, "id")
-	tmplID, err := uuid.Parse(tmplIDStr)
-	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
-		return
-	}
-
-	var body createScheduleHTTPBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if body.ScheduleName == "" {
-		http.Error(w, "schedule_name is required", http.StatusBadRequest)
-		return
-	}
-	if body.CronExpression == "" {
-		http.Error(w, "cron_expression is required", http.StatusBadRequest)
-		return
-	}
-
-	sched, err := h.service.CreateSchedule(r.Context(), tenantID, userID, reports.CreateScheduleInput{
-		TemplateID:          tmplID,
-		ScheduleName:        body.ScheduleName,
-		CronExpression:      body.CronExpression,
-		Region:              body.Region,
-		CalendarID:          body.CalendarID,
-		StartOfDayTime:      body.StartOfDayTime,
-		UnscheduledBehavior: body.UnscheduledBehavior,
-		BusinessDayOffset:   body.BusinessDayOffset,
-		BurstDimension:      body.BurstDimension,
-		ExportFormat:        body.ExportFormat,
-		NotifyInApp:         body.NotifyInApp,
-		NotifyEmail:         body.NotifyEmail,
-	})
-	if err != nil {
-		if errors.Is(err, reports.ErrNotFound) {
-			http.Error(w, "Report template not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, reports.ErrConflict) {
-			http.Error(w, "Schedule name already exists for this report template", http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sched)
+	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "legacy_report_schedules_retired",
+		"message": "Create schedules at POST /api/schedules with target.kind=report (and delivery fields in target.params).",
+	})
 }
 
 // DeleteSchedule handles DELETE /api/v1/reports/{id}/schedules/{sid}.

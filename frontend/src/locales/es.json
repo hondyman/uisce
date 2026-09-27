@@ -881,7 +881,20 @@
       "pickCalendar": "Elija un calendario laboral para esta regla.",
       "nextRuns": "Próximas ejecuciones",
       "halfDay": "Media jornada",
-      "enabled": "Activa"
+      "enabled": "Activa",
+      "delivery": "Opciones de entrega"
+    },
+    "reportParams": {
+      "burstDimension": "Dividir por",
+      "burstHelp": "Una salida por valor distinto de este campo (p. ej. client_id).",
+      "exportFormat": "Formato de exportación",
+      "bothFormats": "PDF y Excel",
+      "notifyInApp": "Notificar en la aplicación al terminar",
+      "notifyEmail": "Enviar también un correo"
+    },
+    "embed": {
+      "schedule": "Programar",
+      "scheduled": "Programado"
     }
   }
 }
