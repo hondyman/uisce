@@ -131,7 +131,7 @@ second calendar store (`tenant_exchange_calendars`).
 | 2 | **Scheduler core** | `internal/schedule` model, Temporal engine, calendar evaluation on MDM calendars, runners for pipeline + report + saved query; `schedule_runs`; API + MCP |
 | 3 | **Scheduler UI** | `<ScheduleEditor>` in report builder, query builder, pipeline editor; Schedules console |
 | 4 | **Retire the rest** | S1 deleted; report schedules 410+dropped; D1(a) console; S2 `/scheduler` fully 410 (Slice 5); table drop follow-up |
-| 5 | **Workflows + DAGs** | **Done:** `workflow` + `job_dag` runners on core; `/scheduler` fully 410; S2 table drop still follow-up |
+| 5 | **Workflows + DAGs** | **Done:** workflow + job_dag runners; `/scheduler` + governance 410; AI/changeset/scheduled_reports tables dropped (20261113); job/dag tables kept as job_dag store |
 | 6 | **Error management** | error log + fingerprint queue + console + routing |
 | 7 | **Error bot** | explain / suggest / cluster / incident / notify; autofix under policy |
 | 8 | **GSIFI hardening pass** | maker–checker, audit completeness, RLS, redaction review, guard tests |

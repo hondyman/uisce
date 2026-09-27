@@ -9,6 +9,8 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import StorageIcon from '@mui/icons-material/Storage';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import type { NodeKind, NodeStats } from './api';
 
 /** One colour per category, shared by the canvas nodes and the palette. */
@@ -26,6 +28,12 @@ export const NODE_META: Record<NodeKind, { icon: React.ReactElement; category: '
   bo_sink: { icon: <BusinessIcon fontSize="small" />, category: 'destination' },
   staging_sink: { icon: <TableChartIcon fontSize="small" />, category: 'destination' },
   file_sink: { icon: <FileDownloadIcon fontSize="small" />, category: 'destination' },
+  iceberg_sink: { icon: <StorageIcon fontSize="small" />, category: 'destination' },
+};
+
+const DEFAULT_META: { icon: React.ReactElement; category: 'source' | 'step' | 'destination' } = {
+  icon: <HelpOutlineIcon fontSize="small" />,
+  category: 'step',
 };
 
 export interface PipelineNodeData {
@@ -38,7 +46,7 @@ export interface PipelineNodeData {
 
 function PipelineNodeImpl({ data, selected }: NodeProps<PipelineNodeData>) {
   const theme = useTheme();
-  const meta = NODE_META[data.kind];
+  const meta = NODE_META[data.kind] ?? DEFAULT_META;
   const color = categoryColor(theme, meta.category);
   const hasIssues = data.issues.length > 0;
   return (

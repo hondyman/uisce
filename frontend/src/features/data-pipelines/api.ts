@@ -4,7 +4,7 @@ import apiClient from '../../utils/apiClient';
 
 export type NodeKind =
   | 'file_source' | 'bo_source' | 'validate' | 'rule_check' | 'map'
-  | 'bo_sink' | 'staging_sink' | 'file_sink';
+  | 'bo_sink' | 'staging_sink' | 'file_sink' | 'iceberg_sink';
 
 export type ColumnType = 'string' | 'int' | 'float' | 'decimal' | 'bool' | 'date' | 'timestamp';
 
@@ -21,6 +21,7 @@ export interface NodeConfigs {
   bo_sink: { bo_key: string; mode?: 'create' | 'upsert'; key_fields?: string[]; dry_run?: boolean };
   staging_sink: { table: string; source_cd: string; domain: string; run_ref?: string; columns?: Record<string, string> };
   file_sink: { uri: string; format: 'csv' | 'json' | 'parquet'; delimiter?: string };
+  iceberg_sink: { namespace: string; table: string; partition_by?: string[]; format?: 'parquet' };
 }
 
 export interface SpecNode<K extends NodeKind = NodeKind> {

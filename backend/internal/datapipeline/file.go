@@ -466,3 +466,91 @@ func (s *fileSink) Close(ctx context.Context, runErr error) error {
 	}
 	return nil
 }
+
+// --- iceberg_sink --------------------------------------------------------
+
+type icebergSink struct {
+	cfg    IcebergSinkConfig
+	engine FileEngine
+	tenant string
+	spool  *os.File
+	w      *bufio.Writer
+	rows   int
+}
+
+func newIcebergSink(n Node, e FileEngine) (Processor, error) {
+	var c IcebergSinkConfig
+	if err := decodeConfig(n, &c); err != nil {
+		return nil, err
+	}
+	if e == nil {
+		return nil, fmt.Errorf("the file engine is not configured for this environment")
+	}
+	if c.Namespace == "" {
+		c.Namespace = "default"
+	}
+	if c.Format == "" {
+		c.Format = "parquet"
+	}
+	return &icebergSink{cfg: c, engine: e}, nil
+}
+
+func (s *icebergSink) Open(_ context.Context, rc *RunContext) error {
+	s.tenant = rc.TenantID
+	if rc.DryRun {
+		return nil
+	}
+	f, err := os.CreateTemp("", "pipeline-iceberg-*.ndjson")
+	if err != nil {
+		return err
+	}
+	s.spool, s.w = f, bufio.NewWriter(f)
+	return nil
+}
+
+func (s *icebergSink) Process(_ context.Context, rows []Row) (Result, error) {
+	if s.spool == nil {
+		return Result{Out: rows}, nil
+	}
+	for _, r := range rows {
+		b, err := json.Marshal(r.Data)
+		if err != nil {
+			return Result{}, fmt.Errorf("row %d: %w", r.Num, err)
+		}
+		s.w.Write(b)
+		s.w.WriteByte('\n')
+		s.rows++
+	}
+	return Result{Out: rows}, nil
+}
+
+func (s *icebergSink) Close(ctx context.Context, runErr error) error {
+	if s.spool == nil {
+		return nil
+	}
+	defer os.Remove(s.spool.Name())
+	defer s.spool.Close()
+	if runErr != nil || s.rows == 0 {
+		return nil
+	}
+	if err := s.w.Flush(); err != nil {
+		return err
+	}
+	if _, err := s.spool.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	// Path formatted for Iceberg warehouse under tenant:
+	// e.g. iceberg/<namespace>/<table>/<timestamp>.parquet
+	timestamp := time.Now().UTC().Format("20060102_150405")
+	rawPath := fmt.Sprintf("iceberg/%s/%s/%s.parquet", s.cfg.Namespace, s.cfg.Table, timestamp)
+	targetURI, _ := tenantPath(s.tenant, rawPath)
+
+	n, err := s.engine.Write(ctx, targetURI, "parquet", "", s.spool)
+	if err != nil {
+		return fmt.Errorf("iceberg export to %s: %w", targetURI, err)
+	}
+	if n != s.rows {
+		return fmt.Errorf("iceberg export wrote %d rows, expected %d", n, s.rows)
+	}
+	return nil
+}
