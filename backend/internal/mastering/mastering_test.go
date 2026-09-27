@@ -223,3 +223,11 @@ func TestOverridableAttributes(t *testing.T) {
 		}
 	}
 }
+
+func TestJSONTextMatchesPostgres(t *testing.T) {
+	for v, want := range map[any]string{"EUR": "EUR", 3567039317.11: "3567039317.11", true: "true"} {
+		if got := jsonText(v); got != want {
+			t.Errorf("%v: got %q want %q", v, got, want)
+		}
+	}
+}
