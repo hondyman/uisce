@@ -129,11 +129,13 @@ func (e *Engine) Start(ctx context.Context, tenantID string, req RunRequest) (*R
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		// Seen before: a failed run is retried; anything else is replayed.
+		// Seen before: a failed run is retried, and so is one left RUNNING
+		// for over an hour (its process went away); anything else is replayed.
 		err = tx.GetContext(ctx, &run, `UPDATE mdm.mastering_run
 			SET status = 'RUNNING', stage = 'CANONICALIZE', error_code = NULL, error_detail = NULL,
 			    started_at = now(), finished_at = NULL, counts = '{}'::jsonb
-			WHERE tenant_id::text = $1 AND entity_cd = $2 AND idempotency_key = $3 AND status = 'FAILED'
+			WHERE tenant_id::text = $1 AND entity_cd = $2 AND idempotency_key = $3
+			  AND (status = 'FAILED' OR (status = 'RUNNING' AND started_at < now() - interval '1 hour'))
 			RETURNING `+runCols, tenantID, strings.ToUpper(req.Entity), req.IdempotencyKey)
 		if err == nil {
 			fresh = true

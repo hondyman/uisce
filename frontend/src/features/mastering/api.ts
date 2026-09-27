@@ -181,6 +181,18 @@ export const masteringApi = {
   loads: (entity: string) => apiClient<{ loads: Load[] }>(`${BASE}/${entity}/loads`),
   preview: (entity: string, r: RunRequest) => apiClient<{ preview: Preview }>(`${BASE}/${entity}/runs`, post({ ...r, dry_run: true })),
   run: (entity: string, r: RunRequest) => apiClient<{ run: Run }>(`${BASE}/${entity}/runs`, post(r)),
+  getRun: (entity: string, id: string) => apiClient<{ run: Run }>(`${BASE}/${entity}/runs/${id}`),
+  /** Starts a run and follows it to the end (runs continue server-side regardless). */
+  runToEnd: async (entity: string, r: RunRequest, onProgress?: (run: Run) => void) => {
+    let { run } = await masteringApi.run(entity, r);
+    const deadline = Date.now() + 2 * 60 * 60 * 1000;
+    while (run.status === 'RUNNING' && Date.now() < deadline) {
+      onProgress?.(run);
+      await new Promise((res) => setTimeout(res, 2000));
+      run = (await masteringApi.getRun(entity, run.id)).run;
+    }
+    return { run };
+  },
   golden: (entity: string, f: { q?: string; status?: string }) => apiClient<{ golden: GoldenSummary[] }>(`${BASE}/${entity}/golden${qs(f)}`),
   goldenById: (entity: string, id: string) => apiClient<{ golden: GoldenDetail }>(`${BASE}/${entity}/golden/${id}`),
   exceptions: (entity: string, status?: string) => apiClient<{ exceptions: ExceptionRow[] }>(`${BASE}/${entity}/exceptions${qs({ status })}`),

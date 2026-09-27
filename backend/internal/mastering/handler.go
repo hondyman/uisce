@@ -1,14 +1,19 @@
 package mastering
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/hondyman/uisce/backend/internal/msgcat"
 )
+
+// runTimeout bounds a manual run started from the API.
+const runTimeout = 2 * time.Hour
 
 // Actor is the caller: tenant and user from the authenticated token only.
 type Actor struct {
@@ -132,12 +137,14 @@ func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
 		if !fresh {
 			return map[string]any{"run": run}, http.StatusOK, nil
 		}
-		run, err = h.Engine.Execute(r.Context(), a.TenantID, run, req)
-		if run != nil && err != nil {
-			// The run is recorded as failed, with the reason; report it.
-			return map[string]any{"run": run}, http.StatusOK, nil
-		}
-		return map[string]any{"run": run}, http.StatusCreated, err
+		// The run continues whatever happens to this request (a closed tab,
+		// a proxy timeout): it is recorded, and GET /runs/{id} follows it.
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), runTimeout)
+		go func() {
+			defer cancel()
+			_, _ = h.Engine.Execute(ctx, a.TenantID, run, req)
+		}()
+		return map[string]any{"run": run}, http.StatusAccepted, nil
 	})
 }
 

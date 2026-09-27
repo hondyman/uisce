@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
@@ -559,7 +560,12 @@ func TestSecurityMasterBitemporal(t *testing.T) {
 	if alphaDSN == "" || dataDSN == "" {
 		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
 	}
-	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	var queries queryCounter
+	alpha := sqlx.MustConnect("postgres", alphaDSN)
+	data, err := queries.open(dataDSN)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer alpha.Close()
 	defer data.Close()
 	platform := PlatformCatalog{DB: alpha}
@@ -617,7 +623,9 @@ func TestSecurityMasterBitemporal(t *testing.T) {
 		t.Logf("%s: %+v", label, c)
 		return c
 	}
+	t0, q0 := time.Now(), queries.n.Load()
 	first := run("first")
+	t.Logf("first pass (2 records): %s, %d statements", time.Since(t0), queries.n.Load()-q0)
 	var why []string
 	_ = tx.SelectContext(ctx, &why, `SELECT exception_type || ': ' || exception_description FROM mdm.security_exception WHERE detected_at > now() - interval '1 minute'`)
 	for _, w := range why {

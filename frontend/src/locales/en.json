@@ -327,6 +327,7 @@
     }
   },
   "mastering": {
+    "stage": {"CANONICALIZE": "reading the load", "MATCH": "matching", "PUBLISH": "surviving and publishing", "DONE": "done"},
     "title": "Mastering",
     "subtitle": "Golden records built from every source - where each value came from, what needs a steward.",
     "entity": "Entity",
@@ -477,6 +478,7 @@
       "empty": "Nothing to review."
     },
     "runDialog": {
+      "stage": "Running: {{stage}}",
       "title": "Master a {{entity}} load",
       "load": "Load",
       "table": "Staging table",

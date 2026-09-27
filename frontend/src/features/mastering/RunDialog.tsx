@@ -54,8 +54,9 @@ export default function RunDialog({ profile, open, onClose, onDone }: {
     idempotency_key: again ? `load:${loadId}:${Date.now()}` : undefined,
   });
   const doPreview = useMutation({ mutationFn: () => masteringApi.preview(entity, req()), onSuccess: (r) => setPreview(r.preview) });
+  const [stage, setStage] = useState<string | null>(null);
   const doRun = useMutation({
-    mutationFn: () => masteringApi.run(entity, req()),
+    mutationFn: () => masteringApi.runToEnd(entity, req(), (r) => setStage(r.stage)),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ['mastering'] });
       onDone(r.run);
@@ -101,6 +102,9 @@ export default function RunDialog({ profile, open, onClose, onDone }: {
           )}
 
           {(doPreview.isPending || doRun.isPending) && <LinearProgress />}
+          {doRun.isPending && stage && (
+            <Typography variant="caption" color="text.secondary">{t('mastering.runDialog.stage', { stage: t(`mastering.stage.${stage}`, stage) })}</Typography>
+          )}
           {doPreview.error && <CatalogErrorAlert error={doPreview.error} />}
           {doRun.error && <CatalogErrorAlert error={doRun.error} />}
           {preview && (
