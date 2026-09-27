@@ -2,15 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert, Badge, Box, Button, Chip, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Tab, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Tabs, TextField, Tooltip, Typography,
+  Alert, Badge, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, InputAdornment, LinearProgress,
+  MenuItem, Paper, Radio, RadioGroup, Stack, Tab, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Tabs, TextField,
+  Tooltip, Typography,
 } from '@mui/material';
 import HubIcon from '@mui/icons-material/Hub';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SearchIcon from '@mui/icons-material/Search';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
-import { ExceptionRow, masteringApi, pct, Profile, Run } from './api';
+import { DecisionResult, ExceptionRow, masteringApi, MatchCandidate, pct, Profile, Run } from './api';
 import GoldenDrawer from './GoldenDrawer';
 import { GoldenStatusChip, RunStatusChip } from './parts';
 import RunDialog, { CountChips } from './RunDialog';
@@ -187,11 +188,32 @@ function ExceptionsTab({ entity, onOpen }: { entity: string; onOpen: (id: string
 
 function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) => void }) {
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const list = useQuery({ queryKey: ['mastering', 'candidates', entity], queryFn: () => masteringApi.candidates(entity) });
+  const [deciding, setDeciding] = useState<{ c: MatchCandidate; merge: boolean } | null>(null);
+  const [keep, setKeep] = useState<'a' | 'b'>('a');
+  const [note, setNote] = useState('');
+  const [done, setDone] = useState<DecisionResult | null>(null);
+  const decide = useMutation({
+    mutationFn: () => masteringApi.decide(entity, deciding!.c.id, { merge: deciding!.merge, keep, note: note.trim() || undefined }),
+    onSuccess: (r) => {
+      setDone(r.decision);
+      setDeciding(null);
+      qc.invalidateQueries({ queryKey: ['mastering'] });
+    },
+  });
+  const open = (c: MatchCandidate, merge: boolean) => { setDeciding({ c, merge }); setKeep('a'); setNote(''); decide.reset(); };
   const rows = list.data?.candidates ?? [];
   return (
     <>
       <Alert severity="info" sx={{ mb: 2 }}>{t('mastering.review.help')}</Alert>
+      {done && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setDone(null)}>
+          {done.status === 'APPROVED'
+            ? t('mastering.review.merged', { sources: done.moved.sources, identifiers: done.moved.identifiers })
+            : t('mastering.review.rejected')}
+        </Alert>
+      )}
       {list.isLoading && <LinearProgress />}
       {list.error && <CatalogErrorAlert error={list.error} />}
       <TableContainer component={Paper} variant="outlined">
@@ -202,6 +224,7 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
               <TableCell>{t('mastering.review.new')}</TableCell>
               <TableCell align="right">{t('mastering.review.score')}</TableCell>
               <TableCell>{t('mastering.review.rule')}</TableCell>
+              <TableCell align="right" />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -211,12 +234,44 @@ function ReviewTab({ entity, onOpen }: { entity: string; onOpen: (id: string) =>
                 <TableCell><Button size="small" onClick={() => onOpen(c.b)}>{c.b_code}</Button> {c.b_name}</TableCell>
                 <TableCell align="right">{pct(c.score)}</TableCell>
                 <TableCell>{c.rule}</TableCell>
+                <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                  <Button size="small" variant="outlined" onClick={() => open(c, true)}>{t('mastering.review.merge')}</Button>
+                  <Button size="small" color="inherit" sx={{ ml: 1 }} onClick={() => open(c, false)}>{t('mastering.review.notSame')}</Button>
+                </TableCell>
               </TableRow>
             ))}
-            {!list.isLoading && !list.error && rows.length === 0 && <Empty cols={4} text={t('mastering.review.empty')} />}
+            {!list.isLoading && !list.error && rows.length === 0 && <Empty cols={5} text={t('mastering.review.empty')} />}
           </TableBody>
         </Table>
       </TableContainer>
+      <Dialog open={!!deciding} onClose={() => setDeciding(null)} fullWidth maxWidth="sm">
+        <DialogTitle>{deciding?.merge ? t('mastering.review.mergeTitle') : t('mastering.review.notSameTitle')}</DialogTitle>
+        <DialogContent dividers>
+          {deciding?.merge ? (
+            <>
+              <Typography variant="body2" sx={{ mb: 2 }}>{t('mastering.review.mergeHelp')}</Typography>
+              <RadioGroup value={keep} onChange={(e) => setKeep(e.target.value as 'a' | 'b')}>
+                <FormControlLabel value="a" control={<Radio size="small" />}
+                  label={t('mastering.review.keep', { code: deciding.c.a_code, name: deciding.c.a_name ?? '' })} />
+                <FormControlLabel value="b" control={<Radio size="small" />}
+                  label={t('mastering.review.keep', { code: deciding.c.b_code, name: deciding.c.b_name ?? '' })} />
+              </RadioGroup>
+            </>
+          ) : (
+            <Typography variant="body2" sx={{ mb: 2 }}>{t('mastering.review.notSameHelp')}</Typography>
+          )}
+          <TextField fullWidth multiline minRows={2} sx={{ mt: 2 }} label={t('mastering.review.note')} value={note} onChange={(e) => setNote(e.target.value)}
+            helperText={t('mastering.review.noteHelp')} />
+          {decide.isPending && <LinearProgress sx={{ mt: 2 }} />}
+          {decide.error && <Box sx={{ mt: 2 }}><CatalogErrorAlert error={decide.error} /></Box>}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeciding(null)}>{t('mastering.cancel')}</Button>
+          <Button variant="contained" color={deciding?.merge ? 'primary' : 'inherit'} disabled={decide.isPending} onClick={() => decide.mutate()}>
+            {deciding?.merge ? t('mastering.review.confirmMerge') : t('mastering.review.confirmNotSame')}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

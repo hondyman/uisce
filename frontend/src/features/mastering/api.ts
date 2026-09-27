@@ -92,6 +92,16 @@ export interface MatchCandidate {
   status: string;
 }
 
+export interface CandidateDecision { merge: boolean; keep?: 'a' | 'b'; note?: string }
+export interface DecisionResult {
+  candidate_id: string;
+  status: 'APPROVED' | 'REJECTED';
+  survivor_id?: string;
+  merged_id?: string;
+  moved: { sources: number; identifiers: number };
+  published: boolean;
+}
+
 export interface Load {
   id: string;
   source: string;
@@ -127,6 +137,8 @@ export const masteringApi = {
   resolve: (entity: string, id: string, status: 'RESOLVED' | 'WAIVED', note?: string) =>
     apiClient<{ ok: boolean }>(`${BASE}/${entity}/exceptions/${id}/resolve`, post({ status, note })),
   candidates: (entity: string) => apiClient<{ candidates: MatchCandidate[] }>(`${BASE}/${entity}/candidates`),
+  decide: (entity: string, id: string, d: CandidateDecision) =>
+    apiClient<{ decision: DecisionResult }>(`${BASE}/${entity}/candidates/${id}/decide`, post(d)),
 };
 
 export const pct = (v?: number) => (v === undefined || v === null ? '—' : `${Math.round(v * 100)}%`);
