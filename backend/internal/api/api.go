@@ -58,6 +58,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/master/personnel"
 	"github.com/hondyman/uisce/backend/internal/master/sales_ledger"
 	"github.com/hondyman/uisce/backend/internal/master/vendor"
+	"github.com/hondyman/uisce/backend/internal/mastering"
 	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/mdm"
 	"github.com/hondyman/uisce/backend/internal/metadata"
@@ -216,11 +217,13 @@ type Server struct {
 	// MessageCatalog renders every user-facing error (msgcat.WriteError).
 	MessageCatalog *msgcat.Catalog
 	// The one scheduler (internal/schedule) and its runners by target kind.
-	ScheduleService         *schedule.Service
-	ScheduleRunners         *schedule.Registry
-	dataPipelineRunner      *dataPipelineRunner
-	BusinessObjectService   *catalogmeta.BusinessObjectService
-	DataPipelines           *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
+	ScheduleService       *schedule.Service
+	ScheduleRunners       *schedule.Registry
+	dataPipelineRunner    *dataPipelineRunner
+	BusinessObjectService *catalogmeta.BusinessObjectService
+	DataPipelines         *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
+	// MasteringEngine masters entities (Product first); the scheduler runs it too.
+	MasteringEngine         *mastering.Engine
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler

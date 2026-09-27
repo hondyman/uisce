@@ -15,6 +15,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/datapipeline"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/mastering"
 	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/internal/stagingbind"
@@ -58,6 +59,16 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 		editor.Columns = stagingColumns{db: deps.StagingDB}
 	}
 	(&stagingbind.Handler{Store: bindings, Editor: editor, Catalog: s.MessageCatalog, ActorFrom: s.stagingBindActor}).RegisterRoutes(r)
+
+	// Entity mastering (canonicalize -> match -> survive -> publish) over
+	// the same data plane, reading staging through these bindings.
+	platform := mastering.PlatformCatalog{DB: sqlxDB}
+	engine := &mastering.Engine{Rules: analytics.NewValidationRuleService(sqlxDB), Bindings: bindings, Fields: platform, GoldCopy: platform.GoldCopyTenant}
+	if deps.StagingDB != nil {
+		engine.Data = sqlx.NewDb(deps.StagingDB, "postgres")
+	}
+	(&mastering.Handler{Engine: engine, Catalog: s.MessageCatalog, ActorFrom: s.masteringActor}).RegisterRoutes(r)
+	s.MasteringEngine = engine
 
 	store := &datapipeline.Store{DB: sqlxDB}
 	acts := &datapipeline.Activities{Store: store, Deps: deps}
@@ -129,6 +140,26 @@ func (s *Server) stagingBindActor(r *http.Request) (stagingbind.Actor, error) {
 				a.PlatformAdmin = true
 			case "tenant_admin":
 				a.TenantAdmin = true
+			}
+		}
+	}
+	return a, nil
+}
+
+// masteringActor is the caller: the tenant from the token (never a header).
+// Administrators and data stewards may run mastering; anyone in the tenant
+// may read it.
+func (s *Server) masteringActor(r *http.Request) (mastering.Actor, error) {
+	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", s.SecurityContextDeps)
+	if err != nil || secCtx == nil || secCtx.TenantID == "" || secCtx.UserID == "" {
+		return mastering.Actor{}, msgcat.Unauthenticated().Wrap(err)
+	}
+	a := mastering.Actor{UserID: secCtx.UserID, TenantID: secCtx.TenantID, Name: msgcat.CallerName(r)}
+	if auth, ok := security.AuthInfoFromContext(r.Context()); ok && !auth.ImpersonationActive {
+		for _, role := range auth.Roles {
+			switch role {
+			case "global_admin", "tenant_admin", "data_steward":
+				a.CanRun = true
 			}
 		}
 	}
