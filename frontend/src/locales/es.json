@@ -454,6 +454,153 @@
       "noneEver": "Todavía no se ha propuesto ningún cambio."
     }
   },
+  "mastering": {
+    "title": "Maestrización",
+    "subtitle": "Registros maestros construidos a partir de todas las fuentes: de dónde viene cada valor y qué necesita un responsable.",
+    "entity": "Entidad",
+    "runLoad": "Maestrizar una carga",
+    "noProfiles": "Aún no hay ninguna entidad configurada para maestrización.",
+    "all": "Todos",
+    "none": "Ninguno",
+    "close": "Cerrar",
+    "cancel": "Cancelar",
+    "replayed": "Esta carga ya se maestrizó con esa clave; se muestra la ejecución anterior.",
+    "finished": {
+      "COMPLETED": "Maestrización terminada.",
+      "PARTIAL": "Maestrización terminada; algunos registros necesitan un responsable.",
+      "FAILED": "La maestrización falló.",
+      "RUNNING": "La maestrización está en curso."
+    },
+    "tabs": {
+      "golden": "Registros maestros",
+      "runs": "Ejecuciones",
+      "exceptions": "Excepciones",
+      "review": "Revisión de coincidencias"
+    },
+    "golden": {
+      "search": "Buscar código o nombre",
+      "status": "Estado",
+      "code": "Código",
+      "name": "Nombre",
+      "dqShort": "CD",
+      "identityShort": "Identidad",
+      "sources": "Fuentes",
+      "updated": "Actualizado",
+      "empty": "Aún no hay registros maestros. Maestrice una carga para crearlos.",
+      "fields": "Valores y su procedencia",
+      "attribute": "Atributo",
+      "value": "Valor",
+      "source": "Fuente",
+      "confidence": "Confianza",
+      "confidenceHelp": "Proporción de fuentes que coinciden con este valor; se reduce a la mitad cuando todas las fuentes están desactualizadas.",
+      "asOf": "A fecha de",
+      "stale": "desactualizada",
+      "why": "Por qué {{field}} tiene este valor",
+      "identifiers": "Identificadores",
+      "versions": "Versiones",
+      "openExceptions": "Excepciones abiertas",
+      "version": "Versión {{v}}",
+      "dq": "CD {{v}}",
+      "identity": "Identidad {{v}}"
+    },
+    "goldenStatus": {
+      "PUBLISHED": "Publicado",
+      "REVIEW": "En revisión",
+      "SUPERSEDED": "Reemplazado",
+      "DRAFT": "Borrador",
+      "RETRACTED": "Retirado"
+    },
+    "runStatus": {
+      "COMPLETED": "Completada",
+      "PARTIAL": "Parcial",
+      "RUNNING": "En curso",
+      "FAILED": "Fallida"
+    },
+    "trigger": {
+      "manual": "Manual",
+      "schedule": "Programada",
+      "external": "Planificador externo"
+    },
+    "method": {
+      "NEW": "Primera vez",
+      "DETERMINISTIC": "Coincidencia por identificador",
+      "FUZZY": "Coincidencia aproximada",
+      "STEWARD": "Responsable"
+    },
+    "runs": {
+      "started": "Inicio",
+      "status": "Estado",
+      "trigger": "Disparador",
+      "outcome": "Resultado",
+      "by": "Por",
+      "empty": "Aún no hay ejecuciones."
+    },
+    "counts": {
+      "records": "Registros",
+      "valid": "Válidos",
+      "invalid": "Rechazados",
+      "xref": "Conocidos",
+      "deterministic": "Por identificador",
+      "fuzzy": "Aproximados",
+      "review": "A revisar",
+      "new": "Nuevos",
+      "conflicts": "Conflictos",
+      "published": "Publicados",
+      "held_for_review": "Retenidos",
+      "unchanged": "Sin cambios",
+      "exceptions": "Excepciones"
+    },
+    "exceptions": {
+      "status": "Mostrar",
+      "open": "Abiertas",
+      "type": "Tipo",
+      "description": "Qué pasó",
+      "record": "Registro",
+      "detected": "Detectada",
+      "openGolden": "Abrir registro maestro",
+      "resolve": "Resuelta",
+      "waive": "Dispensar",
+      "empty": "No hay excepciones."
+    },
+    "exceptionStatus": {
+      "RESOLVED": "Resueltas",
+      "WAIVED": "Dispensadas"
+    },
+    "exceptionType": {
+      "UNMAPPED_CODE": "Código sin mapear",
+      "RULE": "Regla",
+      "IDENTIFIER_CONFLICT": "Conflicto de identificador",
+      "IDENTIFIER_REJECTED": "Identificador rechazado",
+      "ANOMALY": "Anomalía",
+      "MISSING_SOURCE_KEY": "Sin clave de origen",
+      "MASTERING_FAILED": "No maestrizado",
+      "NOT_AN_ID": "No es un id"
+    },
+    "review": {
+      "help": "Registros que se parecen a un registro maestro existente pero no lo suficiente para unirse automáticamente. Se conservaron ambos; decida si son el mismo.",
+      "existing": "Existente",
+      "new": "Registro nuevo",
+      "score": "Puntuación",
+      "rule": "Regla",
+      "empty": "Nada que revisar."
+    },
+    "runDialog": {
+      "title": "Maestrizar una carga de {{entity}}",
+      "load": "Carga",
+      "table": "Tabla de staging",
+      "tableHelp": "Dónde llegó la carga; se lee a través de su vínculo de staging.",
+      "noLoads": "Aún no hay cargas para esta entidad.",
+      "noBinding": "Ninguna tabla de staging está vinculada a {{bo}}.",
+      "rows": "{{n}} filas",
+      "mastered": "maestrizada: {{status}}",
+      "alreadyMastered": "Esta carga ya se maestrizó. Ejecutarla de nuevo con la misma clave solo devuelve esa ejecución.",
+      "again": "Maestrizarla de nuevo (nueva ejecución)",
+      "preview": "Vista previa",
+      "run": "Ejecutar",
+      "previewTitle": "Lo que haría una ejecución (no se guardó nada)",
+      "unmastered": "Vinculados pero no maestrizados (sin columna maestra): {{fields}}"
+    }
+  },
   "stagingBindings": {
     "title": "Vínculos de staging",
     "subtitle": "Qué campo del objeto de negocio alimenta cada columna de staging del proveedor, para que las reglas del objeto comprueben las filas de staging y la masterización las lea en términos del objeto. Los cambios requieren la aprobación de otra persona.",

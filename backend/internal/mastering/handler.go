@@ -38,6 +38,8 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Get("/golden/{id}", h.goldenByID)
 			r.Get("/exceptions", h.exceptions)
 			r.Get("/candidates", h.candidates)
+			r.Get("/loads", h.loads)
+			r.Post("/exceptions/{id}/resolve", h.resolve)
 		})
 	})
 }
@@ -151,5 +153,31 @@ func (h *Handler) candidates(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		l, err := h.Engine.Candidates(r.Context(), a.TenantID, chi.URLParam(r, "entity"), r.URL.Query().Get("status"), limit(r))
 		return map[string]any{"candidates": l}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) loads(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		l, err := h.Engine.Loads(r.Context(), a.TenantID, chi.URLParam(r, "entity"), limit(r))
+		return map[string]any{"loads": l}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) resolve(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.CanRun {
+			return nil, 0, msgNotAllowed()
+		}
+		var in struct {
+			Status string `json:"status"`
+			Note   string `json:"note"`
+		}
+		dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<16))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			return nil, 0, msgcat.MalformedJSON().Wrap(err)
+		}
+		err := h.Engine.ResolveException(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), in.Status, in.Note, a.Name)
+		return map[string]any{"ok": err == nil}, http.StatusOK, err
 	})
 }

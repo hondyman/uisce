@@ -454,6 +454,153 @@
       "noneEver": "Aucune modification n'a encore été proposée."
     }
   },
+  "mastering": {
+    "title": "Mastering",
+    "subtitle": "Des enregistrements de référence construits à partir de toutes les sources : d’où vient chaque valeur et ce qui attend un responsable.",
+    "entity": "Entité",
+    "runLoad": "Traiter un chargement",
+    "noProfiles": "Aucune entité n’est encore configurée pour le mastering.",
+    "all": "Tous",
+    "none": "Aucun",
+    "close": "Fermer",
+    "cancel": "Annuler",
+    "replayed": "Ce chargement a déjà été traité avec cette clé ; l’exécution précédente est affichée.",
+    "finished": {
+      "COMPLETED": "Mastering terminé.",
+      "PARTIAL": "Mastering terminé ; certains enregistrements attendent un responsable.",
+      "FAILED": "Le mastering a échoué.",
+      "RUNNING": "Le mastering est en cours."
+    },
+    "tabs": {
+      "golden": "Enregistrements de référence",
+      "runs": "Exécutions",
+      "exceptions": "Exceptions",
+      "review": "Revue des rapprochements"
+    },
+    "golden": {
+      "search": "Rechercher un code ou un nom",
+      "status": "Statut",
+      "code": "Code",
+      "name": "Nom",
+      "dqShort": "QD",
+      "identityShort": "Identité",
+      "sources": "Sources",
+      "updated": "Mis à jour",
+      "empty": "Aucun enregistrement de référence. Traitez un chargement pour en créer.",
+      "fields": "Valeurs et leur provenance",
+      "attribute": "Attribut",
+      "value": "Valeur",
+      "source": "Source",
+      "confidence": "Confiance",
+      "confidenceHelp": "Part des sources d’accord avec cette valeur ; divisée par deux quand toutes les sources sont périmées.",
+      "asOf": "Date de valeur",
+      "stale": "périmée",
+      "why": "Pourquoi {{field}} a cette valeur",
+      "identifiers": "Identifiants",
+      "versions": "Versions",
+      "openExceptions": "Exceptions ouvertes",
+      "version": "Version {{v}}",
+      "dq": "QD {{v}}",
+      "identity": "Identité {{v}}"
+    },
+    "goldenStatus": {
+      "PUBLISHED": "Publié",
+      "REVIEW": "En revue",
+      "SUPERSEDED": "Remplacé",
+      "DRAFT": "Brouillon",
+      "RETRACTED": "Retiré"
+    },
+    "runStatus": {
+      "COMPLETED": "Terminée",
+      "PARTIAL": "Partielle",
+      "RUNNING": "En cours",
+      "FAILED": "Échouée"
+    },
+    "trigger": {
+      "manual": "Manuel",
+      "schedule": "Planifié",
+      "external": "Ordonnanceur externe"
+    },
+    "method": {
+      "NEW": "Première apparition",
+      "DETERMINISTIC": "Rapprochement par identifiant",
+      "FUZZY": "Rapprochement approché",
+      "STEWARD": "Responsable"
+    },
+    "runs": {
+      "started": "Début",
+      "status": "Statut",
+      "trigger": "Déclencheur",
+      "outcome": "Résultat",
+      "by": "Par",
+      "empty": "Aucune exécution."
+    },
+    "counts": {
+      "records": "Enregistrements",
+      "valid": "Valides",
+      "invalid": "Rejetés",
+      "xref": "Connus",
+      "deterministic": "Par identifiant",
+      "fuzzy": "Approchés",
+      "review": "À revoir",
+      "new": "Nouveaux",
+      "conflicts": "Conflits",
+      "published": "Publiés",
+      "held_for_review": "Retenus",
+      "unchanged": "Inchangés",
+      "exceptions": "Exceptions"
+    },
+    "exceptions": {
+      "status": "Afficher",
+      "open": "Ouvertes",
+      "type": "Type",
+      "description": "Ce qui s’est passé",
+      "record": "Enregistrement",
+      "detected": "Détectée",
+      "openGolden": "Ouvrir l’enregistrement",
+      "resolve": "Résolue",
+      "waive": "Accepter",
+      "empty": "Aucune exception."
+    },
+    "exceptionStatus": {
+      "RESOLVED": "Résolues",
+      "WAIVED": "Acceptées"
+    },
+    "exceptionType": {
+      "UNMAPPED_CODE": "Code non mappé",
+      "RULE": "Règle",
+      "IDENTIFIER_CONFLICT": "Conflit d’identifiant",
+      "IDENTIFIER_REJECTED": "Identifiant rejeté",
+      "ANOMALY": "Anomalie",
+      "MISSING_SOURCE_KEY": "Pas de clé source",
+      "MASTERING_FAILED": "Non traité",
+      "NOT_AN_ID": "Pas un identifiant"
+    },
+    "review": {
+      "help": "Des enregistrements proches d’un enregistrement de référence existant, mais pas assez pour être fusionnés automatiquement. Les deux ont été conservés ; décidez s’ils sont identiques.",
+      "existing": "Existant",
+      "new": "Nouvel enregistrement",
+      "score": "Score",
+      "rule": "Règle",
+      "empty": "Rien à revoir."
+    },
+    "runDialog": {
+      "title": "Traiter un chargement {{entity}}",
+      "load": "Chargement",
+      "table": "Table de staging",
+      "tableHelp": "Où le chargement est arrivé ; lu via sa liaison de staging.",
+      "noLoads": "Aucun chargement pour cette entité.",
+      "noBinding": "Aucune table de staging n’est liée à {{bo}}.",
+      "rows": "{{n}} lignes",
+      "mastered": "traité : {{status}}",
+      "alreadyMastered": "Ce chargement a déjà été traité. Le relancer avec la même clé renvoie seulement cette exécution.",
+      "again": "Le traiter à nouveau (nouvelle exécution)",
+      "preview": "Aperçu",
+      "run": "Lancer",
+      "previewTitle": "Ce que ferait une exécution (rien n’a été conservé)",
+      "unmastered": "Liés mais non traités (pas de colonne de référence) : {{fields}}"
+    }
+  },
   "stagingBindings": {
     "title": "Liaisons de staging",
     "subtitle": "Quel champ de l'objet métier alimente chaque colonne de staging du fournisseur - pour que les règles de l'objet contrôlent les lignes de staging et que la maîtrise les lise dans les termes de l'objet. Les modifications exigent l'approbation d'une autre personne.",

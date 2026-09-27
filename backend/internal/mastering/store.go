@@ -300,3 +300,61 @@ func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status string
 	})
 	return out, err
 }
+
+// Load is a staging load of an entity's domain and its latest mastering.
+type Load struct {
+	ID            string     `db:"id" json:"id"`
+	Source        string     `db:"source_system_cd" json:"source"`
+	RunRef        *string    `db:"run_ref" json:"run_ref,omitempty"`
+	FileName      *string    `db:"file_name" json:"file_name,omitempty"`
+	Status        *string    `db:"status" json:"status,omitempty"`
+	ReceivedRows  *int       `db:"received_rows" json:"received_rows,omitempty"`
+	StartedAt     *time.Time `db:"started_at" json:"started_at,omitempty"`
+	MasteringRun  *string    `db:"mastering_run_id" json:"mastering_run_id,omitempty"`
+	MasteringStat *string    `db:"mastering_status" json:"mastering_status,omitempty"`
+}
+
+// Loads lists recent staging loads for the entity, newest first.
+func (e *Engine) Loads(ctx context.Context, tenantID, entity string, limit int) ([]Load, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	out := []Load{}
+	err := e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &out, `SELECT l.id::text, l.source_system_cd, l.run_ref, l.file_name, l.status, l.received_rows, l.started_at,
+				m.id::text AS mastering_run_id, m.status AS mastering_status
+			FROM staging._load_run l
+			LEFT JOIN LATERAL (SELECT id, status FROM mdm.mastering_run m
+				WHERE m.load_run_id = l.id AND m.entity_cd = $1 ORDER BY m.started_at DESC LIMIT 1) m ON true
+			WHERE upper(l.domain) = $1
+			ORDER BY l.started_at DESC NULLS LAST LIMIT $2`, strings.ToUpper(entity), limit)
+	})
+	return out, err
+}
+
+// ResolveException closes an exception: RESOLVED (fixed) or WAIVED
+// (accepted as is), with a note for the audit trail.
+func (e *Engine) ResolveException(ctx context.Context, tenantID, entity, id, status, note, by string) error {
+	status = strings.ToUpper(status)
+	if status != "RESOLVED" && status != "WAIVED" && status != "IN_REVIEW" {
+		return msgBadResolution(status)
+	}
+	p, err := e.profile(ctx, tenantID, entity)
+	if err != nil {
+		return err
+	}
+	return e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET status = $2,
+				resolved_at = CASE WHEN $2 IN ('RESOLVED', 'WAIVED') THEN now() END,
+				resolution_note = NULLIF($3, ''),
+				custom_attributes = custom_attributes || jsonb_build_object('resolved_by', $4::text)
+			WHERE id::text = $1 AND status IN ('OPEN', 'IN_REVIEW')`, p.table("exception")), id, status, strings.TrimSpace(note), by)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return msgNoException(id)
+		}
+		return nil
+	})
+}

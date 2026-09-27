@@ -326,6 +326,153 @@
       "noneEver": "No changes have been proposed yet."
     }
   },
+  "mastering": {
+    "title": "Mastering",
+    "subtitle": "Golden records built from every source - where each value came from, what needs a steward.",
+    "entity": "Entity",
+    "runLoad": "Master a load",
+    "noProfiles": "No entity is set up for mastering yet.",
+    "all": "All",
+    "none": "None",
+    "close": "Close",
+    "cancel": "Cancel",
+    "replayed": "This load was already mastered with that key - showing the earlier run.",
+    "finished": {
+      "COMPLETED": "Mastering finished.",
+      "PARTIAL": "Mastering finished; some records need a steward.",
+      "FAILED": "Mastering failed.",
+      "RUNNING": "Mastering is running."
+    },
+    "tabs": {
+      "golden": "Golden records",
+      "runs": "Runs",
+      "exceptions": "Exceptions",
+      "review": "Match review"
+    },
+    "golden": {
+      "search": "Search code or name",
+      "status": "Status",
+      "code": "Code",
+      "name": "Name",
+      "dqShort": "DQ",
+      "identityShort": "Identity",
+      "sources": "Sources",
+      "updated": "Updated",
+      "empty": "No golden records yet. Master a load to create them.",
+      "fields": "Values and where they came from",
+      "attribute": "Attribute",
+      "value": "Value",
+      "source": "Source",
+      "confidence": "Confidence",
+      "confidenceHelp": "Share of sources that agree with this value; halved when every source is stale.",
+      "asOf": "As of",
+      "stale": "stale",
+      "why": "Why {{field}} has this value",
+      "identifiers": "Identifiers",
+      "versions": "Versions",
+      "openExceptions": "Open exceptions",
+      "version": "Version {{v}}",
+      "dq": "DQ {{v}}",
+      "identity": "Identity {{v}}"
+    },
+    "goldenStatus": {
+      "PUBLISHED": "Published",
+      "REVIEW": "In review",
+      "SUPERSEDED": "Superseded",
+      "DRAFT": "Draft",
+      "RETRACTED": "Retracted"
+    },
+    "runStatus": {
+      "COMPLETED": "Completed",
+      "PARTIAL": "Partial",
+      "RUNNING": "Running",
+      "FAILED": "Failed"
+    },
+    "trigger": {
+      "manual": "Manual",
+      "schedule": "Scheduled",
+      "external": "External scheduler"
+    },
+    "method": {
+      "NEW": "First seen",
+      "DETERMINISTIC": "Identifier match",
+      "FUZZY": "Fuzzy match",
+      "STEWARD": "Steward"
+    },
+    "runs": {
+      "started": "Started",
+      "status": "Status",
+      "trigger": "Trigger",
+      "outcome": "Outcome",
+      "by": "By",
+      "empty": "No runs yet."
+    },
+    "counts": {
+      "records": "Records",
+      "valid": "Valid",
+      "invalid": "Rejected",
+      "xref": "Known",
+      "deterministic": "Identifier match",
+      "fuzzy": "Fuzzy match",
+      "review": "To review",
+      "new": "New",
+      "conflicts": "Conflicts",
+      "published": "Published",
+      "held_for_review": "Held",
+      "unchanged": "Unchanged",
+      "exceptions": "Exceptions"
+    },
+    "exceptions": {
+      "status": "Show",
+      "open": "Open",
+      "type": "Type",
+      "description": "What happened",
+      "record": "Record",
+      "detected": "Detected",
+      "openGolden": "Open golden record",
+      "resolve": "Resolved",
+      "waive": "Waive",
+      "empty": "No exceptions."
+    },
+    "exceptionStatus": {
+      "RESOLVED": "Resolved",
+      "WAIVED": "Waived"
+    },
+    "exceptionType": {
+      "UNMAPPED_CODE": "Unmapped code",
+      "RULE": "Rule",
+      "IDENTIFIER_CONFLICT": "Identifier conflict",
+      "IDENTIFIER_REJECTED": "Identifier rejected",
+      "ANOMALY": "Anomaly",
+      "MISSING_SOURCE_KEY": "No source key",
+      "MASTERING_FAILED": "Not mastered",
+      "NOT_AN_ID": "Not an id"
+    },
+    "review": {
+      "help": "Records that scored close to an existing golden record but not close enough to merge automatically. Both were kept; decide whether they are the same.",
+      "existing": "Existing",
+      "new": "New record",
+      "score": "Score",
+      "rule": "Rule",
+      "empty": "Nothing to review."
+    },
+    "runDialog": {
+      "title": "Master a {{entity}} load",
+      "load": "Load",
+      "table": "Staging table",
+      "tableHelp": "Where the load landed; read through its staging binding.",
+      "noLoads": "No loads for this entity yet.",
+      "noBinding": "No staging table is bound to {{bo}}.",
+      "rows": "{{n}} rows",
+      "mastered": "mastered: {{status}}",
+      "alreadyMastered": "This load has been mastered. Running it again with the same key only returns that run.",
+      "again": "Master it again (new run)",
+      "preview": "Preview",
+      "run": "Run",
+      "previewTitle": "What a run would do (nothing was kept)",
+      "unmastered": "Bound but not mastered (no golden column): {{fields}}"
+    }
+  },
   "stagingBindings": {
     "title": "Staging bindings",
     "subtitle": "Which business object field each vendor staging column feeds - so the object's rules check staging rows, and mastering reads them in the object's terms. Changes need a second person's approval.",

@@ -36,5 +36,9 @@ func msgNoGolden(id string) *msgcat.Error {
 }
 func msgUnknownSource(cd string) *msgcat.Error { return m(10, cd) }
 func msgNeedTable() *msgcat.Error              { return m(11) }
+func msgBadResolution(s string) *msgcat.Error  { return m(12, s) }
+func msgNoException(id string) *msgcat.Error {
+	return m(13, id).WithStatus(http.StatusNotFound)
+}
 
 func errBadName(n string) error { return fmt.Errorf("%q is not a valid column name", n) }
