@@ -15,8 +15,11 @@ type Actor struct {
 	TenantID string
 	UserID   string
 	Name     string
-	// CanRun: may start mastering runs (administrators and data stewards).
+	// CanRun: may start mastering runs and act as a steward (propose and
+	// approve overrides, merge duplicates): administrators and data stewards.
 	CanRun bool
+	// Admin: may change the entity's override policy.
+	Admin bool
 }
 
 // Handler is the mastering API (/api/mastering). Every error is a catalog
@@ -41,6 +44,13 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Get("/loads", h.loads)
 			r.Post("/exceptions/{id}/resolve", h.resolve)
 			r.Post("/candidates/{id}/decide", h.decide)
+			r.Get("/policy", h.getPolicy)
+			r.Put("/policy", h.setPolicy)
+			r.Get("/overrides", h.overrides)
+			r.Post("/golden/{id}/overrides", h.proposeOverride)
+			r.Post("/overrides/{id}/approve", h.voteOverride(true))
+			r.Post("/overrides/{id}/reject", h.voteOverride(false))
+			r.Post("/overrides/{id}/withdraw", h.withdrawOverride)
 		})
 	})
 }
@@ -197,5 +207,87 @@ func (h *Handler) decide(w http.ResponseWriter, r *http.Request) {
 		}
 		res, err := h.Engine.DecideCandidate(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), d, a.UserID, a.Name)
 		return map[string]any{"decision": res}, http.StatusOK, err
+	})
+}
+
+func decodeBody(r *http.Request, v any) error {
+	if r.ContentLength == 0 {
+		return nil
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 1<<16))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return msgcat.MalformedJSON().Wrap(err)
+	}
+	return nil
+}
+
+func (h *Handler) getPolicy(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		p, err := h.Engine.GetPolicy(r.Context(), a.TenantID, chi.URLParam(r, "entity"))
+		return map[string]any{"policy": p, "can_edit": a.Admin}, http.StatusOK, err
+	})
+}
+
+// setPolicy: administrators choose whether the entity's overrides need
+// approval (and how many) or apply directly. Every change is audited.
+func (h *Handler) setPolicy(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.Admin {
+			return nil, 0, msgNotAdmin()
+		}
+		var in Policy
+		if err := decodeBody(r, &in); err != nil {
+			return nil, 0, err
+		}
+		p, err := h.Engine.SetPolicy(r.Context(), a.TenantID, chi.URLParam(r, "entity"), in, a.Name)
+		return map[string]any{"policy": p, "can_edit": true}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) overrides(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		q := r.URL.Query()
+		l, err := h.Engine.Overrides(r.Context(), a.TenantID, chi.URLParam(r, "entity"), q.Get("status"), q.Get("golden"), a.UserID, limit(r))
+		return map[string]any{"overrides": l}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) proposeOverride(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.CanRun {
+			return nil, 0, msgNotAllowed()
+		}
+		var in OverrideRequest
+		if err := decodeBody(r, &in); err != nil {
+			return nil, 0, err
+		}
+		o, err := h.Engine.ProposeOverride(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), in, a.UserID, a.Name)
+		return map[string]any{"override": o}, http.StatusCreated, err
+	})
+}
+
+func (h *Handler) voteOverride(approve bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.with(w, r, func(a Actor) (any, int, error) {
+			if !a.CanRun {
+				return nil, 0, msgNotAllowed()
+			}
+			var in struct {
+				Comment string `json:"comment"`
+			}
+			if err := decodeBody(r, &in); err != nil {
+				return nil, 0, err
+			}
+			o, err := h.Engine.DecideOverride(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), approve, in.Comment, a.UserID, a.Name)
+			return map[string]any{"override": o}, http.StatusOK, err
+		})
+	}
+}
+
+func (h *Handler) withdrawOverride(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		o, err := h.Engine.WithdrawOverride(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), a.UserID)
+		return map[string]any{"override": o}, http.StatusOK, err
 	})
 }

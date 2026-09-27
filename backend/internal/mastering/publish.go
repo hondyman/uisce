@@ -462,6 +462,18 @@ func (r *runner) masterOne(golden string) error {
 		now = r.e.Now()
 	}
 	decisions, anomalies := Survive(cs, r.cfg.survival, current, now)
+	// A steward's active override wins over the sources (and is never an
+	// anomaly: it was decided, not reported).
+	if err := r.applyOverrides(golden, decisions); err != nil {
+		return err
+	}
+	kept := anomalies[:0]
+	for _, a := range anomalies {
+		if decisions[a.Attribute].Strategy != "OVERRIDE" {
+			kept = append(kept, a)
+		}
+	}
+	anomalies = kept
 	attrs := make(map[string]any, len(decisions))
 	winners := map[string]string{}
 	for a, d := range decisions {

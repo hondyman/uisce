@@ -15,8 +15,10 @@ import { DecisionResult, ExceptionRow, masteringApi, MatchCandidate, pct, Profil
 import GoldenDrawer from './GoldenDrawer';
 import { GoldenStatusChip, RunStatusChip } from './parts';
 import RunDialog, { CountChips } from './RunDialog';
+import { OverridesTab, PolicyDialog, policyText } from './overrides';
+import GavelIcon from '@mui/icons-material/Gavel';
 
-type TabKey = 'golden' | 'runs' | 'exceptions' | 'review';
+type TabKey = 'golden' | 'runs' | 'exceptions' | 'review' | 'overrides';
 
 function useDebounced<T>(v: T, ms = 300): T {
   const [d, setD] = useState(v);
@@ -289,6 +291,7 @@ export default function MasteringPage() {
   const [goldenId, setGoldenId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [lastRun, setLastRun] = useState<Run | null>(null);
+  const [policyOpen, setPolicyOpen] = useState(false);
 
   const list = profiles.data?.profiles ?? [];
   useEffect(() => { if (!entity && list.length) setEntity(list[0].entity_cd.toLowerCase()); }, [list, entity]);
@@ -296,6 +299,9 @@ export default function MasteringPage() {
 
   const exceptions = useQuery({ queryKey: ['mastering', 'exceptions', entity, ''], queryFn: () => masteringApi.exceptions(entity), enabled: !!entity });
   const candidates = useQuery({ queryKey: ['mastering', 'candidates', entity], queryFn: () => masteringApi.candidates(entity), enabled: !!entity });
+  const policy = useQuery({ queryKey: ['mastering', 'policy', entity], queryFn: () => masteringApi.policy(entity), enabled: !!entity });
+  const pendingOverrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'PENDING'], queryFn: () => masteringApi.overrides(entity, { status: 'PENDING' }), enabled: !!entity });
+  const toDecide = (pendingOverrides.data?.overrides ?? []).filter((o) => !o.mine && !o.voted).length;
   const openCount = exceptions.data?.exceptions.length ?? 0;
   const reviewCount = candidates.data?.candidates.length ?? 0;
 
@@ -318,6 +324,9 @@ export default function MasteringPage() {
           <TextField select size="small" sx={{ minWidth: 200 }} label={t('mastering.entity')} value={entity} onChange={(e) => { setEntity(e.target.value); setGoldenId(null); }}>
             {list.map((p) => <MenuItem key={p.id} value={p.entity_cd.toLowerCase()}>{p.display_name}</MenuItem>)}
           </TextField>
+          <Button variant="outlined" startIcon={<GavelIcon />} disabled={!profile} onClick={() => setPolicyOpen(true)}>
+            {policy.data ? policyText(t, policy.data.policy) : t('mastering.policy.title')}
+          </Button>
           <Button variant="contained" startIcon={<PlayArrowIcon />} disabled={!profile} onClick={() => setRunning(true)}>{t('mastering.runLoad')}</Button>
         </Stack>
         {profiles.isLoading && <LinearProgress />}
@@ -341,15 +350,20 @@ export default function MasteringPage() {
               <Tab value="runs" label={t('mastering.tabs.runs')} />
               <Tab value="exceptions" label={badge(t('mastering.tabs.exceptions'), openCount)} />
               <Tab value="review" label={badge(t('mastering.tabs.review'), reviewCount)} />
+              <Tab value="overrides" label={badge(t('mastering.tabs.overrides'), toDecide)} />
             </Tabs>
             {tab === 'golden' && <GoldenTab entity={entity} onOpen={setGoldenId} />}
             {tab === 'runs' && <RunsTab entity={entity} />}
             {tab === 'exceptions' && <ExceptionsTab entity={entity} onOpen={setGoldenId} />}
             {tab === 'review' && <ReviewTab entity={entity} onOpen={setGoldenId} />}
+            {tab === 'overrides' && <OverridesTab entity={entity} onOpen={setGoldenId} />}
           </>
         )}
       </Box>
       {entity && <GoldenDrawer entity={entity} id={goldenId} onClose={() => setGoldenId(null)} />}
+      {entity && policyOpen && (
+        <PolicyDialog entity={entity} open={policyOpen} onClose={() => setPolicyOpen(false)} />
+      )}
       {profile && running && (
         <RunDialog profile={profile} open={running} onClose={() => setRunning(false)}
           onDone={(r) => { setRunning(false); setLastRun(r); setTab(r.counts.exceptions ? 'exceptions' : 'golden'); }} />

@@ -6,17 +6,21 @@ import {
   Tooltip, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
-import { GoldenDetail, masteringApi, pct } from './api';
+import { GoldenDetail, masteringApi, pct, showValue } from './api';
 import { GoldenStatusChip } from './parts';
+import { OverrideDialog, OverrideStatusChip } from './overrides';
 
 const show = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
 
 /** One attribute: the surviving value, its source and why, and every competing value. */
-function FieldRow({ f, decision }: { f: GoldenDetail['fields'][number]; decision?: GoldenDetail['decisions'][number] }) {
+function FieldRow({ f, decision, onOverride, overridden }: {
+  f: GoldenDetail['fields'][number]; decision?: GoldenDetail['decisions'][number]; onOverride: () => void; overridden: boolean;
+}) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const competing = decision?.competing ?? [];
@@ -26,7 +30,9 @@ function FieldRow({ f, decision }: { f: GoldenDetail['fields'][number]; decision
         <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{f.name}</TableCell>
         <TableCell><Typography variant="body2" fontWeight={500}>{show(f.value)}</Typography></TableCell>
         <TableCell sx={{ whiteSpace: 'nowrap' }}>
-          {f.source && <Chip size="small" variant="outlined" label={f.source} />}
+          {overridden
+            ? <Chip size="small" color="secondary" label={t('mastering.overrides.steward')} />
+            : f.source && <Chip size="small" variant="outlined" label={f.source} />}
         </TableCell>
         <TableCell>
           <Tooltip title={t('mastering.golden.confidenceHelp')}>
@@ -34,7 +40,10 @@ function FieldRow({ f, decision }: { f: GoldenDetail['fields'][number]; decision
               variant="outlined" label={pct(f.confidence)} />
           </Tooltip>
         </TableCell>
-        <TableCell padding="checkbox">
+        <TableCell padding="none" sx={{ whiteSpace: 'nowrap' }}>
+          <Tooltip title={t('mastering.overrides.action', { field: f.name })}>
+            <IconButton size="small" onClick={onOverride} aria-label={t('mastering.overrides.action', { field: f.name })}><EditIcon fontSize="small" /></IconButton>
+          </Tooltip>
           {decision && (
             <IconButton size="small" onClick={() => setOpen(!open)} aria-label={t('mastering.golden.why', { field: f.name })}>
               {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
@@ -97,6 +106,9 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
   const current = d?.versions[0];
   const name = current?.attributes?.name as string | undefined;
   const decisionFor = new Map((d?.decisions ?? []).map((x) => [x.field, x]));
+  const overrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'golden', id], queryFn: () => masteringApi.overrides(entity, { golden: id! }), enabled: !!id });
+  const activeAttrs = new Set((overrides.data?.overrides ?? []).filter((o) => o.active).map((o) => o.attribute));
+  const [editing, setEditing] = useState<{ attribute: string; current?: string } | null>(null);
 
   return (
     <Drawer anchor="right" open={!!id} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', md: 760 } } }}>
@@ -134,7 +146,10 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {d.fields.map((f) => <FieldRow key={f.name} f={f} decision={decisionFor.get(f.name)} />)}
+                  {d.fields.map((f) => (
+                    <FieldRow key={f.name} f={f} decision={decisionFor.get(f.name)} overridden={activeAttrs.has(f.name)}
+                      onOverride={() => setEditing({ attribute: f.name, current: f.value })} />
+                  ))}
                 </TableBody>
               </Table>
             </Section>
@@ -182,6 +197,23 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
               </Table>
             </Section>
 
+            {(overrides.data?.overrides.length ?? 0) > 0 && (
+              <Section title={t('mastering.overrides.forRecord')}>
+                <Table size="small">
+                  <TableBody>
+                    {overrides.data!.overrides.map((o) => (
+                      <TableRow key={o.id}>
+                        <TableCell sx={{ fontFamily: 'monospace' }}>{o.attribute}</TableCell>
+                        <TableCell>{o.action === 'CLEAR' ? t('mastering.overrides.clearDesc') : showValue(o.value)}</TableCell>
+                        <TableCell><OverrideStatusChip o={o} /></TableCell>
+                        <TableCell><Typography variant="caption">{o.requested_by_name} · {o.reason}</Typography></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Section>
+            )}
+
             {d.exceptions.length > 0 && (
               <Section title={t('mastering.golden.openExceptions')}>
                 {d.exceptions.map((x) => (
@@ -196,6 +228,10 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
           </>
         )}
       </Box>
+      {d && editing && (
+        <OverrideDialog entity={entity} goldenId={d.id} attribute={editing.attribute} current={editing.current}
+          hasActive={activeAttrs.has(editing.attribute)} open={!!editing} onClose={() => setEditing(null)} />
+      )}
     </Drawer>
   );
 }
