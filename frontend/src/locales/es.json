@@ -455,6 +455,7 @@
     }
   },
   "mastering": {
+    "stage": {"CANONICALIZE": "leyendo la carga", "MATCH": "emparejando", "PUBLISH": "consolidando y publicando", "DONE": "terminado"},
     "title": "Maestrización",
     "subtitle": "Registros maestros construidos a partir de todas las fuentes: de dónde viene cada valor y qué necesita un responsable.",
     "entity": "Entidad",
@@ -605,6 +606,7 @@
       "empty": "Nada que revisar."
     },
     "runDialog": {
+      "stage": "En curso: {{stage}}",
       "title": "Maestrizar una carga de {{entity}}",
       "load": "Carga",
       "table": "Tabla de staging",

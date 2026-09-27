@@ -455,6 +455,7 @@
     }
   },
   "mastering": {
+    "stage": {"CANONICALIZE": "lecture du chargement", "MATCH": "rapprochement", "PUBLISH": "consolidation et publication", "DONE": "terminé"},
     "title": "Mastering",
     "subtitle": "Des enregistrements de référence construits à partir de toutes les sources : d’où vient chaque valeur et ce qui attend un responsable.",
     "entity": "Entité",
@@ -605,6 +606,7 @@
       "empty": "Rien à revoir."
     },
     "runDialog": {
+      "stage": "En cours : {{stage}}",
       "title": "Traiter un chargement {{entity}}",
       "load": "Chargement",
       "table": "Table de staging",

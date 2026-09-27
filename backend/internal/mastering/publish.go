@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // matchOne links a valid record to a golden record: its cross-reference if
@@ -384,45 +386,89 @@ func (r *runner) ensureIdentifiers(golden string, rec *Record) error {
 		types = append(types, t)
 	}
 	sort.Strings(types)
+	values := make([]string, len(types))
+	for i, t := range types {
+		values[i] = rec.Identifiers[t]
+	}
+	// Who already holds each identifier, in one read.
+	var held []struct {
+		Type  string `db:"t"`
+		Owner string `db:"owner"`
+	}
+	if err := r.tx.SelectContext(r.ctx, &held, fmt.Sprintf(`SELECT DISTINCT ON (k.t) k.t, i.%s::text AS owner
+		FROM unnest($1::text[], $2::text[]) AS k(t, v)
+		JOIN %s i ON i.%s = k.t AND i.%s = k.v AND %s AND (k.t <> 'PROVIDER_CODE' OR i.%s::text = $3)
+		ORDER BY k.t, (i.%s::text = $4) DESC`, qi(id.KeyColumn), qi(*r.p.IdentifierTable), qi(id.TypeColumn), qi(id.ValueColumn),
+		id.identActive("i"), qi(id.SourceColumn), qi(id.KeyColumn)), pq.Array(types), pq.Array(values), r.identSource(), golden); err != nil {
+		return err
+	}
+	owners := make(map[string]string, len(held))
+	for _, h := range held {
+		owners[h.Type] = h.Owner
+	}
+	var fresh []string
 	for _, t := range types {
-		v := rec.Identifiers[t]
-		var owner string
-		q := fmt.Sprintf(`SELECT %s::text FROM %s WHERE %s = $1 AND %s = $2 AND %s
-			AND ($1 <> 'PROVIDER_CODE' OR %s::text = $3) LIMIT 1`, qi(id.KeyColumn), qi(*r.p.IdentifierTable),
-			qi(id.TypeColumn), qi(id.ValueColumn), id.identActive(""), qi(id.SourceColumn))
-		err := r.tx.GetContext(r.ctx, &owner, q, t, v, r.identSource())
-		switch {
-		case err == nil && owner == golden:
-			continue
-		case err == nil:
+		switch owner, ok := owners[t]; {
+		case !ok:
+			fresh = append(fresh, t)
+		case owner != golden:
 			if err := r.exception(golden, rec.SourceKey, Issue{Code: "IDENTIFIER_CONFLICT", Severity: SevWarning, Attribute: t,
-				Message: fmt.Sprintf("%s %s is already held by %s", t, v, owner)}); err != nil {
+				Message: fmt.Sprintf("%s %s is already held by %s", t, rec.Identifiers[t], owner)}); err != nil {
 				return err
 			}
-			continue
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
 		}
-		if _, err := r.tx.ExecContext(r.ctx, `SAVEPOINT ident`); err != nil {
-			return err
-		}
-		_, err = r.tx.ExecContext(r.ctx, r.identInsert(), r.identInsertArgs(golden, t, v, t == "ISIN")...)
-		if err != nil {
-			// e.g. a type the identifier table doesn't accept: keep mastering.
-			if _, rbErr := r.tx.ExecContext(r.ctx, `ROLLBACK TO SAVEPOINT ident`); rbErr != nil {
-				return rbErr
+	}
+	if len(fresh) == 0 {
+		return nil
+	}
+	// All the new ones at once; if one is refused, record them one by one
+	// so the rest are kept.
+	if len(fresh) > 1 {
+		ok, err := r.inSavepoint("ident", func() error {
+			for _, t := range fresh {
+				if _, err := r.tx.ExecContext(r.ctx, r.identInsert(), r.identInsertArgs(golden, t, rec.Identifiers[t], t == "ISIN")...); err != nil {
+					return err
+				}
 			}
-			if err := r.exception(golden, rec.SourceKey, Issue{Code: "IDENTIFIER_REJECTED", Severity: SevWarning, Attribute: t,
-				Message: fmt.Sprintf("%s %s was not recorded: %v", t, v, err)}); err != nil {
-				return err
-			}
-			continue
-		}
-		if _, err := r.tx.ExecContext(r.ctx, `RELEASE SAVEPOINT ident`); err != nil {
+			return nil
+		})
+		if err != nil || ok {
 			return err
 		}
 	}
+	for _, t := range fresh {
+		v := rec.Identifiers[t]
+		var insErr error
+		ok, err := r.inSavepoint("ident", func() error {
+			_, insErr = r.tx.ExecContext(r.ctx, r.identInsert(), r.identInsertArgs(golden, t, v, t == "ISIN")...)
+			return insErr
+		})
+		if err != nil {
+			return err
+		}
+		if !ok {
+			// e.g. a type the identifier table doesn't accept: keep mastering.
+			if err := r.exception(golden, rec.SourceKey, Issue{Code: "IDENTIFIER_REJECTED", Severity: SevWarning, Attribute: t,
+				Message: fmt.Sprintf("%s %s was not recorded: %v", t, v, insErr)}); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
+}
+
+// inSavepoint runs fn under a savepoint: false (and nothing kept) when fn
+// fails; an error only when the savepoint itself does.
+func (r *runner) inSavepoint(name string, fn func() error) (bool, error) {
+	if _, err := r.tx.ExecContext(r.ctx, "SAVEPOINT "+name); err != nil {
+		return false, err
+	}
+	if fn() != nil {
+		_, err := r.tx.ExecContext(r.ctx, "ROLLBACK TO SAVEPOINT "+name)
+		return false, err
+	}
+	_, err := r.tx.ExecContext(r.ctx, "RELEASE SAVEPOINT "+name)
+	return err == nil, err
 }
 
 // identInsert records an identifier for a golden record, in the table's
@@ -501,30 +547,43 @@ func (r *runner) masterOne(golden string) error {
 		cs = append(cs, Contribution{SourceID: c.SourceID, SourceCd: strings.ToUpper(c.SourceCd), SourceKey: c.SourceKey, AsOf: p.AsOf, Attrs: p.Attrs})
 	}
 
-	var prev struct {
-		Version int             `db:"golden_version"`
-		Attrs   json.RawMessage `db:"golden_attributes"`
-		Status  string          `db:"status"`
+	// One read for the record's state: its latest and published versions,
+	// its code (minted by mastering, so no source supplies it) and how sure
+	// its linking is (the weakest active link; certain when none is scored).
+	var st struct {
+		Version  sql.NullInt64   `db:"golden_version"`
+		Attrs    []byte          `db:"golden_attributes"`
+		Status   sql.NullString  `db:"status"`
+		Current  []byte          `db:"current_attributes"`
+		Code     sql.NullString  `db:"code"`
+		Identity sql.NullFloat64 `db:"identity"`
 	}
-	var previous map[string]any
-	hasPrev := true
-	err = tx.GetContext(ctx, &prev, fmt.Sprintf(`SELECT golden_version, golden_attributes, status FROM %s
-		WHERE %s::text = $1 ORDER BY golden_version DESC LIMIT 1`, r.p.table("golden_record"), r.p.keyColumn()), golden)
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		hasPrev = false
-	case err != nil:
+	gr, key := r.p.table("golden_record"), r.p.keyColumn()
+	if err := tx.GetContext(ctx, &st, fmt.Sprintf(`SELECT p.golden_version, p.golden_attributes, p.status,
+			(SELECT c.golden_attributes FROM %[1]s c WHERE c.%[2]s::text = $1 AND c.is_current LIMIT 1) AS current_attributes,
+			(SELECT a.%[3]s::text FROM %[4]s a WHERE a.%[5]s::text = $1 AND %[6]s LIMIT 1) AS code,
+			(SELECT MIN(COALESCE(x.match_score, 1)) FROM mdm.entity_xref x
+				WHERE x.entity_cd = $2 AND x.golden_id::text = $1 AND x.status = 'ACTIVE') AS identity
+		FROM (SELECT 1) d LEFT JOIN LATERAL (SELECT golden_version, golden_attributes, status FROM %[1]s
+			WHERE %[2]s::text = $1 ORDER BY golden_version DESC LIMIT 1) p ON true`,
+		gr, key, qi(r.p.AnchorCodeColumn), qi(r.p.AnchorTable), qi(r.p.entityCol()), r.p.current("a")), golden, r.p.EntityCd); err != nil {
 		return err
-	default:
-		_ = json.Unmarshal(prev.Attrs, &previous)
 	}
-	var current map[string]any // the published golden values anomalies compare to
+	hasPrev := st.Version.Valid
+	var previous, current map[string]any // current: the published values anomalies compare to
 	if hasPrev {
-		var raw json.RawMessage
-		if err := tx.GetContext(ctx, &raw, fmt.Sprintf(`SELECT golden_attributes FROM %s WHERE %s::text = $1 AND is_current`,
-			r.p.table("golden_record"), r.p.keyColumn()), golden); err == nil {
-			_ = json.Unmarshal(raw, &current)
+		_ = json.Unmarshal(st.Attrs, &previous)
+		if len(st.Current) > 0 {
+			_ = json.Unmarshal(st.Current, &current)
 		}
+	}
+	prev := struct {
+		Version int
+		Status  string
+	}{int(st.Version.Int64), st.Status.String}
+	identity := 1.0
+	if st.Identity.Valid {
+		identity = st.Identity.Float64
 	}
 
 	now := time.Now().UTC()
@@ -562,10 +621,8 @@ func (r *runner) masterOne(golden string) error {
 	for k, v := range attrs {
 		ruleView[k] = v
 	}
-	var code string
-	if err := r.tx.GetContext(r.ctx, &code, fmt.Sprintf(`SELECT %s::text FROM %s WHERE %s::text = $1 AND %s LIMIT 1`,
-		qi(r.p.AnchorCodeColumn), qi(r.p.AnchorTable), qi(r.p.entityCol()), r.p.current("")), golden); err == nil {
-		ruleView[r.p.AnchorCodeColumn] = code
+	if st.Code.Valid {
+		ruleView[r.p.AnchorCodeColumn] = st.Code.String
 	}
 	issues := append(anomalies, r.rules.Golden(inFields(ruleView, r.attrField))...)
 	status := "PUBLISHED"
@@ -593,10 +650,6 @@ func (r *runner) masterOne(golden string) error {
 	}
 
 	dq := dqScore(attrs, r.cfg.survival, issues)
-	identity, err := r.identityConfidence(golden)
-	if err != nil {
-		return err
-	}
 	version := 1
 	if hasPrev {
 		version = prev.Version + 1
@@ -710,37 +763,55 @@ func (r *runner) provenance(recordID, golden string, version int, decisions map[
 		attrs = append(attrs, a)
 	}
 	sort.Strings(attrs)
+	if len(attrs) == 0 {
+		return nil
+	}
+	// One statement per table for all attributes: provenance is most of a
+	// golden version's writes, and each round trip costs.
+	null := func(s string, ok bool) sql.NullString { return sql.NullString{String: s, Valid: ok} }
+	var names, values, sources, keys, rules, reasons, competing []string
+	var nums, dates, confs []sql.NullString
 	for _, a := range attrs {
 		d := decisions[a]
-		var num any
-		if n, ok := number(d.Value); ok {
-			num = n
-		}
-		var date any
+		n, isNum := number(d.Value)
+		date, isDate := "", false
 		if s, ok := d.Value.(string); ok && len(s) == 10 {
 			if _, err := time.Parse("2006-01-02", s); err == nil {
-				date = s
+				date, isDate = s, true
 			}
-		}
-		if _, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, golden_record_id, field_name, field_value, field_value_numeric,
-				field_value_date, source_system_id, source_field, confidence, rule_applied)
-			VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::date, NULLIF($7, '')::uuid, $8, $9, NULLIF($10, '')::uuid)`, r.p.table("golden_field")),
-			r.tenant, recordID, a, text(d.Value), num, date, d.Winner.SourceID, truncate(d.Winner.SourceKey, 150), d.Confidence, d.RuleID); err != nil {
-			return err
 		}
 		comp := d.Competing
 		if comp == nil {
 			comp = []Candidate{}
 		}
-		competing, _ := json.Marshal(comp)
-		if _, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, golden_version, field_name, winning_source_id,
-				winning_value, competing_values, decision_reason)
-			VALUES ($1::uuid, $2::uuid, $3, $4, NULLIF($5, '')::uuid, $6, $7, $8)`, r.p.table("survivorship_log"), r.p.keyColumn()),
-			r.tenant, golden, version, a, d.Winner.SourceID, text(d.Value), competing, truncate(d.Strategy+": "+d.Reason, 255)); err != nil {
-			return err
-		}
+		cj, _ := json.Marshal(comp)
+		names = append(names, a)
+		values = append(values, text(d.Value))
+		nums = append(nums, null(strconv.FormatFloat(n, 'f', -1, 64), isNum))
+		dates = append(dates, null(date, isDate))
+		sources = append(sources, d.Winner.SourceID)
+		keys = append(keys, truncate(d.Winner.SourceKey, 150))
+		confs = append(confs, null(strconv.FormatFloat(d.Confidence, 'f', -1, 64), true))
+		rules = append(rules, d.RuleID)
+		reasons = append(reasons, truncate(d.Strategy+": "+d.Reason, 255))
+		competing = append(competing, string(cj))
 	}
-	return nil
+	if _, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, golden_record_id, field_name, field_value, field_value_numeric,
+			field_value_date, source_system_id, source_field, confidence, rule_applied)
+		SELECT $1::uuid, $2::uuid, f.name, f.value, f.num::numeric, f.dt::date, NULLIF(f.src, '')::uuid, f.skey, f.conf::numeric, NULLIF(f.rule, '')::uuid
+		FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[])
+			AS f(name, value, num, dt, src, skey, conf, rule)`, r.p.table("golden_field")),
+		r.tenant, recordID, pq.Array(names), pq.Array(values), pq.Array(nums), pq.Array(dates), pq.Array(sources), pq.Array(keys),
+		pq.Array(confs), pq.Array(rules)); err != nil {
+		return err
+	}
+	_, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (tenant_id, %s, golden_version, field_name, winning_source_id,
+			winning_value, competing_values, decision_reason)
+		SELECT $1::uuid, $2::uuid, $3, f.name, NULLIF(f.src, '')::uuid, f.value, f.comp::jsonb, f.reason
+		FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[]) AS f(name, src, value, comp, reason)`,
+		r.p.table("survivorship_log"), r.p.keyColumn()),
+		r.tenant, golden, version, pq.Array(names), pq.Array(sources), pq.Array(values), pq.Array(competing), pq.Array(reasons))
+	return err
 }
 
 func (r *runner) updateAnchor(golden string, attrs map[string]any, dq float64) error {
@@ -835,18 +906,6 @@ func (r *runner) writeAnchor(golden string, set map[string]any) error {
 	_, err := r.tx.ExecContext(r.ctx, fmt.Sprintf(`INSERT INTO %s (%s) SELECT %s FROM %s a WHERE a.id::text = $1`,
 		qi(r.p.AnchorTable), strings.Join(into, ", "), strings.Join(from, ", "), qi(r.p.AnchorTable)), args...)
 	return err
-}
-
-// identityConfidence is how sure the linking is: the weakest active link
-// (an exact identifier or a first sighting counts as certain).
-func (r *runner) identityConfidence(golden string) (float64, error) {
-	var v sql.NullFloat64
-	err := r.tx.GetContext(r.ctx, &v, `SELECT MIN(COALESCE(match_score, 1)) FROM mdm.entity_xref
-		WHERE entity_cd = $1 AND golden_id::text = $2 AND status = 'ACTIVE'`, r.p.EntityCd, golden)
-	if !v.Valid {
-		return 1, err
-	}
-	return v.Float64, err
 }
 
 // dqScore: how complete the golden record is against the attributes the
