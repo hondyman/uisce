@@ -750,7 +750,20 @@
       "pickCalendar": "Choose a business calendar for this rule.",
       "nextRuns": "Next runs",
       "halfDay": "Half day",
-      "enabled": "Active"
+      "enabled": "Active",
+      "delivery": "Delivery options"
+    },
+    "reportParams": {
+      "burstDimension": "Burst by",
+      "burstHelp": "One output per distinct value of this field (for example client_id).",
+      "exportFormat": "Export format",
+      "bothFormats": "PDF and Excel",
+      "notifyInApp": "Notify in the app when a run finishes",
+      "notifyEmail": "Also send email"
+    },
+    "embed": {
+      "schedule": "Schedule",
+      "scheduled": "Scheduled"
     }
   }
 }

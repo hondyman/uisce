@@ -1,6 +1,11 @@
 /**
  * ReportScheduleBurstingTab
  *
+ * DEPRECATED (Slice 4): no product UI mounts this. New schedules use
+ * features/schedules ScheduleEditor + POST /api/schedules (kind=report).
+ * Kept for vitest coverage of the legacy async run contract until that
+ * test is rewritten against schedulesApi.runNow.
+ *
  * Phase 4 frontend: async 202 contract for report execution.
  *
  * Backend contract (Phase 3, commit 81ff74506f):

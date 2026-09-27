@@ -104,7 +104,10 @@ import { useTheme } from '@mui/material';
 import { useTenant } from '../../contexts/TenantContext';
 import BOFieldsPalette, { BOField, extractAllBOFields } from './BOFieldsPalette';
 import FilterBuilderPanel from './FilterBuilderPanel';
-import ReportScheduleBurstingTab from './ReportScheduleBurstingTab';
+import ScheduleEditor from '../../features/schedules/ScheduleEditor';
+import ReportDeliveryParams from '../../features/schedules/ReportDeliveryParams';
+import { useTargetSchedule } from '../../features/schedules/useTargetSchedule';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import { FieldDefinition } from '../ExpressionBuilder/AdvancedConditionBuilder';
 import { dedupeFields } from '../../utils/dedupeFields';
 import { useCreateReportTemplate, useUpdateReportTemplate, useReportTemplate } from '../../api/reporting';
@@ -117,6 +120,7 @@ type ReportParameter = ParamSpec;
 const SSRSReportBuilderContent: React.FC = () => {
   const { tenant, datasource } = useTenant();
   const { reportId: urlReportId } = useParams<{ reportId?: string }>();
+  const reportSchedule = useTargetSchedule('report', urlReportId, !!urlReportId);
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
 
@@ -1546,7 +1550,7 @@ const SSRSReportBuilderContent: React.FC = () => {
                 <Tab label="Preview" value="preview" />
                 <Tab label="Data" value="data" />
                 <Tab label="Filters" value="filters" />
-                <Tab label="Schedule & Bursting" value="schedule" />
+                <Tab label="Schedule" value="schedule" />
                 <Tab label="Settings" value="settings" />
               </Tabs>
             </Box>
@@ -1930,14 +1934,38 @@ const SSRSReportBuilderContent: React.FC = () => {
               </Box>
             )}
 
-            {/* ════ SCHEDULE & BURSTING TAB ════ */}
+            {/* ════ SCHEDULE — one scheduler (kind=report); delivery in target.params ════ */}
             {activeTab === 'schedule' && (
               <Box sx={{ p: 3, overflowY: 'auto', bgcolor: colors.bg }}>
-                <ReportScheduleBurstingTab
-                  reportId={urlReportId}
-                  reportName={reportTitle}
-                  tenantId={tenant?.id}
-                />
+                {!urlReportId ? (
+                  <Alert severity="info">Save the report before creating a schedule.</Alert>
+                ) : (
+                  <Stack spacing={2} alignItems="flex-start">
+                    <Typography variant="body2" color="text.secondary">
+                      Schedules for this report use the platform scheduler (business calendars, run history, external triggers).
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<ScheduleIcon />}
+                      onClick={reportSchedule.openEditor}
+                      color={reportSchedule.schedule?.enabled ? 'success' : 'primary'}
+                    >
+                      {reportSchedule.schedule?.enabled ? 'Edit schedule' : 'Create schedule'}
+                    </Button>
+                    {reportSchedule.open && (
+                      <ScheduleEditor
+                        key={reportSchedule.schedule?.id ?? `report-${urlReportId}`}
+                        open
+                        schedule={reportSchedule.schedule}
+                        fixedTarget={{ kind: 'report', ref: urlReportId, name: reportTitle }}
+                        paramsSlot={({ params, setParams }) => (
+                          <ReportDeliveryParams params={params} setParams={setParams} />
+                        )}
+                        onClose={reportSchedule.closeEditor}
+                      />
+                    )}
+                  </Stack>
+                )}
               </Box>
             )}
 

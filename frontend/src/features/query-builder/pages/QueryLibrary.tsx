@@ -27,6 +27,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import PublicIcon from '@mui/icons-material/Public';
 import LockIcon from '@mui/icons-material/Lock';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import {
   listSavedQueries, deleteSavedQuery, cloneSavedQuery, setSavedQueryFavorite,
   setSavedQueryVisibility, listSavedQueryFolders, createSavedQueryFolder,
@@ -34,10 +35,14 @@ import {
 } from '../services/savedQueryApi';
 import type { SavedQuery, SavedQueryFolder } from '../types/queryDef';
 import { useNotification } from '../../../hooks/useNotification';
+import ScheduleEditor from '../../schedules/ScheduleEditor';
+import { useTargetSchedule } from '../../schedules/useTargetSchedule';
+import { useTranslation } from 'react-i18next';
 
 export default function QueryLibrary() {
   const navigate = useNavigate();
   const notify = useNotification();
+  const { t } = useTranslation();
 
   const [queries, setQueries] = useState<SavedQuery[]>([]);
   const [folders, setFolders] = useState<SavedQueryFolder[]>([]);
@@ -48,6 +53,9 @@ export default function QueryLibrary() {
 
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuQuery, setMenuQuery] = useState<SavedQuery | null>(null);
+  /** Non-null while the ScheduleEditor for this saved query is open. */
+  const [scheduling, setScheduling] = useState<SavedQuery | null>(null);
+  const querySchedule = useTargetSchedule('saved_query', scheduling?.id, !!scheduling);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [renameOpen, setRenameOpen] = useState(false);
@@ -290,11 +298,28 @@ export default function QueryLibrary() {
         <MenuItem onClick={() => { handleEdit(menuQuery!); closeMenu(); }}>Edit</MenuItem>
         <MenuItem onClick={openRename}>Rename</MenuItem>
         <MenuItem onClick={() => handleClone(menuQuery!)}>Duplicate</MenuItem>
+        <MenuItem onClick={() => {
+          if (menuQuery) setScheduling(menuQuery);
+          closeMenu();
+        }}>
+          <ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
+          {t('schedules.embed.schedule')}
+        </MenuItem>
         <MenuItem onClick={() => handleToggleVisibility(menuQuery!)}>
           {menuQuery?.visibility === 'shared' ? 'Make private' : 'Share with tenant'}
         </MenuItem>
         <MenuItem onClick={() => handleDelete(menuQuery!)} sx={{ color: 'error.main' }}>Delete</MenuItem>
       </Menu>
+
+      {scheduling && (
+        <ScheduleEditor
+          key={querySchedule.schedule?.id ?? `sq-${scheduling.id}`}
+          open
+          schedule={querySchedule.schedule}
+          fixedTarget={{ kind: 'saved_query', ref: scheduling.id, name: scheduling.name }}
+          onClose={() => setScheduling(null)}
+        />
+      )}
 
       <Dialog open={newFolderOpen} onClose={() => setNewFolderOpen(false)}>
         <DialogTitle>New Folder</DialogTitle>
