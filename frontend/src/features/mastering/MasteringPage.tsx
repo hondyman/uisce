@@ -337,7 +337,7 @@ export default function MasteringPage() {
   const profile: Profile | undefined = list.find((p) => p.entity_cd.toLowerCase() === entity);
   // A time series (prices) has golden prices by date; no duplicates to review.
   const series = isSeries(profile);
-  useEffect(() => { if (series && (tab === 'review' || tab === 'overrides')) setTab('golden'); }, [series, tab]);
+  useEffect(() => { if (series && tab === 'review') setTab('golden'); }, [series, tab]);
 
   const exceptions = useQuery({ queryKey: ['mastering', 'exceptions', entity, ''], queryFn: () => masteringApi.exceptions(entity), enabled: !!entity });
   const candidates = useQuery({ queryKey: ['mastering', 'candidates', entity], queryFn: () => masteringApi.candidates(entity), enabled: !!entity && !series });
@@ -392,7 +392,7 @@ export default function MasteringPage() {
               <Tab value="runs" label={t('mastering.tabs.runs')} />
               <Tab value="exceptions" label={badge(t('mastering.tabs.exceptions'), openCount)} />
               {!series && <Tab value="review" label={badge(t('mastering.tabs.review'), reviewCount)} />}
-              {!series && <Tab value="overrides" label={badge(t('mastering.tabs.overrides'), toDecide)} />}
+              <Tab value="overrides" label={badge(t('mastering.tabs.overrides'), toDecide)} />
             </Tabs>
             {tab === 'golden' && (series ? <PricesTab entity={entity} onOpen={setGoldenId} /> : <GoldenTab entity={entity} onOpen={setGoldenId} />)}
             {tab === 'runs' && <RunsTab entity={entity} />}

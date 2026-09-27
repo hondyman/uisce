@@ -159,7 +159,7 @@ golden prices; they are not versioned per tick, and the EOD official price super
 4. **Controls**: tolerance, variance events, stale, missing; the console's price views (by date and
    instrument, variance queue, stale, missing).
 5. **Cutoffs, finalization, restatements**, distribution events.
-6. **Overrides and vendor challenges.**
+6. **Overrides** (built) **and vendor challenges.**
 7. **Intraday** from the stream.
 Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
 
@@ -201,6 +201,14 @@ Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
 - **Console** - for a time-series entity: golden prices by valuation date (change, winner, spread, status),
   a price drawer (every quote considered and why, controls, disagreeing sources, versions), price
   exceptions; match review and overrides are record-master only (message 9400-40).
+
+- **Steward decisions** - a price override (`mdm.golden_override`, attribute `TYPE@date`, keyed by the
+  instrument) follows the entity's policy (approval by N others or direct; a high-risk price type covers every
+  date). Applied, it is a MANUAL observation that wins its key whatever the controls say - releasing a held
+  price (at its value) or correcting one - and resolves the key's open exceptions; clearing it returns the key to
+  the vendors (held again if they still are). Confidence counts the sources within the warning threshold.
+- **Related types** - a price only one source quotes is checked against the golden prices of the types that
+  should agree with it (default `[LAST, OFFICIAL_CLOSE]`, `[BID, MID, ASK]`): error flagged, critical held.
 
 Next: stale and missing-price controls and the expected universe (slice 4), cutoffs and finalization,
 overrides as MANUAL observations, vendor challenges, date partitioning, the Postgres rule dialect.

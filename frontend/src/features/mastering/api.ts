@@ -162,6 +162,8 @@ export interface Policy {
 
 export type OverrideStatus = 'PENDING' | 'APPLIED' | 'REJECTED' | 'WITHDRAWN';
 export interface Override {
+  /** What the console opens for it: for a price override, the golden price. */
+  open_id?: string;
   id: string;
   golden_id: string;
   golden_code?: string;

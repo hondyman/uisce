@@ -467,7 +467,8 @@
       "CURRENCY_MISMATCH": "Currency mismatch",
       "DAY_OVER_DAY": "Day-over-day move",
       "SELECTION_HOLD": "Held by selection rule",
-      "SELECTION_FLAG": "Selection rule flag"
+      "SELECTION_FLAG": "Selection rule flag",
+      "RELATED_TYPE_DIVERGENCE": "Disagrees with related price"
     },
     "review": {
       "requested": "Merge requested; it happens when approved.",
@@ -596,7 +597,12 @@
       "controls": "Controls",
       "control": "{{control}}: {{pct}}% ({{level}}, {{action}})",
       "variances": "Sources that disagree",
-      "bitemporal": "Every version is kept with when it was known: what the price was believed to be at any time can be read back."
+      "bitemporal": "Every version is kept with when it was known: what the price was believed to be at any time can be read back.",
+      "decideHeld": "Release or correct this price",
+      "correct": "Correct this price",
+      "changeOverride": "Change or clear the steward price",
+      "stewardPrice": "Steward price",
+      "pending": "Proposed {{value}}, awaiting approval"
     }
   },
   "stagingBindings": {

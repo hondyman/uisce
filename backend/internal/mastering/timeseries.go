@@ -746,13 +746,40 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 		codeOf[id] = code
 	}
 
+	overrides, err := r.priceOverrides(keys)
+	if err != nil {
+		return fmt.Errorf("overrides: %w", err)
+	}
+	// Current golden prices of the chunk's instruments and dates, for the
+	// related-types check (updated as this chunk publishes).
+	var sib []struct {
+		K     string  `db:"k"`
+		Value float64 `db:"golden_value"`
+	}
+	if err := tx.SelectContext(ctx, &sib, `WITH `+keyset+`
+		SELECT DISTINCT g.price_entity_id::text || '|' || g.price_type_cd || '|' || g.price_date::text AS k, g.golden_value::float8 AS golden_value
+		FROM (SELECT DISTINCT et, eid, d FROM k) x JOIN mdm.price_golden_record g
+		  ON g.price_entity_type = x.et AND g.price_entity_id = x.eid AND g.price_date = x.d AND g.is_current`, kj); err != nil {
+		return fmt.Errorf("related prices: %w", err)
+	}
+	r.siblings = make(map[string]float64, len(sib))
+	for _, x := range sib {
+		r.siblings[x.K] = x.Value
+	}
 	var golden []goldenPriceRow
 	var issues []priceIssueRow
 	var variances []varianceRow
 	for _, k := range keys {
-		g, is, vs := r.surviveKey(k, byKey[k.String()], state[k.String()], codeOf)
+		var ov *activeOverride
+		if o, ok := overrides[k.String()]; ok {
+			ov = &o
+		}
+		g, is, vs := r.surviveKey(k, byKey[k.String()], state[k.String()], codeOf, ov)
 		if g != nil {
 			golden = append(golden, *g)
+			if g.Current {
+				r.siblings[k.String()] = g.Value
+			}
 		}
 		issues = append(issues, is...)
 		variances = append(variances, vs...)
@@ -762,11 +789,14 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 
 // surviveKey decides one golden price. It returns the new golden version
 // (nil: unchanged, or nothing to publish), exceptions and variance events.
-func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState, codeOf map[string]string) (*goldenPriceRow, []priceIssueRow, []varianceRow) {
+func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState, codeOf map[string]string, ov *activeOverride) (*goldenPriceRow, []priceIssueRow, []varianceRow) {
 	sc := r.cfg.series
 	ctl := r.p.Settings.Series.Controls
 	var issues []priceIssueRow
 	issue := func(src *string, typ, sev, msg string) {
+		if ov != nil {
+			return // a steward has decided this price
+		}
 		attrs, _ := json.Marshal(map[string]any{"price_type": k.PriceType, "run_id": r.run.ID})
 		issues = append(issues, priceIssueRow{k.EntityType, k.EntityID, k.Date, src, typ, sev, msg, attrs})
 		r.raised = append(r.raised, Issue{Code: typ, Severity: sev, Attribute: k.PriceType, Message: msg}) // sev is SevError or SevWarning
@@ -806,10 +836,16 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 	var prov []provCandidate
 	var contribs []Contribution
 	info := map[string]seriesCandidate{}
-	for _, c := range cands {
+	var manual *seriesCandidate
+	for i, c := range cands {
 		code := codeOf[c.SourceID]
 		if code == "" {
 			code = c.SourceID
+		}
+		if code == manualSource {
+			// The steward's price: it wins through the override, it doesn't compete.
+			manual = &cands[i]
+			continue
 		}
 		pc := provCandidate{Source: code, Value: c.Value, Currency: c.Currency.String, Rank: rankOf(ranking, code)}
 		if c.AsOf.Valid {
@@ -853,6 +889,22 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 		&SurviveOptions{Hierarchy: func(string) []string { return ranking }, Select: selector(r.selRules),
 			Context: map[string]any{"threshold": th.data(), "price_type": k.PriceType, "asset_class": facts.AssetClass}})
 	d, decided := decisions["value"]
+	if ov != nil {
+		var v float64
+		if manual != nil {
+			v = manual.Value
+		} else if x, ok := priceValue(ov.Value); ok {
+			v = x
+		}
+		d = Decision{Attribute: "value", Value: v, Strategy: "OVERRIDE", Reason: overrideReason(*ov), Confidence: 1, Competing: d.Competing,
+			Winner: Candidate{SourceCd: manualSource, SourceKey: "override:" + ov.ID, Value: v}}
+		decided = true
+		info[manualSource] = seriesCandidate{SourceID: r.cfg.sources[manualSource], Value: v}
+		if manual != nil {
+			info[manualSource] = *manual
+		}
+		prov = append(prov, provCandidate{Source: manualSource, Value: v, Note: "steward override " + ov.ID})
+	}
 	status := "PUBLISHED"
 	for _, is := range survIssues {
 		sev := "WARNING"
@@ -860,7 +912,7 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 			sev = "ERROR"
 		}
 		issue(nil, is.Code, sev, fmt.Sprintf("%s: %s", label, is.Message))
-		if is.Code == IssueSelectionHold || is.Code == IssueAnomaly || is.Severity == SevError {
+		if ov == nil && (is.Code == IssueSelectionHold || is.Code == IssueAnomaly || is.Severity == SevError) {
 			status = "REVIEW"
 		}
 	}
@@ -904,6 +956,9 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 			}
 			msg := fmt.Sprintf("%s: %.4g moved %.2f%% from %.4g on %s (%s threshold)", label,
 				value, pct, st.PriorValue.Float64, st.PriorDate.String, strings.ToLower(lvl))
+			if ov != nil {
+				action = "OVERRIDDEN"
+			}
 			if action == "HOLD" {
 				status = "REVIEW"
 				msg += "; held for a steward"
@@ -940,12 +995,65 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 		}
 	}
 
+	// Related types: a price only one source quotes has no peers to agree
+	// with, so it is checked against the golden prices of the types that
+	// should agree with it (a lone official close far from the last price).
+	if len(contribs) == 1 && value != 0 {
+		for _, rt := range ctl.related(k.PriceType) {
+			other, ok := r.siblings[k.EntityID+"|"+rt+"|"+k.Date]
+			if !ok || other == 0 {
+				continue
+			}
+			pct := math.Abs(value-other) / math.Abs(other) * 100
+			lvl := th.level(pct)
+			if lvl == "" || lvl == "WARNING" {
+				continue
+			}
+			action := "FLAG"
+			if lvl == "CRITICAL" {
+				action = "HOLD"
+			}
+			if ov != nil {
+				action = "OVERRIDDEN"
+			}
+			msg := fmt.Sprintf("%s: only %s quotes it, at %.4g - %.2f%% from the golden %s %.4g (%s threshold)", label, winner, value, pct, rt, other, strings.ToLower(lvl))
+			if action == "HOLD" {
+				status = "REVIEW"
+				msg += "; held for a steward"
+			}
+			issue(nil, "RELATED_TYPE_DIVERGENCE", "ERROR", msg)
+			controls = append(controls, map[string]any{"control": "RELATED_TYPE_DIVERGENCE", "level": lvl, "action": action, "pct": round4(pct), "against": rt})
+			break
+		}
+	}
+	// Confidence: the share of the sources within the warning threshold of
+	// the golden value (exact agreement is too strict for prices).
+	if ov == nil && len(contribs) > 0 && value != 0 {
+		tol := 0.5
+		if th != nil && th.Warning.Valid {
+			tol = th.Warning.Float64
+		}
+		agree := 0
+		for _, c := range contribs {
+			if x, ok := number(c.Attrs["value"]); ok && math.Abs(x-value)/math.Abs(value)*100 <= tol {
+				agree++
+			}
+		}
+		d.Confidence = float64(agree) / float64(len(contribs))
+		if d.Winner.Stale {
+			d.Confidence /= 2
+		}
+	}
 	sort.Slice(prov, func(i, j int) bool { return prov[i].Source < prov[j].Source })
 	sigParts := make([]string, len(prov))
 	for i, p := range prov {
 		sigParts[i] = fmt.Sprintf("%s|%v|%s|%s|%v|%s", p.Source, p.Value, p.Currency, p.AsOf, p.Stale, p.Excluded)
 	}
-	sum := sha256.Sum256([]byte(strings.Join(sigParts, ";") + "#" + winner + "#" + status + fmt.Sprint(value)))
+	ovID := ""
+	if ov != nil {
+		ovID = ov.ID
+	}
+	sum := sha256.Sum256([]byte(strings.Join(sigParts, ";") + "#" + winner + "#" + status + fmt.Sprint(value) + "#" + ovID))
 	signature := hex.EncodeToString(sum[:8])
 
 	// Unchanged: the same candidates, winner, value and status as the latest version.
