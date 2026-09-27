@@ -786,7 +786,9 @@
       "report": "Informe",
       "saved_query": "Consulta guardada",
       "data_pipeline": "Canalización de datos",
-      "mastering": "Maestrización"
+      "mastering": "Maestrización",
+      "workflow": "Flujo de trabajo",
+      "job_dag": "DAG de trabajos"
     },
     "when": {
       "external": "Disparada por un planificador externo",

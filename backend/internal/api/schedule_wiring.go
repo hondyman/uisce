@@ -16,6 +16,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/hondyman/uisce/backend/internal/reports"
 	"github.com/hondyman/uisce/backend/internal/schedule"
+	si "github.com/hondyman/uisce/backend/internal/scheduler_intelligence"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
@@ -67,6 +68,11 @@ func (s *Server) registerScheduleRoutes(r chi.Router, sqlxDB *sqlx.DB, tc tempor
 	}
 	if s.masteringRunner != nil {
 		runners.Register(s.masteringRunner)
+	}
+	if sqlxDB != nil {
+		runners.Register(&workflowRunner{db: sqlxDB, tc: tc})
+		siSvc := si.NewService(sqlxDB, si.NewSemanticAdapter(sqlxDB, s.SemanticSvc), logging.GetLogger())
+		runners.Register(newJobDAGRunner(siSvc, tc, si.NewRepository(sqlxDB)))
 	}
 	s.ScheduleRunners = runners
 

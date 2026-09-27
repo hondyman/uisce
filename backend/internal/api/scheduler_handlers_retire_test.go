@@ -17,7 +17,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
-func TestSchedulerMutationsRetired(t *testing.T) {
+func TestSchedulerSurfaceRetired(t *testing.T) {
 	h := httpapi.NewSchedulerHandlers(nil, nil, zap.NewNop(), handlers.SecurityContextDeps{})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
@@ -33,16 +33,19 @@ func TestSchedulerMutationsRetired(t *testing.T) {
 	paths := []struct {
 		method, path string
 	}{
+		{http.MethodGet, "/scheduler/jobs"},
 		{http.MethodPost, "/scheduler/jobs"},
+		{http.MethodGet, "/scheduler/jobs/" + uuid.New().String()},
 		{http.MethodPatch, "/scheduler/jobs/" + uuid.New().String()},
 		{http.MethodDelete, "/scheduler/jobs/" + uuid.New().String()},
 		{http.MethodPost, "/scheduler/jobs/" + uuid.New().String() + "/run"},
+		{http.MethodGet, "/scheduler/jobs/" + uuid.New().String() + "/runs"},
+		{http.MethodGet, "/scheduler/dags"},
 		{http.MethodPost, "/scheduler/dags"},
-		{http.MethodPatch, "/scheduler/dags/" + uuid.New().String()},
-		{http.MethodDelete, "/scheduler/dags/" + uuid.New().String()},
-		{http.MethodPost, "/scheduler/dags/" + uuid.New().String() + "/run"},
+		{http.MethodGet, "/scheduler/dags/" + uuid.New().String()},
+		{http.MethodGet, "/scheduler/stats"},
+		{http.MethodGet, "/scheduler/ai/suggestions"},
 		{http.MethodPost, "/scheduler/ai/suggestions/" + uuid.New().String() + "/accept"},
-		{http.MethodPost, "/scheduler/ai/suggestions/" + uuid.New().String() + "/dismiss"},
 	}
 
 	for _, p := range paths {
@@ -53,13 +56,13 @@ func TestSchedulerMutationsRetired(t *testing.T) {
 			assert.Equal(t, http.StatusGone, w.Code)
 			var body map[string]string
 			require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-			assert.Equal(t, "scheduler_intelligence_mutations_retired", body["error"])
+			assert.Equal(t, "scheduler_intelligence_retired", body["error"])
 			assert.Equal(t, "</api/schedules>; rel=\"successor-version\"", w.Header().Get("Link"))
 		})
 	}
 
-	t.Run("unauthenticated POST is 401", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/scheduler/jobs", nil)
+	t.Run("unauthenticated GET is 401", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/scheduler/jobs", nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)

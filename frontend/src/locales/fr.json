@@ -786,7 +786,9 @@
       "report": "Rapport",
       "saved_query": "Requête enregistrée",
       "data_pipeline": "Pipeline de données",
-      "mastering": "Mastering"
+      "mastering": "Mastering",
+      "workflow": "Workflow",
+      "job_dag": "DAG de jobs"
     },
     "when": {
       "external": "Déclenchée par un ordonnanceur externe",
