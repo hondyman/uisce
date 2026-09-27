@@ -224,6 +224,7 @@ type Server struct {
 	DataPipelines         *DataPipelineHandler // set when BO CRUD routes mount; also serves MCP
 	// MasteringEngine masters entities (Product first); the scheduler runs it too.
 	MasteringEngine         *mastering.Engine
+	masteringRunner         *mastering.Runner
 	QueryHandler            *handlers.QueryHandler
 	QueryBuilderHandler     *querybuilder.QueryBuilderHandler
 	BOStatusHandler         *handlers.BOStatusHandler

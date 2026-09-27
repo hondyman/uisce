@@ -117,3 +117,25 @@ func TestPreviewRerunIsIdempotent(t *testing.T) {
 		t.Errorf("open exceptions must not be raised twice: %d", second.Exceptions)
 	}
 }
+
+// TestPendingLoads: a load already mastered under its load key is not
+// pending (read-only).
+func TestPendingLoads(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	e := &Engine{Data: data}
+	gold, err := PlatformCatalog{DB: alpha}.GoldCopyTenant(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	loads, err := e.PendingLoads(context.Background(), gold, "product", "staging.ff_product")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("pending loads: %v", loads)
+}

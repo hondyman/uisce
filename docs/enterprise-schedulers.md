@@ -86,6 +86,26 @@ GET /api/schedules/{id}/triggers/{key}?wait=60s
 catalog messages (`error`, `error_code`, `user_action`), translated per
 `Accept-Language`.
 
+## Mastering after a load
+
+Mastering is a schedulable kind (`mastering`). Its target is an entity and the staging table its
+source lands in, e.g. `product:staging.ff_product`. Each firing masters every completed load of that
+table that has not been mastered yet, oldest first; each load keeps its own key (`load:<id>`), so a
+retried or doubled firing never masters a load twice, and a firing with nothing new succeeds with
+"no new loads to master".
+
+A typical Tidal chain: the vendor file job, then the load pipeline, then mastering:
+
+```
+uisce-job run --schedule <pipeline schedule id>  --key "$JOB_RUN_ID-load"   --system tidal --wait
+uisce-job run --schedule <mastering schedule id> --key "$JOB_RUN_ID-master" --system tidal --wait
+```
+
+Create the mastering schedule in Schedules (kind *Mastering*, trigger *External scheduler*). Exit
+code 1 means the run failed; records a steward must look at (unmapped codes, conflicts, held
+anomalies) are not failures - they finish the run as PARTIAL and wait in the Mastering console's
+Exceptions tab.
+
 ## What the run history shows
 
 Externally triggered runs carry the calling system and job reference (e.g.

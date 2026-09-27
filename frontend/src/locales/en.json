@@ -577,7 +577,8 @@
     "kinds": {
       "report": "Report",
       "saved_query": "Saved query",
-      "data_pipeline": "Data pipeline"
+      "data_pipeline": "Data pipeline",
+      "mastering": "Mastering"
     },
     "when": {
       "external": "Triggered by an external scheduler",

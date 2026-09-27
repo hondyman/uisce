@@ -705,7 +705,8 @@
     "kinds": {
       "report": "Rapport",
       "saved_query": "Requête enregistrée",
-      "data_pipeline": "Pipeline de données"
+      "data_pipeline": "Pipeline de données",
+      "mastering": "Mastering"
     },
     "when": {
       "external": "Déclenchée par un ordonnanceur externe",
