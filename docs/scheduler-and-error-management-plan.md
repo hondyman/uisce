@@ -130,7 +130,7 @@ second calendar store (`tenant_exchange_calendars`).
 | 1 | **msgcat** | `internal/msgcat` + error envelope middleware; pipeline, scheduler and BO write errors moved to catalog codes; guard test: no `err.Error()` to clients in migrated handlers |
 | 2 | **Scheduler core** | `internal/schedule` model, Temporal engine, calendar evaluation on MDM calendars, runners for pipeline + report + saved query; `schedule_runs`; API + MCP |
 | 3 | **Scheduler UI** | `<ScheduleEditor>` in report builder, query builder, pipeline editor; Schedules console |
-| 4 | **Retire the rest** | S1 deleted; creates/list/run 410; BurstingTab removed; migrate+reapply Temporal; report_schedules/burst dropped; **D1(a) Intelligence console = Schedules console**; S2 AI/DAG backend still Slice 5 |
+| 4 | **Retire the rest** | S1 deleted; report schedules 410+dropped; D1(a) console cutover; **S2 /scheduler mutations 410** (reads remain); Slice 5 = workflow/job_dag targets + S2 table removal |
 | 5 | **Workflows + DAGs** | workflow and job-DAG targets (S2's DAG model on the core) |
 | 6 | **Error management** | error log + fingerprint queue + console + routing |
 | 7 | **Error bot** | explain / suggest / cluster / incident / notify; autofix under policy |
