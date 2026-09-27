@@ -188,4 +188,5 @@ func (c *Counts) add(o Counts) {
 	c.Unchanged += o.Unchanged
 	c.Exceptions += o.Exceptions
 	c.Restated += o.Restated
+	c.Rechecked += o.Rechecked
 }

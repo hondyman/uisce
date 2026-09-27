@@ -94,7 +94,10 @@ type Counts struct {
 	Unchanged     int `json:"unchanged"`
 	// Restated: observations that replaced a value their source had
 	// already reported for the same key (time-series profiles).
-	Restated   int `json:"restated,omitempty"`
+	Restated int `json:"restated,omitempty"`
+	// Rechecked: later dates re-checked because an earlier golden price
+	// changed (time-series profiles).
+	Rechecked  int `json:"rechecked,omitempty"`
 	Exceptions int `json:"exceptions"`
 }
 
@@ -274,8 +277,10 @@ type runner struct {
 	overrides        bool
 	overridesChecked bool
 	// siblings: current golden prices by entity|type|date (time series).
-	siblings   map[string]float64
-	unmastered []string // bound fields with no golden column
+	siblings map[string]float64
+	// cascadeDepth: how many dates forward a change is being re-checked.
+	cascadeDepth int
+	unmastered   []string // bound fields with no golden column
 }
 
 func (r *runner) execute() error {

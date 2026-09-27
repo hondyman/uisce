@@ -232,6 +232,13 @@ func (r *runner) applyPriceOverride(id string) error {
 	if err := r.publishSeries([]seriesKey{k}); err != nil {
 		return err
 	}
+	if o.Action == "CLEAR" {
+		// The steward's price is no longer current: later dates were
+		// checked against it.
+		if err := r.cascade([]seriesKey{k}); err != nil {
+			return err
+		}
+	}
 	_, err := tx.ExecContext(ctx, `UPDATE mdm.golden_override SET applied_version = (SELECT max(golden_version) FROM mdm.price_golden_record
 			WHERE price_entity_type = $2 AND price_entity_id::text = $3 AND price_type_cd = $4 AND price_date = $5::date)
 		WHERE id::text = $1`, id, k.EntityType, k.EntityID, k.PriceType, k.Date)

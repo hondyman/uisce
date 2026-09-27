@@ -5,6 +5,7 @@ package mastering
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -255,6 +256,19 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 	if c.Restated != 1 {
 		t.Errorf("restatement: %+v, want 1 restated", c)
 	}
+	// The next date was checked against the old close: re-checked against
+	// 101 it is still critical, its exception now quoting the new prior.
+	if c.Rechecked != 1 {
+		t.Errorf("restatement: %+v, want day 2 re-checked", c)
+	}
+	var dod []string
+	if err := tx.SelectContext(ctx, &dod, `SELECT exception_description FROM mdm.price_exception WHERE exception_type = 'DAY_OVER_DAY'
+			AND price_entity_id::text = $1 AND price_date = $2::date AND custom_attributes->>'price_type' = 'LAST' AND status = 'OPEN'`, equityID, d2); err != nil {
+		t.Fatal(err)
+	}
+	if len(dod) != 1 || !strings.Contains(dod[0], "from 101") {
+		t.Errorf("day 2's open day-over-day exceptions after the restatement: %q, want one against 101", dod)
+	}
 	if g := latest(equityID, "LAST", d1); g.Version != before.Version+1 || g.Value != 101 || !g.Current {
 		t.Errorf("equity LAST day 1 after restatement: %+v, want v%d 101 current", g, before.Version+1)
 	}
@@ -263,6 +277,25 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 	}
 	if n := count(`SELECT count(*) FROM mdm.price_golden_record WHERE price_entity_id::text = $1 AND price_date = $2::date AND price_type_cd = 'LAST' AND is_current`, equityID, d1); n != 1 {
 		t.Errorf("current versions: %d, want 1", n)
+	}
+
+	// A steward sets day 1's close to 135: day 2's 140 is now a 3.7% move,
+	// so the re-check publishes it and resolves its exception.
+	var d1ID string
+	if err := tx.GetContext(ctx, &d1ID, `SELECT id::text FROM mdm.price_golden_record WHERE price_entity_id::text = $1 AND price_type_cd = 'LAST'
+		AND price_date = $2::date ORDER BY golden_version DESC LIMIT 1`, equityID, d1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.proposePriceOverride(ctx, tx, cfg, direct, gold, "price", d1ID,
+		OverrideRequest{Action: "SET", Value: []byte("135"), Reason: "Vendor close was pre-announcement"}, steward, "Test Steward"); err != nil {
+		t.Fatalf("override day 1: %v", err)
+	}
+	if g := latest(equityID, "LAST", d2); g.Status != "PUBLISHED" || !g.Current || g.Value != 140 {
+		t.Errorf("day 2 after day 1 became 135: %+v, want 140 published and current", g)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_exception WHERE exception_type = 'DAY_OVER_DAY' AND price_entity_id::text = $1
+			AND price_date = $2::date AND custom_attributes->>'price_type' = 'LAST' AND status = 'OPEN'`, equityID, d2); n != 0 {
+		t.Errorf("day 2 still has %d open day-over-day exceptions", n)
 	}
 
 	// Running a load again changes nothing.

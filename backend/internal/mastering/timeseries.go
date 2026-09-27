@@ -636,6 +636,8 @@ type goldenState struct {
 	Attributes []byte          `db:"golden_attributes"`
 	PriorValue sql.NullFloat64 `db:"prior_value"`
 	PriorDate  sql.NullString  `db:"prior_date"`
+	// Current is the key's current (published) golden value, if any.
+	Current sql.NullFloat64 `db:"current_value"`
 }
 
 // Rows written in bulk (jsonb_to_recordset).
@@ -723,14 +725,17 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 	}
 	var states []goldenState
 	if err := tx.SelectContext(ctx, &states, fmt.Sprintf(`WITH %s
-		SELECT k.key AS k, g.golden_version, g.golden_value, g.status, g.golden_attributes, pr.golden_value AS prior_value, pr.price_date::text AS prior_date
+		SELECT k.key AS k, g.golden_version, g.golden_value, g.status, g.golden_attributes, pr.golden_value AS prior_value, pr.price_date::text AS prior_date,
+			(SELECT c.golden_value FROM mdm.price_golden_record c WHERE c.price_entity_type = k.et AND c.price_entity_id = k.eid
+				AND c.price_type_cd = k.pt AND c.price_date = k.d AND c.is_current LIMIT 1) AS current_value
 		FROM k
 		LEFT JOIN LATERAL (SELECT golden_version, golden_value, status, golden_attributes FROM mdm.price_golden_record g
 			WHERE g.price_entity_type = k.et AND g.price_entity_id = k.eid AND g.price_type_cd = k.pt AND g.price_date = k.d
 			ORDER BY g.golden_version DESC LIMIT 1) g ON true
 		LEFT JOIN LATERAL (SELECT golden_value, price_date FROM mdm.price_golden_record p
-			WHERE p.price_entity_type = k.et AND p.price_entity_id = k.eid AND p.price_type_cd = k.pt AND p.price_date < k.d AND p.is_current
-			ORDER BY p.price_date DESC LIMIT 1) pr ON true`, keyset), kj); err != nil {
+			WHERE p.price_entity_type = k.et AND p.price_entity_id = k.eid AND p.price_type_cd = k.pt AND p.price_date < k.d
+			  AND p.price_date >= k.d - $2::int AND p.is_current
+			ORDER BY p.price_date DESC LIMIT 1) pr ON true`, keyset), kj, r.p.Settings.Series.Controls.maxGapDays()); err != nil {
 		return fmt.Errorf("golden state: %w", err)
 	}
 	byKey := map[string][]seriesCandidate{}
@@ -769,23 +774,88 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 	var golden []goldenPriceRow
 	var issues []priceIssueRow
 	var variances []varianceRow
+	var changed []seriesKey
 	for _, k := range keys {
 		var ov *activeOverride
 		if o, ok := overrides[k.String()]; ok {
 			ov = &o
 		}
-		g, is, vs := r.surviveKey(k, byKey[k.String()], state[k.String()], codeOf, ov)
+		st := state[k.String()]
+		g, is, vs := r.surviveKey(k, byKey[k.String()], st, codeOf, ov)
 		if g != nil {
 			golden = append(golden, *g)
 			if g.Current {
 				r.siblings[k.String()] = g.Value
+				// The key's current value moved (or it has one for the first
+				// time): later dates were checked against the old one.
+				if !st.Current.Valid || st.Current.Float64 != g.Value {
+					changed = append(changed, k)
+				}
 			}
 		}
 		issues = append(issues, is...)
 		variances = append(variances, vs...)
 	}
-	return r.writeSeries(golden, issues, variances)
+	if err := r.writeSeries(golden, issues, variances); err != nil {
+		return err
+	}
+	return r.cascade(changed)
 }
+
+// cascade re-checks the next priced date of each key whose current value
+// changed: its day-over-day control was measured against the old value. A
+// re-checked price keeps its value (a new version records the new prior
+// and control outcome); if its own current value changes - a steward's
+// decision, a vendor restatement - the date after is re-checked in turn.
+func (r *runner) cascade(changed []seriesKey) error {
+	if len(changed) == 0 {
+		return nil
+	}
+	if r.cascadeDepth >= maxCascade {
+		return nil
+	}
+	kj, err := keysJSON(changed)
+	if err != nil {
+		return err
+	}
+	var next []struct {
+		EntityType string `db:"price_entity_type"`
+		EntityID   string `db:"price_entity_id"`
+		PriceType  string `db:"price_type_cd"`
+		Date       string `db:"price_date"`
+	}
+	if err := r.tx.SelectContext(r.ctx, &next, `SELECT DISTINCT n.price_entity_type, n.price_entity_id::text, n.price_type_cd, n.price_date::text
+		FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, pt text, d text)
+		CROSS JOIN LATERAL (SELECT g.price_entity_type, g.price_entity_id, g.price_type_cd, g.price_date FROM mdm.price_golden_record g
+			WHERE g.price_entity_type = x.et AND g.price_entity_id = x.eid::uuid AND g.price_type_cd = x.pt AND g.price_date > x.d::date
+			  AND g.price_date <= x.d::date + $2::int
+			ORDER BY g.price_date LIMIT 1) n`, kj, r.p.Settings.Series.Controls.maxGapDays()); err != nil {
+		return fmt.Errorf("cascade: %w", err)
+	}
+	if len(next) == 0 {
+		return nil
+	}
+	keys := make([]seriesKey, len(next))
+	for i, n := range next {
+		keys[i] = seriesKey{n.EntityType, n.EntityID, n.PriceType, n.Date}
+	}
+	// A re-check is judged on its own: no forced version.
+	force := r.force
+	r.force = false
+	r.cascadeDepth++
+	defer func() { r.force = force; r.cascadeDepth-- }()
+	r.counts.Rechecked += len(keys)
+	for i := 0; i < len(keys); i += seriesChunk {
+		end := min(i+seriesChunk, len(keys))
+		if err := r.publishSeries(keys[i:end]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// maxCascade bounds how many dates forward one change re-checks.
+const maxCascade = 366
 
 // surviveKey decides one golden price. It returns the new golden version
 // (nil: unchanged, or nothing to publish), exceptions and variance events.
@@ -1053,7 +1123,13 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 	if ov != nil {
 		ovID = ov.ID
 	}
-	sum := sha256.Sum256([]byte(strings.Join(sigParts, ";") + "#" + winner + "#" + status + fmt.Sprint(value) + "#" + ovID))
+	prior := ""
+	if st.PriorValue.Valid {
+		prior = fmt.Sprint(st.PriorDate.String, st.PriorValue.Float64)
+	}
+	// The prior value is part of what was decided: a changed prior (an
+	// earlier date restated) is a re-check worth a version.
+	sum := sha256.Sum256([]byte(strings.Join(sigParts, ";") + "#" + winner + "#" + status + fmt.Sprint(value) + "#" + ovID + "#" + prior))
 	signature := hex.EncodeToString(sum[:8])
 
 	// Unchanged: the same candidates, winner, value and status as the latest version.
@@ -1155,6 +1231,22 @@ func (r *runner) writeSeries(golden []goldenPriceRow, issues []priceIssueRow, va
 			FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, d text, pt text, v int, cur boolean, val numeric, ccy text,
 				ptime timestamptz, win text, n int, var numeric, conf numeric, dq numeric, stale boolean, off boolean, attrs jsonb,
 				wins jsonb, st text)`, gj, r.tenant, nullUUID(r.req.StartedByID)); err != nil {
+			return err
+		}
+	}
+	if len(golden) > 0 {
+		// A key with a new version was checked again: its open control
+		// exceptions are superseded by what this check raises.
+		gj, err := json.Marshal(golden)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE mdm.price_exception e SET status = 'RESOLVED', resolved_at = now(),
+				resolution_note = 'Superseded: re-checked in version ' || x.v || ' (run ' || $2::text || ')'
+			FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, d text, pt text, v int)
+			WHERE e.status IN ('OPEN', 'IN_REVIEW') AND e.exception_type IN ('DAY_OVER_DAY', 'RELATED_TYPE_DIVERGENCE')
+			  AND e.price_entity_type = x.et AND e.price_entity_id = x.eid::uuid AND e.price_date = x.d::date
+			  AND e.custom_attributes->>'price_type' = x.pt`, gj, r.run.ID); err != nil {
 			return err
 		}
 	}

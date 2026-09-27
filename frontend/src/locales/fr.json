@@ -562,7 +562,8 @@
       "held_for_review": "Retenus",
       "unchanged": "Inchangés",
       "exceptions": "Exceptions",
-      "restated": "Retraités"
+      "restated": "Retraités",
+      "rechecked": "Revérifiés"
     },
     "exceptions": {
       "status": "Afficher",
