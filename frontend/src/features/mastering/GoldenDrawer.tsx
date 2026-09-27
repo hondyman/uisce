@@ -3,7 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Chip, Collapse, Divider, Drawer, IconButton, LinearProgress, Stack, Table, TableBody, TableCell, TableHead, TableRow,
-  Tooltip, Typography,
+  ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import EditIcon from '@mui/icons-material/Edit';
@@ -14,6 +14,7 @@ import { fmt } from '../schedules/api';
 import { GoldenDetail, masteringApi, pct, showValue } from './api';
 import { GoldenStatusChip } from './parts';
 import { OverrideDialog, OverrideStatusChip } from './overrides';
+import SourceMatrix from './SourceMatrix';
 
 const show = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
 
@@ -140,9 +141,12 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
   const overrides = useQuery({ queryKey: ['mastering', 'overrides', entity, 'golden', id], queryFn: () => masteringApi.overrides(entity, { golden: id! }), enabled: !!id });
   const activeAttrs = new Set((overrides.data?.overrides ?? []).filter((o) => o.active).map((o) => o.attribute));
   const [editing, setEditing] = useState<{ attribute: string; current?: string } | null>(null);
+  // Values (with why, per attribute) or side by side (every source per attribute).
+  const [view, setView] = useState<'values' | 'compare'>('values');
 
   return (
-    <Drawer anchor="right" open={!!id} onClose={onClose} PaperProps={{ sx: { width: { xs: '100%', md: 760 } } }}>
+    <Drawer anchor="right" open={!!id} onClose={onClose}
+      PaperProps={{ sx: { width: { xs: '100%', md: view === 'compare' ? 'min(1440px, 96vw)' : 760 }, transition: 'width 200ms' } }}>
       <Box sx={{ p: 3 }}>
         <Stack direction="row" alignItems="flex-start" spacing={2}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -179,6 +183,18 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
                   : t('mastering.golden.changes', { count: changes.size, v: d.versions[idx + 1].version })}
               </Typography>
             )}
+            <Stack direction="row" alignItems="center" sx={{ mt: 2 }}>
+              <ToggleButtonGroup size="small" exclusive value={view} onChange={(_, v) => v && setView(v)}>
+                <ToggleButton value="values">{t('mastering.compare.values')}</ToggleButton>
+                <ToggleButton value="compare">{t('mastering.compare.sideBySide')}</ToggleButton>
+              </ToggleButtonGroup>
+            </Stack>
+            {view === 'compare' && (
+              <Section title={t('mastering.compare.title', { v: d.selected_version })}>
+                <SourceMatrix d={d} />
+              </Section>
+            )}
+            {view === 'values' && (
             <Section title={historical ? t('mastering.golden.fieldsAt', { v: d.selected_version }) : t('mastering.golden.fields')}>
               <Table size="small">
                 <TableHead>
@@ -199,6 +215,7 @@ export default function GoldenDrawer({ entity, id, onClose }: { entity: string; 
                 </TableBody>
               </Table>
             </Section>
+            )}
 
             <Section title={t('mastering.golden.identifiers')}>
               <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>

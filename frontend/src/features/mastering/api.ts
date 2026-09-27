@@ -82,7 +82,11 @@ export interface GoldenDetail {
   sources: { source: string; source_key: string; method: string; score?: number; rule?: string; matched_keys: string; status: string; updated_at: string }[];
   identifiers: { type: string; value: string; is_primary: boolean; source?: string }[];
   exceptions: ExceptionRow[];
-  decisions: { version: number; field: string; value?: string; source?: string; competing: Candidate[]; reason?: string }[];
+  decisions: { version: number; field: string; value?: string; source?: string; competing: Candidate[]; reason?: string; rule_id?: string }[];
+  /** Attribute -> the business object field (semantic term) mapped to it. */
+  terms?: Record<string, string>;
+  /** Survivorship rule id -> label. */
+  rules?: Record<string, string>;
 }
 
 export interface PriceSummary {

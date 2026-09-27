@@ -732,6 +732,27 @@
       "changeOverride": "Cambiar o quitar el precio del responsable",
       "stewardPrice": "Precio del responsable",
       "pending": "Propuesto {{value}}, pendiente de aprobación"
+    },
+    "compare": {
+      "values": "Valores",
+      "sideBySide": "Lado a lado",
+      "title": "Todas las fuentes, lado a lado (versión {{v}})",
+      "term": "Término",
+      "golden": "Valor maestro",
+      "selection": "Cómo se seleccionó",
+      "selected": "Valor seleccionado",
+      "excluded": "Excluido por una regla de selección",
+      "help": "Pase el cursor por un valor para ver por qué se excluyó.",
+      "strategy": {
+        "SOURCE_PRIORITY": "Prioridad de fuente",
+        "PROVIDER_AUTHORITATIVE": "Proveedor autorizado",
+        "MOST_RECENT": "Más reciente",
+        "MOST_FREQUENT": "Más frecuente",
+        "MOST_COMPLETE": "Más completo",
+        "CONSERVATIVE_MIN": "Mínimo",
+        "CONSERVATIVE_MAX": "Máximo",
+        "OVERRIDE": "Anulación del responsable"
+      }
     }
   },
   "stagingBindings": {
