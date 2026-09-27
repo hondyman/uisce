@@ -489,6 +489,15 @@
       "withdrawn": "Retirado"
     },
     "editor": {
+      "masteringKeys": "Claves de maestrización",
+      "masteringKeysHelp": "Lo que la maestrización lee de esta fuente además de los campos: su propia clave de registro (vincula un registro reenviado al mismo registro maestro), su fecha de referencia y sus identificadores (emparejados de forma determinista).",
+      "sourceKey": "Clave de registro de origen",
+      "asOf": "Fecha de referencia de origen",
+      "identifier": "Identificador: {{type}}",
+      "identifierType": "Tipo de identificador",
+      "addIdentifier": "Añadir identificador",
+      "remove": "Quitar",
+      "removeIdentifier": "Quitar identificador {{type}}",
       "newTitle": "Proponer un vínculo de staging",
       "editTitle": "Proponer un cambio al vínculo",
       "makerChecker": "Nada cambia hasta que otro administrador apruebe su propuesta.",

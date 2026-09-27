@@ -184,7 +184,7 @@ export default function StagingBindingsPage() {
                           <Tooltip title={t('stagingBindings.proposeChange')}><IconButton size="small" onClick={() => setEditing(b)}><EditIcon fontSize="small" /></IconButton></Tooltip>
                           <Tooltip title={t('stagingBindings.proposeDelete')}>
                             <span>
-                              <IconButton size="small" disabled={b.origin === 'core' || remove.isPending}
+                              <IconButton size="small" disabled={b.inherited || remove.isPending}
                                 onClick={() => { if (window.confirm(t('stagingBindings.confirmDelete', { table: b.staging_table, bo: b.bo_key }))) remove.mutate(b); }}>
                                 <DeleteIcon fontSize="small" />
                               </IconButton>

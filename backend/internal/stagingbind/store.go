@@ -37,8 +37,11 @@ type Binding struct {
 	Fields       map[string]string `db:"-" json:"fields"` // BO field -> staging column
 	RawFields    []byte            `db:"fields" json:"-"`
 	Version      int               `db:"version" json:"version"`
-	// Origin is "core" (inherited from the gold copy) or "tenant".
+	// Origin is "core" (the gold copy's, including in the gold copy itself)
+	// or "tenant". Inherited marks one that isn't this tenant's own, so it
+	// is read-only here.
 	Origin    string    `db:"origin" json:"origin"`
+	Inherited bool      `db:"inherited" json:"inherited"`
 	UpdatedAt time.Time `db:"updated_at" json:"updated_at"`
 }
 
@@ -111,7 +114,8 @@ const visible = `(sb.tenant_id::text = $1 OR sb.tenant_id = public.uisce_gold_co
 
 const bindingCols = `sb.id::text, sb.tenant_id::text, bo.bo_key, COALESCE(bo.bo_name, bo.bo_key) AS bo_name, sb.staging_table,
 	sb.fields, sb.version, sb.updated_at,
-	CASE WHEN sb.tenant_id::text = $1 THEN 'tenant' ELSE 'core' END AS origin`
+	CASE WHEN sb.tenant_id = public.uisce_gold_copy_tenant_id() THEN 'core' ELSE 'tenant' END AS origin,
+	sb.tenant_id::text <> $1 AS inherited`
 
 // List is every binding the tenant sees, its own first where it overrides
 // the gold copy's.

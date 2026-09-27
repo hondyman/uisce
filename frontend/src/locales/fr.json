@@ -489,6 +489,15 @@
       "withdrawn": "Retirée"
     },
     "editor": {
+      "masteringKeys": "Clés de mastering",
+      "masteringKeysHelp": "Ce que le mastering lit de cette source en plus des champs : sa propre clé d’enregistrement (relie un enregistrement relivré au même enregistrement de référence), sa date de valeur et ses identifiants (rapprochés de façon déterministe).",
+      "sourceKey": "Clé d’enregistrement source",
+      "asOf": "Date de valeur source",
+      "identifier": "Identifiant : {{type}}",
+      "identifierType": "Type d’identifiant",
+      "addIdentifier": "Ajouter un identifiant",
+      "remove": "Retirer",
+      "removeIdentifier": "Retirer l’identifiant {{type}}",
       "newTitle": "Proposer une liaison de staging",
       "editTitle": "Proposer une modification de la liaison",
       "makerChecker": "Rien ne change tant qu'un autre administrateur n'a pas approuvé votre proposition.",

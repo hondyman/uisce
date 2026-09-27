@@ -73,3 +73,20 @@ func TestChangeJSONFlattensAudit(t *testing.T) {
 		t.Errorf("nullable columns leaked: %s", s)
 	}
 }
+
+func TestMasteringKeys(t *testing.T) {
+	for key, ok := range map[string]bool{
+		"id:ISIN": true, "id:BLOOMBERG_ID": true, SourceKey: true, AsOfKey: true,
+		"id:isin": false, "id:": false, "id:I": false, "@sourcekey": false, "ProductName": false,
+	} {
+		if IsMasteringKey(key) != ok {
+			t.Errorf("%q: want %v", key, ok)
+		}
+	}
+	if typ, _ := IdentifierType("id:CUSIP"); typ != "CUSIP" {
+		t.Errorf("type: %q", typ)
+	}
+	if !looksLikeMasteringKey("@sourcekey") || !looksLikeMasteringKey("id:isin") || looksLikeMasteringKey("ProductName") {
+		t.Error("a malformed mastering key must not be looked up as a field")
+	}
+}
