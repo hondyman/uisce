@@ -638,6 +638,22 @@ type goldenState struct {
 	PriorDate  sql.NullString  `db:"prior_date"`
 	// Current is the key's current (published) golden value, if any.
 	Current sql.NullFloat64 `db:"current_value"`
+	// Recent current golden values before the date, newest first (for the
+	// unchanged-price check), and their dates.
+	Recent      pq.Float64Array `db:"recent_values"`
+	RecentDates pq.StringArray  `db:"recent_dates"`
+}
+
+// staleEvent is a stale price (mdm.price_stale_event).
+type staleEvent struct {
+	EntityType string  `json:"et"`
+	EntityID   string  `json:"eid"`
+	Date       string  `json:"d"`
+	PriceType  string  `json:"pt"`
+	SourceID   *string `json:"src"`
+	Since      *string `json:"since"`
+	Days       int     `json:"days"`
+	Kind       string  `json:"kind"` // UNCHANGED | OLD_QUOTE
 }
 
 // Rows written in bulk (jsonb_to_recordset).
@@ -727,15 +743,22 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 	if err := tx.SelectContext(ctx, &states, fmt.Sprintf(`WITH %s
 		SELECT k.key AS k, g.golden_version, g.golden_value, g.status, g.golden_attributes, pr.golden_value AS prior_value, pr.price_date::text AS prior_date,
 			(SELECT c.golden_value FROM mdm.price_golden_record c WHERE c.price_entity_type = k.et AND c.price_entity_id = k.eid
-				AND c.price_type_cd = k.pt AND c.price_date = k.d AND c.is_current LIMIT 1) AS current_value
+				AND c.price_type_cd = k.pt AND c.price_date = k.d AND c.is_current LIMIT 1) AS current_value,
+			rc.recent_values, rc.recent_dates
 		FROM k
+		LEFT JOIN LATERAL (SELECT array_agg(z.v ORDER BY z.d DESC) AS recent_values, array_agg(z.d::text ORDER BY z.d DESC) AS recent_dates
+			FROM (SELECT r.golden_value::float8 AS v, r.price_date AS d FROM mdm.price_golden_record r
+				WHERE r.price_entity_type = k.et AND r.price_entity_id = k.eid AND r.price_type_cd = k.pt AND r.is_current
+				  AND r.price_date < k.d AND r.price_date >= k.d - $3::int
+				ORDER BY r.price_date DESC LIMIT $4) z) rc ON true
 		LEFT JOIN LATERAL (SELECT golden_version, golden_value, status, golden_attributes FROM mdm.price_golden_record g
 			WHERE g.price_entity_type = k.et AND g.price_entity_id = k.eid AND g.price_type_cd = k.pt AND g.price_date = k.d
 			ORDER BY g.golden_version DESC LIMIT 1) g ON true
 		LEFT JOIN LATERAL (SELECT golden_value, price_date FROM mdm.price_golden_record p
 			WHERE p.price_entity_type = k.et AND p.price_entity_id = k.eid AND p.price_type_cd = k.pt AND p.price_date < k.d
 			  AND p.price_date >= k.d - $2::int AND p.is_current
-			ORDER BY p.price_date DESC LIMIT 1) pr ON true`, keyset), kj, r.p.Settings.Series.Controls.maxGapDays()); err != nil {
+			ORDER BY p.price_date DESC LIMIT 1) pr ON true`, keyset), kj, r.p.Settings.Series.Controls.maxGapDays(),
+		3*max(r.p.Settings.Series.Controls.unchangedDays(), 1)+7, max(r.p.Settings.Series.Controls.unchangedDays(), 1)); err != nil {
 		return fmt.Errorf("golden state: %w", err)
 	}
 	byKey := map[string][]seriesCandidate{}
@@ -797,6 +820,9 @@ func (r *runner) publishSeries(keys []seriesKey) error {
 		variances = append(variances, vs...)
 	}
 	if err := r.writeSeries(golden, issues, variances); err != nil {
+		return err
+	}
+	if err := r.writeStale(); err != nil {
 		return err
 	}
 	return r.cascade(changed)
@@ -1065,6 +1091,44 @@ func (r *runner) surviveKey(k seriesKey, cands []seriesCandidate, st goldenState
 		}
 	}
 
+	// Stale: the winning quote older than its source allows, or the golden
+	// value unchanged for N valuation dates in a row (a price nobody is
+	// really re-marking).
+	if ov == nil && !d.Held {
+		staleAction := strings.ToUpper(ctl.Stale.Action)
+		var srcID *string
+		if w, ok := info[winner]; ok {
+			id := w.SourceID
+			srcID = &id
+		}
+		flag := func(kind, msg string, days int, since *string) {
+			if staleAction == "HOLD" {
+				status = "REVIEW"
+				msg += "; held for a steward"
+			}
+			issue(srcID, "STALE_PRICE", "WARNING", msg)
+			controls = append(controls, map[string]any{"control": "STALE_PRICE", "level": "WARNING", "action": map[bool]string{true: "HOLD", false: "FLAG"}[staleAction == "HOLD"], "kind": kind, "days": days})
+			r.staleEvents = append(r.staleEvents, staleEvent{k.EntityType, k.EntityID, k.Date, k.PriceType, srcID, since, days, kind})
+		}
+		if d.Winner.Stale && !d.Winner.AsOf.IsZero() {
+			days := int(eod.Sub(d.Winner.AsOf).Hours() / 24)
+			since := d.Winner.AsOf.UTC().Format("2006-01-02")
+			flag("OLD_QUOTE", fmt.Sprintf("%s: the winning quote from %s is from %s, older than it is allowed to be", label, winner, since), days, &since)
+		}
+		if n := ctl.unchangedDays(); n > 1 {
+			run := 1
+			for _, v := range st.Recent {
+				if v != value {
+					break
+				}
+				run++
+			}
+			if run >= n {
+				since := st.RecentDates[run-2]
+				flag("UNCHANGED", fmt.Sprintf("%s: %.6g unchanged for %d valuation dates, since %s", label, value, run, since), run, &since)
+			}
+		}
+	}
 	// Related types: a price only one source quotes has no peers to agree
 	// with, so it is checked against the golden prices of the types that
 	// should agree with it (a lone official close far from the last price).
@@ -1244,7 +1308,22 @@ func (r *runner) writeSeries(golden []goldenPriceRow, issues []priceIssueRow, va
 		if _, err := tx.ExecContext(ctx, `UPDATE mdm.price_exception e SET status = 'RESOLVED', resolved_at = now(),
 				resolution_note = 'Superseded: re-checked in version ' || x.v || ' (run ' || $2::text || ')'
 			FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, d text, pt text, v int)
-			WHERE e.status IN ('OPEN', 'IN_REVIEW') AND e.exception_type IN ('DAY_OVER_DAY', 'RELATED_TYPE_DIVERGENCE')
+			WHERE e.status IN ('OPEN', 'IN_REVIEW') AND e.exception_type IN ('DAY_OVER_DAY', 'RELATED_TYPE_DIVERGENCE', 'STALE_PRICE')
+			  AND e.price_entity_type = x.et AND e.price_entity_id = x.eid::uuid AND e.price_date = x.d::date
+			  AND e.custom_attributes->>'price_type' = x.pt`, gj, r.run.ID); err != nil {
+			return err
+		}
+	}
+	if len(golden) > 0 {
+		// A missing price that has now arrived is no longer missing.
+		gj, err := json.Marshal(golden)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `UPDATE mdm.price_exception e SET status = 'RESOLVED', resolved_at = now(),
+				resolution_note = 'Priced (run ' || $2::text || ')'
+			FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, d text, pt text, cur boolean)
+			WHERE x.cur AND e.status IN ('OPEN', 'IN_REVIEW') AND e.exception_type = 'MISSING_PRICE'
 			  AND e.price_entity_type = x.et AND e.price_entity_id = x.eid::uuid AND e.price_date = x.d::date
 			  AND e.custom_attributes->>'price_type' = x.pt`, gj, r.run.ID); err != nil {
 			return err
@@ -1290,4 +1369,25 @@ func (r *runner) writeSeries(golden []goldenPriceRow, issues []priceIssueRow, va
 		}
 	}
 	return nil
+}
+
+// writeStale records the chunk's stale prices (once while open).
+func (r *runner) writeStale() error {
+	if len(r.staleEvents) == 0 {
+		return nil
+	}
+	sj, err := json.Marshal(r.staleEvents)
+	r.staleEvents = nil
+	if err != nil {
+		return err
+	}
+	_, err = r.tx.ExecContext(r.ctx, `INSERT INTO mdm.price_stale_event (tenant_id, price_entity_type, price_entity_id, source_id, price_date,
+			last_valid_price_date, staleness_days, severity, status, custom_attributes)
+		SELECT $2::uuid, x.et, x.eid::uuid, x.src::uuid, x.d::date, x.since::date, x.days, 'WARNING', 'OPEN',
+			jsonb_build_object('price_type', x.pt, 'kind', x.kind, 'run_id', $3::text)
+		FROM jsonb_to_recordset($1::jsonb) AS x(et text, eid text, d text, pt text, src text, since text, days int, kind text)
+		WHERE NOT EXISTS (SELECT 1 FROM mdm.price_stale_event e WHERE e.status = 'OPEN' AND e.price_entity_id = x.eid::uuid
+			AND e.price_date = x.d::date AND e.custom_attributes->>'price_type' = x.pt AND e.custom_attributes->>'kind' = x.kind)`,
+		sj, r.tenant, r.run.ID)
+	return err
 }

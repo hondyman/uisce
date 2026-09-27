@@ -48,6 +48,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 			r.Get("/exceptions", h.exceptions)
 			r.Get("/candidates", h.candidates)
 			r.Get("/loads", h.loads)
+			r.Post("/completeness", h.completeness)
 			r.Post("/exceptions/{id}/resolve", h.resolve)
 			r.Post("/candidates/{id}/decide", h.decide)
 			r.Post("/merges/{id}/approve", h.voteMerge(true))
@@ -212,6 +213,23 @@ func (h *Handler) candidates(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		l, err := h.Engine.Candidates(r.Context(), a.TenantID, chi.URLParam(r, "entity"), r.URL.Query().Get("status"), a.UserID, limit(r))
 		return map[string]any{"candidates": l}, http.StatusOK, err
+	})
+}
+
+// completeness runs the missing-price control for a valuation date.
+func (h *Handler) completeness(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.CanRun {
+			return nil, 0, msgNotAllowed()
+		}
+		var in struct {
+			Date string `json:"date"`
+		}
+		if err := decodeBody(r, &in); err != nil {
+			return nil, 0, err
+		}
+		c, err := h.Engine.CheckCompleteness(r.Context(), a.TenantID, chi.URLParam(r, "entity"), in.Date, "console:"+a.UserID)
+		return map[string]any{"completeness": c}, http.StatusOK, err
 	})
 }
 

@@ -469,7 +469,9 @@
       "DAY_OVER_DAY": "Day-over-day move",
       "SELECTION_HOLD": "Held by selection rule",
       "SELECTION_FLAG": "Selection rule flag",
-      "RELATED_TYPE_DIVERGENCE": "Disagrees with related price"
+      "RELATED_TYPE_DIVERGENCE": "Disagrees with related price",
+      "MISSING_PRICE": "Missing price",
+      "STALE_PRICE": "Stale price"
     },
     "review": {
       "requested": "Merge requested; it happens when approved.",
@@ -603,7 +605,12 @@
       "correct": "Correct this price",
       "changeOverride": "Change or clear the steward price",
       "stewardPrice": "Steward price",
-      "pending": "Proposed {{value}}, awaiting approval"
+      "pending": "Proposed {{value}}, awaiting approval",
+      "completeness": {
+        "check": "Check completeness",
+        "summary": "{{date}}: {{expected}} expected, {{priced}} priced, {{held}} held for a steward, {{missing}} missing, {{stale}} stale",
+        "raised": "{{raised}} missing-price exceptions raised, {{resolved}} resolved (priced since)."
+      }
     },
     "compare": {
       "values": "Values",

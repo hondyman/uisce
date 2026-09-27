@@ -597,7 +597,9 @@
       "DAY_OVER_DAY": "Variación diaria",
       "SELECTION_HOLD": "Retenido por regla de selección",
       "SELECTION_FLAG": "Aviso de regla de selección",
-      "RELATED_TYPE_DIVERGENCE": "Discrepa con un precio relacionado"
+      "RELATED_TYPE_DIVERGENCE": "Discrepa con un precio relacionado",
+      "MISSING_PRICE": "Precio ausente",
+      "STALE_PRICE": "Precio obsoleto"
     },
     "review": {
       "requested": "Unión solicitada; se realizará cuando se apruebe.",
@@ -731,7 +733,12 @@
       "correct": "Corregir este precio",
       "changeOverride": "Cambiar o quitar el precio del responsable",
       "stewardPrice": "Precio del responsable",
-      "pending": "Propuesto {{value}}, pendiente de aprobación"
+      "pending": "Propuesto {{value}}, pendiente de aprobación",
+      "completeness": {
+        "check": "Comprobar integridad",
+        "summary": "{{date}}: {{expected}} esperados, {{priced}} con precio, {{held}} retenidos, {{missing}} sin precio, {{stale}} obsoletos",
+        "raised": "{{raised}} excepciones de precio ausente creadas, {{resolved}} resueltas (con precio desde entonces)."
+      }
     },
     "compare": {
       "values": "Valores",

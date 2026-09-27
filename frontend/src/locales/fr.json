@@ -597,7 +597,9 @@
       "DAY_OVER_DAY": "Variation journalière",
       "SELECTION_HOLD": "Retenu par la règle de sélection",
       "SELECTION_FLAG": "Alerte de règle de sélection",
-      "RELATED_TYPE_DIVERGENCE": "Diverge d’un prix associé"
+      "RELATED_TYPE_DIVERGENCE": "Diverge d’un prix associé",
+      "MISSING_PRICE": "Prix manquant",
+      "STALE_PRICE": "Prix figé"
     },
     "review": {
       "requested": "Fusion demandée ; elle aura lieu une fois approuvée.",
@@ -731,7 +733,12 @@
       "correct": "Corriger ce prix",
       "changeOverride": "Modifier ou retirer le prix du gestionnaire",
       "stewardPrice": "Prix du gestionnaire",
-      "pending": "Proposé {{value}}, en attente d’approbation"
+      "pending": "Proposé {{value}}, en attente d’approbation",
+      "completeness": {
+        "check": "Vérifier la complétude",
+        "summary": "{{date}} : {{expected}} attendus, {{priced}} valorisés, {{held}} retenus, {{missing}} manquants, {{stale}} figés",
+        "raised": "{{raised}} exceptions de prix manquant créées, {{resolved}} résolues (valorisées depuis)."
+      }
     },
     "compare": {
       "values": "Valeurs",
