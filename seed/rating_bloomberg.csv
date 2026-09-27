@@ -1,0 +1,8 @@
+rated_party_type,rated_party_key,agency_cd,rating_type_cd,rating_scale_cd,rating_value,outlook_cd,watch_cd,credit_watch_direction,is_credit_event,rating_date,effective_from,effective_to,source_document
+ISSUER,529900T8BM49AURSDO55,SP,ISSUER_LT,SP_LT,BB,STABLE,,,false,2026-09-20,2026-09-20,,https://www.spglobal.com/ratings/en/research/articles/2026-09-20-acme-holdings
+ISSUER,529900T8BM49AURSDO55,MOODYS,ISSUER_LT,MOODYS_LT,Ba1,POSITIVE,,,false,2026-09-22,2026-09-22,,https://www.moodys.com/credit-ratings/acme-holdings
+ISSUER,529900T8BM49AURSDO55,INTERNAL,INTERNAL_RATING,INT_SCALE,A-,STABLE,,,false,2026-09-25,2026-09-25,,internal-model-v3-q3-2026
+ISSUER,529900T8BM49AURSDO56,SP,ISSUER_LT,SP_LT,BBB,STABLE,,,false,2026-09-18,2026-09-18,,https://www.spglobal.com/ratings/en/research/articles/2026-09-18-global-holdings
+ISSUER,529900T8BM49AURSDO56,MOODYS,ISSUER_LT,MOODYS_LT,Baa2,NEGATIVE,WATCH_NEGATIVE,NEGATIVE,false,2026-09-18,2026-09-18,,https://www.moodys.com/credit-ratings/global-holdings
+SOVEREIGN,529900T8BM49AURSDO57,FITCH,SOVEREIGN_LT,FITCH_LT,AAA,STABLE,,,false,2026-09-15,2026-09-15,,https://www.fitchratings.com/site/pr/2026-09-15-eu-sovereign-affirmed
+ISSUER,529900T8BM49AURSDO99,SP,ISSUER_LT,SP_LT,B,STABLE,,,false,2026-09-10,2026-09-10,,https://www.spglobal.com/missing-party

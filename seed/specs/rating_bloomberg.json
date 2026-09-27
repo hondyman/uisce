@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "batch_size": 500,
+  "error_policy": "skip_and_log",
+  "nodes": [
+    {
+      "id": "src",
+      "type": "file_source",
+      "label": "Bloomberg rating file",
+      "position": {"x": 80, "y": 120},
+      "config": {
+        "uri": "",
+        "format": "csv",
+        "has_header": true,
+        "columns": [
+          {"name": "rated_party_type",   "type": "string"},
+          {"name": "rated_party_key",    "type": "string"},
+          {"name": "agency_cd",          "type": "string"},
+          {"name": "rating_type_cd",     "type": "string"},
+          {"name": "rating_scale_cd",    "type": "string", "nullable": true},
+          {"name": "rating_value",       "type": "string"},
+          {"name": "outlook_cd",         "type": "string", "nullable": true},
+          {"name": "watch_cd",           "type": "string", "nullable": true},
+          {"name": "credit_watch_direction", "type": "string", "nullable": true},
+          {"name": "is_credit_event",    "type": "bool"},
+          {"name": "rating_date",        "type": "date"},
+          {"name": "effective_from",     "type": "date"},
+          {"name": "effective_to",       "type": "date", "nullable": true},
+          {"name": "source_document",    "type": "string", "nullable": true}
+        ]
+      }
+    },
+    {
+      "id": "map",
+      "type": "map",
+      "label": "Map typed + keep customs",
+      "position": {"x": 360, "y": 120},
+      "config": {
+        "keep_unmapped": true,
+        "fields": [
+          {"from": "rated_party_type",   "to": "rated_party_type"},
+          {"from": "rated_party_key",    "to": "rated_party_key"},
+          {"from": "agency_cd",          "to": "agency_cd"},
+          {"from": "rating_type_cd",     "to": "rating_type_cd"},
+          {"from": "rating_scale_cd",    "to": "rating_scale_cd"},
+          {"from": "rating_value",       "to": "rating_value"},
+          {"from": "outlook_cd",         "to": "outlook_cd"},
+          {"from": "watch_cd",           "to": "watch_cd"},
+          {"from": "credit_watch_direction", "to": "credit_watch_direction"},
+          {"from": "is_credit_event",    "to": "is_credit_event"},
+          {"from": "rating_date",        "to": "rating_date"},
+          {"from": "effective_from",     "to": "effective_from"},
+          {"from": "effective_to",       "to": "effective_to"},
+          {"from": "source_document",    "to": "source_document"}
+        ]
+      }
+    },
+    {
+      "id": "stg",
+      "type": "staging_sink",
+      "label": "Load staging.rating_incoming",
+      "position": {"x": 640, "y": 120},
+      "config": {
+        "table": "staging.rating_incoming",
+        "source_cd": "BLOOMBERG",
+        "domain": "RATING",
+        "run_ref": "20261112-rating-bloomberg-01"
+      }
+    }
+  ],
+  "edges": [
+    {"from": "src", "to": "map"},
+    {"from": "map", "to": "stg"}
+  ]
+}
