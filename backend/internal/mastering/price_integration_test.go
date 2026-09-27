@@ -298,6 +298,46 @@ func TestPriceMasterEndToEnd(t *testing.T) {
 		t.Errorf("day 2 still has %d open day-over-day exceptions", n)
 	}
 
+	// A third day at the same price: unchanged for two valuation dates
+	// (the limit is 2 here) is a stale price, flagged.
+	two := 2
+	cfg.profile.Settings.Series.Controls.Stale.UnchangedDays = &two
+	d3 := "2001-06-06"
+	bbg3 := load("BLOOMBERG", "staging.bbg_price",
+		bbgCols+` VALUES ($1, $2, $3, 'BBGTESTEQTY1', '`+equity+`', '`+d3+`', 'GBP', 140.00, NULL, NULL, NULL, '`+d3+` 16:35+00')`)
+	run("bloomberg day 3", "staging.bbg_price", bbg3)
+	if g := latest(equityID, "LAST", d3); g.Status != "PUBLISHED" || !g.Current {
+		t.Errorf("day 3 (flagged, not held): %+v", g)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_stale_event WHERE price_entity_id::text = $1 AND price_date = $2::date
+			AND custom_attributes->>'kind' = 'UNCHANGED' AND status = 'OPEN'`, equityID, d3); n != 1 {
+		t.Errorf("unchanged-price stale events: %d, want 1", n)
+	}
+	if n := count(`SELECT count(*) FROM mdm.price_exception WHERE exception_type = 'STALE_PRICE' AND price_entity_id::text = $1
+			AND price_date = $2::date AND status = 'OPEN'`, equityID, d3); n != 1 {
+		t.Errorf("stale-price exceptions: %d, want 1", n)
+	}
+
+	// Completeness for day 1: the priced keys are not gaps; every gap is
+	// raised once; checked again, nothing new is raised.
+	comp, err := checkCompleteness(ctx, tx, cfg.profile, cfg.series.instrument, gold, d1, "test")
+	if err != nil {
+		t.Fatalf("completeness: %v", err)
+	}
+	t.Logf("completeness %s: expected %d, priced %d, held %d, missing %d, raised %d", d1, comp.Expected, comp.Priced, comp.Held, comp.Missing, comp.Raised)
+	for _, gap := range comp.Gaps {
+		if (gap.EntityID == giltID && gap.PriceType == "MID") || (gap.EntityID == equityID && gap.PriceType == "LAST") {
+			t.Errorf("a priced key reported missing: %+v", gap)
+		}
+	}
+	if comp.Priced < 2 || comp.Missing != comp.Expected-comp.Priced || comp.Raised != comp.Missing-comp.Held {
+		t.Errorf("completeness counts: %+v", comp)
+	}
+	again, err := checkCompleteness(ctx, tx, cfg.profile, cfg.series.instrument, gold, d1, "test")
+	if err != nil || again.Raised != 0 {
+		t.Errorf("second check raised %d (err %v), want 0", again.Raised, err)
+	}
+
 	// Running a load again changes nothing.
 	c = run("ice day 1 again", "staging.ice_price", ice1)
 	if c.Published != 0 || c.New != 0 || c.Unchanged == 0 {

@@ -216,5 +216,13 @@ Enablers alongside: date partitioning; the Postgres dialect for rule pushdown.
   the new check raises its own; if that date's own value changes the one after is re-checked in turn.
   Day-over-day compares only with a prior at most `max_gap_days` old (default 7), which also bounds the cascade.
 
-Next: stale and missing-price controls and the expected universe (slice 4), cutoffs and finalization,
+- **Stale and missing prices** (slice 4) - STALE_PRICE (and `mdm.price_stale_event`) when the winning quote is
+  older than its source allows, or the golden value is unchanged for `stale.unchanged_days` valuation dates
+  (default 5); FLAG or HOLD per profile. The completeness check (console, `POST .../completeness`, schedule target
+  `price:completeness` - valuation date from the scheduled time, `days_back`, or `valuation_date`) raises
+  MISSING_PRICE for each expected instrument x price type (`expected`: by asset class, default Equity LAST and
+  FixedIncome MID) without a current golden price, and resolves those priced since; publishing a price resolves
+  its MISSING_PRICE too.
+
+Next: cutoffs and finalization,
 overrides as MANUAL observations, vendor challenges, date partitioning, the Postgres rule dialect.

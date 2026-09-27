@@ -280,7 +280,9 @@ type runner struct {
 	siblings map[string]float64
 	// cascadeDepth: how many dates forward a change is being re-checked.
 	cascadeDepth int
-	unmastered   []string // bound fields with no golden column
+	// staleEvents: stale prices found in the chunk being published.
+	staleEvents []staleEvent
+	unmastered  []string // bound fields with no golden column
 }
 
 func (r *runner) execute() error {

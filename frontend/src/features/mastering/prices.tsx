@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Alert, Box, Button, Chip, Drawer, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell,
@@ -9,7 +9,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
-import { masteringApi, pct, PriceCandidate } from './api';
+import { Completeness, masteringApi, pct, PriceCandidate } from './api';
 import { GoldenStatusChip } from './parts';
 import { OverrideDialog, OverrideStatusChip } from './overrides';
 
@@ -36,6 +36,30 @@ function PctChip({ v, warn = 1, bad = 5 }: { v?: number | null; warn?: number; b
   );
 }
 
+/** The completeness check's outcome for a date, with the gaps. */
+function CompletenessPanel({ c, onClose }: { c: Completeness; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Alert severity={c.missing - c.held > 0 ? 'warning' : c.held > 0 ? 'info' : 'success'} onClose={onClose} sx={{ mb: 2 }}>
+      <Typography variant="body2" fontWeight={600}>
+        {t('mastering.prices.completeness.summary', { date: c.date, expected: c.expected, priced: c.priced, held: c.held, missing: c.missing - c.held, stale: c.stale })}
+      </Typography>
+      {(c.raised > 0 || c.resolved > 0) && (
+        <Typography variant="caption" component="div">{t('mastering.prices.completeness.raised', { raised: c.raised, resolved: c.resolved })}</Typography>
+      )}
+      {c.gaps.length > 0 && (
+        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+          {c.gaps.slice(0, 40).map((g) => (
+            <Chip key={`${g.entity_id}|${g.price_type}`} size="small" variant="outlined" color={g.held ? 'info' : 'warning'}
+              label={`${g.name ?? g.code ?? g.entity_id.slice(0, 8)} · ${g.price_type}${g.held ? ` (${t('mastering.goldenStatus.REVIEW')})` : ''}`} />
+          ))}
+          {c.gaps.length > 40 && <Typography variant="caption">+{c.gaps.length - 40}</Typography>}
+        </Stack>
+      )}
+    </Alert>
+  );
+}
+
 /** A valuation date's golden prices. */
 export function PricesTab({ entity, onOpen }: { entity: string; onOpen: (id: string) => void }) {
   const { t, i18n } = useTranslation();
@@ -50,6 +74,12 @@ export function PricesTab({ entity, onOpen }: { entity: string; onOpen: (id: str
   });
   const data = list.data?.prices;
   const rows = data?.prices ?? [];
+  const qc = useQueryClient();
+  const [checked, setChecked] = useState<Completeness | null>(null);
+  const check = useMutation({
+    mutationFn: () => masteringApi.completeness(entity, data?.date ?? date),
+    onSuccess: (r) => { setChecked(r.completeness); qc.invalidateQueries({ queryKey: ['mastering', 'exceptions'] }); },
+  });
   return (
     <>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
@@ -69,8 +99,13 @@ export function PricesTab({ entity, onOpen }: { entity: string; onOpen: (id: str
           <MenuItem value="">{t('mastering.all')}</MenuItem>
           {(['PUBLISHED', 'REVIEW'] as const).map((s) => <MenuItem key={s} value={s}>{t(`mastering.goldenStatus.${s}`)}</MenuItem>)}
         </TextField>
+        <Button variant="outlined" onClick={() => check.mutate()} disabled={!(data?.date ?? date) || check.isPending}>
+          {t('mastering.prices.completeness.check')}
+        </Button>
       </Stack>
-      {list.isFetching && <LinearProgress />}
+      {check.error && <Box sx={{ mb: 2 }}><CatalogErrorAlert error={check.error} /></Box>}
+      {checked && <CompletenessPanel c={checked} onClose={() => setChecked(null)} />}
+      {(list.isFetching || check.isPending) && <LinearProgress />}
       {list.error && <CatalogErrorAlert error={list.error} />}
       <TableContainer component={Paper} variant="outlined">
         <Table size="small">

@@ -144,12 +144,45 @@ type SeriesControls struct {
 	// CurrencyMismatch: EXCLUDE a quote in another currency than the
 	// instrument's from survivorship (flagged), or FLAG it only.
 	CurrencyMismatch string `json:"currency_mismatch"`
+	// Stale: a golden price unchanged for UnchangedDays valuation dates in
+	// a row (default 5; 0 turns the check off), or whose winning quote is
+	// older than its source allows, raises STALE_PRICE - FLAG (default) or
+	// HOLD for a steward.
+	Stale struct {
+		UnchangedDays *int   `json:"unchanged_days,omitempty"`
+		Action        string `json:"action,omitempty"`
+	} `json:"stale"`
+	// Expected is the universe that must be priced each valuation date:
+	// instruments by asset class ("*": all) and the price types each needs.
+	// The completeness check raises MISSING_PRICE for any without a current
+	// golden price. Default: Equity LAST, FixedIncome MID.
+	Expected []ExpectedPrices `json:"expected,omitempty"`
 	// RelatedTypes are price types that should agree (e.g. LAST and
 	// OFFICIAL_CLOSE; BID, MID and ASK): a price only one source quotes is
 	// checked against the golden prices of its related types for the same
 	// instrument and date - beyond the error threshold it is flagged, beyond
 	// critical held. Default: [[LAST, OFFICIAL_CLOSE], [BID, MID, ASK]].
 	RelatedTypes [][]string `json:"related_types,omitempty"`
+}
+
+// ExpectedPrices: the price types instruments of an asset class need.
+type ExpectedPrices struct {
+	AssetClass string   `json:"asset_class"`
+	PriceTypes []string `json:"price_types"`
+}
+
+func (c SeriesControls) unchangedDays() int {
+	if c.Stale.UnchangedDays != nil {
+		return *c.Stale.UnchangedDays
+	}
+	return 5
+}
+
+func (c SeriesControls) expected() []ExpectedPrices {
+	if len(c.Expected) > 0 {
+		return c.Expected
+	}
+	return []ExpectedPrices{{AssetClass: "Equity", PriceTypes: []string{"LAST"}}, {AssetClass: "FixedIncome", PriceTypes: []string{"MID"}}}
 }
 
 // maxGapDays is how far back a day-over-day prior may be.

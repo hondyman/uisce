@@ -37,14 +37,20 @@ const runnerKind = "mastering"
 func (r *Runner) Kind() string  { return runnerKind }
 func (r *Runner) Label() string { return "Mastering" }
 
-// ParseTarget splits "entity:staging.table".
+// ParseTarget splits "entity:staging.table", or "entity:completeness" (the
+// missing-price check of a time-series entity; table is then "completeness").
 func ParseTarget(ref string) (entity, table string, ok bool) {
 	entity, table, ok = strings.Cut(ref, ":")
+	if ok && entity != "" && table == completenessTarget {
+		return strings.ToLower(entity), table, true
+	}
 	if !ok || entity == "" || !qualified.MatchString(table) || !strings.HasPrefix(table, "staging.") {
 		return "", "", false
 	}
 	return strings.ToLower(entity), table, true
 }
+
+const completenessTarget = "completeness"
 
 // targets pairs each mastered entity with the staging tables bound to its
 // business object.
@@ -64,6 +70,13 @@ func (r *Runner) targets(ctx context.Context, tenantID string) ([]schedule.Targe
 	for _, p := range profiles {
 		if !p.IsActive {
 			continue
+		}
+		if p.Kind == KindTimeSeries {
+			out = append(out, schedule.TargetInfo{
+				Ref:         strings.ToLower(p.EntityCd) + ":" + completenessTarget,
+				Name:        fmt.Sprintf("%s completeness check", p.DisplayName),
+				Description: fmt.Sprintf("Raise a missing-price exception for every expected %s without a golden price for the valuation date", strings.ToLower(p.DisplayName)),
+			})
 		}
 		for _, b := range bindings {
 			if b.BOKey != p.BOKey {
@@ -109,6 +122,16 @@ func (r *Runner) Run(ctx context.Context, rc schedule.RunContext) (*schedule.Out
 	}
 	if r.Engine == nil || r.Engine.Data == nil {
 		return nil, msgNoDataPlane()
+	}
+	if table == completenessTarget {
+		date := completenessDate(rc.ScheduledFor, rc.Params)
+		c, err := r.Engine.CheckCompleteness(ctx, rc.TenantID, entity, date, "schedule:"+rc.RunID)
+		if err != nil {
+			return nil, err
+		}
+		return &schedule.Outcome{Rows: c.Missing, Refs: map[string]any{"valuation_date": date},
+			Summary: fmt.Sprintf("%s: %d expected, %d priced, %d held, %d missing (%d raised, %d resolved), %d stale",
+				date, c.Expected, c.Priced, c.Held, c.Missing, c.Raised, c.Resolved, c.Stale)}, nil
 	}
 	loads, err := r.Engine.PendingLoads(ctx, rc.TenantID, entity, table)
 	if err != nil {

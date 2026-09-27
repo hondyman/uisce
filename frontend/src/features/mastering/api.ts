@@ -127,6 +127,11 @@ export interface PriceDetail {
   versions: PriceVersion[]; exceptions: ExceptionRow[]; variances: VarianceEvent[];
 }
 
+export interface Completeness {
+  date: string; expected: number; priced: number; held: number; missing: number; stale: number; raised: number; resolved: number;
+  gaps: { entity_id: string; code?: string; name?: string; price_type: string; held: boolean }[];
+}
+
 export interface ExceptionRow {
   id: string;
   golden_id?: string;
@@ -250,6 +255,7 @@ export const masteringApi = {
   golden: (entity: string, f: { q?: string; status?: string }) => apiClient<{ golden: GoldenSummary[] }>(`${BASE}/${entity}/golden${qs(f)}`),
   prices: (entity: string, f: { date?: string; q?: string; status?: string; price_type?: string }) =>
     apiClient<{ prices: PriceList }>(`${BASE}/${entity}/golden${qs(f)}`),
+  completeness: (entity: string, date: string) => apiClient<{ completeness: Completeness }>(`${BASE}/${entity}/completeness`, post({ date })),
   priceById: (entity: string, id: string) => apiClient<{ price: PriceDetail }>(`${BASE}/${entity}/golden/${id}`),
   goldenById: (entity: string, id: string, version?: number) =>
     apiClient<{ golden: GoldenDetail }>(`${BASE}/${entity}/golden/${id}${version ? `?version=${version}` : ''}`),

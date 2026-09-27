@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func ns(s string) sql.NullString   { return sql.NullString{String: s, Valid: s != ""} }
@@ -100,5 +101,28 @@ func TestPriceOverridePolicy(t *testing.T) {
 	}
 	if _, _, ok := parsePriceAttr("LAST@yesterday"); ok {
 		t.Error("a date that is not a date must not parse")
+	}
+}
+
+func TestCompletenessTargetAndDate(t *testing.T) {
+	if e, tbl, ok := ParseTarget("price:completeness"); !ok || e != "price" || tbl != completenessTarget {
+		t.Errorf("completeness target: %s %s %v", e, tbl, ok)
+	}
+	if _, _, ok := ParseTarget("price:somethingelse"); ok {
+		t.Error("an unknown target must not parse")
+	}
+	// 01:30 UTC on the 27th is still the 26th in New York.
+	at := time.Date(2026, 9, 27, 1, 30, 0, 0, time.UTC)
+	if d := completenessDate(at, nil); d != "2026-09-26" {
+		t.Errorf("default: %s", d)
+	}
+	if d := completenessDate(at, map[string]any{"days_back": float64(1)}); d != "2026-09-25" {
+		t.Errorf("days_back: %s", d)
+	}
+	if d := completenessDate(at, map[string]any{"time_zone": "UTC"}); d != "2026-09-27" {
+		t.Errorf("time_zone: %s", d)
+	}
+	if d := completenessDate(at, map[string]any{"valuation_date": "2026-09-24"}); d != "2026-09-24" {
+		t.Errorf("valuation_date: %s", d)
 	}
 }
