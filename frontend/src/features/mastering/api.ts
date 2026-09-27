@@ -90,6 +90,11 @@ export interface MatchCandidate {
   rule?: string;
   matched_keys: string[];
   status: string;
+  /** A merge of this pair waiting for approval. */
+  merge_request?: {
+    id: string; keep: 'a' | 'b'; note?: string; approvals_required: number; approvals: number;
+    requested_by_name?: string; mine: boolean; voted: boolean;
+  };
 }
 
 export type OverrideMode = 'APPROVAL' | 'DIRECT';
@@ -134,7 +139,8 @@ export interface OverrideRequest { attribute: string; action?: 'SET' | 'CLEAR'; 
 export interface CandidateDecision { merge: boolean; keep?: 'a' | 'b'; note?: string }
 export interface DecisionResult {
   candidate_id: string;
-  status: 'APPROVED' | 'REJECTED';
+  status: 'APPROVED' | 'REJECTED' | 'PENDING_APPROVAL' | 'MERGE_REJECTED';
+  merge_request_id?: string;
   survivor_id?: string;
   merged_id?: string;
   moved: { sources: number; identifiers: number };
@@ -185,6 +191,9 @@ export const masteringApi = {
   voteOverride: (entity: string, id: string, approve: boolean, comment?: string) =>
     apiClient<{ override: Override }>(`${BASE}/${entity}/overrides/${id}/${approve ? 'approve' : 'reject'}`, post({ comment })),
   withdrawOverride: (entity: string, id: string) => apiClient<{ override: Override }>(`${BASE}/${entity}/overrides/${id}/withdraw`, { method: 'POST' }),
+  voteMerge: (entity: string, id: string, approve: boolean, comment?: string) =>
+    apiClient<{ decision: DecisionResult }>(`${BASE}/${entity}/merges/${id}/${approve ? 'approve' : 'reject'}`, post({ comment })),
+  withdrawMerge: (entity: string, id: string) => apiClient<{ ok: boolean }>(`${BASE}/${entity}/merges/${id}/withdraw`, { method: 'POST' }),
   decide: (entity: string, id: string, d: CandidateDecision) =>
     apiClient<{ decision: DecisionResult }>(`${BASE}/${entity}/candidates/${id}/decide`, post(d)),
 };

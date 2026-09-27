@@ -65,6 +65,17 @@ func msgOwnOverride() *msgcat.Error  { return m(25).WithStatus(http.StatusForbid
 func msgAlreadyVoted() *msgcat.Error { return m(26).WithStatus(http.StatusConflict) }
 func msgNotProposer() *msgcat.Error  { return m(27).WithStatus(http.StatusForbidden) }
 func msgNotAdmin() *msgcat.Error     { return m(28).WithStatus(http.StatusForbidden) }
+func msgMergePending() *msgcat.Error { return m(29).WithStatus(http.StatusConflict) }
+func msgNoMergeRequest(id string) *msgcat.Error {
+	return m(30, id).WithStatus(http.StatusNotFound)
+}
+func msgOwnMerge() *msgcat.Error             { return m(31).WithStatus(http.StatusForbidden) }
+func msgMergeVoted() *msgcat.Error           { return m(32).WithStatus(http.StatusConflict) }
+func msgNotMergeRequester() *msgcat.Error    { return m(33).WithStatus(http.StatusForbidden) }
+func msgMergeDecided(s string) *msgcat.Error { return m(34, s).WithStatus(http.StatusConflict) }
+func msgMergeApprovalsUnavailable() *msgcat.Error {
+	return m(35).WithStatus(http.StatusServiceUnavailable)
+}
 
 func isUniqueViolation(err error) bool {
 	var pe *pq.Error

@@ -180,11 +180,11 @@ func TestStewardMergeAndReject(t *testing.T) {
 		}
 		ab, ac, bc := pair(a, b), pair(a, c), pair(b, c)
 
-		rej, err := e.decide(ctx, tx, cfg, gold, "product", ac, CandidateDecision{Merge: false, Note: "different share classes"}, "", "test")
+		rej, err := e.decide(ctx, tx, cfg, &Policy{Mode: ModeDirect}, gold, "product", ac, CandidateDecision{Merge: false, Note: "different share classes"}, "", "test")
 		if err != nil || rej.Status != "REJECTED" {
 			t.Fatalf("reject: %+v %v", rej, err)
 		}
-		m, err := e.decide(ctx, tx, cfg, gold, "product", ab, CandidateDecision{Merge: true, Note: "same fund"}, "", "test")
+		m, err := e.decide(ctx, tx, cfg, &Policy{Mode: ModeDirect}, gold, "product", ab, CandidateDecision{Merge: true, Note: "same fund"}, "", "test")
 		if err != nil {
 			t.Fatalf("merge: %v", err)
 		}
@@ -217,7 +217,7 @@ func TestStewardMergeAndReject(t *testing.T) {
 		if st.Sources != 2 || st.Merged != a || st.Retracted != 1 || st.BIdents != 0 || st.Version != 2 || st.OtherStatus != "REJECTED" || st.Logged != 1 {
 			t.Errorf("state after merge: %+v", st)
 		}
-		if _, err := e.decide(ctx, tx, cfg, gold, "product", ab, CandidateDecision{Merge: true}, "", "test"); err == nil {
+		if _, err := e.decide(ctx, tx, cfg, &Policy{Mode: ModeDirect}, gold, "product", ab, CandidateDecision{Merge: true}, "", "test"); err == nil {
 			t.Error("a decided pair must not be decided again")
 		}
 		return errPreview
@@ -229,8 +229,11 @@ func TestStewardMergeAndReject(t *testing.T) {
 
 // ddl0013 is the overrides migration without psql meta-commands or its own
 // transaction, so a test can create the tables inside a rolled-back one.
-func ddl0013(t *testing.T) string {
-	b, err := os.ReadFile("../../db/crims/0013_mastering_overrides.up.sql")
+func ddl0013(t *testing.T) string { return crimsDDL(t, "0013_mastering_overrides.up.sql") }
+
+// crimsDDL reads a crims migration for running inside a test transaction.
+func crimsDDL(t *testing.T, file string) string {
+	b, err := os.ReadFile("../../db/crims/" + file)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -346,6 +349,110 @@ func TestOverridesApprovalAndDirect(t *testing.T) {
 		code, _ := json.Marshal("NOT_A_TYPE")
 		if _, err := e.proposeOverride(ctx, tx, cfg, approval, gold, "product", golden, OverrideRequest{Attribute: "product_type_cd", Value: code, Reason: "x"}, alice, "alice"); err == nil {
 			t.Error("a reference attribute must take a known code")
+		}
+		return errPreview
+	})
+	if err != nil && err != errPreview {
+		t.Fatal(err)
+	}
+}
+
+// TestMergeFollowsPolicy: under an approval policy a merge waits for
+// another person; the requester can't approve; a rejection returns the
+// pair to review, where keeping it apart still works. Rolled back.
+func TestMergeFollowsPolicy(t *testing.T) {
+	alphaDSN, dataDSN := os.Getenv("MASTERING_ALPHA_DSN"), os.Getenv("MASTERING_DATA_DSN")
+	if alphaDSN == "" || dataDSN == "" {
+		t.Skip("set MASTERING_ALPHA_DSN and MASTERING_DATA_DSN")
+	}
+	alpha, data := sqlx.MustConnect("postgres", alphaDSN), sqlx.MustConnect("postgres", dataDSN)
+	defer alpha.Close()
+	defer data.Close()
+	platform := PlatformCatalog{DB: alpha}
+	e := &Engine{Data: data, Rules: analytics.NewValidationRuleService(alpha), Fields: platform, GoldCopy: platform.GoldCopyTenant}
+	ctx := context.Background()
+	gold, _ := platform.GoldCopyTenant(ctx)
+	cfg, err := e.loadConfig(ctx, gold, "product")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.inTenant(ctx, gold, func(tx *sqlx.Tx) error {
+		var exists bool
+		_ = tx.GetContext(ctx, &exists, `SELECT to_regclass('mdm.golden_merge_request') IS NOT NULL`)
+		if !exists {
+			if _, err := tx.ExecContext(ctx, crimsDDL(t, "0014_mastering_merge_requests.up.sql")); err != nil {
+				return fmt.Errorf("0014: %w", err)
+			}
+		}
+		var ids []string
+		if err := tx.SelectContext(ctx, &ids, `SELECT golden_id::text FROM mdm.entity_xref WHERE entity_cd = 'PRODUCT' AND status = 'ACTIVE' ORDER BY golden_id LIMIT 3`); err != nil {
+			return err
+		}
+		if len(ids) < 3 {
+			t.Skip("needs three mastered products")
+		}
+		pair := func(x, y string) string {
+			var id string
+			if err := tx.GetContext(ctx, &id, `INSERT INTO mdm.product_match_candidate (tenant_id, match_rule_id, product_id_a, product_id_b, overall_score)
+				SELECT $1::uuid, id, $2::uuid, $3::uuid, 0.85 FROM mdm.product_match_rule WHERE rule_cd = 'PRODUCT_NAME_FUZZY' LIMIT 1 RETURNING id::text`, gold, x, y); err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		approval := &Policy{Mode: ModeApproval, ApprovalsRequired: 1}
+		ab, ac := pair(ids[0], ids[1]), pair(ids[0], ids[2])
+		// An expected failure must not poison the test's one transaction.
+		refused := func(what string, f func() error) {
+			if _, err := tx.ExecContext(ctx, "SAVEPOINT expect"); err != nil {
+				t.Fatal(err)
+			}
+			if f() == nil {
+				t.Error(what)
+			}
+			if _, err := tx.ExecContext(ctx, "ROLLBACK TO SAVEPOINT expect"); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		req, err := e.decide(ctx, tx, cfg, approval, gold, "product", ab, CandidateDecision{Merge: true, Note: "same fund"}, "user-alice", "alice")
+		if err != nil || req.Status != "PENDING_APPROVAL" || req.MergeRequest == "" {
+			t.Fatalf("request: %+v %v", req, err)
+		}
+		refused("a second merge request on a pending pair must be refused", func() error {
+			_, err := e.decide(ctx, tx, cfg, approval, gold, "product", ab, CandidateDecision{Merge: true}, "user-bob", "bob")
+			return err
+		})
+		refused("the requester must not approve their own merge", func() error {
+			_, err := e.decideMerge(ctx, tx, cfg, gold, "product", req.MergeRequest, true, "", "user-alice", "alice")
+			return err
+		})
+		done, err := e.decideMerge(ctx, tx, cfg, gold, "product", req.MergeRequest, true, "agree", "user-john", "john")
+		if err != nil || done.Status != "APPROVED" || done.Survivor != ids[0] {
+			t.Fatalf("approve: %+v %v", done, err)
+		}
+		var approvedBy, merged string
+		if err := tx.QueryRowxContext(ctx, `SELECT COALESCE(custom_attributes->>'approved_by', ''),
+				(SELECT COALESCE(merged_into_id::text, '') FROM mdm.product WHERE id = $1::uuid)
+			FROM mdm.product_merge_log WHERE merged_product_id = $1::uuid`, ids[1]).Scan(&approvedBy, &merged); err != nil {
+			return err
+		}
+		t.Logf("merged by alice, approved by %q; merged into %s", approvedBy, merged)
+		if approvedBy != "john" || merged != ids[0] {
+			t.Errorf("merge log: approved_by=%q merged_into=%q", approvedBy, merged)
+		}
+
+		// A second pair: request a merge, have it rejected, then keep the pair apart.
+		req2, err := e.decide(ctx, tx, cfg, approval, gold, "product", ac, CandidateDecision{Merge: true, Keep: "b"}, "user-alice", "alice")
+		if err != nil {
+			return err
+		}
+		rej, err := e.decideMerge(ctx, tx, cfg, gold, "product", req2.MergeRequest, false, "different share class", "user-john", "john")
+		if err != nil || rej.Status != "MERGE_REJECTED" {
+			t.Fatalf("reject: %+v %v", rej, err)
+		}
+		apart, err := e.decide(ctx, tx, cfg, approval, gold, "product", ac, CandidateDecision{Merge: false}, "user-john", "john")
+		if err != nil || apart.Status != "REJECTED" {
+			t.Fatalf("keep apart after a rejected merge: %+v %v", apart, err)
 		}
 		return errPreview
 	})

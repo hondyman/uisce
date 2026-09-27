@@ -272,10 +272,26 @@ type MatchCandidate struct {
 	Rule    *string         `db:"rule_cd" json:"rule,omitempty"`
 	Matched json.RawMessage `db:"matched_keys" json:"matched_keys"`
 	Status  string          `db:"status" json:"status"`
+	// A merge of this pair waiting for approval, if any.
+	Merge *PendingMerge `db:"-" json:"merge_request,omitempty"`
+}
+
+// PendingMerge is a merge request awaiting approval.
+type PendingMerge struct {
+	ID                string  `db:"id" json:"id"`
+	Candidate         string  `db:"candidate_id" json:"-"`
+	Keep              string  `db:"keep" json:"keep"`
+	Note              *string `db:"note" json:"note,omitempty"`
+	ApprovalsRequired int     `db:"approvals_required" json:"approvals_required"`
+	Approvals         int     `db:"approvals" json:"approvals"`
+	RequestedBy       string  `db:"requested_by" json:"-"`
+	RequestedByName   *string `db:"requested_by_name" json:"requested_by_name,omitempty"`
+	Mine              bool    `db:"-" json:"mine"`
+	Voted             bool    `db:"voted" json:"voted"`
 }
 
 // Candidates lists possible duplicates (status "" = PENDING).
-func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status string, limit int) ([]MatchCandidate, error) {
+func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status, actorID string, limit int) ([]MatchCandidate, error) {
 	p, err := e.profile(ctx, tenantID, entity)
 	if err != nil {
 		return nil, err
@@ -290,13 +306,36 @@ func (e *Engine) Candidates(ctx context.Context, tenantID, entity, status string
 	a, b := qi(p.TablePrefix+"_id_a"), qi(p.TablePrefix+"_id_b")
 	code, name := qi(p.AnchorCodeColumn), qi(p.Settings.NameAttribute)
 	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
-		return tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT c.id::text, c.%[1]s::text AS a, pa.%[3]s AS a_code, pa.%[4]s::text AS a_name,
+		if err := tx.SelectContext(ctx, &out, fmt.Sprintf(`SELECT c.id::text, c.%[1]s::text AS a, pa.%[3]s AS a_code, pa.%[4]s::text AS a_name,
 				c.%[2]s::text AS b, pb.%[3]s AS b_code, pb.%[4]s::text AS b_name, c.overall_score, r.rule_cd, c.matched_keys, c.status
 			FROM %[5]s c
 			LEFT JOIN %[6]s pa ON pa.id = c.%[1]s LEFT JOIN %[6]s pb ON pb.id = c.%[2]s
 			LEFT JOIN %[7]s r ON r.id = c.match_rule_id
 			WHERE c.status = $1 ORDER BY c.overall_score DESC LIMIT $2`,
-			a, b, code, name, p.table("match_candidate"), qi(p.AnchorTable), p.table("match_rule")), strings.ToUpper(status), limit)
+			a, b, code, name, p.table("match_candidate"), qi(p.AnchorTable), p.table("match_rule")), strings.ToUpper(status), limit); err != nil {
+			return err
+		}
+		var ok bool
+		if err := tx.GetContext(ctx, &ok, `SELECT to_regclass('mdm.golden_merge_request') IS NOT NULL`); err != nil || !ok || len(out) == 0 {
+			return err
+		}
+		var reqs []PendingMerge
+		if err := tx.SelectContext(ctx, &reqs, `SELECT m.id::text, m.candidate_id::text, m.keep, m.note, m.approvals_required,
+				m.requested_by, m.requested_by_name,
+				(SELECT count(*) FROM mdm.golden_merge_vote v WHERE v.request_id = m.id AND v.decision = 'APPROVE') AS approvals,
+				EXISTS (SELECT 1 FROM mdm.golden_merge_vote v WHERE v.request_id = m.id AND v.approver = $2) AS voted
+			FROM mdm.golden_merge_request m WHERE m.entity_cd = $1 AND m.status = 'PENDING'`, p.EntityCd, actorID); err != nil {
+			return err
+		}
+		by := map[string]*PendingMerge{}
+		for i := range reqs {
+			reqs[i].Mine = reqs[i].RequestedBy == actorID
+			by[reqs[i].Candidate] = &reqs[i]
+		}
+		for i := range out {
+			out[i].Merge = by[out[i].ID]
+		}
+		return nil
 	})
 	return out, err
 }
