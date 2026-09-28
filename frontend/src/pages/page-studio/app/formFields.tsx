@@ -1,26 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { Autocomplete, Box, Button, Chip, FormControlLabel, FormLabel, IconButton, MenuItem, Radio, RadioGroup, Stack, Switch, TextField, Typography } from '@mui/material';
+import { Alert, Autocomplete, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, FormLabel, IconButton, MenuItem, Radio, RadioGroup, Stack, Switch, TextField, Typography } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
-import type { FormFieldSpec, OptionsFrom } from './appModel';
-import { getPath, text, type Scope } from './bindings';
+import type { FormFieldSpec, OptionsFrom, RowFieldSpec } from './appModel';
+import { getPath, resolve, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
 import { MapField } from './mapField';
+import { useAppRuntime } from './AppRuntime';
+import { getOperation } from '../../../studio-core/operations/registry';
+import { PageIcon } from './icons';
 
 /** A field's options: its static list, or rows of a query. */
-export function fieldOptions(f: { options?: FormFieldSpec['options']; optionsFrom?: OptionsFrom }, scope: Scope): { value: string; label: string; caption?: string }[] {
+export type Badge = { label: string; color?: 'default' | 'primary' | 'secondary' | 'success' | 'warning' | 'error' | 'info'; variant?: 'filled' | 'outlined' };
+
+export function fieldOptions(f: { options?: FormFieldSpec['options']; optionsFrom?: OptionsFrom }, scope: Scope): { value: string; label: string; caption?: string; badges?: Badge[] }[] {
   if (f.optionsFrom) {
-    const { query, rowsPath, valueField, labelField, captionField } = f.optionsFrom;
+    const { query, rowsPath, valueField, labelField, captionField, badgesField } = f.optionsFrom;
     const data = getPath(scope, `queries.${query}.data`);
     const rows = (rowsPath ? getPath(data, rowsPath) : data) as unknown[] | undefined;
     return (Array.isArray(rows) ? rows : []).map((r) => {
       const value = valueField ? getPath(r, valueField) : r;
       const label = labelField ? getPath(r, labelField) : value;
       const caption = captionField ? getPath(r, captionField) : undefined;
-      return { value: String(value ?? ''), label: String(label ?? ''), ...(caption ? { caption: String(caption) } : {}) };
+      const badges = badgesField ? getPath(r, badgesField) : undefined;
+      return {
+        value: String(value ?? ''), label: String(label ?? ''), ...(caption ? { caption: String(caption) } : {}),
+        ...(Array.isArray(badges) ? { badges: badges as Badge[] } : {}),
+      };
     });
   }
-  return (f.options ?? []).map((o) => ({ value: o.value, label: text(o.label, scope) }));
+  return (f.options ?? []).map((o) => ({ value: o.value, label: text(o.label, scope), ...(o.caption ? { caption: text(o.caption, scope) } : {}), ...(o.badges ? { badges: o.badges } : {}) }));
 }
 
 export const isBlank = (v: unknown) => v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
@@ -32,35 +41,147 @@ export function requiredFilled(fields: FormFieldSpec[], values: Record<string, u
 
 type Row = Record<string, unknown>;
 
-/** A list of objects edited as rows (e.g. a match rule's fuzzy keys: field, method, weight). */
+/** One cell of a row: its own kind, options, read-only, caption, visibility (all seeing {{row}}). */
+function RowCell({ c, row, onChange, disabled, scope }: { c: RowFieldSpec; row: Row; onChange: (v: unknown) => void; disabled: boolean; scope: Scope }) {
+  const s: Scope = { ...scope, row };
+  const visible = useCondition(c.visibleWhen, s, true);
+  if (c.visibleWhen && !visible) return <Box sx={{ flex: c.flex ?? 1 }} />;
+  const v = row[c.name];
+  const label = text(c.label, s);
+  const off = disabled || !!c.readOnly;
+  const caption = c.caption !== undefined ? resolve(c.caption, s) : undefined;
+  let input: React.ReactNode;
+  switch (c.kind) {
+    case 'select':
+      input = (
+        <TextField select size="small" fullWidth label={label} value={v === undefined || v === null ? '' : String(v)} disabled={off} onChange={(e) => onChange(e.target.value)}>
+          {fieldOptions(c, s).map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+          {v !== undefined && v !== null && v !== '' && !fieldOptions(c, s).some((o) => o.value === String(v)) && <MenuItem value={String(v)}>{String(v)} (missing)</MenuItem>}
+        </TextField>
+      );
+      break;
+    case 'switch':
+      input = <FormControlLabel control={<Checkbox size="small" checked={!!v} disabled={off} onChange={(e) => onChange(e.target.checked)} />} label={label} />;
+      break;
+    case 'chips':
+      input = (
+        <Autocomplete multiple freeSolo size="small" options={fieldOptions(c, s).map((o) => o.value)} value={Array.isArray(v) ? v.map(String) : []} disabled={off}
+          onChange={(_, n) => onChange(n)} renderInput={(p) => <TextField {...p} label={label} placeholder={c.placeholder ? text(c.placeholder, s) : undefined} />} />
+      );
+      break;
+    default:
+      input = (
+        <TextField size="small" fullWidth label={label} value={v === undefined || v === null ? '' : String(v)} disabled={off}
+          placeholder={c.placeholder ? text(c.placeholder, s) : undefined}
+          onChange={(e) => {
+            const n = Number(e.target.value);
+            onChange(c.kind === 'number' && e.target.value !== '' && !Number.isNaN(n) ? n : e.target.value);
+          }} />
+      );
+  }
+  return (
+    <Box sx={{ flex: c.flex ?? 1, minWidth: 0 }}>
+      {input}
+      {caption !== undefined && caption !== null && caption !== '' && <Typography variant="caption" color="text.secondary" noWrap component="div">{String(caption)}</Typography>}
+    </Box>
+  );
+}
+
+/** A list of objects edited as rows (a match rule's fuzzy keys, a map step's field maps, a file's columns). */
 function RowsField({ f, value, onChange, disabled, label, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; disabled: boolean; label: string; scope: Scope }) {
   const rows = (Array.isArray(value) ? value : []) as Row[];
-  const cols = f.rowFields ?? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).map((name) => ({ name, label: name, kind: 'text' as const }));
-  const set = (i: number, name: string, raw: string, kind?: string) => {
-    const next = rows.map((r) => ({ ...r }));
-    const n = Number(raw);
-    next[i][name] = kind === 'number' && raw !== '' && !Number.isNaN(n) ? n : raw;
-    onChange(next);
-  };
+  const cols: RowFieldSpec[] = f.rowFields ?? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).map((name) => ({ name, label: name, kind: 'text' as const }));
+  const set = (i: number, name: string, v: unknown) => onChange(rows.map((r, j) => (j === i ? { ...r, [name]: v } : r)));
   return (
     <Box>
       {label && <Typography variant="caption" color="text.secondary">{label}</Typography>}
       <Stack spacing={1}>
         {rows.map((r, i) => (
-          <Stack key={i} direction="row" spacing={1} alignItems="center">
-            {cols.map((c) => (
-              <TextField key={c.name} size="small" label={text(c.label, scope)} value={r[c.name] === undefined || r[c.name] === null ? '' : String(r[c.name])}
-                disabled={disabled} onChange={(e) => set(i, c.name, e.target.value, c.kind)} />
-            ))}
-            <IconButton size="small" aria-label="Remove" disabled={disabled} onClick={() => onChange(rows.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+          <Stack key={i} direction="row" spacing={1} alignItems="flex-start">
+            {cols.map((c) => <RowCell key={c.name} c={c} row={r} disabled={disabled} scope={scope} onChange={(v) => set(i, c.name, v)} />)}
+            {!f.fixedRows && (
+              <IconButton size="small" aria-label="Remove" disabled={disabled} onClick={() => onChange(rows.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+            )}
           </Stack>
         ))}
-        <Box>
-          <Button size="small" startIcon={<AddIcon />} disabled={disabled}
-            onClick={() => onChange([...rows, Object.fromEntries(cols.map((c) => [c.name, c.kind === 'number' ? 0 : '']))])}>
-            Add
-          </Button>
-        </Box>
+        {!f.fixedRows && (
+          <Box>
+            <Button size="small" startIcon={<AddIcon />} disabled={disabled}
+              onClick={() => onChange([...rows, Object.fromEntries(cols.map((c) => [c.name, c.default !== undefined ? c.default : c.kind === 'number' ? 0 : c.kind === 'switch' ? false : c.kind === 'chips' ? [] : '']))])}>
+              {f.addLabel ? text(f.addLabel, scope) : 'Add'}
+            </Button>
+          </Box>
+        )}
+      </Stack>
+    </Box>
+  );
+}
+
+/** A button inside a form: runs actions with {{form}} (Read file, Suggest mappings, Remove this step). */
+function FormButton({ f, scope, disabled, label }: { f: FormFieldSpec; scope: Scope; disabled: boolean; label: string }) {
+  const { runActions } = useAppRuntime();
+  const [busy, setBusy] = useState(false);
+  const click = async () => {
+    setBusy(true);
+    try { await runActions(f.onClick, scope); } finally { setBusy(false); }
+  };
+  return (
+    <Box>
+      <Button size="small" variant={f.buttonVariant ?? 'outlined'} disabled={disabled || busy} onClick={() => void click()}
+        startIcon={busy ? <CircularProgress size={16} /> : f.icon ? <PageIcon name={f.icon} fontSize="small" /> : undefined}>
+        {label}
+      </Button>
+    </Box>
+  );
+}
+
+/** Upload a file through an operation ({file}), then run actions with {{result}}. */
+function UploadButton({ f, scope, disabled, label }: { f: FormFieldSpec; scope: Scope; disabled: boolean; label: string }) {
+  const { runActions } = useAppRuntime();
+  const ref = React.useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const pick = async (file: File) => {
+    const op = f.uploadOperation ? getOperation(f.uploadOperation) : undefined;
+    if (!op) { setError(`Unknown operation ${f.uploadOperation}`); return; }
+    setBusy(true); setError(null);
+    try {
+      const result = await op.run({ file });
+      await runActions(f.onClick, { ...scope, result });
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  };
+  return (
+    <Box>
+      <input ref={ref} type="file" hidden accept={f.accept} aria-label={label} onChange={(e) => { const x = e.target.files?.[0]; if (x) void pick(x); e.target.value = ''; }} />
+      <Button size="small" variant={f.buttonVariant ?? 'outlined'} disabled={disabled || busy} onClick={() => ref.current?.click()}
+        startIcon={busy ? <CircularProgress size={16} /> : <PageIcon name={f.icon ?? 'export'} fontSize="small" />}>
+        {label}
+      </Button>
+      {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+    </Box>
+  );
+}
+
+/** Several options picked with checkboxes, each with a caption and badges (rules with their severity). */
+function Checklist({ f, value, onChange, disabled, label, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; disabled: boolean; label: string; scope: Scope }) {
+  const picked = new Set(Array.isArray(value) ? value.map(String) : []);
+  return (
+    <Box>
+      {label && <Typography variant="caption" color="text.secondary">{label}</Typography>}
+      <Stack>
+        {fieldOptions(f, scope).map((o) => (
+          <FormControlLabel key={o.value} sx={{ alignItems: 'flex-start' }} disabled={disabled}
+            control={<Checkbox checked={picked.has(o.value)} onChange={(e) => onChange(e.target.checked ? [...picked, o.value] : [...picked].filter((x) => x !== o.value))} />}
+            label={
+              <Box>
+                <Stack direction="row" spacing={1} alignItems="center">
+                  <Typography variant="body2">{o.label}</Typography>
+                  {(o.badges ?? []).map((b, i) => <Chip key={i} size="small" label={b.label} color={b.color ?? 'default'} variant={b.variant ?? 'filled'} />)}
+                </Stack>
+                {o.caption && <Typography variant="caption" color="text.secondary">{o.caption}</Typography>}
+              </Box>
+            } />
+        ))}
       </Stack>
     </Box>
   );
@@ -82,6 +203,9 @@ function Field({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown
   const body = <FieldBody f={f} value={value} onChange={onChange} scope={scope} />;
   return f.wide ? <Box sx={{ gridColumn: '1 / -1' }}>{body}</Box> : body;
 }
+
+/** Kinds that hold no value (never seeded, never required). */
+export const ACTION_KINDS: FormFieldSpec['kind'][] = ['note', 'button', 'upload'];
 
 function FieldBody({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; scope: Scope }) {
   const visible = useCondition(f.visibleWhen, scope, true);
@@ -131,6 +255,16 @@ function FieldBody({ f, value, onChange, scope }: { f: FormFieldSpec; value: unk
       );
     case 'rows':
       return <RowsField f={f} value={value} onChange={onChange} disabled={disabled} label={label} scope={scope} />;
+    case 'note':
+      return f.severity
+        ? <Alert severity={f.severity}>{label}</Alert>
+        : <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>{label}</Typography>;
+    case 'button':
+      return <FormButton f={f} scope={scope} disabled={disabled} label={label} />;
+    case 'upload':
+      return <UploadButton f={f} scope={scope} disabled={disabled} label={label} />;
+    case 'checklist':
+      return <Checklist f={f} value={value} onChange={onChange} disabled={disabled} label={label} scope={scope} />;
     case 'json':
       return <JsonText value={value} onChange={onChange} label={label} disabled={disabled} required={f.required} helperText={helper} />;
     case 'map':

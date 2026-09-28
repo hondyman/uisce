@@ -54,6 +54,13 @@ export interface PageQuery {
   enabledWhen?: ConditionNode;
   /** Keep showing the previous result while new params load (filters, paging). Search inputs debounce themselves. */
   keepPrevious?: boolean;
+  /** Wait until the params have been still this long (live validation as a graph is edited). */
+  debounceMs?: number;
+  /** Refetch every refetchMs (default 2000) while this holds (following a run until it finishes). */
+  refetchWhile?: ConditionNode;
+  refetchMs?: number;
+  /** Run when the query's data changes (not on its first load), with {{data}} - react to a run finishing. */
+  onChange?: Action[];
 }
 
 export interface PageAppModel {
@@ -70,7 +77,10 @@ export interface PageAppModel {
 // ---------------------------------------------------------------------------
 // Actions
 
-export type Action =
+/** Any action may carry `when`: it runs only while that holds (evaluated against the action's scope). */
+export type Action = ActionBody & { when?: ConditionNode };
+
+export type ActionBody =
   | { kind: 'setVariable'; name: string; value?: Binding }
   | {
       kind: 'runOperation';
@@ -98,8 +108,10 @@ export interface FormFieldSpec {
    * of objects edited as rows of `rowFields`; json: any JSON value as text;
    * map: an object of key -> value edited as a table (`map`).
    */
-  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date' | 'rows' | 'json' | 'map';
-  options?: { value: string; label: TextSpec }[];
+  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date' | 'rows' | 'json' | 'map'
+    /** Not values: note shows text (a hint, a warning); button and upload run actions; checklist picks several options with captions and badges. */
+    | 'note' | 'button' | 'upload' | 'checklist';
+  options?: { value: string; label: TextSpec; caption?: TextSpec; badges?: { label: string; color?: ChipColor; variant?: 'filled' | 'outlined' }[] }[];
   /** Options from a query: rows at rowsPath, value/label read from each row (omit = the row itself). */
   optionsFrom?: OptionsFrom;
   /** select/radio: store the chosen value as a number (e.g. a count of approvers). */
@@ -112,8 +124,19 @@ export interface FormFieldSpec {
   wide?: boolean;
   /** Cleared when any of these fields changes (a mapping that depends on the table chosen). */
   resetOn?: string[];
-  /** rows: the fields of each row. */
-  rowFields?: { name: string; label: TextSpec; kind?: 'text' | 'number' }[];
+  /** rows: the fields of each row (templates and conditions see {{row}}). */
+  rowFields?: RowFieldSpec[];
+  /** rows: no add / remove (a fixed list, e.g. a file's columns); addLabel names the add button. */
+  fixedRows?: boolean;
+  addLabel?: TextSpec;
+  /** note: its look (plain caption text when absent). */
+  severity?: 'info' | 'warning' | 'error' | 'success';
+  /** button / upload: run with {{form}}; upload runs uploadOperation with {file} first and these with {{result}}. */
+  onClick?: Action[];
+  icon?: string;
+  buttonVariant?: 'text' | 'outlined' | 'contained';
+  uploadOperation?: string;
+  accept?: string;
   /** map: how the key -> value table is laid out. */
   map?: MapFieldSpec;
   default?: Binding;
@@ -122,6 +145,24 @@ export interface FormFieldSpec {
   /** Show the field only while this holds; read-only while readOnlyWhen holds. */
   visibleWhen?: ConditionNode;
   readOnlyWhen?: ConditionNode;
+}
+
+/** A column of a rows field. */
+export interface RowFieldSpec {
+  name: string;
+  label: TextSpec;
+  kind?: 'text' | 'number' | 'select' | 'switch' | 'chips';
+  options?: { value: string; label: TextSpec }[];
+  optionsFrom?: OptionsFrom;
+  readOnly?: boolean;
+  /** A caption under the input (e.g. a sample value). */
+  caption?: Binding;
+  placeholder?: TextSpec;
+  visibleWhen?: ConditionNode;
+  /** Width weight (default 1). */
+  flex?: number;
+  /** A new row's value. */
+  default?: unknown;
 }
 
 /**
@@ -154,6 +195,8 @@ export interface OptionsFrom {
   labelField?: string;
   /** A second, smaller line under each option's label (e.g. rows and status of a load). */
   captionField?: string;
+  /** checklist: chips beside each option [{label, color, variant}]. */
+  badgesField?: string;
 }
 
 export interface FormSpec {

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Alert, Box, Tab, Tabs } from '@mui/material';
 import type { PageAppModel, ConditionNode } from './appModel';
 import { AppRuntimeProvider, useAppRuntime } from './AppRuntime';
@@ -74,8 +75,13 @@ function RuntimeBody(props: RuntimePageProps) {
 
 /** A page as a viewer gets it: app runtime, filter bar, tabs, the active layout. */
 export default function RuntimePage(props: RuntimePageProps) {
+  // The route's parameters ({{route.id}} on /data/pipelines/:id).
+  const params = useParams();
+  const paramsKey = JSON.stringify(params);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const route = useMemo(() => params, [paramsKey]);
   return (
-    <AppRuntimeProvider app={props.app} mode="preview">
+    <AppRuntimeProvider app={props.app} mode="preview" route={route}>
       <RuntimeBody {...props} />
     </AppRuntimeProvider>
   );

@@ -5,6 +5,9 @@ import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
 import { usePresentationOverlay } from './PresentationRuntime';
 import { OverlayContainer, TabSetContainer } from './app/containers';
+import { useAppRuntime } from './app/AppRuntime';
+import { useCondition } from './app/conditions';
+import type { ConditionNode } from './app/appModel';
 
 const DEFAULT_PANEL_PROPS: PanelNodeProps = { side: 'right', collapsible: true, defaultOpen: true, widthPx: 320, label: 'Panel' };
 
@@ -47,6 +50,10 @@ interface RenderLayoutTreeProps {
 const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, components, dataSources, tenantId }) => {
   const overlay = usePresentationOverlay(nodeId);
   const node = nodes[nodeId];
+  // A Row/Column shows only while props.visibleWhen holds (a side panel while a step is selected).
+  const { scope } = useAppRuntime();
+  const gate = node?.props?.visibleWhen as ConditionNode | undefined;
+  const shown = useCondition(gate, scope, false);
   if (!node) {
     const component = components[nodeId];
     if (!component) return null;
@@ -57,6 +64,7 @@ const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, comp
     );
   }
   if (overlay?.hidden) return null;
+  if (gate && !shown) return null;
 
   const child = (childId: string) => (
     <RenderLayoutTree key={childId} nodeId={childId} nodes={nodes} components={components} dataSources={dataSources} tenantId={tenantId} />

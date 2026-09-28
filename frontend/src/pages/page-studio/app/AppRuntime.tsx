@@ -105,17 +105,34 @@ export const AppRuntimeProvider: React.FC<{
   const baseScope = useMemo<Scope>(() => ({ vars, route: route ?? {} }), [vars, route]);
   const [enabled, setEnabled] = useState<Record<string, boolean>>({});
   const prevResults = useRef<Record<string, QueryState>>({});
+  // Debounced queries run on params that have been still for debounceMs.
+  const [settled, setSettled] = useState<Record<string, string>>({});
   const resolved = queries.map((q) => {
     const op = getOperation(q.operation);
-    const params = resolveAll(q.params, { ...baseScope, queries: prevResults.current });
+    const live = resolveAll(q.params, { ...baseScope, queries: prevResults.current });
+    const key = JSON.stringify(live);
+    const params = q.debounceMs && settled[q.id] !== undefined && settled[q.id] !== key ? (JSON.parse(settled[q.id]) as typeof live) : live;
     const ready = !!op && missingParams(op, params).length === 0 && (q.enabledWhen ? enabled[q.id] === true : true);
-    return { q, op, params, ready };
+    return { q, op, params, ready, key };
   });
+  const liveKeys = resolved.map((r) => (r.q.debounceMs ? `${r.q.id}:${r.key}` : '')).join('|');
+  useEffect(() => {
+    const timers = resolved.filter((r) => r.q.debounceMs).map((r) => {
+      if (settled[r.q.id] === undefined) { setSettled((s) => ({ ...s, [r.q.id]: r.key })); return undefined; }
+      if (settled[r.q.id] === r.key) return undefined;
+      return setTimeout(() => setSettled((s) => ({ ...s, [r.q.id]: r.key })), r.q.debounceMs);
+    });
+    return () => timers.forEach((t) => t && clearTimeout(t));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKeys]);
+  // Queries that poll while a condition holds (a run in progress).
+  const [polling, setPolling] = useState<Record<string, boolean>>({});
   const results = useQueries({
     queries: resolved.map(({ q, op, params, ready }) => ({
       queryKey: [op?.domain ?? 'studio', 'studio', q.operation, params],
       queryFn: () => op!.run(params),
       enabled: ready,
+      refetchInterval: polling[q.id] ? (q.refetchMs ?? 2000) : false,
       // useQueries does not hand placeholderData the previous key's data, so keep it here.
       placeholderData: q.keepPrevious ? () => prevResults.current[q.id]?.data : undefined,
     })),
@@ -137,6 +154,19 @@ export const AppRuntimeProvider: React.FC<{
   prevResults.current = queryStates;
 
   const scope = useMemo<Scope>(() => ({ ...baseScope, queries: queryStates }), [baseScope, queryStates]);
+
+  const pollKey = JSON.stringify(queries.map((q) => q.refetchWhile ?? null));
+  useEffect(() => {
+    let live = true;
+    const gated = queries.filter((q) => q.refetchWhile);
+    if (gated.length === 0) return;
+    void Promise.all(gated.map(async (q) => [q.id, await evaluateCondition(q.refetchWhile, scope)] as const)).then((pairs) => {
+      if (!live) return;
+      setPolling((prev) => (pairs.every(([id, v]) => prev[id] === v) ? prev : { ...prev, ...Object.fromEntries(pairs) }));
+    });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, pollKey]);
 
   const enabledKey = JSON.stringify(queries.map((q) => q.enabledWhen ?? null));
   useEffect(() => {
@@ -176,6 +206,7 @@ export const AppRuntimeProvider: React.FC<{
     let s: Scope = { ...scopeRef.current, ...local };
     try {
       for (const a of actions ?? []) {
+        if (a.when && !(await evaluateCondition(a.when, s))) continue;
         if (a.kind === 'setVariable') {
           const v = resolve(a.value ?? null, s);
           setVariable(a.name, v === undefined ? null : v);
@@ -234,6 +265,22 @@ export const AppRuntimeProvider: React.FC<{
   const runActionsInner = (actions: Action[], s: Scope) => runActionsRef.current(actions, s);
   const runActionsRef = useRef(runActions);
   runActionsRef.current = runActions;
+
+  // Queries with onChange: run their actions when the data changes after the first load.
+  const lastData = useRef<Record<string, string>>({});
+  const reactKey = queries.filter((q) => q.onChange?.length).map((q) => `${q.id}:${results[queries.indexOf(q)]?.dataUpdatedAt ?? 0}`).join('|');
+  useEffect(() => {
+    for (const q of queries) {
+      if (!q.onChange?.length) continue;
+      const data = queryStates[q.id]?.data;
+      if (data === undefined) continue;
+      const key = JSON.stringify(data);
+      const before = lastData.current[q.id];
+      lastData.current[q.id] = key;
+      if (before !== undefined && before !== key) void runActions(q.onChange, { data });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reactKey]);
 
   const value = useMemo(() => ({ scope, mode, setVariable, runActions }), [scope, mode, setVariable, runActions]);
 

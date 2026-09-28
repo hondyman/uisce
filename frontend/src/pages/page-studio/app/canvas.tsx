@@ -84,7 +84,8 @@ export interface CanvasProps {
   onChange?: Action[];
   emptyText?: TextSpec;
   emptyHint?: TextSpec;
-  height?: number;
+  /** Pixels, or any CSS height ('100%' fills the region it is in). */
+  height?: number | string;
   minimap?: boolean;
 }
 

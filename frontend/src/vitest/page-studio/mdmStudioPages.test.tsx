@@ -29,7 +29,6 @@ vi.mock('../../features/data-pipelines/api', async (orig) => {
   const real = await orig<typeof import('../../features/data-pipelines/api')>();
   return { ...real, pipelinesApi: { ...real.pipelinesApi, ...dp } };
 });
-vi.mock('../../features/data-pipelines/PipelineEditorPage', () => ({ default: () => <div data-testid="pipeline-editor" /> }));
 
 import '../../studio-core/registerDomains';
 import RuntimePage from '../../pages/page-studio/app/RuntimePage';
@@ -118,8 +117,10 @@ describe('data pipelines as studio pages', () => {
     await waitFor(() => expect(dp.remove).toHaveBeenCalledWith('p1'));
   });
 
-  it('the editor page places the domain editor', async () => {
-    mount(dataPipelineEditorBlueprint());
-    expect(await screen.findByTestId('pipeline-editor')).toBeTruthy();
+  it('the editor page is built from studio blocks - no domain editor (pipelineEditorParity covers it)', () => {
+    const types = Object.values(dataPipelineEditorBlueprint().components).map((c) => c.type);
+    expect(types).toContain('Canvas');
+    expect(types).toContain('Form');
+    expect(Object.values(dataPipelineEditorBlueprint().components).some((c) => (c.props as { component?: string }).component === 'dataPipelines.Editor')).toBe(false);
   });
 });
