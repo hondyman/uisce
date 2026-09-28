@@ -21,6 +21,8 @@ import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import RestoreIcon from '@mui/icons-material/Restore';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import PublishIcon from '@mui/icons-material/Publish';
+import UnpublishedIcon from '@mui/icons-material/Unpublished';
 import CoreCompareDialog from './CoreCompareDialog';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
@@ -188,6 +190,12 @@ const PageStudioListPage: React.FC = () => {
       setError(err instanceof Error ? err.message : failure);
     }
   };
+
+  const togglePublished = (page: CorePageDefinition) =>
+    runCoreAction(async () => {
+      const updated = await PageStudioApi.setStatus(page.id, page.status === 'published' ? 'draft' : 'published');
+      setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status, updatedAt: updated.updatedAt } : p)));
+    }, 'Failed to change publish status');
 
   const toggleActive = (page: CorePageDefinition) =>
     runCoreAction(async () => {
@@ -438,6 +446,13 @@ const PageStudioListPage: React.FC = () => {
           <MenuItem key="edit" onClick={() => { const p = menuAnchor!.page; closeMenu(); navigate(p.id); }}>
             <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
           </MenuItem>,
+          ...(menuAnchor?.page.editable !== false ? [
+            <MenuItem key="publish" onClick={() => togglePublished(menuAnchor!.page)}>
+              {menuAnchor?.page.status === 'published'
+                ? <><UnpublishedIcon fontSize="small" sx={{ mr: 1 }} /> Unpublish</>
+                : <><PublishIcon fontSize="small" sx={{ mr: 1 }} /> Publish</>}
+            </MenuItem>,
+          ] : []),
           <MenuItem key="rename" onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
             <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
           </MenuItem>,

@@ -235,3 +235,58 @@ func TestPageStudioCore_CustomizeNeedsTenantAdminOutsideGold(t *testing.T) {
 		t.Fatal("a tenant admin customizes core pages")
 	}
 }
+
+// Publishing changes only the status: a core page stays at its version
+// (no false upgrade for tenants), and only the gold-copy admin may do it.
+func TestPageStudio_SetStatus(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	h := &PageStudioHandler{db: sqlx.NewDb(db, "sqlmock")}
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+	core := corePage(3, v1Tabs, v1Components)
+	path := "/page-studio/pages/" + core.ID.String() + "/status"
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, path, goldTenant.String(), security.AuthInfo{UserID: "u", IsGlobalAdmin: true}, `{"status":"live"}`))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad status value: %d", w.Code)
+	}
+
+	// Not an admin: refused before anything is written.
+	mock.ExpectQuery(`SELECT is_core FROM page_definitions`).WithArgs(core.ID, goldTenant).
+		WillReturnRows(sqlmock.NewRows([]string{"is_core"}).AddRow(true))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, path, goldTenant.String(), security.AuthInfo{UserID: "u"}, `{"status":"published"}`))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("non-admin: %d %s", w.Code, w.Body.String())
+	}
+
+	// Gold-copy admin: status only, version untouched.
+	mock.ExpectQuery(`SELECT is_core FROM page_definitions`).WithArgs(core.ID, goldTenant).
+		WillReturnRows(sqlmock.NewRows([]string{"is_core"}).AddRow(true))
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldTenant))
+	published := *core
+	published.Status = "published"
+	mock.ExpectQuery(`UPDATE page_definitions SET status = \$1, updated_at = NOW\(\)\s+WHERE id = \$2 AND tenant_id = \$3`).
+		WithArgs("published", core.ID, goldTenant).WillReturnRows(pageRows(&published))
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, tenantRequest(http.MethodPut, path, goldTenant.String(), security.AuthInfo{UserID: "u", IsGlobalAdmin: true}, `{"status":"published"}`))
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin: %d %s", w.Code, w.Body.String())
+	}
+	var got struct {
+		Status  string `json:"status"`
+		Version int    `json:"version"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	if got.Status != "published" || got.Version != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -141,6 +141,7 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}", h.get)
 		r.Put("/{id}", h.update)
 		r.Delete("/{id}", h.delete)
+		r.Put("/{id}/status", h.setStatus)
 		// Tenant lifecycle of a core page (page_studio_core.go).
 		r.Put("/{id}/extension", h.saveExtension)
 		r.Put("/{id}/activation", h.setActivation)
@@ -700,6 +701,55 @@ func (h *PageStudioHandler) update(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to update page: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+// setStatus publishes or unpublishes a page the caller owns. Only the
+// status changes - not the version - so publishing a core page is not a
+// new core version and tenants see no upgrade for it. Core pages need the
+// gold-copy admin, like any other core change.
+func (h *PageStudioHandler) setStatus(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	var req struct {
+		Status string `json:"status"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Status != "draft" && req.Status != "published") {
+		http.Error(w, `status must be "draft" or "published"`, http.StatusBadRequest)
+		return
+	}
+	var isCore bool
+	err = h.db.GetContext(r.Context(), &isCore, `SELECT is_core FROM page_definitions WHERE id = $1 AND tenant_id = $2`, id, tenantID)
+	if err == sql.ErrNoRows {
+		http.Error(w, "page not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if isCore && !h.canEditCore(r, tenantID) {
+		http.Error(w, "core pages can only be published by the gold-copy tenant admin", http.StatusForbidden)
+		return
+	}
+	var page PageStudioPage
+	err = h.db.GetContext(r.Context(), &page, `
+		UPDATE page_definitions SET status = $1, updated_at = NOW()
+		WHERE id = $2 AND tenant_id = $3
+		RETURNING `+pageColumns, req.Status, id, tenantID)
+	if err != nil {
+		http.Error(w, "failed to change status: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	page.Editable = true
 	writeJSON(w, http.StatusOK, page)
 }
 

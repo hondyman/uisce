@@ -239,6 +239,19 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const custom = draft.customization;
     const canSave = !inheritedCore || (!!draft.canCustomize && custom?.mode !== 'cloned');
 
+    // Status only (no new version); unsaved layout edits stay in the draft.
+    const handleTogglePublish = async () => {
+        if (!draft.id) return;
+        try {
+            const next = draft.status === 'published' ? 'draft' : 'published';
+            const updated = await PageStudioApi.setStatus(draft.id, next);
+            setDraft((prev) => ({ ...prev, status: updated.status }));
+            setSaveNotice({ severity: 'success', message: next === 'published' ? 'Published' : 'Unpublished - back to draft' });
+        } catch (err) {
+            setSaveNotice({ severity: 'error', message: err instanceof Error ? err.message : 'Failed to change publish status' });
+        }
+    };
+
     const handleSave = async () => {
         try {
             // A page opened from the sidebar list carries its real id;
@@ -311,6 +324,11 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         <Button variant="contained" color="secondary" startIcon={<EditIcon />} size="small" onClick={() => setViewMode('design')}>Back to Design</Button>
                     )}
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                    {draft.id && !inheritedCore && draft.editable !== false && (
+                        <Button size="small" variant="outlined" color={draft.status === 'published' ? 'inherit' : 'success'} onClick={handleTogglePublish}>
+                            {draft.status === 'published' ? 'Unpublish' : 'Publish'}
+                        </Button>
+                    )}
                     <Button variant="contained" startIcon={<SaveIcon />} size="small" onClick={handleSave} disabled={!canSave}>
                         {inheritedCore ? 'Save customization' : 'Save Changes'}
                     </Button>

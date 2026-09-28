@@ -97,6 +97,15 @@ export const PageStudioApi = {
     return apiClient<void>(`${PAGE_STUDIO_BASE}/pages/${id}`, { method: 'DELETE' });
   },
 
+  /** Publish or unpublish a page the caller owns. Status only - the version is not bumped, so publishing a core page is not an upgrade for tenants. */
+  setStatus: async (id: string, status: 'draft' | 'published'): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
   // ── Tenant lifecycle of a core page (page_studio_core.go) ──────────────
   // A tenant never writes the core page itself; these record how the
   // tenant uses it.
