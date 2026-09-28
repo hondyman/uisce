@@ -485,7 +485,7 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Advisor Dashboard', path: '/analytics/advisor-dashboard', icon: <SupervisorAccountIcon />, description: 'Advisor view' },
           { label: 'Portfolio Master', path: '/analytics/portfolio-master', icon: <PortfolioIcon />, description: 'Gold copy & performance' },
-          { label: 'Security Master', path: '/analytics/security-master', icon: <AssessmentIcon />, description: 'Instrument MDM & lineage' },
+          { label: 'Security Master', path: '/data/mastering?entity=security', icon: <AssessmentIcon />, description: 'Instrument MDM: golden securities in the mastering console' },
           { label: 'Crypto Portfolio', path: '/crypto/portfolio', icon: <TimelineIcon />, description: 'Digital assets' },
           { label: 'Wealth Feed', path: '/wealth/feed', icon: <NotificationsIcon />, description: 'Activity feed' },
           { label: 'Fabric Dashboard', path: '/fabric/dashboard', icon: <AssessmentIcon />, description: 'General dashboard view' },

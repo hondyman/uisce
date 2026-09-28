@@ -10,6 +10,8 @@ export interface NavigationMenuNode {
   displayOrder: number;
   requiredEntitlement: string;
   children?: NavigationMenuNode[];
+  /** From the gold copy: every tenant has it, read-only outside the gold copy. */
+  inherited?: boolean;
 }
 
 export interface NavigationMenuUpsert {

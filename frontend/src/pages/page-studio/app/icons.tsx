@@ -14,6 +14,9 @@ import FactCheckIcon from '@mui/icons-material/FactCheck';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import LinkIcon from '@mui/icons-material/Link';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import DeleteIcon from '@mui/icons-material/Delete';
 import type { SvgIconProps } from '@mui/material';
 
 /**
@@ -37,6 +40,9 @@ export const PAGE_ICONS: Record<string, React.ComponentType<SvgIconProps>> = {
   schedule: ScheduleIcon,
   chart: ShowChartIcon,
   warning: WarningAmberIcon,
+  link: LinkIcon,
+  pipeline: AccountTreeIcon,
+  delete: DeleteIcon,
 };
 
 export function PageIcon({ name, ...props }: { name?: string } & SvgIconProps) {

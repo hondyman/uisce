@@ -291,6 +291,8 @@ export interface CorePageDefinition {
   canCustomize?: boolean;
   /** Set on a tenant page that is a clone of a core page (no upgrade path). */
   clonedFrom?: { pageId: string; name: string; version: number };
+  /** Menu entries that open this page, top of the menu down (list responses only). */
+  menuPlacements?: { nodeId: string; path: string[]; inherited?: boolean }[];
   status?: 'draft' | 'published';
   /**
    * The page's application model: variables, governed queries, tab state,

@@ -57,5 +57,6 @@ export function text(spec: TextSpec | undefined, scope: Scope): string {
   if (typeof spec === 'string') return translateMaybe(stringify(resolve(spec, scope)));
   const params = resolveAll(spec.params, scope);
   const key = stringify(resolve(spec.t, scope));
-  return i18n.exists(key) ? (i18n.t(key, params) as string) : key;
+  // With the params: a pluralised key exists only as key_one / key_other, which i18next finds from count.
+  return i18n.exists(key, params) ? (i18n.t(key, params) as string) : key;
 }

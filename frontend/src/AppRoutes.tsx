@@ -172,11 +172,17 @@ const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
 const PipelinesListPage = React.lazy(() => import('./features/data-pipelines/PipelinesListPage'));
 const PipelineEditorPage = React.lazy(() => import('./features/data-pipelines/PipelineEditorPage'));
 const StagingBindingsPage = React.lazy(() => import('./features/staging-bindings/StagingBindingsPage'));
-// /data/mastering is the core Page Studio page "mastering-console" (built
-// from app/blueprints/masteringConsole.ts), not the hand-built
-// features/mastering/MasteringPage.tsx it replaced - that stays as the
-// parity reference (vitest/page-studio/masteringConsoleParity.test.tsx).
+// MDM routes are served by core Page Studio pages (studioRoutes.ts). The
+// hand-built screens they replaced are the fallback while a page has not
+// been saved in an environment yet, and the parity references in tests.
+const MasteringPage = React.lazy(() => import('./features/mastering/MasteringPage'));
 const StudioPageContent = React.lazy(() => import('./pages/PageBrowser').then((m) => ({ default: m.PageContent })));
+const STUDIO_ROUTE_FALLBACKS: Record<string, React.ReactNode> = {
+  'mastering-console': <MasteringPage />,
+  'staging-bindings': <StagingBindingsPage />,
+  'data-pipelines': <PipelinesListPage />,
+  'data-pipeline-editor': <PipelineEditorPage />,
+};
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
@@ -196,6 +202,7 @@ import SimulationWorkspace from "./pages/simulation/SimulationWorkspace";
 import ScenarioDetail from "./pages/simulation/ScenarioDetail";
 import ScenarioComparison from "./pages/simulation/ScenarioComparison";
 import RebalancingWizard from "./pages/simulation/RebalancingWizard";
+import { STUDIO_ROUTES } from './pages/page-studio/studioRoutes';
 
 export function AppRoutes() {
   return (
@@ -291,10 +298,9 @@ function ProtectedApp() {
         <Route path="fabric/bundles/create" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         {/* Validation rules: one editor, one engine (internal/rules/vm). */}
-        <Route path="data/pipelines" element={<ProtectedRoute><PipelinesListPage /></ProtectedRoute>} />
-        <Route path="data/pipelines/:id" element={<ProtectedRoute><PipelineEditorPage /></ProtectedRoute>} />
-        <Route path="data/staging-bindings" element={<ProtectedRoute><StagingBindingsPage /></ProtectedRoute>} />
-        <Route path="data/mastering" element={<ProtectedRoute><StudioPageContent slug="mastering-console" /></ProtectedRoute>} />
+        {STUDIO_ROUTES.map(({ path, slug }) => (
+          <Route key={path} path={path} element={<ProtectedRoute><StudioPageContent slug={slug} fallback={STUDIO_ROUTE_FALLBACKS[slug]} /></ProtectedRoute>} />
+        ))}
         <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         {/* System-wide validation-rule-nodes view (every BO, one page) -

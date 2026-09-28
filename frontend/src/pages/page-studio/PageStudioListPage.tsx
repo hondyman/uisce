@@ -24,6 +24,9 @@ import CallSplitIcon from '@mui/icons-material/CallSplit';
 import PublishIcon from '@mui/icons-material/Publish';
 import UnpublishedIcon from '@mui/icons-material/Unpublished';
 import CoreCompareDialog from './CoreCompareDialog';
+import PlaceOnMenuDialog from './PlaceOnMenuDialog';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import { routesForSlug } from './studioRoutes';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import { useTenant } from '../../contexts/TenantContext';
@@ -32,6 +35,8 @@ import { generatePageDraft, type BOOption } from './generatePageDraft';
 import type { GeneratedPageKind } from '../../api/pageStudio';
 import { NavigationMenuApi, NavigationMenuNode } from '../../api/navigationMenu';
 import { PAGE_BLUEPRINTS, type PageBlueprint } from './app/blueprints';
+
+const NO_SECTION = '__none__';
 
 const flattenMenuNodes = (nodes: NavigationMenuNode[], depth = 0): { node: NavigationMenuNode; depth: number }[] =>
   nodes.flatMap((node) => [{ node, depth }, ...flattenMenuNodes(node.children || [], depth + 1)]);
@@ -59,6 +64,9 @@ const PageStudioListPage: React.FC = () => {
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
   const [scope, setScope] = useState<'all' | 'core' | 'custom'>('all');
+  // Menu section (top-level menu entry) filter; NO_SECTION = not on the menu.
+  const [section, setSection] = useState('');
+  const [placeTarget, setPlaceTarget] = useState<CorePageDefinition | null>(null);
   const [compareTarget, setCompareTarget] = useState<CorePageDefinition | null>(null);
   const [confirm, setConfirm] = useState<{ title: string; body: string; label: string; run: () => Promise<void> } | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -142,14 +150,22 @@ const PageStudioListPage: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const scoped = pages.filter((p) => scope === 'all' || (scope === 'core') === !!p.isCore);
+    const scoped = pages
+      .filter((p) => scope === 'all' || (scope === 'core') === !!p.isCore)
+      .filter((p) => !section || (section === NO_SECTION
+        ? !(p.menuPlacements?.length)
+        : (p.menuPlacements ?? []).some((m) => m.path[0] === section)));
     if (!q) return scoped;
     return scoped.filter((p) =>
       p.name.toLowerCase().includes(q) ||
       p.slug.toLowerCase().includes(q) ||
       (p.description || '').toLowerCase().includes(q)
     );
-  }, [pages, search, scope]);
+  }, [pages, search, scope, section]);
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(pages.flatMap((p) => (p.menuPlacements ?? []).map((m) => m.path[0])))).sort(),
+    [pages],
+  );
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -314,6 +330,14 @@ const PageStudioListPage: React.FC = () => {
           onChange={(e) => setSearch(e.target.value)}
           InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
         />
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="ps-section">Menu section</InputLabel>
+          <Select labelId="ps-section" label="Menu section" value={section} onChange={(e) => setSection(e.target.value as string)}>
+            <SelectMenuItem value="">All sections</SelectMenuItem>
+            {sectionOptions.map((s) => <SelectMenuItem key={s} value={s}>{s}</SelectMenuItem>)}
+            <SelectMenuItem value={NO_SECTION}>Not on the menu</SelectMenuItem>
+          </Select>
+        </FormControl>
         <ToggleButtonGroup exclusive size="small" value={scope} onChange={(_, v) => v && setScope(v)}>
           <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>All</ToggleButton>
           <ToggleButton value="core" sx={{ textTransform: 'none', px: 2 }}>Core</ToggleButton>
@@ -390,6 +414,20 @@ const PageStudioListPage: React.FC = () => {
                       </Tooltip>
                     )}
                   </Stack>
+                  {/* Where the page lives: menu entries and app routes it serves. */}
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                    {(page.menuPlacements ?? []).map((m) => (
+                      <Tooltip key={m.nodeId} title={m.inherited ? 'Menu entry from the gold copy' : 'Menu entry'}>
+                        <Chip size="small" variant="outlined" color="info" icon={<MenuOpenIcon />} label={m.path.join(' › ')} />
+                      </Tooltip>
+                    ))}
+                    {!(page.menuPlacements?.length) && <Chip size="small" variant="outlined" label="Not on the menu" />}
+                    {routesForSlug(page.slug).map((r) => (
+                      <Tooltip key={r} title="Served at this app route">
+                        <Chip size="small" variant="outlined" label={r} sx={{ fontFamily: 'monospace' }} />
+                      </Tooltip>
+                    ))}
+                  </Stack>
                 </CardContent>
               </CardActionArea>
             </Card>
@@ -404,6 +442,9 @@ const PageStudioListPage: React.FC = () => {
           const items = [
             <MenuItem key="open" onClick={() => { closeMenu(); navigate(p.id); }}>
               <EditIcon fontSize="small" sx={{ mr: 1 }} /> {p.canCustomize && c.mode !== 'cloned' ? (c.mode === 'extended' ? 'Edit customization' : 'Extend') : 'Open'}
+            </MenuItem>,
+            <MenuItem key="place" onClick={() => { closeMenu(); setPlaceTarget(p); }}>
+              <MenuOpenIcon fontSize="small" sx={{ mr: 1 }} /> Place on menu…
             </MenuItem>,
           ];
           if (!p.canCustomize) return items;
@@ -453,6 +494,9 @@ const PageStudioListPage: React.FC = () => {
                 : <><PublishIcon fontSize="small" sx={{ mr: 1 }} /> Publish</>}
             </MenuItem>,
           ] : []),
+          <MenuItem key="place" onClick={() => { const p = menuAnchor!.page; closeMenu(); setPlaceTarget(p); }}>
+            <MenuOpenIcon fontSize="small" sx={{ mr: 1 }} /> Place on menu…
+          </MenuItem>,
           <MenuItem key="rename" onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
             <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
           </MenuItem>,
@@ -465,6 +509,7 @@ const PageStudioListPage: React.FC = () => {
         ]}
       </Menu>
 
+      <PlaceOnMenuDialog page={placeTarget} onClose={() => setPlaceTarget(null)} onChanged={load} />
       <CoreCompareDialog
         page={compareTarget}
         onClose={() => setCompareTarget(null)}
