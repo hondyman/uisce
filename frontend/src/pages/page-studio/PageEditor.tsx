@@ -234,6 +234,24 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
         }
     };
 
+    // A gold-copy page this tenant inherits (not the gold copy editing its own).
+    const inheritedCore = !!draft.isCore && draft.editable === false;
+    const custom = draft.customization;
+    const canSave = !inheritedCore || (!!draft.canCustomize && custom?.mode !== 'cloned');
+
+    // Status only (no new version); unsaved layout edits stay in the draft.
+    const handleTogglePublish = async () => {
+        if (!draft.id) return;
+        try {
+            const next = draft.status === 'published' ? 'draft' : 'published';
+            const updated = await PageStudioApi.setStatus(draft.id, next);
+            setDraft((prev) => ({ ...prev, status: updated.status }));
+            setSaveNotice({ severity: 'success', message: next === 'published' ? 'Published' : 'Unpublished - back to draft' });
+        } catch (err) {
+            setSaveNotice({ severity: 'error', message: err instanceof Error ? err.message : 'Failed to change publish status' });
+        }
+    };
+
     const handleSave = async () => {
         try {
             // A page opened from the sidebar list carries its real id;
@@ -241,13 +259,16 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
             // branch every save POSTed as a create, so re-saving an
             // existing page hit the (tenant_id, slug) unique constraint
             // as a 409 instead of updating it.
+            // A tenant never writes a core page: its edits are saved as
+            // its customization (extension) of the core version it is on.
+            const extending = !!draft.id && inheritedCore;
             const saved = !draft.id
                 ? await PageStudioApi.savePage(draft)
-                : draft.isCore && draft.editable === false
-                  ? await PageStudioApi.saveOverlay(draft.id, { components: draft.components, layout: draft.layout, tabs: draft.tabs })
+                : extending
+                  ? await PageStudioApi.saveExtension(draft.id, draft)
                   : await PageStudioApi.updatePage(draft.id, draft);
             onSave(saved);
-            setSaveNotice({ severity: 'success', message: draft.isCore && draft.editable === false ? 'Saved as tenant overlay (core unchanged)' : 'Saved' });
+            setSaveNotice({ severity: 'success', message: extending ? `Saved as your customization of core v${saved.customization?.baseVersion ?? saved.version} (the core page is unchanged)` : 'Saved' });
         } catch (err) {
             console.error('Save failed', err);
             setSaveNotice({ severity: 'error', message: err instanceof Error ? err.message : 'Save failed' });
@@ -303,14 +324,28 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         <Button variant="contained" color="secondary" startIcon={<EditIcon />} size="small" onClick={() => setViewMode('design')}>Back to Design</Button>
                     )}
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
-                    <Button variant="contained" startIcon={<SaveIcon />} size="small" onClick={handleSave}>Save Changes</Button>
+                    {draft.id && !inheritedCore && draft.editable !== false && (
+                        <Button size="small" variant="outlined" color={draft.status === 'published' ? 'inherit' : 'success'} onClick={handleTogglePublish}>
+                            {draft.status === 'published' ? 'Unpublish' : 'Publish'}
+                        </Button>
+                    )}
+                    <Button variant="contained" startIcon={<SaveIcon />} size="small" onClick={handleSave} disabled={!canSave}>
+                        {inheritedCore ? 'Save customization' : 'Save Changes'}
+                    </Button>
                 </Box>
             </Paper>
             {draft.isCore && (
-                <Alert severity={draft.editable === false ? 'info' : 'success'} sx={{ mx: 2, mt: 1 }}>
-                    {draft.editable === false
-                        ? 'This is a gold-copy core page. You can add tenant overlay widgets; core FIX commands cannot be edited here.'
-                        : 'Gold-copy core page. Only gold-copy admins can change core. Tenants inherit and extend via overlay.'}
+                <Alert severity={inheritedCore && custom?.upgradeAvailable ? 'warning' : inheritedCore ? 'info' : 'success'} sx={{ mx: 2, mt: 1 }}>
+                    {!inheritedCore
+                        ? 'Core page (gold copy). Changes here ship to every tenant as a new core version; tenants that extended it review their customizations on upgrade.'
+                        : !draft.canCustomize
+                          ? 'Core page, read-only. A tenant admin can extend, clone or switch it off from the page list.'
+                          : custom?.mode === 'cloned'
+                            ? 'Your environment uses a clone of this core page. Edit the clone, or revert to core from the page list.'
+                            : custom?.mode === 'extended'
+                              ? `You are editing your customization of core v${custom.baseVersion}.${custom.upgradeAvailable ? ` Core v${custom.coreVersion} is available - review and upgrade from the page list.` : ''}`
+                              : 'Core page. Saving extends it: your changes are kept as customizations, compared with the core on every upgrade, and can be kept or removed one by one.'}
+                    {inheritedCore && custom && !custom.active && ' This page is switched off in your environment.'}
                 </Alert>
             )}
             {aiDraft && (

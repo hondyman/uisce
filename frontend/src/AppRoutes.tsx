@@ -172,7 +172,11 @@ const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
 const PipelinesListPage = React.lazy(() => import('./features/data-pipelines/PipelinesListPage'));
 const PipelineEditorPage = React.lazy(() => import('./features/data-pipelines/PipelineEditorPage'));
 const StagingBindingsPage = React.lazy(() => import('./features/staging-bindings/StagingBindingsPage'));
-const MasteringPage = React.lazy(() => import('./features/mastering/MasteringPage'));
+// /data/mastering is the core Page Studio page "mastering-console" (built
+// from app/blueprints/masteringConsole.ts), not the hand-built
+// features/mastering/MasteringPage.tsx it replaced - that stays as the
+// parity reference (vitest/page-studio/masteringConsoleParity.test.tsx).
+const StudioPageContent = React.lazy(() => import('./pages/PageBrowser').then((m) => ({ default: m.PageContent })));
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
@@ -290,7 +294,7 @@ function ProtectedApp() {
         <Route path="data/pipelines" element={<ProtectedRoute><PipelinesListPage /></ProtectedRoute>} />
         <Route path="data/pipelines/:id" element={<ProtectedRoute><PipelineEditorPage /></ProtectedRoute>} />
         <Route path="data/staging-bindings" element={<ProtectedRoute><StagingBindingsPage /></ProtectedRoute>} />
-        <Route path="data/mastering" element={<ProtectedRoute><MasteringPage /></ProtectedRoute>} />
+        <Route path="data/mastering" element={<ProtectedRoute><StudioPageContent slug="mastering-console" /></ProtectedRoute>} />
         <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         {/* System-wide validation-rule-nodes view (every BO, one page) -

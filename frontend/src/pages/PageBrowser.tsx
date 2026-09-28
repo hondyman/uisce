@@ -100,7 +100,12 @@ const NavTree: React.FC<{
   );
 };
 
-const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
+/**
+ * One Page Studio page by slug, as the tenant uses it (its extension or
+ * clone, or not at all if switched off). Also mounted directly on routes
+ * that are served by a studio page, e.g. /data/mastering.
+ */
+export const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
   const { tenant } = useTenant();
   const navigate = useNavigate();
   const isCreate = recordId === 'new';

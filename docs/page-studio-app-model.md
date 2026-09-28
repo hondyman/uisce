@@ -46,6 +46,13 @@ studio now has.
   domain component with a declared contract (inputs, events) rather than
   approximated by generic widgets.
 
+## Live
+
+`/data/mastering` is served by the core page `mastering-console` (saved from
+the blueprint in the gold copy). Tenants see it as they use it: extended,
+cloned, or not at all if switched off (`docs/core-customization.md`).
+`features/mastering/MasteringPage.tsx` stays as the parity reference.
+
 ## Where things are
 
 - Types: `pages/page-studio/app/appModel.ts`; `CorePageDefinition.app`,
@@ -78,8 +85,8 @@ studio now has.
   from domain component to studio-built.
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
-- Tenant overlays (`saveOverlay`) do not carry `app` - behaviour is
-  gold-copy authored; revisit if tenants need their own queries.
+- Tenant customization of core pages (inactive / vanilla / extended /
+  cloned, compare and upgrade) is in `docs/core-customization.md`. An
+  extension is the whole page, `app` included.
 - Operation catalog is registered in the frontend; a backend catalog would
   let MCP and governance list page capabilities server-side.
-- Switch `/data/mastering` to the studio page once saved and reviewed.

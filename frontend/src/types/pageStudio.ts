@@ -226,6 +226,24 @@ export interface PresentationRule {
   actions: PresentationAction[];
 }
 
+/**
+ * A tenant's choice for one core (gold-copy) page
+ * (backend/internal/handlers/page_studio_core.go):
+ * - vanilla: used as the gold copy ships it
+ * - extended: customized; customizations are compared with the core version
+ *   they were made on and carried forward (or dropped) on upgrade
+ * - cloned: replaced by an independent tenant copy; no upgrades
+ * `active: false` switches the core page off in this tenant (any extension is kept).
+ */
+export interface CorePageCustomization {
+  mode: 'vanilla' | 'extended' | 'cloned';
+  active: boolean;
+  coreVersion: number;
+  baseVersion?: number;
+  upgradeAvailable: boolean;
+  clonePageId?: string;
+}
+
 export interface CorePageDefinition {
   id: string;
   name: string;
@@ -267,6 +285,12 @@ export interface CorePageDefinition {
   isCore?: boolean;
   /** False when this is an inherited gold-copy page the current tenant cannot mutate. */
   editable?: boolean;
+  /** On a core page seen from a tenant: how this tenant uses it (see CorePageCustomization). */
+  customization?: CorePageCustomization;
+  /** The caller may extend, clone or switch this core page off in their environment. */
+  canCustomize?: boolean;
+  /** Set on a tenant page that is a clone of a core page (no upgrade path). */
+  clonedFrom?: { pageId: string; name: string; version: number };
   status?: 'draft' | 'published';
   /**
    * The page's application model: variables, governed queries, tab state,

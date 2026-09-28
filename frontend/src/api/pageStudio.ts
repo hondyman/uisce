@@ -43,6 +43,27 @@ export interface GeneratedPageSpec {
  */
 export type PageStudioPage = CorePageDefinition;
 
+/** One element's worth of changes (backend/internal/corecustom Group). */
+export interface CoreChangeGroup {
+  id: string;
+  kind: 'page' | 'component' | 'layout' | 'tab' | 'dataSource' | 'rule' | 'app' | 'other' | string;
+  label: string;
+  summary: 'added' | 'removed' | 'changed';
+  changes: { path: string; op: 'add' | 'remove' | 'change' | 'reorder'; old?: unknown; new?: unknown }[];
+  /** The core also changed this element; keeping the customization means the tenant's version wins. */
+  conflict: boolean;
+  /** The core now ships exactly this customization. */
+  inCore: boolean;
+}
+
+export interface CoreComparison {
+  baseVersion: number;
+  coreVersion: number;
+  upgradeAvailable: boolean;
+  customizations: CoreChangeGroup[];
+  coreUpdates: CoreChangeGroup[];
+}
+
 export const PageStudioApi = {
   listPages: async (_env?: string): Promise<PageStudioPage[]> => {
     return apiClient<PageStudioPage[]>(`${PAGE_STUDIO_BASE}/pages`);
@@ -76,10 +97,57 @@ export const PageStudioApi = {
     return apiClient<void>(`${PAGE_STUDIO_BASE}/pages/${id}`, { method: 'DELETE' });
   },
 
-  saveOverlay: async (id: string, overlay: { components?: unknown; layout?: unknown; tabs?: unknown }): Promise<PageStudioPage> => {
-    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/overlay`, {
+  /** Publish or unpublish a page the caller owns. Status only - the version is not bumped, so publishing a core page is not an upgrade for tenants. */
+  setStatus: async (id: string, status: 'draft' | 'published'): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/status`, {
       method: 'PUT',
-      body: JSON.stringify(overlay),
+      body: JSON.stringify({ status }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  // ── Tenant lifecycle of a core page (page_studio_core.go) ──────────────
+  // A tenant never writes the core page itself; these record how the
+  // tenant uses it.
+
+  /** Save the tenant's customized copy of a core page (extends it; the first save pins the core version it is based on). */
+  saveExtension: async (id: string, page: Partial<PageStudioPage>): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/extension`, {
+      method: 'PUT',
+      body: JSON.stringify(page),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  /** Switch a core page on or off in this tenant. */
+  setCoreActive: async (id: string, active: boolean): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/activation`, {
+      method: 'PUT',
+      body: JSON.stringify({ active }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  /** Replace a core page with an independent tenant copy at the same slug. No upgrade path. */
+  cloneCore: async (id: string): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/clone`, { method: 'POST' });
+  },
+
+  /** Drop the tenant's extension or clone (the clone page is deleted) and use the core page as shipped. */
+  revertToCore: async (id: string): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/customization`, { method: 'DELETE' });
+  },
+
+  /** The tenant's customizations and the core's changes since the version they were made on. */
+  compareWithCore: async (id: string): Promise<CoreComparison> => {
+    return apiClient<CoreComparison>(`${PAGE_STUDIO_BASE}/pages/${id}/compare`);
+  },
+
+  /** Rebase the extension onto the current core, carrying every customization except those in `remove`. */
+  upgradeExtension: async (id: string, remove: string[]): Promise<PageStudioPage> => {
+    return apiClient<PageStudioPage>(`${PAGE_STUDIO_BASE}/pages/${id}/upgrade`, {
+      method: 'POST',
+      body: JSON.stringify({ remove }),
       headers: { 'Content-Type': 'application/json' },
     });
   },
