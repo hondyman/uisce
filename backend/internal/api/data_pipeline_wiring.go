@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -70,6 +72,10 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	(&mastering.Handler{Engine: engine, Catalog: s.MessageCatalog, ActorFrom: s.masteringActor}).RegisterRoutes(r)
 	s.MasteringEngine = engine
 	s.masteringRunner = &mastering.Runner{Engine: engine, Bindings: bindings}
+	if engine.Data != nil {
+		// A pipeline's master step masters the load it just committed.
+		deps.Master = pipelineMasterer{engine: engine}
+	}
 
 	store := &datapipeline.Store{DB: sqlxDB}
 	acts := &datapipeline.Activities{Store: store, Deps: deps}
@@ -167,4 +173,36 @@ func (s *Server) masteringActor(r *http.Request) (mastering.Actor, error) {
 		}
 	}
 	return a, nil
+}
+
+// pipelineMasterer masters a pipeline's committed staging load on the
+// mastering engine: the load's own idempotency key (load:<id>), so a load
+// already mastered returns its run; the pipeline run is recorded on it.
+type pipelineMasterer struct{ engine *mastering.Engine }
+
+func (m pipelineMasterer) MasterLoad(ctx context.Context, r datapipeline.MasterRequest) (*datapipeline.MasterResult, error) {
+	req := mastering.RunRequest{Entity: r.Entity, StagingTable: r.StagingTable, LoadRunID: r.LoadRunID, Trigger: "external",
+		WorkflowID: "pipeline:" + r.PipelineRunID, StartedBy: "pipeline:" + r.PipelineRunID}
+	run, fresh, err := m.engine.Start(ctx, r.TenantID, req)
+	if err != nil {
+		return nil, err
+	}
+	if fresh {
+		if run, err = m.engine.Execute(ctx, r.TenantID, run, req); err != nil && run == nil {
+			return nil, err
+		}
+	}
+	out := &datapipeline.MasterResult{Entity: r.Entity, RunID: run.ID, Status: run.Status, Replayed: !fresh}
+	var c mastering.Counts
+	if len(run.RawCounts) > 0 && json.Unmarshal(run.RawCounts, &c) == nil {
+		out.Records, out.Published, out.HeldForReview, out.Exceptions = c.Records, c.Published, c.HeldForReview, c.Exceptions
+	}
+	if err == nil && run.Status == "FAILED" {
+		detail := ""
+		if run.ErrorDetail != nil {
+			detail = *run.ErrorDetail
+		}
+		err = fmt.Errorf("mastering run %s failed: %s", run.ID, detail)
+	}
+	return out, err
 }

@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 var stagingTableRE = regexp.MustCompile(`^staging\.[a-z_][a-z0-9_]*$`)
@@ -33,6 +34,10 @@ const (
 	NodeStagingSink = "staging_sink"
 	NodeFileSink    = "file_sink"
 	NodeIcebergSink = "iceberg_sink"
+	// NodeMaster masters the load its staging sink committed (after the
+	// stream, once every sink has committed): canonicalize, match, survive,
+	// publish, as a mastering run linked to this pipeline run.
+	NodeMaster = "master"
 )
 
 // Error policies (data_pipeline_definitions.error_policy).
@@ -147,6 +152,12 @@ type BOSinkConfig struct {
 // row: (tenant, source_cd, domain, run_ref) is unique, so re-running a
 // completed run_ref is a no-op. The target table must have _load_run_id,
 // _source_row_num and tenant_id columns (see db/manual_fixes/008_staging_product.sql).
+// MasterConfig: the mastered entity (a mastering profile, e.g. security or
+// price) the staging load feeds.
+type MasterConfig struct {
+	Entity string `json:"entity"`
+}
+
 type StagingSinkConfig struct {
 	Table    string `json:"table"`     // must be staging.<name>
 	SourceCd string `json:"source_cd"` // e.g. FACTSET
@@ -210,7 +221,7 @@ func (s *Spec) Validate() []error {
 			sources++
 		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink:
 			sinks++
-		case NodeValidate, NodeMap, NodeRuleCheck:
+		case NodeValidate, NodeMap, NodeRuleCheck, NodeMaster:
 		default:
 			add("node %q: unknown type %q", n.ID, n.Type)
 			continue
@@ -228,7 +239,9 @@ func (s *Spec) Validate() []error {
 
 	in := map[string]int{}
 	out := map[string]int{}
+	parent := map[string]string{}
 	for _, e := range s.Edges {
+		parent[e.To] = e.From
 		if ids[e.From] == nil {
 			add("edge %s->%s: unknown from node", e.From, e.To)
 			continue
@@ -255,6 +268,15 @@ func (s *Spec) Validate() []error {
 			}
 			if in[id] > 1 {
 				add("node %q: multiple inputs are not supported", id)
+			}
+		}
+		// A master step follows the staging load it masters, and ends a branch.
+		if n.Type == NodeMaster {
+			if p := ids[parent[id]]; in[id] == 1 && (p == nil || p.Type != NodeStagingSink) {
+				add("node %q: a master step must follow a staging load", id)
+			}
+			if out[id] > 0 {
+				add("node %q: a master step cannot have outputs", id)
 			}
 		}
 	}
@@ -414,6 +436,14 @@ func validateNodeConfig(n *Node) []error {
 		}
 		if !validFormat(c.Format) {
 			add("format must be csv, json or parquet")
+		}
+	case NodeMaster:
+		var c MasterConfig
+		if !decode(&c) {
+			return errs
+		}
+		if strings.TrimSpace(c.Entity) == "" {
+			add("entity is required")
 		}
 	case NodeIcebergSink:
 		var c IcebergSinkConfig

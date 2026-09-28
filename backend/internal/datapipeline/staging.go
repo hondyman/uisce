@@ -22,6 +22,7 @@ import (
 // transaction sets.
 type stagingSink struct {
 	cfg    StagingSinkConfig
+	node   string // its node id (for the master step that follows it)
 	db     *sql.DB
 	tenant string
 	runID  string
@@ -41,7 +42,7 @@ func newStagingSink(n Node, db *sql.DB) (Processor, error) {
 	if db == nil {
 		return nil, fmt.Errorf("the staging database is not configured for this environment")
 	}
-	return &stagingSink{cfg: c, db: db}, nil
+	return &stagingSink{cfg: c, db: db, node: n.ID}, nil
 }
 
 func splitTable(t string) (schema, table string) {
@@ -68,6 +69,13 @@ func (s *stagingSink) inTenantTx(ctx context.Context, fn func(*sql.Tx) error) er
 
 func (s *stagingSink) Open(ctx context.Context, rc *RunContext) error {
 	s.tenant = rc.TenantID
+	// The load run claimed below is what a following master step masters
+	// (a load completed earlier is mastered again - idempotently).
+	defer func() {
+		if s.runID != "" && !s.dryRun && rc.Loads != nil {
+			rc.Loads[s.node] = s.runID
+		}
+	}()
 	runRef := s.cfg.RunRef
 	if runRef == "" {
 		runRef = rc.RunID

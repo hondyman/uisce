@@ -16,7 +16,12 @@ type Deps struct {
 	// Bindings resolves staging table bindings for rule checks in front of
 	// a staging load (nil: such checks can't run).
 	Bindings BindingSource
+	// Master masters committed staging loads (master steps; nil: they can't run).
+	Master Masterer
 }
+
+// Masterer returns the master step's dependency.
+func (d Deps) Masterer() Masterer { return d.Master }
 
 // BindingSource resolves the approved binding of a staging table to a
 // business object: field -> staging column, nil when there is none.

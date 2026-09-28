@@ -11,6 +11,7 @@ import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import StorageIcon from '@mui/icons-material/Storage';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import HubIcon from '@mui/icons-material/Hub';
 import type { NodeKind, NodeStats } from './api';
 
 /** One colour per category, shared by the canvas nodes and the palette. */
@@ -29,6 +30,7 @@ export const NODE_META: Record<NodeKind, { icon: React.ReactElement; category: '
   staging_sink: { icon: <TableChartIcon fontSize="small" />, category: 'destination' },
   file_sink: { icon: <FileDownloadIcon fontSize="small" />, category: 'destination' },
   iceberg_sink: { icon: <StorageIcon fontSize="small" />, category: 'destination' },
+  master: { icon: <HubIcon fontSize="small" />, category: 'destination' },
 };
 
 const DEFAULT_META: { icon: React.ReactElement; category: 'source' | 'step' | 'destination' } = {

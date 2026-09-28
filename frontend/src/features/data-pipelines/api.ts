@@ -4,7 +4,7 @@ import apiClient from '../../utils/apiClient';
 
 export type NodeKind =
   | 'file_source' | 'bo_source' | 'validate' | 'rule_check' | 'map'
-  | 'bo_sink' | 'staging_sink' | 'file_sink' | 'iceberg_sink';
+  | 'bo_sink' | 'staging_sink' | 'file_sink' | 'iceberg_sink' | 'master';
 
 export type ColumnType = 'string' | 'int' | 'float' | 'decimal' | 'bool' | 'date' | 'timestamp';
 
@@ -22,6 +22,8 @@ export interface NodeConfigs {
   staging_sink: { table: string; source_cd: string; domain: string; run_ref?: string; columns?: Record<string, string> };
   file_sink: { uri: string; format: 'csv' | 'json' | 'parquet'; delimiter?: string };
   iceberg_sink: { namespace: string; table: string; partition_by?: string[]; format?: 'parquet' };
+  /** Master the load the staging sink before it committed (runs after the load). */
+  master: { entity: string };
 }
 
 export interface SpecNode<K extends NodeKind = NodeKind> {
@@ -69,6 +71,12 @@ export interface RunRecord {
   start_time: string; end_time?: string; records_in: number; records_out: number; errors: number;
   errors_sample: { kind?: string; node_id?: string; row?: number; field?: string; reason?: string; run_error?: string }[];
   steps?: NodeStats[];
+  /** What the run produced beyond rows: the mastering runs its master steps started. */
+  outputs?: { mastering?: MasterResult[] };
+}
+export interface MasterResult {
+  node_id: string; entity: string; load_run_id: string; run_id: string; status: string;
+  records: number; published: number; held_for_review: number; exceptions: number; replayed?: boolean;
 }
 export interface BOListItem { id: string; name: string; display_name: string; description?: string }
 export interface BOSchemaField { name: string; displayName?: string; type: string; required?: boolean; physicalColumn?: string }
