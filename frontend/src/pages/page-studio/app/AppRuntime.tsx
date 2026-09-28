@@ -273,7 +273,7 @@ function FormDialog({ pending }: { pending: Extract<Pending, { kind: 'form' }> }
       <DialogContent dividers>
         <Stack spacing={2}>
           {spec.intro && <Typography variant="body2">{text(spec.intro, scope)}</Typography>}
-          {spec.notice && showNotice && <Alert severity={spec.notice.severity}>{text(spec.notice.text, scope)}</Alert>}
+          {spec.notice && showNotice && <Alert severity={(['info', 'warning', 'error', 'success'].includes(String(resolve(spec.notice.severity, scope))) ? String(resolve(spec.notice.severity, scope)) : 'info') as 'info'}>{text(spec.notice.text, scope)}</Alert>}
           <FormFields fields={spec.fields} values={values} scope={scope} onChange={(name, v) => setValues((p) => ({ ...p, [name]: v }))} />
           {busy && <LinearProgress />}
           {!!error && <Box><CatalogErrorAlert error={error} /></Box>}

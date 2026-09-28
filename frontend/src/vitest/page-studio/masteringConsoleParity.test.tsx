@@ -32,17 +32,13 @@ const fixtures = {
 
 const api = vi.hoisted(() => ({
   profiles: vi.fn(), policy: vi.fn(), golden: vi.fn(), runs: vi.fn(), exceptions: vi.fn(), candidates: vi.fn(), overrides: vi.fn(),
-  resolve: vi.fn(), voteOverride: vi.fn(), decide: vi.fn(), loads: vi.fn(),
+  resolve: vi.fn(), voteOverride: vi.fn(), decide: vi.fn(), loads: vi.fn(), goldenById: vi.fn(),
 }));
 
 vi.mock('../../features/mastering/api', async (orig) => {
   const real = await orig<typeof import('../../features/mastering/api')>();
   return { ...real, masteringApi: { ...real.masteringApi, ...api } };
 });
-// The drawer is the domain's own component; here it only has to open with the right record.
-vi.mock('../../features/mastering/GoldenDrawer', () => ({
-  default: ({ id }: { id: string | null }) => (id ? <div data-testid="golden-drawer">drawer:{id}</div> : null),
-}));
 
 import RuntimePage from '../../pages/page-studio/app/RuntimePage';
 import { masteringConsoleBlueprint } from '../../pages/page-studio/app/blueprints/masteringConsole';
@@ -140,10 +136,17 @@ describe('mastering console as a Page Studio page', () => {
     expect(normalise(await open())).toEqual(HAND_BUILT.tabRows[label]);
   }, 30000);
 
-  it('opens the record drawer from a golden row', async () => {
+  it('opens the record drawer (built in the studio) from a golden row', async () => {
+    api.goldenById.mockResolvedValue({ golden: {
+      id: 'g2', code: 'P-002', name: 'Gadget', selected_version: 1,
+      versions: [{ id: 'v1', version: 1, status: 'REVIEW', is_current: true, attributes: { name: 'Gadget' }, winning_sources: {}, knowledge_at: iso }],
+      fields: [{ name: 'name', value: 'Gadget', source: 'RTR', confidence: 1 }], sources: [], identifiers: [], exceptions: [], decisions: [],
+    } });
     mount(studioPage());
     fireEvent.click(await screen.findByText('P-002'));
-    expect(await screen.findByTestId('golden-drawer')).toHaveTextContent('drawer:g2');
+    const drawer = await screen.findByRole('presentation');
+    expect(await within(drawer).findByText('Gadget', { selector: 'h6' })).toBeInTheDocument();
+    expect(api.goldenById).toHaveBeenCalledWith('product', 'g2', undefined);
   }, 30000);
 
   it('row actions call the domain operations with the row and inline input', async () => {
@@ -170,9 +173,9 @@ describe('Page Studio editor on the blueprint', () => {
     mount(<PageEditor page={page} onSave={() => {}} />);
     // Live data on the design canvas.
     expect(await screen.findByText('P-001')).toBeInTheDocument();
-    // Overlays show as chips in design, not as open drawers.
-    expect(screen.getByText('Golden record drawer · overlay')).toBeInTheDocument();
-    expect(screen.queryByTestId('golden-drawer')).toBeNull();
+    // The record drawer is an editable region on the canvas (closed at runtime), with what opens it.
+    expect(screen.getByText(/opens when .*vars\.goldenId is not empty/)).toBeInTheDocument();
+    expect(screen.queryByRole('presentation')).toBeNull();
     // Selecting the grid opens its inspector with its columns.
     fireEvent.click(screen.getByText('P-001'));
     expect(await screen.findByText('golden_grid')).toBeInTheDocument();

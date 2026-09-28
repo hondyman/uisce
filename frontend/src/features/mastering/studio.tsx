@@ -1,9 +1,9 @@
 import React from 'react';
 import i18n from '../../i18n';
+import { fmt } from '../schedules/api';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
 import { registerDomainComponents } from '../../studio-core/components/registry';
-import { masteringApi, isSeries, showValue, type Override, type Profile, type Run } from './api';
-import GoldenDrawer from './GoldenDrawer';
+import { masteringApi, isSeries, pct, showValue, type Override, type Policy, type Profile, type Run } from './api';
 import { PriceDrawer } from './prices';
 import RunDialog from './RunDialog';
 import { PolicyDialog, policyText } from './overrides';
@@ -113,6 +113,31 @@ const operations: OperationDef[] = [
     },
   },
   {
+    id: 'mastering.golden.detail', domain: 'mastering', kind: 'query', label: 'A golden record for its drawer',
+    description: 'Header chips, the version shown and what it changed, fields (with competing values, override notice), the side-by-side matrix (sources + rows.by_source), identifiers, sources, versions, overrides, exceptions. width follows view (compare is wider).',
+    params: [E, { name: 'id', type: 'string', required: true }, { name: 'version', type: 'number' }, { name: 'view', type: 'string' }],
+    fields: [
+      { name: 'title' }, { name: 'code' }, { name: 'width', type: 'number' }, { name: 'historical', type: 'boolean' }, { name: 'viewing_text' },
+      { name: 'changes_text' }, { name: 'fields', type: 'array' }, { name: 'identifiers', type: 'array' }, { name: 'sources_list', type: 'array' },
+      { name: 'versions', type: 'array' }, { name: 'overrides', type: 'array' }, { name: 'exceptions', type: 'array' }, { name: 'matrix', type: 'object' },
+    ],
+    run: (p) => goldenDetail(str(p, 'entity'), str(p, 'id'), p.version === null || p.version === undefined || p.version === '' ? undefined : Number(p.version), str(p, 'view')),
+  },
+  {
+    id: 'mastering.overrides.propose', domain: 'mastering', kind: 'mutation', label: 'Propose (or apply) a steward override',
+    description: 'SET a value or CLEAR an active override; applies now or goes for approval per the entity\'s policy. Numbers go as numbers.',
+    params: [E, { name: 'id', type: 'string', required: true }, { name: 'attribute', type: 'string', required: true },
+      { name: 'action', type: 'string' }, { name: 'value', type: 'string' }, { name: 'reason', type: 'string', required: true }],
+    run: (p) => {
+      const action = (str(p, 'action') || 'SET') as 'SET' | 'CLEAR';
+      const raw = str(p, 'value').trim();
+      const value = raw !== '' && /^-?\d+(\.\d+)?$/.test(raw) ? Number(raw) : raw;
+      return masteringApi.proposeOverride(str(p, 'entity'), str(p, 'id'), {
+        attribute: str(p, 'attribute'), action, value: action === 'SET' ? value : undefined, reason: str(p, 'reason').trim(),
+      });
+    },
+  },
+  {
     id: 'mastering.runs.list', domain: 'mastering', kind: 'query', label: 'Mastering runs', params: [E],
     fields: [{ name: 'started_at', type: 'datetime' }, { name: 'status' }, { name: 'trigger' }, { name: 'counts', type: 'object' }, { name: 'error_detail' }, { name: 'started_by' }],
     run: async (p) => (await masteringApi.runs(str(p, 'entity'))).runs,
@@ -199,6 +224,138 @@ const operations: OperationDef[] = [
   },
 ];
 
+const GOLDEN_COLOR: Record<string, 'success' | 'warning' | 'default' | 'info' | 'error'> = {
+  PUBLISHED: 'success', REVIEW: 'warning', SUPERSEDED: 'default', DRAFT: 'info', RETRACTED: 'error',
+};
+const dash = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : String(v));
+
+/** The strategy that decided a value: the reason's prefix ("SOURCE_PRIORITY: ..."). */
+function strategyOf(reason?: string): { strategy: string; detail: string } {
+  const r = reason ?? '';
+  const i = r.indexOf(':');
+  if (i > 0 && /^[A-Z_]+$/.test(r.slice(0, i))) return { strategy: r.slice(0, i), detail: r.slice(i + 1).trim() };
+  return { strategy: '', detail: r };
+}
+
+function approvalsNeeded(p: Policy, attr: string) {
+  if (p.mode === 'DIRECT') return 0;
+  return p.high_risk_attributes.includes(attr) ? Math.max(p.high_risk_approvals, p.approvals_required) : p.approvals_required;
+}
+
+/**
+ * A golden record shaped for its drawer (the provenance view): header,
+ * version being viewed and what it changed, each attribute with its source,
+ * confidence and the values that competed (and why), the side-by-side matrix
+ * of every source, identifiers, sources, versions, overrides and exceptions.
+ * The same derivations the hand-built drawer made - the page only displays.
+ */
+async function goldenDetail(entity: string, id: string, version: number | undefined, view: string) {
+  const [{ golden: d }, { overrides }, pol] = await Promise.all([
+    masteringApi.goldenById(entity, id, version),
+    masteringApi.overrides(entity, { golden: id }),
+    masteringApi.policy(entity).catch(() => null),
+  ]);
+  const latest = d.versions[0];
+  const idx = Math.max(0, d.versions.findIndex((v) => v.version === d.selected_version));
+  const current = d.versions[idx];
+  const historical = !!latest && d.selected_version !== latest.version;
+  const previous = d.versions[idx + 1];
+  const changes = new Map<string, unknown>();
+  if (current && previous) {
+    for (const k of new Set([...Object.keys(current.attributes ?? {}), ...Object.keys(previous.attributes ?? {})])) {
+      if (JSON.stringify(current.attributes?.[k] ?? null) !== JSON.stringify(previous.attributes?.[k] ?? null)) changes.set(k, previous.attributes?.[k]);
+    }
+  }
+  const decisions = new Map(d.decisions.map((x) => [x.field, x]));
+  const active = new Set(overrides.filter((o) => o.active).map((o) => o.attribute));
+  const policy = pol?.policy;
+  const fields = d.fields.map((f) => {
+    const dec = decisions.get(f.name);
+    const conf = f.confidence ?? 0;
+    const need = policy ? Math.max(1, approvalsNeeded(policy, f.name)) : 1;
+    return {
+      id: f.name, attribute: f.name, value: dash(f.value),
+      was_text: changes.has(f.name) ? t('mastering.golden.was', { v: showValue(changes.get(f.name)) }) : '',
+      overridden: !historical && active.has(f.name), source: f.source ?? '',
+      confidence: f.confidence, confidence_color: conf >= 0.8 ? 'success' : conf >= 0.5 ? 'warning' : 'error', confidence_label: pct(f.confidence),
+      has_decision: !!dec, reason: dec?.reason ?? '',
+      competing: (dec?.competing ?? []).map((c) => ({
+        source: c.source, source_key: c.source_key, value: dash(showValue(c.value)), excluded: c.selected === false, note: c.note ?? '',
+        as_of: c.as_of, stale: !!c.stale,
+      })),
+      can_override: !historical,
+      override_title: t('mastering.overrides.title', { attribute: f.name }),
+      value_raw: f.value ?? '',
+      override_intro: `${t('mastering.overrides.current')}: ${dash(f.value)}. ${t('mastering.overrides.sticky')}`,
+      override_notice: policy?.mode === 'DIRECT' ? t('mastering.overrides.appliesNow') : t('mastering.overrides.needsApproval', { count: need }),
+      override_severity: policy?.mode === 'DIRECT' ? 'warning' : 'info',
+      override_submit: policy?.mode === 'DIRECT' ? t('mastering.overrides.apply') : t('mastering.overrides.propose'),
+    };
+  });
+  // Side by side: source columns, the most often selected first.
+  const wins = new Map<string, number>();
+  for (const x of d.decisions) {
+    for (const c of x.competing ?? []) if (!wins.has(c.source)) wins.set(c.source, 0);
+    if (x.source && wins.has(x.source)) wins.set(x.source, (wins.get(x.source) ?? 0) + 1);
+  }
+  const sources = [...wins.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([code]) => ({ code }));
+  const matrix = [...d.fields].sort((a, b) => (d.terms?.[a.name] ?? a.name).localeCompare(d.terms?.[b.name] ?? b.name)).map((f) => {
+    const dec = decisions.get(f.name);
+    const { strategy, detail } = strategyOf(dec?.reason);
+    const steward = strategy === 'OVERRIDE' || f.source === 'STEWARD' || dec?.source === 'STEWARD';
+    const bySource: Record<string, unknown[]> = {};
+    for (const { code } of sources) {
+      const cands = (dec?.competing ?? []).filter((c) => c.source === code);
+      bySource[code] = cands.map((c) => ({
+        value: showValue(c.value), key: cands.length > 1 ? c.source_key : '', note: c.note ?? '',
+        tone: dec?.source === code && showValue(c.value) === showValue(f.value) ? 'success' : '',
+        strike: c.selected === false, stale: !!c.stale,
+      }));
+    }
+    return {
+      id: f.name, term: d.terms?.[f.name] ?? f.name, attribute: f.name, golden: showValue(f.value), steward, by_source: bySource,
+      strategy, strategy_label: strategy ? t(`mastering.compare.strategy.${strategy}`, { defaultValue: strategy }) : '',
+      rule: dec?.rule_id ? d.rules?.[dec.rule_id] ?? '' : '', detail: detail || '—',
+    };
+  });
+  return {
+    id: d.id, code: d.code, title: d.name ?? (current?.attributes?.name as string | undefined) ?? d.code,
+    width: view === 'compare' ? 1440 : 760,
+    header_chips: current ? [
+      { label: t(`mastering.goldenStatus.${current.status}`), color: GOLDEN_COLOR[current.status] ?? 'default', variant: 'filled' },
+      { label: t('mastering.golden.version', { v: current.version }) },
+      { label: t('mastering.golden.dq', { v: dash(current.dq_score) }) },
+      { label: t('mastering.golden.identity', { v: pct(current.identity_confidence) }) },
+    ] : [],
+    historical,
+    viewing_text: historical && current && latest
+      ? t('mastering.golden.viewingVersion', { v: current.version, latest: latest.version, at: fmt(current.published_at ?? current.knowledge_at, i18n.language) })
+      : '',
+    changes_text: previous ? (changes.size === 0
+      ? t('mastering.golden.noChanges', { v: previous.version })
+      : t('mastering.golden.changes', { count: changes.size, v: previous.version })) : '',
+    fields_title: historical ? t('mastering.golden.fieldsAt', { v: d.selected_version }) : t('mastering.golden.fields'),
+    compare_title: t('mastering.compare.title', { v: d.selected_version }),
+    fields,
+    identifiers: d.identifiers.map((i) => ({
+      label: `${i.type} ${i.value}${i.source ? ` · ${i.source}` : ''}`, color: i.is_primary ? 'primary' : 'default', variant: i.is_primary ? 'filled' : 'outlined',
+    })),
+    sources_list: d.sources.map((x) => ({
+      id: `${x.source}|${x.source_key}`, source: x.source, source_key: x.source_key,
+      method: t(`mastering.method.${x.method}`, { defaultValue: x.method }), score: x.score, updated_at: x.updated_at,
+    })),
+    versions: d.versions.map((v) => ({
+      id: v.id, version: v.version, status: v.status, dq_text: t('mastering.golden.dq', { v: dash(v.dq_score) }),
+      at: v.published_at ?? v.knowledge_at, showing: v.version === d.selected_version,
+      // Selecting the latest shows "latest" (no pinned version).
+      target: latest && v.version === latest.version ? null : v.version,
+    })),
+    overrides: overrides.map(overrideRow),
+    exceptions: d.exceptions,
+    matrix: { sources, rows: matrix },
+  };
+}
+
 function decisionMessage(d: { status: string; moved?: { sources: number; identifiers: number } }) {
   if (d.status === 'APPROVED') return t('mastering.review.merged', { sources: d.moved?.sources ?? 0, identifiers: d.moved?.identifiers ?? 0 });
   if (d.status === 'PENDING_APPROVAL') return t('mastering.review.requested');
@@ -211,15 +368,6 @@ registerOperations(operations);
 const entityInput = { name: 'entity', type: 'string' as const, required: true };
 
 registerDomainComponents([
-  {
-    id: 'mastering.GoldenDrawer', domain: 'mastering', label: 'Golden record drawer', overlay: true,
-    description: 'A golden record\'s provenance: values and why, side-by-side sources, identifiers, versions, overrides.',
-    inputs: [entityInput, { name: 'id', type: 'string', description: 'Golden record id; empty = closed' }],
-    events: [{ name: 'close' }],
-    render: ({ inputs, emit }) => (
-      <GoldenDrawer entity={String(inputs.entity ?? '')} id={(inputs.id as string) || null} onClose={() => emit('close')} />
-    ),
-  },
   {
     id: 'mastering.PriceDrawer', domain: 'mastering', label: 'Golden price drawer', overlay: true,
     description: 'A golden price: every quote considered, controls, variances, versions, steward decision.',

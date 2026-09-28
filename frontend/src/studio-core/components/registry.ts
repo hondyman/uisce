@@ -26,7 +26,7 @@ export interface DomainComponentEvent {
 }
 
 export interface DomainComponentDef {
-  /** e.g. mastering.GoldenDrawer */
+  /** e.g. mastering.RunDialog */
   id: string;
   domain: string;
   label: string;

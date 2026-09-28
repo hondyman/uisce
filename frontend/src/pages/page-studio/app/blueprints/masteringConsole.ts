@@ -15,6 +15,7 @@ import type { Action, CellSpec, ColumnDef, ConditionNode } from '../appModel';
 
 const cond = (field: string, operator: string, value?: unknown): ConditionNode => ({ type: 'condition', field, operator, value });
 const any = (...conditions: ConditionNode[]): ConditionNode => ({ type: 'group', operator: 'OR', conditions });
+const all = (...conditions: ConditionNode[]): ConditionNode => ({ type: 'group', operator: 'AND', conditions });
 const set = (name: string, value: unknown = null): Action => ({ kind: 'setVariable', name, value });
 
 // A record (not time-series) entity - also true while the profile loads, so
@@ -30,7 +31,8 @@ function widget(id: string, type: string, props: Record<string, unknown>, extra:
   components[id] = { id, type, props, ...extra };
   return id;
 }
-function layout(tree: string, root: string, spec: Record<string, { type: 'Row' | 'Column'; children: string[]; style?: Record<string, string> }>): PageLayout {
+type NodeSpec = { type: 'Row' | 'Column' | 'Drawer' | 'Dialog' | 'TabSet'; children: string[]; style?: Record<string, string>; props?: Record<string, unknown> };
+function layout(tree: string, root: string, spec: Record<string, NodeSpec>): PageLayout {
   nodes[tree] = Object.fromEntries(Object.entries(spec).map(([id, n]) => [id, { id, ...n }]));
   return { root, nodes: nodes[tree] };
 }
@@ -38,7 +40,8 @@ const fit = { flex: '0 0 auto' };
 const text = (field: string, more: Partial<Extract<CellSpec, { kind: 'text' }>> = {}): CellSpec => ({ kind: 'text', value: `{{row.${field}}}`, ...more });
 const col = (id: string, header: string, cell: CellSpec | CellSpec[], more: Partial<ColumnDef> = {}): ColumnDef =>
   Array.isArray(cell) ? { id, header, stack: cell, ...more } : { id, header, cell, ...more };
-const openGolden = (idField: string): Action[] => [set('goldenId', `{{row.${idField}}}`)];
+// Opening a record shows its latest version.
+const openGolden = (idField: string): Action[] => [set('goldenId', `{{row.${idField}}}`), set('goldenVersion')];
 const byState = (state: string) => cond('row.state', 'equals', state);
 
 const GOLDEN_STATUS = { PUBLISHED: 'success', REVIEW: 'warning', SUPERSEDED: 'default', DRAFT: 'info', RETRACTED: 'error' } as const;
@@ -73,9 +76,142 @@ widget('last_run', 'AlertBanner', {
   detail: '{{vars.lastRun.error_detail}}',
   onClose: [set('lastRun')],
 }, { visibleWhen: cond('vars.lastRun', 'is_not_empty') });
-widget('golden_drawer', 'DomainComponent', {
-  component: 'mastering.GoldenDrawer', inputs: { entity: E, id: '{{vars.goldenId}}' }, events: { close: [set('goldenId')] },
-}, { visibleWhen: RECORD, style: fit });
+// --- The golden record drawer (provenance), built from studio blocks --------------
+
+const GD = 'queries.goldenDetail.data';
+const COMPARE = cond('vars.goldenView', 'equals', 'compare');
+const VALUES = cond('vars.goldenView', 'not_equals', 'compare');
+const heading = (id: string, t: unknown, visibleWhen?: ConditionNode) =>
+  widget(id, 'TextBlock', { text: t, variant: 'subtitle2' }, visibleWhen ? { visibleWhen } : {});
+widget('gd_chips', 'KeyValue', { source: `{{${GD}}}`, columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.header_chips}}' } }] });
+widget('gd_historical', 'AlertBanner', {
+  severity: 'info', text: `{{${GD}.viewing_text}}`, action: { label: 'mastering.golden.backToLatest', onClick: [set('goldenVersion')] },
+}, { visibleWhen: cond(`${GD}.historical`, 'is_true') });
+widget('gd_changes', 'TextBlock', { text: `{{${GD}.changes_text}}`, variant: 'caption', color: 'text.secondary' }, { visibleWhen: cond(`${GD}.changes_text`, 'is_not_empty') });
+widget('gd_view', 'VariableSelect', {
+  variable: 'goldenView', variant: 'toggle',
+  options: [{ value: 'values', label: 'mastering.compare.values' }, { value: 'compare', label: 'mastering.compare.sideBySide' }],
+}, { style: fit });
+heading('gd_fields_title', `{{${GD}.fields_title}}`, VALUES);
+const overrideForm: Action = {
+  kind: 'runOperation', operation: 'mastering.overrides.propose',
+  params: { entity: E, id: `{{${GD}.id}}`, attribute: '{{row.attribute}}', action: '{{form.action}}', value: '{{form.value}}', reason: '{{form.reason}}' },
+  form: {
+    title: '{{row.override_title}}', intro: '{{row.override_intro}}',
+    notice: { severity: '{{row.override_severity}}', text: '{{row.override_notice}}' },
+    fields: [
+      { name: 'action', kind: 'radio', label: '', default: 'SET', visibleWhen: cond('row.overridden', 'is_true'),
+        options: [{ value: 'SET', label: 'mastering.overrides.set' }, { value: 'CLEAR', label: 'mastering.overrides.clear' }] },
+      { name: 'value', kind: 'text', label: 'mastering.overrides.newValue', default: '{{row.value_raw}}', visibleWhen: cond('form.action', 'not_equals', 'CLEAR') },
+      { name: 'reason', kind: 'multiline', label: 'mastering.overrides.reason', required: true, helperText: 'mastering.overrides.reasonHelp' },
+    ],
+    submitLabel: '{{row.override_submit}}',
+  },
+};
+widget('gd_fields', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'fields', progressOnFetch: true,
+  columns: [
+    col('attr', 'mastering.golden.attribute', text('attribute', { mono: true }), { nowrap: true }),
+    col('value', 'mastering.golden.value', [text('value', { bold: true }), { kind: 'text', value: '{{row.was_text}}', caption: true, color: 'info' }]),
+    col('source', 'mastering.golden.source', [
+      { kind: 'chip', label: 'mastering.overrides.steward', color: 'secondary', visibleWhen: cond('row.overridden', 'is_true') },
+      { kind: 'chip', value: '{{row.source}}', variant: 'outlined', visibleWhen: all(cond('row.overridden', 'is_false'), cond('row.source', 'is_not_empty')) },
+    ], { nowrap: true }),
+    col('confidence', 'mastering.golden.confidence', {
+      kind: 'chip', value: '{{row.confidence_label}}', colorBy: '{{row.confidence_color}}', colorMap: { success: 'success', warning: 'warning', error: 'error' },
+      variant: 'outlined', tooltip: 'mastering.golden.confidenceHelp',
+    }),
+    col('act', '', {
+      kind: 'actions', buttons: [{
+        label: { t: 'mastering.overrides.action', params: { field: '{{row.attribute}}' } }, icon: 'edit',
+        visibleWhen: cond('row.can_override', 'is_true'), onClick: [overrideForm],
+      }],
+    }, { align: 'right', nowrap: true }),
+  ] satisfies ColumnDef[],
+  rowDetail: {
+    rows: '{{row.competing}}', text: '{{row.reason}}', when: cond('row.has_decision', 'is_true'),
+    columns: [
+      col('src', 'mastering.golden.source', [text('source'), { kind: 'text', value: '{{row.source_key}}', mono: true, caption: true }]),
+      col('val', 'mastering.golden.value', [
+        { kind: 'text', value: '{{row.value}}', strike: '{{row.excluded}}' },
+        { kind: 'text', value: '{{row.note}}', caption: true, color: 'warning' },
+      ]),
+      col('asof', 'mastering.golden.asOf', [
+        { kind: 'datetime', value: '{{row.as_of}}' },
+        { kind: 'chip', label: 'mastering.golden.stale', color: 'warning', variant: 'outlined', visibleWhen: cond('row.stale', 'is_true') },
+      ], { nowrap: true, stackDirection: 'row' }),
+    ],
+  },
+}, { visibleWhen: VALUES });
+heading('gd_compare_title', `{{${GD}.compare_title}}`, COMPARE);
+widget('gd_compare_help', 'TextBlock', { text: 'mastering.compare.help', variant: 'caption', color: 'text.secondary' }, { visibleWhen: COMPARE });
+widget('gd_matrix', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'matrix.rows', stickyFirstColumn: true, maxHeight: 640,
+  columns: [
+    col('term', 'mastering.compare.term', [text('term', { bold: true }), { kind: 'text', value: '{{row.attribute}}', mono: true, caption: true }], { minWidth: 200 }),
+    col('golden', 'mastering.compare.golden', [
+      text('golden', { bold: true }),
+      { kind: 'chip', label: 'mastering.overrides.steward', color: 'secondary', visibleWhen: cond('row.steward', 'is_true') },
+    ], { minWidth: 170 }),
+    col('selection', 'mastering.compare.selection', [
+      { kind: 'chip', value: '{{row.strategy_label}}', colorBy: '{{row.steward}}', colorMap: { true: 'secondary', '*': 'default' }, variant: 'outlined', visibleWhen: cond('row.strategy', 'is_not_empty') },
+      { kind: 'text', value: '{{row.rule}}', caption: true },
+      { kind: 'text', value: '{{row.detail}}', caption: true },
+    ], { minWidth: 260 }),
+  ] satisfies ColumnDef[],
+  dynamicColumns: {
+    from: `{{${GD}.matrix.sources}}`, idField: 'code', header: '{{col.code}}', valuePath: 'by_source', insertAt: 2, minWidth: 150,
+    cell: {
+      kind: 'list', value: '{{value}}',
+      item: { kind: 'text', value: '{{item.value}}', tone: '{{item.tone}}', strike: '{{item.strike}}', tooltip: '{{item.note}}' },
+    },
+  },
+}, { visibleWhen: COMPARE });
+heading('gd_ids_title', 'mastering.golden.identifiers');
+widget('gd_ids', 'KeyValue', { source: `{{${GD}}}`, columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.identifiers}}' } }] });
+heading('gd_sources_title', 'mastering.golden.sources');
+widget('gd_sources', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'sources_list',
+  columns: [
+    col('source', '', text('source')),
+    col('key', '', text('source_key', { mono: true })),
+    col('method', '', [{ kind: 'chip', value: '{{row.method}}', variant: 'outlined' }, { kind: 'percent', value: '{{row.score}}' }], { stackDirection: 'row', nowrap: true }),
+    col('updated', '', { kind: 'datetime', value: '{{row.updated_at}}' }, { nowrap: true }),
+  ] satisfies ColumnDef[],
+});
+heading('gd_versions_title', 'mastering.golden.versionsHelp');
+widget('gd_versions', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'versions', onRowClick: [set('goldenVersion', '{{row.target}}')],
+  columns: [
+    col('v', '', [{ kind: 'text', value: 'v{{row.version}}' }, { kind: 'chip', label: 'mastering.golden.showing', visibleWhen: cond('row.showing', 'is_true') }], { stackDirection: 'row' }),
+    col('status', '', { kind: 'chip', value: '{{row.status}}', labelKey: 'mastering.goldenStatus.', colorMap: GOLDEN_STATUS }),
+    col('dq', '', text('dq_text')),
+    col('at', '', { kind: 'datetime', value: '{{row.at}}' }, { nowrap: true }),
+  ] satisfies ColumnDef[],
+});
+const HAS_OVERRIDES = cond(`${GD}.overrides.length`, 'not_equals', 0);
+heading('gd_ovr_title', 'mastering.overrides.forRecord', HAS_OVERRIDES);
+widget('gd_ovr', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'overrides',
+  columns: [
+    col('attr', '', text('attribute', { mono: true })),
+    col('val', '', [
+      { kind: 'text', text: 'mastering.overrides.clearDesc', visibleWhen: cond('row.action', 'equals', 'CLEAR') },
+      { kind: 'text', value: '{{row.after_text}}', visibleWhen: cond('row.action', 'not_equals', 'CLEAR') },
+    ]),
+    col('state', '', { kind: 'chip', value: '{{row.status_view}}', label: '{{row.status_label}}', colorMap: { PENDING: 'warning', APPLIED: 'success', ACTIVE: 'success', REJECTED: 'error', '*': 'default' } }),
+    col('who', '', { kind: 'text', value: '{{row.requested_by_name}} · {{row.reason}}', caption: true }),
+  ] satisfies ColumnDef[],
+}, { visibleWhen: HAS_OVERRIDES });
+const HAS_EXCEPTIONS = cond(`${GD}.exceptions.length`, 'not_equals', 0);
+heading('gd_exc_title', 'mastering.golden.openExceptions', HAS_EXCEPTIONS);
+widget('gd_exc', 'DataGrid', {
+  query: 'goldenDetail', rowsPath: 'exceptions',
+  columns: [
+    col('type', '', { kind: 'chip', value: '{{row.type}}', colorBy: '{{row.severity}}', colorMap: { ERROR: 'error', '*': 'warning' } }),
+    col('desc', '', text('description')),
+  ] satisfies ColumnDef[],
+}, { visibleWhen: HAS_EXCEPTIONS });
 widget('price_drawer', 'DomainComponent', {
   component: 'mastering.PriceDrawer', inputs: { entity: E, id: '{{vars.goldenId}}' }, events: { close: [set('goldenId')] },
 }, { visibleWhen: SERIES, style: fit });
@@ -94,6 +230,19 @@ const filterBar = layout('top', 'top_root', {
   top_root: { type: 'Column', children: ['top_header', 'no_profiles', 'last_run', 'top_overlays'], style: { gap: '16px' } },
   top_header: { type: 'Row', children: ['hdr', 'entity_select', 'policy_btn', 'run_btn'], style: { alignItems: 'center' } },
   top_overlays: { type: 'Row', children: ['golden_drawer', 'price_drawer', 'run_dialog', 'policy_dialog'], style: { gap: '8px' } },
+  golden_drawer: {
+    type: 'Drawer', children: ['gd_body'], props: {
+      title: `{{${GD}.title}}`, subtitle: `{{${GD}.code}}`, width: `{{${GD}.width}}`,
+      openWhen: all(RECORD, cond('vars.goldenId', 'is_not_empty')),
+      onClose: [set('goldenId'), set('goldenVersion')],
+    },
+  },
+  gd_body: {
+    type: 'Column', style: { gap: '16px' }, children: [
+      'gd_chips', 'gd_historical', 'gd_changes', 'gd_view', 'gd_fields_title', 'gd_fields', 'gd_compare_title', 'gd_compare_help', 'gd_matrix',
+      'gd_ids_title', 'gd_ids', 'gd_sources_title', 'gd_sources', 'gd_versions_title', 'gd_versions', 'gd_ovr_title', 'gd_ovr', 'gd_exc_title', 'gd_exc',
+    ],
+  },
 });
 
 // --- Golden records -------------------------------------------------------------
@@ -371,6 +520,8 @@ export function masteringConsoleBlueprint(): Omit<CorePageDefinition, 'id' | 'cr
         { name: 'entity', url: true, initFrom: { query: 'profiles', path: '0.entity' }, description: 'The mastered entity on show' },
         { name: 'tab', default: 'golden', url: true },
         { name: 'goldenId', url: true, description: 'The record open in the drawer' },
+        { name: 'goldenVersion', description: 'The version the drawer shows; empty = the latest' },
+        { name: 'goldenView', default: 'values', description: 'Values or side by side' },
         { name: 'policyOpen', default: false },
         { name: 'running', default: false },
         { name: 'lastRun' },
@@ -389,6 +540,8 @@ export function masteringConsoleBlueprint(): Omit<CorePageDefinition, 'id' | 'cr
         q('profiles', 'mastering.profiles', {}),
         q('profile', 'mastering.profile'),
         q('policy', 'mastering.policy'),
+        q('goldenDetail', 'mastering.golden.detail', { entity: E, id: '{{vars.goldenId}}', version: '{{vars.goldenVersion}}', view: '{{vars.goldenView}}' },
+          { enabledWhen: all(RECORD, cond('vars.goldenId', 'is_not_empty')), keepPrevious: true }),
         q('golden', 'mastering.golden.list', { entity: E, q: '{{vars.goldenQ}}', status: '{{vars.goldenStatus}}' }, { enabledWhen: RECORD }),
         q('prices', 'mastering.prices.list', {
           entity: E, date: '{{vars.priceDate}}', q: '{{vars.priceQ}}', price_type: '{{vars.priceType}}', status: '{{vars.priceStatus}}',
