@@ -349,6 +349,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             <SelectField label="Values in variable" value={p.variable} options={vars} onChange={(v) => setProps({ variable: v })} />
             <BindingField label="Start from (optional)" value={p.initFrom} onChange={(v) => setProps({ initFrom: v || undefined })} paths={paths}
               helperText="e.g. {{vars.editRow}} - re-seeds when it changes" />
+            <BindingField label="Fields from data (optional)" value={p.fieldsFrom} onChange={(v) => setProps({ fieldsFrom: v || undefined })} paths={paths}
+              helperText="A list of field specs an operation shapes (e.g. from a table's columns); replaces the fields below" />
             <TextField size="small" type="number" label="Columns" value={p.columns ?? 1} onChange={(e) => setProps({ columns: Math.max(1, Number(e.target.value) || 1) })} />
           </Section>
           <Section title="Fields">

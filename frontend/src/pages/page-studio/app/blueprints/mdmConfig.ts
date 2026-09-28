@@ -19,7 +19,7 @@ const byState = (state: string) => cond('row.state', 'equals', state);
 const CAN_EDIT = cond('queries.table.data.can_edit', 'is_true');
 const fit = { flex: '0 0 auto' };
 
-type Spec = Record<string, { type: 'Row' | 'Column'; children: string[]; style?: Record<string, string> }>;
+type Spec = Record<string, { type: 'Row' | 'Column' | 'Dialog'; children: string[]; style?: Record<string, string>; props?: Record<string, unknown> }>;
 const layout = (root: string, spec: Spec): PageLayout => ({ root, nodes: Object.fromEntries(Object.entries(spec).map(([id, n]) => [id, { id, ...n }])) });
 const col = (id: string, header: string, cell: CellSpec | CellSpec[], more: Partial<ColumnDef> = {}): ColumnDef =>
   Array.isArray(cell) ? { id, header, stack: cell, ...more } : { id, header, cell, ...more };
@@ -133,11 +133,12 @@ function configPage(s: PageSpec): Omit<CorePageDefinition, 'id' | 'createdAt' | 
   widget('read_only', 'AlertBanner', {
     severity: 'info', text: 'Read-only: only administrators propose configuration changes, and a second administrator approves them.',
   }, { visibleWhen: cond('queries.table.data.can_edit', 'is_false') });
-  widget('editor', 'DomainComponent', {
-    component: 'mdmConfig.RowEditor',
-    inputs: { open: '{{vars.editorOpen}}', kind: s.kind, entity, mode: '{{vars.editorMode}}', row: '{{vars.editRow}}' },
-    events: { close: [set('editorOpen', false)], proposed: [set('editorOpen', false), set('tab', 'approvals')] },
-  }, { style: fit });
+  // The row editor: a dialog whose form the domain shapes from the table's columns.
+  widget('editor_override', 'AlertBanner', {
+    severity: 'info', text: 'This row comes from the gold copy. Your version replaces it in your environment only; the gold copy is unchanged.',
+  }, { visibleWhen: cond('queries.editor.data.override', 'is_true') });
+  widget('editor_form', 'Form', { variable: 'editDraft', fieldsFrom: '{{queries.editor.data.fields}}', initFrom: '{{queries.editor.data.initial}}' });
+  widget('editor_note', 'TextBlock', { text: 'Nothing changes until another administrator approves.', variant: 'caption', color: 'text.secondary' });
   widget('grid', 'DataGrid', {
     query: 'table', rowsPath: 'rows', emptyText: 'No rows.',
     columns: [...s.columns, originCol, actionsCol(s.kind, entity)],
@@ -148,6 +149,24 @@ function configPage(s: PageSpec): Omit<CorePageDefinition, 'id' | 'createdAt' | 
   const header = ['hdr', ...(s.perEntity ? ['entity_select'] : []), 'new_btn'];
   const filterBar = layout('top_root', {
     top_root: { type: 'Column', children: ['top_header', 'read_only', 'editor'], style: { gap: '12px' } },
+    editor: {
+      type: 'Dialog', children: ['editor_body'], props: {
+        title: '{{queries.editor.data.title}}', maxWidth: 'sm',
+        openWhen: cond('vars.editorOpen', 'is_true'), onClose: [set('editorOpen', false)],
+        buttons: [
+          { label: 'Cancel', onClick: [set('editorOpen', false)] },
+          {
+            label: 'Send for approval', variant: 'contained', disabledWhen: cond('queries.editor.data', 'is_empty'),
+            onClick: [{
+              kind: 'runOperation', operation: 'mdmConfig.propose',
+              params: { kind: s.kind, entity, mode: '{{vars.editorMode}}', id: '{{vars.editRow.id}}', values: '{{vars.editDraft}}', original: '{{queries.editor.data.initial}}' },
+              onSuccess: [set('editorOpen', false), set('tab', 'approvals')],
+            }],
+          },
+        ],
+      },
+    },
+    editor_body: { type: 'Column', children: ['editor_override', 'editor_form', 'editor_note'], style: { gap: '16px' } },
     top_header: { type: 'Row', children: header, style: { alignItems: 'center' } },
   });
   const one = (id: string, child: string) => layout(`${id}_root`, { [`${id}_root`]: { type: 'Column', children: [child] } });
@@ -177,11 +196,16 @@ function configPage(s: PageSpec): Omit<CorePageDefinition, 'id' | 'createdAt' | 
         { name: 'editorOpen', default: false },
         { name: 'editorMode', default: 'new' },
         { name: 'editRow' },
+        { name: 'editDraft', description: 'The row being proposed' },
       ],
       queries: [
         ...(s.perEntity ? [{ id: 'entities', operation: 'mdmConfig.entities', params: { kind: s.kind } }] : []),
         { id: 'table', operation: 'mdmConfig.table', params: { kind: s.kind, entity }, ...needEntity },
         { id: 'pending', operation: 'mdmConfig.changes', params: { kind: s.kind, entity, status: 'pending' }, ...needEntity },
+        {
+          id: 'editor', operation: 'mdmConfig.editor', params: { kind: s.kind, entity, mode: '{{vars.editorMode}}', id: '{{vars.editRow.id}}' },
+          enabledWhen: cond('vars.editorOpen', 'is_true'),
+        },
         { id: 'history', operation: 'mdmConfig.changes', params: { kind: s.kind, entity, status: '' }, enabledWhen: cond('vars.tab', 'equals', 'history') },
       ],
     },

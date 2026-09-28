@@ -24,7 +24,6 @@ vi.mock('../../features/mastering/api', async (orig) => {
 import '../../studio-core/registerDomains';
 import RuntimePage from '../../pages/page-studio/app/RuntimePage';
 import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from '../../pages/page-studio/app/blueprints/mdmConfig';
-import ConfigRowEditor from '../../features/mastering/ConfigRowEditor';
 import type { CorePageDefinition } from '../../types/pageStudio';
 
 beforeAll(loadRuleEngine, 30000);
@@ -119,17 +118,18 @@ describe('vendor registry page', () => {
 
 describe('row editor', () => {
   it('an override keeps the key, sends no target, and goes for approval', async () => {
-    const onProposed = vi.fn();
-    mount(<ConfigRowEditor kind="source_priority" entity="product" mode="override" row={goldRow as never} onClose={() => {}} onProposed={onProposed} />);
-    const group = await screen.findByLabelText(/Field group/);
+    mount(page(sourceHierarchyBlueprint()));
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Override' }))[0]);
+    const d = await screen.findByRole('dialog');
+    const group = await within(d).findByLabelText(/Field group/);
     expect((group as HTMLInputElement).disabled).toBe(true);
-    const priority = screen.getByLabelText(/Priority/);
-    fireEvent.change(priority, { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send for approval' }));
+    fireEvent.change(within(d).getByLabelText(/Priority/), { target: { value: '1' } });
+    fireEvent.click(within(d).getByRole('button', { name: 'Send for approval' }));
     await waitFor(() => expect(cfg.propose).toHaveBeenCalledWith(expect.objectContaining({
       kind: 'source_priority', entity: 'product', action: 'upsert', target_id: undefined,
       values: expect.objectContaining({ field_group: 'NAME', source: 'REFINITIV', priority: 1 }),
     })));
-    expect(onProposed).toHaveBeenCalled();
-  });
+    // Sent: the dialog closes and the approvals tab shows.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  }, 30000);
 });

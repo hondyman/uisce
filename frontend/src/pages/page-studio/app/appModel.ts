@@ -93,19 +93,58 @@ export type Action =
 export interface FormFieldSpec {
   name: string;
   label: TextSpec;
-  /** chips: a list of strings typed as chips; date: an ISO date. */
-  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date';
+  /**
+   * chips: a list of strings typed as chips; date: an ISO date; rows: a list
+   * of objects edited as rows of `rowFields`; json: any JSON value as text;
+   * map: an object of key -> value edited as a table (`map`).
+   */
+  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date' | 'rows' | 'json' | 'map';
   options?: { value: string; label: TextSpec }[];
   /** Options from a query: rows at rowsPath, value/label read from each row (omit = the row itself). */
   optionsFrom?: OptionsFrom;
   /** select/radio: store the chosen value as a number (e.g. a count of approvers). */
   valueType?: 'number';
+  /** number: the step (1 for whole numbers); default any. */
+  step?: number;
+  /** Always read-only (e.g. the key of a row being overridden). */
+  readOnly?: boolean;
+  /** Spans every column of a multi-column form. */
+  wide?: boolean;
+  /** Cleared when any of these fields changes (a mapping that depends on the table chosen). */
+  resetOn?: string[];
+  /** rows: the fields of each row. */
+  rowFields?: { name: string; label: TextSpec; kind?: 'text' | 'number' }[];
+  /** map: how the key -> value table is laid out. */
+  map?: MapFieldSpec;
   default?: Binding;
   required?: boolean;
   helperText?: TextSpec;
   /** Show the field only while this holds; read-only while readOnlyWhen holds. */
   visibleWhen?: ConditionNode;
   readOnlyWhen?: ConditionNode;
+}
+
+/**
+ * A key -> value mapping edited as a table (e.g. business-object field ->
+ * staging column). Each row picks its value from the field's options.
+ */
+export interface MapFieldSpec {
+  /** The rows: {key, label, caption?, group?}. Keys in the value that no row lists are shown too, under the add control whose prefix they carry. */
+  rows: Binding;
+  /** Row groups, each its own table; a group's title and help see {{map.bound}} / {{map.total}}. */
+  groups?: { id: string; title?: TextSpec; help?: TextSpec; headers?: boolean; action?: { label: TextSpec; onClick: Action[]; disabledWhen?: ConditionNode } }[];
+  keyHeader?: TextSpec;
+  valueHeader?: TextSpec;
+  placeholder?: TextSpec;
+  /** Per key {value, label, color, tooltip}: a chip shown while the row's value is still `value` (a suggestion). */
+  hints?: Binding;
+  /** Controls that add a key: prefix + the typed code (upper-cased when `code`). Such rows can be removed. */
+  add?: {
+    prefix: string; group?: string; label: TextSpec; inputLabel: TextSpec; helperText?: TextSpec; options?: string[]; code?: boolean;
+    /** The added row's label; {{item.type}} is the code. */
+    rowLabel?: TextSpec; removeLabel?: TextSpec; visibleWhen?: ConditionNode;
+  }[];
+  maxHeight?: number;
 }
 
 export interface OptionsFrom {

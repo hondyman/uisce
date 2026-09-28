@@ -1,10 +1,8 @@
-import React from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
-import { registerDomainComponents } from '../../studio-core/components/registry';
+import i18n from '../../i18n';
 import { msgcatApi } from '../message-catalog/api';
+import { type Column, pipelinesApi, platformApi } from '../data-pipelines/api';
 import { type Binding, type Change, diffFields, stagingBindingsApi } from './api';
-import BindingEditor from './BindingEditor';
 
 /**
  * The staging-bindings domain's Page Studio surface (the Staging bindings
@@ -47,7 +45,92 @@ function changeRow(c: Change, me?: string) {
 
 const ID = { name: 'id', type: 'string' as const, required: true };
 
+/** Keys mastering reads from a source besides BO fields (see stagingbind/keys.go). */
+const SOURCE_KEY = '@source_key';
+const AS_OF_KEY = '@as_of';
+const t = (k: string, o?: Record<string, unknown>) => i18n.t(k, o) as string;
+
+/** A business object's fields as mapping rows, then the mastering keys every source may bind. */
+interface MapRow { key: string; label: string; caption: string; group: string; type?: string }
+
+async function editorRows(boKey: string): Promise<{ rows: MapRow[]; offers_values: boolean }> {
+  const { fields } = await platformApi.boSchema(boKey);
+  return {
+    rows: [
+      ...fields.map((f) => ({ key: f.name, label: f.displayName || f.name, caption: `${f.name}${f.type ? ` · ${f.type}` : ''}`, group: 'fields', type: f.type })),
+      { key: SOURCE_KEY, label: t('stagingBindings.editor.sourceKey'), caption: SOURCE_KEY, group: 'keys' },
+      { key: AS_OF_KEY, label: t('stagingBindings.editor.asOf'), caption: AS_OF_KEY, group: 'keys' },
+    ],
+    // Price columns are for a time-series (price) object.
+    offers_values: boKey === 'price',
+  };
+}
+
+const tableColumns = async (table: string) => ((await pipelinesApi.stagingTables()).find((x) => x.table === table)?.columns ?? []);
+
 const operations: OperationDef[] = [
+  {
+    id: 'stagingBindings.businessObjects', domain: 'sb', kind: 'query', label: 'Business objects to bind', params: [],
+    fields: [{ name: 'name' }, { name: 'label' }],
+    run: async () => (await platformApi.businessObjects()).map((b) => ({ ...b, label: `${b.display_name} (${b.name})` })),
+  },
+  {
+    id: 'stagingBindings.stagingTables', domain: 'sb', kind: 'query', label: 'Staging tables', params: [],
+    fields: [{ name: 'table' }],
+    run: async () => (await pipelinesApi.stagingTables()).map((x) => ({ table: x.table })),
+  },
+  {
+    id: 'stagingBindings.editorRows', domain: 'sb', kind: 'query', label: 'What a binding maps',
+    description: 'Mapping rows {key, label, caption, group}: the business object\'s fields (group fields), then the mastering keys (group keys). offers_values: a price object.',
+    params: [{ name: 'bo_key', type: 'string', required: true }],
+    fields: [{ name: 'rows', type: 'array' }, { name: 'offers_values', type: 'boolean' }],
+    run: (p) => editorRows(str(p, 'bo_key')),
+  },
+  {
+    id: 'stagingBindings.tableColumns', domain: 'sb', kind: 'query', label: 'A staging table\'s columns',
+    params: [{ name: 'table', type: 'string', required: true }],
+    fields: [{ name: 'name' }, { name: 'type' }],
+    run: (p) => tableColumns(str(p, 'table')),
+  },
+  {
+    id: 'stagingBindings.suggest', domain: 'sb', kind: 'mutation', label: 'Suggest a field mapping',
+    description: 'Fills fields not already bound with the best-matching column. result.draft: the draft with fields filled; result.hints: per field {value, label, color, tooltip}.',
+    params: [{ name: 'draft', type: 'object', required: true, description: '{bo_key, staging_table, fields}' }],
+    invalidates: [],
+    run: async (p) => {
+      const draft = (p.draft ?? {}) as { bo_key?: string; staging_table?: string; fields?: Record<string, string> };
+      const [columns, { rows }] = await Promise.all([tableColumns(draft.staging_table ?? ''), editorRows(draft.bo_key ?? '')]);
+      const fields = rows.filter((r) => r.group === 'fields');
+      const list = await pipelinesApi.suggestMapping(
+        columns.map((c) => ({ name: c.name, type: (c.type || 'string') as Column['type'] })),
+        fields.map((f) => ({ name: f.key, label: f.label, type: f.type })),
+      );
+      const best: Record<string, { from: string; confidence: number; reason: string }> = {};
+      for (const s of list) if (!best[s.to] || best[s.to].confidence < s.confidence) best[s.to] = s;
+      // Fill only fields not already bound; the user reviews every one.
+      const mapping = { ...(draft.fields ?? {}) };
+      for (const [field, s] of Object.entries(best)) if (!mapping[field]) mapping[field] = s.from;
+      return {
+        draft: { ...draft, fields: mapping },
+        hints: Object.fromEntries(Object.entries(best).map(([field, s]) => [field, {
+          value: s.from, tooltip: s.reason, color: s.confidence >= 0.8 ? 'success' : 'warning',
+          label: t('stagingBindings.editor.suggested', { pct: Math.round(s.confidence * 100) }),
+        }])),
+      };
+    },
+  },
+  {
+    id: 'stagingBindings.propose', domain: 'sb', kind: 'mutation', label: 'Propose a binding',
+    description: 'The bound fields (unbound rows left out) of {bo_key, staging_table, fields, reason}. Nothing changes until another administrator approves.',
+    params: [{ name: 'draft', type: 'object', required: true }],
+    run: (p) => {
+      const d = (p.draft ?? {}) as { bo_key?: string; staging_table?: string; fields?: Record<string, unknown>; reason?: string };
+      return stagingBindingsApi.propose({
+        bo_key: d.bo_key ?? '', staging_table: d.staging_table ?? '', action: 'upsert', reason: (d.reason ?? '').trim() || undefined,
+        fields: Object.fromEntries(Object.entries(d.fields ?? {}).filter(([, c]) => !!c).map(([k, c]) => [k, String(c)])),
+      });
+    },
+  },
   {
     id: 'stagingBindings.list', domain: 'sb', kind: 'query', label: 'Staging bindings',
     description: 'Every binding visible to the tenant (core ones inherited read-only). pending: a change is waiting for approval.',
@@ -110,29 +193,3 @@ const operations: OperationDef[] = [
 ];
 
 registerOperations(operations);
-
-// The editor refreshes its own query keys when it proposes; the page's
-// queries live under the domain prefix, so refresh those on close too.
-function EditorOverlay({ inputs, emit }: { inputs: Record<string, unknown>; emit: (e: string) => void }) {
-  const qc = useQueryClient();
-  if (!inputs.open) return null;
-  const b = inputs.binding as Binding | null | undefined;
-  const close = () => {
-    qc.invalidateQueries({ queryKey: ['sb'] });
-    emit('close');
-  };
-  return <BindingEditor key={b?.id ?? 'new'} open onClose={close} binding={b?.id ? b : undefined} />;
-}
-
-registerDomainComponents([
-  {
-    id: 'stagingBindings.BindingEditor', domain: 'sb', label: 'Propose a binding', overlay: true,
-    description: 'Map a business object\'s fields to a staging table\'s columns (with suggestions) and send the proposal for approval.',
-    inputs: [
-      { name: 'open', type: 'boolean' },
-      { name: 'binding', type: 'object', description: 'The binding to change; empty = a new binding' },
-    ],
-    events: [{ name: 'close' }],
-    render: EditorOverlay,
-  },
-]);

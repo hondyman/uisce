@@ -5,7 +5,8 @@ import type { Action, ColumnDef, ConditionNode } from '../appModel';
  * Staging bindings (formerly the hand-built StagingBindingsPage.tsx) as a
  * Page Studio page: which staging column each business object field is read
  * from, maker-checker. Bindings, approvals (with a waiting count) and
- * history tabs; proposals open the domain's own editor.
+ * history tabs; proposals are made in a dialog built from studio blocks - a
+ * form whose field -> column map is a `map` field with suggestions.
  */
 
 const cond = (field: string, operator: string, value?: unknown): ConditionNode => ({ type: 'condition', field, operator, value });
@@ -18,25 +19,86 @@ function widget(id: string, type: string, props: Record<string, unknown>, extra:
   components[id] = { id, type, props, ...extra };
   return id;
 }
-function layout(root: string, spec: Record<string, { type: 'Row' | 'Column'; children: string[]; style?: Record<string, string> }>): PageLayout {
+function layout(root: string, spec: Record<string, { type: 'Row' | 'Column' | 'Dialog'; children: string[]; style?: Record<string, string>; props?: Record<string, unknown> }>): PageLayout {
   return { root, nodes: Object.fromEntries(Object.entries(spec).map(([id, n]) => [id, { id, ...n }])) };
 }
 
 const STATUS = { pending: 'warning', applied: 'success', rejected: 'error', withdrawn: 'default' } as const;
-const openEditor = (binding: unknown): Action[] => [set('editing', binding), set('editorOpen', true)];
+const openEditor = (binding: unknown, title: string): Action[] => [set('editing', binding), set('editorTitle', title), set('sbHints'), set('editorOpen', true)];
 
 // --- page-wide ---------------------------------------------------------------
 
 widget('hdr', 'PageHeader', { icon: 'link', title: 'stagingBindings.title', subtitle: 'stagingBindings.subtitle' }, { style: { flex: '1 1 320px' } });
-widget('new_btn', 'ActionButton', { label: 'stagingBindings.new', icon: 'add', variant: 'contained', onClick: openEditor(null) }, { style: fit });
-widget('editor', 'DomainComponent', {
-  component: 'stagingBindings.BindingEditor',
-  inputs: { open: '{{vars.editorOpen}}', binding: '{{vars.editing}}' },
-  events: { close: [set('editorOpen', false), set('editing')] },
-}, { style: fit });
+widget('new_btn', 'ActionButton', { label: 'stagingBindings.new', icon: 'add', variant: 'contained', onClick: openEditor(null, 'stagingBindings.editor.newTitle') }, { style: fit });
+
+// --- The binding editor: which staging column each field is read from ---------------
+const EDITING = cond('vars.editing.id', 'is_not_empty');
+const closeEditor = [set('editorOpen', false), set('editing'), set('sbHints')];
+widget('sb_maker_checker', 'AlertBanner', { severity: 'info', text: 'stagingBindings.editor.makerChecker' });
+widget('sb_form', 'Form', {
+  variable: 'sbDraft', initFrom: '{{vars.editing}}', columns: 2,
+  fields: [
+    { name: 'bo_key', kind: 'select', label: 'stagingBindings.columns.businessObject', readOnlyWhen: EDITING,
+      optionsFrom: { query: 'sbBos', valueField: 'name', labelField: 'label' } },
+    { name: 'staging_table', kind: 'select', label: 'stagingBindings.columns.stagingTable', readOnlyWhen: EDITING,
+      optionsFrom: { query: 'sbTables', valueField: 'table', labelField: 'table' } },
+    {
+      name: 'fields', kind: 'map', label: '', wide: true, resetOn: ['bo_key', 'staging_table'],
+      visibleWhen: { type: 'group', operator: 'AND', conditions: [cond('form.bo_key', 'is_not_empty'), cond('form.staging_table', 'is_not_empty')] },
+      optionsFrom: { query: 'sbColumns', valueField: 'name', labelField: 'name' },
+      map: {
+        rows: '{{queries.sbRows.data.rows}}', hints: '{{vars.sbHints}}', placeholder: 'stagingBindings.editor.notBound',
+        keyHeader: 'stagingBindings.editor.field', valueHeader: 'stagingBindings.editor.column',
+        groups: [
+          {
+            id: 'fields', headers: true,
+            title: { t: 'stagingBindings.editor.mapping', params: { bound: '{{map.bound}}', total: '{{map.total}}' } },
+            action: {
+              label: 'stagingBindings.editor.suggest',
+              onClick: [{ kind: 'runOperation', operation: 'stagingBindings.suggest', params: { draft: '{{vars.sbDraft}}' },
+                onSuccess: [set('sbDraft', '{{result.draft}}'), set('sbHints', '{{result.hints}}')] }],
+            },
+          },
+          { id: 'keys', title: 'stagingBindings.editor.masteringKeys', help: 'stagingBindings.editor.masteringKeysHelp' },
+        ],
+        add: [
+          {
+            prefix: 'id:', group: 'keys', code: true, label: 'stagingBindings.editor.addIdentifier', inputLabel: 'stagingBindings.editor.identifierType',
+            options: ['ISIN', 'CUSIP', 'SEDOL', 'LEI', 'FIGI', 'BLOOMBERG_ID', 'TICKER', 'RIC', 'PROVIDER_CODE', 'INTERNAL'],
+            rowLabel: { t: 'stagingBindings.editor.identifier', params: { type: '{{item.type}}' } }, removeLabel: 'stagingBindings.editor.remove',
+          },
+          {
+            prefix: 'value:', group: 'keys', code: true, label: 'stagingBindings.editor.addPriceColumn', inputLabel: 'stagingBindings.editor.priceType',
+            helperText: 'stagingBindings.editor.priceTypeHelp', visibleWhen: cond('queries.sbRows.data.offers_values', 'is_true'),
+            options: ['LAST', 'OFFICIAL_CLOSE', 'BID', 'ASK', 'MID', 'NAV', 'EVALUATED', 'CLEAN_PRICE', 'DIRTY_PRICE', 'SETTLEMENT'],
+            rowLabel: { t: 'stagingBindings.editor.seriesValue', params: { type: '{{item.type}}' } }, removeLabel: 'stagingBindings.editor.remove',
+          },
+        ],
+      },
+    },
+    { name: 'reason', kind: 'multiline', label: 'stagingBindings.editor.reason', helperText: 'stagingBindings.editor.reasonHelp', wide: true },
+  ],
+});
 
 const filterBar = layout('top_root', {
   top_root: { type: 'Column', children: ['top_header', 'editor'], style: { gap: '8px' } },
+  editor: {
+    type: 'Dialog', children: ['editor_body'], props: {
+      title: { t: '{{vars.editorTitle}}' }, maxWidth: 'md',
+      openWhen: cond('vars.editorOpen', 'is_true'), onClose: closeEditor,
+      buttons: [
+        { label: 'stagingBindings.cancel', onClick: closeEditor },
+        {
+          label: 'stagingBindings.editor.propose', variant: 'contained',
+          disabledWhen: { type: 'group', operator: 'OR', conditions: [
+            cond('vars.sbDraft.bo_key', 'is_empty'), cond('vars.sbDraft.staging_table', 'is_empty'), cond('vars.sbDraft.fields', 'is_empty'),
+          ] },
+          onClick: [{ kind: 'runOperation', operation: 'stagingBindings.propose', params: { draft: '{{vars.sbDraft}}' }, onSuccess: closeEditor }],
+        },
+      ],
+    },
+  },
+  editor_body: { type: 'Column', children: ['sb_maker_checker', 'sb_form'], style: { gap: '16px' } },
   top_header: { type: 'Row', children: ['hdr', 'new_btn'], style: { alignItems: 'center' } },
 });
 
@@ -66,7 +128,7 @@ widget('bindings_grid', 'DataGrid', {
     {
       id: 'act', align: 'right', nowrap: true, cell: {
         kind: 'actions', buttons: [
-          { label: 'stagingBindings.proposeChange', onClick: openEditor('{{row}}') },
+          { label: 'stagingBindings.proposeChange', onClick: openEditor('{{row}}', 'stagingBindings.editor.editTitle') },
           {
             label: 'stagingBindings.proposeDelete', color: 'error', visibleWhen: cond('row.inherited', 'is_false'),
             onClick: [{
@@ -179,10 +241,17 @@ export function stagingBindingsBlueprint(): Omit<CorePageDefinition, 'id' | 'cre
         { name: 'tab', default: 'bindings', url: true },
         { name: 'editorOpen', default: false },
         { name: 'editing', description: 'The binding being changed; empty = a new one' },
+        { name: 'editorTitle', default: 'stagingBindings.editor.newTitle' },
+        { name: 'sbDraft', description: 'The proposal: bo_key, staging_table, fields (field -> column), reason' },
+        { name: 'sbHints', description: 'Suggested columns per field (from Suggest)' },
       ],
       queries: [
         { id: 'bindings', operation: 'stagingBindings.list', params: {} },
         { id: 'pending', operation: 'stagingBindings.changes', params: { status: 'pending' } },
+        { id: 'sbBos', operation: 'stagingBindings.businessObjects', params: {}, enabledWhen: cond('vars.editorOpen', 'is_true') },
+        { id: 'sbTables', operation: 'stagingBindings.stagingTables', params: {}, enabledWhen: cond('vars.editorOpen', 'is_true') },
+        { id: 'sbRows', operation: 'stagingBindings.editorRows', params: { bo_key: '{{vars.sbDraft.bo_key}}' }, enabledWhen: cond('vars.editorOpen', 'is_true') },
+        { id: 'sbColumns', operation: 'stagingBindings.tableColumns', params: { table: '{{vars.sbDraft.staging_table}}' }, enabledWhen: cond('vars.editorOpen', 'is_true') },
         { id: 'history', operation: 'stagingBindings.changes', params: { status: '' }, enabledWhen: cond('vars.tab', 'equals', 'history') },
       ],
     },

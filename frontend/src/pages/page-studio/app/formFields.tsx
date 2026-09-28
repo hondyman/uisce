@@ -1,8 +1,11 @@
-import React from 'react';
-import { Autocomplete, Box, Chip, FormControlLabel, FormLabel, MenuItem, Radio, RadioGroup, Stack, Switch, TextField, Typography } from '@mui/material';
+import React, { useEffect, useState } from 'react';
+import { Autocomplete, Box, Button, Chip, FormControlLabel, FormLabel, IconButton, MenuItem, Radio, RadioGroup, Stack, Switch, TextField, Typography } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
 import type { FormFieldSpec, OptionsFrom } from './appModel';
 import { getPath, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
+import { MapField } from './mapField';
 
 /** A field's options: its static list, or rows of a query. */
 export function fieldOptions(f: { options?: FormFieldSpec['options']; optionsFrom?: OptionsFrom }, scope: Scope): { value: string; label: string; caption?: string }[] {
@@ -27,11 +30,64 @@ export function requiredFilled(fields: FormFieldSpec[], values: Record<string, u
   return fields.every((f) => !f.required || f.visibleWhen || !isBlank(typeof values[f.name] === 'string' ? (values[f.name] as string).trim() : values[f.name]));
 }
 
+type Row = Record<string, unknown>;
+
+/** A list of objects edited as rows (e.g. a match rule's fuzzy keys: field, method, weight). */
+function RowsField({ f, value, onChange, disabled, label, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; disabled: boolean; label: string; scope: Scope }) {
+  const rows = (Array.isArray(value) ? value : []) as Row[];
+  const cols = f.rowFields ?? Array.from(new Set(rows.flatMap((r) => Object.keys(r)))).map((name) => ({ name, label: name, kind: 'text' as const }));
+  const set = (i: number, name: string, raw: string, kind?: string) => {
+    const next = rows.map((r) => ({ ...r }));
+    const n = Number(raw);
+    next[i][name] = kind === 'number' && raw !== '' && !Number.isNaN(n) ? n : raw;
+    onChange(next);
+  };
+  return (
+    <Box>
+      {label && <Typography variant="caption" color="text.secondary">{label}</Typography>}
+      <Stack spacing={1}>
+        {rows.map((r, i) => (
+          <Stack key={i} direction="row" spacing={1} alignItems="center">
+            {cols.map((c) => (
+              <TextField key={c.name} size="small" label={text(c.label, scope)} value={r[c.name] === undefined || r[c.name] === null ? '' : String(r[c.name])}
+                disabled={disabled} onChange={(e) => set(i, c.name, e.target.value, c.kind)} />
+            ))}
+            <IconButton size="small" aria-label="Remove" disabled={disabled} onClick={() => onChange(rows.filter((_, j) => j !== i))}><DeleteIcon fontSize="small" /></IconButton>
+          </Stack>
+        ))}
+        <Box>
+          <Button size="small" startIcon={<AddIcon />} disabled={disabled}
+            onClick={() => onChange([...rows, Object.fromEntries(cols.map((c) => [c.name, c.kind === 'number' ? 0 : '']))])}>
+            Add
+          </Button>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
+
+/** Any JSON value as text; kept as text until it parses. */
+function JsonText({ value, onChange, ...rest }: { value: unknown; onChange: (v: unknown) => void; label: string; disabled: boolean; required?: boolean; helperText?: string }) {
+  const [draft, setDraft] = useState(() => (typeof value === 'string' ? value : value === undefined || value === null ? '' : JSON.stringify(value, null, 2)));
+  useEffect(() => {
+    if (typeof value !== 'string') setDraft((d) => { try { return JSON.stringify(JSON.parse(d)) === JSON.stringify(value) ? d : JSON.stringify(value ?? null, null, 2); } catch { return JSON.stringify(value ?? null, null, 2); } });
+  }, [value]);
+  return (
+    <TextField size="small" fullWidth multiline minRows={2} {...rest} value={draft}
+      onChange={(e) => { setDraft(e.target.value); try { onChange(JSON.parse(e.target.value)); } catch { onChange(e.target.value); } }} />
+  );
+}
+
 function Field({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; scope: Scope }) {
+  const body = <FieldBody f={f} value={value} onChange={onChange} scope={scope} />;
+  return f.wide ? <Box sx={{ gridColumn: '1 / -1' }}>{body}</Box> : body;
+}
+
+function FieldBody({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown; onChange: (v: unknown) => void; scope: Scope }) {
   const visible = useCondition(f.visibleWhen, scope, true);
   const readOnly = useCondition(f.readOnlyWhen, scope, false);
   if (f.visibleWhen && !visible) return null;
-  const disabled = !!f.readOnlyWhen && readOnly;
+  const disabled = !!f.readOnly || (!!f.readOnlyWhen && readOnly);
   const label = text(f.label, scope);
   const helper = f.helperText ? text(f.helperText, scope) || undefined : undefined;
   // Values show as text whatever they are stored as (a policy's 2 selects option "2").
@@ -73,9 +129,16 @@ function Field({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown
           ))}
         </TextField>
       );
+    case 'rows':
+      return <RowsField f={f} value={value} onChange={onChange} disabled={disabled} label={label} scope={scope} />;
+    case 'json':
+      return <JsonText value={value} onChange={onChange} label={label} disabled={disabled} required={f.required} helperText={helper} />;
+    case 'map':
+      return f.map ? <MapField spec={f.map} value={value} onChange={onChange} disabled={disabled} options={fieldOptions(f, scope)} scope={scope} /> : null;
     case 'number':
       return (
         <TextField size="small" fullWidth type="number" label={label} value={value ?? ''} disabled={disabled} required={f.required} helperText={helper}
+          inputProps={{ step: f.step ?? 'any' }}
           onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
       );
     case 'date':
