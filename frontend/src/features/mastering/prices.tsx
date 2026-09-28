@@ -1,28 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert, Box, Button, Chip, Drawer, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
+  Alert, Box, Button, Chip, Drawer, IconButton, LinearProgress, Stack, Table, TableBody, TableCell,
+  TableHead, TableRow, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
-import SearchIcon from '@mui/icons-material/Search';
 import { CatalogErrorAlert } from '../message-catalog/parts';
 import { fmt } from '../schedules/api';
-import { Completeness, masteringApi, pct, PriceCandidate } from './api';
+import { masteringApi, pct, PriceCandidate } from './api';
 import { GoldenStatusChip } from './parts';
 import { OverrideDialog, OverrideStatusChip } from './overrides';
 
-const PRICE_TYPES = ['LAST', 'OFFICIAL_CLOSE', 'BID', 'MID', 'ASK', 'NAV', 'EVALUATED'];
-
 const num = (v: number | undefined | null, lang: string, digits = 4) =>
   v === undefined || v === null ? '—' : v.toLocaleString(lang, { maximumFractionDigits: digits });
-
-function useDebounced<T>(v: T, ms = 300): T {
-  const [d, setD] = useState(v);
-  useEffect(() => { const h = setTimeout(() => setD(v), ms); return () => clearTimeout(h); }, [v, ms]);
-  return d;
-}
 
 /** A move or disagreement in percent, coloured by size. */
 function PctChip({ v, warn = 1, bad = 5 }: { v?: number | null; warn?: number; bad?: number }) {
@@ -33,129 +24,6 @@ function PctChip({ v, warn = 1, bad = 5 }: { v?: number | null; warn?: number; b
     <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', color: a >= bad ? 'error.main' : a >= warn ? 'warning.main' : 'text.primary' }}>
       {num(v, i18n.language, 2)}%
     </Typography>
-  );
-}
-
-/** The completeness check's outcome for a date, with the gaps. */
-function CompletenessPanel({ c, onClose }: { c: Completeness; onClose: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <Alert severity={c.missing - c.held > 0 ? 'warning' : c.held > 0 ? 'info' : 'success'} onClose={onClose} sx={{ mb: 2 }}>
-      <Typography variant="body2" fontWeight={600}>
-        {t('mastering.prices.completeness.summary', { date: c.date, expected: c.expected, priced: c.priced, held: c.held, missing: c.missing - c.held, stale: c.stale })}
-      </Typography>
-      {(c.raised > 0 || c.resolved > 0) && (
-        <Typography variant="caption" component="div">{t('mastering.prices.completeness.raised', { raised: c.raised, resolved: c.resolved })}</Typography>
-      )}
-      {c.gaps.length > 0 && (
-        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
-          {c.gaps.slice(0, 40).map((g) => (
-            <Chip key={`${g.entity_id}|${g.price_type}`} size="small" variant="outlined" color={g.held ? 'info' : 'warning'}
-              label={`${g.name ?? g.code ?? g.entity_id.slice(0, 8)} · ${g.price_type}${g.held ? ` (${t('mastering.goldenStatus.REVIEW')})` : ''}`} />
-          ))}
-          {c.gaps.length > 40 && <Typography variant="caption">+{c.gaps.length - 40}</Typography>}
-        </Stack>
-      )}
-    </Alert>
-  );
-}
-
-/** A valuation date's golden prices. */
-export function PricesTab({ entity, onOpen }: { entity: string; onOpen: (id: string) => void }) {
-  const { t, i18n } = useTranslation();
-  const [date, setDate] = useState('');
-  const [q, setQ] = useState('');
-  const [priceType, setPriceType] = useState('');
-  const [status, setStatus] = useState('');
-  const dq = useDebounced(q);
-  const list = useQuery({
-    queryKey: ['mastering', 'prices', entity, date, dq, priceType, status],
-    queryFn: () => masteringApi.prices(entity, { date, q: dq, price_type: priceType, status }), placeholderData: keepPreviousData,
-  });
-  const data = list.data?.prices;
-  const rows = data?.prices ?? [];
-  const qc = useQueryClient();
-  const [checked, setChecked] = useState<Completeness | null>(null);
-  const check = useMutation({
-    mutationFn: () => masteringApi.completeness(entity, data?.date ?? date),
-    onSuccess: (r) => { setChecked(r.completeness); qc.invalidateQueries({ queryKey: ['mastering', 'exceptions'] }); },
-  });
-  return (
-    <>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
-        <TextField select size="small" sx={{ minWidth: 170 }} label={t('mastering.prices.date')} value={data?.date ?? date}
-          onChange={(e) => setDate(e.target.value)} disabled={!data?.dates.length}>
-          {(data?.dates ?? []).map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
-        </TextField>
-        <TextField size="small" sx={{ flex: 1, maxWidth: 360 }} placeholder={t('mastering.prices.search')} value={q} onChange={(e) => setQ(e.target.value)}
-          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
-        <TextField select size="small" sx={{ minWidth: 170 }} label={t('mastering.prices.type')} value={priceType} onChange={(e) => setPriceType(e.target.value)}
-          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
-          <MenuItem value="">{t('mastering.all')}</MenuItem>
-          {PRICE_TYPES.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
-        </TextField>
-        <TextField select size="small" sx={{ minWidth: 160 }} label={t('mastering.golden.status')} value={status} onChange={(e) => setStatus(e.target.value)}
-          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
-          <MenuItem value="">{t('mastering.all')}</MenuItem>
-          {(['PUBLISHED', 'REVIEW'] as const).map((s) => <MenuItem key={s} value={s}>{t(`mastering.goldenStatus.${s}`)}</MenuItem>)}
-        </TextField>
-        <Button variant="outlined" onClick={() => check.mutate()} disabled={!(data?.date ?? date) || check.isPending}>
-          {t('mastering.prices.completeness.check')}
-        </Button>
-      </Stack>
-      {check.error && <Box sx={{ mb: 2 }}><CatalogErrorAlert error={check.error} /></Box>}
-      {checked && <CompletenessPanel c={checked} onClose={() => setChecked(null)} />}
-      {(list.isFetching || check.isPending) && <LinearProgress />}
-      {list.error && <CatalogErrorAlert error={list.error} />}
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('mastering.prices.instrument')}</TableCell>
-              <TableCell>{t('mastering.prices.type')}</TableCell>
-              <TableCell align="right">{t('mastering.prices.price')}</TableCell>
-              <TableCell align="right">{t('mastering.prices.change')}</TableCell>
-              <TableCell>{t('mastering.prices.winner')}</TableCell>
-              <TableCell align="right">{t('mastering.prices.spread')}</TableCell>
-              <TableCell>{t('mastering.golden.status')}</TableCell>
-              <TableCell>{t('mastering.golden.updated')}</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((p) => (
-              <TableRow key={p.id} hover sx={{ cursor: 'pointer' }} onClick={() => onOpen(p.id)}>
-                <TableCell>
-                  <Typography variant="body2" fontWeight={500}>{p.name ?? p.entity_id}</Typography>
-                  <Typography variant="caption" color="text.secondary" fontFamily="monospace">{p.code}</Typography>
-                </TableCell>
-                <TableCell sx={{ fontFamily: 'monospace' }}>{p.price_type}</TableCell>
-                <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                  {num(p.value, i18n.language)} <Typography component="span" variant="caption" color="text.secondary">{p.currency}</Typography>
-                </TableCell>
-                <TableCell align="right"><PctChip v={p.change_pct} warn={3} bad={10} /></TableCell>
-                <TableCell>
-                  <Tooltip title={t('mastering.prices.sourcesHelp', { n: p.sources })}>
-                    <Chip size="small" variant="outlined" label={`${p.winner ?? '—'} · ${p.sources}`} />
-                  </Tooltip>
-                </TableCell>
-                <TableCell align="right"><PctChip v={p.variance_pct} /></TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                  <GoldenStatusChip status={p.status} />
-                  {p.is_stale && <Chip size="small" color="warning" variant="outlined" sx={{ ml: 0.5 }} label={t('mastering.golden.stale')} />}
-                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>v{p.version}</Typography>
-                </TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmt(p.updated_at, i18n.language)}</TableCell>
-              </TableRow>
-            ))}
-            {!list.isLoading && !list.error && rows.length === 0 && (
-              <TableRow><TableCell colSpan={8}>
-                <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{t('mastering.prices.empty')}</Typography>
-              </TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </>
   );
 }
 

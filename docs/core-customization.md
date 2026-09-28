@@ -90,9 +90,9 @@ placement in a container groups with the widget itself.
   | `GET compare` | Compare with core |
   | `POST upgrade` | `{remove: [groupId]}` |
 
-`page_definition_overlays` (the earlier add-only overlay) is superseded.
-The migration copies its rows into `core_object_adoption`. The table itself
-is dropped in a later migration, once no running build reads it.
+`page_definition_overlays` (the earlier add-only overlay) is gone: its rows
+were copied into `core_object_adoption` (20261116_001) and the table dropped
+(20261117_001).
 
 ## Next object types
 

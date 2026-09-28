@@ -6,10 +6,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { loadRuleEngine } from './loadRuleEngine';
 
 /**
- * Acceptance test for the page application model: the hand-built mastering
- * console and the same console built as a Page Studio page (the blueprint)
- * render the same header, tabs, counts and cells from the same API, and
- * the studio page's actions call the same operations.
+ * Acceptance test for the page application model: the mastering console
+ * built as a Page Studio page (the blueprint) renders the header, tabs,
+ * counts and cells the hand-built console rendered from the same API (the
+ * expectations below were recorded from it before it was retired), and its
+ * actions call the domain's operations.
  */
 
 const iso = '2026-09-01T10:00:00Z';
@@ -43,7 +44,6 @@ vi.mock('../../features/mastering/GoldenDrawer', () => ({
   default: ({ id }: { id: string | null }) => (id ? <div data-testid="golden-drawer">drawer:{id}</div> : null),
 }));
 
-import MasteringPage from '../../features/mastering/MasteringPage';
 import RuntimePage from '../../pages/page-studio/app/RuntimePage';
 import { masteringConsoleBlueprint } from '../../pages/page-studio/app/blueprints/masteringConsole';
 
@@ -76,6 +76,9 @@ function studioPage() {
 }
 
 const squash = (s: string | null | undefined) => (s ?? '').replace(/\s+/g, '');
+// Dates render in the test machine's timezone; compare them as a placeholder.
+const DT = /[A-Z][a-z]{2}\d{1,2},\d{4},\d{1,2}:\d{2}(AM|PM)/g;
+const normalise = (rows: string[][]) => rows.map((r) => r.map((c) => c.replace(DT, '<datetime>')));
 const cellsOf = (table: HTMLElement) => Array.from(table.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => squash(td.textContent)));
 const tabsText = () => screen.getAllByRole('tab').map((t: HTMLElement) => squash(t.textContent));
 
@@ -93,23 +96,34 @@ async function snapshot() {
   };
 }
 
-describe('mastering console: hand-built vs Page Studio', () => {
-  it('renders the same header, tabs with counts, and golden records', async () => {
-    const hand = mount(<MasteringPage />);
-    const a = await snapshot();
-    hand.unmount();
+// What the hand-built console rendered for these fixtures.
+const HAND_BUILT = {
+  heading: 'Mastering',
+  buttons: ['Masteraload', 'Overrides:2approvals'],
+  tabs: ['Goldenrecords', 'Runs', 'Exceptions1', 'Matchreview1', 'Overrides1'],
+  golden: [
+    ['P-001', 'Widget', 'Publishedv3', '92', '97%', 'BBG,RTR', '<datetime>'],
+    ['P-002', 'Gadget', 'Inreviewv1', '71', '64%', 'RTR', '<datetime>'],
+  ],
+  tabRows: {
+    Runs: [['<datetime>', 'Completed', 'Manual', 'Records10Published8Exceptions2', 'Sam']],
+    Exceptions: [['MISSING_REQUIRED', 'Namemissing', 'Opengoldenrecord', '<datetime>', 'ResolvedWaive']],
+    'Match review': [['P-001Widget', 'P-002Gadget', '91%', 'fuzzyname', 'Same-mergeNotthesame']],
+    Overrides: [['P-001Widget', 'nameWidget→WidgetLtd', 'Legalname', 'Sam<datetime>', 'Waitingforapproval0of2approvals', '\u200bApproveReject']],
+  } as Record<string, string[][]>,
+};
 
+describe('mastering console as a Page Studio page', () => {
+  it('renders the header, tabs with counts, and golden records', async () => {
     mount(studioPage());
     const b = await snapshot();
-
-    expect(b.heading).toBe(a.heading);
-    expect(b.buttons).toEqual(a.buttons);
-    expect(b.tabs).toEqual(a.tabs);
-    expect(b.golden).toEqual(a.golden);
-    expect(b.golden).toHaveLength(2);
+    expect(b.heading).toBe(HAND_BUILT.heading);
+    expect(b.buttons).toEqual(HAND_BUILT.buttons);
+    expect(b.tabs).toEqual(HAND_BUILT.tabs);
+    expect(normalise(b.golden)).toEqual(HAND_BUILT.golden);
   }, 30000);
 
-  it.each(['Runs', 'Exceptions', 'Match review', 'Overrides'])('renders the same %s tab', async (label) => {
+  it.each(['Runs', 'Exceptions', 'Match review', 'Overrides'])('renders the %s tab', async (label) => {
     const open = async () => {
       await screen.findByText('P-001');
       fireEvent.click(screen.getAllByRole('tab').find((t: HTMLElement) => t.textContent?.startsWith(label))!);
@@ -122,12 +136,8 @@ describe('mastering console: hand-built vs Page Studio', () => {
       await new Promise((r) => setTimeout(r, 150));
       return cellsOf(table);
     };
-    const hand = mount(<MasteringPage />);
-    const a = await open();
-    hand.unmount();
     mount(studioPage());
-    const b = await open();
-    expect(b).toEqual(a);
+    expect(normalise(await open())).toEqual(HAND_BUILT.tabRows[label]);
   }, 30000);
 
   it('opens the record drawer from a golden row', async () => {

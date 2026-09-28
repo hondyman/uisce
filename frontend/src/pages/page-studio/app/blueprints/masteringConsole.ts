@@ -2,7 +2,7 @@ import type { ComponentDefinition, CorePageDefinition, PageLayout, PageTab } fro
 import type { Action, CellSpec, ColumnDef, ConditionNode } from '../appModel';
 
 /**
- * The mastering console (features/mastering/MasteringPage.tsx), rebuilt as a
+ * The mastering console (formerly the hand-built MasteringPage.tsx), rebuilt as a
  * Page Studio page: the acceptance test for the page application model.
  * Every behaviour of the hand-built page is here as data - entity picker,
  * policy and run buttons, the last-run alert, tabs with live counts and
@@ -130,6 +130,18 @@ widget('price_status', 'VariableSelect', {
   variable: 'priceStatus', label: 'mastering.golden.status', emptyLabel: 'mastering.all', minWidth: 160,
   options: ['PUBLISHED', 'REVIEW'].map((s) => ({ value: s, label: `mastering.goldenStatus.${s}` })),
 }, { style: fit });
+widget('price_check', 'ActionButton', {
+  label: 'mastering.prices.completeness.check', variant: 'outlined',
+  disabledWhen: cond('queries.prices.data.date', 'is_empty'),
+  onClick: [{
+    kind: 'runOperation', operation: 'mastering.prices.completeness', params: { entity: E, date: '{{queries.prices.data.date}}' },
+    onSuccess: [set('completeness', '{{result}}')],
+  }],
+}, { style: fit });
+widget('price_completeness', 'AlertBanner', {
+  severity: '{{vars.completeness.severity}}', text: '{{vars.completeness.message}}',
+  chips: { value: '{{vars.completeness.gaps}}' }, onClose: [set('completeness')],
+}, { visibleWhen: cond('vars.completeness', 'is_not_empty') });
 widget('price_grid', 'DataGrid', {
   query: 'prices', rowsPath: 'prices', emptyText: 'mastering.prices.empty', progressOnFetch: true, onRowClick: openGolden('id'),
   columns: [
@@ -313,8 +325,8 @@ const tabs: PageTab[] = [
   {
     id: 'prices', label: 'mastering.tabs.prices', visibleWhen: SERIES,
     layout: layout('prices', 'prices_root', {
-      prices_root: { type: 'Column', children: ['price_filters', 'price_grid'] },
-      ...filters('price_filters', ['price_date', 'price_search', 'price_type', 'price_status']),
+      prices_root: { type: 'Column', children: ['price_filters', 'price_completeness', 'price_grid'] },
+      ...filters('price_filters', ['price_date', 'price_search', 'price_type', 'price_status', 'price_check']),
     }),
   },
   { id: 'runs', label: 'mastering.tabs.runs', layout: layout('runs', 'runs_root', { runs_root: { type: 'Column', children: ['runs_grid'] } }) },
@@ -371,6 +383,7 @@ export function masteringConsoleBlueprint(): Omit<CorePageDefinition, 'id' | 'cr
         { name: 'priceStatus', default: '' },
         { name: 'exceptionStatus', default: '' },
         { name: 'overrideStatus', default: 'PENDING' },
+        { name: 'completeness', description: 'The last completeness check for the date shown' },
       ],
       queries: [
         q('profiles', 'mastering.profiles', {}),

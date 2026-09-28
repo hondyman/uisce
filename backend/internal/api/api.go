@@ -1932,9 +1932,6 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 				)
 				externalHandler.RegisterRoutes(r)
 
-				survivorshipHandler := NewSurvivorshipHandler(mdm.NewSurvivorshipEngine())
-				survivorshipHandler.RegisterRoutes(r)
-
 				lookthroughHandler := NewLookThroughSQLHandler()
 				lookthroughHandler.RegisterRoutes(r)
 

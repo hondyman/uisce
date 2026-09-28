@@ -2,8 +2,8 @@ import type { ComponentDefinition, CorePageDefinition, PageLayout, PageTab } fro
 import type { ColumnDef } from '../appModel';
 
 /**
- * Data pipelines (features/data-pipelines/PipelinesListPage.tsx) and the
- * pipeline editor (PipelineEditorPage.tsx) as Page Studio pages - the ingest
+ * Data pipelines and the pipeline editor as Page Studio pages (they replaced
+ * the hand-built list and editor pages) - the ingest
  * step of mastering. The list is studio widgets over the dataPipelines.list
  * operation; the editor page places the domain's visual editor.
  */

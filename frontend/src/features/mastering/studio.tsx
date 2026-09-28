@@ -96,6 +96,23 @@ const operations: OperationDef[] = [
     },
   },
   {
+    id: 'mastering.prices.completeness', domain: 'mastering', kind: 'mutation', label: 'Check price completeness for a date',
+    description: 'Raises missing-price exceptions (and resolves those priced since). result: severity, message, gaps (one label per gap).',
+    params: [E, { name: 'date', type: 'string', required: true }],
+    run: async (p) => {
+      const { completeness: c } = await masteringApi.completeness(str(p, 'entity'), str(p, 'date'));
+      const missing = c.missing - c.held;
+      const summary = t('mastering.prices.completeness.summary', { date: c.date, expected: c.expected, priced: c.priced, held: c.held, missing, stale: c.stale });
+      const raised = c.raised > 0 || c.resolved > 0 ? ` ${t('mastering.prices.completeness.raised', { raised: c.raised, resolved: c.resolved })}` : '';
+      const gaps = c.gaps.map((g) => `${g.name ?? g.code ?? g.entity_id.slice(0, 8)} · ${g.price_type}${g.held ? ` (${t('mastering.goldenStatus.REVIEW')})` : ''}`);
+      return {
+        severity: missing > 0 ? 'warning' : c.held > 0 ? 'info' : 'success',
+        message: summary + raised,
+        gaps: gaps.length > 40 ? [...gaps.slice(0, 40), `+${gaps.length - 40}`] : gaps,
+      };
+    },
+  },
+  {
     id: 'mastering.runs.list', domain: 'mastering', kind: 'query', label: 'Mastering runs', params: [E],
     fields: [{ name: 'started_at', type: 'datetime' }, { name: 'status' }, { name: 'trigger' }, { name: 'counts', type: 'object' }, { name: 'error_detail' }, { name: 'started_by' }],
     run: async (p) => (await masteringApi.runs(str(p, 'entity'))).runs,
