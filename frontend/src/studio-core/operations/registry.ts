@@ -23,6 +23,11 @@ export interface OperationField {
   description?: string;
 }
 
+/** What a running operation may report while it works (a long run's stage). */
+export interface OperationContext {
+  progress: (text: string) => void;
+}
+
 export interface OperationDef {
   id: string;
   /** Owning domain; also the cache prefix, so the domain's own invalidations refresh pages. */
@@ -31,7 +36,7 @@ export interface OperationDef {
   description?: string;
   kind: 'query' | 'mutation';
   params: OperationParam[];
-  run: (params: Record<string, unknown>) => Promise<unknown>;
+  run: (params: Record<string, unknown>, ctx?: OperationContext) => Promise<unknown>;
   /** Query only: row fields, for the column editor. */
   fields?: OperationField[];
   /** Mutation only: cache prefixes to refresh after success (default: [domain]). */

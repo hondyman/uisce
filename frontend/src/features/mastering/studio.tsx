@@ -1,22 +1,24 @@
-import React from 'react';
 import i18n from '../../i18n';
 import { fmt } from '../schedules/api';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
-import { registerDomainComponents } from '../../studio-core/components/registry';
-import { masteringApi, isSeries, pct, showValue, type Override, type Policy, type Profile, type Run } from './api';
-import { PriceDrawer } from './prices';
-import RunDialog from './RunDialog';
-import { PolicyDialog, policyText } from './overrides';
+import { stagingBindingsApi } from '../staging-bindings/api';
+import { masteringApi, isSeries, pct, showValue, type Counts, type Override, type Policy } from './api';
 
 /**
- * The mastering domain's Page Studio surface: the operations a page may call
- * and the hand-built components it may place. Row-level derivations (who
- * may vote, what a request says) live here - the domain decides, the page
+ * The mastering domain's Page Studio surface: the operations a page may
+ * call. Row-level derivations (who may vote, what a request says) live here - the domain decides, the page
  * displays - so pages stay declarative and the rules stay with the API.
  */
 
 const t = (k: string, o?: Record<string, unknown>) => i18n.t(k, o) as string;
 const str = (p: Record<string, unknown>, k: string) => (p[k] === undefined || p[k] === null ? '' : String(p[k]));
+
+/** How the policy reads in plain words. */
+function policyText(p?: Policy) {
+  if (!p) return '';
+  if (p.mode === 'DIRECT') return t('mastering.policy.directShort');
+  return t('mastering.policy.approvalShort', { count: p.approvals_required });
+}
 
 /** Whether the viewer can still act on a request: their own, already voted, can vote. */
 const requestState = (r: { mine?: boolean; voted?: boolean }) => (r.mine ? 'mine' : r.voted ? 'voted' : 'can_vote');
@@ -57,10 +59,74 @@ const operations: OperationDef[] = [
   {
     id: 'mastering.policy', domain: 'mastering', kind: 'query', label: 'Override policy',
     description: 'The entity\'s steward policy; label reads it in plain words.', params: [E],
-    fields: [{ name: 'label' }, { name: 'policy', type: 'object' }, { name: 'can_edit', type: 'boolean' }],
+    fields: [{ name: 'label' }, { name: 'policy', type: 'object' }, { name: 'can_edit', type: 'boolean' }, { name: 'attributes', type: 'array' }, { name: 'caption' }],
     run: async (p) => {
       const r = await masteringApi.policy(str(p, 'entity'));
-      return { ...r, label: policyText(t, r.policy) };
+      return {
+        ...r, label: policyText(r.policy), attributes: r.policy.attributes ?? [],
+        caption: r.policy.inherited ? t('mastering.policy.inherited') : t('mastering.policy.own', { by: r.policy.updated_by ?? '—' }),
+      };
+    },
+  },
+  {
+    id: 'mastering.policy.save', domain: 'mastering', kind: 'mutation', label: 'Change the override policy',
+    description: 'Administrators only; audited. policy: {mode, approvals_required, high_risk_attributes, high_risk_approvals}.',
+    params: [E, { name: 'policy', type: 'object', required: true }],
+    run: (p) => {
+      const { attributes: _known, ...policy } = (p.policy ?? {}) as Partial<Policy>;
+      const n = (v: unknown, d: number) => (v === undefined || v === null || v === '' ? d : Number(v));
+      return masteringApi.setPolicy(str(p, 'entity'), {
+        ...policy,
+        approvals_required: n(policy.approvals_required, 1),
+        high_risk_approvals: n(policy.high_risk_approvals, 1),
+        high_risk_attributes: policy.high_risk_attributes ?? [],
+      });
+    },
+  },
+  {
+    id: 'mastering.price.detail', domain: 'mastering', kind: 'query', label: 'A golden price for its drawer',
+    description: 'Header, the version shown, why this value, every quote considered, controls, variances, exceptions, versions, and the steward decision (override form data).',
+    params: [E, { name: 'id', type: 'string', required: true }, { name: 'version', type: 'number' }],
+    fields: [
+      { name: 'title' }, { name: 'subtitle' }, { name: 'value_text' }, { name: 'header_chips', type: 'array' }, { name: 'historical', type: 'boolean' },
+      { name: 'viewing_text' }, { name: 'reason_text' }, { name: 'prior_text' }, { name: 'candidates', type: 'array' }, { name: 'ranking_text' },
+      { name: 'controls', type: 'array' }, { name: 'variances', type: 'array' }, { name: 'exceptions', type: 'array' }, { name: 'versions', type: 'array' },
+      { name: 'decide', type: 'object' },
+    ],
+    run: (p) => priceDetail(str(p, 'entity'), str(p, 'id'), p.version === null || p.version === undefined || p.version === '' ? undefined : Number(p.version)),
+  },
+  {
+    id: 'mastering.runs.setup', domain: 'mastering', kind: 'query', label: 'What can be mastered',
+    description: 'The staging loads (label, caption) and the staging tables bound to the entity\'s business object; ready / can_run for the choice made.',
+    params: [E, { name: 'bo_key', type: 'string', required: true }, { name: 'load_id', type: 'string' }, { name: 'table', type: 'string' }, { name: 'again', type: 'boolean' }],
+    fields: [
+      { name: 'loads', type: 'array' }, { name: 'tables', type: 'array' }, { name: 'initial', type: 'object' }, { name: 'loads_help' }, { name: 'table_help' },
+      { name: 'already_mastered', type: 'boolean' }, { name: 'ready', type: 'boolean' }, { name: 'can_run', type: 'boolean' },
+    ],
+    run: (p) => runSetup(str(p, 'entity'), str(p, 'bo_key'), str(p, 'load_id'), str(p, 'table'), p.again === true || p.again === 'true'),
+  },
+  {
+    id: 'mastering.runs.preview', domain: 'mastering', kind: 'mutation', label: 'Preview mastering a load (nothing kept)',
+    description: 'result: chips (counts), exceptions ({code, severity, message}), unmastered_text.',
+    params: [E, { name: 'table', type: 'string', required: true }, { name: 'load_id', type: 'string', required: true }, { name: 'again', type: 'boolean' }],
+    invalidates: [],
+    run: async (p) => {
+      const { preview } = await masteringApi.preview(str(p, 'entity'), runRequest(p));
+      return {
+        chips: countChips(preview.counts),
+        exceptions: preview.exceptions,
+        unmastered_text: preview.unmastered_fields?.length ? t('mastering.runDialog.unmastered', { fields: preview.unmastered_fields.join(', ') }) : '',
+      };
+    },
+  },
+  {
+    id: 'mastering.runs.run', domain: 'mastering', kind: 'mutation', label: 'Master a load',
+    description: 'Runs to the end, reporting each stage. result: run, messageKey (what happened), tab (where to look).',
+    params: [E, { name: 'table', type: 'string', required: true }, { name: 'load_id', type: 'string', required: true }, { name: 'again', type: 'boolean' }],
+    run: async (p, ctx) => {
+      const { run } = await masteringApi.runToEnd(str(p, 'entity'), runRequest(p),
+        (r) => ctx?.progress(t('mastering.runDialog.stage', { stage: t(`mastering.stage.${r.stage}`, { defaultValue: r.stage }) })));
+      return { run, messageKey: run.replayed ? 'mastering.replayed' : `mastering.finished.${run.status}`, tab: run.counts.exceptions ? 'exceptions' : 'golden' };
     },
   },
   {
@@ -356,6 +422,130 @@ async function goldenDetail(entity: string, id: string, version: number | undefi
   };
 }
 
+const num = (v: number | undefined | null, digits = 4) =>
+  v === undefined || v === null ? '—' : v.toLocaleString(i18n.language, { maximumFractionDigits: digits });
+
+/**
+ * A golden price shaped for its drawer: the version being viewed, why this
+ * value won, every quote considered, controls, variances, versions, and
+ * what a steward may do now (correct, change or clear, or wait for a
+ * pending decision). The same derivations the hand-built drawer made.
+ */
+async function priceDetail(entity: string, id: string, version: number | undefined) {
+  const { price: d } = await masteringApi.priceById(entity, id);
+  const attr = `${d.price_type}@${d.date}`;
+  const [{ overrides }, pol] = await Promise.all([
+    masteringApi.overrides(entity, { golden: d.entity_id }),
+    masteringApi.policy(entity).catch(() => null),
+  ]);
+  const latest = d.versions[0];
+  const v = d.versions.find((x) => x.version === version) ?? latest;
+  const historical = !!v && !!latest && v.version !== latest.version;
+  const prov = v?.provenance;
+  const th = prov?.threshold;
+  const mine = overrides.filter((o) => o.attribute === attr);
+  const active = mine.find((o) => o.active);
+  const pending = mine.find((o) => o.status === 'PENDING');
+  const policy = pol?.policy;
+  const need = policy ? Math.max(1, approvalsNeeded(policy, attr)) : 1;
+  const held = latest?.status === 'REVIEW';
+  return {
+    id: d.id, title: d.name ?? d.entity_id, subtitle: `${d.code ?? ''} · ${d.price_type} · ${d.date}`,
+    value_text: v ? `${num(v.value)} ${v.currency ?? ''}`.trim() : '',
+    header_chips: v ? [
+      { label: t(`mastering.goldenStatus.${v.status}`, { defaultValue: v.status }), color: GOLDEN_COLOR[v.status] ?? 'default', variant: 'filled' },
+      { label: t('mastering.golden.version', { v: v.version }) },
+      ...(v.is_stale ? [{ label: t('mastering.golden.stale'), color: 'warning' }] : []),
+      { label: `${t('mastering.golden.confidence')} ${pct(v.confidence)}` },
+    ] : [],
+    historical,
+    viewing_text: historical && v && latest ? t('mastering.prices.viewingVersion', { v: v.version, latest: latest.version, at: fmt(v.knowledge_at, i18n.language) }) : '',
+    reason_text: prov ? `${v.winner ?? t('mastering.prices.previous')} — ${prov.reason}` : '',
+    prior_text: prov?.prior
+      ? t('mastering.prices.prior', { date: prov.prior.date, value: num(prov.prior.value) }) + (prov.change_pct !== undefined ? ` · ${t('mastering.prices.moved', { pct: num(prov.change_pct, 2) })}` : '')
+      : '',
+    candidates: (prov?.candidates ?? []).map((c) => ({
+      id: c.source, source: c.source, won: c.source === v?.winner, value_text: num(c.value), currency: c.currency ?? '',
+      out: !!c.excluded || c.selected === false, diff_pct: c.diff_pct, rank_text: c.rank ? String(c.rank) : '—', as_of: c.as_of, stale: !!c.stale,
+      excluded_text: c.excluded ? t('mastering.prices.excluded', { why: c.excluded }) : '', note: c.note ?? '',
+    })),
+    ranking_text: prov ? t('mastering.prices.ranking', { order: prov.ranking.join(' › ') || '—' })
+      + (th && th.warning !== undefined ? ` · ${t('mastering.prices.thresholds', { w: th.warning, e: th.error, c: th.critical })}` : '') : '',
+    controls: (prov?.controls ?? []).map((c) => ({
+      label: t('mastering.prices.control', {
+        control: t(`mastering.exceptionType.${c.control}`, { defaultValue: c.control }), level: c.level.toLowerCase(), pct: num(c.pct, 2), action: c.action.toLowerCase(),
+      }),
+      color: c.level === 'WARNING' ? 'warning' : 'error', variant: c.action === 'HOLD' ? 'filled' : 'outlined',
+    })),
+    variances: d.variances.map((x) => ({
+      id: x.id, a_text: `${x.source_a ?? ''} ${num(x.price_a)}`, b_text: `${x.source_b ?? ''} ${num(x.price_b)}`,
+      variance_pct: x.variance_pct, severity: x.severity, status: x.status,
+    })),
+    exceptions: d.exceptions,
+    versions: d.versions.map((x) => ({
+      id: x.id, version: x.version, value_text: `${num(x.value)} ${x.currency ?? ''}`.trim(), winner: x.winner ?? '—', status: x.status,
+      at: x.knowledge_at, showing: x.version === v?.version, target: latest && x.version === latest.version ? null : x.version,
+    })),
+    // What a steward may do on the latest version.
+    decide: {
+      can: !historical && !!latest, held, blocked: !!pending,
+      label: held ? t('mastering.prices.decideHeld') : active ? t('mastering.prices.changeOverride') : t('mastering.prices.correct'),
+      chips: [
+        ...(active ? [{ label: t('mastering.prices.stewardPrice'), color: 'secondary' }] : []),
+        ...(pending ? [{ label: overrideRow(pending).status_label, color: 'warning' }] : []),
+      ],
+      pending_text: pending ? t('mastering.prices.pending', { value: String(pending.value ?? '—') }) : '',
+      golden_id: d.id, attribute: attr, has_active: !!active, value_raw: latest ? String(latest.value) : '',
+      title: t('mastering.overrides.title', { attribute: attr }),
+      intro: `${t('mastering.overrides.current')}: ${latest ? String(latest.value) : '—'}. ${t('mastering.overrides.sticky')}`,
+      notice: policy?.mode === 'DIRECT' ? t('mastering.overrides.appliesNow') : t('mastering.overrides.needsApproval', { count: need }),
+      severity: policy?.mode === 'DIRECT' ? 'warning' : 'info',
+      submit: policy?.mode === 'DIRECT' ? t('mastering.overrides.apply') : t('mastering.overrides.propose'),
+    },
+  };
+}
+
+const COUNT_KEYS: (keyof Counts)[] = ['records', 'invalid', 'xref', 'deterministic', 'fuzzy', 'review', 'new', 'restated', 'rechecked', 'conflicts', 'published', 'held_for_review', 'unchanged', 'exceptions'];
+
+/** A run's counts as chips: the non-zero ones, problems coloured. */
+function countChips(counts: Partial<Counts>) {
+  return COUNT_KEYS.filter((k) => (counts[k] ?? 0) > 0).map((k) => ({
+    label: `${t(`mastering.counts.${k}`)} ${counts[k]}`, variant: 'outlined',
+    color: k === 'invalid' || k === 'conflicts' ? 'error' : k === 'review' || k === 'held_for_review' || k === 'exceptions' ? 'warning' : k === 'published' ? 'success' : 'default',
+  }));
+}
+
+/** A load is mastered once per key; "master again" gives it a new one. */
+const runRequest = (p: Record<string, unknown>) => ({
+  staging_table: str(p, 'table'), load_run_id: str(p, 'load_id'),
+  idempotency_key: p.again === true || p.again === 'true' ? `load:${str(p, 'load_id')}:${Date.now()}` : undefined,
+});
+
+/** The loads that can be mastered and the staging tables bound to the entity. */
+async function runSetup(entity: string, boKey: string, loadId: string, table: string, again: boolean) {
+  const [{ loads }, { bindings }] = await Promise.all([masteringApi.loads(entity), stagingBindingsApi.list()]);
+  const tables = bindings.filter((b) => b.bo_key === boKey).map((b) => b.staging_table);
+  const load = loads.find((l) => l.id === loadId);
+  const alreadyMastered = !!load?.mastering_run_id;
+  const ready = !!loadId && !!table;
+  return {
+    loads: loads.map((l) => ({
+      id: l.id,
+      label: `${l.source} · ${l.run_ref ?? l.id.slice(0, 8)} · ${fmt(l.started_at, i18n.language)}`,
+      caption: [
+        l.received_rows !== undefined && l.received_rows !== null ? t('mastering.runDialog.rows', { n: l.received_rows }) : '',
+        l.mastering_status ? t('mastering.runDialog.mastered', { status: t(`mastering.runStatus.${l.mastering_status}`) }) : '',
+      ].filter(Boolean).join(' · '),
+    })),
+    tables: tables.map((x) => ({ value: x })),
+    // One bound table is chosen for you.
+    initial: tables.length === 1 ? { table: tables[0] } : {},
+    loads_help: loads.length === 0 ? t('mastering.runDialog.noLoads') : '',
+    table_help: tables.length === 0 ? t('mastering.runDialog.noBinding', { bo: boKey }) : t('mastering.runDialog.tableHelp'),
+    already_mastered: alreadyMastered, ready, can_run: ready && (!alreadyMastered || again),
+  };
+}
+
 function decisionMessage(d: { status: string; moved?: { sources: number; identifiers: number } }) {
   if (d.status === 'APPROVED') return t('mastering.review.merged', { sources: d.moved?.sources ?? 0, identifiers: d.moved?.identifiers ?? 0 });
   if (d.status === 'PENDING_APPROVAL') return t('mastering.review.requested');
@@ -364,44 +554,3 @@ function decisionMessage(d: { status: string; moved?: { sources: number; identif
 }
 
 registerOperations(operations);
-
-const entityInput = { name: 'entity', type: 'string' as const, required: true };
-
-registerDomainComponents([
-  {
-    id: 'mastering.PriceDrawer', domain: 'mastering', label: 'Golden price drawer', overlay: true,
-    description: 'A golden price: every quote considered, controls, variances, versions, steward decision.',
-    inputs: [entityInput, { name: 'id', type: 'string' }],
-    events: [{ name: 'close' }],
-    render: ({ inputs, emit }) => (
-      <PriceDrawer entity={String(inputs.entity ?? '')} id={(inputs.id as string) || null} onClose={() => emit('close')} />
-    ),
-  },
-  {
-    id: 'mastering.RunDialog', domain: 'mastering', label: 'Master a load', overlay: true,
-    description: 'Pick a staging load, preview (nothing kept), then run. done carries the run, a message key and the tab to show.',
-    inputs: [{ name: 'profile', type: 'object', required: true, description: 'The entity profile (mastering.profile)' }, { name: 'open', type: 'boolean' }],
-    events: [{ name: 'close' }, { name: 'done', payload: ['run', 'messageKey', 'tab'] }],
-    render: ({ inputs, emit }) => {
-      const profile = inputs.profile as Profile | null;
-      if (!profile || !inputs.open) return null;
-      return (
-        <RunDialog profile={profile} open onClose={() => emit('close')}
-          onDone={(r: Run) => emit('done', {
-            run: r,
-            messageKey: r.replayed ? 'mastering.replayed' : `mastering.finished.${r.status}`,
-            tab: r.counts.exceptions ? 'exceptions' : 'golden',
-          })} />
-      );
-    },
-  },
-  {
-    id: 'mastering.PolicyDialog', domain: 'mastering', label: 'Override policy', overlay: true,
-    description: 'The entity\'s steward policy; administrators can change it (audited).',
-    inputs: [entityInput, { name: 'open', type: 'boolean' }],
-    events: [{ name: 'close' }],
-    render: ({ inputs, emit }) => (inputs.open && inputs.entity
-      ? <PolicyDialog entity={String(inputs.entity)} open onClose={() => emit('close')} />
-      : null),
-  },
-]);

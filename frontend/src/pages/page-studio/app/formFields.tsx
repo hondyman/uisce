@@ -1,19 +1,20 @@
 import React from 'react';
-import { Autocomplete, Chip, FormControlLabel, FormLabel, MenuItem, Radio, RadioGroup, Stack, Switch, TextField } from '@mui/material';
+import { Autocomplete, Box, Chip, FormControlLabel, FormLabel, MenuItem, Radio, RadioGroup, Stack, Switch, TextField, Typography } from '@mui/material';
 import type { FormFieldSpec, OptionsFrom } from './appModel';
 import { getPath, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
 
 /** A field's options: its static list, or rows of a query. */
-export function fieldOptions(f: { options?: FormFieldSpec['options']; optionsFrom?: OptionsFrom }, scope: Scope): { value: string; label: string }[] {
+export function fieldOptions(f: { options?: FormFieldSpec['options']; optionsFrom?: OptionsFrom }, scope: Scope): { value: string; label: string; caption?: string }[] {
   if (f.optionsFrom) {
-    const { query, rowsPath, valueField, labelField } = f.optionsFrom;
+    const { query, rowsPath, valueField, labelField, captionField } = f.optionsFrom;
     const data = getPath(scope, `queries.${query}.data`);
     const rows = (rowsPath ? getPath(data, rowsPath) : data) as unknown[] | undefined;
     return (Array.isArray(rows) ? rows : []).map((r) => {
       const value = valueField ? getPath(r, valueField) : r;
       const label = labelField ? getPath(r, labelField) : value;
-      return { value: String(value ?? ''), label: String(label ?? '') };
+      const caption = captionField ? getPath(r, captionField) : undefined;
+      return { value: String(value ?? ''), label: String(label ?? ''), ...(caption ? { caption: String(caption) } : {}) };
     });
   }
   return (f.options ?? []).map((o) => ({ value: o.value, label: text(o.label, scope) }));
@@ -32,13 +33,16 @@ function Field({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown
   if (f.visibleWhen && !visible) return null;
   const disabled = !!f.readOnlyWhen && readOnly;
   const label = text(f.label, scope);
-  const helper = f.helperText ? text(f.helperText, scope) : undefined;
+  const helper = f.helperText ? text(f.helperText, scope) || undefined : undefined;
+  // Values show as text whatever they are stored as (a policy's 2 selects option "2").
+  const shown = value === undefined || value === null ? '' : String(value);
+  const choose = (v: string) => onChange(f.valueType === 'number' && v !== '' ? Number(v) : v);
   switch (f.kind) {
     case 'radio':
       return (
         <Stack>
           {label && <FormLabel>{label}</FormLabel>}
-          <RadioGroup value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+          <RadioGroup value={shown} onChange={(e) => choose(e.target.value)}>
             {fieldOptions(f, scope).map((o) => <FormControlLabel key={o.value} value={o.value} control={<Radio size="small" disabled={disabled} />} label={o.label} />)}
           </RadioGroup>
         </Stack>
@@ -54,10 +58,19 @@ function Field({ f, value, onChange, scope }: { f: FormFieldSpec; value: unknown
       );
     case 'select':
       return (
-        <TextField select size="small" fullWidth label={label} value={value ?? ''} disabled={disabled} required={f.required} helperText={helper}
-          onChange={(e) => onChange(e.target.value)}>
+        <TextField select size="small" fullWidth label={label} value={shown} disabled={disabled} required={f.required} helperText={helper}
+          onChange={(e) => choose(e.target.value)}>
           {!f.required && <MenuItem value=""><em>—</em></MenuItem>}
-          {fieldOptions(f, scope).map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
+          {fieldOptions(f, scope).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.caption ? (
+                <Box>
+                  <Typography variant="body2">{o.label}</Typography>
+                  <Typography variant="caption" color="text.secondary">{o.caption}</Typography>
+                </Box>
+              ) : o.label}
+            </MenuItem>
+          ))}
         </TextField>
       );
     case 'number':

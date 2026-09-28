@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, Stack, Tab, Tabs, Typography,
+  Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, Drawer, IconButton, LinearProgress, Stack, Tab, Tabs, Typography,
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import type { ContainerButton, OverlayNodeProps, TabSetNodeProps } from './appModel';
@@ -29,13 +29,18 @@ export const DEFAULT_CONTAINER_PROPS: Record<string, Record<string, unknown>> = 
   TabSet: { tabs: [{ id: 'tab1', label: 'Tab 1' }, { id: 'tab2', label: 'Tab 2' }] },
 };
 
-function FooterButton({ b, scope }: { b: ContainerButton; scope: Scope }) {
+/** A footer button; while its actions run, every footer button waits and the overlay shows progress. */
+function FooterButton({ b, scope, busy, setBusy }: { b: ContainerButton; scope: Scope; busy: boolean; setBusy: (v: boolean) => void }) {
   const { runActions } = useAppRuntime();
   const shown = useCondition(b.visibleWhen, scope, true);
   const disabled = useCondition(b.disabledWhen, scope, false);
   if (b.visibleWhen && !shown) return null;
+  const click = async () => {
+    setBusy(true);
+    try { await runActions(b.onClick, scope); } finally { setBusy(false); }
+  };
   return (
-    <Button variant={b.variant ?? 'text'} color={b.color ?? 'primary'} disabled={!!b.disabledWhen && disabled} onClick={() => void runActions(b.onClick, scope)}>
+    <Button variant={b.variant ?? 'text'} color={b.color ?? 'primary'} disabled={busy || (!!b.disabledWhen && disabled)} onClick={() => void click()}>
       {text(b.label, scope)}
     </Button>
   );
@@ -61,12 +66,14 @@ export function OverlayContainer({ type, props, children }: { type: 'Drawer' | '
   const open = useCondition(p.openWhen, scope, false) && !!p.openWhen;
   const close = () => void runActions(p.onClose, scope);
   const buttons = p.buttons ?? [];
+  const [busy, setBusy] = useState(false);
+  const footer = buttons.map((b, i) => <FooterButton key={i} b={b} scope={scope} busy={busy} setBusy={setBusy} />);
   if (type === 'Dialog') {
     return (
       <Dialog open={open} onClose={close} fullWidth maxWidth={p.maxWidth ?? 'sm'}>
         <DialogTitle component="div"><Header p={p} scope={scope} onClose={close} /></DialogTitle>
-        <DialogContent dividers><Stack spacing={2}>{children}</Stack></DialogContent>
-        {buttons.length > 0 && <DialogActions>{buttons.map((b, i) => <FooterButton key={i} b={b} scope={scope} />)}</DialogActions>}
+        <DialogContent dividers><Stack spacing={2}>{children}{busy && <LinearProgress />}</Stack></DialogContent>
+        {buttons.length > 0 && <DialogActions>{footer}</DialogActions>}
       </Dialog>
     );
   }
@@ -75,7 +82,8 @@ export function OverlayContainer({ type, props, children }: { type: 'Drawer' | '
       <Stack spacing={2}>
         <Header p={p} scope={scope} onClose={close} />
         {children}
-        {buttons.length > 0 && <Stack direction="row" spacing={1} justifyContent="flex-end">{buttons.map((b, i) => <FooterButton key={i} b={b} scope={scope} />)}</Stack>}
+        {busy && <LinearProgress />}
+        {buttons.length > 0 && <Stack direction="row" spacing={1} justifyContent="flex-end">{footer}</Stack>}
       </Stack>
     </Drawer>
   );

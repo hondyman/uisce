@@ -26,7 +26,7 @@ export interface DomainComponentEvent {
 }
 
 export interface DomainComponentDef {
-  /** e.g. mastering.RunDialog */
+  /** e.g. pipelines.Canvas (domain.Component) */
   id: string;
   domain: string;
   label: string;

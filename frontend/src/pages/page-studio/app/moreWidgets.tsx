@@ -132,13 +132,15 @@ export interface FormWidgetProps {
   /** The page variable holding the values (an object: {{vars.<variable>.<field>}}). */
   variable: string;
   fields: FormFieldSpec[];
-  /** Seeds the values when it changes (e.g. the row being edited); field defaults fill the rest. */
+  /** Seeds the values when it changes (e.g. the row being edited); field defaults fill the rest. Omitted, existing values are kept. */
   initFrom?: Binding;
   columns?: number;
   submitLabel?: TextSpec;
   /** Runs on submit with {{form}} = the values. */
   onSubmit?: Action[];
   submitDisabledWhen?: ConditionNode;
+  /** Runs after the user changes a field, with {{form}} = the new values (e.g. clear a stale preview). */
+  onChange?: Action[];
 }
 
 export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
@@ -149,13 +151,18 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
   const seeded = useRef<string | null>(null);
   useEffect(() => {
     if (!p.variable || seeded.current === initKey) return;
+    // A start value that goes away (its query refetching) keeps what was typed.
+    if (seeded.current !== null && p.initFrom !== undefined && (init === undefined || init === null)) return;
     seeded.current = initKey;
     const base: Record<string, unknown> = {};
     for (const f of p.fields ?? []) {
       const d = f.default !== undefined ? resolve(f.default, scope) : undefined;
       if (d !== undefined) base[f.name] = d;
     }
-    setVariable(p.variable, { ...base, ...(init && typeof init === 'object' ? (init as Record<string, unknown>) : {}) });
+    // Without a start value the form only fills its defaults in, so two forms can share a variable.
+    setVariable(p.variable, p.initFrom === undefined
+      ? { ...base, ...values }
+      : { ...base, ...(init && typeof init === 'object' ? (init as Record<string, unknown>) : {}) });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [p.variable, initKey]);
   const blocked = useCondition(p.submitDisabledWhen, { ...scope, form: values }, false);
@@ -164,7 +171,11 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
   return (
     <Stack spacing={2}>
       <FormFields fields={p.fields ?? []} values={values} scope={scope} columns={p.columns}
-        onChange={(name, v) => setVariable(p.variable, { ...values, [name]: v })} />
+        onChange={(name, v) => {
+          const next = { ...values, [name]: v };
+          setVariable(p.variable, next);
+          if (p.onChange?.length) void runActions(p.onChange, { form: next });
+        }} />
       {p.onSubmit && p.onSubmit.length > 0 && (
         <Box>
           <Button variant="contained" disabled={!ready} onClick={() => void runActions(p.onSubmit, { form: values })}>

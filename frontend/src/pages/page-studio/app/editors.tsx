@@ -275,6 +275,8 @@ function ActionEditor({ a, onChange, draft, paths }: { a: Action; onChange: (a: 
           onChange={(v) => onChange({ ...a, params: { ...a.params, [p.name]: v } })} helperText={p.description} />
       ))}
       <TextSpecField label="Success message" value={a.successMessage} onChange={(v) => onChange({ ...a, successMessage: v || undefined })} paths={[...paths, 'result.message']} />
+      <SelectField label="Progress into variable (optional)" value={a.progressVariable} allowEmpty="None"
+        options={(draft.app?.variables ?? []).map((v) => ({ value: v.name, label: v.name }))} onChange={(v) => onChange({ ...a, progressVariable: v || undefined })} />
       <JsonField label="Ask first: form (optional)" value={a.form ?? null} minRows={2} onChange={(v) => onChange({ ...a, form: (v || undefined) as FormSpec | undefined })} />
       <JsonField label="Ask first: confirm (optional)" value={a.confirm ?? null} minRows={2} onChange={(v) => onChange({ ...a, confirm: (v || undefined) as RunOperation['confirm'] })} />
       <Divider textAlign="left"><Typography variant="caption">Then</Typography></Divider>

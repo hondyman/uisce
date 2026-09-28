@@ -84,6 +84,8 @@ export type Action =
       onSuccess?: Action[];
       /** Show on success. */
       successMessage?: TextSpec;
+      /** A page variable holding what the operation reports while it runs (e.g. a run's stage); cleared after. */
+      progressVariable?: string;
     }
   | { kind: 'navigate'; to: Binding }
   | { kind: 'notify'; severity: 'success' | 'info' | 'warning' | 'error'; text: TextSpec };
@@ -96,6 +98,8 @@ export interface FormFieldSpec {
   options?: { value: string; label: TextSpec }[];
   /** Options from a query: rows at rowsPath, value/label read from each row (omit = the row itself). */
   optionsFrom?: OptionsFrom;
+  /** select/radio: store the chosen value as a number (e.g. a count of approvers). */
+  valueType?: 'number';
   default?: Binding;
   required?: boolean;
   helperText?: TextSpec;
@@ -109,6 +113,8 @@ export interface OptionsFrom {
   rowsPath?: string;
   valueField?: string;
   labelField?: string;
+  /** A second, smaller line under each option's label (e.g. rows and status of a load). */
+  captionField?: string;
 }
 
 export interface FormSpec {

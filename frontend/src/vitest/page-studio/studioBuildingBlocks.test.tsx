@@ -121,7 +121,7 @@ describe('studio building blocks', () => {
     fireEvent.click(await screen.findByRole('option', { name: 'FactSet' }));
     await waitFor(() => expect((within(dialog).getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
-    await waitFor(() => expect(save).toHaveBeenCalledWith({ source: 'FACTSET', priority: 10 }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ source: 'FACTSET', priority: 10 }, expect.anything()));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   }, 30000);
 
