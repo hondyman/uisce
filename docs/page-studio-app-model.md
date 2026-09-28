@@ -75,6 +75,21 @@ Wizards and editor dialogs (the run wizard, the override policy):
   get `ctx.progress(text)` as their second argument.
 - A query's `keepPrevious` keeps its last data while new params load.
 
+Editors whose form comes from data (the config row editor, the staging
+binding editor):
+
+- **Form `fieldsFrom`** - fields shaped by an operation (a table's columns
+  become text / number / switch / choice / chips / rows / JSON fields; a
+  gold-copy row's key is `readOnly` when overriding).
+- Field kinds **`rows`** (a list of objects, e.g. fuzzy keys, with
+  `rowFields`), **`json`**, and **`map`** - a key -> value table (business
+  object field -> staging column): row groups with titles that see
+  `{{map.bound}}`/`{{map.total}}` and a group action (Suggest), per-key hint
+  chips shown while the value is still the suggested one, and add controls
+  for prefixed keys (identifiers, price columns) that can be removed.
+- `resetOn` clears a dependent field when what it depends on changes;
+  `wide` spans a multi-column form; `step` for whole numbers.
+
 Action forms (`runOperation.form`) use the same field kinds, options from a
 query included (`app/formFields.tsx`). In Page Designer the containers show
 as editable regions (a drawer's content is edited in place, with what opens
@@ -151,9 +166,9 @@ a tenant switched off is hidden.
 ## Not done yet (next)
 
 - Structured editors for row buttons and action forms (JSON today).
-- The mastering console is fully studio-built (record and price drawers,
-  policy dialog, run wizard). Still domain components: the mastering config
-  row editor, the staging binding editor and the pipeline canvas.
+- The mastering console, the mastering configuration pages and staging
+  bindings are fully studio-built, editors included. Still a domain
+  component: the pipeline canvas (needs a canvas widget).
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

@@ -25,9 +25,6 @@ vi.mock('../../features/message-catalog/api', async (orig) => {
   const real = await orig<typeof import('../../features/message-catalog/api')>();
   return { ...real, msgcatApi: { ...real.msgcatApi, me } };
 });
-vi.mock('../../features/staging-bindings/BindingEditor', () => ({
-  default: ({ binding }: { binding?: { staging_table: string } }) => <div data-testid="binding-editor">editing:{binding?.staging_table ?? 'new'}</div>,
-}));
 vi.mock('../../features/data-pipelines/api', async (orig) => {
   const real = await orig<typeof import('../../features/data-pipelines/api')>();
   return { ...real, pipelinesApi: { ...real.pipelinesApi, ...dp } };
@@ -86,7 +83,8 @@ describe('staging bindings as a studio page', () => {
 
     const row = screen.getByText('staging.ff_product').closest('tr') as HTMLElement;
     fireEvent.click(within(row).getAllByRole('button')[0]);
-    expect((await screen.findByTestId('binding-editor')).textContent).toBe('editing:staging.ff_product');
+    // The studio-built editor opens on that binding (configEditorsParity covers the editor itself).
+    expect(within(await screen.findByRole('dialog')).getByText('Propose a change to the binding')).toBeTruthy();
   });
 
   it('shows what a proposal changes and approves it with the comment', async () => {

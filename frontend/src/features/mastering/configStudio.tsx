@@ -1,9 +1,6 @@
-import React from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
-import { registerDomainComponents } from '../../studio-core/components/registry';
-import { type ConfigChange, type ConfigKind, type ConfigRow, isSeries, masteringApi, masteringConfigApi } from './api';
-import ConfigRowEditor, { type EditorMode } from './ConfigRowEditor';
+import type { FormFieldSpec } from '../../pages/page-studio/app/appModel';
+import { type ConfigChange, type ConfigColumn, type ConfigKind, type ConfigRow, isSeries, masteringApi, masteringConfigApi } from './api';
 
 /**
  * Mastering configuration in Page Studio: the Vendor registry, Source
@@ -89,7 +86,88 @@ function changeRow(c: ConfigChange, canDecide: boolean) {
 const KIND = { name: 'kind', type: 'string' as const, required: true, description: 'source_system, source_priority or match_rule' };
 const ENTITY = { name: 'entity', type: 'string' as const, description: 'Empty for the vendor registry' };
 
+type EditorMode = 'new' | 'edit' | 'override';
+const label = (name: string) => name.replace(/_cd$/, '').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+/** A JSON list of plain values (match keys) - edited as chips. */
+const isStringList = (v: unknown) => Array.isArray(v) && v.every((x) => typeof x !== 'object');
+/** A JSON list of objects (fuzzy keys) - edited as rows with the objects' own fields. */
+const isObjectList = (v: unknown) => Array.isArray(v) && v.length > 0 && v.every((x) => x && typeof x === 'object' && !Array.isArray(x));
+
+/**
+ * The editor's form, from the table's columns: a vendor code is a choice of
+ * the registry's codes, flags are switches, numbers are numbers, key lists
+ * are chips, lists of objects are rows, anything else JSON. An override keeps
+ * the key read-only - that is what makes it replace the gold row.
+ */
+function editorField(c: ConfigColumn, v: unknown, mode: EditorMode, sourceCodes: string[]): FormFieldSpec {
+  const base = { name: c.name, label: label(c.name), required: c.required || undefined, readOnly: (mode === 'override' && c.key) || undefined };
+  switch (c.type) {
+    case 'source':
+      return { ...base, kind: 'select', options: sourceCodes.map((x) => ({ value: x, label: x })) };
+    case 'boolean':
+      return { ...base, kind: 'switch' };
+    case 'integer':
+    case 'number':
+      return { ...base, kind: 'number', step: c.type === 'integer' ? 1 : undefined };
+    case 'json':
+    case 'list':
+      if (isObjectList(v)) {
+        const rows = v as Record<string, unknown>[];
+        const keys = Array.from(new Set(rows.flatMap((o) => Object.keys(o))));
+        return { ...base, kind: 'rows', rowFields: keys.map((k) => ({ name: k, label: label(k), kind: typeof rows[0]?.[k] === 'number' ? 'number' : 'text' })) };
+      }
+      return v === undefined || v === null || isStringList(v) ? { ...base, kind: 'chips' } : { ...base, kind: 'json' };
+    default:
+      return { ...base, kind: 'text' };
+  }
+}
+
+const TITLES: Record<EditorMode, string> = { new: 'Propose a new row', edit: 'Propose a change', override: 'Override for your environment' };
+
 const operations: OperationDef[] = [
+  {
+    id: 'mdmConfig.editor', domain: 'mdmcfg', kind: 'query', label: 'A configuration row editor',
+    description: 'The form for a new row, a change to an own row, or an override of a gold-copy row: title, fields (from the table\'s columns) and the starting values.',
+    params: [KIND, ENTITY, { name: 'mode', type: 'string', required: true, description: 'new, edit or override' }, { name: 'id', type: 'string', description: 'The row (edit, override)' }],
+    fields: [{ name: 'title' }, { name: 'override', type: 'boolean' }, { name: 'fields', type: 'array' }, { name: 'initial', type: 'object' }],
+    run: async (p) => {
+      const mode = (str(p, 'mode') || 'new') as EditorMode;
+      const [{ table }, sources] = await Promise.all([
+        masteringConfigApi.table(kindOf(p), str(p, 'entity') || undefined),
+        masteringConfigApi.table('source_system'),
+      ]);
+      const row = mode === 'new' ? undefined : table.rows.find((r) => r.id === str(p, 'id'));
+      const values = row ? { ...row.values } : {};
+      const codes = Array.from(new Set(sources.table.rows.map((r) => String(r.values.code ?? '')))).filter(Boolean).sort();
+      return {
+        title: TITLES[mode], override: mode === 'override',
+        fields: [
+          ...table.columns.map((c) => editorField(c, values[c.name], mode, codes)),
+          { name: 'reason', label: 'Reason (shown to the approver)', kind: 'multiline' },
+        ],
+        initial: { ...values, reason: '' },
+      };
+    },
+  },
+  {
+    id: 'mdmConfig.propose', domain: 'mdmcfg', kind: 'mutation', label: 'Propose a configuration row',
+    description: 'A new row, a change to an own row (only what changed), or an override of a gold-copy row. Applied when another administrator approves.',
+    params: [KIND, ENTITY, { name: 'mode', type: 'string', required: true }, { name: 'id', type: 'string' },
+      { name: 'values', type: 'object', required: true, description: 'The form, reason included' }, { name: 'original', type: 'object', description: 'The row as it was (edit)' }],
+    run: (p) => {
+      const mode = (str(p, 'mode') || 'new') as EditorMode;
+      const { reason, ...values } = (p.values ?? {}) as Record<string, unknown>;
+      const original = (p.original ?? {}) as Record<string, unknown>;
+      // Only what changed for an edit; everything for a new row or an override.
+      const changed = mode === 'edit'
+        ? Object.fromEntries(Object.entries(values).filter(([k, v]) => JSON.stringify(v) !== JSON.stringify(original[k])))
+        : Object.fromEntries(Object.entries(values).filter(([, v]) => v !== undefined && v !== '' && v !== null));
+      return masteringConfigApi.propose({
+        kind: kindOf(p), entity: str(p, 'entity') || undefined, action: 'upsert', target_id: mode === 'edit' ? str(p, 'id') : undefined,
+        values: changed, reason: typeof reason === 'string' ? reason : '',
+      });
+    },
+  },
   {
     id: 'mdmConfig.entities', domain: 'mdmcfg', kind: 'query', label: 'Entities with this configuration',
     description: 'Mastered entities for a configuration kind (match rules: record entities only).', params: [KIND],
@@ -146,36 +224,3 @@ const operations: OperationDef[] = [
 ];
 
 registerOperations(operations);
-
-// The editor proposes through the API itself; refresh the page's queries
-// (domain prefix) when it is done.
-function EditorOverlay({ inputs, emit }: { inputs: Record<string, unknown>; emit: (e: string) => void }) {
-  const qc = useQueryClient();
-  if (!inputs.open) return null;
-  const row = (inputs.row as { row?: ConfigRow } | null)?.row ?? null;
-  const done = (event: string) => {
-    qc.invalidateQueries({ queryKey: ['mdmcfg'] });
-    emit(event);
-  };
-  return (
-    <ConfigRowEditor kind={String(inputs.kind) as ConfigKind} entity={(inputs.entity as string) || undefined}
-      mode={(String(inputs.mode || 'new')) as EditorMode} row={row}
-      onClose={() => emit('close')} onProposed={() => done('proposed')} />
-  );
-}
-
-registerDomainComponents([
-  {
-    id: 'mdmConfig.RowEditor', domain: 'mdmcfg', label: 'Propose a configuration row', overlay: true,
-    description: 'New row, change to an own row, or override of a gold-copy row - sent for approval. Form from the table\'s columns.',
-    inputs: [
-      { name: 'open', type: 'boolean' },
-      { name: 'kind', type: 'string', required: true },
-      { name: 'entity', type: 'string' },
-      { name: 'mode', type: 'string', description: 'new, edit or override' },
-      { name: 'row', type: 'object', description: 'The grid row being edited or overridden' },
-    ],
-    events: [{ name: 'close' }, { name: 'proposed' }],
-    render: EditorOverlay,
-  },
-]);

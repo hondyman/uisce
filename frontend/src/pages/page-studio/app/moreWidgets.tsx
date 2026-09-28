@@ -132,6 +132,8 @@ export interface FormWidgetProps {
   /** The page variable holding the values (an object: {{vars.<variable>.<field>}}). */
   variable: string;
   fields: FormFieldSpec[];
+  /** Or fields from data - a binding to a list of field specs (an operation shapes them, e.g. from a table's columns). */
+  fieldsFrom?: Binding;
   /** Seeds the values when it changes (e.g. the row being edited); field defaults fill the rest. Omitted, existing values are kept. */
   initFrom?: Binding;
   columns?: number;
@@ -146,6 +148,8 @@ export interface FormWidgetProps {
 export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
   const { setVariable, runActions } = useAppRuntime();
   const values = ((scope.vars as Record<string, unknown>)?.[p.variable] ?? {}) as Record<string, unknown>;
+  const generated = p.fieldsFrom !== undefined ? resolve(p.fieldsFrom, scope) : undefined;
+  const fields = (Array.isArray(generated) ? generated : p.fields ?? []) as FormFieldSpec[];
   const init = p.initFrom !== undefined ? resolve(p.initFrom, scope) : undefined;
   const initKey = JSON.stringify(init ?? null);
   const seeded = useRef<string | null>(null);
@@ -155,7 +159,7 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
     if (seeded.current !== null && p.initFrom !== undefined && (init === undefined || init === null)) return;
     seeded.current = initKey;
     const base: Record<string, unknown> = {};
-    for (const f of p.fields ?? []) {
+    for (const f of fields) {
       const d = f.default !== undefined ? resolve(f.default, scope) : undefined;
       if (d !== undefined) base[f.name] = d;
     }
@@ -167,12 +171,14 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
   }, [p.variable, initKey]);
   const blocked = useCondition(p.submitDisabledWhen, { ...scope, form: values }, false);
   if (!p.variable) return <Alert severity="info">Choose the variable this form edits.</Alert>;
-  const ready = requiredFilled(p.fields ?? [], values) && !(p.submitDisabledWhen && blocked);
+  const ready = requiredFilled(fields, values) && !(p.submitDisabledWhen && blocked);
   return (
     <Stack spacing={2}>
-      <FormFields fields={p.fields ?? []} values={values} scope={scope} columns={p.columns}
+      <FormFields fields={fields} values={values} scope={scope} columns={p.columns}
         onChange={(name, v) => {
           const next = { ...values, [name]: v };
+          // Dependent fields start over when what they depend on changes.
+          for (const f of fields) if (f.resetOn?.includes(name) && f.name !== name) delete next[f.name];
           setVariable(p.variable, next);
           if (p.onChange?.length) void runActions(p.onChange, { form: next });
         }} />
