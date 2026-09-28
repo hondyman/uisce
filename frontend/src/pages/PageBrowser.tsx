@@ -105,21 +105,29 @@ const NavTree: React.FC<{
  * clone, or not at all if switched off). Also mounted directly on routes
  * that are served by a studio page, e.g. /data/mastering.
  */
-export const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
+export const PageContent: React.FC<{ slug: string; recordId?: string; fallback?: React.ReactNode }> = ({ slug, recordId, fallback }) => {
   const { tenant } = useTenant();
   const navigate = useNavigate();
   const isCreate = recordId === 'new';
   const [page, setPage] = useState<PageStudioPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [missing, setMissing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setMissing(false);
     PageStudioApi.getPageBySlug(slug)
       .then((p) => { if (!cancelled) setPage(p); })
-      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load page'); })
+      .catch((err) => {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : 'Failed to load page';
+        // No such page at all (not "switched off in your environment").
+        setMissing(/\b404\b/.test(msg) && /page not found/i.test(msg));
+        setError(msg);
+      })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [slug]);
@@ -127,6 +135,7 @@ export const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slu
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>;
   }
+  if (missing && fallback) return <>{fallback}</>;
   if (error) {
     return <Alert severity="error" sx={{ m: 3 }}>{error}</Alert>;
   }

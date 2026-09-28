@@ -53,6 +53,9 @@ type PageStudioPage struct {
 	Customization *PageCustomization `json:"customization,omitempty" db:"-"`
 	CanCustomize  bool               `json:"canCustomize,omitempty" db:"-"`
 	ClonedFrom    *PageCloneSource   `json:"clonedFrom,omitempty" db:"-"`
+	// MenuPlacements: every menu entry (the tenant's own or inherited from
+	// the gold copy) that opens this page. List responses only.
+	MenuPlacements []PageMenuPlacement `json:"menuPlacements,omitempty" db:"-"`
 }
 
 // pageColumns is the select list every page read and RETURNING uses.
@@ -473,7 +476,14 @@ func (h *PageStudioHandler) list(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, p)
 	}
+	placements := map[string][]PageMenuPlacement{}
+	if nodes, err := loadMenuNodes(r.Context(), h.db, tenantID); err != nil {
+		log.Printf("page-studio list: menu placements unavailable: %v", err)
+	} else {
+		placements = menuPlacements(nodes)
+	}
 	for i := range out {
+		out[i].MenuPlacements = placements[out[i].Slug]
 		if coreID, ok := clones[out[i].ID]; ok {
 			if c, ok := cores[coreID]; ok {
 				out[i].ClonedFrom = &PageCloneSource{PageID: c.ID, Name: c.Name, Version: int(adoptions[coreID].BaseVersion.Int64)}

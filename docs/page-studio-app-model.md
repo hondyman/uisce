@@ -48,10 +48,27 @@ studio now has.
 
 ## Live
 
-`/data/mastering` is served by the core page `mastering-console` (saved from
-the blueprint in the gold copy). Tenants see it as they use it: extended,
-cloned, or not at all if switched off (`docs/core-customization.md`).
-`features/mastering/MasteringPage.tsx` stays as the parity reference.
+Every MDM screen is a core Page Studio page, served at its app route
+(`pages/page-studio/studioRoutes.ts`) and placed on the gold copy's
+**Master Data** menu section, which every tenant inherits:
+
+| Page (slug) | Route | Built from |
+| --- | --- | --- |
+| `mastering-console` | `/data/mastering` | `blueprints/masteringConsole.ts` |
+| `staging-bindings` | `/data/staging-bindings` | `blueprints/stagingBindings.ts` (operations + editor in `features/staging-bindings/studio.tsx`) |
+| `data-pipelines` | `/data/pipelines` | `blueprints/dataPipelines.ts` (operations in `features/data-pipelines/studio.tsx`) |
+| `data-pipeline-editor` | `/data/pipelines/:id` | the domain's visual editor placed as a domain component |
+
+Tenants see each page as they use it (extended, cloned, or not at all if
+switched off - `docs/core-customization.md`). Until a page is saved in an
+environment, its route falls back to the hand-built screen, which also
+stays as the parity reference in tests.
+
+Page Studio shows each page's menu entries and routes, filters by menu
+section, and places a page on the menu (**Place on menu…**). Menus follow
+the same inheritance as core pages: gold-copy entries are read-only for
+tenants, who can add their own entries under them; an entry for a core page
+a tenant switched off is hidden.
 
 ## Where things are
 

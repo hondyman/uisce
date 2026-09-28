@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Paper, Typography, Stack, Button, IconButton, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, MenuItem, Select, InputLabel, FormControl, Alert, Tooltip,
-  CircularProgress,
+  CircularProgress, Chip,
 } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
@@ -191,16 +191,25 @@ const MenuDesignerPage: React.FC = () => {
                 <CreateNewFolderIcon fontSize="small" />
               </IconButton>
             </Tooltip>
-            <Tooltip title="Edit">
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(node); }}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete (and any children)">
-              <IconButton size="small" onClick={(e) => { e.stopPropagation(); setDeleteTarget(node); }}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            {node.inherited ? (
+              // Gold-copy entries: every tenant has them; change them in the gold copy.
+              <Tooltip title="From the gold copy - read-only here. You can add your own entries under it.">
+                <Chip size="small" variant="outlined" color="primary" label="Core" />
+              </Tooltip>
+            ) : (
+              <>
+                <Tooltip title="Edit">
+                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); openEdit(node); }}>
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title="Delete (and any children)">
+                  <IconButton size="small" onClick={(e) => { e.stopPropagation(); setDeleteTarget(node); }}>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
           </Stack>
         }
       >
