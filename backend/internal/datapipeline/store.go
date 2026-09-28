@@ -44,7 +44,10 @@ type RunRecord struct {
 	RecordsOut int64           `db:"total_records_out" json:"records_out"`
 	Errors     int64           `db:"total_errors" json:"errors"`
 	ErrorJSON  json.RawMessage `db:"error_details" json:"errors_sample"`
-	Steps      []NodeStats     `db:"-" json:"steps,omitempty"`
+	// Outputs: what the run produced beyond rows - e.g. the mastering runs
+	// its master steps started ({"mastering": [...]}).
+	Outputs json.RawMessage `db:"outputs" json:"outputs,omitempty"`
+	Steps   []NodeStats     `db:"-" json:"steps,omitempty"`
 }
 
 // Store persists definitions and runs, always scoped to one tenant.
@@ -189,17 +192,22 @@ func (s *Store) FinishRun(ctx context.Context, tenantID, runID string, sum *Summ
 		status = "failed"
 	}
 	var in, out, errs int64
+	outputs := []byte("{}")
 	if sum != nil {
 		in, out, errs = sum.RecordsIn, sum.RecordsOut, sum.Errors
+		if len(sum.Mastering) > 0 {
+			outputs, _ = json.Marshal(map[string]any{"mastering": sum.Mastering})
+		}
 	}
 	_, err := s.DB.ExecContext(ctx, `
 		UPDATE data_pipeline_runs
 		SET status = $3, end_time = now(), updated_at = now(),
 		    total_records_in = $4, total_records_out = $5, total_errors = $6,
 		    error_details = CASE WHEN $7::text = '' THEN error_details
-		                         ELSE error_details || jsonb_build_array(jsonb_build_object('run_error', $7::text)) END
+		                         ELSE error_details || jsonb_build_array(jsonb_build_object('run_error', $7::text)) END,
+		    outputs = COALESCE(outputs, '{}'::jsonb) || $8::jsonb
 		WHERE id = $1 AND tenant_id = $2`,
-		runID, tenantID, status, in, out, errs, errString(runErr))
+		runID, tenantID, status, in, out, errs, errString(runErr), string(outputs))
 	return err
 }
 
@@ -214,7 +222,7 @@ func (s *Store) ListRuns(ctx context.Context, tenantID, pipelineID string, limit
 	var out []RunRecord
 	err := s.DB.SelectContext(ctx, &out, `
 		SELECT id, pipeline_id, status, start_time, end_time, total_records_in, total_records_out, total_errors,
-		       COALESCE(error_details, '[]'::jsonb) AS error_details
+		       COALESCE(error_details, '[]'::jsonb) AS error_details, COALESCE(outputs, '{}'::jsonb) AS outputs
 		FROM data_pipeline_runs WHERE tenant_id = $1 AND pipeline_id = $2
 		ORDER BY start_time DESC LIMIT $3`, tenantID, pipelineID, limit)
 	return out, err
@@ -227,7 +235,7 @@ func (s *Store) GetRun(ctx context.Context, tenantID, runID string) (*RunRecord,
 	var r RunRecord
 	err := s.DB.GetContext(ctx, &r, `
 		SELECT id, pipeline_id, status, start_time, end_time, total_records_in, total_records_out, total_errors,
-		       COALESCE(error_details, '[]'::jsonb) AS error_details
+		       COALESCE(error_details, '[]'::jsonb) AS error_details, COALESCE(outputs, '{}'::jsonb) AS outputs
 		FROM data_pipeline_runs WHERE id = $1 AND tenant_id = $2`, runID, tenantID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

@@ -28,6 +28,7 @@ func Palette(d Deps) []NodeType {
 	bo, boWhy := avail(d.BO != nil, "business object access is not configured")
 	rules, rulesWhy := avail(d.Rules != nil, "the rule engine is not configured")
 	staging, stagingWhy := avail(d.StagingDB != nil, "the staging database is not configured")
+	master, masterWhy := avail(d.Master != nil, "mastering is not configured")
 	return []NodeType{
 		{NodeFileSource, "Read a file", "source", "Read a CSV, JSON or Parquet file you uploaded. Define its columns once; every row is checked against them.", files, filesWhy},
 		{NodeBOSource, "Read business object", "source", "Read records of a business object, optionally filtered.", bo, boWhy},
@@ -36,6 +37,7 @@ func Palette(d Deps) []NodeType {
 		{NodeMap, "Map fields", "step", "Rename fields and apply simple transforms (trim, dates, numbers, lookups).", true, ""},
 		{NodeBOSink, "Write business object", "destination", "Create or update business object records. Every record goes through the object's rules.", bo, boWhy},
 		{NodeStagingSink, "Load staging table", "destination", "Bulk-load rows into a staging table, tracked as a load run (re-running the same run is safe).", staging, stagingWhy},
+		{NodeMaster, "Master the load", "destination", "After the staging load commits, master it: match to golden records, survive, publish. Follows a staging load.", master, masterWhy},
 		{NodeIcebergSink, "Export to Iceberg Lakehouse", "destination", "Write rows to an Apache Iceberg table as Parquet in object storage (MinIO/S3).", files, filesWhy},
 		{NodeFileSink, "Export a file", "destination", "Write the rows to a CSV, JSON or Parquet file.", files, filesWhy},
 	}

@@ -355,7 +355,9 @@ func (r *runner) executeSeries() error {
 	if err := r.canonicalizeSeries(b); err != nil {
 		return fmt.Errorf("canonicalize: %w", err)
 	}
-	*r.stage = "OBSERVE"
+	// Resolving and observing are the price master's linking stage (the run
+	// table's stages are CANONICALIZE, MATCH, SURVIVE, PUBLISH, DONE).
+	*r.stage = "MATCH"
 	if err := r.observe(); err != nil {
 		return fmt.Errorf("observe: %w", err)
 	}

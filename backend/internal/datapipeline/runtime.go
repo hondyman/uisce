@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -59,6 +60,38 @@ type RunContext struct {
 	MaxRows    int
 	SampleRows int
 	DryRun     bool
+	// Loads: the load run each staging sink claimed (node id -> load run
+	// id), for the master steps that follow them.
+	Loads map[string]string
+}
+
+// MasterRequest asks for a committed staging load to be mastered.
+type MasterRequest struct {
+	TenantID      string
+	Entity        string
+	StagingTable  string
+	LoadRunID     string
+	PipelineRunID string
+}
+
+// MasterResult is the mastering run a master step started.
+type MasterResult struct {
+	NodeID        string `json:"node_id"`
+	Entity        string `json:"entity"`
+	LoadRunID     string `json:"load_run_id"`
+	RunID         string `json:"run_id"`
+	Status        string `json:"status"`
+	Records       int    `json:"records"`
+	Published     int    `json:"published"`
+	HeldForReview int    `json:"held_for_review"`
+	Exceptions    int    `json:"exceptions"`
+	Replayed      bool   `json:"replayed,omitempty"`
+}
+
+// Masterer masters committed staging loads (the mastering engine, wired by
+// the API server; nil: master steps can't run).
+type Masterer interface {
+	MasterLoad(ctx context.Context, r MasterRequest) (*MasterResult, error)
 }
 
 // Recorder receives per-run observability. Implementations persist to
@@ -93,7 +126,9 @@ type Factory interface {
 
 // Summary is the run outcome.
 type Summary struct {
-	Nodes      []NodeStats
+	Nodes []NodeStats
+	// Mastering: the mastering runs the pipeline's master steps started.
+	Mastering  []MasterResult   `json:"mastering,omitempty"`
 	Samples    map[string][]Row `json:"samples,omitempty"` // preview only
 	RecordsIn  int64            // rows read from sources
 	RecordsOut int64            // rows accepted by sinks
@@ -127,9 +162,19 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 	for _, n := range spec.Nodes {
 		nodes[n.ID] = n
 	}
+	// Master steps run after the stream, once every sink has committed; they
+	// are not in the stream (a staging sink with one is still a sink).
 	children := map[string][]string{}
+	masterOf := map[string]string{} // master node -> its staging sink
 	for _, e := range spec.Edges {
+		if nodes[e.To].Type == NodeMaster {
+			masterOf[e.To] = e.From
+			continue
+		}
 		children[e.From] = append(children[e.From], e.To)
+	}
+	if rc.Loads == nil {
+		rc.Loads = map[string]string{}
 	}
 
 	stats := map[string]*NodeStats{}
@@ -138,7 +183,7 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		n := nodes[id]
 		stats[id] = &NodeStats{NodeID: id, Label: n.Label, Type: n.Type, OrderIndex: i, Status: "COMPLETED"}
 		switch n.Type {
-		case NodeFileSource, NodeBOSource:
+		case NodeFileSource, NodeBOSource, NodeMaster:
 		default:
 			p, err := f.Processor(n)
 			if err != nil {
@@ -298,6 +343,27 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 	if cerr := closeAll(runErr); cerr != nil && runErr == nil {
 		runErr = cerr
 	}
+	// Master steps: every sink has committed; master each staging load.
+	for _, id := range order {
+		parent, ok := masterOf[id]
+		if !ok {
+			continue
+		}
+		st := stats[id]
+		if runErr != nil || rc.DryRun {
+			st.Status = "SKIPPED"
+			continue
+		}
+		res, err := masterStep(ctx, f, rc, nodes[id], nodes[parent])
+		if res != nil {
+			sum.Mastering = append(sum.Mastering, *res)
+			st.In, st.Out, st.Errors = int64(res.Records), int64(res.Published), int64(res.Exceptions)
+		}
+		if err != nil {
+			st.Status, st.Err = "FAILED", err.Error()
+			runErr = fmt.Errorf("node %q: the load is committed but mastering it failed (master it from the mastering console): %w", id, err)
+		}
+	}
 	out := summarize(order, stats, nodes)
 	sum.Nodes = out.Nodes
 	if rec != nil {
@@ -337,4 +403,30 @@ func decodeConfig(n Node, v any) error {
 		return fmt.Errorf("node %q config: %w", n.ID, err)
 	}
 	return nil
+}
+
+// masterStep masters the load a staging sink committed.
+func masterStep(ctx context.Context, f Factory, rc *RunContext, n, staging Node) (*MasterResult, error) {
+	var c MasterConfig
+	if err := decodeConfig(n, &c); err != nil {
+		return nil, err
+	}
+	var sc StagingSinkConfig
+	if err := decodeConfig(staging, &sc); err != nil {
+		return nil, err
+	}
+	m, ok := f.(interface{ Masterer() Masterer })
+	if !ok || m.Masterer() == nil {
+		return nil, fmt.Errorf("mastering is not configured for this environment")
+	}
+	load := rc.Loads[staging.ID]
+	if load == "" {
+		return nil, fmt.Errorf("staging load %q claimed no load run", staging.ID)
+	}
+	res, err := m.Masterer().MasterLoad(context.WithoutCancel(ctx), MasterRequest{TenantID: rc.TenantID,
+		Entity: strings.ToLower(strings.TrimSpace(c.Entity)), StagingTable: sc.Table, LoadRunID: load, PipelineRunID: rc.RunID})
+	if res != nil {
+		res.NodeID, res.LoadRunID = n.ID, load
+	}
+	return res, err
 }

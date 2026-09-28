@@ -14,6 +14,7 @@ import {
   SpecNode, TargetField,
 } from './api';
 import { missingRequired } from './fields';
+import { masteringApi } from '../mastering/api';
 
 const COLUMN_TYPES: ColumnType[] = ['string', 'int', 'float', 'decimal', 'bool', 'date', 'timestamp'];
 const TRANSFORMS = [
@@ -70,6 +71,7 @@ export function NodeConfigPanel(props: NodeConfigPanelProps) {
       {node.type === 'staging_sink' && <StagingSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
       {node.type === 'file_sink' && <FileSinkForm cfg={cfg} set={set} />}
       {node.type === 'iceberg_sink' && <IcebergSinkForm cfg={cfg} set={set} fields={props.inputFields} />}
+      {node.type === 'master' && <MasterForm cfg={cfg} set={set} />}
     </Stack>
   );
 }
@@ -542,6 +544,25 @@ function IcebergSinkForm({ cfg, set, fields }: FormProps<'iceberg_sink'> & { fie
         />
       )}
       <Chip size="small" label="Format: Parquet (Iceberg REST)" sx={{ alignSelf: 'flex-start' }} />
+    </Stack>
+  );
+}
+
+/** Master the load the staging step before it just committed. */
+function MasterForm({ cfg, set }: FormProps<'master'>) {
+  const profiles = useQuery({ queryKey: ['mastering', 'profiles'], queryFn: masteringApi.profiles });
+  const list = profiles.data?.profiles ?? [];
+  return (
+    <Stack spacing={2}>
+      <Hint>
+        After the staging load commits, master it: resolve each record to its golden record, survive, run the controls and
+        publish - one mastering run, linked to this pipeline run. Connect this step after a "Load staging table" step;
+        the table must be bound to the entity's business object (Staging bindings).
+      </Hint>
+      <TextField select size="small" label="Entity" value={cfg.entity ?? ''} onChange={e => set({ entity: e.target.value })}
+        helperText={profiles.isLoading ? 'Loading…' : list.length === 0 ? 'No mastered entities are set up' : undefined}>
+        {list.map(p => <MenuItem key={p.id} value={p.entity_cd.toLowerCase()}>{p.display_name}</MenuItem>)}
+      </TextField>
     </Stack>
   );
 }

@@ -29,6 +29,7 @@ import ScheduleEditor from '../schedules/ScheduleEditor';
 import { useTargetSchedule } from '../schedules/useTargetSchedule';
 import { useFillHeight } from './useFillHeight';
 import ScheduleIcon from '@mui/icons-material/Schedule';
+import HubIcon from '@mui/icons-material/Hub';
 
 const nodeTypes = { pipeline: PipelineNode };
 
@@ -45,6 +46,7 @@ export function defaultConfig(kind: NodeKind): NodeConfigs[NodeKind] {
     case 'staging_sink': return { table: '', source_cd: '', domain: '' };
     case 'file_sink': return { uri: '', format: 'csv' };
     case 'iceberg_sink': return { namespace: 'default', table: '', partition_by: [], format: 'parquet' };
+    case 'master': return { entity: '' };
   }
 }
 
@@ -61,6 +63,7 @@ export function summarize(n: SpecNode): string {
     case 'staging_sink': return c.table ? `${c.table}${c.source_cd ? ` · ${c.source_cd}/${c.domain}` : ''}` : '';
     case 'file_sink': return c.uri ? `${c.uri} (${c.format})` : '';
     case 'iceberg_sink': return c.table ? `${c.namespace || 'default'}.${c.table} (iceberg)` : '';
+    case 'master': return c.entity ? `master into ${c.entity} golden records` : '';
   }
   return '';
 }
@@ -499,6 +502,16 @@ function RunsView({ runs, loading, label }: { runs: RunRecord[]; loading: boolea
                   <TableCell>{s.Err && <Typography variant="caption" color="error">{s.Err}</Typography>}</TableCell>
                 </TableRow>))}</TableBody>
             </Table>
+            {(detail.data.outputs?.mastering ?? []).map((m) => (
+              <Stack key={m.run_id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Chip size="small" icon={<HubIcon />} color={m.status === 'FAILED' ? 'error' : m.status === 'PARTIAL' ? 'warning' : 'success'}
+                  label={`${label(m.node_id) ?? 'Master'}: ${m.status.toLowerCase()}`} />
+                <Typography variant="body2">
+                  {`${m.records} records · ${m.published} published · ${m.held_for_review} held · ${m.exceptions} exceptions${m.replayed ? ' (already mastered)' : ''}`}
+                </Typography>
+                <Button size="small" href={`/${window.location.pathname.split('/')[1] || 'en'}/data/mastering`}>Open {m.entity} mastering</Button>
+              </Stack>
+            ))}
             {detail.data.errors_sample.slice(0, 100).map((e, i) => (
               <Typography key={i} variant="body2" color={e.run_error || e.kind === 'error' ? 'error' : 'warning.main'}>
                 {e.run_error ?? `Row ${e.row} · ${label(e.node_id)} · ${e.reason}`}
