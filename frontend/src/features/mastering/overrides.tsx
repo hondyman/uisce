@@ -2,12 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Alert, Autocomplete, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress,
-  MenuItem, Paper, Radio, RadioGroup, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  Alert, Autocomplete, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress,
+  MenuItem, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import { CatalogErrorAlert } from '../message-catalog/parts';
-import { fmt } from '../schedules/api';
-import { masteringApi, Override, OverrideStatus, Policy, showValue } from './api';
+import { masteringApi, Override, OverrideStatus, Policy } from './api';
 
 const STATUS_COLOR: Record<OverrideStatus, 'warning' | 'success' | 'error' | 'default'> = {
   PENDING: 'warning', APPLIED: 'success', REJECTED: 'error', WITHDRAWN: 'default',
@@ -93,97 +92,6 @@ export function OverrideDialog({ entity, goldenId, attribute, current, hasActive
 function policyNeed(p: Policy, attr: string) {
   if (p.mode === 'DIRECT') return 0;
   return p.high_risk_attributes.includes(attr) ? Math.max(p.high_risk_approvals, p.approvals_required) : p.approvals_required;
-}
-
-/** Override requests: approve, reject, withdraw; and what was applied. */
-export function OverridesTab({ entity, onOpen }: { entity: string; onOpen: (id: string) => void }) {
-  const { t, i18n } = useTranslation();
-  const qc = useQueryClient();
-  const [status, setStatus] = useState('PENDING');
-  const [comment, setComment] = useState<Record<string, string>>({});
-  const list = useQuery({ queryKey: ['mastering', 'overrides', entity, status], queryFn: () => masteringApi.overrides(entity, { status }) });
-  const act = useMutation({
-    mutationFn: ({ o, a }: { o: Override; a: 'approve' | 'reject' | 'withdraw' }) =>
-      a === 'withdraw' ? masteringApi.withdrawOverride(entity, o.id) : masteringApi.voteOverride(entity, o.id, a === 'approve', comment[o.id]?.trim() || undefined),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['mastering'] }),
-  });
-  const rows = list.data?.overrides ?? [];
-  return (
-    <>
-      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-        <TextField select size="small" sx={{ minWidth: 200 }} label={t('mastering.overrides.show')} value={status} onChange={(e) => setStatus(e.target.value)}
-          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}>
-          <MenuItem value="PENDING">{t('mastering.overrides.status.PENDING')}</MenuItem>
-          <MenuItem value="ACTIVE">{t('mastering.overrides.active')}</MenuItem>
-          <MenuItem value="">{t('mastering.all')}</MenuItem>
-        </TextField>
-      </Stack>
-      {list.isLoading && <LinearProgress />}
-      {list.error && <CatalogErrorAlert error={list.error} />}
-      {act.error && <Box sx={{ mb: 2 }}><CatalogErrorAlert error={act.error} /></Box>}
-      <TableContainer component={Paper} variant="outlined">
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>{t('mastering.overrides.record')}</TableCell>
-              <TableCell>{t('mastering.overrides.change')}</TableCell>
-              <TableCell>{t('mastering.overrides.reason')}</TableCell>
-              <TableCell>{t('mastering.overrides.requested')}</TableCell>
-              <TableCell>{t('mastering.overrides.state')}</TableCell>
-              <TableCell align="right" />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((o) => (
-              <TableRow key={o.id} hover>
-                <TableCell>
-                  <Button size="small" onClick={() => onOpen(o.open_id ?? o.golden_id)}>{o.golden_code ?? o.golden_id.slice(0, 8)}</Button>
-                  <Typography variant="caption" color="text.secondary" component="div">{o.golden_name}</Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" fontFamily="monospace">{o.attribute}</Typography>
-                  {o.action === 'CLEAR'
-                    ? <Typography variant="body2">{t('mastering.overrides.clearDesc')}</Typography>
-                    : <Typography variant="body2"><s>{showValue(o.previous_value)}</s> → <b>{showValue(o.value)}</b></Typography>}
-                </TableCell>
-                <TableCell sx={{ maxWidth: 260 }}><Typography variant="body2">{o.reason}</Typography></TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                  <Typography variant="body2">{o.requested_by_name ?? '—'}</Typography>
-                  <Typography variant="caption" color="text.secondary">{fmt(o.requested_at, i18n.language)}</Typography>
-                </TableCell>
-                <TableCell>
-                  <OverrideStatusChip o={o} />
-                  <Typography variant="caption" color="text.secondary" component="div">
-                    {o.mode === 'DIRECT' ? t('mastering.overrides.direct') : t('mastering.overrides.approvals', { n: o.approvals, of: o.approvals_required })}
-                  </Typography>
-                  {o.voters && <Typography variant="caption" color="text.secondary" component="div">{o.voters}</Typography>}
-                </TableCell>
-                <TableCell align="right" sx={{ whiteSpace: 'nowrap', minWidth: 220 }}>
-                  {o.status === 'PENDING' && (o.mine ? (
-                    <Button size="small" color="inherit" disabled={act.isPending} onClick={() => act.mutate({ o, a: 'withdraw' })}>{t('mastering.overrides.withdraw')}</Button>
-                  ) : o.voted ? (
-                    <Typography variant="caption" color="text.secondary">{t('mastering.overrides.youVoted')}</Typography>
-                  ) : (
-                    <Stack spacing={1} alignItems="flex-end">
-                      <TextField size="small" placeholder={t('mastering.overrides.comment')} value={comment[o.id] ?? ''}
-                        onChange={(e) => setComment((c) => ({ ...c, [o.id]: e.target.value }))} />
-                      <Stack direction="row" spacing={1}>
-                        <Button size="small" variant="contained" disabled={act.isPending} onClick={() => act.mutate({ o, a: 'approve' })}>{t('mastering.overrides.approve')}</Button>
-                        <Button size="small" color="error" disabled={act.isPending} onClick={() => act.mutate({ o, a: 'reject' })}>{t('mastering.overrides.reject')}</Button>
-                      </Stack>
-                    </Stack>
-                  ))}
-                </TableCell>
-              </TableRow>
-            ))}
-            {!list.isLoading && !list.error && rows.length === 0 && (
-              <TableRow><TableCell colSpan={6}><Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{t('mastering.overrides.empty')}</Typography></TableCell></TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </>
-  );
 }
 
 /** The entity's override policy; administrators can change it (audited). */

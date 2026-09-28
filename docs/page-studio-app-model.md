@@ -1,10 +1,11 @@
 # Page Studio: the page application model
 
 **Goal.** Page Studio builds the platform's own best pages. The acceptance
-test is the hand-built mastering console (`features/mastering/MasteringPage.tsx`):
+test was the hand-built mastering console (`MasteringPage.tsx`, now retired):
 the same console, built as a Page Studio page (`app/blueprints/masteringConsole.ts`),
 renders the same header, tabs, counts and cells from the same API, cell for
-cell (`src/vitest/page-studio/masteringConsoleParity.test.tsx`).
+cell - the hand-built output is kept as the expectations in
+`src/vitest/page-studio/masteringConsoleParity.test.tsx`.
 
 ## What the console needed that the studio lacked
 
@@ -60,9 +61,10 @@ Every MDM screen is a core Page Studio page, served at its app route
 | `data-pipeline-editor` | `/data/pipelines/:id` | the domain's visual editor placed as a domain component |
 
 Tenants see each page as they use it (extended, cloned, or not at all if
-switched off - `docs/core-customization.md`). Until a page is saved in an
-environment, its route falls back to the hand-built screen, which also
-stays as the parity reference in tests.
+switched off - `docs/core-customization.md`). The hand-built screens are
+retired; an environment without a page saved says so and points to
+**From blueprint**. The parity test keeps the hand-built console's recorded
+output as the studio console's expectations.
 
 Page Studio shows each page's menu entries and routes, filters by menu
 section, and places a page on the menu (**Place on menu…**). Menus follow

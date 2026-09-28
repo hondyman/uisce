@@ -169,20 +169,8 @@ import RuntimePage from './pages/PageRuntimeRenderer';
 
 // Code-split workstation components for standalone / detached popout routes
 const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));
-const PipelinesListPage = React.lazy(() => import('./features/data-pipelines/PipelinesListPage'));
-const PipelineEditorPage = React.lazy(() => import('./features/data-pipelines/PipelineEditorPage'));
-const StagingBindingsPage = React.lazy(() => import('./features/staging-bindings/StagingBindingsPage'));
-// MDM routes are served by core Page Studio pages (studioRoutes.ts). The
-// hand-built screens they replaced are the fallback while a page has not
-// been saved in an environment yet, and the parity references in tests.
-const MasteringPage = React.lazy(() => import('./features/mastering/MasteringPage'));
+// MDM routes are served by core Page Studio pages (studioRoutes.ts).
 const StudioPageContent = React.lazy(() => import('./pages/PageBrowser').then((m) => ({ default: m.PageContent })));
-const STUDIO_ROUTE_FALLBACKS: Record<string, React.ReactNode> = {
-  'mastering-console': <MasteringPage />,
-  'staging-bindings': <StagingBindingsPage />,
-  'data-pipelines': <PipelinesListPage />,
-  'data-pipeline-editor': <PipelineEditorPage />,
-};
 const StandalonePageRenderer = React.lazy<React.ComponentType<{ slug?: string; recordId?: string }>>(() =>
   import('./pages/PageBrowser').then((m) => ({ default: m.StandalonePageRenderer }))
 );
@@ -299,7 +287,7 @@ function ProtectedApp() {
         <Route path="fabric/bundles/:bundleId/edit" element={<ProtectedRoute><BundleEditor onSave={handleBundleSave} onCancel={handleBundleCancel} /></ProtectedRoute>} />
         {/* Validation rules: one editor, one engine (internal/rules/vm). */}
         {STUDIO_ROUTES.map(({ path, slug }) => (
-          <Route key={path} path={path} element={<ProtectedRoute><StudioPageContent slug={slug} fallback={STUDIO_ROUTE_FALLBACKS[slug]} /></ProtectedRoute>} />
+          <Route key={path} path={path} element={<ProtectedRoute><StudioPageContent slug={slug} /></ProtectedRoute>} />
         ))}
         <Route path="core/validation-rules" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />
         <Route path="core/validation-rules/editor" element={<ProtectedRoute><AdvancedRuleBuilderPage /></ProtectedRoute>} />

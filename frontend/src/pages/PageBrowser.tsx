@@ -105,7 +105,7 @@ const NavTree: React.FC<{
  * clone, or not at all if switched off). Also mounted directly on routes
  * that are served by a studio page, e.g. /data/mastering.
  */
-export const PageContent: React.FC<{ slug: string; recordId?: string; fallback?: React.ReactNode }> = ({ slug, recordId, fallback }) => {
+export const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
   const { tenant } = useTenant();
   const navigate = useNavigate();
   const isCreate = recordId === 'new';
@@ -135,7 +135,14 @@ export const PageContent: React.FC<{ slug: string; recordId?: string; fallback?:
   if (loading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>;
   }
-  if (missing && fallback) return <>{fallback}</>;
+  if (missing) {
+    // No page with this slug at all (a switched-off core page says so itself).
+    return (
+      <Alert severity="info" sx={{ m: 3 }}>
+        The page “{slug}” is not in this environment yet. A gold-copy administrator can add it in Page Designer → From blueprint.
+      </Alert>
+    );
+  }
   if (error) {
     return <Alert severity="error" sx={{ m: 3 }}>{error}</Alert>;
   }

@@ -4,7 +4,7 @@
  * (variables), governed data (queries against registered operations),
  * behavior (actions), and conditional display (conditions evaluated by the
  * one rule engine). Reverse-engineered from the hand-built mastering console
- * (features/mastering/MasteringPage.tsx): every construct here exists
+ * (the retired features/mastering/MasteringPage.tsx): every construct here exists
  * because that page needs it. See docs/page-studio-app-model.md.
  *
  * Governance boundaries (deliberate, do not loosen):

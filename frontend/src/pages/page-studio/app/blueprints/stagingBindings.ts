@@ -2,7 +2,7 @@ import type { ComponentDefinition, CorePageDefinition, PageLayout, PageTab } fro
 import type { Action, ColumnDef, ConditionNode } from '../appModel';
 
 /**
- * Staging bindings (features/staging-bindings/StagingBindingsPage.tsx) as a
+ * Staging bindings (formerly the hand-built StagingBindingsPage.tsx) as a
  * Page Studio page: which staging column each business object field is read
  * from, maker-checker. Bindings, approvals (with a waiting count) and
  * history tabs; proposals open the domain's own editor.
