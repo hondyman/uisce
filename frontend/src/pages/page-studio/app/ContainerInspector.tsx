@@ -78,7 +78,8 @@ export default function ContainerInspector({ node, layout, onLayoutChange, draft
           {node.type === 'Drawer' ? (
             <Stack direction="row" spacing={1}>
               <SelectField label="Side" value={p.anchor ?? 'right'} options={[{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]} onChange={(v) => setProps({ anchor: v })} />
-              <TextField size="small" type="number" label="Width (px)" value={p.width ?? 720} onChange={(e) => setProps({ width: Number(e.target.value) || 720 })} />
+              <BindingField label="Width (px, or a binding)" value={p.width ?? 720} paths={paths}
+                onChange={(v) => setProps({ width: typeof v === 'string' && /^\d+$/.test(v) ? Number(v) : v })} />
             </Stack>
           ) : (
             <SelectField label="Width" value={p.maxWidth ?? 'sm'} options={['xs', 'sm', 'md', 'lg', 'xl'].map((v) => ({ value: v as 'sm', label: v }))} onChange={(v) => setProps({ maxWidth: v })} />

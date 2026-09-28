@@ -1,11 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, Chip, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { fmt } from '../../../features/schedules/api';
 import type { CellBody, CellSpec, ChipColor, RowButton } from './appModel';
 import { resolve, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
 import { useAppRuntime } from './AppRuntime';
+import { PageIcon } from './icons';
 
 const DASH = '—';
 const blank = (v: unknown) => v === undefined || v === null || v === '';
@@ -22,9 +24,21 @@ function RowButtonView({ b, scope }: { b: RowButton; scope: Scope }) {
   const { runActions, mode } = useAppRuntime();
   const visible = useCondition(b.visibleWhen, scope, false);
   if (!visible) return null;
+  const click = (e: React.MouseEvent) => { e.stopPropagation(); void runActions(b.onClick, scope); };
+  if (b.icon) {
+    const label = text(b.label, scope);
+    return (
+      <Tooltip title={label}>
+        <span>
+          <IconButton size="small" color={b.color === 'inherit' ? 'default' : b.color ?? 'default'} disabled={mode === 'design'} onClick={click} aria-label={label}>
+            <PageIcon name={b.icon} fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+    );
+  }
   return (
-    <Button size="small" variant={b.variant ?? 'text'} color={b.color ?? 'primary'} disabled={mode === 'design'}
-      onClick={(e) => { e.stopPropagation(); void runActions(b.onClick, scope); }}>
+    <Button size="small" variant={b.variant ?? 'text'} color={b.color ?? 'primary'} disabled={mode === 'design'} onClick={click}>
       {text(b.label, scope)}
     </Button>
   );
@@ -62,12 +76,34 @@ function CellBodyView({ spec, scope }: { spec: CellBody; scope: Scope }) {
     case 'text': {
       const v = spec.text !== undefined ? text(spec.text, scope) : resolve(spec.value, scope);
       if (spec.caption && blank(v)) return null;
-      return (
-        <Typography variant={spec.caption ? 'caption' : 'body2'} component={spec.caption ? 'div' : 'span'} fontWeight={spec.bold ? 600 : undefined}
-          color={spec.color ? `${spec.color}.main` : spec.caption ? 'text.secondary' : undefined}
-          sx={{ fontFamily: spec.mono ? 'monospace' : undefined, whiteSpace: spec.nowrap ? 'nowrap' : undefined }}>
+      const tone = spec.tone !== undefined ? String(resolve(spec.tone, scope) ?? '') : '';
+      const struck = spec.strike !== undefined && !!resolve(spec.strike, scope) && resolve(spec.strike, scope) !== 'false';
+      const tip = spec.tooltip !== undefined ? resolve(spec.tooltip, scope) : undefined;
+      const toned = ['success', 'warning', 'error', 'info'].includes(tone);
+      const body = (
+        <Typography variant={spec.caption ? 'caption' : 'body2'} component={spec.caption || toned ? 'div' : 'span'} fontWeight={spec.bold || toned ? 600 : undefined}
+          color={struck ? 'text.secondary' : spec.color ? `${spec.color}.main` : spec.caption ? 'text.secondary' : undefined}
+          sx={(th) => ({
+            fontFamily: spec.mono ? 'monospace' : undefined, whiteSpace: spec.nowrap ? 'nowrap' : undefined, wordBreak: 'break-word',
+            textDecoration: struck ? 'line-through' : undefined,
+            ...(toned ? {
+              px: 1, py: 0.25, borderRadius: 1,
+              bgcolor: alpha(th.palette[tone as 'success'].main, 0.22), outline: `1px solid ${alpha(th.palette[tone as 'success'].main, 0.6)}`,
+            } : {}),
+          })}>
           {show(v)}
         </Typography>
+      );
+      return !blank(tip) ? <Tooltip title={String(tip)}><Box component="span">{body}</Box></Tooltip> : body;
+    }
+    case 'list': {
+      const v = resolve(spec.value, scope);
+      const items = Array.isArray(v) ? v : [];
+      if (items.length === 0) return <Typography variant="body2" color="text.disabled">{spec.empty ? text(spec.empty, scope) : DASH}</Typography>;
+      return (
+        <Stack direction={spec.direction ?? 'column'} spacing={0.5} useFlexGap flexWrap="wrap">
+          {items.map((item, i) => <Cell key={i} spec={spec.item} scope={{ ...scope, item }} />)}
+        </Stack>
       );
     }
     case 'diff':
@@ -129,6 +165,18 @@ function CellBodyView({ spec, scope }: { spec: CellBody; scope: Scope }) {
     }
     case 'chips': {
       const v = resolve(spec.value, scope);
+      // Entries may carry their own look: {label, color, variant}.
+      if (Array.isArray(v) && v.some((x) => x && typeof x === 'object')) {
+        return (
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            {v.map((x, i) => {
+              const o = (x && typeof x === 'object' ? x : { label: x }) as { label?: unknown; color?: ChipColor; variant?: 'filled' | 'outlined'; tooltip?: unknown };
+              const chip = <Chip key={i} size="small" color={o.color ?? 'default'} variant={o.variant ?? 'outlined'} label={show(o.label)} />;
+              return !blank(o.tooltip) ? <Tooltip key={i} title={String(o.tooltip)}>{chip}</Tooltip> : chip;
+            })}
+          </Stack>
+        );
+      }
       const entries: [string, unknown][] = Array.isArray(v)
         ? v.map((x) => [String(x), undefined])
         : v && typeof v === 'object'
