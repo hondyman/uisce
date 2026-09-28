@@ -49,6 +49,23 @@ function page(nodes: Record<string, { type: string; children?: string[]; props?:
 }
 
 describe('studio building blocks', () => {
+  it('a hidden widget takes no room: its sized wrapper is not rendered (a closed side panel)', async () => {
+    const { container } = page(
+      { root: { type: 'Row', children: ['main_text', 'side'] } },
+      {
+        main_text: { type: 'TextBlock', props: { text: 'Main' } },
+        side: { type: 'TextBlock', props: { text: 'Side panel' }, style: { flex: '0 0 380px' }, visibleWhen: cond('vars.open', 'is_true') },
+      },
+      { variables: [{ name: 'open', default: false }] },
+    );
+    expect(await screen.findByText('Main')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText('Side panel')).toBeNull());
+    // Main's widget wrapper is the row's only child: no empty, sized box beside it.
+    const wrapper = screen.getByText('Main').closest('[class*="MuiBox"]')!.parentElement!;
+    expect(wrapper.parentElement!.children).toHaveLength(1);
+    expect(container.querySelectorAll('.MuiBox-root:empty')).toHaveLength(0);
+  }, 30000);
+
   it('a button opens a Drawer holding a KeyValue and a selectable Timeline; closing clears it', async () => {
     page(
       {
