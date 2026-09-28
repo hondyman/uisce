@@ -16,6 +16,7 @@ const CELL_KINDS: { value: CellSpec['kind']; label: string }[] = [
   { value: 'percent', label: 'Percent (0-1)' }, { value: 'delta', label: 'Change % (coloured)' }, { value: 'datetime', label: 'Date/time' },
   { value: 'chip', label: 'Status chip' }, { value: 'chips', label: 'Chips (counts/list)' }, { value: 'diff', label: 'Change (old → new)' },
   { value: 'link', label: 'Link button' }, { value: 'actions', label: 'Row buttons' }, { value: 'input', label: 'Inline input' },
+  { value: 'list', label: 'List of values' },
 ];
 
 const COLORS = ['default', 'primary', 'secondary', 'success', 'warning', 'error', 'info'];
@@ -29,7 +30,14 @@ function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange
   switch (cell.kind) {
     case 'text':
       fields.push(bind('value', 'Value'), <SwitchField key="mono" label="Monospace" checked={!!cell.mono} onChange={(v) => set({ mono: v })} />,
-        <SwitchField key="caption" label="Caption style" checked={!!cell.caption} onChange={(v) => set({ caption: v })} />);
+        <SwitchField key="caption" label="Caption style" checked={!!cell.caption} onChange={(v) => set({ caption: v })} />,
+        bind('tone', 'Tone (success|warning|error|info - tints the value)'), bind('strike', 'Struck through when (truthy)'), bind('tooltip', 'Tooltip'));
+      break;
+    case 'list':
+      fields.push(bind('value', 'Values (a list)'),
+        <SelectField key="d" label="Direction" value={cell.direction ?? 'column'} options={[{ value: 'column', label: 'Stacked' }, { value: 'row', label: 'In a row' }]} onChange={(v) => set({ direction: v })} />,
+        <Box key="i"><Typography variant="caption" color="text.secondary">Each item ({'{{item}}'})</Typography>
+          <CellEditor cell={cell.item ?? { kind: 'text', value: '{{item}}' }} onChange={(c) => set({ item: c })} paths={[...paths, 'item']} draft={draft} /></Box>);
       break;
     case 'twoLine': fields.push(bind('primary', 'Primary'), bind('secondary', 'Secondary'),
       <SwitchField key="m" label="Secondary monospace" checked={!!cell.secondaryMono} onChange={(v) => set({ secondaryMono: v })} />); break;
@@ -62,7 +70,7 @@ function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange
       <TextField key="n" size="small" label="Name ({{rowState.<name>}})" value={cell.name} onChange={(e) => set({ name: e.target.value })} />,
       <TextSpecField key="p" label="Placeholder" value={cell.placeholder} onChange={(v) => set({ placeholder: v })} paths={paths} />); break;
     case 'actions':
-      fields.push(<JsonField key="b" label="Buttons [{label, variant, color, visibleWhen, onClick}]" value={cell.buttons} onChange={(v) => set({ buttons: v })} minRows={6} />,
+      fields.push(<JsonField key="b" label="Buttons [{label, icon, variant, color, visibleWhen, onClick}]" value={cell.buttons} onChange={(v) => set({ buttons: v })} minRows={6} />,
         <JsonField key="c" label="Caption {text, visibleWhen} (optional)" value={cell.caption ?? null} minRows={2} onChange={(v) => set({ caption: v || undefined })} />);
       break;
   }
@@ -160,6 +168,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
           <Section title="Select">
             <SelectField label="Sets variable" value={props.variable as string} options={vars} onChange={(v) => setProps({ variable: v })} />
             {text('label', 'Label')}{text('emptyLabel', 'Empty option label (All)')}
+            <SelectField label="Style" value={(props.variant as 'select') ?? 'select'} options={[{ value: 'select', label: 'Dropdown' }, { value: 'toggle', label: 'Toggle buttons' }]} onChange={(v) => setProps({ variant: v === 'select' ? undefined : v })} />
             <TextField size="small" type="number" label="Min width" value={props.minWidth ?? ''} onChange={(e) => setProps({ minWidth: e.target.value ? Number(e.target.value) : undefined })} />
           </Section>
           <Section title="Options">
@@ -226,6 +235,13 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
               render={(col, set) => <ColumnEditor col={col} onChange={set} paths={rowPaths} draft={draft} />} />
           </Section>
           <Section title="Behaviour">{actions('onRowClick', 'On row click ({{row}})', rowPaths)}</Section>
+          <Section title="Wide and nested">
+            <SwitchField label="Freeze the first column" checked={!!p.stickyFirstColumn} onChange={(v) => setProps({ stickyFirstColumn: v || undefined })} />
+            <JsonField label="Columns from data {from, idField, header, valuePath, cell, insertAt} ({{col}}, {{value}})" value={p.dynamicColumns ?? null} minRows={4}
+              onChange={(v) => setProps({ dynamicColumns: v || undefined })} />
+            <JsonField label="Row detail {rows, columns, text, when} - an expandable nested table ({{row}} = detail row, {{parent}})" value={p.rowDetail ?? null} minRows={4}
+              onChange={(v) => setProps({ rowDetail: v || undefined })} />
+          </Section>
         </>
       );
       break;
@@ -238,6 +254,25 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
           {text('text', 'Text')}{text('detail', 'Detail')}
           <JsonField label="Chips {value, labelKey, colorMap} (optional)" value={props.chips ?? null} minRows={2} onChange={(v) => setProps({ chips: v || undefined })} />
           {actions('onClose', 'On close (makes it closable)')}
+          <SwitchField label="Action button" checked={!!props.action} onChange={(v) => setProps({ action: v ? { label: 'Action', onClick: [] } : undefined })} />
+          {!!props.action && (
+            <>
+              <TextSpecField label="Button label" value={(props.action as { label: TextSpec }).label} onChange={(v) => setProps({ action: { ...(props.action as object), label: v } })} paths={paths} />
+              <ActionsEditor label="On click" value={(props.action as { onClick: never }).onClick} onChange={(v) => setProps({ action: { ...(props.action as object), onClick: v ?? [] } })} draft={draft} paths={paths} />
+            </>
+          )}
+        </Section>
+      );
+      break;
+    case 'TextBlock':
+      body = (
+        <Section title="Text">
+          {text('text', 'Text')}
+          <SelectField label="Style" value={(props.variant as 'body2') ?? 'body2'}
+            options={['h5', 'h6', 'subtitle1', 'subtitle2', 'body1', 'body2', 'caption', 'overline'].map((v) => ({ value: v as 'body2', label: v }))} onChange={(v) => setProps({ variant: v })} />
+          <SelectField label="Colour" value={props.color as 'text.primary'} allowEmpty="Default"
+            options={['text.primary', 'text.secondary', 'primary.main', 'error.main', 'warning.main', 'success.main', 'info.main'].map((v) => ({ value: v as 'text.primary', label: v }))}
+            onChange={(v) => setProps({ color: v || undefined })} />
         </Section>
       );
       break;

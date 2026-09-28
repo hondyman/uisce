@@ -141,9 +141,9 @@ export interface OverlayNodeProps {
   openWhen?: ConditionNode;
   title?: TextSpec;
   subtitle?: TextSpec;
-  /** Drawer: side and width. */
+  /** Drawer: side and width (a number, or a binding - wider in one view than another). */
   anchor?: 'right' | 'left';
-  width?: number;
+  width?: Binding;
   /** Dialog: width class. */
   maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   /** Closing (X, backdrop, Escape) runs these - usually clearing the variable openWhen reads. */
@@ -171,7 +171,16 @@ export type CellSpec = CellBody & {
 
 export type CellBody =
   /** value (raw) or text (translated when it names an i18n key). */
-  | { kind: 'text'; value?: Binding; text?: TextSpec; mono?: boolean; bold?: boolean; nowrap?: boolean; caption?: boolean; color?: 'error' | 'warning' | 'info' | 'secondary' }
+  | {
+      kind: 'text'; value?: Binding; text?: TextSpec; mono?: boolean; bold?: boolean; nowrap?: boolean; caption?: boolean; color?: 'error' | 'warning' | 'info' | 'secondary';
+      /** Tinted background when this resolves to success|warning|error|info (e.g. the value that won). */
+      tone?: Binding;
+      /** Struck through when this resolves truthy (e.g. an excluded value). */
+      strike?: Binding;
+      tooltip?: Binding;
+    }
+  /** Each item of a list, rendered with `item` cell ({{item}} is the entry). */
+  | { kind: 'list'; value?: Binding; item: CellSpec; direction?: 'row' | 'column'; empty?: TextSpec }
   /** Primary line plus a caption line (name over code). */
   | { kind: 'twoLine'; primary: Binding; secondary?: Binding; secondaryMono?: boolean }
   | { kind: 'number'; value?: Binding; digits?: number; suffix?: Binding }
@@ -197,7 +206,7 @@ export type CellBody =
       /** Extra caption after the chip (v{{row.version}}). */
       caption?: Binding;
     }
-  /** Chips for each entry of an object (counts) or array; zero/empty entries skipped. */
+  /** Chips for each entry of an object (counts) or array; zero/empty entries skipped. Array entries may be {label, color, variant}. */
   | { kind: 'chips'; value?: Binding; labelKey?: string; colorMap?: Record<string, ChipColor>; showCount?: boolean; keys?: string[] }
   /** A text button that runs actions (open a record). */
   | { kind: 'link'; label: TextSpec; onClick: Action[]; after?: Binding }
@@ -208,6 +217,8 @@ export type CellBody =
 
 export interface RowButton {
   label: TextSpec;
+  /** A page icon name (app/icons.tsx); with an icon the label becomes its tooltip. */
+  icon?: string;
   variant?: 'text' | 'outlined' | 'contained';
   color?: 'primary' | 'inherit' | 'error' | 'secondary';
   visibleWhen?: ConditionNode;

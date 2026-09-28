@@ -43,6 +43,22 @@ domain components:
 | **Timeline** | widget | Versions, runs, events from a query or binding; title/subtitle/time/chip per item; `selectedWhen`, `onItemClick` |
 | **Form** | widget | Fields bound to a page variable (`{{vars.draft.x}}`), seeded by `initFrom`; text, long text, number, date, select, radio, switch, chips; options static or **from a query**; per-field `visibleWhen` / `readOnlyWhen`; optional submit actions (or a dialog's buttons) |
 
+Grids and cells for record detail (the provenance drawer's needs):
+
+- **DataGrid `dynamicColumns`** - columns generated from data (one per
+  source): each entry of `from` becomes a column whose cell sees `{{col}}`
+  and `{{value}}` = `row[valuePath][col[idField]]`; `stickyFirstColumn` for
+  wide matrices.
+- **DataGrid `rowDetail`** - an expandable nested table under a row (the
+  values that competed for an attribute, and why).
+- **Cells** - `list` (several values in one cell, each rendered by an item
+  cell), text `tone` (tints the value that won) / `strike` (an excluded
+  value) / `tooltip`, chips whose entries carry their own colour, row
+  buttons with an `icon`.
+- **VariableSelect `variant: 'toggle'`**, **AlertBanner `action`**,
+  **TextBlock** (headings and captions), a Drawer `width` that can be a
+  binding (wider in one view than another).
+
 Action forms (`runOperation.form`) use the same field kinds, options from a
 query included (`app/formFields.tsx`). In Page Designer the containers show
 as editable regions (a drawer's content is edited in place, with what opens

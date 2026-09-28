@@ -184,3 +184,73 @@ describe('the building blocks in Page Designer', () => {
     expect(screen.getByText('Footer buttons')).toBeTruthy();
   }, 30000);
 });
+
+describe('grid and cell building blocks', () => {
+  registerOperations([{
+    id: 'test.attributes', domain: 'test', kind: 'query', label: 'Attributes', params: [],
+    run: async () => ({
+      sources: [{ code: 'BLOOMBERG' }, { code: 'FACTSET' }],
+      rows: [{
+        id: 'name', attribute: 'name', golden: 'Widget Ltd', reason: 'SOURCE_PRIORITY: Bloomberg ranks first',
+        identifiers: [{ label: 'ISIN US123', color: 'primary', variant: 'filled' }, { label: 'CUSIP 123' }],
+        competing: [{ source: 'BLOOMBERG', value: 'Widget Ltd' }, { source: 'FACTSET', value: 'Widget Limited' }],
+        by_source: {
+          BLOOMBERG: [{ value: 'Widget Ltd', tone: 'success' }],
+          FACTSET: [{ value: 'Widget Limited', strike: true }],
+        },
+      }],
+    }),
+  }]);
+  const onEdit = vi.fn();
+  registerOperations([{ id: 'test.edit', domain: 'test', kind: 'mutation', label: 'Edit', params: [{ name: 'attr', type: 'string' }], run: async (p) => onEdit(p) }]);
+
+  it('builds a source-by-source matrix with generated columns, list cells, a detail row, a toggle, an alert action and icon buttons', async () => {
+    page(
+      { root: { type: 'Column', children: ['view', 'title', 'back', 'grid'] } },
+      {
+        view: { type: 'VariableSelect', props: { variable: 'view', variant: 'toggle', options: [{ value: 'values', label: 'Values' }, { value: 'compare', label: 'Side by side' }] } },
+        title: { type: 'TextBlock', props: { text: 'Showing {{vars.view}}', variant: 'subtitle2' } },
+        back: { type: 'AlertBanner', props: { text: 'Viewing an old version', action: { label: 'Back to latest', onClick: [{ kind: 'setVariable', name: 'view', value: 'values' }] } } },
+        grid: {
+          type: 'DataGrid', props: {
+            query: 'attrs', rowsPath: 'rows', stickyFirstColumn: true,
+            columns: [
+              { id: 'attr', header: 'Attribute', field: 'attribute' },
+              { id: 'golden', header: 'Golden', field: 'golden' },
+              { id: 'ids', header: 'Identifiers', cell: { kind: 'chips', value: '{{row.identifiers}}' } },
+              { id: 'act', header: '', cell: { kind: 'actions', buttons: [{ label: 'Override name', icon: 'edit', onClick: [{ kind: 'runOperation', operation: 'test.edit', params: { attr: '{{row.attribute}}' } }] }] } },
+            ],
+            dynamicColumns: {
+              from: '{{queries.attrs.data.sources}}', idField: 'code', header: '{{col.code}}', valuePath: 'by_source', insertAt: 2,
+              cell: { kind: 'list', value: '{{value}}', item: { kind: 'text', value: '{{item.value}}', tone: '{{item.tone}}', strike: '{{item.strike}}' } },
+            },
+            rowDetail: {
+              rows: '{{row.competing}}', text: '{{row.reason}}',
+              columns: [{ id: 's', header: 'Source', field: 'source' }, { id: 'v', header: 'Value', field: 'value' }],
+            },
+          },
+        },
+      },
+      { variables: [{ name: 'view', default: 'compare' }], queries: [{ id: 'attrs', operation: 'test.attributes', params: {} }] },
+    );
+    // Generated columns sit where they were asked for (after Golden).
+    await screen.findByRole('columnheader', { name: 'BLOOMBERG' });
+    const headers = screen.getAllByRole('columnheader').map((h: HTMLElement) => h.textContent);
+    expect(headers.slice(0, 4)).toEqual(['Attribute', 'Golden', 'BLOOMBERG', 'FACTSET']);
+    // Tone and strike through come from the data.
+    expect(screen.getByText('Widget Limited').style.textDecoration || getComputedStyle(screen.getByText('Widget Limited')).textDecoration).toMatch(/line-through/);
+    expect(screen.getByText('ISIN US123')).toBeTruthy();
+    // The toggle and the alert action change page state; text follows.
+    expect(screen.getByText('Showing compare')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Back to latest' }));
+    expect(await screen.findByText('Showing values')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }));
+    expect(await screen.findByText('Showing compare')).toBeTruthy();
+    // The detail row expands to the competing values and why.
+    fireEvent.click(screen.getByRole('button', { name: 'Show detail' }));
+    expect(await screen.findByText('SOURCE_PRIORITY: Bloomberg ranks first')).toBeTruthy();
+    // An icon button carries its label as its accessible name.
+    fireEvent.click(screen.getByRole('button', { name: 'Override name' }));
+    await waitFor(() => expect(onEdit).toHaveBeenCalledWith({ attr: 'name' }));
+  }, 30000);
+});

@@ -4,7 +4,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import type { ContainerButton, OverlayNodeProps, TabSetNodeProps } from './appModel';
-import { text, type Scope } from './bindings';
+import { resolve, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
 import { useAppRuntime } from './AppRuntime';
 import { TabLabel, useVisibleTabs } from './tabs';
@@ -71,7 +71,7 @@ export function OverlayContainer({ type, props, children }: { type: 'Drawer' | '
     );
   }
   return (
-    <Drawer anchor={p.anchor ?? 'right'} open={open} onClose={close} PaperProps={{ sx: { width: { xs: '100%', md: p.width ?? 720 }, p: 3, bgcolor: 'background.default' } }}>
+    <Drawer anchor={p.anchor ?? 'right'} open={open} onClose={close} PaperProps={{ sx: { width: { xs: '100%', md: Number(resolve(p.width ?? 720, scope)) || 720 }, maxWidth: '96vw', p: 3, bgcolor: 'background.default', transition: 'width 200ms' } }}>
       <Stack spacing={2}>
         <Header p={p} scope={scope} onClose={close} />
         {children}
