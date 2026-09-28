@@ -20,6 +20,8 @@ import type { SavedQuery } from '../../features/query-builder/types/queryDef';
 import { apiClient } from '../../utils/apiClient';
 import { newPresentationRule, collectPresentationTargets } from './presentationEvents';
 import { RuleCard } from './PresentationEventsPanel';
+import AppWidgetInspector from './app/AppWidgetInspector';
+import { isAppWidget } from './app/AppWidgets';
 
 interface PropertiesPanelProps {
   selectedId: string | null;
@@ -219,6 +221,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
         <Typography variant="body2" color="text.secondary">Unknown selection</Typography>
       </Paper>
     );
+  }
+
+  if (component && isAppWidget(component.type)) {
+    return <AppWidgetInspector component={component} draft={draft} setDraft={setDraft} />;
   }
 
   const style = (layoutNode?.style || component?.style || {}) as Record<string, string>;

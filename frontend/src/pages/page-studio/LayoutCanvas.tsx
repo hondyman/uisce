@@ -5,6 +5,7 @@ import { useDroppable, useDndMonitor, type DragEndEvent } from '@dnd-kit/core';
 import { PageLayout, ComponentDefinition, DataSourceDefinition, PanelNodeProps, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
 import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
+import { APP_WIDGET_DEFAULTS, isAppWidget } from './app/AppWidgets';
 import type { FieldDragPayload } from './DataBindingsPanel';
 import type { FieldLayoutEntry } from './FormFieldsDesigner';
 import type { RelatedObjectDragPayload } from '../../studio-core/binding/boRelationships';
@@ -113,7 +114,7 @@ const ComponentBlock: React.FC<{
                 // width/height style takes effect and the resize handle has
                 // room to shrink/grow it independently of the row/column -
                 // `flex: 1` would just snap it back to fill its container.
-                flex: comp.style?.resize ? '0 0 auto' : 1,
+                flex: comp.style?.flex ?? (comp.style?.resize ? '0 0 auto' : 1),
                 minWidth: 0,
                 bgcolor: 'transparent',
                 '&:hover .widget-chrome': { opacity: 1 },
@@ -214,7 +215,8 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                 return { ...prev, nodes };
             });
         } else {
-            onComponentsChange((prev) => ({ ...prev, [newId]: { id: newId, type: componentType, props: {} } }));
+            const props = isAppWidget(componentType) ? structuredClone(APP_WIDGET_DEFAULTS[componentType]) : {};
+            onComponentsChange((prev) => ({ ...prev, [newId]: { id: newId, type: componentType, props } }));
             onLayoutChange((prev) => {
                 const parent = prev.nodes[parentId];
                 return { ...prev, nodes: { ...prev.nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };

@@ -13,6 +13,13 @@ import {
     Link as LinkIcon,
     ViewSidebar as PanelIcon,
     Dashboard as TileIcon,
+    ViewHeadline as HeaderIcon,
+    ArrowDropDownCircle as SelectIcon,
+    Search as SearchIcon,
+    TouchApp as ActionIcon,
+    GridOn as GridIcon,
+    Campaign as AlertIcon,
+    Extension as DomainIcon,
 } from '@mui/icons-material';
 
 /**
@@ -52,6 +59,15 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'FixCommand', icon: <ButtonIcon />, group: 'Filters & Actions' },
     { type: 'Hyperlink', icon: <LinkIcon />, group: 'Filters & Actions' },
     { type: 'Tile', icon: <TileIcon />, group: 'Filters & Actions' },
+    // Page application widgets (app/AppWidgets.tsx): driven by the page's
+    // variables, registered-operation queries and actions - see the App tab.
+    { type: 'PageHeader', icon: <HeaderIcon />, group: 'App' },
+    { type: 'VariableSelect', icon: <SelectIcon />, group: 'App' },
+    { type: 'SearchInput', icon: <SearchIcon />, group: 'App' },
+    { type: 'ActionButton', icon: <ActionIcon />, group: 'App' },
+    { type: 'DataGrid', icon: <GridIcon />, group: 'App' },
+    { type: 'AlertBanner', icon: <AlertIcon />, group: 'App' },
+    { type: 'DomainComponent', icon: <DomainIcon />, group: 'App' },
     // Report Studio only — band types. Not shown in Page Studio's palette
     // (filtered below) and not rendered by PageComponentRenderer; they
     // become live once Phase 3 builds ReportCanvas/ReportBandDesigner.
@@ -69,15 +85,17 @@ const GROUP_LABELS: Record<string, string> = {
     Layout: 'Layout',
     Data: 'Data Displays',
     'Filters & Actions': 'Filters & Actions',
+    App: 'App (state, operations, actions)',
     'Report Bands': 'Report Bands',
 };
 const GROUP_COLORS: Record<string, string> = {
     Layout: 'primary.main',
     Data: 'secondary.main',
     'Filters & Actions': 'warning.main',
+    App: 'success.main',
     'Report Bands': 'info.main',
 };
-const GROUP_ORDER = ['Layout', 'Data', 'Filters & Actions', 'Report Bands'];
+const GROUP_ORDER = ['Layout', 'Data', 'Filters & Actions', 'App', 'Report Bands'];
 
 /** Page Studio's palette guard: report-only widgets never appear here, full stop. */
 const PAGE_STUDIO_COMPONENT_TYPES = COMPONENT_TYPES.filter((c) => (c.availableIn ?? ['page']).includes('page'));

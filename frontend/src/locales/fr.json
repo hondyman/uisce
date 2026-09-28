@@ -983,5 +983,10 @@
       "schedule": "Planifier",
       "scheduled": "Planifié"
     }
+  },
+  "studioApp": {
+    "cancel": "Annuler",
+    "ok": "OK",
+    "empty": "Rien à afficher."
   }
 }
