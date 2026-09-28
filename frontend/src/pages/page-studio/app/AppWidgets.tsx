@@ -104,7 +104,7 @@ export interface AlertBannerProps {
 }
 export interface TextBlockProps {
   text: TextSpec;
-  variant?: 'h5' | 'h6' | 'subtitle1' | 'subtitle2' | 'body1' | 'body2' | 'caption' | 'overline';
+  variant?: 'h4' | 'h5' | 'h6' | 'subtitle1' | 'subtitle2' | 'body1' | 'body2' | 'caption' | 'overline';
   color?: 'text.primary' | 'text.secondary' | 'primary.main' | 'error.main' | 'warning.main' | 'success.main' | 'info.main';
 }
 export interface DomainComponentProps {

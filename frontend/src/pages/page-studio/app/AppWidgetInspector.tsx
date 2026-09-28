@@ -269,7 +269,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
         <Section title="Text">
           {text('text', 'Text')}
           <SelectField label="Style" value={(props.variant as 'body2') ?? 'body2'}
-            options={['h5', 'h6', 'subtitle1', 'subtitle2', 'body1', 'body2', 'caption', 'overline'].map((v) => ({ value: v as 'body2', label: v }))} onChange={(v) => setProps({ variant: v })} />
+            options={['h4', 'h5', 'h6', 'subtitle1', 'subtitle2', 'body1', 'body2', 'caption', 'overline'].map((v) => ({ value: v as 'body2', label: v }))} onChange={(v) => setProps({ variant: v })} />
           <SelectField label="Colour" value={props.color as 'text.primary'} allowEmpty="Default"
             options={['text.primary', 'text.secondary', 'primary.main', 'error.main', 'warning.main', 'success.main', 'info.main'].map((v) => ({ value: v as 'text.primary', label: v }))}
             onChange={(v) => setProps({ color: v || undefined })} />
@@ -358,6 +358,9 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             {text('submitLabel', 'Button label')}
             {actions('onSubmit', 'On submit ({{form}})', ['form'])}
             {condition('submitDisabledWhen', 'Disabled when')}
+          </Section>
+          <Section title="On change">
+            {actions('onChange', 'After a field changes ({{form}})', ['form'])}
           </Section>
         </>
       );

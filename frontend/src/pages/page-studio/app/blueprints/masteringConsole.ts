@@ -7,8 +7,8 @@ import type { Action, CellSpec, ColumnDef, ConditionNode } from '../appModel';
  * Every behaviour of the hand-built page is here as data - entity picker,
  * policy and run buttons, the last-run alert, tabs with live counts and
  * conditional tabs, filtered grids with rich cells, row actions with
- * approval states, merge / keep-apart forms, and the domain's own drawers
- * and dialogs placed as domain components.
+ * approval states, merge / keep-apart forms, and the record and price
+ * drawers, policy dialog and run wizard - all built from studio blocks.
  */
 
 // --- small builders ------------------------------------------------------------
@@ -212,24 +212,220 @@ widget('gd_exc', 'DataGrid', {
     col('desc', '', text('description')),
   ] satisfies ColumnDef[],
 }, { visibleWhen: HAS_EXCEPTIONS });
-widget('price_drawer', 'DomainComponent', {
-  component: 'mastering.PriceDrawer', inputs: { entity: E, id: '{{vars.goldenId}}' }, events: { close: [set('goldenId')] },
-}, { visibleWhen: SERIES, style: fit });
-widget('run_dialog', 'DomainComponent', {
-  component: 'mastering.RunDialog', inputs: { profile: '{{queries.profile.data}}', open: '{{vars.running}}' },
-  events: {
-    close: [set('running', false)],
-    done: [set('running', false), set('lastRun', '{{event.run}}'), set('lastRunMessage', '{{event.messageKey}}'), set('tab', '{{event.tab}}')],
+// --- The golden price drawer ------------------------------------------------------
+const PD = 'queries.priceDetail.data';
+const DECIDE = `${PD}.decide`;
+const priceOverride: Action = {
+  kind: 'runOperation', operation: 'mastering.overrides.propose',
+  params: { entity: E, id: `{{${DECIDE}.golden_id}}`, attribute: `{{${DECIDE}.attribute}}`, action: '{{form.action}}', value: '{{form.value}}', reason: '{{form.reason}}' },
+  form: {
+    title: `{{${DECIDE}.title}}`, intro: `{{${DECIDE}.intro}}`,
+    notice: { severity: `{{${DECIDE}.severity}}`, text: `{{${DECIDE}.notice}}` },
+    fields: [
+      { name: 'action', kind: 'radio', label: '', default: 'SET', visibleWhen: cond(`${DECIDE}.has_active`, 'is_true'),
+        options: [{ value: 'SET', label: 'mastering.overrides.set' }, { value: 'CLEAR', label: 'mastering.overrides.clear' }] },
+      { name: 'value', kind: 'text', label: 'mastering.overrides.newValue', default: `{{${DECIDE}.value_raw}}`, visibleWhen: cond('form.action', 'not_equals', 'CLEAR') },
+      { name: 'reason', kind: 'multiline', label: 'mastering.overrides.reason', required: true, helperText: 'mastering.overrides.reasonHelp' },
+    ],
+    submitLabel: `{{${DECIDE}.submit}}`,
   },
-}, { style: fit });
-widget('policy_dialog', 'DomainComponent', {
-  component: 'mastering.PolicyDialog', inputs: { entity: E, open: '{{vars.policyOpen}}' }, events: { close: [set('policyOpen', false)] },
-}, { style: fit });
+};
+const CAN_DECIDE = cond(`${DECIDE}.can`, 'is_true');
+widget('pd_value', 'TextBlock', { text: `{{${PD}.value_text}}`, variant: 'h4' }, { style: fit });
+widget('pd_chips', 'KeyValue', { source: `{{${PD}}}`, columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.header_chips}}' } }] }, { style: { flex: '1 1 200px' } });
+widget('pd_decide_held', 'ActionButton', {
+  label: `{{${DECIDE}.label}}`, variant: 'contained', disabledWhen: cond(`${DECIDE}.blocked`, 'is_true'), onClick: [priceOverride],
+}, { visibleWhen: all(CAN_DECIDE, cond(`${DECIDE}.held`, 'is_true')), style: fit });
+widget('pd_decide', 'ActionButton', {
+  label: `{{${DECIDE}.label}}`, variant: 'outlined', disabledWhen: cond(`${DECIDE}.blocked`, 'is_true'), onClick: [priceOverride],
+}, { visibleWhen: all(CAN_DECIDE, cond(`${DECIDE}.held`, 'is_false')), style: fit });
+widget('pd_decide_state', 'KeyValue', {
+  source: `{{${DECIDE}}}`, columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.chips}}' } }],
+}, { visibleWhen: all(CAN_DECIDE, cond(`${DECIDE}.chips.length`, 'not_equals', 0)), style: fit });
+widget('pd_pending', 'TextBlock', { text: `{{${DECIDE}.pending_text}}`, variant: 'caption', color: 'text.secondary' },
+  { visibleWhen: all(CAN_DECIDE, cond(`${DECIDE}.pending_text`, 'is_not_empty')), style: fit });
+widget('pd_historical', 'AlertBanner', {
+  severity: 'info', text: `{{${PD}.viewing_text}}`, action: { label: 'mastering.golden.backToLatest', onClick: [set('goldenVersion')] },
+}, { visibleWhen: cond(`${PD}.historical`, 'is_true') });
+widget('pd_reason', 'TextBlock', { text: `{{${PD}.reason_text}}` });
+widget('pd_prior', 'TextBlock', { text: `{{${PD}.prior_text}}`, color: 'text.secondary' }, { visibleWhen: cond(`${PD}.prior_text`, 'is_not_empty') });
+heading('pd_quotes_title', 'mastering.prices.quotes');
+widget('pd_quotes', 'DataGrid', {
+  query: 'priceDetail', rowsPath: 'candidates', progressOnFetch: true,
+  columns: [
+    col('source', 'mastering.golden.source', [text('source'), { kind: 'chip', label: 'mastering.prices.won', color: 'primary', visibleWhen: cond('row.won', 'is_true') }],
+      { nowrap: true, stackDirection: 'row' }),
+    col('price', 'mastering.prices.price', [
+      { kind: 'text', value: '{{row.value_text}}', strike: '{{row.out}}' }, { kind: 'text', value: '{{row.currency}}', caption: true },
+    ], { align: 'right', nowrap: true, stackDirection: 'row' }),
+    col('diff', 'mastering.prices.diff', { kind: 'delta', value: '{{row.diff_pct}}', warn: 1, bad: 5 }, { align: 'right' }),
+    col('rank', 'mastering.prices.rank', text('rank_text'), { align: 'center' }),
+    col('asof', 'mastering.golden.asOf', [
+      { kind: 'datetime', value: '{{row.as_of}}' },
+      { kind: 'chip', label: 'mastering.golden.stale', color: 'warning', variant: 'outlined', visibleWhen: cond('row.stale', 'is_true') },
+    ], { nowrap: true, stackDirection: 'row' }),
+    col('why', '', [
+      { kind: 'text', value: '{{row.excluded_text}}', caption: true, color: 'warning' },
+      { kind: 'text', value: '{{row.note}}', caption: true, color: 'warning' },
+    ]),
+  ] satisfies ColumnDef[],
+});
+widget('pd_ranking', 'TextBlock', { text: `{{${PD}.ranking_text}}`, variant: 'caption', color: 'text.secondary' });
+const HAS_CONTROLS = cond(`${PD}.controls.length`, 'not_equals', 0);
+heading('pd_controls_title', 'mastering.prices.controls', HAS_CONTROLS);
+widget('pd_controls', 'KeyValue', { source: `{{${PD}}}`, columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.controls}}' } }] }, { visibleWhen: HAS_CONTROLS });
+const HAS_VARIANCES = cond(`${PD}.variances.length`, 'not_equals', 0);
+heading('pd_var_title', 'mastering.prices.variances', HAS_VARIANCES);
+widget('pd_var', 'DataGrid', {
+  query: 'priceDetail', rowsPath: 'variances',
+  columns: [
+    col('a', '', text('a_text')),
+    col('b', '', text('b_text')),
+    col('pct', '', { kind: 'delta', value: '{{row.variance_pct}}', warn: 1, bad: 5 }, { align: 'right' }),
+    col('sev', '', { kind: 'chip', value: '{{row.severity}}', colorMap: { WARNING: 'warning', '*': 'error' } }),
+    col('status', '', text('status')),
+  ] satisfies ColumnDef[],
+}, { visibleWhen: HAS_VARIANCES });
+const HAS_PRICE_EXC = cond(`${PD}.exceptions.length`, 'not_equals', 0);
+heading('pd_exc_title', 'mastering.golden.openExceptions', HAS_PRICE_EXC);
+widget('pd_exc', 'DataGrid', {
+  query: 'priceDetail', rowsPath: 'exceptions',
+  columns: [
+    col('type', '', { kind: 'chip', value: '{{row.type}}', colorBy: '{{row.severity}}', colorMap: { ERROR: 'error', '*': 'warning' } }),
+    col('desc', '', text('description')),
+  ] satisfies ColumnDef[],
+}, { visibleWhen: HAS_PRICE_EXC });
+heading('pd_versions_title', 'mastering.golden.versionsHelp');
+widget('pd_versions', 'DataGrid', {
+  query: 'priceDetail', rowsPath: 'versions', onRowClick: [set('goldenVersion', '{{row.target}}')],
+  columns: [
+    col('v', '', [{ kind: 'text', value: 'v{{row.version}}' }, { kind: 'chip', label: 'mastering.golden.showing', visibleWhen: cond('row.showing', 'is_true') }], { stackDirection: 'row' }),
+    col('value', '', text('value_text'), { align: 'right', nowrap: true }),
+    col('winner', '', text('winner')),
+    col('status', '', { kind: 'chip', value: '{{row.status}}', labelKey: 'mastering.goldenStatus.', colorMap: GOLDEN_STATUS }),
+    col('at', '', { kind: 'datetime', value: '{{row.at}}' }, { nowrap: true }),
+  ] satisfies ColumnDef[],
+});
+widget('pd_bitemporal', 'TextBlock', { text: 'mastering.prices.bitemporal', variant: 'caption', color: 'text.secondary' });
+
+// --- The override policy dialog ------------------------------------------------------
+const CAN_EDIT = cond('queries.policy.data.can_edit', 'is_true');
+const READ_ONLY = cond('queries.policy.data.can_edit', 'is_false');
+const approvers = [1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }));
+widget('pol_help', 'TextBlock', { text: 'mastering.policy.help', color: 'text.secondary' });
+widget('pol_form', 'Form', {
+  variable: 'policyDraft', initFrom: '{{queries.policy.data.policy}}',
+  fields: [
+    { name: 'mode', kind: 'radio', label: '', readOnlyWhen: READ_ONLY,
+      options: [{ value: 'APPROVAL', label: 'mastering.policy.approval' }, { value: 'DIRECT', label: 'mastering.policy.direct' }] },
+    { name: 'approvals_required', kind: 'select', label: 'mastering.policy.approvers', required: true, valueType: 'number', options: approvers,
+      readOnlyWhen: READ_ONLY, visibleWhen: cond('form.mode', 'equals', 'APPROVAL') },
+    { name: 'high_risk_attributes', kind: 'chips', label: 'mastering.policy.highRisk', helperText: 'mastering.policy.highRiskHelp',
+      optionsFrom: { query: 'policy', rowsPath: 'attributes' }, readOnlyWhen: READ_ONLY, visibleWhen: cond('form.mode', 'equals', 'APPROVAL') },
+    { name: 'high_risk_approvals', kind: 'select', label: 'mastering.policy.highRiskApprovers', required: true, valueType: 'number', options: approvers,
+      readOnlyWhen: any(READ_ONLY, cond('form.high_risk_attributes', 'is_empty')), visibleWhen: cond('form.mode', 'equals', 'APPROVAL') },
+  ],
+});
+widget('pol_direct', 'AlertBanner', { severity: 'warning', text: 'mastering.policy.directWarning' }, { visibleWhen: cond('vars.policyDraft.mode', 'equals', 'DIRECT') });
+widget('pol_caption', 'TextBlock', { text: '{{queries.policy.data.caption}}', variant: 'caption', color: 'text.secondary' });
+widget('pol_admins', 'AlertBanner', { severity: 'info', text: 'mastering.policy.adminsOnly' }, { visibleWhen: READ_ONLY });
+
+// --- The run wizard: pick a load, preview (nothing kept), run ---------------------------
+const RS = 'queries.runSetup.data';
+const runParams = { entity: E, table: '{{vars.runForm.table}}', load_id: '{{vars.runForm.load_id}}', again: '{{vars.runForm.again}}' };
+widget('run_form', 'Form', {
+  variable: 'runForm', initFrom: `{{${RS}.initial}}`, columns: 2,
+  fields: [
+    { name: 'load_id', kind: 'select', label: 'mastering.runDialog.load', required: true, helperText: `{{${RS}.loads_help}}`,
+      optionsFrom: { query: 'runSetup', rowsPath: 'loads', valueField: 'id', labelField: 'label', captionField: 'caption' } },
+    { name: 'table', kind: 'select', label: 'mastering.runDialog.table', required: true, helperText: `{{${RS}.table_help}}`,
+      optionsFrom: { query: 'runSetup', rowsPath: 'tables', valueField: 'value' } },
+  ],
+  // A preview is of the choice it was made for.
+  onChange: [set('runPreview')],
+});
+widget('run_again_note', 'AlertBanner', { severity: 'info', text: 'mastering.runDialog.alreadyMastered' }, { visibleWhen: cond(`${RS}.already_mastered`, 'is_true') });
+widget('run_again', 'Form', {
+  variable: 'runForm', fields: [{ name: 'again', kind: 'switch', label: 'mastering.runDialog.again' }],
+}, { visibleWhen: cond(`${RS}.already_mastered`, 'is_true') });
+widget('run_stage', 'TextBlock', { text: '{{vars.runStage}}', variant: 'caption', color: 'text.secondary' }, { visibleWhen: cond('vars.runStage', 'is_not_empty') });
+const PREVIEWED = cond('vars.runPreview', 'is_not_empty');
+heading('run_preview_title', 'mastering.runDialog.previewTitle', PREVIEWED);
+widget('run_preview_counts', 'KeyValue', { source: '{{vars.runPreview}}', columns: 1, items: [{ label: '', cell: { kind: 'chips', value: '{{data.chips}}' } }] }, { visibleWhen: PREVIEWED });
+widget('run_preview_issues', 'KeyValue', {
+  source: '{{vars.runPreview}}', columns: 1, items: [{
+    label: '', visibleWhen: cond('data.exceptions.length', 'not_equals', 0),
+    cell: {
+      kind: 'list', value: '{{data.exceptions}}',
+      item: { kind: 'chip', value: '{{item.code}}', colorBy: '{{item.severity}}', colorMap: { ERROR: 'error', '*': 'warning' }, caption: '{{item.message}}' },
+    },
+  }],
+}, { visibleWhen: PREVIEWED });
+widget('run_preview_unmastered', 'TextBlock', { text: '{{vars.runPreview.unmastered_text}}', variant: 'caption', color: 'text.secondary' },
+  { visibleWhen: all(PREVIEWED, cond('vars.runPreview.unmastered_text', 'is_not_empty')) });
+const closeRun = [set('running', false), set('runForm'), set('runPreview')];
 
 const filterBar = layout('top', 'top_root', {
   top_root: { type: 'Column', children: ['top_header', 'no_profiles', 'last_run', 'top_overlays'], style: { gap: '16px' } },
   top_header: { type: 'Row', children: ['hdr', 'entity_select', 'policy_btn', 'run_btn'], style: { alignItems: 'center' } },
   top_overlays: { type: 'Row', children: ['golden_drawer', 'price_drawer', 'run_dialog', 'policy_dialog'], style: { gap: '8px' } },
+  price_drawer: {
+    type: 'Drawer', children: ['pd_body'], props: {
+      title: `{{${PD}.title}}`, subtitle: `{{${PD}.subtitle}}`, width: 760,
+      openWhen: all(SERIES, cond('vars.goldenId', 'is_not_empty')),
+      onClose: [set('goldenId'), set('goldenVersion')],
+    },
+  },
+  pd_body: {
+    type: 'Column', style: { gap: '12px' }, children: [
+      'pd_head', 'pd_decide_row', 'pd_historical', 'pd_reason', 'pd_prior', 'pd_quotes_title', 'pd_quotes', 'pd_ranking',
+      'pd_controls_title', 'pd_controls', 'pd_var_title', 'pd_var', 'pd_exc_title', 'pd_exc', 'pd_versions_title', 'pd_versions', 'pd_bitemporal',
+    ],
+  },
+  pd_head: { type: 'Row', children: ['pd_value', 'pd_chips'], style: { alignItems: 'center', gap: '12px' } },
+  pd_decide_row: { type: 'Row', children: ['pd_decide_held', 'pd_decide', 'pd_decide_state', 'pd_pending'], style: { alignItems: 'center', gap: '8px' } },
+  policy_dialog: {
+    type: 'Dialog', children: ['pol_body'], props: {
+      title: 'mastering.policy.title', maxWidth: 'sm',
+      openWhen: cond('vars.policyOpen', 'is_true'),
+      onClose: [set('policyOpen', false)],
+      buttons: [
+        { label: 'mastering.cancel', visibleWhen: CAN_EDIT, onClick: [set('policyOpen', false)] },
+        { label: 'mastering.close', visibleWhen: READ_ONLY, onClick: [set('policyOpen', false)] },
+        {
+          label: 'mastering.policy.save', variant: 'contained', visibleWhen: CAN_EDIT, disabledWhen: cond('vars.policyDraft', 'is_empty'),
+          onClick: [{ kind: 'runOperation', operation: 'mastering.policy.save', params: { entity: E, policy: '{{vars.policyDraft}}' }, onSuccess: [set('policyOpen', false)] }],
+        },
+      ],
+    },
+  },
+  pol_body: { type: 'Column', style: { gap: '16px' }, children: ['pol_help', 'pol_form', 'pol_direct', 'pol_caption', 'pol_admins'] },
+  run_dialog: {
+    type: 'Dialog', children: ['run_body'], props: {
+      title: { t: 'mastering.runDialog.title', params: { entity: '{{queries.profile.data.display_name}}' } }, maxWidth: 'md',
+      openWhen: cond('vars.running', 'is_true'),
+      onClose: closeRun,
+      buttons: [
+        { label: 'mastering.cancel', onClick: closeRun },
+        {
+          label: 'mastering.runDialog.preview', disabledWhen: cond(`${RS}.ready`, 'is_false'),
+          onClick: [{ kind: 'runOperation', operation: 'mastering.runs.preview', params: runParams, onSuccess: [set('runPreview', '{{result}}')] }],
+        },
+        {
+          label: 'mastering.runDialog.run', variant: 'contained', disabledWhen: cond(`${RS}.can_run`, 'is_false'),
+          onClick: [{
+            kind: 'runOperation', operation: 'mastering.runs.run', params: runParams, progressVariable: 'runStage',
+            onSuccess: [...closeRun, set('lastRun', '{{result.run}}'), set('lastRunMessage', '{{result.messageKey}}'), set('tab', '{{result.tab}}')],
+          }],
+        },
+      ],
+    },
+  },
+  run_body: {
+    type: 'Column', style: { gap: '16px' }, children: [
+      'run_form', 'run_again_note', 'run_again', 'run_stage', 'run_preview_title', 'run_preview_counts', 'run_preview_issues', 'run_preview_unmastered',
+    ],
+  },
   golden_drawer: {
     type: 'Drawer', children: ['gd_body'], props: {
       title: `{{${GD}.title}}`, subtitle: `{{${GD}.code}}`, width: `{{${GD}.width}}`,
@@ -523,7 +719,11 @@ export function masteringConsoleBlueprint(): Omit<CorePageDefinition, 'id' | 'cr
         { name: 'goldenVersion', description: 'The version the drawer shows; empty = the latest' },
         { name: 'goldenView', default: 'values', description: 'Values or side by side' },
         { name: 'policyOpen', default: false },
+        { name: 'policyDraft', description: 'The policy being edited' },
         { name: 'running', default: false },
+        { name: 'runForm', description: 'The load and staging table chosen to master' },
+        { name: 'runPreview', description: 'What a run would do (the last preview)' },
+        { name: 'runStage', description: 'The stage a run has reached' },
         { name: 'lastRun' },
         { name: 'lastRunMessage', default: '' },
         { name: 'goldenQ', default: '' },
@@ -542,6 +742,11 @@ export function masteringConsoleBlueprint(): Omit<CorePageDefinition, 'id' | 'cr
         q('policy', 'mastering.policy'),
         q('goldenDetail', 'mastering.golden.detail', { entity: E, id: '{{vars.goldenId}}', version: '{{vars.goldenVersion}}', view: '{{vars.goldenView}}' },
           { enabledWhen: all(RECORD, cond('vars.goldenId', 'is_not_empty')), keepPrevious: true }),
+        q('priceDetail', 'mastering.price.detail', { entity: E, id: '{{vars.goldenId}}', version: '{{vars.goldenVersion}}' },
+          { enabledWhen: all(SERIES, cond('vars.goldenId', 'is_not_empty')), keepPrevious: true }),
+        q('runSetup', 'mastering.runs.setup', {
+          entity: E, bo_key: '{{queries.profile.data.bo_key}}', load_id: '{{vars.runForm.load_id}}', table: '{{vars.runForm.table}}', again: '{{vars.runForm.again}}',
+        }, { enabledWhen: cond('vars.running', 'is_true'), keepPrevious: true }),
         q('golden', 'mastering.golden.list', { entity: E, q: '{{vars.goldenQ}}', status: '{{vars.goldenStatus}}' }, { enabledWhen: RECORD }),
         q('prices', 'mastering.prices.list', {
           entity: E, date: '{{vars.priceDate}}', q: '{{vars.priceQ}}', price_type: '{{vars.priceType}}', status: '{{vars.priceStatus}}',

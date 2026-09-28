@@ -59,6 +59,22 @@ Grids and cells for record detail (the provenance drawer's needs):
   **TextBlock** (headings and captions), a Drawer `width` that can be a
   binding (wider in one view than another).
 
+Wizards and editor dialogs (the run wizard, the override policy):
+
+- **Form** fields: `valueType: 'number'` stores a choice as a number (a
+  count of approvers); options from a query can carry a `captionField`
+  (a second line under each option - a load's rows and status); a Form's
+  `onChange` actions run after any field changes (clear a stale preview).
+  A Form without `initFrom` only fills its defaults in, so two forms can
+  edit one variable; a start value that goes away while its query
+  refetches keeps what was typed.
+- **Footer buttons** wait while their actions run: every button in the
+  overlay disables and a progress bar shows.
+- **`runOperation.progressVariable`** - a long operation reports progress
+  (a run's stage) into a page variable, cleared when it ends; operations
+  get `ctx.progress(text)` as their second argument.
+- A query's `keepPrevious` keeps its last data while new params load.
+
 Action forms (`runOperation.form`) use the same field kinds, options from a
 query included (`app/formFields.tsx`). In Page Designer the containers show
 as editable regions (a drawer's content is edited in place, with what opens
@@ -135,9 +151,9 @@ a tenant switched off is hidden.
 ## Not done yet (next)
 
 - Structured editors for row buttons and action forms (JSON today).
-- Studio primitives to decompose the drawers themselves (a Drawer/Dialog
-  layout node, key-value and version-list widgets) so GoldenDrawer can move
-  from domain component to studio-built.
+- The mastering console is fully studio-built (record and price drawers,
+  policy dialog, run wizard). Still domain components: the mastering config
+  row editor, the staging binding editor and the pipeline canvas.
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

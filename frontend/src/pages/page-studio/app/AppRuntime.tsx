@@ -116,7 +116,8 @@ export const AppRuntimeProvider: React.FC<{
       queryKey: [op?.domain ?? 'studio', 'studio', q.operation, params],
       queryFn: () => op!.run(params),
       enabled: ready,
-      placeholderData: q.keepPrevious ? (prev: unknown) => prev : undefined,
+      // useQueries does not hand placeholderData the previous key's data, so keep it here.
+      placeholderData: q.keepPrevious ? () => prevResults.current[q.id]?.data : undefined,
     })),
   });
   const queryStates = useMemo(() => {
@@ -189,7 +190,13 @@ export const AppRuntimeProvider: React.FC<{
           if (!op) throw new Error(`Unknown operation ${a.operation}`);
           const exec = async (form?: Record<string, unknown>) => {
             const sc = form ? { ...s, form } : s;
-            const result = await op.run(resolveAll(a.params, sc));
+            const pv = a.progressVariable;
+            let result: unknown;
+            try {
+              result = await op.run(resolveAll(a.params, sc), { progress: (msg) => { if (pv) setVariable(pv, msg); } });
+            } finally {
+              if (pv) setVariable(pv, null);
+            }
             for (const prefix of op.invalidates ?? [[op.domain]]) await qc.invalidateQueries({ queryKey: prefix });
             return { ...sc, result };
           };

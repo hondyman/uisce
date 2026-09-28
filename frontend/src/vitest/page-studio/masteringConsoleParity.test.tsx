@@ -173,8 +173,10 @@ describe('Page Studio editor on the blueprint', () => {
     mount(<PageEditor page={page} onSave={() => {}} />);
     // Live data on the design canvas.
     expect(await screen.findByText('P-001')).toBeInTheDocument();
-    // The record drawer is an editable region on the canvas (closed at runtime), with what opens it.
-    expect(screen.getByText(/opens when .*vars\.goldenId is not empty/)).toBeInTheDocument();
+    // The record and price drawers, policy dialog and run wizard are editable regions on the canvas (closed at runtime), with what opens them.
+    expect(screen.getAllByText(/opens when .*vars\.goldenId is not empty/)).toHaveLength(2);
+    expect(screen.getByText(/opens when .*vars\.policyOpen is true/)).toBeInTheDocument();
+    expect(screen.getByText(/opens when .*vars\.running is true/)).toBeInTheDocument();
     expect(screen.queryByRole('presentation')).toBeNull();
     // Selecting the grid opens its inspector with its columns.
     fireEvent.click(screen.getByText('P-001'));

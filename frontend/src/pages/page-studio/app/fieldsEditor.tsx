@@ -25,6 +25,9 @@ function FieldEditor({ f, onChange, paths, queries }: { f: FormFieldSpec; onChan
       <BindingField label="Default" value={f.default} onChange={(v) => set({ default: v })} paths={paths} />
       {hasOptions && (
         <>
+          {f.kind !== 'chips' && (
+            <SwitchField label="Store as a number" checked={f.valueType === 'number'} onChange={(v) => set({ valueType: v ? 'number' : undefined })} />
+          )}
           <SwitchField label="Options from a query" checked={!!f.optionsFrom} onChange={(v) => set({ optionsFrom: v ? { query: queries[0]?.value ?? '' } : undefined, options: v ? undefined : f.options ?? [] })} />
           {f.optionsFrom ? (
             <>
@@ -34,6 +37,8 @@ function FieldEditor({ f, onChange, paths, queries }: { f: FormFieldSpec; onChan
                 <TextField size="small" label="Value field" value={f.optionsFrom.valueField ?? ''} onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, valueField: e.target.value || undefined } })} />
                 <TextField size="small" label="Label field" value={f.optionsFrom.labelField ?? ''} onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, labelField: e.target.value || undefined } })} />
               </Stack>
+              <TextField size="small" label="Caption field (optional)" value={f.optionsFrom.captionField ?? ''} helperText="A second line under each option"
+                onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, captionField: e.target.value || undefined } })} />
             </>
           ) : (
             <ListEditor items={f.options ?? []} onChange={(v) => set({ options: v })} addLabel="Add option" create={() => ({ value: '', label: '' as TextSpec })}
