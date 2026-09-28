@@ -8,6 +8,7 @@ import KeyValueIcon from '@mui/icons-material/ListAlt';
 import TimelineIcon from '@mui/icons-material/Timeline';
 import FormWidgetIcon from '@mui/icons-material/EditNote';
 import TextBlockIcon from '@mui/icons-material/Notes';
+import CanvasIcon from '@mui/icons-material/AccountTree';
 import {
     TableChart as TableIcon,
     ShowChart as ChartIcon,
@@ -84,6 +85,7 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'Timeline', icon: <TimelineIcon />, group: 'App' },
     { type: 'Form', icon: <FormWidgetIcon />, group: 'App' },
     { type: 'TextBlock', icon: <TextBlockIcon />, group: 'App' },
+    { type: 'Canvas', icon: <CanvasIcon />, group: 'App' },
     // Report Studio only — band types. Not shown in Page Studio's palette
     // (filtered below) and not rendered by PageComponentRenderer; they
     // become live once Phase 3 builds ReportCanvas/ReportBandDesigner.

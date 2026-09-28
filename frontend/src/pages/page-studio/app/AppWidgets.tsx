@@ -16,10 +16,12 @@ import { useAppRuntime, type QueryState } from './AppRuntime';
 import { Cell } from './cells';
 import { PageIcon } from './icons';
 import { FormWidget, KeyValue, Timeline } from './moreWidgets';
+import { Canvas, DEFAULT_CANVAS_PROPS } from './canvas';
 export type { FormWidgetProps, KeyValueProps, TimelineProps } from './moreWidgets';
+export type { CanvasProps } from './canvas';
 
 /** Component types rendered by this module (the page application widgets). */
-export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock'] as const;
+export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock', 'Canvas'] as const;
 export type AppWidgetType = typeof APP_WIDGET_TYPES[number];
 export const isAppWidget = (type: string): type is AppWidgetType => (APP_WIDGET_TYPES as readonly string[]).includes(type);
 
@@ -36,6 +38,7 @@ export const APP_WIDGET_DEFAULTS: Record<AppWidgetType, Record<string, unknown>>
   Timeline: { query: '', title: '{{row.title}}', subtitle: '', time: '{{row.at}}', onItemClick: [] },
   Form: { variable: 'draft', fields: [{ name: 'name', label: 'Name', kind: 'text', required: true }], columns: 1 },
   TextBlock: { text: 'Section title', variant: 'subtitle2' },
+  Canvas: DEFAULT_CANVAS_PROPS as unknown as Record<string, unknown>,
 };
 
 // --- Props per widget (component.props) ------------------------------------
@@ -405,6 +408,7 @@ export function AppWidget({ component }: { component: ComponentDefinition }) {
     case 'Timeline': return <Timeline p={p} scope={scope} />;
     case 'Form': return <FormWidget p={p} scope={scope} />;
     case 'TextBlock': return <TextBlockView p={p} scope={scope} />;
+    case 'Canvas': return <Canvas p={p} scope={scope} />;
     default: return null;
   }
 }
