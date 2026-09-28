@@ -42,6 +42,7 @@ domain components:
 | **KeyValue** | widget | Label/value pairs of a record (`{{data.x}}`, or any cell kind), or pairs from a list/object |
 | **Timeline** | widget | Versions, runs, events from a query or binding; title/subtitle/time/chip per item; `selectedWhen`, `onItemClick` |
 | **Canvas** | widget | A graph editor over a page variable (nodes + edges, paths and edge field names configurable): node title / subtitle / placeholder / icon / category (colour and which handles) / problems / chips from bindings seeing `{{node}}` and `{{extra}}` (per-node data such as validation issues or preview stats); move, connect (optionally one input per node), delete in place; selection in a variable; a grouped palette from a query whose items run `onAdd` with `{{item}}`, `{{graph}}`, `{{selected}}` - the domain decides what a new node is; `onChange` after each edit |
+| **Chat** | widget | A conversation over a page variable: intro and starter chips while empty, a composer, a busy line; sending appends the message and runs `onSend` with `{{text}}` / `{{messages}}` (usually an operation returning the next messages); assistant messages show detail lines, a warning and an action (Apply) that marks itself done - templates see `{{message}}`, `{{index}}` |
 | **Form** | widget | Fields bound to a page variable (`{{vars.draft.x}}`), seeded by `initFrom`; text, long text, number, date, select, radio, switch, chips; options static or **from a query**; per-field `visibleWhen` / `readOnlyWhen`; optional submit actions (or a dialog's buttons) |
 
 Grids and cells for record detail (the provenance drawer's needs):
@@ -190,10 +191,9 @@ a tenant switched off is hidden.
 
 - Structured editors for row buttons and action forms (JSON today).
 - The mastering console, mastering configuration, staging bindings and
-  the data pipeline editor are studio-built. Still domain components on the
-  pipeline editor: the AI assistant (needs a chat widget) and the target
-  schedule (the shared schedule editor, to be rebuilt with the Schedules
-  console).
+  the data pipeline editor (its assistant included) are studio-built. Still
+  a domain component on the pipeline editor: the target schedule (the
+  shared schedule editor, to be rebuilt with the Schedules console).
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

@@ -1,5 +1,6 @@
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
 import type { FormFieldSpec, RowFieldSpec } from '../../pages/page-studio/app/appModel';
+import apiClient from '../../utils/apiClient';
 import { masteringApi } from '../mastering/api';
 import {
   type BOSchemaField, type Column, type ColumnType, type Condition, type FieldMap, type NodeConfigs, type NodeKind, type NodeType,
@@ -487,7 +488,50 @@ function previewView(p: PreviewResult | null, pick: string, spec: Spec) {
   };
 }
 
+/** The assistant's answer: a reply, and maybe a proposed spec with what it changes and what it still lacks. */
+interface Proposal { reply: string; spec?: Spec; changes?: string[]; issues?: { node_id?: string; message: string }[] }
+
+function friendly(msg: string): string {
+  if (msg.includes('503')) return 'The AI assistant is not set up here yet - an administrator can configure it under System > LLM Config.';
+  return `Sorry, that did not work: ${msg.replace(/^API Error: \d+ [^-]*- /, '')}`;
+}
+
 const operations: OperationDef[] = [
+  {
+    id: 'dataPipelines.assist', domain: 'dp', kind: 'mutation', label: 'Ask the pipeline assistant', invalidates: [],
+    description: 'Sends a message with the pipeline, the selected step, the conversation and the last preview\'s rejects. result.messages: the conversation with the reply (spec, changes, issue_lines, focus = its first new step when it proposes a pipeline; error when it failed).',
+    params: [
+      { name: 'message', type: 'string', required: true }, { name: 'messages', type: 'object', description: 'The conversation before it' },
+      { name: 'spec', type: 'object', required: true }, { name: 'selected', type: 'string' }, { name: 'preview', type: 'object' },
+    ],
+    run: async (p) => {
+      const msg = s(p, 'message');
+      const before = (Array.isArray(p.messages) ? p.messages : []) as { role: string; text: string }[];
+      const spec = specOf(p.spec);
+      const preview = (p.preview ?? null) as PreviewResult | null;
+      const user = { role: 'user', text: msg };
+      try {
+        const res = await apiClient<Proposal>('/api/data-pipelines/assist', {
+          method: 'POST',
+          body: JSON.stringify({
+            message: msg, spec, selected_node_id: s(p, 'selected') || undefined, history: before.map((m) => ({ role: m.role, text: m.text })),
+            preview_rejects: preview?.rejects?.slice(0, 30).map((r) => `row ${r.row} (${r.node_id}): ${r.reason}`),
+          }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+        const reply = res.spec
+          ? {
+            role: 'assistant', text: res.reply, spec: res.spec, changes: res.changes ?? [],
+            issue_lines: (res.issues ?? []).map((x) => `${x.node_id ? `${x.node_id}: ` : ''}${x.message}`),
+            focus: res.spec.nodes.find((n) => !spec.nodes.some((o) => o.id === n.id))?.id ?? null,
+          }
+          : { role: 'assistant', text: res.reply };
+        return { messages: [...before, user, reply] };
+      } catch (e) {
+        return { messages: [...before, user, { role: 'assistant', text: friendly((e as Error).message), error: true }] };
+      }
+    },
+  },
   {
     id: 'dataPipelines.load', domain: 'dp', kind: 'query', label: 'A pipeline to edit',
     description: '{name, spec, is_new} - "new" (or no id) starts a blank pipeline.',
