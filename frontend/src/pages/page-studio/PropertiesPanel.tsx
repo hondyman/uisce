@@ -22,6 +22,8 @@ import { newPresentationRule, collectPresentationTargets } from './presentationE
 import { RuleCard } from './PresentationEventsPanel';
 import AppWidgetInspector from './app/AppWidgetInspector';
 import { isAppWidget } from './app/AppWidgets';
+import ContainerInspector from './app/ContainerInspector';
+import { isContainerType } from './app/containers';
 
 interface PropertiesPanelProps {
   selectedId: string | null;
@@ -221,6 +223,10 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
         <Typography variant="body2" color="text.secondary">Unknown selection</Typography>
       </Paper>
     );
+  }
+
+  if (layoutNode && layout && isContainerType(layoutNode.type)) {
+    return <ContainerInspector node={layoutNode} layout={layout} onLayoutChange={onLayoutChange} draft={draft} />;
   }
 
   if (component && isAppWidget(component.type)) {

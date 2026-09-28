@@ -13,9 +13,11 @@ import { evaluateCondition, useCondition } from './conditions';
 import { useAppRuntime, type QueryState } from './AppRuntime';
 import { Cell } from './cells';
 import { PageIcon } from './icons';
+import { FormWidget, KeyValue, Timeline } from './moreWidgets';
+export type { FormWidgetProps, KeyValueProps, TimelineProps } from './moreWidgets';
 
 /** Component types rendered by this module (the page application widgets). */
-export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent'] as const;
+export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form'] as const;
 export type AppWidgetType = typeof APP_WIDGET_TYPES[number];
 export const isAppWidget = (type: string): type is AppWidgetType => (APP_WIDGET_TYPES as readonly string[]).includes(type);
 
@@ -28,6 +30,9 @@ export const APP_WIDGET_DEFAULTS: Record<AppWidgetType, Record<string, unknown>>
   DataGrid: { query: '', columns: [], rowKey: 'id' },
   AlertBanner: { severity: 'info', text: 'Message' },
   DomainComponent: { component: '', inputs: {}, events: {} },
+  KeyValue: { source: '', items: [{ label: 'Label', value: '{{data.field}}' }], columns: 2 },
+  Timeline: { query: '', title: '{{row.title}}', subtitle: '', time: '{{row.at}}', onItemClick: [] },
+  Form: { variable: 'draft', fields: [{ name: 'name', label: 'Name', kind: 'text', required: true }], columns: 1 },
 };
 
 // --- Props per widget (component.props) ------------------------------------
@@ -273,6 +278,9 @@ export function AppWidget({ component }: { component: ComponentDefinition }) {
     case 'DataGrid': return <DataGrid p={p} scope={scope} />;
     case 'AlertBanner': return <AlertBanner p={p} scope={scope} />;
     case 'DomainComponent': return <DomainComponentView p={p} scope={scope} />;
+    case 'KeyValue': return <KeyValue p={p} scope={scope} />;
+    case 'Timeline': return <Timeline p={p} scope={scope} />;
+    case 'Form': return <FormWidget p={p} scope={scope} />;
     default: return null;
   }
 }

@@ -28,6 +28,26 @@ studio now has.
 | Provenance drawer, source matrix, run wizard, policy dialog | **Domain components** placed on the page, inputs bound, events → actions |
 | Own surface (dark shell canvas), max width 1400 | `app.surface`, `app.chrome: 'none'` |
 
+## Building blocks for record drawers and editors
+
+Rich pages - a record drawer with its own tabs, an editor dialog with a
+form - are built from these by configuration, not placed as hand-built
+domain components:
+
+| Block | Kind | What it does |
+| --- | --- | --- |
+| **Drawer** | layout container | Side overlay holding any widgets/containers; open while `openWhen` (a rule-engine condition, usually a variable an action sets) holds; `onClose` actions; title/subtitle templates; optional footer buttons |
+| **Dialog** | layout container | The same as a modal, with footer buttons (`disabledWhen`, `visibleWhen`, `onClick` actions) |
+| **TabSet** | layout container | Tabs inside any region (a drawer's own tabs); tab *i* shows child *i*; badges, `visibleWhen`, optional tab variable so actions can switch tabs |
+| **KeyValue** | widget | Label/value pairs of a record (`{{data.x}}`, or any cell kind), or pairs from a list/object |
+| **Timeline** | widget | Versions, runs, events from a query or binding; title/subtitle/time/chip per item; `selectedWhen`, `onItemClick` |
+| **Form** | widget | Fields bound to a page variable (`{{vars.draft.x}}`), seeded by `initFrom`; text, long text, number, date, select, radio, switch, chips; options static or **from a query**; per-field `visibleWhen` / `readOnlyWhen`; optional submit actions (or a dialog's buttons) |
+
+Action forms (`runOperation.form`) use the same field kinds, options from a
+query included (`app/formFields.tsx`). In Page Designer the containers show
+as editable regions (a drawer's content is edited in place, with what opens
+it read out); each block has a structured inspector plus a JSON view.
+
 ## Governance boundaries (deliberate)
 
 - **No URLs, SQL or scripts in pages.** Data comes from operations a domain

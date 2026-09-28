@@ -2,8 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueries, useQueryClient } from '@tanstack/react-query';
 import {
-  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, LinearProgress, MenuItem, Radio,
-  RadioGroup, Snackbar, Stack, Switch, TextField, Typography,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, LinearProgress, Snackbar, Stack, Typography,
 } from '@mui/material';
 import { CatalogErrorAlert } from '../../../features/message-catalog/parts';
 import { getOperation, missingParams } from '../../../studio-core/operations/registry';
@@ -11,6 +10,7 @@ import '../../../studio-core/registerDomains';
 import type { Action, FormSpec, PageAppModel } from './appModel';
 import { evaluateCondition, useCondition } from './conditions';
 import { resolve, resolveAll, text, type Scope } from './bindings';
+import { FormFields, requiredFilled } from './formFields';
 
 export interface QueryState {
   data: unknown;
@@ -258,7 +258,7 @@ function FormDialog({ pending }: { pending: Extract<Pending, { kind: 'form' }> }
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const showNotice = useCondition(spec.notice?.visibleWhen, scope, false);
-  const ready = spec.fields.every((f) => !f.required || !isEmpty(typeof values[f.name] === 'string' ? (values[f.name] as string).trim() : values[f.name]));
+  const ready = requiredFilled(spec.fields, values);
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -274,29 +274,7 @@ function FormDialog({ pending }: { pending: Extract<Pending, { kind: 'form' }> }
         <Stack spacing={2}>
           {spec.intro && <Typography variant="body2">{text(spec.intro, scope)}</Typography>}
           {spec.notice && showNotice && <Alert severity={spec.notice.severity}>{text(spec.notice.text, scope)}</Alert>}
-          {spec.fields.map((f) => {
-            const set = (v: unknown) => setValues((p) => ({ ...p, [f.name]: v }));
-            const label = text(f.label, scope);
-            const helper = f.helperText ? text(f.helperText, scope) : undefined;
-            if (f.kind === 'radio') {
-              return (
-                <RadioGroup key={f.name} value={values[f.name] ?? ''} onChange={(e) => set(e.target.value)}>
-                  {(f.options ?? []).map((o) => (
-                    <FormControlLabel key={o.value} value={o.value} control={<Radio size="small" />} label={text(o.label, scope)} />
-                  ))}
-                </RadioGroup>
-              );
-            }
-            if (f.kind === 'switch') {
-              return <FormControlLabel key={f.name} control={<Switch checked={!!values[f.name]} onChange={(e) => set(e.target.checked)} />} label={label} />;
-            }
-            return (
-              <TextField key={f.name} label={label} value={values[f.name] ?? ''} onChange={(e) => set(e.target.value)} helperText={helper}
-                required={f.required} select={f.kind === 'select'} multiline={f.kind === 'multiline'} minRows={f.kind === 'multiline' ? 2 : undefined} fullWidth>
-                {f.kind === 'select' && (f.options ?? []).map((o) => <MenuItem key={o.value} value={o.value}>{text(o.label, scope)}</MenuItem>)}
-              </TextField>
-            );
-          })}
+          <FormFields fields={spec.fields} values={values} scope={scope} onChange={(name, v) => setValues((p) => ({ ...p, [name]: v }))} />
           {busy && <LinearProgress />}
           {!!error && <Box><CatalogErrorAlert error={error} /></Box>}
         </Stack>
