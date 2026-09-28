@@ -41,6 +41,7 @@ domain components:
 | **TabSet** | layout container | Tabs inside any region (a drawer's own tabs); tab *i* shows child *i*; badges, `visibleWhen`, optional tab variable so actions can switch tabs |
 | **KeyValue** | widget | Label/value pairs of a record (`{{data.x}}`, or any cell kind), or pairs from a list/object |
 | **Timeline** | widget | Versions, runs, events from a query or binding; title/subtitle/time/chip per item; `selectedWhen`, `onItemClick` |
+| **Canvas** | widget | A graph editor over a page variable (nodes + edges, paths and edge field names configurable): node title / subtitle / placeholder / icon / category (colour and which handles) / problems / chips from bindings seeing `{{node}}` and `{{extra}}` (per-node data such as validation issues or preview stats); move, connect (optionally one input per node), delete in place; selection in a variable; a grouped palette from a query whose items run `onAdd` with `{{item}}`, `{{graph}}`, `{{selected}}` - the domain decides what a new node is; `onChange` after each edit |
 | **Form** | widget | Fields bound to a page variable (`{{vars.draft.x}}`), seeded by `initFrom`; text, long text, number, date, select, radio, switch, chips; options static or **from a query**; per-field `visibleWhen` / `readOnlyWhen`; optional submit actions (or a dialog's buttons) |
 
 Grids and cells for record detail (the provenance drawer's needs):
@@ -167,8 +168,10 @@ a tenant switched off is hidden.
 
 - Structured editors for row buttons and action forms (JSON today).
 - The mastering console, the mastering configuration pages and staging
-  bindings are fully studio-built, editors included. Still a domain
-  component: the pipeline canvas (needs a canvas widget).
+  bindings are fully studio-built, editors included. The Canvas widget is
+  in; the pipeline editor page is still the domain component until it is
+  rebuilt on it (toolbar, canvas, step settings via `fieldsFrom`, problems /
+  preview / runs tabs, assistant, schedule).
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

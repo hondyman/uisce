@@ -17,6 +17,16 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LinkIcon from '@mui/icons-material/Link';
 import AccountTreeIcon from '@mui/icons-material/AccountTree';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import BusinessIcon from '@mui/icons-material/Business';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import TableChartIcon from '@mui/icons-material/TableChart';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
+import SaveIcon from '@mui/icons-material/Save';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import type { SvgIconProps } from '@mui/material';
 
 /**
@@ -43,6 +53,16 @@ export const PAGE_ICONS: Record<string, React.ComponentType<SvgIconProps>> = {
   link: LinkIcon,
   pipeline: AccountTreeIcon,
   delete: DeleteIcon,
+  file: InsertDriveFileIcon,
+  business: BusinessIcon,
+  swap: SwapHorizIcon,
+  table: TableChartIcon,
+  export: FileDownloadIcon,
+  save: SaveIcon,
+  preview: VisibilityIcon,
+  assistant: AutoAwesomeIcon,
+  back: ArrowBackIcon,
+  help: HelpOutlineIcon,
 };
 
 export function PageIcon({ name, ...props }: { name?: string } & SvgIconProps) {

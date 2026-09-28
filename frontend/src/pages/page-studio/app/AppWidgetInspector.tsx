@@ -4,7 +4,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { ComponentDefinition, CorePageDefinition } from '../../../types/pageStudio';
 import { getDomainComponent, listDomainComponents } from '../../../studio-core/components/registry';
 import type { CellSpec, ColumnDef, ConditionNode, TextSpec } from './appModel';
-import type { AppWidgetType, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
+import type { AppWidgetType, CanvasProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
 import { FieldsEditor } from './fieldsEditor';
 import { PAGE_ICONS } from './icons';
 import {
@@ -276,6 +276,68 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
         </Section>
       );
       break;
+    case 'Canvas': {
+      const p = props as unknown as CanvasProps;
+      const nodePaths = [...paths, 'node', 'extra'];
+      const setNode = (patch: Partial<CanvasProps['node']>) => setProps({ node: { ...p.node, ...patch } });
+      body = (
+        <>
+          <Section title="Graph">
+            <SelectField label="Graph in variable" value={p.variable} options={vars} onChange={(v) => setProps({ variable: v })} />
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="Nodes at" value={p.nodesPath ?? 'nodes'} onChange={(e) => setProps({ nodesPath: e.target.value || undefined })} />
+              <TextField size="small" label="Edges at" value={p.edgesPath ?? 'edges'} onChange={(e) => setProps({ edgesPath: e.target.value || undefined })} />
+            </Stack>
+            <Stack direction="row" spacing={1}>
+              <TextField size="small" label="Edge from field" value={p.edgeFrom ?? 'from'} onChange={(e) => setProps({ edgeFrom: e.target.value || undefined })} />
+              <TextField size="small" label="Edge to field" value={p.edgeTo ?? 'to'} onChange={(e) => setProps({ edgeTo: e.target.value || undefined })} />
+            </Stack>
+            <SelectField label="Selected node id in variable" value={p.selectedVariable} options={vars} allowEmpty="None" onChange={(v) => setProps({ selectedVariable: v || undefined })} />
+            <SwitchField label="One input per node (a new connection replaces it)" checked={!!p.singleInput} onChange={(v) => setProps({ singleInput: v || undefined })} />
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField size="small" type="number" label="Height" value={p.height ?? 520} onChange={(e) => setProps({ height: Number(e.target.value) || undefined })} />
+              <SwitchField label="Minimap" checked={p.minimap !== false} onChange={(v) => setProps({ minimap: v ? undefined : false })} />
+            </Stack>
+            {text('emptyText', 'When empty')}{text('emptyHint', 'Hint when empty')}
+          </Section>
+          <Section title="Nodes ({{node}}, {{extra}})">
+            <TextSpecField label="Title" value={p.node?.title} onChange={(v) => setNode({ title: v })} paths={nodePaths} />
+            <TextSpecField label="Subtitle" value={p.node?.subtitle} onChange={(v) => setNode({ subtitle: v || undefined })} paths={nodePaths} />
+            <TextSpecField label="When the subtitle is empty" value={p.node?.placeholder} onChange={(v) => setNode({ placeholder: v || undefined })} paths={nodePaths} />
+            <BindingField label="Icon (a name)" value={p.node?.icon} onChange={(v) => setNode({ icon: v })} paths={nodePaths} helperText={Object.keys(PAGE_ICONS).join(', ')} />
+            <BindingField label="Category" value={p.node?.category} onChange={(v) => setNode({ category: v })} paths={nodePaths} />
+            <BindingField label="Problems (a message or list)" value={p.node?.errors} onChange={(v) => setNode({ errors: v || undefined })} paths={nodePaths} />
+            <BindingField label="Chips [{label, color, variant}]" value={p.node?.chips} onChange={(v) => setNode({ chips: v || undefined })} paths={nodePaths} />
+            <JsonField label="Categories {name: {color, inputs, outputs}}" value={p.categories ?? {}} minRows={3} onChange={(v) => setProps({ categories: (v || undefined) as CanvasProps['categories'] })} />
+            <BindingField label="Extra data per node id" value={p.nodeData} onChange={(v) => setProps({ nodeData: v || undefined })} paths={paths} helperText="e.g. {{queries.issues.data.by_node}}" />
+            {condition('animatedWhen', 'Edges animate when')}
+          </Section>
+          <Section title="Palette ({{item}})">
+            <SwitchField label="Show a palette" checked={!!p.palette} onChange={(v) => setProps({ palette: v ? { query: queries[0]?.value ?? '', label: '{{item.label}}' } : undefined })} />
+            {p.palette && (
+              <>
+                <SelectField label="Items from query" value={p.palette.query} options={queries} onChange={(v) => setProps({ palette: { ...p.palette!, query: v ?? '' } })} />
+                <Stack direction="row" spacing={1}>
+                  <TextField size="small" label="Rows path" value={p.palette.rowsPath ?? ''} onChange={(e) => setProps({ palette: { ...p.palette!, rowsPath: e.target.value || undefined } })} />
+                  <TextField size="small" label="Group by field" value={p.palette.groupBy ?? ''} onChange={(e) => setProps({ palette: { ...p.palette!, groupBy: e.target.value || undefined } })} />
+                </Stack>
+                <JsonField label="Groups [{id, label}] (order and titles)" value={p.palette.groups ?? []} minRows={2} onChange={(v) => setProps({ palette: { ...p.palette!, groups: (v || undefined) as never } })} />
+                <TextSpecField label="Label" value={p.palette.label} onChange={(v) => setProps({ palette: { ...p.palette!, label: v } })} paths={[...paths, 'item']} />
+                <TextSpecField label="Description" value={p.palette.description} onChange={(v) => setProps({ palette: { ...p.palette!, description: v || undefined } })} paths={[...paths, 'item']} />
+                <BindingField label="Icon" value={p.palette.icon} onChange={(v) => setProps({ palette: { ...p.palette!, icon: v } })} paths={[...paths, 'item']} />
+                <BindingField label="Category" value={p.palette.category} onChange={(v) => setProps({ palette: { ...p.palette!, category: v } })} paths={[...paths, 'item']} />
+                <ConditionEditor label="Disabled when" value={p.palette.disabledWhen} onChange={(v) => setProps({ palette: { ...p.palette!, disabledWhen: v } })} paths={[...paths, 'item']} />
+              </>
+            )}
+          </Section>
+          <Section title="Actions">
+            {actions('onAdd', 'Add ({{item}}, {{graph}}, {{selected}})', ['item', 'graph', 'selected'])}
+            {actions('onChange', 'After the graph changes ({{graph}})', ['graph'])}
+          </Section>
+        </>
+      );
+      break;
+    }
     case 'KeyValue': {
       const p = props as unknown as KeyValueProps;
       const dataPaths = [...paths, 'data'];
