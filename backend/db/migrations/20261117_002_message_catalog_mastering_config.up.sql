@@ -1,0 +1,35 @@
+-- Message set 9400 (mastering): maker-checker changes to mastering
+-- configuration (vendor registry, source hierarchy, match rules) -
+-- internal/mastering/configedit.go.
+INSERT INTO public.message_catalog (set_nbr, message_nbr, language_cd, severity, message_text, description, user_action) VALUES
+  (9400, 42, 'en', 'Error', 'Configuration change %1 was not found.', NULL, NULL),
+  (9400, 42, 'es', 'Error', 'No se encontró el cambio de configuración %1.', NULL, NULL),
+  (9400, 42, 'fr', 'Error', 'La modification de configuration %1 est introuvable.', NULL, NULL),
+  (9400, 43, 'en', 'Error', 'Configuration change %1 is no longer pending (it is %2).', NULL, NULL),
+  (9400, 43, 'es', 'Error', 'El cambio de configuración %1 ya no está pendiente (está %2).', NULL, NULL),
+  (9400, 43, 'fr', 'Error', 'La modification de configuration %1 n''est plus en attente (elle est %2).', NULL, NULL),
+  (9400, 44, 'en', 'Error', 'You proposed this change; another administrator must approve it.', NULL, 'Ask a second administrator to review it.'),
+  (9400, 44, 'es', 'Error', 'Usted propuso este cambio; otro administrador debe aprobarlo.', NULL, 'Pida a un segundo administrador que lo revise.'),
+  (9400, 44, 'fr', 'Error', 'Vous avez proposé cette modification ; un autre administrateur doit l''approuver.', NULL, 'Demandez à un second administrateur de l''examiner.'),
+  (9400, 45, 'en', 'Error', 'Column %1 cannot be set on %2.', NULL, NULL),
+  (9400, 45, 'es', 'Error', 'La columna %1 no se puede establecer en %2.', NULL, NULL),
+  (9400, 45, 'fr', 'Error', 'La colonne %1 ne peut pas être définie sur %2.', NULL, NULL),
+  (9400, 46, 'en', 'Error', 'This row belongs to the gold copy and is read-only here. Propose your own row with the same key to override it.', NULL, NULL),
+  (9400, 46, 'es', 'Error', 'Esta fila pertenece a la copia maestra y aquí es de solo lectura. Proponga su propia fila con la misma clave para reemplazarla.', NULL, NULL),
+  (9400, 46, 'fr', 'Error', 'Cette ligne appartient à la copie de référence et est en lecture seule ici. Proposez votre propre ligne avec la même clé pour la remplacer.', NULL, NULL),
+  (9400, 47, 'en', 'Error', 'There is no source %1 in the vendor registry.', NULL, NULL),
+  (9400, 47, 'es', 'Error', 'No existe la fuente %1 en el registro de proveedores.', NULL, NULL),
+  (9400, 47, 'fr', 'Error', 'La source %1 n''existe pas dans le registre des fournisseurs.', NULL, NULL),
+  (9400, 48, 'en', 'Error', 'A row with the same key already exists in %1.', NULL, 'Change that row instead.'),
+  (9400, 48, 'es', 'Error', 'Ya existe una fila con la misma clave en %1.', NULL, 'Modifique esa fila en su lugar.'),
+  (9400, 48, 'fr', 'Error', 'Une ligne avec la même clé existe déjà dans %1.', NULL, 'Modifiez plutôt cette ligne.'),
+  (9400, 49, 'en', 'Error', 'Unknown configuration request: %1.', NULL, NULL),
+  (9400, 49, 'es', 'Error', 'Solicitud de configuración desconocida: %1.', NULL, NULL),
+  (9400, 49, 'fr', 'Error', 'Demande de configuration inconnue : %1.', NULL, NULL),
+  (9400, 50, 'en', 'Error', 'This row is still in use and cannot be removed: %1', NULL, NULL),
+  (9400, 50, 'es', 'Error', 'Esta fila todavía está en uso y no se puede eliminar: %1', NULL, NULL),
+  (9400, 50, 'fr', 'Error', 'Cette ligne est encore utilisée et ne peut pas être supprimée : %1', NULL, NULL),
+  (9400, 51, 'en', 'Error', 'Configuration row %1 was not found (it may belong to another tenant or have been removed).', NULL, NULL),
+  (9400, 51, 'es', 'Error', 'No se encontró la fila de configuración %1 (puede pertenecer a otro inquilino o haberse eliminado).', NULL, NULL),
+  (9400, 51, 'fr', 'Error', 'La ligne de configuration %1 est introuvable (elle appartient peut-être à un autre locataire ou a été supprimée).', NULL, NULL)
+ON CONFLICT (set_nbr, message_nbr, language_cd) DO NOTHING;

@@ -39,6 +39,14 @@ type Handler struct {
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Route("/mastering", func(r chi.Router) {
 		r.Get("/profiles", h.profiles)
+		// Configuration (vendor registry, source hierarchy, match rules):
+		// read by anyone in the tenant; changed only by maker-checker.
+		r.Route("/config", func(r chi.Router) {
+			r.Get("/changes", h.configChanges)
+			r.Post("/changes", h.proposeConfig)
+			r.Post("/changes/{id}/{decision:approve|reject|withdraw}", h.decideConfig)
+			r.Get("/{kind}", h.configTable)
+		})
 		r.Route("/{entity}", func(r chi.Router) {
 			r.Get("/runs", h.runs)
 			r.Post("/runs", h.start)
@@ -383,5 +391,50 @@ func (h *Handler) withdrawMerge(w http.ResponseWriter, r *http.Request) {
 	h.with(w, r, func(a Actor) (any, int, error) {
 		err := h.Engine.WithdrawMerge(r.Context(), a.TenantID, chi.URLParam(r, "entity"), chi.URLParam(r, "id"), a.UserID)
 		return map[string]any{"ok": err == nil}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) configTable(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		t, err := h.Engine.ConfigTable(r.Context(), a.TenantID, chi.URLParam(r, "kind"), r.URL.Query().Get("entity"))
+		if err != nil {
+			return nil, 0, err
+		}
+		return map[string]any{"table": t, "can_edit": a.Admin}, http.StatusOK, nil
+	})
+}
+
+func (h *Handler) configChanges(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		q := r.URL.Query()
+		l, err := h.Engine.ConfigChanges(r.Context(), a, q.Get("kind"), q.Get("entity"), q.Get("status"))
+		return map[string]any{"changes": l, "can_decide": a.Admin}, http.StatusOK, err
+	})
+}
+
+func (h *Handler) proposeConfig(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		if !a.Admin {
+			return nil, 0, msgNotAdmin()
+		}
+		var in ConfigProposal
+		if err := decodeBody(r, &in); err != nil {
+			return nil, 0, err
+		}
+		ch, err := h.Engine.ProposeConfig(r.Context(), a, in)
+		return map[string]any{"change": ch}, http.StatusCreated, err
+	})
+}
+
+func (h *Handler) decideConfig(w http.ResponseWriter, r *http.Request) {
+	h.with(w, r, func(a Actor) (any, int, error) {
+		var in struct {
+			Comment string `json:"comment"`
+		}
+		if err := decodeBody(r, &in); err != nil {
+			return nil, 0, err
+		}
+		ch, err := h.Engine.DecideConfig(r.Context(), a, chi.URLParam(r, "id"), chi.URLParam(r, "decision"), in.Comment)
+		return map[string]any{"change": ch}, http.StatusOK, err
 	})
 }
