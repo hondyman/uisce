@@ -61,6 +61,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/mastering"
 	"github.com/hondyman/uisce/backend/internal/mcp"
 	"github.com/hondyman/uisce/backend/internal/mdm"
+	"github.com/hondyman/uisce/backend/internal/mdm/scoring"
 	"github.com/hondyman/uisce/backend/internal/metadata"
 	appmid "github.com/hondyman/uisce/backend/internal/middleware"
 	"github.com/hondyman/uisce/backend/internal/migrations"
@@ -1328,6 +1329,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	masterVendorHandler.RegisterRoutes(r)
 	masterPersonnelHandler.RegisterRoutes(r)
 	masterSalesLedgerHandler.RegisterRoutes(r)
+
+	// Initialize MDM License Source Scoring and Vendor Displacement handler
+	mdmScoringHandler := scoring.NewHandler(scoring.NewService(scoring.NewPostgresRepository(db)))
+	mdmScoringHandler.RegisterRoutes(r)
 
 	// Initialize Gold Copy Engine (full entity suite)
 	// NOTE: GoldCopy routes will be registered inside the main /api Route block below

@@ -3,6 +3,7 @@ import { masteringConsoleBlueprint } from './masteringConsole';
 import { stagingBindingsBlueprint } from './stagingBindings';
 import { dataPipelinesBlueprint, dataPipelineEditorBlueprint } from './dataPipelines';
 import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from './mdmConfig';
+import { sourceScoringBlueprint } from './sourceScoring';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -58,4 +59,11 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     description: 'The one list of data sources mastering ranks and matches on. Maker-checker.',
     build: vendorRegistryBlueprint,
   },
+  {
+    id: 'mdm-source-scoring',
+    name: 'Source scoring & displacement',
+    description: 'Vendor quality scoring, substitution rates, override endorsements, value-for-money efficient frontier, and displacement readiness simulation.',
+    build: sourceScoringBlueprint,
+  },
 ];
+
