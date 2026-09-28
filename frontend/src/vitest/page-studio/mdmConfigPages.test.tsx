@@ -86,6 +86,17 @@ describe('source hierarchy page', () => {
     expect(cfg.table).toHaveBeenCalledWith('source_priority', 'product');
   });
 
+  it('a price row with no price type applies to all of them', async () => {
+    cfg.table.mockResolvedValueOnce({ can_edit: true, table: { kind: 'source_priority', columns: hierarchyColumns, rows: [
+      { id: 'p1', origin: 'core', inherited: true, overridden: false, pending: false,
+        values: { price_type_cd: null, asset_class_cd: 'FixedIncome', source: 'ICE', priority: 10, max_staleness_minutes: 4320 } },
+    ] } });
+    mount(page(sourceHierarchyBlueprint()));
+    const row = (await screen.findByText('ICE')).closest('tr') as HTMLElement;
+    expect(within(row).getAllByText('All').length).toBeGreaterThan(0);
+    expect(within(row).getByText('stale after 4320 min')).toBeTruthy();
+  });
+
   it('approvals: someone else\'s proposal is approved with the comment', async () => {
     mount(page(sourceHierarchyBlueprint()));
     const approvals = (await screen.findAllByRole('tab'))[1];

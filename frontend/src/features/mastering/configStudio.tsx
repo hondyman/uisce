@@ -33,7 +33,9 @@ function fuzzyText(v: unknown): string[] {
 /** One configuration row, flattened for a grid. */
 function displayRow(r: ConfigRow, keyCols: string[]) {
   const v = r.values;
-  const group = GROUP_COLS.map((c) => v[c]).find((x) => !blank(x));
+  // A hierarchy row with no field group / price type applies to all of them.
+  const hasGroup = GROUP_COLS.some((c) => c in v);
+  const group = GROUP_COLS.map((c) => v[c]).find((x) => !blank(x)) ?? (hasGroup ? 'All' : undefined);
   const scope = keyCols.filter((c) => !GROUP_COLS.includes(c) && c !== 'source' && c !== 'rule_cd' && c !== 'code' && c !== 'price_entity_type' && !blank(v[c]))
     .map((c) => String(v[c]));
   const settings = Object.entries(SETTING_LABELS)
