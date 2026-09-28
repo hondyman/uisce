@@ -28,3 +28,4 @@
 20261021_001_catalog_node_tenant_path_unique.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
 20261021_002_semantic_term_rejections.up.sql	modified	Trailing DOWN block stripped in 55e262aa4 (the runner executed the DOWN inside the same transaction as the UP)
 20260914_014_seed_order_validation_trigger.up.sql	modified	File-scope BEGIN/COMMIT stripped in 8ebbb8e90 (runner rejects COMMIT in migration files); behaviour-preserving
+20261027_001_message_catalog.up.sql	modified	Restored to the applied text (55baa65ea); the post-apply ALTER from fd73f661f moved to 20261115_001_message_catalog_changes_by_name
