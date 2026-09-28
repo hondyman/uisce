@@ -4,7 +4,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { ComponentDefinition, CorePageDefinition } from '../../../types/pageStudio';
 import { getDomainComponent, listDomainComponents } from '../../../studio-core/components/registry';
 import type { CellSpec, ColumnDef, ConditionNode, TextSpec } from './appModel';
-import type { AppWidgetType, CanvasProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
+import type { AppWidgetType, CanvasProps, ChatProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
 import { FieldsEditor } from './fieldsEditor';
 import { PAGE_ICONS } from './icons';
 import {
@@ -276,6 +276,43 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
         </Section>
       );
       break;
+    case 'Chat': {
+      const p = props as unknown as ChatProps;
+      const msgPaths = [...paths, 'message', 'index'];
+      const setMessage = (patch: Partial<NonNullable<ChatProps['message']>>) => setProps({ message: { ...p.message, ...patch } });
+      body = (
+        <>
+          <Section title="Conversation">
+            <SelectField label="Messages in variable" value={p.variable} options={vars} onChange={(v) => setProps({ variable: v })} />
+            {text('title', 'Title')}
+            <SelectField label="Icon" value={p.icon} options={Object.keys(PAGE_ICONS).map((k) => ({ value: k, label: k }))} allowEmpty="None" onChange={(v) => setProps({ icon: v || undefined })} />
+            {text('intro', 'When empty')}
+            <JsonField label="Starters (a list of texts, or a binding)" value={p.starters ?? []} minRows={3} onChange={(v) => setProps({ starters: (v ?? undefined) as ChatProps['starters'] })} />
+            {text('placeholder', 'Placeholder')}{text('busyText', 'While waiting')}
+          </Section>
+          <Section title="Sending">
+            {actions('onSend', 'On send ({{text}}, {{messages}})', ['text', 'messages'])}
+          </Section>
+          <Section title="Assistant messages ({{message}}, {{index}})">
+            <BindingField label="Detail lines" value={p.message?.details} onChange={(v) => setMessage({ details: v || undefined })} paths={msgPaths} />
+            <BindingField label="Warning lines" value={p.message?.warning} onChange={(v) => setMessage({ warning: v || undefined })} paths={msgPaths} />
+            <TextSpecField label="Warning title" value={p.message?.warningTitle} onChange={(v) => setMessage({ warningTitle: v || undefined })} paths={msgPaths} />
+            <SwitchField label="An action on each message" checked={!!p.message?.action}
+              onChange={(v) => setMessage({ action: v ? { label: 'Apply', doneLabel: 'Applied', onClick: [] } : undefined })} />
+            {p.message?.action && (
+              <>
+                <TextSpecField label="Action label" value={p.message.action.label} onChange={(v) => setMessage({ action: { ...p.message!.action!, label: v } })} paths={msgPaths} />
+                <TextSpecField label="Once done" value={p.message.action.doneLabel} onChange={(v) => setMessage({ action: { ...p.message!.action!, doneLabel: v || undefined } })} paths={msgPaths} />
+                <ConditionEditor label="Show when" value={p.message.action.visibleWhen} onChange={(v) => setMessage({ action: { ...p.message!.action!, visibleWhen: v } })} paths={msgPaths} />
+                <ActionsEditor label="On click" value={p.message.action.onClick} onChange={(v) => setMessage({ action: { ...p.message!.action!, onClick: v ?? [] } })} draft={draft} paths={msgPaths} />
+              </>
+            )}
+          </Section>
+          <Section title="Closing">{actions('onClose', 'On close (makes it closable)')}</Section>
+        </>
+      );
+      break;
+    }
     case 'Canvas': {
       const p = props as unknown as CanvasProps;
       const nodePaths = [...paths, 'node', 'extra'];

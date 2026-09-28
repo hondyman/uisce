@@ -172,11 +172,31 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
       [set('spec', '{{result.spec}}'), set('stepDraft', '{{result.form}}'), ...edited])],
   });
 
-  // --- the assistant and the schedule (domain components for now) ----------------
-  w('assistant', 'DomainComponent', {
-    component: 'dataPipelines.Assistant', inputs: { spec: '{{vars.spec}}', selected: '{{vars.selected}}', preview: '{{vars.preview}}' },
-    events: { apply: [set('spec', '{{event.spec}}'), set('selected', '{{event.focus}}'), ...edited], close: [set('assistantOpen', false)] },
+  // --- the assistant: a conversation that proposes pipelines --------------------------
+  w('assistant', 'Chat', {
+    variable: 'assistantChat', title: 'Pipeline assistant', icon: 'assistant',
+    intro: 'Describe what you want to load or change. I only use business objects, rules, files and tables that exist for you, and nothing changes until you press Apply.',
+    starters: [
+      'Load the uploaded FactSet file into the Fund business object, updating funds that already exist',
+      'Add a step that applies the fund validation rules before writing',
+      'Load this file into a staging table instead of a business object',
+      'Why were rows rejected in the preview?',
+    ],
+    placeholder: 'e.g. only load funds with AUM over 1m',
+    onSend: [op('dataPipelines.assist', {
+      message: '{{text}}', messages: '{{messages}}', spec: '{{vars.spec}}', selected: '{{vars.selected}}', preview: '{{vars.preview}}',
+    }, [set('assistantChat', '{{result.messages}}')])],
+    message: {
+      details: '{{message.changes}}', warning: '{{message.issue_lines}}', warningTitle: 'Still needs attention:',
+      action: {
+        label: 'Apply to canvas', doneLabel: 'Applied', visibleWhen: cond('message.spec', 'is_not_empty'),
+        onClick: [set('spec', '{{message.spec}}'), set('selected', '{{message.focus}}'), ...edited],
+      },
+    },
+    onClose: [set('assistantOpen', false)],
   }, { style: { flex: '0 0 380px' }, visibleWhen: cond('vars.assistantOpen', 'is_true') });
+
+  // --- the schedule (the shared schedule editor, a domain component for now) ------------
   w('schedule', 'DomainComponent', {
     component: 'schedules.TargetSchedule', inputs: { kind: 'data_pipeline', ref: ID, name: '{{vars.name}}', open: '{{vars.scheduleOpen}}' },
     events: { close: [set('scheduleOpen', false)] },
@@ -300,6 +320,7 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
         { name: 'activeRun', description: 'A run being followed' },
         { name: 'openRun', description: 'The run shown in detail' },
         { name: 'assistantOpen', default: false },
+        { name: 'assistantChat', default: [], description: 'The conversation with the assistant' },
         { name: 'scheduleOpen', default: false },
       ],
       queries: [

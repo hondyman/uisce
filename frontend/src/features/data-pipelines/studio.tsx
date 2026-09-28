@@ -1,8 +1,7 @@
 import React from 'react';
 import { registerOperations, type OperationDef } from '../../studio-core/operations/registry';
 import { registerDomainComponents } from '../../studio-core/components/registry';
-import { type Definition, type PreviewResult, type Spec, pipelinesApi } from './api';
-import { AssistantPanel } from './AssistantPanel';
+import { type Definition, pipelinesApi } from './api';
 import { categoryOf } from './editorStudio';
 import ScheduleEditor from '../schedules/ScheduleEditor';
 import { useTargetSchedule } from '../schedules/useTargetSchedule';
@@ -12,8 +11,8 @@ import { schedulesApi } from '../schedules/api';
  * The data-pipelines domain's Page Studio surface: the pipeline list (the
  * Data pipelines core page) and the editor's operations (editorStudio.ts -
  * the Data pipeline editor core page is built from studio blocks, its graph
- * on the Canvas widget). Two parts are still placed as domain components:
- * the AI assistant (a chat) and the pipeline's schedule (the shared
+ * on the Canvas widget, the assistant on the Chat widget). One part is still
+ * placed as a domain component: the pipeline's schedule (the shared
  * schedule editor).
  */
 
@@ -74,16 +73,6 @@ function TargetSchedule({ inputs, emit }: { inputs: Record<string, unknown>; emi
 }
 
 registerDomainComponents([
-  {
-    id: 'dataPipelines.Assistant', domain: 'dp', label: 'Pipeline assistant',
-    description: 'Describe a change in words; the assistant proposes a spec, applied on request. apply carries spec and focus (the first new step).',
-    inputs: [{ name: 'spec', type: 'object', required: true }, { name: 'selected', type: 'string' }, { name: 'preview', type: 'object' }],
-    events: [{ name: 'apply', payload: ['spec', 'focus'] }, { name: 'close' }],
-    render: ({ inputs, emit }) => (
-      <AssistantPanel spec={inputs.spec as Spec} selectedNodeId={(inputs.selected as string) || null} preview={(inputs.preview as PreviewResult) ?? null}
-        onApply={(spec, focus) => emit('apply', { spec, focus: focus ?? null })} onClose={() => emit('close')} />
-    ),
-  },
   {
     id: 'schedules.TargetSchedule', domain: 'sched-list', label: 'Schedule a target', overlay: true,
     description: 'The schedule editor for one target (kind data_pipeline, ref its id).',
