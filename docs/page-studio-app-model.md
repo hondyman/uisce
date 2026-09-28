@@ -46,6 +46,13 @@ studio now has.
   domain component with a declared contract (inputs, events) rather than
   approximated by generic widgets.
 
+## Live
+
+`/data/mastering` is served by the core page `mastering-console` (saved from
+the blueprint in the gold copy). Tenants see it as they use it: extended,
+cloned, or not at all if switched off (`docs/core-customization.md`).
+`features/mastering/MasteringPage.tsx` stays as the parity reference.
+
 ## Where things are
 
 - Types: `pages/page-studio/app/appModel.ts`; `CorePageDefinition.app`,
@@ -83,4 +90,3 @@ studio now has.
   extension is the whole page, `app` included.
 - Operation catalog is registered in the frontend; a backend catalog would
   let MCP and governance list page capabilities server-side.
-- Switch `/data/mastering` to the studio page once saved and reviewed.
