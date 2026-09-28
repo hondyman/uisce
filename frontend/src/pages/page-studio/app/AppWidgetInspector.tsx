@@ -4,7 +4,8 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { ComponentDefinition, CorePageDefinition } from '../../../types/pageStudio';
 import { getDomainComponent, listDomainComponents } from '../../../studio-core/components/registry';
 import type { CellSpec, ColumnDef, ConditionNode, TextSpec } from './appModel';
-import type { AppWidgetType, DataGridProps, DomainComponentProps } from './AppWidgets';
+import type { AppWidgetType, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
+import { FieldsEditor } from './fieldsEditor';
 import { PAGE_ICONS } from './icons';
 import {
   ActionsEditor, BindingField, ConditionEditor, JsonField, ListEditor, Section, SelectField, SwitchField, TextSpecField, scopePaths,
@@ -126,7 +127,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
     ...prev, components: { ...prev.components, [component.id]: { ...prev.components[component.id], ...next } },
   }));
   const setProps = (patch: Record<string, unknown>) => update({ props: { ...props, ...patch } });
-  const gridQuery = type === 'DataGrid' ? (props as unknown as DataGridProps).query : undefined;
+  // Row paths for per-row editors: a grid's or a timeline's query.
+  const gridQuery = type === 'DataGrid' || type === 'Timeline' ? (props.query as string | undefined) : undefined;
   const paths = scopePaths(draft);
   const rowPaths = scopePaths(draft, gridQuery);
   const vars = (draft.app?.variables ?? []).map((v) => ({ value: v.name, label: v.name }));
@@ -239,6 +241,93 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
         </Section>
       );
       break;
+    case 'KeyValue': {
+      const p = props as unknown as KeyValueProps;
+      const dataPaths = [...paths, 'data'];
+      body = (
+        <>
+          <Section title="Record">
+            <BindingField label="Record (templates below see {{data}})" value={p.source} onChange={(v) => setProps({ source: v })} paths={paths}
+              helperText="e.g. {{queries.golden.data}}" />
+            <TextField size="small" type="number" label="Columns" value={p.columns ?? 2} onChange={(e) => setProps({ columns: Math.max(1, Number(e.target.value) || 1) })} />
+            {text('emptyText', 'When empty')}
+          </Section>
+          <Section title="Items">
+            <SwitchField label="Pairs from data (list or object)" checked={!!p.pairsFrom} onChange={(v) => setProps({ pairsFrom: v ? { value: '{{data}}' } : undefined })} />
+            {p.pairsFrom ? (
+              <>
+                <BindingField label="Pairs" value={p.pairsFrom.value} onChange={(v) => setProps({ pairsFrom: { ...p.pairsFrom!, value: v } })} paths={dataPaths} />
+                <Stack direction="row" spacing={1}>
+                  <TextField size="small" label="Label field" value={p.pairsFrom.labelField ?? ''} onChange={(e) => setProps({ pairsFrom: { ...p.pairsFrom!, labelField: e.target.value || undefined } })} />
+                  <TextField size="small" label="Value field" value={p.pairsFrom.valueField ?? ''} onChange={(e) => setProps({ pairsFrom: { ...p.pairsFrom!, valueField: e.target.value || undefined } })} />
+                </Stack>
+              </>
+            ) : (
+              <ListEditor items={p.items ?? []} onChange={(v) => setProps({ items: v })} addLabel="Add item" create={() => ({ label: 'Label', value: '{{data.field}}' })}
+                render={(it, up) => (
+                  <>
+                    <TextSpecField label="Label" value={it.label} onChange={(v) => up({ ...it, label: v })} paths={dataPaths} />
+                    <SwitchField label="Rich cell (chip, number, date...)" checked={!!it.cell} onChange={(v) => up({ ...it, cell: v ? { kind: 'text', value: it.value } : undefined })} />
+                    {it.cell
+                      ? <CellEditor cell={it.cell} onChange={(c) => up({ ...it, cell: c })} paths={dataPaths} draft={draft} />
+                      : <BindingField label="Value" value={it.value} onChange={(v) => up({ ...it, value: v })} paths={dataPaths} />}
+                    <ConditionEditor label="Show when" value={it.visibleWhen} onChange={(v) => up({ ...it, visibleWhen: v })} paths={dataPaths} />
+                  </>
+                )} />
+            )}
+          </Section>
+        </>
+      );
+      break;
+    }
+    case 'Timeline': {
+      const p = props as unknown as TimelineProps;
+      body = (
+        <>
+          <Section title="Items">
+            <SelectField label="Query" value={p.query} options={queries} allowEmpty="From a binding" onChange={(v) => setProps({ query: v || undefined })} />
+            {p.query
+              ? <TextField size="small" label="Rows path (optional)" value={p.rowsPath ?? ''} onChange={(e) => setProps({ rowsPath: e.target.value || undefined })} />
+              : <BindingField label="Items (a list)" value={p.items} onChange={(v) => setProps({ items: v })} paths={paths} />}
+            {text('emptyText', 'When empty')}
+            <TextField size="small" type="number" label="Max height (px, scrolls)" value={p.maxHeight ?? ''} onChange={(e) => setProps({ maxHeight: e.target.value ? Number(e.target.value) : undefined })} />
+          </Section>
+          <Section title="Each item ({{row}})">
+            <TextSpecField label="Title" value={p.title} onChange={(v) => setProps({ title: v })} paths={rowPaths} />
+            <TextSpecField label="Subtitle" value={p.subtitle} onChange={(v) => setProps({ subtitle: v || undefined })} paths={rowPaths} />
+            <BindingField label="Time" value={p.time} onChange={(v) => setProps({ time: v || undefined })} paths={rowPaths} />
+            <JsonField label="Chip {value, labelKey, colorMap} (optional)" value={p.chip ?? null} minRows={2} onChange={(v) => setProps({ chip: v || undefined })} />
+          </Section>
+          <Section title="Behaviour">
+            <ConditionEditor label="Selected when" value={p.selectedWhen} onChange={(v) => setProps({ selectedWhen: v })} paths={rowPaths} />
+            {actions('onItemClick', 'On click ({{row}})', rowPaths)}
+          </Section>
+        </>
+      );
+      break;
+    }
+    case 'Form': {
+      const p = props as unknown as FormWidgetProps;
+      body = (
+        <>
+          <Section title="Form">
+            <SelectField label="Values in variable" value={p.variable} options={vars} onChange={(v) => setProps({ variable: v })} />
+            <BindingField label="Start from (optional)" value={p.initFrom} onChange={(v) => setProps({ initFrom: v || undefined })} paths={paths}
+              helperText="e.g. {{vars.editRow}} - re-seeds when it changes" />
+            <TextField size="small" type="number" label="Columns" value={p.columns ?? 1} onChange={(e) => setProps({ columns: Math.max(1, Number(e.target.value) || 1) })} />
+          </Section>
+          <Section title="Fields">
+            <FieldsEditor fields={p.fields ?? []} onChange={(v) => setProps({ fields: v })} draft={draft} paths={paths} />
+          </Section>
+          <Section title="Submit (optional - or use a dialog's buttons)">
+            {text('submitLabel', 'Button label')}
+            {actions('onSubmit', 'On submit ({{form}})', ['form'])}
+            {condition('submitDisabledWhen', 'Disabled when')}
+          </Section>
+        </>
+      );
+      break;
+    }
     case 'DomainComponent': {
       const p = props as unknown as DomainComponentProps;
       const def = getDomainComponent(p.component);

@@ -1,6 +1,12 @@
 import React from 'react';
 import { Box, Typography, Card, CardActionArea, Grid } from '@mui/material';
 import { useDraggable } from '@dnd-kit/core';
+import DrawerIcon from '@mui/icons-material/VerticalSplit';
+import DialogIcon from '@mui/icons-material/WebAsset';
+import TabsIcon from '@mui/icons-material/Tab';
+import KeyValueIcon from '@mui/icons-material/ListAlt';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import FormWidgetIcon from '@mui/icons-material/EditNote';
 import {
     TableChart as TableIcon,
     ShowChart as ChartIcon,
@@ -49,6 +55,11 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'Row', icon: <LayoutIcon />, group: 'Layout' },
     { type: 'Column', icon: <LayoutIcon />, group: 'Layout' },
     { type: 'Panel', icon: <PanelIcon />, group: 'Layout' },
+    // Containers with page state (app/containers.tsx): overlays opened by a
+    // condition, and tabs inside a region (a drawer's own tabs).
+    { type: 'Drawer', icon: <DrawerIcon />, group: 'Layout' },
+    { type: 'Dialog', icon: <DialogIcon />, group: 'Layout' },
+    { type: 'TabSet', icon: <TabsIcon />, group: 'Layout' },
     { type: 'Text', icon: <TextIcon />, group: 'Data' },
     { type: 'Table', icon: <TableIcon />, group: 'Data' },
     { type: 'LineChart', icon: <ChartIcon />, group: 'Data' },
@@ -68,6 +79,9 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'DataGrid', icon: <GridIcon />, group: 'App' },
     { type: 'AlertBanner', icon: <AlertIcon />, group: 'App' },
     { type: 'DomainComponent', icon: <DomainIcon />, group: 'App' },
+    { type: 'KeyValue', icon: <KeyValueIcon />, group: 'App' },
+    { type: 'Timeline', icon: <TimelineIcon />, group: 'App' },
+    { type: 'Form', icon: <FormWidgetIcon />, group: 'App' },
     // Report Studio only — band types. Not shown in Page Studio's palette
     // (filtered below) and not rendered by PageComponentRenderer; they
     // become live once Phase 3 builds ReportCanvas/ReportBandDesigner.

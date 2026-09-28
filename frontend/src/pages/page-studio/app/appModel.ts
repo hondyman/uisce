@@ -91,11 +91,24 @@ export type Action =
 export interface FormFieldSpec {
   name: string;
   label: TextSpec;
-  kind: 'text' | 'multiline' | 'radio' | 'select' | 'switch';
+  /** chips: a list of strings typed as chips; date: an ISO date. */
+  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date';
   options?: { value: string; label: TextSpec }[];
+  /** Options from a query: rows at rowsPath, value/label read from each row (omit = the row itself). */
+  optionsFrom?: OptionsFrom;
   default?: Binding;
   required?: boolean;
   helperText?: TextSpec;
+  /** Show the field only while this holds; read-only while readOnlyWhen holds. */
+  visibleWhen?: ConditionNode;
+  readOnlyWhen?: ConditionNode;
+}
+
+export interface OptionsFrom {
+  query: string;
+  rowsPath?: string;
+  valueField?: string;
+  labelField?: string;
 }
 
 export interface FormSpec {
@@ -107,6 +120,43 @@ export interface FormSpec {
   fields: FormFieldSpec[];
   submitLabel?: TextSpec;
   submitColor?: 'primary' | 'inherit' | 'error';
+}
+
+// ---------------------------------------------------------------------------
+// Overlay and tab containers (layout nodes; app/containers.tsx)
+
+/** A footer button of a Dialog (or Drawer). */
+export interface ContainerButton {
+  label: TextSpec;
+  variant?: 'text' | 'outlined' | 'contained';
+  color?: 'primary' | 'inherit' | 'error' | 'secondary';
+  disabledWhen?: ConditionNode;
+  visibleWhen?: ConditionNode;
+  onClick: Action[];
+}
+
+/** LayoutNode.props when type === 'Drawer' or 'Dialog'. */
+export interface OverlayNodeProps {
+  /** Open while this holds, e.g. vars.goldenId is_not_empty. */
+  openWhen?: ConditionNode;
+  title?: TextSpec;
+  subtitle?: TextSpec;
+  /** Drawer: side and width. */
+  anchor?: 'right' | 'left';
+  width?: number;
+  /** Dialog: width class. */
+  maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  /** Closing (X, backdrop, Escape) runs these - usually clearing the variable openWhen reads. */
+  onClose?: Action[];
+  /** Footer buttons. */
+  buttons?: ContainerButton[];
+}
+
+/** LayoutNode.props when type === 'TabSet'; tab i shows children[i]. */
+export interface TabSetNodeProps {
+  tabs?: { id: string; label: TextSpec; badge?: Binding; visibleWhen?: ConditionNode }[];
+  /** The page variable holding the active tab id (so actions can switch it); omit for local state. */
+  variable?: string;
 }
 
 // ---------------------------------------------------------------------------

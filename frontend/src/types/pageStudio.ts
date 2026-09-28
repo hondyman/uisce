@@ -74,7 +74,12 @@ export interface LayoutNode {
    * region (see PanelNodeProps below, read out of `props`) - used for
    * things like a filters/detail rail next to a page's main content.
    */
-  type: 'Row' | 'Column' | 'Panel';
+  /**
+   * Row/Column stack children; Panel is a collapsible side rail; Drawer and
+   * Dialog are overlays opened by a condition (app/containers.tsx); TabSet
+   * shows one child per tab (children[i] is tab i's content).
+   */
+  type: 'Row' | 'Column' | 'Panel' | 'Drawer' | 'Dialog' | 'TabSet';
   /** Unused by plain Row/Column containers; reserved for a future componentId-backed layout node kind. */
   componentId?: string;
   /** Row/Column: unused today. Panel: see PanelNodeProps. */

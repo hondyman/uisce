@@ -4,6 +4,7 @@ import { PanelNodeProps } from '../../types/pageStudio';
 import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
 import { usePresentationOverlay } from './PresentationRuntime';
+import { OverlayContainer, TabSetContainer } from './app/containers';
 
 const DEFAULT_PANEL_PROPS: PanelNodeProps = { side: 'right', collapsible: true, defaultOpen: true, widthPx: 320, label: 'Panel' };
 
@@ -57,6 +58,16 @@ const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, comp
   }
   if (overlay?.hidden) return null;
 
+  const child = (childId: string) => (
+    <RenderLayoutTree key={childId} nodeId={childId} nodes={nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
+  );
+  if (node.type === 'Drawer' || node.type === 'Dialog') {
+    return <OverlayContainer type={node.type} props={node.props}>{(node.children || []).map(child)}</OverlayContainer>;
+  }
+  if (node.type === 'TabSet') {
+    return <TabSetContainer props={node.props} childIds={node.children || []} renderChild={child} />;
+  }
+
   const body = (
     <Box
       key={node.type === 'Panel' ? undefined : nodeId}
@@ -69,9 +80,7 @@ const RenderLayoutTree: React.FC<RenderLayoutTreeProps> = ({ nodeId, nodes, comp
         ...overlay?.style,
       }}
     >
-      {(node.children || []).map((childId) => (
-        <RenderLayoutTree key={childId} nodeId={childId} nodes={nodes} components={components} dataSources={dataSources} tenantId={tenantId} />
-      ))}
+      {(node.children || []).map(child)}
     </Box>
   );
 
