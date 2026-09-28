@@ -78,8 +78,9 @@ studio now has.
   from domain component to studio-built.
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
-- Tenant overlays (`saveOverlay`) do not carry `app` - behaviour is
-  gold-copy authored; revisit if tenants need their own queries.
+- Tenant customization of core pages (inactive / vanilla / extended /
+  cloned, compare and upgrade) is in `docs/core-customization.md`. An
+  extension is the whole page, `app` included.
 - Operation catalog is registered in the frontend; a backend catalog would
   let MCP and governance list page capabilities server-side.
 - Switch `/data/mastering` to the studio page once saved and reviewed.

@@ -47,7 +47,21 @@ type PageStudioPage struct {
 	UpdatedAt          time.Time        `json:"updatedAt" db:"updated_at"`
 	// Editable is computed: core pages are writable only by gold-copy admin.
 	Editable bool `json:"editable" db:"-"`
+	// Customization: on a core page seen from a tenant, how that tenant
+	// uses it (page_studio_core.go). CanCustomize: the caller may extend,
+	// clone or switch it off. ClonedFrom: this tenant page is a clone.
+	Customization *PageCustomization `json:"customization,omitempty" db:"-"`
+	CanCustomize  bool               `json:"canCustomize,omitempty" db:"-"`
+	ClonedFrom    *PageCloneSource   `json:"clonedFrom,omitempty" db:"-"`
 }
+
+// pageColumns is the select list every page read and RETURNING uses.
+const pageColumns = `id, tenant_id, name, slug, COALESCE(description, '') AS description,
+	       layout, tabs, components, data_sources,
+	       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
+	       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
+	       app_model,
+	       version, is_core, status, created_at, updated_at`
 
 // PageAIField is one BO field passed to the AI page generator as grounding.
 type PageAIField struct {
@@ -126,8 +140,14 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/slug/{slug}", h.getBySlug)
 		r.Get("/{id}", h.get)
 		r.Put("/{id}", h.update)
-		r.Put("/{id}/overlay", h.saveOverlay)
 		r.Delete("/{id}", h.delete)
+		// Tenant lifecycle of a core page (page_studio_core.go).
+		r.Put("/{id}/extension", h.saveExtension)
+		r.Put("/{id}/activation", h.setActivation)
+		r.Post("/{id}/clone", h.cloneCore)
+		r.Delete("/{id}/customization", h.revertToCore)
+		r.Get("/{id}/compare", h.compare)
+		r.Post("/{id}/upgrade", h.upgrade)
 	})
 	r.Post("/page-studio/generate", h.generate)
 }
@@ -412,12 +432,7 @@ func (h *PageStudioHandler) list(w http.ResponseWriter, r *http.Request) {
 	var pages []PageStudioPage
 	gold := h.goldCopyID(r.Context())
 	err := h.db.SelectContext(r.Context(), &pages, `
-		SELECT id, tenant_id, name, slug, COALESCE(description, '') AS description,
-		       layout, tabs, components, data_sources,
-		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
-		       app_model,
-		       version, is_core, status, created_at, updated_at
+		SELECT `+pageColumns+`
 		FROM page_definitions
 		WHERE tenant_id = $1
 		   OR (is_core = true AND tenant_id = $2)
@@ -427,28 +442,48 @@ func (h *PageStudioHandler) list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to list pages: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if pages == nil {
-		pages = []PageStudioPage{}
+	var adoptions map[uuid.UUID]pageAdoption
+	if gold != uuid.Nil && tenantID != gold {
+		if adoptions, err = h.adoptions(r.Context(), tenantID); err != nil {
+			http.Error(w, "failed to load core page customizations: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 	canEdit := h.canEditCore(r, tenantID)
-	seen := map[string]bool{}
+	canCustomize := adoptions != nil && h.canCustomize(r, tenantID)
+	cores := map[uuid.UUID]PageStudioPage{}
+	clones := map[uuid.UUID]uuid.UUID{} // clone page id -> core page id
+	for id, a := range adoptions {
+		if a.CloneObjectID.Valid {
+			clones[a.CloneObjectID.UUID] = id
+		}
+	}
 	out := make([]PageStudioPage, 0, len(pages))
 	for _, p := range pages {
-		key := p.Slug
-		if seen[key] && p.TenantID != tenantID {
-			continue
+		if p.IsCore && p.TenantID != tenantID {
+			var a *pageAdoption
+			if found, ok := adoptions[p.ID]; ok {
+				a = &found
+			}
+			presentCore(&p, a, canCustomize)
+			cores[p.ID] = p
+		} else {
+			p.Editable = !p.IsCore || canEdit
 		}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		p.Editable = !p.IsCore || canEdit
-		h.mergeOverlay(r.Context(), tenantID, &p)
 		out = append(out, p)
+	}
+	for i := range out {
+		if coreID, ok := clones[out[i].ID]; ok {
+			if c, ok := cores[coreID]; ok {
+				out[i].ClonedFrom = &PageCloneSource{PageID: c.ID, Name: c.Name, Version: int(adoptions[coreID].BaseVersion.Int64)}
+			}
+		}
 	}
 	writeJSON(w, http.StatusOK, out)
 }
 
+// get is the studio's read: a core page comes back even when this tenant
+// has switched it off, with its customization state.
 func (h *PageStudioHandler) get(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
@@ -461,9 +496,14 @@ func (h *PageStudioHandler) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, err := h.getOne(r, "id = $1 AND tenant_id = $2", id, tenantID)
+	if err == nil {
+		page.Editable = !page.IsCore || h.canEditCore(r, tenantID)
+		h.markClone(r.Context(), tenantID, page)
+		writeJSON(w, http.StatusOK, page)
+		return
+	}
 	if err == sql.ErrNoRows {
-		gold := h.goldCopyID(r.Context())
-		page, err = h.getOne(r, "id = $1 AND is_core = true AND tenant_id = $2", id, gold)
+		page, err = h.getOne(r, "id = $1 AND is_core = true AND tenant_id = $2", id, h.goldCopyID(r.Context()))
 	}
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -473,11 +513,19 @@ func (h *PageStudioHandler) get(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	page.Editable = !page.IsCore || h.canEditCore(r, tenantID)
-	h.mergeOverlay(r.Context(), tenantID, page)
+	a, err := h.adoption(r.Context(), tenantID, page.ID)
+	if err != nil {
+		http.Error(w, "failed to load customization: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	presentCore(page, a, h.canCustomize(r, tenantID))
 	writeJSON(w, http.StatusOK, page)
 }
 
+// getBySlug is the runtime read (PageBrowser): the tenant's own page at
+// the slug (its clone, if it cloned a core page) wins; otherwise the core
+// page as the tenant uses it. A core page the tenant switched off is not
+// served.
 func (h *PageStudioHandler) getBySlug(w http.ResponseWriter, r *http.Request) {
 	tenantID, ok := mustTenantID(r)
 	if !ok {
@@ -486,9 +534,13 @@ func (h *PageStudioHandler) getBySlug(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := chi.URLParam(r, "slug")
 	page, err := h.getOne(r, "slug = $1 AND tenant_id = $2", slug, tenantID)
+	if err == nil {
+		page.Editable = !page.IsCore || h.canEditCore(r, tenantID)
+		writeJSON(w, http.StatusOK, page)
+		return
+	}
 	if err == sql.ErrNoRows {
-		gold := h.goldCopyID(r.Context())
-		page, err = h.getOne(r, "slug = $1 AND is_core = true AND tenant_id = $2", slug, gold)
+		page, err = h.getOne(r, "slug = $1 AND is_core = true AND tenant_id = $2", slug, h.goldCopyID(r.Context()))
 	}
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -498,22 +550,39 @@ func (h *PageStudioHandler) getBySlug(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	page.Editable = !page.IsCore || h.canEditCore(r, tenantID)
-	h.mergeOverlay(r.Context(), tenantID, page)
+	a, err := h.adoption(r.Context(), tenantID, page.ID)
+	if err != nil {
+		http.Error(w, "failed to load customization: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if a != nil && !a.Active {
+		http.Error(w, "this page is not active in your environment", http.StatusNotFound)
+		return
+	}
+	presentCore(page, a, false)
 	writeJSON(w, http.StatusOK, page)
+}
+
+// markClone sets ClonedFrom when a tenant page is the clone of a core page.
+func (h *PageStudioHandler) markClone(ctx context.Context, tenantID uuid.UUID, page *PageStudioPage) {
+	var src struct {
+		ID          uuid.UUID     `db:"id"`
+		Name        string        `db:"name"`
+		BaseVersion sql.NullInt64 `db:"base_version"`
+	}
+	err := h.db.GetContext(ctx, &src, `
+		SELECT p.id, p.name, a.base_version
+		FROM core_object_adoption a JOIN page_definitions p ON p.id = a.core_object_id
+		WHERE a.tenant_id = $1 AND a.object_type = $2 AND a.clone_object_id = $3
+	`, tenantID, corePageObjectType, page.ID)
+	if err == nil {
+		page.ClonedFrom = &PageCloneSource{PageID: src.ID, Name: src.Name, Version: int(src.BaseVersion.Int64)}
+	}
 }
 
 func (h *PageStudioHandler) getOne(r *http.Request, where string, args ...interface{}) (*PageStudioPage, error) {
 	var page PageStudioPage
-	query := `
-		SELECT id, tenant_id, name, slug, COALESCE(description, '') AS description,
-		       layout, tabs, components, data_sources,
-		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
-		       app_model,
-		       version, is_core, status, created_at, updated_at
-		FROM page_definitions
-		WHERE ` + where
+	query := `SELECT ` + pageColumns + ` FROM page_definitions WHERE ` + where
 	if err := h.db.GetContext(r.Context(), &page, query, args...); err != nil {
 		return nil, err
 	}
@@ -532,8 +601,11 @@ type pageStudioUpsertRequest struct {
 	FilterBar          json.RawMessage `json:"filterBar,omitempty"`
 	App                json.RawMessage `json:"app,omitempty"`
 	Version            int             `json:"version"`
-	IsCore             bool            `json:"isCore,omitempty"`
-	Status             string          `json:"status,omitempty"`
+	// IsCore: nil = the default - core when the gold-copy admin creates
+	// it (everything the gold copy authors, every MDM page, is core) and
+	// never otherwise.
+	IsCore *bool  `json:"isCore,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 func (h *PageStudioHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -557,20 +629,12 @@ func (h *PageStudioHandler) create(w http.ResponseWriter, r *http.Request) {
 	if req.Status == "" {
 		req.Status = "draft"
 	}
-	if req.IsCore && !h.canEditCore(r, tenantID) {
-		req.IsCore = false
-	}
+	isCore := (req.IsCore == nil || *req.IsCore) && h.canEditCore(r, tenantID)
 	var page PageStudioPage
 	err := h.db.GetContext(r.Context(), &page, `
 		INSERT INTO page_definitions (id, tenant_id, name, slug, description, layout, tabs, components, data_sources, presentation_events, filter_bar, version, is_core, status, app_model)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-		RETURNING id, tenant_id, name, slug, COALESCE(description, '') AS description,
-		          layout, tabs, components, data_sources,
-		          COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		          COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
-		          app_model,
-		          version, is_core, status, created_at, updated_at
-	`, id, tenantID, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, max(req.Version, 1), req.IsCore, req.Status, nullableJSON(req.App))
+		RETURNING `+pageColumns, id, tenantID, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, max(req.Version, 1), isCore, req.Status, nullableJSON(req.App))
 	if err != nil {
 		if isUniqueViolation(err) {
 			http.Error(w, "a page with this slug already exists", http.StatusConflict)
@@ -623,13 +687,7 @@ func (h *PageStudioHandler) update(w http.ResponseWriter, r *http.Request) {
 		SET name = $1, slug = $2, description = $3, layout = $4, tabs = $5, components = $6,
 		    data_sources = $7, presentation_events = $8, filter_bar = $9, status = $10, app_model = $13, version = version + 1, updated_at = NOW()
 		WHERE id = $11 AND tenant_id = $12
-		RETURNING id, tenant_id, name, slug, COALESCE(description, '') AS description,
-		          layout, tabs, components, data_sources,
-		          COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
-		          COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
-		          app_model,
-		          version, is_core, status, created_at, updated_at
-	`, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, req.Status, id, tenantID, nullableJSON(req.App))
+		RETURNING `+pageColumns, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, req.Status, id, tenantID, nullableJSON(req.App))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "page not found", http.StatusNotFound)
@@ -671,6 +729,10 @@ func (h *PageStudioHandler) delete(w http.ResponseWriter, r *http.Request) {
 	if n, _ := res.RowsAffected(); n == 0 {
 		http.Error(w, "page not found", http.StatusNotFound)
 		return
+	}
+	// Deleting a tenant's clone of a core page puts the core page back.
+	if _, err := h.db.ExecContext(r.Context(), `DELETE FROM core_object_adoption WHERE tenant_id = $1 AND object_type = $2 AND clone_object_id = $3`, tenantID, corePageObjectType, id); err != nil {
+		log.Printf("page-studio delete: clearing clone record for %s: %v", id, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -740,118 +802,4 @@ func (h *PageStudioHandler) canEditCore(r *http.Request, tenantID uuid.UUID) boo
 		return true
 	}
 	return tenantID == gold
-}
-
-func (h *PageStudioHandler) mergeOverlay(ctx context.Context, tenantID uuid.UUID, page *PageStudioPage) {
-	if page == nil {
-		return
-	}
-	var overlay struct {
-		Components json.RawMessage `db:"components"`
-		Layout     json.RawMessage `db:"layout"`
-		Tabs       json.RawMessage `db:"tabs"`
-	}
-	err := h.db.GetContext(ctx, &overlay, `
-		SELECT components, layout, tabs FROM page_definition_overlays
-		WHERE tenant_id = $1 AND core_page_id = $2
-	`, tenantID, page.ID)
-	if err != nil {
-		return
-	}
-	if len(overlay.Components) > 0 && string(overlay.Components) != "{}" && string(overlay.Components) != "null" {
-		base := map[string]json.RawMessage{}
-		extra := map[string]json.RawMessage{}
-		_ = json.Unmarshal(page.Components, &base)
-		_ = json.Unmarshal(overlay.Components, &extra)
-		added := []string{}
-		for k, v := range extra {
-			if _, exists := base[k]; exists {
-				continue
-			}
-			base[k] = v
-			added = append(added, k)
-		}
-		if merged, mErr := json.Marshal(base); mErr == nil {
-			page.Components = merged
-		}
-		if len(added) > 0 && len(overlay.Tabs) == 0 {
-			appendChildrenToRoot(&page.Layout, added)
-		}
-	}
-	if len(overlay.Tabs) > 0 && string(overlay.Tabs) != "null" {
-		page.Tabs = overlay.Tabs
-	}
-}
-
-type layoutTree struct {
-	Root  string                `json:"root"`
-	Nodes map[string]layoutNode `json:"nodes"`
-}
-type layoutNode struct {
-	ID       string   `json:"id"`
-	Type     string   `json:"type"`
-	Children []string `json:"children,omitempty"`
-}
-
-func appendChildrenToRoot(raw *json.RawMessage, ids []string) {
-	if raw == nil || len(*raw) == 0 {
-		return
-	}
-	var tree layoutTree
-	if err := json.Unmarshal(*raw, &tree); err != nil || tree.Root == "" {
-		return
-	}
-	n := tree.Nodes[tree.Root]
-	n.ID = tree.Root
-	n.Children = append(n.Children, ids...)
-	if tree.Nodes == nil {
-		tree.Nodes = map[string]layoutNode{}
-	}
-	tree.Nodes[tree.Root] = n
-	if b, err := json.Marshal(tree); err == nil {
-		*raw = b
-	}
-}
-
-func (h *PageStudioHandler) saveOverlay(w http.ResponseWriter, r *http.Request) {
-	tenantID, ok := mustTenantID(r)
-	if !ok {
-		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
-		return
-	}
-	id, err := uuid.Parse(chi.URLParam(r, "id"))
-	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
-		return
-	}
-	var req struct {
-		Components json.RawMessage `json:"components"`
-		Layout     json.RawMessage `json:"layout"`
-		Tabs       json.RawMessage `json:"tabs"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	if len(req.Components) == 0 {
-		req.Components = json.RawMessage(`{}`)
-	}
-	_, err = h.db.ExecContext(r.Context(), `
-		INSERT INTO page_definition_overlays (tenant_id, core_page_id, components, layout, tabs, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW())
-		ON CONFLICT (tenant_id, core_page_id) DO UPDATE
-		SET components = EXCLUDED.components, layout = EXCLUDED.layout, tabs = EXCLUDED.tabs, updated_at = NOW()
-	`, tenantID, id, req.Components, req.Layout, req.Tabs)
-	if err != nil {
-		http.Error(w, "failed to save overlay: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	page, err := h.getOne(r, "id = $1", id)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
-		return
-	}
-	page.Editable = false
-	h.mergeOverlay(r.Context(), tenantID, page)
-	writeJSON(w, http.StatusOK, page)
 }

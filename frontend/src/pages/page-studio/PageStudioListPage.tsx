@@ -4,7 +4,7 @@ import {
   Box, Typography, TextField, InputAdornment, Button, Card, CardActionArea, CardContent,
   Chip, Stack, CircularProgress, Alert, Grid, IconButton, Tooltip, Menu, MenuItem, Dialog,
   DialogTitle, DialogContent, DialogActions, Select, MenuItem as SelectMenuItem, InputLabel, FormControl,
-  FormControlLabel, Switch,
+  FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Divider,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
@@ -17,6 +17,11 @@ import EditIcon from '@mui/icons-material/Edit';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
+import RestoreIcon from '@mui/icons-material/Restore';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import CoreCompareDialog from './CoreCompareDialog';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import { useTenant } from '../../contexts/TenantContext';
@@ -51,6 +56,10 @@ const PageStudioListPage: React.FC = () => {
   const [renameTarget, setRenameTarget] = useState<CorePageDefinition | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
+  const [scope, setScope] = useState<'all' | 'core' | 'custom'>('all');
+  const [compareTarget, setCompareTarget] = useState<CorePageDefinition | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; body: string; label: string; run: () => Promise<void> } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBOs, setAiBOs] = useState<BOOption[]>([]);
@@ -131,13 +140,14 @@ const PageStudioListPage: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return pages;
-    return pages.filter((p) =>
+    const scoped = pages.filter((p) => scope === 'all' || (scope === 'core') === !!p.isCore);
+    if (!q) return scoped;
+    return scoped.filter((p) =>
       p.name.toLowerCase().includes(q) ||
       p.slug.toLowerCase().includes(q) ||
       (p.description || '').toLowerCase().includes(q)
     );
-  }, [pages, search]);
+  }, [pages, search, scope]);
 
   const closeMenu = () => setMenuAnchor(null);
 
@@ -159,6 +169,74 @@ const PageStudioListPage: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to clone page');
     } finally {
       setCloning(false);
+    }
+  };
+
+  // ── Core page lifecycle (tenant side) ───────────────────────────────────
+  // A tenant chooses per core page: switch it off, use it as shipped,
+  // extend it (customizations carried across upgrades), or clone it (no
+  // upgrades). The core page itself is never written.
+  const inherited = (p: CorePageDefinition) => !!p.isCore && !!p.customization;
+  const replacePage = (updated: CorePageDefinition) =>
+    setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+
+  const runCoreAction = async (run: () => Promise<void>, failure: string) => {
+    closeMenu();
+    try {
+      await run();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : failure);
+    }
+  };
+
+  const toggleActive = (page: CorePageDefinition) =>
+    runCoreAction(async () => {
+      replacePage(await PageStudioApi.setCoreActive(page.id, !page.customization?.active));
+    }, 'Failed to change activation');
+
+  const askCloneCore = (page: CorePageDefinition) => {
+    closeMenu();
+    setConfirm({
+      title: `Clone "${page.name}"?`,
+      body:
+        'Your environment gets its own copy of this page at the same address, replacing the core page. ' +
+        'Clones are not upgraded: future core versions will not reach it, and it will not be compared with the core.' +
+        (page.customization?.mode === 'extended' ? ' Your current customizations are copied into the clone.' : ''),
+      label: 'Clone',
+      run: async () => {
+        const clone = await PageStudioApi.cloneCore(page.id);
+        navigate(clone.id);
+      },
+    });
+  };
+
+  const askRevert = (page: CorePageDefinition) => {
+    closeMenu();
+    const cloned = page.customization?.mode === 'cloned';
+    setConfirm({
+      title: `Revert "${page.name}" to core?`,
+      body: cloned
+        ? 'Your clone of this page is deleted and the core page is used as shipped, switched on. This cannot be undone.'
+        : 'All your customizations of this page are removed and the core page is used as shipped, switched on. To drop only some, use Compare with core instead.',
+      label: cloned ? 'Delete clone and revert' : 'Remove customizations',
+      run: async () => {
+        await PageStudioApi.revertToCore(page.id);
+        load();
+      },
+    });
+  };
+
+  const runConfirm = async () => {
+    if (!confirm) return;
+    setConfirming(true);
+    try {
+      await confirm.run();
+      setConfirm(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed');
+      setConfirm(null);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -220,14 +298,20 @@ const PageStudioListPage: React.FC = () => {
         </Stack>
       </Stack>
 
-      <TextField
-        fullWidth
-        placeholder="Search pages by name, slug, or description…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        sx={{ mb: 3 }}
-        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-      />
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          placeholder="Search pages by name, slug, or description…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+        />
+        <ToggleButtonGroup exclusive size="small" value={scope} onChange={(_, v) => v && setScope(v)}>
+          <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>All</ToggleButton>
+          <ToggleButton value="core" sx={{ textTransform: 'none', px: 2 }}>Core</ToggleButton>
+          <ToggleButton value="custom" sx={{ textTransform: 'none', px: 2 }}>Custom</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
 
       {loading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
@@ -253,7 +337,7 @@ const PageStudioListPage: React.FC = () => {
               <CardActionArea onClick={() => navigate(page.id)} sx={{ height: '100%', p: 0.5 }}>
                 <CardContent>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, pr: 3 }}>
-                    <Tooltip title={page.isCore ? 'Core page (gold-copy, inherited read-only)' : 'Custom page'}>
+                    <Tooltip title={page.isCore ? 'Core page (gold copy)' : page.clonedFrom ? 'Clone of a core page' : 'Custom page'}>
                       {page.isCore ? <VerifiedIcon color="primary" fontSize="small" /> : <PersonIcon color="action" fontSize="small" />}
                     </Tooltip>
                     <DescriptionIcon color="disabled" fontSize="small" />
@@ -267,7 +351,7 @@ const PageStudioListPage: React.FC = () => {
                       {page.description}
                     </Typography>
                   )}
-                  <Stack direction="row" spacing={1}>
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                     <Chip
                       size="small"
                       label={page.status === 'published' ? 'Published' : 'Draft'}
@@ -275,6 +359,28 @@ const PageStudioListPage: React.FC = () => {
                       variant={page.status === 'published' ? 'filled' : 'outlined'}
                     />
                     <Chip size="small" label={`v${page.version ?? 1}`} variant="outlined" />
+                    {page.customization && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color={page.customization.mode === 'extended' ? 'secondary' : 'default'}
+                        label={{ vanilla: 'Vanilla', extended: `Extended · v${page.customization.baseVersion}`, cloned: 'Cloned' }[page.customization.mode]}
+                      />
+                    )}
+                    {page.customization && !page.customization.active && <Chip size="small" color="error" variant="outlined" label="Inactive" />}
+                    {page.customization?.upgradeAvailable && (
+                      <Chip
+                        size="small"
+                        color="warning"
+                        label={`Upgrade v${page.customization.baseVersion} → v${page.customization.coreVersion}`}
+                        onClick={(e) => { e.stopPropagation(); setCompareTarget(page); }}
+                      />
+                    )}
+                    {page.clonedFrom && (
+                      <Tooltip title="An independent copy - core upgrades do not reach it.">
+                        <Chip size="small" variant="outlined" label={`Clone of core v${page.clonedFrom.version}`} />
+                      </Tooltip>
+                    )}
                   </Stack>
                 </CardContent>
               </CardActionArea>
@@ -284,19 +390,83 @@ const PageStudioListPage: React.FC = () => {
       </Grid>
 
       <Menu anchorEl={menuAnchor?.el} open={!!menuAnchor} onClose={closeMenu}>
-        <MenuItem onClick={() => { const p = menuAnchor!.page; closeMenu(); navigate(p.id); }}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
-        </MenuItem>
-        <MenuItem onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
-          <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
-        </MenuItem>
-        <MenuItem onClick={() => handleClone(menuAnchor!.page)}>
-          <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Clone
-        </MenuItem>
-        <MenuItem onClick={() => { setDeleteTarget(menuAnchor!.page); closeMenu(); }} sx={{ color: 'error.main' }}>
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
-        </MenuItem>
+        {menuAnchor && inherited(menuAnchor.page) ? (() => {
+          const p = menuAnchor.page;
+          const c = p.customization!;
+          const items = [
+            <MenuItem key="open" onClick={() => { closeMenu(); navigate(p.id); }}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} /> {p.canCustomize && c.mode !== 'cloned' ? (c.mode === 'extended' ? 'Edit customization' : 'Extend') : 'Open'}
+            </MenuItem>,
+          ];
+          if (!p.canCustomize) return items;
+          if (c.mode === 'extended') {
+            items.push(
+              <MenuItem key="compare" onClick={() => { closeMenu(); setCompareTarget(p); }}>
+                <CompareArrowsIcon fontSize="small" sx={{ mr: 1 }} /> {c.upgradeAvailable ? `Review upgrade to v${c.coreVersion}` : 'Compare with core'}
+              </MenuItem>,
+            );
+          }
+          if (c.mode === 'cloned' && c.clonePageId) {
+            items.push(
+              <MenuItem key="clone-open" onClick={() => { closeMenu(); navigate(c.clonePageId!); }}>
+                <EditIcon fontSize="small" sx={{ mr: 1 }} /> Open my clone
+              </MenuItem>,
+            );
+          }
+          items.push(
+            <MenuItem key="active" onClick={() => toggleActive(p)}>
+              <PowerSettingsNewIcon fontSize="small" sx={{ mr: 1 }} /> {c.active ? 'Switch off in my environment' : 'Switch on'}
+            </MenuItem>,
+          );
+          if (c.mode !== 'cloned') {
+            items.push(
+              <MenuItem key="clone" onClick={() => askCloneCore(p)}>
+                <CallSplitIcon fontSize="small" sx={{ mr: 1 }} /> Clone (no upgrades)
+              </MenuItem>,
+            );
+          }
+          if (c.mode !== 'vanilla') {
+            items.push(
+              <Divider key="d" />,
+              <MenuItem key="revert" onClick={() => askRevert(p)} sx={{ color: 'error.main' }}>
+                <RestoreIcon fontSize="small" sx={{ mr: 1 }} /> Revert to core
+              </MenuItem>,
+            );
+          }
+          return items;
+        })() : [
+          <MenuItem key="edit" onClick={() => { const p = menuAnchor!.page; closeMenu(); navigate(p.id); }}>
+            <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+          </MenuItem>,
+          <MenuItem key="rename" onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
+            <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
+          </MenuItem>,
+          <MenuItem key="clone" onClick={() => handleClone(menuAnchor!.page)}>
+            <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplicate
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { setDeleteTarget(menuAnchor!.page); closeMenu(); }} sx={{ color: 'error.main' }}>
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+          </MenuItem>,
+        ]}
       </Menu>
+
+      <CoreCompareDialog
+        page={compareTarget}
+        onClose={() => setCompareTarget(null)}
+        onChanged={(p) => { replacePage(p); load(); }}
+      />
+      <Dialog open={!!confirm} onClose={() => !confirming && setConfirm(null)} maxWidth="sm">
+        <DialogTitle>{confirm?.title}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{confirm?.body}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={confirming}>Cancel</Button>
+          <Button variant="contained" color="warning" onClick={runConfirm} disabled={confirming}>
+            {confirming ? 'Working…' : confirm?.label}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!renameTarget} onClose={() => !renaming && setRenameTarget(null)}>
         <DialogTitle>Rename page</DialogTitle>
