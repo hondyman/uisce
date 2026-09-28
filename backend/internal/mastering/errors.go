@@ -99,3 +99,31 @@ func msgNoException(id string) *msgcat.Error {
 }
 
 func errBadName(n string) error { return fmt.Errorf("%q is not a valid column name", n) }
+
+// Configuration changes (maker-checker; configedit.go).
+func msgConfigChangeNotFound(id string) *msgcat.Error {
+	return m(42, id).WithStatus(http.StatusNotFound)
+}
+func msgConfigChangeClosed(id, status string) *msgcat.Error {
+	return m(43, id, status).WithStatus(http.StatusConflict)
+}
+func msgConfigOwnChange() *msgcat.Error { return m(44).WithStatus(http.StatusForbidden) }
+func msgConfigBadColumn(col, table string) *msgcat.Error {
+	return m(45, col, table).WithStatus(http.StatusBadRequest)
+}
+func msgConfigCoreRow() *msgcat.Error { return m(46).WithStatus(http.StatusForbidden) }
+func msgConfigUnknownSource(code string) *msgcat.Error {
+	return m(47, code).WithStatus(http.StatusBadRequest)
+}
+func msgConfigKeyExists(table string) *msgcat.Error {
+	return m(48, table).WithStatus(http.StatusConflict)
+}
+func msgUnknownConfigKind(kind string) *msgcat.Error {
+	return m(49, kind).WithStatus(http.StatusBadRequest)
+}
+func msgConfigInUse(detail string) *msgcat.Error {
+	return m(50, detail).WithStatus(http.StatusConflict)
+}
+func msgConfigRowNotFound(id string) *msgcat.Error {
+	return m(51, id).WithStatus(http.StatusNotFound)
+}

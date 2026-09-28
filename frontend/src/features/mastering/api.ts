@@ -282,3 +282,69 @@ export const masteringApi = {
 export const pct = (v?: number) => (v === undefined || v === null ? '—' : `${Math.round(v * 100)}%`);
 
 export const showValue = (v: unknown) => (v === undefined || v === null || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+
+// ─── Mastering configuration (maker-checker; backend internal/mastering/configedit.go) ──────────
+
+export type ConfigKind = 'source_system' | 'source_priority' | 'match_rule';
+
+export interface ConfigColumn {
+  name: string;
+  /** text, integer, number, boolean, json, list, or source (a vendor registry code). */
+  type: 'text' | 'integer' | 'number' | 'boolean' | 'json' | 'list' | 'source';
+  required: boolean;
+  /** Part of the row's identity: a tenant row with the same key overrides the gold copy's. */
+  key: boolean;
+}
+
+export interface ConfigRow {
+  id: string;
+  origin: 'core' | 'tenant';
+  /** The gold copy's row seen from another tenant: read-only there. */
+  inherited: boolean;
+  /** An inherited row this tenant replaces with its own. */
+  overridden: boolean;
+  /** A proposed change to this row is waiting for approval. */
+  pending: boolean;
+  values: Record<string, unknown>;
+}
+
+export interface ConfigTable { kind: ConfigKind; entity?: string; columns: ConfigColumn[]; rows: ConfigRow[] }
+
+export interface ConfigChange {
+  id: string;
+  entity?: string;
+  kind: ConfigKind;
+  action: 'upsert' | 'delete';
+  target_id?: string;
+  values: Record<string, unknown>;
+  before?: Record<string, unknown> | null;
+  reason?: string;
+  status: 'pending' | 'applied' | 'rejected' | 'withdrawn';
+  requested_by: string;
+  requested_by_name?: string;
+  requested_at: string;
+  reviewed_by_name?: string;
+  reviewed_at?: string;
+  review_comment?: string;
+  mine: boolean;
+}
+
+export interface ConfigProposal {
+  kind: ConfigKind;
+  entity?: string;
+  action?: 'upsert' | 'delete';
+  /** The tenant's own row to change or remove; omit for a new row (or an override of a gold-copy row). */
+  target_id?: string;
+  values?: Record<string, unknown>;
+  reason?: string;
+}
+
+export const masteringConfigApi = {
+  table: (kind: ConfigKind, entity?: string) =>
+    apiClient<{ table: ConfigTable; can_edit: boolean }>(`${BASE}/config/${kind}${qs({ entity })}`),
+  changes: (p: { kind?: ConfigKind; entity?: string; status?: string }) =>
+    apiClient<{ changes: ConfigChange[]; can_decide: boolean }>(`${BASE}/config/changes${qs(p)}`),
+  propose: (p: ConfigProposal) => apiClient<{ change: ConfigChange }>(`${BASE}/config/changes`, post(p)),
+  decide: (id: string, decision: 'approve' | 'reject' | 'withdraw', comment?: string) =>
+    apiClient<{ change: ConfigChange }>(`${BASE}/config/changes/${id}/${decision}`, post({ comment })),
+};

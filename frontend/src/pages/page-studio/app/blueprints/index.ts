@@ -2,6 +2,7 @@ import type { CorePageDefinition } from '../../../../types/pageStudio';
 import { masteringConsoleBlueprint } from './masteringConsole';
 import { stagingBindingsBlueprint } from './stagingBindings';
 import { dataPipelinesBlueprint, dataPipelineEditorBlueprint } from './dataPipelines';
+import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from './mdmConfig';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -38,5 +39,23 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Data pipeline editor',
     description: 'The visual pipeline editor (canvas, preview, assistant, runs), served at /data/pipelines/:id.',
     build: dataPipelineEditorBlueprint,
+  },
+  {
+    id: 'mdm-source-hierarchy',
+    name: 'Source hierarchy',
+    description: 'Per mastered entity: which source wins for each field group or price type. Maker-checker.',
+    build: sourceHierarchyBlueprint,
+  },
+  {
+    id: 'mdm-match-rules',
+    name: 'Match rules',
+    description: 'Per record entity: exact and fuzzy match keys with auto-match and review thresholds. Maker-checker.',
+    build: matchRulesBlueprint,
+  },
+  {
+    id: 'mdm-vendors',
+    name: 'Vendor registry',
+    description: 'The one list of data sources mastering ranks and matches on. Maker-checker.',
+    build: vendorRegistryBlueprint,
   },
 ];
