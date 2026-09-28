@@ -1,4 +1,4 @@
-import { createTheme, alpha, PaletteOptions } from '@mui/material/styles';
+import { createTheme, alpha, ThemeOptions } from '@mui/material/styles';
 import { darkPalette } from './palette';
 
 // Tone tokens — sourced from the UISCE platform palette so this page fits in.
@@ -88,7 +88,7 @@ export const qbTheme = createTheme({
     mode: 'dark',
   },
   shape: { borderRadius: 4 },
-} as PaletteOptions, {
+} as ThemeOptions, {
   cssVariables: false,
   typography: {
     fontFamily: ['Inter', 'Outfit', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'].join(', '),
