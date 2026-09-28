@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, Collapse, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
+  Alert, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -59,13 +59,25 @@ export interface VariableSelectProps {
   /** toggle: a row of toggle buttons (Values | Side by side) instead of a dropdown. */
   variant?: 'select' | 'toggle';
 }
-export interface SearchInputProps { variable: string; placeholder?: TextSpec; debounceMs?: number; maxWidth?: number }
+export interface SearchInputProps {
+  variable: string; placeholder?: TextSpec; debounceMs?: number; maxWidth?: number;
+  /** search (default, with an icon), plain (a labelled text field) or title (a large borderless name, e.g. a pipeline's). */
+  variant?: 'search' | 'plain' | 'title';
+  label?: TextSpec;
+  /** After the value is committed (e.g. mark the page unsaved), with {{value}}. */
+  onChange?: Action[];
+}
 export interface ActionButtonProps {
   label: TextSpec;
   icon?: string;
-  variant?: 'text' | 'outlined' | 'contained';
-  color?: 'primary' | 'secondary' | 'inherit' | 'error';
+  /** chip: a small clickable status chip (colour from chipColor). */
+  variant?: 'text' | 'outlined' | 'contained' | 'chip';
+  color?: 'primary' | 'secondary' | 'inherit' | 'error' | 'success';
+  /** chip: its colour, a binding resolving to default|primary|success|warning|error|info. */
+  chipColor?: Binding;
   disabledWhen?: ConditionNode;
+  /** Hover text (why it is disabled, what it does). */
+  tooltip?: TextSpec;
   onClick: Action[];
 }
 export interface DataGridProps {
@@ -169,17 +181,36 @@ function VariableSelect({ p, scope }: { p: VariableSelectProps; scope: Scope }) 
 }
 
 function SearchInput({ p, scope }: { p: SearchInputProps; scope: Scope }) {
-  const { setVariable } = useAppRuntime();
-  const committed = getPath(scope, `vars.${p.variable}`);
-  const [draft, setDraft] = useState(committed === null || committed === undefined ? '' : String(committed));
+  const { setVariable, runActions } = useAppRuntime();
+  const raw = getPath(scope, `vars.${p.variable}`);
+  const committed = raw === null || raw === undefined ? '' : String(raw);
+  const [draft, setDraft] = useState(committed);
+  const sent = useRef(committed);
+  // The variable set from elsewhere (a record loaded) shows here.
   useEffect(() => {
-    const h = setTimeout(() => setVariable(p.variable, draft), p.debounceMs ?? 300);
+    if (committed !== sent.current) { sent.current = committed; setDraft(committed); }
+  }, [committed]);
+  useEffect(() => {
+    if (draft === sent.current) return;
+    const h = setTimeout(() => {
+      sent.current = draft;
+      setVariable(p.variable, draft);
+      if (p.onChange?.length) void runActions(p.onChange, { value: draft });
+    }, p.debounceMs ?? 300);
     return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, p.variable, p.debounceMs, setVariable]);
+  const label = p.label ? text(p.label, scope) : undefined;
+  if (p.variant === 'title') {
+    return (
+      <TextField variant="standard" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={p.placeholder ? text(p.placeholder, scope) : undefined}
+        inputProps={{ 'aria-label': label ?? p.variable, style: { fontSize: 20, fontWeight: 600 } }} sx={{ minWidth: 220, flex: '1 1 260px', maxWidth: p.maxWidth ?? 480 }} />
+    );
+  }
   return (
-    <TextField size="small" sx={{ flex: 1, maxWidth: p.maxWidth ?? 420 }} placeholder={p.placeholder ? text(p.placeholder, scope) : undefined} value={draft}
+    <TextField size="small" sx={{ flex: 1, maxWidth: p.maxWidth ?? 420 }} label={label} placeholder={p.placeholder ? text(p.placeholder, scope) : undefined} value={draft}
       onChange={(e) => setDraft(e.target.value)}
-      InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
+      InputProps={p.variant === 'plain' ? undefined : { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
   );
 }
 
@@ -187,12 +218,29 @@ function ActionButton({ p, scope }: { p: ActionButtonProps; scope: Scope }) {
   const { runActions, mode } = useAppRuntime();
   const gated = useCondition(p.disabledWhen, scope, true);
   const disabled = !!p.disabledWhen && gated;
-  return (
-    <Button variant={p.variant ?? 'contained'} color={p.color ?? 'primary'} startIcon={p.icon ? <PageIcon name={p.icon} /> : undefined}
-      disabled={disabled || mode === 'design'} onClick={() => void runActions(p.onClick, scope)} sx={{ whiteSpace: 'nowrap' }}>
-      {text(p.label, scope)}
-    </Button>
-  );
+  // Waits (spinner, disabled) while its actions run.
+  const [busy, setBusy] = useState(false);
+  const click = async () => {
+    setBusy(true);
+    try { await runActions(p.onClick, scope); } finally { setBusy(false); }
+  };
+  const label = text(p.label, scope);
+  let control: React.ReactElement;
+  if (p.variant === 'chip') {
+    const c = String(resolve(p.chipColor ?? 'default', scope) ?? 'default') as ChipColor;
+    control = <Chip size="small" color={c} label={label} onClick={mode === 'design' ? undefined : () => void click()} />;
+  } else {
+    control = (
+      <Button variant={p.variant ?? 'contained'} color={p.color ?? 'primary'}
+        startIcon={busy ? <CircularProgress size={16} /> : p.icon ? <PageIcon name={p.icon} /> : undefined}
+        disabled={disabled || busy || mode === 'design'} onClick={() => void click()} sx={{ whiteSpace: 'nowrap' }}>
+        {label}
+      </Button>
+    );
+  }
+  const tip = p.tooltip ? text(p.tooltip, scope) : '';
+  // A disabled button fires no hover events; the span carries the tooltip.
+  return tip ? <Tooltip title={tip}><span>{control}</span></Tooltip> : control;
 }
 
 /** Which gated columns show now - column conditions read page scope, not rows. */

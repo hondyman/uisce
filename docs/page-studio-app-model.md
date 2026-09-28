@@ -91,6 +91,28 @@ binding editor):
 - `resetOn` clears a dependent field when what it depends on changes;
   `wide` spans a multi-column form; `step` for whole numbers.
 
+The pipeline editor (a graph page with side settings and bottom tabs) added:
+
+- Page runtime: route parameters in scope (`{{route.id}}`); any action may
+  carry `when` (runs only while it holds); queries take `debounceMs` (live
+  validation while the graph is edited), `refetchWhile` / `refetchMs`
+  (follow a run) and `onChange` actions (react when a run finishes); a
+  Row/Column shows only while its `props.visibleWhen` holds (the settings
+  panel while a step is selected).
+- Widgets: SearchInput `variant` plain / title (a pipeline's name) with
+  `onChange`; ActionButton `tooltip`, busy while its actions run, and a
+  `chip` variant (a clickable status chip).
+- Form: `seedKey` (reseed only when it changes - the step on show, not
+  every edit that comes back); field kinds `note`, `button`, `upload`
+  (an operation receives the file), `checklist` (options with captions and
+  badges); richer `rows` (per-column select / switch / chips, read-only,
+  captions, defaults, visibility by row); captions and badges on static
+  options.
+- A step's settings are a form shaped by the domain from the spec
+  (`dataPipelines.stepForm`) and applied back through an operation
+  (`dataPipelines.applyStep`), so reshaping (staging columns stored field ->
+  column, a filter's value by its operator's arity) stays in the domain.
+
 Action forms (`runOperation.form`) use the same field kinds, options from a
 query included (`app/formFields.tsx`). In Page Designer the containers show
 as editable regions (a drawer's content is edited in place, with what opens
@@ -167,11 +189,11 @@ a tenant switched off is hidden.
 ## Not done yet (next)
 
 - Structured editors for row buttons and action forms (JSON today).
-- The mastering console, the mastering configuration pages and staging
-  bindings are fully studio-built, editors included. The Canvas widget is
-  in; the pipeline editor page is still the domain component until it is
-  rebuilt on it (toolbar, canvas, step settings via `fieldsFrom`, problems /
-  preview / runs tabs, assistant, schedule).
+- The mastering console, mastering configuration, staging bindings and
+  the data pipeline editor are studio-built. Still domain components on the
+  pipeline editor: the AI assistant (needs a chat widget) and the target
+  schedule (the shared schedule editor, to be rebuilt with the Schedules
+  console).
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

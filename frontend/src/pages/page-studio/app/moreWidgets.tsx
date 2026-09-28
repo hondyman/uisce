@@ -134,6 +134,8 @@ export interface FormWidgetProps {
   fields: FormFieldSpec[];
   /** Or fields from data - a binding to a list of field specs (an operation shapes them, e.g. from a table's columns). */
   fieldsFrom?: Binding;
+  /** Reseed only when this changes (e.g. the selected step) - not every time initFrom does. */
+  seedKey?: Binding;
   /** Seeds the values when it changes (e.g. the row being edited); field defaults fill the rest. Omitted, existing values are kept. */
   initFrom?: Binding;
   columns?: number;
@@ -151,7 +153,10 @@ export function FormWidget({ p, scope }: { p: FormWidgetProps; scope: Scope }) {
   const generated = p.fieldsFrom !== undefined ? resolve(p.fieldsFrom, scope) : undefined;
   const fields = (Array.isArray(generated) ? generated : p.fields ?? []) as FormFieldSpec[];
   const init = p.initFrom !== undefined ? resolve(p.initFrom, scope) : undefined;
-  const initKey = JSON.stringify(init ?? null);
+  // With a seed key the form reseeds when the key changes (once its start value is there), not on every change of it.
+  const initKey = p.seedKey !== undefined
+    ? `key:${JSON.stringify(resolve(p.seedKey, scope) ?? null)}${init === undefined || init === null ? ':pending' : ''}`
+    : JSON.stringify(init ?? null);
   const seeded = useRef<string | null>(null);
   useEffect(() => {
     if (!p.variable || seeded.current === initKey) return;
