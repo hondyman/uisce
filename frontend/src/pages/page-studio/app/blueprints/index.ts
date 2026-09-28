@@ -4,6 +4,7 @@ import { stagingBindingsBlueprint } from './stagingBindings';
 import { dataPipelinesBlueprint, dataPipelineEditorBlueprint } from './dataPipelines';
 import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from './mdmConfig';
 import { schedulesBlueprint } from './schedules';
+import { sourceScoringBlueprint } from './sourceScoring';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -65,4 +66,11 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     description: 'The platform scheduler: every schedule and its run history, with the schedule editor.',
     build: schedulesBlueprint,
   },
+  {
+    id: 'mdm-source-scoring',
+    name: 'Source scoring & displacement',
+    description: 'Vendor quality scoring, substitution rates, override endorsements, value-for-money efficient frontier, and displacement readiness simulation.',
+    build: sourceScoringBlueprint,
+  },
 ];
+
