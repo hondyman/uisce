@@ -116,7 +116,8 @@ export interface FormSpec {
   /** Explanatory text above the fields. */
   intro?: TextSpec;
   /** A callout shown when its condition holds (e.g. "needs 2 approvals"). */
-  notice?: { severity: 'info' | 'warning'; text: TextSpec; visibleWhen?: ConditionNode };
+  /** severity: info | warning, or a binding resolving to one (e.g. warning when it applies at once). */
+  notice?: { severity: Binding; text: TextSpec; visibleWhen?: ConditionNode };
   fields: FormFieldSpec[];
   submitLabel?: TextSpec;
   submitColor?: 'primary' | 'inherit' | 'error';

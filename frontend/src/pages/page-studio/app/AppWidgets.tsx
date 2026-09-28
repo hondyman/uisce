@@ -234,7 +234,7 @@ function useGridColumns(p: DataGridProps, scope: Scope): GridColumn[] {
   return [...staticCols.slice(0, at), ...dyn, ...staticCols.slice(at)];
 }
 
-function GridCell({ c, rowScope, first, sticky }: { c: GridColumn; rowScope: Scope; first: boolean; sticky?: boolean }) {
+function GridCell({ c, rowScope, first, sticky, extra }: { c: GridColumn; rowScope: Scope; first: boolean; sticky?: boolean; extra?: React.ReactNode }) {
   const s = c.dyn ? { ...rowScope, col: c.dyn.col, value: c.dyn.value(rowScope.row) } : rowScope;
   const tip = c.tooltip !== undefined ? resolve(c.tooltip, s) : undefined;
   const body = cellOf(c).map((spec, i) => <Cell key={i} spec={spec} scope={s} />);
@@ -248,6 +248,7 @@ function GridCell({ c, rowScope, first, sticky }: { c: GridColumn; rowScope: Sco
       ...(first && sticky ? { position: 'sticky', left: 0, zIndex: 1, bgcolor: 'background.paper' } : {}),
     }}>
       {tip ? <Tooltip title={String(tip)} componentsProps={{ tooltip: { sx: { whiteSpace: 'pre-line' } } }}><span>{content}</span></Tooltip> : content}
+      {extra}
     </TableCell>
   );
 }
@@ -292,20 +293,17 @@ function GridRow({ row, index, p, scope, cols }: { row: unknown; index: number; 
   const expandable = useCondition(p.rowDetail?.when, rowScope, true);
   const hasDetail = !!p.rowDetail && (!p.rowDetail.when || expandable);
   const clickable = !!p.onRowClick?.length;
-  const span = cols.length + (p.rowDetail ? 1 : 0);
+  const span = Math.max(1, cols.length);
+  // The detail toggle sits at the end of the last column, beside any row buttons.
+  const toggle = hasDetail ? (
+    <IconButton size="small" aria-label={open ? 'Hide detail' : 'Show detail'} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
+      {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
+    </IconButton>
+  ) : undefined;
   return (
     <>
       <TableRow hover sx={clickable ? { cursor: 'pointer' } : undefined} onClick={clickable ? () => void runActions(p.onRowClick, rowScope) : undefined}>
-        {cols.map((c, i) => <GridCell key={c.id} c={c} rowScope={rowScope} first={i === 0} sticky={p.stickyFirstColumn} />)}
-        {p.rowDetail && (
-          <TableCell padding="none" sx={{ verticalAlign: 'top' }}>
-            {hasDetail && (
-              <IconButton size="small" aria-label={open ? 'Hide detail' : 'Show detail'} onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
-                {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-              </IconButton>
-            )}
-          </TableCell>
-        )}
+        {cols.map((c, i) => <GridCell key={c.id} c={c} rowScope={rowScope} first={i === 0} sticky={p.stickyFirstColumn} extra={i === cols.length - 1 ? toggle : undefined} />)}
       </TableRow>
       {hasDetail && (
         <TableRow>
@@ -326,7 +324,7 @@ function DataGrid({ p, scope }: { p: DataGridProps; scope: Scope }) {
   // Column visibility is page-level (e.g. an actions column only for open items); some columns come from data.
   const cols = useGridColumns(p, scope);
   const busy = q ? (p.progressOnFetch ? q.isFetching : q.isLoading) : false;
-  const span = Math.max(1, cols.length + (p.rowDetail ? 1 : 0));
+  const span = Math.max(1, cols.length);
   return (
     <>
       {busy && <LinearProgress />}
@@ -341,7 +339,6 @@ function DataGrid({ p, scope }: { p: DataGridProps; scope: Scope }) {
                   {c.header ? (c.dyn ? String(c.header) : text(c.header, scope)) : ''}
                 </TableCell>
               ))}
-              {p.rowDetail && <TableCell padding="checkbox" />}
             </TableRow>
           </TableHead>
           <TableBody>

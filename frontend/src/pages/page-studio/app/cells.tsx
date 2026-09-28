@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Box, Button, Chip, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { fmt } from '../../../features/schedules/api';
-import type { CellBody, CellSpec, ChipColor, RowButton } from './appModel';
+import type { CellBody, CellSpec, ChipColor, RowButton, TextSpec } from './appModel';
 import { resolve, text, type Scope } from './bindings';
 import { useCondition } from './conditions';
 import { useAppRuntime } from './AppRuntime';
@@ -78,7 +78,7 @@ function CellBodyView({ spec, scope }: { spec: CellBody; scope: Scope }) {
       if (spec.caption && blank(v)) return null;
       const tone = spec.tone !== undefined ? String(resolve(spec.tone, scope) ?? '') : '';
       const struck = spec.strike !== undefined && !!resolve(spec.strike, scope) && resolve(spec.strike, scope) !== 'false';
-      const tip = spec.tooltip !== undefined ? resolve(spec.tooltip, scope) : undefined;
+      const tip = spec.tooltip !== undefined ? text(spec.tooltip as TextSpec, scope) : undefined;
       const toned = ['success', 'warning', 'error', 'info'].includes(tone);
       const body = (
         <Typography variant={spec.caption ? 'caption' : 'body2'} component={spec.caption || toned ? 'div' : 'span'} fontWeight={spec.bold || toned ? 600 : undefined}
@@ -153,7 +153,8 @@ function CellBodyView({ spec, scope }: { spec: CellBody; scope: Scope }) {
       const label = spec.label ? text(spec.label, scope) : chipLabel(v, spec.labelKey, t);
       const by = spec.colorBy !== undefined ? resolve(spec.colorBy, scope) : v;
       const color: ChipColor = spec.colorMap?.[String(by)] ?? spec.colorMap?.['*'] ?? spec.color ?? 'default';
-      const tip = spec.tooltip !== undefined ? resolve(spec.tooltip, scope) : undefined;
+      // Tooltips are text: templates resolve and i18n keys translate.
+      const tip = spec.tooltip !== undefined ? text(spec.tooltip as TextSpec, scope) : undefined;
       const caption = spec.caption !== undefined ? resolve(spec.caption, scope) : undefined;
       const chip = <Chip size="small" color={color} variant={spec.variant ?? 'filled'} label={label} />;
       return (
