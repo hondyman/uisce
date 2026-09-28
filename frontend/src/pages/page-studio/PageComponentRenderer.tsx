@@ -20,6 +20,7 @@ import { useCrossFilterStore, crossFilterKey } from '../../store/useCrossFilterS
 import SavedQueryWidget, { SavedQueryParamBinding } from './SavedQueryWidget';
 import FormFieldsDesigner, { type FieldLayoutEntry, type FieldOverrideEntry, isFormLikeWidget } from './FormFieldsDesigner';
 import { TableDesignPlaceholder, ChartDesignPlaceholder } from './WidgetDesignPlaceholder';
+import { AppWidget, VisibleWhen, isAppWidget } from './app/AppWidgets';
 
 /** Table widget's configurable row-click behavior (component.props.rowClickAction), set via PropertiesPanel. */
 export type RowClickAction = 'select' | 'navigate' | 'openModal' | 'openDrawer';
@@ -63,7 +64,7 @@ const COMPONENT_TO_WIDGET_TYPE: Record<string, string> = {
 // PropertiesPanel) as a wrapping Box around whatever the widget itself
 // renders - a generic mechanism every widget type gets for free, rather
 // than each renderer branch re-implementing style application.
-const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
+const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
   component, dataSources, tenantId, mode = 'preview',
   selectedFieldName = null, onSelectField, onUpdateFieldLayout, onReorderFields, onUnhideField,
 }) => {
@@ -401,6 +402,30 @@ const PageComponentRenderer: React.FC<PageComponentRendererProps> = ({
       <ReportWidgetRenderer type={widgetType} binding={binding} style={widgetStyle} />
     </Box>
   );
+};
+
+/**
+ * Dispatch: a widget with a visibility condition is gated first; page
+ * application widgets (grids, inputs, domain components - app/AppWidgets.tsx)
+ * render from the page's app runtime; everything else is the Business
+ * Object renderer above, unchanged. A separate wrapper (rather than early
+ * returns in the renderer) so toggling a condition in the editor never
+ * changes the renderer's hook order.
+ */
+const PageComponentRenderer: React.FC<PageComponentRendererProps> = (props) => {
+  const { component } = props;
+  if (component.visibleWhen) {
+    return (
+      <VisibleWhen when={component.visibleWhen}>
+        <PageComponentRenderer {...props} component={{ ...component, visibleWhen: undefined }} />
+      </VisibleWhen>
+    );
+  }
+  if (isAppWidget(component.type)) {
+    const { flex: _flex, ...style } = component.style ?? {};
+    return <Box sx={style as React.CSSProperties}><AppWidget component={component} /></Box>;
+  }
+  return <PageComponentRendererInner {...props} />;
 };
 
 export default PageComponentRenderer;

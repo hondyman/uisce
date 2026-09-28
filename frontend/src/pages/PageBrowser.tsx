@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box, Paper, Typography, List, ListItemButton, ListItemIcon, ListItemText, Collapse,
-  CircularProgress, Alert, Divider, Tabs, Tab,
+  CircularProgress, Alert, Divider,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandLess from '@mui/icons-material/ExpandLess';
@@ -13,8 +13,9 @@ import DashboardIcon from '@mui/icons-material/Dashboard';
 import { NavigationMenuApi, NavigationMenuNode } from '../api/navigationMenu';
 import { PageStudioApi, PageStudioPage } from '../api/pageStudio';
 import type { PresentationRule } from '../types/pageStudio';
+import type { ConditionNode } from './page-studio/app/appModel';
 import { useTenant } from '../contexts/TenantContext';
-import RenderLayoutTree from './page-studio/RenderLayoutTree';
+import RuntimePage from './page-studio/app/RuntimePage';
 import { SelectionProvider } from './page-studio/SelectionContext';
 import { PresentationProvider } from './page-studio/PresentationRuntime';
 
@@ -43,6 +44,8 @@ interface RuntimeTab {
   id: string;
   label: string;
   layout: { root: string; nodes: Record<string, RuntimeLayoutNode> };
+  badge?: string;
+  visibleWhen?: ConditionNode;
 }
 
 const NavTree: React.FC<{
@@ -100,13 +103,10 @@ const NavTree: React.FC<{
 const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, recordId }) => {
   const { tenant } = useTenant();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const isCreate = recordId === 'new';
-  const isView = searchParams.get('mode') === 'view';
   const [page, setPage] = useState<PageStudioPage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,8 +134,6 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
   const tabs = isCreate
     ? allTabs.filter((t) => t.id === 'tab_order' || t.id === allTabs[0]?.id).slice(0, 1)
     : allTabs;
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-  const layout = activeTab.layout;
   const allComponents = (page.components as unknown as Record<string, RuntimeComponent>) || {};
   const components = isCreate
     ? Object.fromEntries(Object.entries(allComponents).filter(([, c]) => c.type !== 'FixCommand'))
@@ -155,47 +153,26 @@ const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slug, reco
   return (
     <SelectionProvider key={`${page.id || slug}:${recordId || ''}`} initialSelection={initialSelection}>
     <PresentationProvider rules={(page as PageStudioPage).presentationEvents || [] as PresentationRule[]}>
-    <Box sx={{ p: 3 }}>
-      {(recordId || isCreate) && (
-        <Box
-          onClick={() => navigate(-1)}
-          sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, cursor: 'pointer', color: 'primary.main', fontSize: 13, fontWeight: 600 }}
-        >
-          <ArrowBackIcon fontSize="inherit" /> Back to list
-        </Box>
-      )}
-      <Typography variant="h5" sx={{ fontWeight: 800, mb: 0.5 }}>
-        {isCreate ? `New ${page.name.replace(/ detail$/i, '')}` : isView ? page.name : page.name}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: tabs.length > 1 ? 2 : 3 }}>/{page.slug}</Typography>
-      {filterBar?.root && (
-        <Box sx={{ mb: 2 }}>
-          <RenderLayoutTree
-            nodeId={filterBar.root}
-            nodes={filterBar.nodes}
-            components={components}
-            dataSources={dataSources}
-            tenantId={tenant?.id || ''}
-          />
-        </Box>
-      )}
-      {tabs.length > 1 && (
-        <Tabs value={activeTab.id} onChange={(_, v) => setActiveTabId(v)} sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
-          {tabs.map((t) => <Tab key={t.id} value={t.id} label={t.label} sx={{ textTransform: 'none' }} />)}
-        </Tabs>
-      )}
-      {layout?.root ? (
-        <RenderLayoutTree
-          nodeId={layout.root}
-          nodes={layout.nodes}
-          components={components}
-          dataSources={dataSources}
-          tenantId={tenant?.id || ''}
-        />
-      ) : (
-        <Alert severity="info">This page has no components yet.</Alert>
-      )}
-    </Box>
+      <RuntimePage
+        name={page.name}
+        slug={page.slug}
+        title={isCreate ? `New ${page.name.replace(/ detail$/i, '')}` : undefined}
+        tabs={tabs}
+        filterBar={filterBar}
+        components={components}
+        dataSources={dataSources}
+        tenantId={tenant?.id || ''}
+        app={page.app}
+        padded
+        before={(recordId || isCreate) ? (
+          <Box
+            onClick={() => navigate(-1)}
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, mb: 1, cursor: 'pointer', color: 'primary.main', fontSize: 13, fontWeight: 600 }}
+          >
+            <ArrowBackIcon fontSize="inherit" /> Back to list
+          </Box>
+        ) : undefined}
+      />
     </PresentationProvider>
     </SelectionProvider>
   );

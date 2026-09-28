@@ -847,6 +847,10 @@
       "schedule": "Schedule",
       "scheduled": "Scheduled"
     }
+  },
+  "studioApp": {
+    "cancel": "Cancel",
+    "ok": "OK",
+    "empty": "Nothing to show."
   }
 }
-

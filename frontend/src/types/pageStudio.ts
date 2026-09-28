@@ -1,3 +1,5 @@
+import type { ConditionNode, PageAppModel } from '../pages/page-studio/app/appModel';
+
 /**
  * ZERO-PAGE WINDOW: no page definitions persist durably today. The frontend
  * (src/api/pageStudio.ts) calls `/api/page-studio`, but that route has no
@@ -21,8 +23,10 @@ export interface ComponentDefinition {
   category?: string;
   /** Widget instance config (data binding, text content, expression source, etc). */
   props?: Record<string, unknown>;
-  /** Free-form CSS-ish style overrides applied to the widget's wrapper (font, color, spacing). */
+  /** Free-form CSS-ish style overrides applied to the widget's wrapper (font, color, spacing). `flex` also sizes it within its row. */
   style?: Record<string, string>;
+  /** Show only while this holds (rule-engine condition over the page scope - see app/appModel.ts). Dimmed, not hidden, in design. */
+  visibleWhen?: ConditionNode;
 }
 
 /**
@@ -171,6 +175,10 @@ export interface PageTab {
   id: string;
   label: string;
   layout: PageLayout;
+  /** A count shown on the tab (hidden at 0), e.g. {{queries.openExceptions.data.length}}. */
+  badge?: string;
+  /** Show the tab only while this holds (e.g. no duplicate review for time series). */
+  visibleWhen?: ConditionNode;
 }
 
 /** PeopleSoft-style page events that only change presentation. */
@@ -260,6 +268,11 @@ export interface CorePageDefinition {
   /** False when this is an inherited gold-copy page the current tenant cannot mutate. */
   editable?: boolean;
   status?: 'draft' | 'published';
+  /**
+   * The page's application model: variables, governed queries, tab state,
+   * chrome. Absent on plain BO pages, which behave exactly as before.
+   */
+  app?: PageAppModel;
   /** list | detail | master-detail | dashboard — authoring intent, not a layout id. */
   pageKind?: 'list' | 'detail' | 'master-detail' | 'dashboard';
   createdAt: string;

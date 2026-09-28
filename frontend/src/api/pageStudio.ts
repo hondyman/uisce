@@ -106,6 +106,7 @@ export const PageStudioApi = {
         dataSources: source.dataSources,
         presentationEvents: source.presentationEvents,
         filterBar: source.filterBar,
+        app: source.app,
         isCore: false,
         status: 'draft',
       }),

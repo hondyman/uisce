@@ -29,12 +29,14 @@ import { mergeGeneratedSpecIntoDraft } from './generatePageDraft';
 import { PagePerformanceDashboard } from './PagePerformanceDashboard';
 import { AIDocumentationViewer } from './AIDocumentationViewer';
 import { AITestGenerator } from './AITestGenerator';
-import { Description as DocIcon, BugReport as TestIcon, Edit as EditIcon, FlashOn as EventsIcon, AutoAwesome as CopilotIcon } from '@mui/icons-material';
+import { Description as DocIcon, BugReport as TestIcon, Edit as EditIcon, FlashOn as EventsIcon, AutoAwesome as CopilotIcon, Hub as AppIcon } from '@mui/icons-material';
 import DraftPreview from './DraftPreview';
 import TemplatePickerDialog from './TemplatePickerDialog';
 import { SelectionProvider } from './SelectionContext';
 import PageArtboard from './PageArtboard';
 import PageBody from './PageBody';
+import { AppRuntimeProvider } from './app/AppRuntime';
+import AppModelPanel from './app/AppModelPanel';
 import { CANVAS_SIZES, canvasWidthPx, type CanvasSizeId } from './canvasSizes';
 
 interface PageEditorProps {
@@ -87,7 +89,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const [copilot, setCopilot] = useState('');
     const [copilotBusy, setCopilotBusy] = useState(false);
     const [copilotError, setCopilotError] = useState<string | null>(null);
-    const [tab, setTab] = useState(0); // 0: Design, 1: Data, 2: Events, 3: Performance, 4: Docs, 5: Testing
+    const [tab, setTab] = useState(0); // 0: Design, 1: App, 2: Data, 3: Events, 4: Performance, 5: Docs, 6: Testing
     const [selectedId, setSelectedId] = useState<string | null>(null);
     // Design/Preview: the Preview button previously had no onClick handler
     // at all - clicking it did nothing. Preview renders the live in-memory
@@ -107,6 +109,8 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
         return () => window.removeEventListener('resize', onResize);
     }, []);
     const artboardWidth = canvasWidthPx(canvasSize, viewportWidth);
+    // The App tab edits queries and actions - it needs more room than the palette.
+    const leftWidth = tab === 1 ? 360 : 250;
     // A single DndContext for the whole design surface (ComponentPalette,
     // DataBindingsPanel, and both LayoutCanvas instances below) - each
     // LayoutCanvas registers its own onDragEnd via useDndMonitor and only
@@ -343,15 +347,17 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                     <DraftPreview draft={draft} tenantId={draft.tenantId || 'default'} framed />
                 </PageArtboard>
             ) : (
+            <AppRuntimeProvider app={draft.app} mode="design">
             <DndContext sensors={dndSensors} collisionDetection={collisionDetection}>
             <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
                 {/* Left Panel: Palette */}
                 <Box sx={{ display: 'flex', flexShrink: 0 }}>
-                <Paper elevation={0} sx={{ width: paletteOpen ? 250 : 0, overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease' }}>
-                    <Box sx={{ width: 250, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <Paper elevation={0} sx={{ width: paletteOpen ? leftWidth : 0, overflow: 'hidden', borderRight: '1px solid rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', transition: 'width 0.2s ease' }}>
+                    <Box sx={{ width: leftWidth, height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ minHeight: 48 }}>
                             <Tab label="Design" icon={<DesignIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
+                            <Tab label="App" icon={<AppIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Data Binding" icon={<DataIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Events" icon={<EventsIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
                             <Tab label="Performance" icon={<PerformanceIcon sx={{ fontSize: 18 }} />} iconPosition="start" />
@@ -366,23 +372,24 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                                 <ComponentPalette />
                             </>
                         )}
-                        {tab === 1 && (
+                        {tab === 1 && <AppModelPanel draft={draft} setDraft={setDraft} />}
+                        {tab === 2 && (
                             <DataBindingsPanel
                                 draft={draft}
                                 setDraft={setDraft}
                                 tenantId={draft.tenantId || 'default'}
                             />
                         )}
-                        {tab === 2 && (
+                        {tab === 3 && (
                             <PresentationEventsPanel draft={draft} setDraft={setDraft} />
                         )}
-                        {tab === 3 && (
+                        {tab === 4 && (
                             <PagePerformanceDashboard pageId={draft.id!} />
                         )}
-                        {tab === 4 && (
+                        {tab === 5 && (
                             <AIDocumentationViewer page={draft} />
                         )}
-                        {tab === 5 && (
+                        {tab === 6 && (
                             <AITestGenerator page={draft} />
                         )}
                     </Box>
@@ -443,7 +450,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         </Tooltip>
                     </Box>
                     <PageArtboard width={artboardWidth} fit={fitToWorkspace}>
-                        <PageBody name={draft.name} slug={draft.slug}>
+                        <PageBody name={draft.name} slug={draft.slug} hidden={draft.app?.chrome === 'none'}>
                         <Box sx={{ mb: 2 }}>
                             <LayoutCanvas
                                 layout={filterBarLayout}
@@ -511,6 +518,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                 </Box>
             </Box>
             </DndContext>
+            </AppRuntimeProvider>
             )}
             <TemplatePickerDialog
                 open={templatePickerOpen}

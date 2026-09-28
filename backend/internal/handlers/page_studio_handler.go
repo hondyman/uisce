@@ -28,22 +28,23 @@ func isUniqueViolation(err error) bool {
 // Backed by page_definitions, which existed with no handler at all before
 // this - every save from the Page Studio UI 404'd.
 type PageStudioPage struct {
-	ID                 uuid.UUID       `json:"id" db:"id"`
-	TenantID           uuid.UUID       `json:"-" db:"tenant_id"`
-	Name               string          `json:"name" db:"name"`
-	Slug               string          `json:"slug" db:"slug"`
-	Description        string          `json:"description,omitempty" db:"description"`
-	Layout             json.RawMessage `json:"layout" db:"layout"`
-	Tabs               json.RawMessage `json:"tabs,omitempty" db:"tabs"`
-	Components         json.RawMessage `json:"components" db:"components"`
-	DataSources        json.RawMessage `json:"dataSources" db:"data_sources"`
-	PresentationEvents json.RawMessage `json:"presentationEvents,omitempty" db:"presentation_events"`
-	FilterBar          json.RawMessage `json:"filterBar,omitempty" db:"filter_bar"`
-	Version            int             `json:"version" db:"version"`
-	IsCore             bool            `json:"isCore" db:"is_core"`
-	Status             string          `json:"status" db:"status"`
-	CreatedAt          time.Time       `json:"createdAt" db:"created_at"`
-	UpdatedAt          time.Time       `json:"updatedAt" db:"updated_at"`
+	ID                 uuid.UUID        `json:"id" db:"id"`
+	TenantID           uuid.UUID        `json:"-" db:"tenant_id"`
+	Name               string           `json:"name" db:"name"`
+	Slug               string           `json:"slug" db:"slug"`
+	Description        string           `json:"description,omitempty" db:"description"`
+	Layout             json.RawMessage  `json:"layout" db:"layout"`
+	Tabs               json.RawMessage  `json:"tabs,omitempty" db:"tabs"`
+	Components         json.RawMessage  `json:"components" db:"components"`
+	DataSources        json.RawMessage  `json:"dataSources" db:"data_sources"`
+	PresentationEvents json.RawMessage  `json:"presentationEvents,omitempty" db:"presentation_events"`
+	FilterBar          json.RawMessage  `json:"filterBar,omitempty" db:"filter_bar"`
+	App                *json.RawMessage `json:"app,omitempty" db:"app_model"` // page application model (variables, queries, tabs); opaque here, NULL on plain BO pages (pointer: RawMessage cannot scan NULL)
+	Version            int              `json:"version" db:"version"`
+	IsCore             bool             `json:"isCore" db:"is_core"`
+	Status             string           `json:"status" db:"status"`
+	CreatedAt          time.Time        `json:"createdAt" db:"created_at"`
+	UpdatedAt          time.Time        `json:"updatedAt" db:"updated_at"`
 	// Editable is computed: core pages are writable only by gold-copy admin.
 	Editable bool `json:"editable" db:"-"`
 }
@@ -415,6 +416,7 @@ func (h *PageStudioHandler) list(w http.ResponseWriter, r *http.Request) {
 		       layout, tabs, components, data_sources,
 		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
 		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
+		       app_model,
 		       version, is_core, status, created_at, updated_at
 		FROM page_definitions
 		WHERE tenant_id = $1
@@ -508,6 +510,7 @@ func (h *PageStudioHandler) getOne(r *http.Request, where string, args ...interf
 		       layout, tabs, components, data_sources,
 		       COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
 		       COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
+		       app_model,
 		       version, is_core, status, created_at, updated_at
 		FROM page_definitions
 		WHERE ` + where
@@ -527,6 +530,7 @@ type pageStudioUpsertRequest struct {
 	DataSources        json.RawMessage `json:"dataSources"`
 	PresentationEvents json.RawMessage `json:"presentationEvents,omitempty"`
 	FilterBar          json.RawMessage `json:"filterBar,omitempty"`
+	App                json.RawMessage `json:"app,omitempty"`
 	Version            int             `json:"version"`
 	IsCore             bool            `json:"isCore,omitempty"`
 	Status             string          `json:"status,omitempty"`
@@ -558,14 +562,15 @@ func (h *PageStudioHandler) create(w http.ResponseWriter, r *http.Request) {
 	}
 	var page PageStudioPage
 	err := h.db.GetContext(r.Context(), &page, `
-		INSERT INTO page_definitions (id, tenant_id, name, slug, description, layout, tabs, components, data_sources, presentation_events, filter_bar, version, is_core, status)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		INSERT INTO page_definitions (id, tenant_id, name, slug, description, layout, tabs, components, data_sources, presentation_events, filter_bar, version, is_core, status, app_model)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING id, tenant_id, name, slug, COALESCE(description, '') AS description,
 		          layout, tabs, components, data_sources,
 		          COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
 		          COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
+		          app_model,
 		          version, is_core, status, created_at, updated_at
-	`, id, tenantID, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, max(req.Version, 1), req.IsCore, req.Status)
+	`, id, tenantID, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, max(req.Version, 1), req.IsCore, req.Status, nullableJSON(req.App))
 	if err != nil {
 		if isUniqueViolation(err) {
 			http.Error(w, "a page with this slug already exists", http.StatusConflict)
@@ -616,14 +621,15 @@ func (h *PageStudioHandler) update(w http.ResponseWriter, r *http.Request) {
 	err = h.db.GetContext(r.Context(), &page, `
 		UPDATE page_definitions
 		SET name = $1, slug = $2, description = $3, layout = $4, tabs = $5, components = $6,
-		    data_sources = $7, presentation_events = $8, filter_bar = $9, status = $10, version = version + 1, updated_at = NOW()
+		    data_sources = $7, presentation_events = $8, filter_bar = $9, status = $10, app_model = $13, version = version + 1, updated_at = NOW()
 		WHERE id = $11 AND tenant_id = $12
 		RETURNING id, tenant_id, name, slug, COALESCE(description, '') AS description,
 		          layout, tabs, components, data_sources,
 		          COALESCE(presentation_events, '[]'::jsonb) AS presentation_events,
 		          COALESCE(filter_bar, '{}'::jsonb) AS filter_bar,
+		          app_model,
 		          version, is_core, status, created_at, updated_at
-	`, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, req.Status, id, tenantID)
+	`, req.Name, req.Slug, req.Description, req.Layout, req.Tabs, req.Components, req.DataSources, req.PresentationEvents, req.FilterBar, req.Status, id, tenantID, nullableJSON(req.App))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "page not found", http.StatusNotFound)
@@ -709,6 +715,15 @@ func normalizeUpsertDefaults(req *pageStudioUpsertRequest) {
 	if len(req.FilterBar) == 0 {
 		req.FilterBar = emptyPageLayoutJSON
 	}
+}
+
+// nullableJSON stores an absent (or JSON null) app model as SQL NULL rather
+// than the jsonb value null, so "no app model" has one representation.
+func nullableJSON(raw json.RawMessage) interface{} {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	return []byte(raw)
 }
 
 func (h *PageStudioHandler) goldCopyID(ctx context.Context) uuid.UUID {

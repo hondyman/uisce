@@ -24,6 +24,7 @@ import { apiClient } from '../../utils/apiClient';
 import { generatePageDraft, type BOOption } from './generatePageDraft';
 import type { GeneratedPageKind } from '../../api/pageStudio';
 import { NavigationMenuApi, NavigationMenuNode } from '../../api/navigationMenu';
+import { PAGE_BLUEPRINTS, type PageBlueprint } from './app/blueprints';
 
 const flattenMenuNodes = (nodes: NavigationMenuNode[], depth = 0): { node: NavigationMenuNode; depth: number }[] =>
   nodes.flatMap((node) => [{ node, depth }, ...flattenMenuNodes(node.children || [], depth + 1)]);
@@ -140,6 +141,14 @@ const PageStudioListPage: React.FC = () => {
 
   const closeMenu = () => setMenuAnchor(null);
 
+  // Blueprints: complete pages built from the page model, opened as an
+  // unsaved draft; saving creates the page.
+  const [blueprintAnchor, setBlueprintAnchor] = useState<HTMLElement | null>(null);
+  const handleBlueprint = (bp: PageBlueprint) => {
+    setBlueprintAnchor(null);
+    navigate(`new?blueprint=${bp.id}`);
+  };
+
   const handleClone = async (page: CorePageDefinition) => {
     closeMenu();
     setCloning(true);
@@ -194,6 +203,17 @@ const PageStudioListPage: React.FC = () => {
           <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={openAiDialog}>
             Generate with AI
           </Button>
+          <Button variant="outlined" onClick={(e) => setBlueprintAnchor(e.currentTarget)}>
+            From blueprint
+          </Button>
+          <Menu anchorEl={blueprintAnchor} open={!!blueprintAnchor} onClose={() => setBlueprintAnchor(null)}>
+            {PAGE_BLUEPRINTS.map((bp) => (
+              <MenuItem key={bp.id} onClick={() => handleBlueprint(bp)} sx={{ display: 'block', maxWidth: 360, whiteSpace: 'normal' }}>
+                <Typography variant="body2" fontWeight={600}>{bp.name}</Typography>
+                <Typography variant="caption" color="text.secondary">{bp.description}</Typography>
+              </MenuItem>
+            ))}
+          </Menu>
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('new')}>
             New Page
           </Button>

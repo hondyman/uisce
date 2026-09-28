@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams, Link as RouterLink } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams, Link as RouterLink } from 'react-router-dom';
+import { PAGE_BLUEPRINTS } from './app/blueprints';
 import { Box, CircularProgress, Alert, Breadcrumbs, Link, Typography, TextField, IconButton, Tooltip } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
@@ -34,6 +35,10 @@ const BLANK_PAGE: CorePageDefinition = {
 const PageStudioDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  // /page-studio/new?blueprint=<id>: open a blueprint as an unsaved draft -
+  // the author looks it over, then saves to create it.
+  const [searchParams] = useSearchParams();
+  const blueprint = id === 'new' ? PAGE_BLUEPRINTS.find((b) => b.id === searchParams.get('blueprint')) : undefined;
   const { tenant } = useTenant();
   const [page, setPage] = useState<CorePageDefinition | null>(null);
   const [loading, setLoading] = useState(id !== 'new');
@@ -44,7 +49,7 @@ const PageStudioDetailsPage: React.FC = () => {
   // A brand-new page picks its primary/related Business Objects and a
   // layout recommended for that object count before the editor opens; an
   // existing page (or one already past this dialog) skips it.
-  const [showWizard, setShowWizard] = useState(id === 'new');
+  const [showWizard, setShowWizard] = useState(id === 'new' && !blueprint);
 
   // page_definitions never persists tenant_id to the client (the backend
   // hides it, json:"-" on PageDefinition.TenantID - a page's rows/queries
@@ -54,7 +59,11 @@ const PageStudioDetailsPage: React.FC = () => {
   // page.tenantId, which is never populated by a real API response.
   useEffect(() => {
     if (!tenant?.id) return;
-    if (id === 'new') { setPage({ ...BLANK_PAGE, tenantId: tenant.id }); setLoading(false); return; }
+    if (id === 'new') {
+      setPage(blueprint ? { ...BLANK_PAGE, ...blueprint.build(), tenantId: tenant.id } : { ...BLANK_PAGE, tenantId: tenant.id });
+      setLoading(false);
+      return;
+    }
     if (!id) return;
     let cancelled = false;
     setLoading(true);
