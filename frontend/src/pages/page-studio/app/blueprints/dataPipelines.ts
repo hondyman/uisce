@@ -221,7 +221,7 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
       col('step', 'Step', txt('step')), col('in', 'In', txt('in')), col('out', 'Out', txt('out')), col('rejected', 'Rejected', txt('rejected')),
       col('time', 'Time', txt('time')), col('error', '', { kind: 'text', value: '{{row.error}}', caption: true, color: 'error' }),
     ],
-  });
+  }, { visibleWhen: cond('vars.openRun', 'is_not_empty') });
   w('run_mastering', 'DataGrid', {
     query: 'runDetail', rowsPath: 'mastering',
     columns: [
