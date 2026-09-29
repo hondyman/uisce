@@ -30,7 +30,12 @@ func pipelineDB(t *testing.T) *sqlx.DB {
 	db := sqlx.MustConnect("postgres", dsn)
 	t.Cleanup(func() { db.Close() })
 	// The real migrations that own these tables.
-	for _, m := range []string{"20260901_001_create_data_pipelines.up.sql", "20260909_001_datapipeline_run_persistence.up.sql", "20261027_001_data_pipeline_schedule.up.sql"} {
+	for _, m := range []string{
+		"20260901_001_create_data_pipelines.up.sql",
+		"20260909_001_datapipeline_run_persistence.up.sql",
+		"20261027_001_data_pipeline_schedule.up.sql",
+		"20261102_001_data_pipeline_run_outputs.up.sql",
+	} {
 		b, err := os.ReadFile(filepath.Join("..", "..", "db", "migrations", m))
 		if err != nil {
 			t.Fatal(err)
