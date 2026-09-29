@@ -141,3 +141,19 @@ func (s *Service) GetScorecardReport(ctx context.Context, asOf time.Time, univer
 
 	return report, nil
 }
+
+// SyncMart computes the current vendor scorecard and flushes rollups to StarRocks if configured.
+func (s *Service) SyncMart(ctx context.Context, asOf time.Time, universeSize int) (*VendorScorecardReport, error) {
+	report, err := s.GetScorecardReport(ctx, asOf, universeSize)
+	if err != nil {
+		return nil, err
+	}
+	if syncer, ok := s.repo.(interface {
+		SyncToStarRocks(ctx context.Context, asOf time.Time, scores []SubstitutionScore) error
+	}); ok {
+		if err := syncer.SyncToStarRocks(ctx, asOf, report.SubstitutionMatrix); err != nil {
+			return report, fmt.Errorf("starrocks sync warning: %w", err)
+		}
+	}
+	return report, nil
+}

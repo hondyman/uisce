@@ -56,6 +56,8 @@ func (d Deps) Processor(n Node) (Processor, error) {
 		return newFileSink(n, d.Files)
 	case NodeIcebergSink:
 		return newIcebergSink(n, d.Files)
+	case NodeVendorScoring:
+		return newVendorScoringProc(n, d.StagingDB)
 	}
 	return nil, fmt.Errorf("%q is not a processing step", n.Type)
 }

@@ -37,7 +37,8 @@ const (
 	// NodeMaster masters the load its staging sink committed (after the
 	// stream, once every sink has committed): canonicalize, match, survive,
 	// publish, as a mastering run linked to this pipeline run.
-	NodeMaster = "master"
+	NodeMaster        = "master"
+	NodeVendorScoring = "vendor_scoring"
 )
 
 // Error policies (data_pipeline_definitions.error_policy).
@@ -186,6 +187,16 @@ type IcebergSinkConfig struct {
 	Format      string   `json:"format"`       // default parquet
 }
 
+// VendorScoringConfig evaluates vendor sufficiency, tolerance compliance,
+// and quality scores against the golden master or certified reference set.
+type VendorScoringConfig struct {
+	Entity         string `json:"entity"`                   // e.g. "SECURITY" or "PRODUCT"
+	VendorID       string `json:"vendor_id,omitempty"`     // e.g. "BLOOMBERG"
+	UniverseSize   int    `json:"universe_size,omitempty"` // default 42000
+	ToleranceCheck bool   `json:"tolerance_check,omitempty"`
+	RecordMart     bool   `json:"record_mart,omitempty"`
+}
+
 // --- validation -------------------------------------------------------
 
 // Validate checks structure: unique ids, known types, edges reference nodes,
@@ -219,7 +230,7 @@ func (s *Spec) Validate() []error {
 		switch n.Type {
 		case NodeFileSource, NodeBOSource:
 			sources++
-		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink:
+		case NodeBOSink, NodeFileSink, NodeStagingSink, NodeIcebergSink, NodeVendorScoring:
 			sinks++
 		case NodeValidate, NodeMap, NodeRuleCheck, NodeMaster:
 		default:
@@ -452,6 +463,14 @@ func validateNodeConfig(n *Node) []error {
 		}
 		if c.Table == "" {
 			add("table is required")
+		}
+	case NodeVendorScoring:
+		var c VendorScoringConfig
+		if !decode(&c) {
+			return errs
+		}
+		if strings.TrimSpace(c.Entity) == "" {
+			add("entity is required")
 		}
 	}
 	return errs

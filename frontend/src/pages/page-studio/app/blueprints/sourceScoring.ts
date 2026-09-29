@@ -67,6 +67,37 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
     ],
   }, { style: fit });
 
+  reg('sync_mart_btn', 'ActionButton', {
+    label: 'Sync StarRocks Hot Mart',
+    icon: 'refresh',
+    variant: 'outlined',
+    onClick: [
+      {
+        kind: 'runOperation',
+        operation: 'mdmScoring.syncMart',
+        successMessage: 'StarRocks hot analytical mart synchronized.',
+      },
+    ],
+  }, { style: fit });
+
+  reg('run_pipeline_btn', 'ActionButton', {
+    label: 'Run Ingest & Scoring Pipeline',
+    icon: 'play',
+    variant: 'contained',
+    onClick: [
+      {
+        kind: 'runOperation',
+        operation: 'mdmScoring.runPipeline',
+        successMessage: 'MDM Multi-Vendor Ingestion & Scoring pipeline launched via Temporal.',
+      },
+    ],
+  }, { style: fit });
+
+  reg('pipeline_hud', 'AlertBanner', {
+    severity: 'info',
+    text: 'Tripartite Pipeline: Raw files → Apache Iceberg Parquet Lakehouse → Centralized Validation Engine → Staging DB → MDM Survivorship Mastering → Vendor Quality & Displacement Scoring Mart (StarRocks: mdm_analytics.vendor_substitution_daily).',
+  });
+
   // Tab 1: Sufficiency Matrix Grid
   reg('matrix_grid', 'DataGrid', {
     query: 'scorecard',
@@ -157,8 +188,8 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
 
   // Layouts
   const filterBar = layout('filter_root', {
-    filter_root: { type: 'Column', children: ['header_row'], style: { gap: '16px' } },
-    header_row: { type: 'Row', children: ['hdr', 'universe_select', 'vendor_filter'], style: { alignItems: 'center' } },
+    filter_root: { type: 'Column', children: ['header_row', 'pipeline_hud'], style: { gap: '12px' } },
+    header_row: { type: 'Row', children: ['hdr', 'universe_select', 'vendor_filter', 'sync_mart_btn', 'run_pipeline_btn'], style: { alignItems: 'center', gap: '8px' } },
   });
 
   const matrixLayout = layout('matrix_root', {

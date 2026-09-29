@@ -25,6 +25,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/scorecard", h.HandleGetScorecard)
 		r.Get("/tolerances", h.HandleGetTolerances)
 		r.Post("/displacement", h.HandleSimulateDisplacement)
+		r.Post("/sync-mart", h.HandleSyncMart)
 	})
 }
 
@@ -129,4 +130,33 @@ func (h *Handler) HandleSimulateDisplacement(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+// HandleSyncMart manually triggers a recalculation and flush to StarRocks hot mart.
+func (h *Handler) HandleSyncMart(w http.ResponseWriter, r *http.Request) {
+	asOfStr := r.URL.Query().Get("as_of")
+	var asOf time.Time
+	if asOfStr != "" {
+		if parsed, err := time.Parse("2006-01-02", asOfStr); err == nil {
+			asOf = parsed
+		}
+	}
+	if asOf.IsZero() {
+		asOf = time.Now()
+	}
+
+	report, err := h.service.SyncMart(r.Context(), asOf, 42000)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"status":          "COMPLETED",
+		"as_of":           report.AsOfDate,
+		"records_synced":  len(report.SubstitutionMatrix),
+		"annual_spend":    report.AnnualSpendTotal,
+		"frontier_points": len(report.FrontierPoints),
+	})
 }
