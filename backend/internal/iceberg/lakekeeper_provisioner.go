@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 )
 
@@ -17,8 +16,7 @@ type LakekeeperProvisioner struct {
 	s3Bucket   string
 	s3Endpoint string
 	httpClient *http.Client
-	token      string
-	tokenMu    sync.RWMutex
+	tokenMgr   *TokenManager
 }
 
 func NewLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string) *LakekeeperProvisioner {
@@ -40,12 +38,37 @@ func NewLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string) *LakekeeperP
 			s3Endpoint = "http://minio:9000"
 		}
 	}
+	tm := newDefaultTokenManager(baseURL)
 	return &LakekeeperProvisioner{
 		baseURL:    baseURL,
 		s3Bucket:   s3Bucket,
 		s3Endpoint: s3Endpoint,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
+		tokenMgr:   tm,
 	}
+}
+
+func NewAuthedLakekeeperProvisioner(baseURL, s3Bucket, s3Endpoint string, tokenMgr *TokenManager) *LakekeeperProvisioner {
+	return &LakekeeperProvisioner{
+		baseURL:    baseURL,
+		s3Bucket:   s3Bucket,
+		s3Endpoint: s3Endpoint,
+		httpClient: &http.Client{Timeout: 30 * time.Second},
+		tokenMgr:   tokenMgr,
+	}
+}
+
+func newDefaultTokenManager(baseURL string) *TokenManager {
+	tokenURL := os.Getenv("LAKEKEEPER_TOKEN_URL")
+	if tokenURL == "" {
+		tokenURL = "https://keycloak:8443/realms/uisce/protocol/openid-connect/token"
+	}
+	clientID := os.Getenv("LAKEKEEPER_CLIENT_ID")
+	if clientID == "" {
+		clientID = "uisce-provisioner"
+	}
+	clientSecret := os.Getenv("LAKEKEEPER_CLIENT_SECRET")
+	return NewTokenManager(tokenURL, clientID, clientSecret)
 }
 
 type NamespaceConfig struct {
@@ -68,6 +91,14 @@ func (p *LakekeeperProvisioner) doRequest(ctx context.Context, method, path stri
 		return nil, fmt.Errorf("create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+
+	if p.tokenMgr != nil {
+		token, err := p.tokenMgr.Token(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("acquire token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
@@ -210,6 +241,69 @@ func (p *LakekeeperProvisioner) HealthCheck(ctx context.Context) error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("health check returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+type warehouseResponse struct {
+	ID                string                 `json:"id"`
+	Name              string                 `json:"name"`
+}
+
+func (p *LakekeeperProvisioner) CreateWarehouse(ctx context.Context, payload map[string]interface{}) error {
+	resp, err := p.doRequest(ctx, http.MethodPost, "/management/v1/warehouse", payload)
+	if err != nil {
+		return fmt.Errorf("create warehouse request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create warehouse returned %d: %s", resp.StatusCode, string(body))
+	}
+	return nil
+}
+
+func (p *LakekeeperProvisioner) GetWarehouseByName(ctx context.Context, name string) (string, int, error) {
+	resp, err := p.doRequest(ctx, http.MethodGet, fmt.Sprintf("/management/v1/warehouse?name=%s", name), nil)
+	if err != nil {
+		return "", 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", http.StatusNotFound, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", resp.StatusCode, fmt.Errorf("get warehouse returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var listResp struct {
+		Warehouses []warehouseResponse `json:"warehouses"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
+		return "", resp.StatusCode, fmt.Errorf("decode warehouse list: %w", err)
+	}
+	for _, w := range listResp.Warehouses {
+		if w.Name == name {
+			return w.ID, resp.StatusCode, nil
+		}
+	}
+	return "", resp.StatusCode, nil
+}
+
+func (p *LakekeeperProvisioner) DeleteWarehouse(ctx context.Context, id string) error {
+	resp, err := p.doRequest(ctx, http.MethodDelete, fmt.Sprintf("/management/v1/warehouse/%s", id), nil)
+	if err != nil {
+		return fmt.Errorf("delete warehouse request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete warehouse returned %d: %s", resp.StatusCode, string(body))
 	}
 	return nil
 }
