@@ -13,6 +13,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { mdmScoringApi, type TrendAnalysisReport } from '../api';
+import { QualityTrendChart } from './QualityTrendChart';
 
 const DIMENSIONS = [
   { key: 'COMPOSITE', label: '6-Pillar Composite Quality' },
@@ -277,6 +278,13 @@ export const HistoricalTrendsViewer: React.FC<HistoricalTrendsViewerProps> = ({ 
               </Grid>
             ))}
           </Grid>
+
+          {/* Interactive Visual Trendline Chart with Watermarks & Zone Shading */}
+          <QualityTrendChart
+            entityDomain={entityDomain}
+            initialDimension={dimension}
+            initialPresetDays={selectedPreset}
+          />
 
           {/* Interactive Multi-Vendor Time-Series Matrix */}
           <Card variant="outlined" sx={{ borderRadius: 2, mb: 3 }}>

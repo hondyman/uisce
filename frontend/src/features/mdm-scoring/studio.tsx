@@ -242,6 +242,27 @@ const operations: OperationDef[] = [
       return mdmScoringApi.shadowEval(asOf);
     },
   },
+  {
+    id: 'mdmScoring.simulateProfiles',
+    domain: 'mdm_scoring',
+    kind: 'query',
+    label: 'Profile Sensitivity Simulation',
+    description: 'Simulates vendor rank shifts, composite score deltas, and bundle financial impact between two weight profiles.',
+    params: [
+      { name: 'profile_a', type: 'object', required: true },
+      { name: 'profile_b', type: 'object', required: true },
+      { name: 'entity_domain', type: 'string', required: false },
+      { name: 'universe_size', type: 'number', required: false },
+    ],
+    run: async (params) => {
+      return mdmScoringApi.simulateProfiles({
+        profile_a: params.profile_a as any,
+        profile_b: params.profile_b as any,
+        entity_domain: params.entity_domain ? String(params.entity_domain) : undefined,
+        universe_size: params.universe_size ? Number(params.universe_size) : 42000,
+      });
+    },
+  },
 ];
 
 registerOperations(operations);
@@ -253,8 +274,46 @@ import { DisplacementTCOTable } from './components/DisplacementTCOTable';
 import { MultiVendorDisplacement } from './components/MultiVendorDisplacement';
 import { ShadowComparator } from './components/ShadowComparator';
 import { HistoricalTrendsViewer } from './components/HistoricalTrendsViewer';
+import { QualityTrendChart } from './components/QualityTrendChart';
+import { ProfileSimulation } from './components/ProfileSimulation';
 
 registerDomainComponents([
+  {
+    id: 'mdmScoring.ProfileSimulation',
+    domain: 'mdm_scoring',
+    label: 'Profile Sensitivity Simulator',
+    description: 'Dual-column A/B weight profile simulator with delta radar overlay, rank shift analysis, and optimal bundle financial impact.',
+    inputs: [
+      { name: 'entity_domain', label: 'Entity Domain', type: 'string', required: false },
+      { name: 'universe_size', label: 'Universe Size', type: 'number', required: false },
+    ],
+    events: [],
+    render: ({ inputs }) => (
+      <ProfileSimulation
+        entityDomain={inputs.entity_domain ? String(inputs.entity_domain) : undefined}
+        universeSize={inputs.universe_size ? Number(inputs.universe_size) : 42000}
+      />
+    ),
+  },
+  {
+    id: 'mdmScoring.QualityTrendChart',
+    domain: 'mdm_scoring',
+    label: 'Quality Trend Trajectory & Watermarks',
+    description: 'Interactive SVG multi-vendor time-series chart with tier watermark boundary lines and quality zone background shading.',
+    inputs: [
+      { name: 'entity_domain', label: 'Entity Domain', type: 'string', required: false },
+      { name: 'initial_dimension', label: 'Initial Dimension', type: 'string', required: false },
+      { name: 'height', label: 'Chart Height', type: 'number', required: false },
+    ],
+    events: [],
+    render: ({ inputs }) => (
+      <QualityTrendChart
+        entityDomain={inputs.entity_domain ? String(inputs.entity_domain) : undefined}
+        initialDimension={inputs.initial_dimension ? String(inputs.initial_dimension) : 'COMPOSITE'}
+        height={inputs.height ? Number(inputs.height) : 380}
+      />
+    ),
+  },
   {
     id: 'mdmScoring.HistoricalTrendsViewer',
     domain: 'mdm_scoring',

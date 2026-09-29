@@ -1246,6 +1246,142 @@ func TestRunShadowValidation_DroppedFixtureVendors(t *testing.T) {
 	}
 }
 
+func TestEvaluateVendorRanking(t *testing.T) {
+	eval := NewEvaluator()
+
+	radarScores := map[string]RadarScores{
+		"V1": {SufficiencyRate: 90.0, CoverageRate: 95.0, SLAComplianceRate: 60.0, StabilityScore: 50.0, StewardFrictionCost: 40.0, RightsScore: 30.0},
+		"V2": {SufficiencyRate: 50.0, CoverageRate: 60.0, SLAComplianceRate: 95.0, StabilityScore: 90.0, StewardFrictionCost: 85.0, RightsScore: 90.0},
+	}
+	vendorNames := map[string]string{"V1": "Vendor One", "V2": "Vendor Two"}
+	costs := map[string]float64{"V1": 1000000.0, "V2": 800000.0}
+
+	// Profile favoring Sufficiency & Coverage -> V1 should be Rank 1
+	profA := WeightProfile{
+		ProfileName: "Data Heavy",
+		WeightSuff:  0.40,
+		WeightCov:   0.40,
+		WeightSLA:   0.05,
+		WeightStab:  0.05,
+		WeightOER:   0.05,
+		WeightLic:   0.05,
+	}
+
+	rankingA := eval.EvaluateVendorRanking(radarScores, costs, vendorNames, profA)
+	if len(rankingA) != 2 {
+		t.Fatalf("expected 2 rankings, got %d", len(rankingA))
+	}
+	if rankingA[0].VendorID != "V1" {
+		t.Errorf("expected V1 to be rank 1 under data-heavy profile, got %s", rankingA[0].VendorID)
+	}
+	if rankingA[0].Rank != 1 || rankingA[1].Rank != 2 {
+		t.Errorf("expected ranks 1 and 2, got %d and %d", rankingA[0].Rank, rankingA[1].Rank)
+	}
+
+	// Profile favoring SLA & Stability & Licensing -> V2 should be Rank 1
+	profB := WeightProfile{
+		ProfileName: "Operations Heavy",
+		WeightSuff:  0.05,
+		WeightCov:   0.05,
+		WeightSLA:   0.35,
+		WeightStab:  0.25,
+		WeightOER:   0.10,
+		WeightLic:   0.20,
+	}
+
+	rankingB := eval.EvaluateVendorRanking(radarScores, costs, vendorNames, profB)
+	if len(rankingB) != 2 {
+		t.Fatalf("expected 2 rankings, got %d", len(rankingB))
+	}
+	if rankingB[0].VendorID != "V2" {
+		t.Errorf("expected V2 to be rank 1 under operations-heavy profile, got %s", rankingB[0].VendorID)
+	}
+}
+
+func TestComputeRankShifts(t *testing.T) {
+	eval := NewEvaluator()
+
+	rankingA := []VendorRankingEntry{
+		{Rank: 1, VendorID: "V1", VendorName: "Vendor One", CompositeQualityScore: 85.0},
+		{Rank: 2, VendorID: "V2", VendorName: "Vendor Two", CompositeQualityScore: 65.0},
+	}
+	rankingB := []VendorRankingEntry{
+		{Rank: 1, VendorID: "V2", VendorName: "Vendor Two", CompositeQualityScore: 80.0},
+		{Rank: 2, VendorID: "V1", VendorName: "Vendor One", CompositeQualityScore: 60.0},
+	}
+
+	shifts := eval.ComputeRankShifts(rankingA, rankingB)
+	if len(shifts) != 2 {
+		t.Fatalf("expected 2 shifts, got %d", len(shifts))
+	}
+
+	// V1 went from rank 1 to rank 2 -> delta = 1 - 2 = -1 (dropped)
+	// V2 went from rank 2 to rank 1 -> delta = 2 - 1 = +1 (improved)
+	var shiftV1, shiftV2 *VendorRankShift
+	for i := range shifts {
+		if shifts[i].VendorID == "V1" {
+			shiftV1 = &shifts[i]
+		} else if shifts[i].VendorID == "V2" {
+			shiftV2 = &shifts[i]
+		}
+	}
+
+	if shiftV1 == nil || shiftV2 == nil {
+		t.Fatalf("missing shifts for V1 or V2")
+	}
+	if shiftV1.RankDelta != -1 {
+		t.Errorf("expected V1 rank delta = -1, got %d", shiftV1.RankDelta)
+	}
+	if shiftV1.ScoreDelta != -25.0 {
+		t.Errorf("expected V1 score delta = -25.0, got %.1f", shiftV1.ScoreDelta)
+	}
+	if shiftV2.RankDelta != 1 {
+		t.Errorf("expected V2 rank delta = 1, got %d", shiftV2.RankDelta)
+	}
+	if shiftV2.ScoreDelta != 15.0 {
+		t.Errorf("expected V2 score delta = 15.0, got %.1f", shiftV2.ScoreDelta)
+	}
+}
+
+func TestEvaluateBundleImpact(t *testing.T) {
+	eval := NewEvaluator()
+
+	allVendors := []string{"BBG", "RFT"}
+	vendorNames := map[string]string{"BBG": "Bloomberg", "RFT": "Refinitiv"}
+	costs := map[string]float64{"BBG": 2140000.0, "RFT": 1180000.0}
+
+	now := time.Now()
+	candidates := []VendorCandidate{
+		{EntityID: 1, AttributeCode: "LEI", VendorID: "BBG", NormalizedValue: "V1", FormatOK: true, RangeOK: true, RefIntegrityOK: true, AsOfDate: now},
+		{EntityID: 1, AttributeCode: "LEI", VendorID: "RFT", NormalizedValue: "V1", FormatOK: true, RangeOK: true, RefIntegrityOK: true, AsOfDate: now},
+	}
+	tolerances := map[string]AttributeTolerance{
+		"LEI": {AttributeCode: "LEI", Tier: 1, MatchType: MatchExact, TierWeight: 1.0},
+	}
+
+	rankingsA := []VendorRankingEntry{
+		{Rank: 1, VendorID: "RFT", CompositeQualityScore: 70.0},
+		{Rank: 2, VendorID: "BBG", CompositeQualityScore: 65.0},
+	}
+	rankingsB := []VendorRankingEntry{
+		{Rank: 1, VendorID: "BBG", CompositeQualityScore: 90.0},
+		{Rank: 2, VendorID: "RFT", CompositeQualityScore: 60.0},
+	}
+
+	profA := WeightProfile{ProfileName: "Cost Balanced", WeightSuff: 0.166, WeightCov: 0.166, WeightSLA: 0.167, WeightStab: 0.167, WeightOER: 0.167, WeightLic: 0.167}
+	profB := WeightProfile{ProfileName: "SLA Premium", WeightSuff: 0.10, WeightCov: 0.10, WeightSLA: 0.40, WeightStab: 0.20, WeightOER: 0.10, WeightLic: 0.10}
+
+	impact := eval.EvaluateBundleImpact(allVendors, vendorNames, costs, candidates, tolerances, 1, rankingsA, rankingsB, profA, profB)
+
+	if impact.Insight == "" {
+		t.Errorf("expected non-empty insight in bundle impact")
+	}
+	if impact.ProfileAOptimal.Cost <= 0 {
+		t.Errorf("expected positive cost for Profile A optimal bundle")
+	}
+}
+
+
 
 
 

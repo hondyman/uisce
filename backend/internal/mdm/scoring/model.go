@@ -1,6 +1,9 @@
 package scoring
 
 import (
+	"encoding/json"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -190,14 +193,16 @@ type VendorScorecardReport struct {
 
 // ScoringSettings defines tenant-level parameters for scoring evaluation.
 type ScoringSettings struct {
-	TenantID        uuid.UUID `json:"tenant_id" db:"tenant_id"`
-	HourlyLaborRate float64   `json:"hourly_labor_rate" db:"hourly_labor_rate"`
-	StabilityDecayK float64   `json:"stability_decay_k" db:"stability_decay_k"`
-	FrictionBudget    float64   `json:"friction_budget" db:"friction_budget"`
-	ColdStartDays     int       `json:"cold_start_days" db:"cold_start_days"`
-	WatermarkHotDays  int       `json:"watermark_hot_days" db:"watermark_hot_days"`
-	WatermarkWarmDays int       `json:"watermark_warm_days" db:"watermark_warm_days"`
-	UpdatedAt         time.Time `json:"updated_at" db:"updated_at"`
+	TenantID                 uuid.UUID `json:"tenant_id" db:"tenant_id"`
+	HourlyLaborRate          float64   `json:"hourly_labor_rate" db:"hourly_labor_rate"`
+	StabilityDecayK          float64   `json:"stability_decay_k" db:"stability_decay_k"`
+	FrictionBudget           float64   `json:"friction_budget" db:"friction_budget"`
+	ColdStartDays            int       `json:"cold_start_days" db:"cold_start_days"`
+	WatermarkHotDays         int       `json:"watermark_hot_days" db:"watermark_hot_days"`
+	WatermarkWarmDays        int       `json:"watermark_warm_days" db:"watermark_warm_days"`
+	QualityZoneHighThreshold float64   `json:"quality_zone_high_threshold" db:"quality_zone_high_threshold"`
+	QualityZoneMidThreshold  float64   `json:"quality_zone_mid_threshold" db:"quality_zone_mid_threshold"`
+	UpdatedAt                time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // WeightProfile defines the 6-pillar weighting configuration for composite scoring.
@@ -607,19 +612,21 @@ type WatermarkBoundaries struct {
 
 // TrendAnalysisReport is the comprehensive historical trend analysis payload.
 type TrendAnalysisReport struct {
-	TenantID              string              `json:"tenant_id"`
-	Dimension             string              `json:"dimension"`
-	DateFrom              time.Time           `json:"date_from"`
-	DateTo                time.Time           `json:"date_to"`
-	TiersPlanned          []string            `json:"tiers_planned"`
-	TiersHit              []string            `json:"tiers_hit"`
-	EmptyTiers            []string            `json:"empty_tiers"`
-	TiersQueried          []string            `json:"tiers_queried"` // Retained for backward-compat
-	BoundaryConflicts     []BoundaryConflict  `json:"boundary_conflicts"`
-	BoundaryConflictCount int                 `json:"boundary_conflict_count"`
-	Series                []VendorTrendSeries `json:"series"`
-	Watermarks            WatermarkBoundaries `json:"watermarks"`
-	GeneratedAt           time.Time           `json:"generated_at"`
+	TenantID                 string              `json:"tenant_id"`
+	Dimension                string              `json:"dimension"`
+	DateFrom                 time.Time           `json:"date_from"`
+	DateTo                   time.Time           `json:"date_to"`
+	TiersPlanned             []string            `json:"tiers_planned"`
+	TiersHit                 []string            `json:"tiers_hit"`
+	EmptyTiers               []string            `json:"empty_tiers"`
+	TiersQueried             []string            `json:"tiers_queried"` // Retained for backward-compat
+	BoundaryConflicts        []BoundaryConflict  `json:"boundary_conflicts"`
+	BoundaryConflictCount    int                 `json:"boundary_conflict_count"`
+	Series                   []VendorTrendSeries `json:"series"`
+	Watermarks               WatermarkBoundaries `json:"watermarks"`
+	QualityZoneHighThreshold float64             `json:"quality_zone_high_threshold"`
+	QualityZoneMidThreshold  float64             `json:"quality_zone_mid_threshold"`
+	GeneratedAt              time.Time           `json:"generated_at"`
 }
 
 // TrendQueryRequest defines the parameters for historical trend queries.
@@ -631,6 +638,182 @@ type TrendQueryRequest struct {
 	DateTo       time.Time `json:"date_to"`
 	EntityDomain string    `json:"entity_domain"`
 }
+
+// ProfileWeights defines the 6-pillar weights for custom or resolved profile evaluation.
+type ProfileWeights struct {
+	Suff float64 `json:"suff"`
+	Cov  float64 `json:"cov"`
+	SLA  float64 `json:"sla"`
+	Stab float64 `json:"stab"`
+	OER  float64 `json:"oer"`
+	Lic  float64 `json:"lic"`
+}
+
+// Validate ensures weights are non-negative and sum to 1.000 within 0.001 tolerance.
+func (w *ProfileWeights) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Suff float64 `json:"suff"`
+		Cov  float64 `json:"cov"`
+		SLA  float64 `json:"sla"`
+		Stab float64 `json:"stab"`
+		OER  float64 `json:"oer"`
+		Lic  float64 `json:"lic"`
+
+		WeightSuff float64 `json:"weight_sufficiency"`
+		WeightCov  float64 `json:"weight_coverage"`
+		WeightSLA  float64 `json:"weight_sla"`
+		WeightStab float64 `json:"weight_stability"`
+		WeightOER  float64 `json:"weight_friction"`
+		WeightOER2 float64 `json:"weight_oer"`
+		WeightLic  float64 `json:"weight_licensing"`
+	}
+	type Alias ProfileWeights
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Suff != 0 {
+		w.Suff = raw.Suff
+	} else {
+		w.Suff = raw.WeightSuff
+	}
+	if raw.Cov != 0 {
+		w.Cov = raw.Cov
+	} else {
+		w.Cov = raw.WeightCov
+	}
+	if raw.SLA != 0 {
+		w.SLA = raw.SLA
+	} else {
+		w.SLA = raw.WeightSLA
+	}
+	if raw.Stab != 0 {
+		w.Stab = raw.Stab
+	} else {
+		w.Stab = raw.WeightStab
+	}
+	if raw.OER != 0 {
+		w.OER = raw.OER
+	} else if raw.WeightOER != 0 {
+		w.OER = raw.WeightOER
+	} else {
+		w.OER = raw.WeightOER2
+	}
+	if raw.Lic != 0 {
+		w.Lic = raw.Lic
+	} else {
+		w.Lic = raw.WeightLic
+	}
+	return nil
+}
+
+func (w ProfileWeights) Validate() error {
+	sum := w.Suff + w.Cov + w.SLA + w.Stab + w.OER + w.Lic
+	if math.Abs(sum-1.000) > 0.001 {
+		return fmt.Errorf("weights must sum to 1.000 (got %.3f)", sum)
+	}
+	if w.Suff < 0 || w.Cov < 0 || w.SLA < 0 || w.Stab < 0 || w.OER < 0 || w.Lic < 0 {
+		return fmt.Errorf("all weights must be non-negative")
+	}
+	return nil
+}
+
+// ToWeightProfile converts ProfileWeights to a WeightProfile model struct.
+func (w ProfileWeights) ToWeightProfile(id int64, name string) WeightProfile {
+	return WeightProfile{
+		ProfileID:   id,
+		ProfileName: name,
+		WeightSuff:  w.Suff,
+		WeightCov:   w.Cov,
+		WeightSLA:   w.SLA,
+		WeightStab:  w.Stab,
+		WeightOER:   w.OER,
+		WeightLic:   w.Lic,
+	}
+}
+
+// ProfileSimSpec specifies a profile for simulation: either by ProfileID or inline Weights.
+type ProfileSimSpec struct {
+	ProfileID *int64          `json:"profile_id,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Weights   *ProfileWeights `json:"weights,omitempty"`
+}
+
+// ProfileSimulationRequest is the payload for POST /api/mdm/scoring/simulate-profiles.
+type ProfileSimulationRequest struct {
+	TenantID     string         `json:"tenant_id,omitempty"`
+	VendorIDs    []string       `json:"vendor_ids,omitempty"`
+	EntityDomain string         `json:"entity_domain,omitempty"`
+	ProfileA     ProfileSimSpec `json:"profile_a"`
+	ProfileB     ProfileSimSpec `json:"profile_b"`
+	UniverseSize int            `json:"universe_size,omitempty"`
+}
+
+// RadarScores holds the 6 normalized pillar scores for radar visualization.
+type RadarScores struct {
+	SufficiencyRate     float64 `json:"sufficiency_rate"`
+	CoverageRate        float64 `json:"coverage_rate"`
+	SLAComplianceRate   float64 `json:"sla_compliance_rate"`
+	StabilityScore      float64 `json:"stability_score"`
+	StewardFrictionCost float64 `json:"steward_friction_cost"`
+	RightsScore         float64 `json:"rights_score"`
+}
+
+// VendorRankingEntry is a vendor's quality score and rank under a specific profile.
+type VendorRankingEntry struct {
+	VendorID              string      `json:"vendor_id"`
+	VendorName            string      `json:"vendor_name"`
+	Rank                  int         `json:"rank"`
+	CompositeQualityScore float64     `json:"composite_quality_score"`
+	Radar                 RadarScores `json:"radar"`
+	AnnualSpend           float64     `json:"annual_spend"`
+	CostPerQualityPoint   float64     `json:"cost_per_quality_point"`
+}
+
+// ProfileEvaluationResult contains rankings and metadata for a single profile in a simulation.
+type ProfileEvaluationResult struct {
+	ProfileID   int64                `json:"profile_id"`
+	ProfileName string               `json:"profile_name"`
+	Weights     ProfileWeights       `json:"weights"`
+	Rankings    []VendorRankingEntry `json:"rankings"`
+}
+
+// VendorRankShift captures rank and score movement between Profile A and Profile B.
+type VendorRankShift struct {
+	VendorID   string  `json:"vendor_id"`
+	VendorName string  `json:"vendor_name"`
+	RankA      int     `json:"rank_a"`
+	RankB      int     `json:"rank_b"`
+	RankDelta  int     `json:"rank_delta"` // rank_a - rank_b (positive = higher in B)
+	ScoreA     float64 `json:"score_a"`
+	ScoreB     float64 `json:"score_b"`
+	ScoreDelta float64 `json:"score_delta"` // score_b - score_a
+}
+
+// BundleOptimalSummary summarizes the optimal bundle solved under a profile.
+type BundleOptimalSummary struct {
+	Vendors              []string `json:"vendors"`
+	Cost                 float64  `json:"cost"`
+	CompositeCoveragePct float64  `json:"composite_coverage_pct"`
+}
+
+// BundleSimulationImpact captures optimal bundle cost delta and rationale.
+type BundleSimulationImpact struct {
+	ProfileAOptimal BundleOptimalSummary `json:"profile_a_optimal"`
+	ProfileBOptimal BundleOptimalSummary `json:"profile_b_optimal"`
+	BundleDeltaCost float64              `json:"bundle_delta_cost"` // b_cost - a_cost
+	Insight         string               `json:"insight"`
+}
+
+// ProfileSimulationResponse is the return payload for POST /api/mdm/scoring/simulate-profiles.
+type ProfileSimulationResponse struct {
+	AsOfDate     time.Time               `json:"as_of_date"`
+	TenantID     string                  `json:"tenant_id"`
+	ProfileA     ProfileEvaluationResult `json:"profile_a"`
+	ProfileB     ProfileEvaluationResult `json:"profile_b"`
+	RankShifts   []VendorRankShift       `json:"rank_shifts"`
+	BundleImpact BundleSimulationImpact  `json:"bundle_impact"`
+}
+
 
 
 

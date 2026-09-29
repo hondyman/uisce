@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Handler handles HTTP requests for MDM source scoring and vendor displacement.
@@ -35,6 +36,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Get("/trends", h.HandleGetTrends)
 		r.Get("/health", h.HandleHealthCheck)
 		r.Post("/optimize-bundle", h.HandleOptimizeBundle)
+		r.Post("/simulate-profiles", h.HandleSimulateProfiles)
 		r.Get("/weight-profiles", h.HandleGetWeightProfiles)
 		r.Post("/weight-profiles", h.HandleSaveWeightProfile)
 		r.Post("/displacement", h.HandleSimulateDisplacement)
@@ -485,6 +487,41 @@ func (h *Handler) HandleGetTrends(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(report)
+}
+
+// HandleSimulateProfiles performs A/B sensitivity comparison between two weight profiles.
+func (h *Handler) HandleSimulateProfiles(w http.ResponseWriter, r *http.Request) {
+	tenantID := "default"
+	if claims := jwtmiddleware.GetClaimsFromContext(r); claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
+	} else if tid := r.Header.Get("X-Tenant-ID"); tid != "" {
+		tenantID = tid
+	}
+
+	var req ProfileSimulationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request payload"}`, http.StatusBadRequest)
+		return
+	}
+
+	if req.TenantID == "" {
+		req.TenantID = tenantID
+	}
+
+	res, err := h.service.SimulateProfiles(r.Context(), req)
+	if err != nil {
+		status := http.StatusInternalServerError
+		if strings.Contains(err.Error(), "invalid") || strings.Contains(err.Error(), "must sum to") || strings.Contains(err.Error(), "must specify") {
+			status = http.StatusBadRequest
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 

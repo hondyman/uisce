@@ -549,6 +549,157 @@ func TestHandler_HandleGetTrends(t *testing.T) {
 	})
 }
 
+func TestHandler_HandleSimulateProfiles(t *testing.T) {
+	now := time.Now()
+	mockRepo := &mockScoringRepository{
+		tolerances: DefaultTolerances(),
+		candidates: []VendorCandidate{
+			{EntityID: 1, AttributeCode: "LEI", VendorID: "BBG", NormalizedValue: "V1", FormatOK: true, RangeOK: true, RefIntegrityOK: true, AsOfDate: now},
+			{EntityID: 1, AttributeCode: "LEI", VendorID: "RFT", NormalizedValue: "V1", FormatOK: true, RangeOK: true, RefIntegrityOK: true, AsOfDate: now},
+		},
+		goldenRecords: []GoldenRecord{
+			{EntityID: 1, AttributeCode: "LEI", GoldenValue: "V1", WinningVendorID: "BBG", RuleApplied: "SOURCE_PRIORITY"},
+		},
+		costs: map[string]float64{
+			"BBG": 2140000,
+			"RFT": 1180000,
+		},
+	}
+	service := NewService(mockRepo)
+	handler := NewHandler(service)
+
+	r := chi.NewRouter()
+	handler.RegisterRoutes(r)
+
+	t.Run("ValidProfilesSimulation", func(t *testing.T) {
+		payload := `{
+			"profile_a": {
+				"name": "Quality Focus",
+				"weights": {
+					"weight_sufficiency": 0.30,
+					"weight_coverage": 0.30,
+					"weight_sla": 0.15,
+					"weight_stability": 0.10,
+					"weight_friction": 0.05,
+					"weight_licensing": 0.10
+				}
+			},
+			"profile_b": {
+				"name": "Operations Focus",
+				"weights": {
+					"weight_sufficiency": 0.10,
+					"weight_coverage": 0.10,
+					"weight_sla": 0.35,
+					"weight_stability": 0.25,
+					"weight_friction": 0.10,
+					"weight_licensing": 0.10
+				}
+			}
+		}`
+
+		req := httptest.NewRequest("POST", "/api/mdm/scoring/simulate-profiles", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Tenant-ID", "tenant-test")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("POST /simulate-profiles returned %d: %s", rr.Code, rr.Body.String())
+		}
+
+		var res ProfileSimulationResponse
+		if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+
+		if res.ProfileA.ProfileName != "Quality Focus" {
+			t.Errorf("expected Profile A name 'Quality Focus', got '%s'", res.ProfileA.ProfileName)
+		}
+		if res.ProfileB.ProfileName != "Operations Focus" {
+			t.Errorf("expected Profile B name 'Operations Focus', got '%s'", res.ProfileB.ProfileName)
+		}
+		if len(res.RankShifts) == 0 {
+			t.Errorf("expected non-empty rank shifts")
+		}
+		if res.BundleImpact.Insight == "" {
+			t.Errorf("expected bundle impact insight")
+		}
+	})
+
+	t.Run("InvalidWeightsProfileA", func(t *testing.T) {
+		payload := `{
+			"profile_a": {
+				"name": "Bad Sum",
+				"weights": {
+					"weight_sufficiency": 0.20,
+					"weight_coverage": 0.20,
+					"weight_sla": 0.20,
+					"weight_stability": 0.20,
+					"weight_friction": 0.10,
+					"weight_licensing": 0.00
+				}
+			},
+			"profile_b": {
+				"name": "Valid",
+				"weights": {
+					"weight_sufficiency": 0.20,
+					"weight_coverage": 0.20,
+					"weight_sla": 0.20,
+					"weight_stability": 0.20,
+					"weight_friction": 0.10,
+					"weight_licensing": 0.10
+				}
+			}
+		}`
+
+		req := httptest.NewRequest("POST", "/api/mdm/scoring/simulate-profiles", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 Bad Request, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+
+	t.Run("InvalidWeightsProfileB", func(t *testing.T) {
+		payload := `{
+			"profile_a": {
+				"name": "Valid",
+				"weights": {
+					"weight_sufficiency": 0.20,
+					"weight_coverage": 0.20,
+					"weight_sla": 0.20,
+					"weight_stability": 0.20,
+					"weight_friction": 0.10,
+					"weight_licensing": 0.10
+				}
+			},
+			"profile_b": {
+				"name": "Bad Sum",
+				"weights": {
+					"weight_sufficiency": 0.50,
+					"weight_coverage": 0.50,
+					"weight_sla": 0.50,
+					"weight_stability": 0.00,
+					"weight_friction": 0.00,
+					"weight_licensing": 0.00
+				}
+			}
+		}`
+
+		req := httptest.NewRequest("POST", "/api/mdm/scoring/simulate-profiles", strings.NewReader(payload))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusBadRequest {
+			t.Errorf("expected status 400 Bad Request, got %d: %s", rr.Code, rr.Body.String())
+		}
+	})
+}
+
+
 
 
 

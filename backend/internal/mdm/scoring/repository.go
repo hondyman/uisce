@@ -485,14 +485,19 @@ func (r *PostgresRepository) GetScoringSettings(ctx context.Context) (*ScoringSe
 	if r.db != nil {
 		query := `
 			SELECT tenant_id, hourly_labor_rate, stability_decay_k, friction_budget, cold_start_days,
-			       watermark_hot_days, watermark_warm_days, updated_at
+			       watermark_hot_days, watermark_warm_days,
+			       COALESCE(quality_zone_high_threshold, 70.0) as quality_zone_high_threshold,
+			       COALESCE(quality_zone_mid_threshold, 50.0) as quality_zone_mid_threshold,
+			       updated_at
 			FROM mdm_eval.scoring_settings
 			LIMIT 1
 		`
 		var s ScoringSettings
 		err := r.db.QueryRowContext(ctx, query).Scan(
 			&s.TenantID, &s.HourlyLaborRate, &s.StabilityDecayK, &s.FrictionBudget, &s.ColdStartDays,
-			&s.WatermarkHotDays, &s.WatermarkWarmDays, &s.UpdatedAt,
+			&s.WatermarkHotDays, &s.WatermarkWarmDays,
+			&s.QualityZoneHighThreshold, &s.QualityZoneMidThreshold,
+			&s.UpdatedAt,
 		)
 		if err == nil {
 			if s.WatermarkHotDays <= 0 {
@@ -501,18 +506,26 @@ func (r *PostgresRepository) GetScoringSettings(ctx context.Context) (*ScoringSe
 			if s.WatermarkWarmDays <= 0 {
 				s.WatermarkWarmDays = 365
 			}
+			if s.QualityZoneHighThreshold <= 0 {
+				s.QualityZoneHighThreshold = 70.0
+			}
+			if s.QualityZoneMidThreshold <= 0 {
+				s.QualityZoneMidThreshold = 50.0
+			}
 			return &s, nil
 		}
 	}
 	return &ScoringSettings{
-		TenantID:          uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
-		HourlyLaborRate:   150.00,
-		StabilityDecayK:   50.00,
-		FrictionBudget:    100000.00,
-		ColdStartDays:     30,
-		WatermarkHotDays:  30,
-		WatermarkWarmDays: 365,
-		UpdatedAt:         time.Now(),
+		TenantID:                 uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+		HourlyLaborRate:          150.00,
+		StabilityDecayK:          50.00,
+		FrictionBudget:           100000.00,
+		ColdStartDays:            30,
+		WatermarkHotDays:         30,
+		WatermarkWarmDays:        365,
+		QualityZoneHighThreshold: 70.0,
+		QualityZoneMidThreshold:  50.0,
+		UpdatedAt:                time.Now(),
 	}, nil
 }
 

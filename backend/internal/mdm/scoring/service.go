@@ -751,6 +751,181 @@ func (s *Service) QueryHistoricalTrends(ctx context.Context, req TrendQueryReque
 		}
 	}
 
-	return s.trendRouter.QueryTrends(ctx, req, hotDays, warmDays)
+	report, err := s.trendRouter.QueryTrends(ctx, req, hotDays, warmDays)
+	if err != nil {
+		return nil, err
+	}
+	if settings != nil {
+		report.QualityZoneHighThreshold = settings.QualityZoneHighThreshold
+		report.QualityZoneMidThreshold = settings.QualityZoneMidThreshold
+	}
+	if report.QualityZoneHighThreshold <= 0 {
+		report.QualityZoneHighThreshold = 70.0
+	}
+	if report.QualityZoneMidThreshold <= 0 {
+		report.QualityZoneMidThreshold = 50.0
+	}
+	return report, nil
+}
+
+// SimulateProfiles performs A/B sensitivity comparison between two weight profiles,
+// computing rank shifts, score deltas, and the financial impact on optimal vendor bundles.
+func (s *Service) SimulateProfiles(ctx context.Context, req ProfileSimulationRequest) (*ProfileSimulationResponse, error) {
+	asOf := time.Now()
+
+	// 1. Resolve Profile A
+	profileA, err := s.resolveProfile(ctx, req.ProfileA, "Profile A", true)
+	if err != nil {
+		return nil, fmt.Errorf("invalid profile_a: %w", err)
+	}
+
+	// 2. Resolve Profile B
+	profileB, err := s.resolveProfile(ctx, req.ProfileB, "Profile B", false)
+	if err != nil {
+		return nil, fmt.Errorf("invalid profile_b: %w", err)
+	}
+
+	universeSize := req.UniverseSize
+	if universeSize <= 0 {
+		universeSize = 42000
+	}
+
+	// 3. Retrieve scorecard components for candidate vendors
+	scorecard, err := s.GetScorecardReport(ctx, asOf, universeSize, req.EntityDomain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch vendor telemetry: %w", err)
+	}
+
+	vendorScores := make(map[string]RadarScores)
+	vendorCosts := make(map[string]float64)
+	vendorNames := make(map[string]string)
+	var allVendors []string
+
+	filterVendors := make(map[string]bool)
+	for _, v := range req.VendorIDs {
+		filterVendors[v] = true
+	}
+
+	for _, item := range scorecard.DimensionProfiles {
+		if len(filterVendors) > 0 && !filterVendors[item.VendorID] {
+			continue
+		}
+		vendorScores[item.VendorID] = RadarScores{
+			SufficiencyRate:     math.Round(item.Components.Sufficiency*1000.0) / 10.0,
+			CoverageRate:        math.Round(item.Components.Coverage*1000.0) / 10.0,
+			SLAComplianceRate:   math.Round(item.Components.SLA*1000.0) / 10.0,
+			StabilityScore:      math.Round(item.Components.Stability*1000.0) / 10.0,
+			StewardFrictionCost: math.Round(item.Components.Friction*1000.0) / 10.0,
+			RightsScore:         math.Round(item.Components.Licensing*1000.0) / 10.0,
+		}
+		vendorCosts[item.VendorID] = item.AnnualSpend
+		vendorNames[item.VendorID] = item.VendorName
+		allVendors = append(allVendors, item.VendorID)
+	}
+
+	// 4. Evaluate vendor rankings under Profile A and Profile B
+	rankingsA := s.evaluator.EvaluateVendorRanking(vendorScores, vendorCosts, vendorNames, profileA)
+	rankingsB := s.evaluator.EvaluateVendorRanking(vendorScores, vendorCosts, vendorNames, profileB)
+
+	// 5. Compute rank shifts
+	rankShifts := s.evaluator.ComputeRankShifts(rankingsA, rankingsB)
+
+	// 6. Compute bundle impact
+	tolerances, _ := s.repo.GetAttributeTolerances(ctx)
+	candidates, _ := s.repo.GetVendorCandidates(ctx, asOf)
+
+	bundleImpact := s.evaluator.EvaluateBundleImpact(
+		allVendors, vendorNames, vendorCosts, candidates, tolerances, universeSize,
+		rankingsA, rankingsB, profileA, profileB,
+	)
+
+	tenantID := req.TenantID
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	return &ProfileSimulationResponse{
+		AsOfDate: asOf,
+		TenantID: tenantID,
+		ProfileA: ProfileEvaluationResult{
+			ProfileID:   profileA.ProfileID,
+			ProfileName: profileA.ProfileName,
+			Weights: ProfileWeights{
+				Suff: profileA.WeightSuff,
+				Cov:  profileA.WeightCov,
+				SLA:  profileA.WeightSLA,
+				Stab: profileA.WeightStab,
+				OER:  profileA.WeightOER,
+				Lic:  profileA.WeightLic,
+			},
+			Rankings: rankingsA,
+		},
+		ProfileB: ProfileEvaluationResult{
+			ProfileID:   profileB.ProfileID,
+			ProfileName: profileB.ProfileName,
+			Weights: ProfileWeights{
+				Suff: profileB.WeightSuff,
+				Cov:  profileB.WeightCov,
+				SLA:  profileB.WeightSLA,
+				Stab: profileB.WeightStab,
+				OER:  profileB.WeightOER,
+				Lic:  profileB.WeightLic,
+			},
+			Rankings: rankingsB,
+		},
+		RankShifts:   rankShifts,
+		BundleImpact: bundleImpact,
+	}, nil
+}
+
+func (s *Service) resolveProfile(ctx context.Context, spec ProfileSimSpec, defaultName string, allowActiveDefault bool) (WeightProfile, error) {
+	if spec.Weights != nil {
+		if err := spec.Weights.Validate(); err != nil {
+			return WeightProfile{}, err
+		}
+		name := spec.Name
+		if name == "" {
+			name = defaultName
+		}
+		var id int64
+		if spec.ProfileID != nil {
+			id = *spec.ProfileID
+		}
+		return spec.Weights.ToWeightProfile(id, name), nil
+	}
+
+	if spec.ProfileID != nil {
+		profiles, err := s.repo.GetWeightProfiles(ctx)
+		if err == nil {
+			for _, p := range profiles {
+				if p.ProfileID == *spec.ProfileID {
+					if spec.Name != "" {
+						p.ProfileName = spec.Name
+					}
+					return p, nil
+				}
+			}
+		}
+		return WeightProfile{}, fmt.Errorf("profile with ID %d not found", *spec.ProfileID)
+	}
+
+	if allowActiveDefault {
+		active, err := s.repo.GetActiveWeightProfile(ctx)
+		if err == nil && active != nil {
+			return *active, nil
+		}
+		return WeightProfile{
+			ProfileID:   1,
+			ProfileName: "Balanced Institutional Standard",
+			WeightSuff:  0.300,
+			WeightCov:   0.200,
+			WeightSLA:   0.150,
+			WeightStab:  0.150,
+			WeightOER:   0.100,
+			WeightLic:   0.100,
+		}, nil
+	}
+
+	return WeightProfile{}, fmt.Errorf("profile must specify either profile_id or weights")
 }
 

@@ -1949,5 +1949,190 @@ func (e *Evaluator) RunShadowValidation(
 	}
 }
 
+// EvaluateVendorRanking evaluates a set of vendors under a given WeightProfile and sorts them descending by score.
+func (e *Evaluator) EvaluateVendorRanking(
+	vendorScores map[string]RadarScores,
+	vendorCosts map[string]float64,
+	vendorNames map[string]string,
+	profile WeightProfile,
+) []VendorRankingEntry {
+	var entries []VendorRankingEntry
+	for vID, r := range vendorScores {
+		cost := vendorCosts[vID]
+		vName := vendorNames[vID]
+		if vName == "" {
+			vName = vID
+		}
+		comp := QualityComponents{
+			Sufficiency: r.SufficiencyRate / 100.0,
+			Coverage:    r.CoverageRate / 100.0,
+			SLA:         r.SLAComplianceRate / 100.0,
+			Stability:   r.StabilityScore / 100.0,
+			Friction:    r.StewardFrictionCost / 100.0,
+			Licensing:   r.RightsScore / 100.0,
+		}
+		q := e.ComputeCompositeQuality(comp, profile)
+		// normalize to 0..100
+		qNorm := math.Round(q*1000.0) / 10.0
+		costPerPt := 0.0
+		if qNorm > 0 {
+			costPerPt = cost / qNorm
+		}
+		entries = append(entries, VendorRankingEntry{
+			VendorID:              vID,
+			VendorName:            vName,
+			CompositeQualityScore: qNorm,
+			Radar:                 r,
+			AnnualSpend:           cost,
+			CostPerQualityPoint:   costPerPt,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].CompositeQualityScore != entries[j].CompositeQualityScore {
+			return entries[i].CompositeQualityScore > entries[j].CompositeQualityScore
+		}
+		return entries[i].VendorID < entries[j].VendorID
+	})
+
+	for i := range entries {
+		entries[i].Rank = i + 1
+	}
+
+	return entries
+}
+
+// ComputeRankShifts computes rank movement and score deltas between Profile A and Profile B rankings.
+func (e *Evaluator) ComputeRankShifts(rankingsA, rankingsB []VendorRankingEntry) []VendorRankShift {
+	mapB := make(map[string]VendorRankingEntry)
+	for _, b := range rankingsB {
+		mapB[b.VendorID] = b
+	}
+
+	var shifts []VendorRankShift
+	for _, a := range rankingsA {
+		b, ok := mapB[a.VendorID]
+		if !ok {
+			continue
+		}
+		shifts = append(shifts, VendorRankShift{
+			VendorID:   a.VendorID,
+			VendorName: a.VendorName,
+			RankA:      a.Rank,
+			RankB:      b.Rank,
+			RankDelta:  a.Rank - b.Rank, // positive = higher in B
+			ScoreA:     a.CompositeQualityScore,
+			ScoreB:     b.CompositeQualityScore,
+			ScoreDelta: math.Round((b.CompositeQualityScore-a.CompositeQualityScore)*10.0) / 10.0,
+		})
+	}
+
+	sort.Slice(shifts, func(i, j int) bool {
+		return shifts[i].RankA < shifts[j].RankA
+	})
+
+	return shifts
+}
+
+// EvaluateBundleImpact solves the optimal vendor bundle under both profiles and calculates the spend delta and narrative insight.
+func (e *Evaluator) EvaluateBundleImpact(
+	allVendors []string,
+	vendorNames map[string]string,
+	costs map[string]float64,
+	candidates []VendorCandidate,
+	tolerances map[string]AttributeTolerance,
+	universeSize int,
+	rankingsA, rankingsB []VendorRankingEntry,
+	profileA, profileB WeightProfile,
+) BundleSimulationImpact {
+	// Baseline solve for Profile A
+	resA := e.SolveOptimalVendorBundle(OptimalBundleRequest{
+		TargetT1Coverage: 0.995,
+		TargetT2Coverage: 0.950,
+		TargetT3Coverage: 0.850,
+		UniverseSize:     universeSize,
+	}, allVendors, vendorNames, costs, candidates, tolerances, universeSize)
+
+	// For Profile B: if Profile B has a distinct top-ranked vendor that is not in bundle A,
+	// or if Profile B's weights place heavy priority on SLA/Licensing/Sufficiency
+	var mandatoryB []string
+	if len(rankingsB) > 0 && rankingsB[0].CompositeQualityScore >= 40.0 {
+		topB := rankingsB[0].VendorID
+		inA := false
+		for _, v := range resA.SelectedVendors {
+			if v == topB {
+				inA = true
+				break
+			}
+		}
+		if !inA && (profileB.WeightSuff >= 0.30 || profileB.WeightSLA >= 0.25 || profileB.WeightLic >= 0.20 || profileB.WeightStab >= 0.25) {
+			mandatoryB = append(mandatoryB, topB)
+		}
+	}
+
+	resB := e.SolveOptimalVendorBundle(OptimalBundleRequest{
+		TargetT1Coverage: 0.995,
+		TargetT2Coverage: 0.950,
+		TargetT3Coverage: 0.850,
+		MandatoryVendors: mandatoryB,
+		UniverseSize:     universeSize,
+	}, allVendors, vendorNames, costs, candidates, tolerances, universeSize)
+
+	deltaCost := resB.TotalAnnualCost - resA.TotalAnnualCost
+
+	insight := ""
+	if deltaCost > 0 {
+		insight = fmt.Sprintf("%s weights prioritize %s, shifting the optimal bundle to include %s and adding $%.0f in annual spend vs the %s bundle.",
+			profileB.ProfileName, getTopDimensionName(profileB), strings.Join(resB.SelectedVendors, ", "), deltaCost, profileA.ProfileName)
+	} else if deltaCost < 0 {
+		insight = fmt.Sprintf("%s weights optimize cost efficiency, reducing annual bundle spend by $%.0f while satisfying all coverage constraints.",
+			profileB.ProfileName, -deltaCost)
+	} else {
+		insight = fmt.Sprintf("Both %s and %s converge on the identical optimal bundle (%s) at $%.0f annual spend.",
+			profileA.ProfileName, profileB.ProfileName, strings.Join(resA.SelectedVendors, ", "), resA.TotalAnnualCost)
+	}
+
+	return BundleSimulationImpact{
+		ProfileAOptimal: BundleOptimalSummary{
+			Vendors:              resA.SelectedVendors,
+			Cost:                 resA.TotalAnnualCost,
+			CompositeCoveragePct: math.Round(resA.T1CoverageAchieved*1000.0) / 10.0,
+		},
+		ProfileBOptimal: BundleOptimalSummary{
+			Vendors:              resB.SelectedVendors,
+			Cost:                 resB.TotalAnnualCost,
+			CompositeCoveragePct: math.Round(resB.T1CoverageAchieved*1000.0) / 10.0,
+		},
+		BundleDeltaCost: deltaCost,
+		Insight:         insight,
+	}
+}
+
+func getTopDimensionName(p WeightProfile) string {
+	maxW := p.WeightSuff
+	dim := "Sufficiency"
+	if p.WeightCov > maxW {
+		maxW = p.WeightCov
+		dim = "Coverage"
+	}
+	if p.WeightSLA > maxW {
+		maxW = p.WeightSLA
+		dim = "SLA & Delivery Timeliness"
+	}
+	if p.WeightStab > maxW {
+		maxW = p.WeightStab
+		dim = "Stability & Revision Rate"
+	}
+	if p.WeightOER > maxW {
+		maxW = p.WeightOER
+		dim = "Steward Friction & OER"
+	}
+	if p.WeightLic > maxW {
+		maxW = p.WeightLic
+		dim = "Licensing & Commercial Rights"
+	}
+	return dim
+}
+
 
 

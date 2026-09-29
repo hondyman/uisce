@@ -394,7 +394,92 @@ export interface TrendAnalysisReport {
   boundary_conflict_count: number;
   series: VendorTrendSeries[];
   watermarks: WatermarkBoundaries;
+  quality_zone_high_threshold?: number;
+  quality_zone_mid_threshold?: number;
   generated_at: string;
+}
+
+export interface ProfileWeights {
+  weight_sufficiency: number;
+  weight_coverage: number;
+  weight_sla: number;
+  weight_stability: number;
+  weight_friction: number;
+  weight_licensing: number;
+}
+
+export interface ProfileSimSpec {
+  profile_id?: number;
+  name?: string;
+  weights?: ProfileWeights;
+}
+
+export interface ProfileSimulationRequest {
+  tenant_id?: string;
+  vendor_ids?: string[];
+  entity_domain?: string;
+  profile_a: ProfileSimSpec;
+  profile_b: ProfileSimSpec;
+  universe_size?: number;
+}
+
+export interface RadarScores {
+  sufficiency_rate: number;
+  coverage_rate: number;
+  sla_compliance_rate: number;
+  stability_score: number;
+  steward_friction_cost: number;
+  rights_score: number;
+}
+
+export interface VendorRankingEntry {
+  vendor_id: string;
+  vendor_name: string;
+  rank: number;
+  composite_quality_score: number;
+  radar: RadarScores;
+  annual_spend: number;
+  cost_per_quality_point: number;
+}
+
+export interface ProfileEvaluationResult {
+  profile_id: number;
+  profile_name: string;
+  weights: ProfileWeights;
+  rankings: VendorRankingEntry[];
+}
+
+export interface VendorRankShift {
+  vendor_id: string;
+  vendor_name: string;
+  rank_a: number;
+  rank_b: number;
+  rank_delta: number;
+  score_a: number;
+  score_b: number;
+  score_delta: number;
+}
+
+export interface BundleOptimalSummary {
+  vendors: string[];
+  cost: number;
+  composite_coverage_pct: number;
+}
+
+export interface BundleSimulationImpact {
+  profile_a_optimal: BundleOptimalSummary;
+  profile_b_optimal: BundleOptimalSummary;
+  bundle_delta_cost: number;
+  insight: string;
+}
+
+export interface ProfileSimulationResponse {
+  as_of_date: string;
+  tenant_id: string;
+  profile_a: ProfileEvaluationResult;
+  profile_b: ProfileEvaluationResult;
+  rank_shifts: VendorRankShift[];
+  bundle_impact: BundleSimulationImpact;
 }
 
 export const mdmScoringApi = {
@@ -407,6 +492,8 @@ export const mdmScoringApi = {
     if (entityDomain) params.set('entity_domain', entityDomain);
     return apiClient<TrendAnalysisReport>(`${BASE}/trends?${params.toString()}`);
   },
+  simulateProfiles: (req: ProfileSimulationRequest) =>
+    apiClient<ProfileSimulationResponse>(`${BASE}/simulate-profiles`, json(req)),
   shadowEval: (asOf?: string) =>
     apiClient<ShadowValidationReport>(`${BASE}/shadow-eval${asOf ? `?as_of=${asOf}` : ''}`),
   scorecard: (universeSize = 42000, asOf?: string, entityDomain?: string) =>
@@ -451,5 +538,6 @@ export const mdmScoringApi = {
     }
   },
 };
+
 
 

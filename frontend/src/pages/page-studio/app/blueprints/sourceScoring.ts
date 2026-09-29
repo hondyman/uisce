@@ -483,6 +483,15 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
     trends_root: { type: 'Column', children: ['trends_widget'], style: { gap: '16px' } },
   });
 
+  reg('simulation_widget', 'mdmScoring.ProfileSimulation', {
+    entity_domain: '{{vars.entity_domain}}',
+    universe_size: '{{vars.universe_size}}',
+  });
+
+  const simulationLayout = layout('sim_root', {
+    sim_root: { type: 'Column', children: ['simulation_widget'], style: { gap: '16px' } },
+  });
+
   const trainingLayout = layout('training_root', {
     training_root: { type: 'Column', children: ['training_alert', 'training_sec1', 'training_text1', 'training_sec2', 'training_text2', 'training_sec3', 'training_text3'], style: { gap: '16px' } },
   });
@@ -497,6 +506,11 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
       id: 'radar',
       label: '360° Radar Scorecard',
       layout: radarLayout,
+    },
+    {
+      id: 'simulation',
+      label: 'Profile Simulation (A/B)',
+      layout: simulationLayout,
     },
     {
       id: 'optimizer',
