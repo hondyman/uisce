@@ -11,6 +11,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/temporal/activities"
 	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
+	"github.com/jmoiron/sqlx"
 )
 
 // WorkerConfig wraps configuration for starting a Temporal worker
@@ -77,8 +78,10 @@ func registerWorkflows(w worker.Worker) {
 	// separate process/supervision overhead at current scale.
 	w.RegisterWorkflow(workflows.ReportGenerationWorkflow)
 	w.RegisterWorkflow(workflows.ClientBurstReportWorkflow)
+	w.RegisterWorkflow(workflows.RuleReviewWorkflow)
+	w.RegisterWorkflow(workflows.RuleHealthCheckWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -100,6 +103,19 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 	w.RegisterActivity(act.ExpireIcebergSnapshots)
 	w.RegisterActivity(act.RemoveOrphanFiles)
 	w.RegisterActivity(act.CompactManifests)
+
+	// Register rule governance & health activities
+	if db != nil {
+		sqlxDB := sqlx.NewDb(db, "postgres")
+		govActs := activities.NewRuleGovernanceActivities(sqlxDB, logger)
+		w.RegisterActivity(govActs.RecordApprovalActivity)
+		w.RegisterActivity(govActs.RecordRejectionActivity)
+		w.RegisterActivity(govActs.PublishVersionActivity)
+		w.RegisterActivity(govActs.EscalateReviewActivity)
+
+		healthActs := activities.NewRuleHealthActivities(sqlxDB, logger)
+		w.RegisterActivity(healthActs.RunRuleHealthCheckActivity)
+	}
 
 	// Register tenant provisioning activities
 	if db != nil && controlDB != nil && logger != nil {

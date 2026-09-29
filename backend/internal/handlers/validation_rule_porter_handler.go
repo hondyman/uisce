@@ -8,12 +8,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
+	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
+	"go.temporal.io/sdk/client"
 )
 
 // RulePorter is the handler-facing surface of the rule porter.
@@ -204,6 +207,23 @@ func (h *ValidationRuleHandler) handleImportRules(w http.ResponseWriter, r *http
 		logging.GetLogger().Sugar().Errorf("validation-rule-nodes/import failed: %v", err)
 		http.Error(w, "import failed: "+err.Error(), http.StatusBadRequest)
 		return
+	}
+
+	if report.Success && h.temporalClient != nil && !req.DryRun && !bypass {
+		for _, rule := range req.Bundle.Rules {
+			if rule.Domain == models.ValidationRuleDomainCompliance {
+				workflowID := fmt.Sprintf("rule-review/%s/%s", tenantID.String(), rule.RuleKey)
+				_, _ = h.temporalClient.ExecuteWorkflow(r.Context(), client.StartWorkflowOptions{
+					ID:        workflowID,
+					TaskQueue: workflows.RuleGovernanceTaskQueue,
+				}, workflows.RuleReviewWorkflow, workflows.RuleReviewWorkflowInput{
+					TenantID:   tenantID.String(),
+					RuleNodeID: rule.RuleKey,
+					AuthorID:   req.Bundle.ExportedFrom,
+					ReviewSLA:  72 * time.Hour,
+				})
+			}
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

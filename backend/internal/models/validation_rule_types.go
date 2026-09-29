@@ -17,7 +17,7 @@ type ValidationRuleProperties struct {
 	Severity         string `json:"severity"` // "BLOCK" | "WARN"
 	Timing           string `json:"timing"`   // "pre_write" | "reconcile"
 	Category         string `json:"category,omitempty"`
-	GovernanceStatus string `json:"governance_status,omitempty"` // "draft", "review", "published", "deprecated"
+	GovernanceStatus string `json:"governance_status,omitempty"` // "draft", "submitted_for_review", "review", "approved", "rejected", "published", "deprecated"
 	// Domain distinguishes which rule-authoring surface produced this
 	// rule - "validation" (the original BO-scoped surface), "mdm", or
 	// "compliance" (the domain values the rulefabric consolidation adds;
@@ -27,14 +27,23 @@ type ValidationRuleProperties struct {
 	// ListByBO's descriptorFromNode - the service defaults new writes to
 	// it explicitly rather than leaving new rows blank too, so "domain"
 	// is unambiguous for anything written from this point forward.
-	Domain     string   `json:"domain,omitempty"`
-	BindingIDs []string `json:"binding_ids,omitempty"`
-	RuleKey    string   `json:"rule_key,omitempty"` // stable portable key; fallback is node_name
+	Domain          string     `json:"domain,omitempty"`
+	BindingIDs      []string   `json:"binding_ids,omitempty"`
+	RuleKey         string     `json:"rule_key,omitempty"` // stable portable key; fallback is node_name
+	AuthorID        string     `json:"author_id,omitempty"`
+	SubmittedAt     *time.Time `json:"submitted_at,omitempty"`
+	ApprovedBy      string     `json:"approved_by,omitempty"`
+	ApprovedAt      *time.Time `json:"approved_at,omitempty"`
+	RejectedBy      string     `json:"rejected_by,omitempty"`
+	RejectedAt      *time.Time `json:"rejected_at,omitempty"`
+	RejectionReason string     `json:"rejection_reason,omitempty"`
+	PublishedBy     string     `json:"published_by,omitempty"`
+	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	Version         int        `json:"version,omitempty"`
 }
 
 // BoRuleKey returns the stable rule key from properties.
 func (p ValidationRuleProperties) BoRuleKey() string { return p.RuleKey }
-
 
 const (
 	ValidationRuleSeverityBlock = "BLOCK"
@@ -51,6 +60,15 @@ const (
 	// (internal/mastering). Never enforced on records; listed only when
 	// asked for by domain.
 	ValidationRuleDomainSurvivorship = "survivorship"
+
+	// Governance Status constants
+	ValidationRuleGovernanceDraft              = "draft"
+	ValidationRuleGovernanceSubmittedForReview = "submitted_for_review"
+	ValidationRuleGovernanceReview             = "review" // backward-compatibility alias
+	ValidationRuleGovernanceApproved           = "approved"
+	ValidationRuleGovernanceRejected           = "rejected"
+	ValidationRuleGovernancePublished          = "published"
+	ValidationRuleGovernanceDeprecated         = "deprecated"
 
 	// Origin of a rule as seen by a tenant. A rule authored in the gold-copy tenant is "core": every
 	// tenant inherits it read-only. A rule authored in the tenant itself is "custom" and applies to

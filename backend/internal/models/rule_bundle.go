@@ -7,12 +7,6 @@ import (
 
 const (
 	RuleBundleVersion = "1.0"
-
-	// ValidationRuleGovernanceDraft is the default status for exported rules
-	// that predate governance tracking.
-	ValidationRuleGovernanceDraft              = "draft"
-	ValidationRuleGovernancePublished          = "published"
-	ValidationRuleGovernanceSubmittedForReview = "submitted_for_review"
 )
 
 // Overwrite policies for RuleImportRequest.OverwritePolicy.

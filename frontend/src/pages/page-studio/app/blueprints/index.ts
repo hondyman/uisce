@@ -5,6 +5,7 @@ import { dataPipelinesBlueprint, dataPipelineEditorBlueprint } from './dataPipel
 import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from './mdmConfig';
 import { schedulesBlueprint } from './schedules';
 import { sourceScoringBlueprint } from './sourceScoring';
+import { validationRulesBlueprint } from './validationRules';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -72,5 +73,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     description: 'Vendor quality scoring, substitution rates, override endorsements, value-for-money efficient frontier, and displacement readiness simulation.',
     build: sourceScoringBlueprint,
   },
+  {
+    id: 'validation-rules',
+    name: 'Validation Rules & Rule Studio',
+    description: 'Centralized single-store validation catalog, portable AST bundles, and live evaluation engine.',
+    build: validationRulesBlueprint,
+  },
 ];
+
 

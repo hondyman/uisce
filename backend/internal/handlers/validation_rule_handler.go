@@ -12,6 +12,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/sdk/client"
 )
 
 // ValidationRuleHandler exposes CRUD + evaluation for validation-rule
@@ -20,10 +21,11 @@ import (
 // Mirrors PreAggregationHandler's shape: both are catalog_node-backed
 // domain objects with the same CRUD/DDL-or-evaluate pattern.
 type ValidationRuleHandler struct {
-	svc       *analytics.ValidationRuleService
-	porter    RulePorter
-	evaluator EvalService
-	db        *sqlx.DB
+	svc            *analytics.ValidationRuleService
+	porter         RulePorter
+	evaluator      EvalService
+	db             *sqlx.DB
+	temporalClient client.Client
 }
 
 func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB, porter ...RulePorter) *ValidationRuleHandler {
@@ -34,6 +36,11 @@ func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB,
 		p = analytics.NewValidationRulePorter(db)
 	}
 	return &ValidationRuleHandler{svc: svc, evaluator: svc, db: db, porter: p}
+}
+
+func (h *ValidationRuleHandler) WithTemporalClient(tc client.Client) *ValidationRuleHandler {
+	h.temporalClient = tc
+	return h
 }
 
 // RegisterRoutes adds the validation-rule-node routes to the given
@@ -64,6 +71,11 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/evaluate/batch", h.handleEvaluateBatch)
 		r.Get("/evaluate/snapshot", h.handleLoadSnapshot)
 		r.Post("/evaluate/snapshot", h.handleLoadSnapshot)
+
+		// Four-Eyes Governance endpoints (Phase 4)
+		r.Post("/{id}/submit-review", h.handleSubmitReview)
+		r.Post("/{id}/approve", h.handleApproveRule)
+		r.Post("/{id}/reject", h.handleRejectRule)
 	})
 }
 
