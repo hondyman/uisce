@@ -42,7 +42,7 @@ DECLARE
           "label": "Centralized Validation Rules",
           "position": {"x": 280, "y": 140},
           "config": {
-            "rule_ids": []
+            "rule_ids": ["b2222222-2222-4222-8222-222222222202"]
           }
         },
         {

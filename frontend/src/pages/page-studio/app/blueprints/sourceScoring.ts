@@ -101,7 +101,8 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
   // Tab 1: Sufficiency Matrix Grid
   reg('matrix_grid', 'DataGrid', {
     query: 'scorecard',
-    dataPath: 'substitution_matrix',
+    rowsPath: 'substitution_matrix',
+    rowKey: 'attribute_code',
     emptyText: 'No scoring data available for this universe.',
     columns: [
       col('attr', 'Attribute', { kind: 'twoLine', primary: '{{row.attribute_code}}', secondary: 'Tier {{row.tier}}' }),
@@ -118,7 +119,8 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
   // Tab 2: Value for Money Frontier Grid
   reg('frontier_grid', 'DataGrid', {
     query: 'scorecard',
-    dataPath: 'frontier_points',
+    rowsPath: 'frontier_points',
+    rowKey: 'vendor_id',
     emptyText: 'No frontier calculations available.',
     columns: [
       col('vendor', 'Vendor', { kind: 'twoLine', primary: '{{row.vendor_name}}', secondary: '{{row.vendor_id}}' }),
@@ -149,7 +151,8 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
 
   reg('displacement_kpis', 'DataGrid', {
     query: 'displacement',
-    dataPath: 'tier_summaries',
+    rowsPath: 'tier_summaries',
+    rowKey: 'tier',
     emptyText: 'Select a candidate vendor to simulate removal.',
     columns: [
       col('tier', 'Attribute Tier', { kind: 'chip', value: '{{row.tier}}', colorMap: TIER_COLORS }),
@@ -162,7 +165,8 @@ export function sourceScoringBlueprint(): Omit<CorePageDefinition, 'id' | 'creat
 
   reg('residual_gaps_grid', 'DataGrid', {
     query: 'displacement',
-    dataPath: 'residual_gaps',
+    rowsPath: 'residual_gaps',
+    rowKey: 'attribute_code',
     emptyText: 'No residual gaps detected for this removal scenario.',
     columns: [
       col('attr', 'Attribute Code', { kind: 'text', value: '{{row.attribute_code}}' }),
