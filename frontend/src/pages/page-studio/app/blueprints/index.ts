@@ -6,6 +6,7 @@ import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint 
 import { schedulesBlueprint } from './schedules';
 import { sourceScoringBlueprint } from './sourceScoring';
 import { validationRulesBlueprint } from './validationRules';
+import { lakehouseStreamingBlueprint } from './lakehouseStreaming';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -78,6 +79,12 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Validation Rules & Rule Studio',
     description: 'Centralized single-store validation catalog, portable AST bundles, and live evaluation engine.',
     build: validationRulesBlueprint,
+  },
+  {
+    id: 'lakehouse-streaming',
+    name: 'Lakehouse & CDC Stream Ingestion',
+    description: 'Apache Iceberg REST catalog management, Debezium CDC ingestion pipelines, Layer 2 tenant assertion, and streaming gatekeeper inspection.',
+    build: lakehouseStreamingBlueprint,
   },
 ];
 

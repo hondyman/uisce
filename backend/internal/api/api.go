@@ -1383,6 +1383,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 	calcTermSvc := analytics.NewCalcTermService(sqlxDB)
 	calcTermHandler := handlers.NewCalcTermHandler(calcTermSvc)
 
+	// Lakehouse & CDC Streaming handler (Lakekeeper Iceberg catalog & gatekeeper metrics)
+	lakehouseStreamingHandler := handlers.NewLakehouseStreamingHandler(sqlxDB)
+
 	// 2. Execution Engine for recursive NAV/analytics
 	execEngine, _ := mdm.NewExecutionEngine(context.Background(), mdmGraph, nil)
 	srv.ExecutionEngine = execEngine
@@ -1632,6 +1635,9 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 
 		// Calc terms as catalog nodes (unified rule engine, calc side)
 		calcTermHandler.RegisterRoutes(r)
+
+		// Lakehouse & CDC Streaming routes
+		lakehouseStreamingHandler.RegisterRoutes(r)
 
 		// Multi-tenant & tenant access routes
 		tenantAccessHandler.RegisterRoutes(r)
@@ -3755,14 +3761,11 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 	entitySchemaHandler.RegisterRoutes(r)
 }
 
-// registerCatalogRoutes mounts catalog scan, connection, and marketplace endpoints
+// registerCatalogRoutes mounts catalog scan, connection, and node/edge type endpoints
 func (s *Server) registerCatalogRoutes(r chi.Router, db *sql.DB, routes *Routes, temporalClient temporalclient.Client) {
 	// Node Types endpoints
 	RegisterNodeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
 	RegisterEdgeTypesRoutes(r, db, handlers.SecurityContextDeps{Resolver: s.DatasourceResolver})
-
-	// Marketplace endpoints
-	RegisterMarketplaceRoutes(r, db)
 
 	// Catalog Scan endpoints
 	routes.RegisterCatalogScan(r, s.CatalogScanHandler)
@@ -3788,15 +3791,6 @@ func (s *Server) registerWorkflowRoutes(r chi.Router, db *sql.DB, cronJob *cron.
 		Resolver: s.DatasourceResolver,
 	})
 	rbacHandlers.RegisterRoutes(r)
-
-	// ── Marketplace Ecosystem (secured) ─────────────────────────────────────────
-	// All /api/marketplace/* routes require at minimum a valid AuthInfo.
-	// Browse (GET) passes through because every authenticated tenant can browse.
-	// Publish and install require their own additional scope checks inside handlers.
-	r.Route("/marketplace", func(mr chi.Router) {
-		mr.Use(appmid.RequireMarketplaceScope(appmid.ScopeMarketplaceInstall))
-		RegisterMarketplaceEcosystemRoutes(mr, rbacHandlers)
-	})
 }
 
 // registerTriggerEngineRoutes mounts the Trigger and Automation engine endpoints

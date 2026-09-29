@@ -16,6 +16,9 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'data/mdm/source-scoring', slug: 'mdm-source-scoring' },
   { path: 'governance/validation-rules', slug: 'validation-rules' },
   { path: 'data/validation-rules', slug: 'validation-rules' },
+  { path: 'data/lakehouse-streaming', slug: 'lakehouse-streaming' },
+  { path: 'infrastructure/streaming', slug: 'lakehouse-streaming' },
+  { path: 'lakehouse-streaming', slug: 'lakehouse-streaming' },
 ];
 
 /** The app routes a page is served at, e.g. ['/data/mastering']. */
