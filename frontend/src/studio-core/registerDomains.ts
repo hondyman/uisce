@@ -6,3 +6,4 @@ import '../features/mastering/studio';
 import '../features/staging-bindings/studio';
 import '../features/data-pipelines/studio';
 import '../features/mastering/configStudio';
+import '../features/schedules/studio';

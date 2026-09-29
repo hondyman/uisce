@@ -190,10 +190,15 @@ a tenant switched off is hidden.
 ## Not done yet (next)
 
 - Structured editors for row buttons and action forms (JSON today).
-- The mastering console, mastering configuration, staging bindings and
-  the data pipeline editor (its assistant included) are studio-built. Still
-  a domain component on the pipeline editor: the target schedule (the
-  shared schedule editor, to be rebuilt with the Schedules console).
+- The mastering console, mastering configuration, staging bindings, the
+  data pipeline editor and the Schedules console are studio-built - no
+  domain components left on them. The schedule editor is a studio fragment
+  (`blueprints/schedules.ts` `scheduleEditor`) any page with a schedulable
+  target places; the hand-built report and query pages still use the old
+  ScheduleEditor component.
+- Also added for the Schedules console: a `toggle` cell (a row's on/off
+  switch), a SearchInput `date` variant, a `time` form field, and text-only
+  row detail (optionally an alert: a failed run's reason).
 - Row buttons do not disable while their mutation is in flight (the
   hand-built page does).
 - Tenant customization of core pages (inactive / vanilla / extended /

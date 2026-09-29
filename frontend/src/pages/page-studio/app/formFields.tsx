@@ -275,6 +275,11 @@ function FieldBody({ f, value, onChange, scope }: { f: FormFieldSpec; value: unk
           inputProps={{ step: f.step ?? 'any' }}
           onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))} />
       );
+    case 'time':
+      return (
+        <TextField size="small" fullWidth type="time" label={label} value={value ?? ''} disabled={disabled} required={f.required} helperText={helper}
+          InputLabelProps={{ shrink: true }} onChange={(e) => onChange(e.target.value)} />
+      );
     case 'date':
       return (
         <TextField size="small" fullWidth type="date" label={label} value={value ?? ''} disabled={disabled} required={f.required} helperText={helper}

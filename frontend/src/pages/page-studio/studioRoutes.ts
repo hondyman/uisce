@@ -12,6 +12,7 @@ export const STUDIO_ROUTES: { path: string; slug: string }[] = [
   { path: 'data/mdm/source-hierarchy', slug: 'mdm-source-hierarchy' },
   { path: 'data/mdm/match-rules', slug: 'mdm-match-rules' },
   { path: 'data/mdm/vendors', slug: 'mdm-vendors' },
+  { path: 'automation/schedules', slug: 'schedules' },
 ];
 
 /** The app routes a page is served at, e.g. ['/data/mastering']. */

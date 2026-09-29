@@ -178,7 +178,8 @@ export default function ScheduleEditor({ open, onClose, schedule, fixedTarget, p
                     onChange={(e) => setPreset({ ...preset, weekday: Number(e.target.value) })}>
                     {[1, 2, 3, 4, 5, 6, 7].map((d) => (
                       <MenuItem key={d} value={d}>
-                        {new Intl.DateTimeFormat(lang, { weekday: 'long' }).format(new Date(Date.UTC(2026, 0, 4 + d)))}
+                        {/* In UTC, so the name matches the day the cron fires. */}
+                        {new Intl.DateTimeFormat(lang, { weekday: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, 0, 4 + d)))}
                       </MenuItem>
                     ))}
                   </Select>

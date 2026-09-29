@@ -6,7 +6,7 @@ import { BindingField, ConditionEditor, JsonField, ListEditor, SelectField, Swit
 
 const KINDS: { value: FormFieldSpec['kind']; label: string }[] = [
   { value: 'text', label: 'Text' }, { value: 'multiline', label: 'Long text' }, { value: 'number', label: 'Number' },
-  { value: 'date', label: 'Date' }, { value: 'select', label: 'Choice (list)' }, { value: 'radio', label: 'Choice (radio)' },
+  { value: 'date', label: 'Date' }, { value: 'time', label: 'Time of day' }, { value: 'select', label: 'Choice (list)' }, { value: 'radio', label: 'Choice (radio)' },
   { value: 'switch', label: 'On / off' }, { value: 'chips', label: 'List of values (chips)' },
   { value: 'rows', label: 'List of rows' }, { value: 'json', label: 'JSON' }, { value: 'map', label: 'Mapping table (key -> value)' },
 ];

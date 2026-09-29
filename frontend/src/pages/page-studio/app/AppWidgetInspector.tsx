@@ -16,7 +16,7 @@ const CELL_KINDS: { value: CellSpec['kind']; label: string }[] = [
   { value: 'percent', label: 'Percent (0-1)' }, { value: 'delta', label: 'Change % (coloured)' }, { value: 'datetime', label: 'Date/time' },
   { value: 'chip', label: 'Status chip' }, { value: 'chips', label: 'Chips (counts/list)' }, { value: 'diff', label: 'Change (old → new)' },
   { value: 'link', label: 'Link button' }, { value: 'actions', label: 'Row buttons' }, { value: 'input', label: 'Inline input' },
-  { value: 'list', label: 'List of values' },
+  { value: 'list', label: 'List of values' }, { value: 'toggle', label: 'On/off switch' },
 ];
 
 const COLORS = ['default', 'primary', 'secondary', 'success', 'warning', 'error', 'info'];
@@ -69,6 +69,10 @@ function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange
     case 'input': fields.push(
       <TextField key="n" size="small" label="Name ({{rowState.<name>}})" value={cell.name} onChange={(e) => set({ name: e.target.value })} />,
       <TextSpecField key="p" label="Placeholder" value={cell.placeholder} onChange={(v) => set({ placeholder: v })} paths={paths} />); break;
+    case 'toggle':
+      fields.push(bind('value', 'On when'), <TextSpecField key="l" label="Label (for screen readers)" value={cell.label} onChange={(v) => set({ label: v })} paths={paths} />,
+        <JsonField key="o" label="On change ({{row}}, {{value}}) - actions" value={cell.onChange ?? []} minRows={3} onChange={(v) => set({ onChange: v ?? [] })} />);
+      break;
     case 'actions':
       fields.push(<JsonField key="b" label="Buttons [{label, icon, variant, color, visibleWhen, onClick}]" value={cell.buttons} onChange={(v) => set({ buttons: v })} minRows={6} />,
         <JsonField key="c" label="Caption {text, visibleWhen} (optional)" value={cell.caption ?? null} minRows={2} onChange={(v) => set({ caption: v || undefined })} />);
@@ -200,7 +204,10 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
       body = (
         <Section title="Search">
           <SelectField label="Sets variable" value={props.variable as string} options={vars} onChange={(v) => setProps({ variable: v })} />
-          {text('placeholder', 'Placeholder')}
+          <SelectField label="Style" value={(props.variant as 'search') ?? 'search'}
+            options={[{ value: 'search', label: 'Search' }, { value: 'plain', label: 'Text' }, { value: 'title', label: 'Title (a name)' }, { value: 'date', label: 'Date' }]}
+            onChange={(v) => setProps({ variant: v === 'search' ? undefined : v })} />
+          {text('label', 'Label')}{text('placeholder', 'Placeholder')}
           <TextField size="small" type="number" label="Debounce (ms)" value={props.debounceMs ?? 300} onChange={(e) => setProps({ debounceMs: Number(e.target.value) })} />
         </Section>
       );

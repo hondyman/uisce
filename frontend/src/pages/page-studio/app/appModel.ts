@@ -108,7 +108,7 @@ export interface FormFieldSpec {
    * of objects edited as rows of `rowFields`; json: any JSON value as text;
    * map: an object of key -> value edited as a table (`map`).
    */
-  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date' | 'rows' | 'json' | 'map'
+  kind: 'text' | 'multiline' | 'number' | 'radio' | 'select' | 'switch' | 'chips' | 'date' | 'time' | 'rows' | 'json' | 'map'
     /** Not values: note shows text (a hint, a warning); button and upload run actions; checklist picks several options with captions and badges. */
     | 'note' | 'button' | 'upload' | 'checklist';
   options?: { value: string; label: TextSpec; caption?: TextSpec; badges?: { label: string; color?: ChipColor; variant?: 'filled' | 'outlined' }[] }[];
@@ -301,6 +301,8 @@ export type CellBody =
   | { kind: 'link'; label: TextSpec; onClick: Action[]; after?: Binding }
   /** Row buttons, each with its own condition. */
   | { kind: 'actions'; buttons: RowButton[]; caption?: { text: TextSpec; visibleWhen?: ConditionNode } }
+  /** An on/off switch for the row (a schedule's Active); onChange runs with {{row}} and {{value}} (the new state). */
+  | { kind: 'toggle'; value?: Binding; label?: TextSpec; onChange: Action[] }
   /** An inline input whose value is {{rowState.<name>}} for this row's actions. */
   | { kind: 'input'; name: string; placeholder?: TextSpec };
 

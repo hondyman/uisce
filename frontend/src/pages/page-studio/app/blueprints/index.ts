@@ -3,6 +3,7 @@ import { masteringConsoleBlueprint } from './masteringConsole';
 import { stagingBindingsBlueprint } from './stagingBindings';
 import { dataPipelinesBlueprint, dataPipelineEditorBlueprint } from './dataPipelines';
 import { matchRulesBlueprint, sourceHierarchyBlueprint, vendorRegistryBlueprint } from './mdmConfig';
+import { schedulesBlueprint } from './schedules';
 
 /**
  * Pages the studio can start from: complete, working pages built entirely
@@ -57,5 +58,11 @@ export const PAGE_BLUEPRINTS: PageBlueprint[] = [
     name: 'Vendor registry',
     description: 'The one list of data sources mastering ranks and matches on. Maker-checker.',
     build: vendorRegistryBlueprint,
+  },
+  {
+    id: 'schedules',
+    name: 'Schedules',
+    description: 'The platform scheduler: every schedule and its run history, with the schedule editor.',
+    build: schedulesBlueprint,
   },
 ];
