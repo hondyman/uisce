@@ -141,7 +141,7 @@ func TestCompileToSQL_SUMPRODUCTPushdown(t *testing.T) {
 			Right: &FuncCall{Name: "SUM", Args: []ExprNode{&FieldRef{Path: "qty"}}},
 		},
 	}
-	got, err := CompileToSQL(expr, resolveIdentity)
+	got, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -92,6 +92,7 @@ type UpsertValidationRuleRequest struct {
 // ValidationRuleDescriptor is the API response shape.
 type ValidationRuleDescriptor struct {
 	ID               uuid.UUID       `json:"id"`
+	RuleKey          string          `json:"rule_key,omitempty"`
 	TenantID         string          `json:"tenant_id"`
 	BOName           string          `json:"bo_name"`
 	Name             string          `json:"name"`

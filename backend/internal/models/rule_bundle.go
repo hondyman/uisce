@@ -40,45 +40,46 @@ const (
 // The canonical interchange format is JSON; YAML is a read-only convenience
 // converted to JSON before any checksumming occurs.
 type RuleBundle struct {
-	BundleVersion string             `json:"bundle_version"` // e.g. "1.0"
-	CreatedAt     time.Time          `json:"created_at"`
-	ExportedFrom  string             `json:"exported_from"`
-	TenantScope   string             `json:"tenant_scope"` // "core" or tenant ID
-	Origin        string             `json:"origin"`       // "core" | "custom"
-	Checksum      string             `json:"checksum"`     // SHA-256 over CanonicalBytes()
-	Rules         []PortableRuleSpec `json:"rules"`
+	BundleVersion string             `json:"bundle_version" yaml:"bundle_version"` // e.g. "1.0"
+	CreatedAt     time.Time          `json:"created_at" yaml:"created_at"`
+	ExportedFrom  string             `json:"exported_from" yaml:"exported_from"`
+	TenantScope   string             `json:"tenant_scope" yaml:"tenant_scope"` // "core" or tenant ID
+	Origin        string             `json:"origin" yaml:"origin"`             // "core" | "custom"
+	Checksum      string             `json:"checksum" yaml:"checksum"`         // SHA-256 over CanonicalBytes()
+	Rules         []PortableRuleSpec `json:"rules" yaml:"rules"`
 }
 
 // PortableRuleSpec defines a single rule stripped of environment-specific UUIDs.
 type PortableRuleSpec struct {
-	RuleKey          string          `json:"rule_key"`
-	Name             string          `json:"name"`
-	BOName           string          `json:"bo_name"`
-	Description      string          `json:"description,omitempty"`
-	Domain           string          `json:"domain"`
-	Severity         string          `json:"severity"`
-	Timing           string          `json:"timing"`
-	Category         string          `json:"category,omitempty"`
-	GovernanceStatus string          `json:"governance_status"`
-	BindingScope     []string        `json:"binding_scope,omitempty"`
-	DependsOn        []string        `json:"depends_on,omitempty"`
-	RuleAST          json.RawMessage `json:"rule_ast,omitempty"` // canonical vm.RuleNode; empty when Deleted
-	Deleted          bool            `json:"deleted,omitempty"`  // tombstone; checksum-relevant
+	RuleKey          string          `json:"rule_key" yaml:"rule_key"`
+	Name             string          `json:"name" yaml:"name"`
+	BOName           string          `json:"bo_name" yaml:"bo_name"`
+	Description      string          `json:"description,omitempty" yaml:"description,omitempty"`
+	Domain           string          `json:"domain" yaml:"domain"`
+	Severity         string          `json:"severity" yaml:"severity"`
+	Timing           string          `json:"timing" yaml:"timing"`
+	Category         string          `json:"category,omitempty" yaml:"category,omitempty"`
+	GovernanceStatus string          `json:"governance_status" yaml:"governance_status"`
+	BindingScope     []string        `json:"binding_scope,omitempty" yaml:"binding_scope,omitempty"`
+	DependsOn        []string        `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	RuleAST          json.RawMessage `json:"rule_ast,omitempty" yaml:"rule_ast,omitempty"` // canonical vm.RuleNode; empty when Deleted
+	Deleted          bool            `json:"deleted,omitempty" yaml:"deleted,omitempty"`   // tombstone; checksum-relevant
 }
 
 // RuleImportRequest specifies import options.
 type RuleImportRequest struct {
-	Bundle          RuleBundle `json:"bundle"`
-	TargetTenantID  string     `json:"target_tenant_id"`
-	DryRun          bool       `json:"dry_run"`
-	OverwritePolicy string     `json:"overwrite_policy"` // "fail_on_conflict" | "skip_existing" | "overwrite"
-	PreserveStatus  bool       `json:"preserve_governance_status"`
-	Prune           bool       `json:"prune"`                     // delete tenant-scoped custom rules absent from bundle (opt-in)
-	IdempotencyKey  string     `json:"idempotency_key,omitempty"` // or via X-Idempotency-Key header
+	Bundle          RuleBundle `json:"bundle" yaml:"bundle"`
+	TargetTenantID  string     `json:"target_tenant_id" yaml:"target_tenant_id"`
+	DryRun          bool       `json:"dry_run" yaml:"dry_run"`
+	OverwritePolicy string     `json:"overwrite_policy" yaml:"overwrite_policy"` // "fail_on_conflict" | "skip_existing" | "overwrite"
+	PreserveStatus  bool       `json:"preserve_governance_status" yaml:"preserve_governance_status"`
+	Prune           bool       `json:"prune" yaml:"prune"`                               // delete tenant-scoped custom rules absent from bundle (opt-in)
+	IdempotencyKey  string     `json:"idempotency_key,omitempty" yaml:"idempotency_key,omitempty"` // or via X-Idempotency-Key header
 }
 
 // RuleImportReport returns granular results of the import.
 type RuleImportReport struct {
+	Success     bool                    `json:"success"`
 	DryRun      bool                    `json:"dry_run"`
 	TotalRules  int                     `json:"total_rules"`
 	Created     []string                `json:"created"`

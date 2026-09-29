@@ -12,27 +12,13 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
 // ViolationRecord is one failed rule evaluation, ready to persist.
-// RuleError distinguishes "the rule ran and found a real violation" from
-// "the rule couldn't run at all" (unresolvable field reference,
-// malformed rule_ast) - see shadow_evaluation.go's ruleViolation for why
-// this can never be a silent skip.
-type ViolationRecord struct {
-	TenantID     string
-	RuleID       string
-	RuleName     string
-	BOKey        string
-	Severity     string
-	RecordID     string
-	Message      string
-	Context      map[string]interface{}
-	WriteBlocked bool
-	RuleError    bool
-}
+type ViolationRecord = models.ViolationRecord
 
 // PersistViolation writes v to validation_rule_violations. Deliberately
 // takes db (not a transaction) - callers persist violations after

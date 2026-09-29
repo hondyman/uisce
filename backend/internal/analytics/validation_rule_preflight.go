@@ -103,6 +103,7 @@ func (p *ValidationRulePorter) Preflight(ctx context.Context, req models.RuleImp
 			// preflight diff and executed result stay consistent.
 		}
 	}
+	report.Success = len(report.Errors) == 0
 	if hasBlockingErrors(report) {
 		return report, nil
 	}
@@ -188,6 +189,7 @@ func (p *ValidationRulePorter) Preflight(ctx context.Context, req models.RuleImp
 			}
 		}
 	}
+	report.Success = len(report.Errors) == 0
 	if hasBlockingErrors(report) {
 		return report, nil
 	}
@@ -205,6 +207,7 @@ func (p *ValidationRulePorter) Preflight(ctx context.Context, req models.RuleImp
 		}
 	}
 	sortDiffSummary(report.DiffSummary)
+	report.Success = len(report.Errors) == 0
 	return report, nil
 }
 

@@ -23,7 +23,7 @@ func TestCompileToSQL_BinaryArithmetic(t *testing.T) {
 			Right: &FieldRef{Path: "revenue"},
 		},
 	}
-	got, err := CompileToSQL(expr, resolveIdentity)
+	got, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestCompileToSQL_AggregateFuncCall(t *testing.T) {
 			Right: &FuncCall{Name: "SUM", Args: []ExprNode{&FieldRef{Path: "paid_in_capital"}}},
 		},
 	}
-	got, err := CompileToSQL(expr, resolveIdentity)
+	got, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestCompileToSQL_NPVExpansion(t *testing.T) {
 			},
 		},
 	}
-	got, err := CompileToSQL(expr, resolveIdentity)
+	got, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestCompileToSQL_UnsupportedFunction(t *testing.T) {
 			Args: []ExprNode{&FieldRef{Path: "cash_flow"}, &FieldRef{Path: "dates"}},
 		},
 	}
-	_, err := CompileToSQL(expr, resolveIdentity)
+	_, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err == nil {
 		t.Fatal("expected error for unsupported function, got nil")
 	}
@@ -97,7 +97,7 @@ func TestCompileToSQL_UnsupportedFunction(t *testing.T) {
 
 func TestCompileToSQL_FieldResolutionError(t *testing.T) {
 	expr := &Expression{Root: &FieldRef{Path: "missing_field"}}
-	_, err := CompileToSQL(expr, func(path string) (string, error) {
+	_, err := CompileExpressionToSQL(expr, func(path string) (string, error) {
 		return "", errors.New("not found")
 	})
 	if err == nil {
@@ -109,7 +109,7 @@ func TestCompileToSQL_UnsupportedOperator(t *testing.T) {
 	expr := &Expression{
 		Root: &BinaryExpr{Op: "%", Left: &Literal{Value: 1}, Right: &Literal{Value: 2}},
 	}
-	_, err := CompileToSQL(expr, resolveIdentity)
+	_, err := CompileExpressionToSQL(expr, resolveIdentity)
 	if err == nil {
 		t.Fatal("expected error for unsupported operator, got nil")
 	}

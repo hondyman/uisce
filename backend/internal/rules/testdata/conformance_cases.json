@@ -1,0 +1,116 @@
+[
+  {
+    "id": "condition_gt_numeric_pass",
+    "description": "Numeric greater than operator passes when value exceeds threshold",
+    "ast": {
+      "type": "condition",
+      "field": "quantity",
+      "operator": "greater_than",
+      "value": 100
+    },
+    "data": { "quantity": 150 },
+    "expected": true
+  },
+  {
+    "id": "condition_gt_numeric_fail",
+    "description": "Numeric greater than operator fails when value is below threshold",
+    "ast": {
+      "type": "condition",
+      "field": "quantity",
+      "operator": "greater_than",
+      "value": 100
+    },
+    "data": { "quantity": 50 },
+    "expected": false
+  },
+  {
+    "id": "condition_is_null_pass",
+    "description": "is_null operator passes when field is missing or null",
+    "ast": {
+      "type": "condition",
+      "field": "memo",
+      "operator": "is_null",
+      "value": null
+    },
+    "data": {},
+    "expected": true
+  },
+  {
+    "id": "condition_between_pass",
+    "description": "between operator passes when within range",
+    "ast": {
+      "type": "condition",
+      "field": "price",
+      "operator": "between",
+      "value": [10.0, 50.0]
+    },
+    "data": { "price": 25.5 },
+    "expected": true
+  },
+  {
+    "id": "group_and_pass",
+    "description": "AND group passes when all child conditions pass",
+    "ast": {
+      "type": "group",
+      "operator": "AND",
+      "conditions": [
+        {
+          "type": "condition",
+          "field": "status",
+          "operator": "equals",
+          "value": "ACTIVE"
+        },
+        {
+          "type": "condition",
+          "field": "balance",
+          "operator": "greater_than",
+          "value": 0
+        }
+      ]
+    },
+    "data": { "status": "ACTIVE", "balance": 500 },
+    "expected": true
+  },
+  {
+    "id": "group_and_fail",
+    "description": "AND group fails when one child condition fails",
+    "ast": {
+      "type": "group",
+      "operator": "AND",
+      "conditions": [
+        {
+          "type": "condition",
+          "field": "status",
+          "operator": "equals",
+          "value": "ACTIVE"
+        },
+        {
+          "type": "condition",
+          "field": "balance",
+          "operator": "greater_than",
+          "value": 0
+        }
+      ]
+    },
+    "data": { "status": "SUSPENDED", "balance": 500 },
+    "expected": false
+  },
+  {
+    "id": "expression_binary_arithmetic_pass",
+    "description": "Expression with binary comparison and arithmetic passes",
+    "ast": {
+      "type": "expression",
+      "root": {
+        "op": ">",
+        "left": {
+          "op": "*",
+          "left": { "path": "price" },
+          "right": { "path": "quantity" }
+        },
+        "right": { "value": 1000.0 }
+      }
+    },
+    "data": { "price": 20.0, "quantity": 100.0 },
+    "expected": true
+  }
+]

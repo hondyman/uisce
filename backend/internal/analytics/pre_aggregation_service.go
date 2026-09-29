@@ -341,7 +341,7 @@ func (s *PreAggregationService) compileCalcTermToSQL(ctx context.Context, calcNa
 		return "", fmt.Errorf("parsing rule_ast for %q: %w", calcName, err)
 	}
 
-	return vm.CompileToSQL(&expr, resolveColumn)
+	return vm.CompileExpressionToSQL(&expr, resolveColumn)
 }
 
 // sanitizeSQLComment strips characters that would break out of a `/* ... */`

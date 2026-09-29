@@ -20,12 +20,20 @@ import (
 // Mirrors PreAggregationHandler's shape: both are catalog_node-backed
 // domain objects with the same CRUD/DDL-or-evaluate pattern.
 type ValidationRuleHandler struct {
-	svc *analytics.ValidationRuleService
-	db  *sqlx.DB
+	svc       *analytics.ValidationRuleService
+	porter    RulePorter
+	evaluator EvalService
+	db        *sqlx.DB
 }
 
-func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB) *ValidationRuleHandler {
-	return &ValidationRuleHandler{svc: svc, db: db}
+func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB, porter ...RulePorter) *ValidationRuleHandler {
+	var p RulePorter
+	if len(porter) > 0 && porter[0] != nil {
+		p = porter[0]
+	} else if db != nil {
+		p = analytics.NewValidationRulePorter(db)
+	}
+	return &ValidationRuleHandler{svc: svc, evaluator: svc, db: db, porter: p}
 }
 
 // RegisterRoutes adds the validation-rule-node routes to the given
@@ -42,6 +50,20 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/bo-fields", h.handleListSemanticFields)
 		r.Get("/health", h.handleGetHealth)
 		r.Patch("/{id}/active", h.handleSetActive)
+
+		// Rule Portability endpoints (Phase 1)
+		r.Get("/export", h.handleExportRules)
+		r.Post("/import", h.handleImportRules)
+		r.Post("/import/preview", h.handlePreviewImport)
+		r.Post("/preflight", h.handlePreviewImport)
+
+		// Multi-Surface Evaluation APIs (Phase 2)
+		r.Post("/evaluate-record", h.handleEvaluateRecord)
+		r.Post("/evaluate-batch", h.handleEvaluateBatch)
+		r.Post("/evaluate/record", h.handleEvaluateRecord)
+		r.Post("/evaluate/batch", h.handleEvaluateBatch)
+		r.Get("/evaluate/snapshot", h.handleLoadSnapshot)
+		r.Post("/evaluate/snapshot", h.handleLoadSnapshot)
 	})
 }
 

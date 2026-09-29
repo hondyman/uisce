@@ -357,8 +357,13 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 	if domain == "" {
 		domain = models.ValidationRuleDomainDefault
 	}
+	ruleKey := props.RuleKey
+	if ruleKey == "" {
+		ruleKey = name
+	}
 	return &models.ValidationRuleDescriptor{
 		ID:               id,
+		RuleKey:          ruleKey,
 		TenantID:         props.TenantID,
 		BOName:           props.BOName,
 		Name:             name,
