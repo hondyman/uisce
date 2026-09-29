@@ -262,6 +262,7 @@ type runner struct {
 	sourceCd string
 
 	attrField   map[string]string // golden attribute -> BO field
+	fieldLookup map[string]string // binding key (BO field or golden attribute) -> golden column
 	anchorCols  map[string]string // anchor column -> data type
 	refIDs      map[string]map[string]string
 	touched     map[string]bool // golden ids to survive + publish
@@ -367,11 +368,18 @@ func (r *runner) prepare() (map[string]string, error) {
 		return nil, err
 	}
 	r.attrField = map[string]string{}
+	r.fieldLookup = map[string]string{}
 	for f, a := range fieldAttr {
 		r.attrField[a] = f
 		if ref, ok := r.p.referenceFor(a); ok {
 			r.attrField[ref.Attribute] = f
 		}
+		// A staging binding names its fields either by BO field name
+		// ("SecName", the common case) or by golden attribute name
+		// ("security_name", as staging.security_data does). Both resolve to
+		// the same golden column, so accept either key.
+		r.fieldLookup[f] = a
+		r.fieldLookup[a] = a
 	}
 	if r.rules, err = loadRules(r.ctx, r.e.Rules, r.tenant, r.p.BOKey); err != nil {
 		return nil, err
@@ -390,7 +398,7 @@ func (r *runner) prepare() (map[string]string, error) {
 	if err := r.tx.GetContext(r.ctx, &r.overrides, `SELECT to_regclass('mdm.golden_override') IS NOT NULL`); err != nil {
 		return nil, err
 	}
-	return fieldAttr, nil
+	return r.fieldLookup, nil
 }
 
 // columns lists a table's columns and data types (empty: no such table).

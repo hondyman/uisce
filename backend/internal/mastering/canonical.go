@@ -55,8 +55,10 @@ type Canonicalizer struct {
 	Profile *Profile
 	// Binding is the staging binding: BO field or mastering key -> column.
 	Binding map[string]string
-	// FieldAttr maps a BO field to the golden column it masters (its
-	// MAPS_TO column on the anchor table).
+	// FieldAttr maps a bound field name to the golden column it masters (its
+	// MAPS_TO column on the anchor table). A binding may name the field either
+	// by BO field ("SecName") or by golden attribute ("security_name"), so
+	// both keys are present and both resolve to the golden column.
 	FieldAttr map[string]string
 	// ColumnTypes are the staging columns' data types (information_schema),
 	// so numeric text from the driver becomes a number.

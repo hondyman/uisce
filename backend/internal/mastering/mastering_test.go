@@ -84,6 +84,40 @@ func TestCanonicalRecord(t *testing.T) {
 	}
 }
 
+// A staging binding may name its fields by golden attribute instead of BO
+// field (staging.security_data and staging.party_data do). Those keys must
+// still reach the golden record: when they did not, mint() rejected every
+// security record for a missing security_name and the run reported COMPLETED
+// with zero published.
+func TestCanonicalRecordAttributeNamedBinding(t *testing.T) {
+	c := &Canonicalizer{
+		Profile: productProfile(t),
+		Binding: map[string]string{
+			"name": "fund_name", "base_currency": "base_currency",
+			"id:ISIN": "isin", "@source_key": "fsym_id",
+		},
+		FieldAttr: map[string]string{
+			"ProductName": "name", "ProductBaseCurrency": "base_currency",
+			// both key spellings, as prepare() builds them
+			"name": "name", "base_currency": "base_currency",
+		},
+		ColumnTypes: map[string]string{},
+	}
+	rec := c.Record(map[string]any{
+		"fund_name": "Uisce Global Equity Income Fund", "base_currency": "EUR",
+		"isin": "ie0019722233", "fsym_id": "H29PZ16-R",
+	}, time.Date(2026, 9, 25, 14, 9, 45, 0, time.UTC))
+	if !rec.Valid() {
+		t.Fatalf("record rejected: %v", rec.Issues)
+	}
+	if rec.Attrs["name"] != "Uisce Global Equity Income Fund" {
+		t.Errorf("name = %v, want the fund name", rec.Attrs["name"])
+	}
+	if rec.Attrs["base_currency"] != "EUR" {
+		t.Errorf("base_currency = %v, want EUR", rec.Attrs["base_currency"])
+	}
+}
+
 func TestNormalizeNumbers(t *testing.T) {
 	if v := normalize([]byte("3567039317.1100"), "numeric"); v != 3567039317.11 {
 		t.Errorf("numeric: %v", v)
