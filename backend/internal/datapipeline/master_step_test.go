@@ -28,11 +28,15 @@ type masterStub struct {
 	got       []MasterRequest
 	err       error
 	afterSink bool
+	result    *MasterResult // overrides the default success result
 }
 
 func (m *masterStub) MasterLoad(_ context.Context, r MasterRequest) (*MasterResult, error) {
 	m.got = append(m.got, r)
 	m.afterSink = *m.committed
+	if m.result != nil {
+		return m.result, m.err
+	}
 	return &MasterResult{Entity: r.Entity, RunID: "mr-1", Status: "COMPLETED", Records: 2, Published: 2}, m.err
 }
 
@@ -116,6 +120,40 @@ func TestMasterStepNeedsMastering(t *testing.T) {
 	f.master = nil
 	if _, err := Run(context.Background(), masterSpec(), &RunContext{RunID: "r"}, f, nil); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("error: %v", err)
+	}
+}
+
+func TestMasterStepFailsWhenEveryRecordIsRejected(t *testing.T) {
+	// The engine reports a run that rejected everything as PARTIAL, not as an
+	// error, so it used to finish COMPLETED with zero published. That is how a
+	// broken field mapping stayed invisible.
+	f, _ := newMasterFactory(nil)
+	f.master.result = &MasterResult{Entity: "security", RunID: "mr-1", Status: "PARTIAL",
+		Records: 12, Valid: 0, Invalid: 12, Published: 0}
+	sum, err := Run(context.Background(), masterSpec(), &RunContext{RunID: "r"}, f, nil)
+	if err == nil || !strings.Contains(err.Error(), "rejected all 12 records") {
+		t.Fatalf("a run that published nothing must fail the node: %v", err)
+	}
+	for _, s := range sum.Nodes {
+		if s.NodeID == "master" && s.Status != "FAILED" {
+			t.Errorf("master step status %q, want FAILED", s.Status)
+		}
+	}
+}
+
+func TestMasterStepToleratesSomeRejectedRecords(t *testing.T) {
+	// Partial rejection is ordinary data quality and must stay COMPLETED.
+	f, _ := newMasterFactory(nil)
+	f.master.result = &MasterResult{Entity: "security", RunID: "mr-1", Status: "PARTIAL",
+		Records: 12, Valid: 9, Invalid: 3, Published: 9, Exceptions: 3}
+	sum, err := Run(context.Background(), masterSpec(), &RunContext{RunID: "r"}, f, nil)
+	if err != nil {
+		t.Fatalf("some rejected records must not fail the run: %v", err)
+	}
+	for _, s := range sum.Nodes {
+		if s.NodeID == "master" && s.Status != "COMPLETED" {
+			t.Errorf("master step status %q, want COMPLETED", s.Status)
+		}
 	}
 }
 

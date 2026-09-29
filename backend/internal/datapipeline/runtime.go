@@ -82,6 +82,8 @@ type MasterResult struct {
 	RunID         string `json:"run_id"`
 	Status        string `json:"status"`
 	Records       int    `json:"records"`
+	Valid         int    `json:"valid"`
+	Invalid       int    `json:"invalid"`
 	Published     int    `json:"published"`
 	HeldForReview int    `json:"held_for_review"`
 	Exceptions    int    `json:"exceptions"`
@@ -362,6 +364,17 @@ func Run(ctx context.Context, spec *Spec, rc *RunContext, f Factory, rec Recorde
 		if err != nil {
 			st.Status, st.Err = "FAILED", err.Error()
 			runErr = fmt.Errorf("node %q: the load is committed but mastering it failed (master it from the mastering console): %w", id, err)
+			continue
+		}
+		// A run that rejected every record produced nothing, but the engine
+		// reports it as PARTIAL, not an error — so it used to finish as
+		// COMPLETED with zero published. Rejecting all of them is always a
+		// configuration fault, never a data-quality verdict.
+		if res != nil && res.Records > 0 && res.Invalid == res.Records {
+			st.Status = "FAILED"
+			st.Err = fmt.Sprintf("mastering rejected all %d records (%d valid, %d published)", res.Records, res.Valid, res.Published)
+			runErr = fmt.Errorf("node %q: the load is committed but mastering it failed (master it from the mastering console): %w",
+				id, errors.New(st.Err))
 		}
 	}
 	out := summarize(order, stats, nodes)

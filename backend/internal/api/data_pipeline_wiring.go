@@ -196,6 +196,7 @@ func (m pipelineMasterer) MasterLoad(ctx context.Context, r datapipeline.MasterR
 	var c mastering.Counts
 	if len(run.RawCounts) > 0 && json.Unmarshal(run.RawCounts, &c) == nil {
 		out.Records, out.Published, out.HeldForReview, out.Exceptions = c.Records, c.Published, c.HeldForReview, c.Exceptions
+		out.Valid, out.Invalid = c.Valid, c.Invalid
 	}
 	if err == nil && run.Status == "FAILED" {
 		detail := ""
