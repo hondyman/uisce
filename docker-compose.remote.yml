@@ -1,3 +1,7 @@
+x-lakekeeper-image: &lakekeeper-image quay.io/lakekeeper/catalog:v0.13.6
+
+x-openfga-image: &openfga-image openfga/openfga@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55
+
 services:
   uisce-redpanda:
     image: docker.redpanda.com/redpandadata/redpanda:latest
@@ -262,6 +266,34 @@ services:
       retries: 5
     restart: unless-stopped
 
+  infisical2:
+    image: infisical/infisical@sha256:6b911e3938ac2ff385a782df59ce9272799be7976d26dc5667266a2aecac4116
+    container_name: uisce-infisical2
+    depends_on:
+      uisce-redis:
+        condition: service_healthy
+    ports:
+      - "8086:8080"
+    environment:
+      - NODE_ENV=production
+      - DB_CONNECTION_URI=postgresql://infisical2:${INFISICAL2_DB_PASSWORD}@lakekeeper-db:5432/infisical2?sslmode=disable
+      - REDIS_URL=redis://uisce-redis:6379/1
+      - SITE_URL=http://100.84.50.65:8086
+      - ENCRYPTION_KEY=${INFISICAL2_ENCRYPTION_KEY}
+      - AUTH_SECRET=${INFISICAL2_AUTH_SECRET}
+      - TZ=UTC
+      - STANDALONE_BUILD=true
+      - STANDALONE_MODE=true
+      - NODE_OPTIONS=--max-old-space-size=2048
+    networks:
+      - remote-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/auth/status"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
   # ---------------------------------------------------------
   # Lakehouse Provisioning Service
   # Synchronises the Uisce semantic graph → Iceberg cold store.
@@ -438,13 +470,17 @@ services:
       retries: 10
 
   lakekeeper-migrate:
-    image: quay.io/lakekeeper/catalog:latest-main
+    image: *lakekeeper-image
     container_name: lakekeeper-migrate
     restart: "no"
     environment:
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/lakekeeper
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/lakekeeper
       - LAKEKEEPER__PG_ENCRYPTION_KEY=${LAKEKEEPER_PG_ENCRYPTION_KEY}
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      - LAKEKEEPER__OPENFGA__API_KEY=${OPENFGA_RAW_TOKEN}
+      - LAKEKEEPER__OPENFGA__STORE_NAME=lakekeeper-raw
       - RUST_LOG=info
     command: ["migrate"]
     networks:
@@ -454,14 +490,23 @@ services:
         condition: service_healthy
 
   lakekeeper:
-    image: quay.io/lakekeeper/catalog:latest-main
+    image: *lakekeeper-image
     container_name: lakekeeper
+    volumes:
+      - /mnt/github/uisce/certs:/certs:ro
     environment:
-      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/postgres?options=-c%20timezone=utc
-      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/postgres?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://postgres:postgres@lakekeeper-db:5432/lakekeeper?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://postgres:postgres@lakekeeper-db:5432/lakekeeper?options=-c%20timezone=utc
       - LAKEKEEPER__PG_ENCRYPTION_KEY=${LAKEKEEPER_PG_ENCRYPTION_KEY}
-      - LAKEKEEPER__BASE_URI=http://localhost:8181
+      - LAKEKEEPER__BASE_URI=http://100.84.50.65:8181
       - LAKEKEEPER__ENABLE_DEFAULT_PROJECT=true
+      - LAKEKEEPER__OPENID_PROVIDER_URI=https://100.84.50.65:8443/realms/uisce
+      - LAKEKEEPER__OPENID_AUDIENCE=uisce-raw
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga:8081
+      - LAKEKEEPER__OPENFGA__API_KEY=${OPENFGA_RAW_TOKEN}
+      - LAKEKEEPER__OPENFGA__STORE_NAME=lakekeeper-raw
+      - SSL_CERT_FILE=/certs/keycloak-ca.pem
       - RUST_LOG=info
       - TZ=UTC
     command: ["serve"]
@@ -474,6 +519,153 @@ services:
         condition: service_completed_successfully
       lakekeeper-db:
         condition: service_healthy
+      openfga:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  openfga-migrate:
+    image: *openfga-image
+    container_name: openfga-migrate
+    restart: "no"
+    command: ["migrate"]
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgresql://openfga_raw:${OPENFGA_RAW_DB_PASSWORD}@lakekeeper-db:5432/openfga?sslmode=disable
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-db:
+        condition: service_healthy
+
+  openfga:
+    image: *openfga-image
+    container_name: openfga
+    ports:
+      - "18180:8080"
+    command: ["run"]
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgresql://openfga_raw:${OPENFGA_RAW_DB_PASSWORD}@lakekeeper-db:5432/openfga?sslmode=disable
+      - OPENFGA_AUTHN_METHOD=preshared
+      - OPENFGA_AUTHN_PRESHARED_KEYS=${OPENFGA_RAW_TOKEN}
+      - OPENFGA_PLAYGROUND_ENABLED=false
+      - OPENFGA_GRPC_ADDR=0.0.0.0:8081
+      - OPENFGA_HTTP_ADDR=0.0.0.0:8080
+    networks:
+      - remote-net
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+      lakekeeper-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/openfga", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  openfga-gold-migrate:
+    image: *openfga-image
+    container_name: openfga-gold-migrate
+    restart: "no"
+    command: ["migrate"]
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgresql://openfga_gold:${OPENFGA_GOLD_DB_PASSWORD}@lakekeeper-db:5432/openfga_gold?sslmode=disable
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-db:
+        condition: service_healthy
+
+  openfga-gold:
+    image: *openfga-image
+    container_name: openfga-gold
+    ports:
+      - "18182:8080"
+    command: ["run"]
+    environment:
+      - OPENFGA_DATASTORE_ENGINE=postgres
+      - OPENFGA_DATASTORE_URI=postgresql://openfga_gold:${OPENFGA_GOLD_DB_PASSWORD}@lakekeeper-db:5432/openfga_gold?sslmode=disable
+      - OPENFGA_AUTHN_METHOD=preshared
+      - OPENFGA_AUTHN_PRESHARED_KEYS=${OPENFGA_GOLD_TOKEN}
+      - OPENFGA_PLAYGROUND_ENABLED=false
+      - OPENFGA_GRPC_ADDR=0.0.0.0:8081
+      - OPENFGA_HTTP_ADDR=0.0.0.0:8080
+    networks:
+      - remote-net
+    depends_on:
+      openfga-gold-migrate:
+        condition: service_completed_successfully
+      lakekeeper-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/openfga", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  lakekeeper-gold-migrate:
+    image: *lakekeeper-image
+    container_name: lakekeeper-gold-migrate
+    restart: "no"
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper_gold:${LAKEKEEPER_GOLD_DB_PASSWORD}@lakekeeper-db:5432/lakekeeper_gold?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper_gold:${LAKEKEEPER_GOLD_DB_PASSWORD}@lakekeeper-db:5432/lakekeeper_gold?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=${LAKEKEEPER_PG_ENCRYPTION_KEY}
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga-gold:8081
+      - LAKEKEEPER__OPENFGA__API_KEY=${OPENFGA_GOLD_TOKEN}
+      - LAKEKEEPER__OPENFGA__STORE_NAME=lakekeeper-gold
+      - RUST_LOG=info
+    command: ["migrate"]
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-db:
+        condition: service_healthy
+
+  lakekeeper-gold:
+    image: *lakekeeper-image
+    container_name: lakekeeper-gold
+    volumes:
+      - /mnt/github/uisce/certs:/certs:ro
+    environment:
+      - LAKEKEEPER__PG_DATABASE_URL_READ=postgresql://lakekeeper_gold:${LAKEKEEPER_GOLD_DB_PASSWORD}@lakekeeper-db:5432/lakekeeper_gold?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_DATABASE_URL_WRITE=postgresql://lakekeeper_gold:${LAKEKEEPER_GOLD_DB_PASSWORD}@lakekeeper-db:5432/lakekeeper_gold?options=-c%20timezone=utc
+      - LAKEKEEPER__PG_ENCRYPTION_KEY=${LAKEKEEPER_PG_ENCRYPTION_KEY}
+      - LAKEKEEPER__BASE_URI=http://100.84.50.65:8182
+      - LAKEKEEPER__ENABLE_DEFAULT_PROJECT=true
+      - LAKEKEEPER__OPENID_PROVIDER_URI=https://100.84.50.65:8443/realms/uisce
+      - LAKEKEEPER__OPENID_AUDIENCE=uisce-gold
+      - LAKEKEEPER__AUTHZ_BACKEND=openfga
+      - LAKEKEEPER__OPENFGA__ENDPOINT=http://openfga-gold:8081
+      - LAKEKEEPER__OPENFGA__API_KEY=${OPENFGA_GOLD_TOKEN}
+      - LAKEKEEPER__OPENFGA__STORE_NAME=lakekeeper-gold
+      - SSL_CERT_FILE=/certs/keycloak-ca.pem
+      - RUST_LOG=info
+      - TZ=UTC
+    command: ["serve"]
+    ports:
+      - "8182:8181"
+    networks:
+      - remote-net
+    depends_on:
+      lakekeeper-gold-migrate:
+        condition: service_completed_successfully
+      lakekeeper-db:
+        condition: service_healthy
+      openfga-gold:
+        condition: service_started
     healthcheck:
       test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
       interval: 10s
@@ -656,10 +848,8 @@ services:
 
 networks:
   remote-net:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+    external: true
+    name: uisce_remote-net
 
 # ---------------------------------------------------------
 # Volumes
