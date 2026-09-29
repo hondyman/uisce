@@ -174,6 +174,7 @@ type UpdateSpendRequest struct {
 // VendorScorecardReport aggregates the full executive pack for a set of vendors.
 type VendorScorecardReport struct {
 	ScoringVersion        string                     `json:"scoring_version"`
+	TenantID              string                     `json:"tenant_id,omitempty"`
 	AsOfDate              string                     `json:"as_of_date"`
 	UniverseSize          int                        `json:"universe_size"`
 	TiersTracked          int                        `json:"tiers_tracked"`
@@ -182,6 +183,7 @@ type VendorScorecardReport struct {
 	PremiumSoloShareT1    float64                    `json:"premium_solo_share_t1"`
 	DisplacementReadiness float64                    `json:"displacement_readiness"`
 	SubstitutionMatrix    []SubstitutionScore        `json:"substitution_matrix"`
+	Matrix                []SubstitutionScore        `json:"matrix,omitempty"`
 	FrontierPoints        []ValueForMoneyPoint       `json:"frontier_points"`
 	EntityBreakdowns      []VendorEntityBreakdown    `json:"entity_breakdowns"`
 	EntityDomains         []string                   `json:"entity_domains"`

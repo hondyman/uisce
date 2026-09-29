@@ -1,6 +1,7 @@
 package mastering
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strconv"
@@ -81,26 +82,112 @@ func (c *Canonicalizer) Unmastered() []string {
 	return out
 }
 
+// extractCol extracts a value from row given a target column spec.
+// When col is a plain column name, it returns row[col].
+// When col contains a JSON extraction path (e.g. "custom_attributes->>'esg_score'"),
+// it parses the base column and navigates the nested JSON keys.
+func extractCol(row map[string]any, col string) any {
+	if val, ok := row[col]; ok {
+		return val
+	}
+	if !strings.Contains(col, "->") {
+		return nil
+	}
+
+	idx := strings.Index(col, "->")
+	baseCol := strings.TrimSpace(col[:idx])
+	raw, ok := row[baseCol]
+	if !ok || raw == nil {
+		return nil
+	}
+
+	var current any
+	switch v := raw.(type) {
+	case []byte:
+		if err := json.Unmarshal(v, &current); err != nil {
+			return nil
+		}
+	case string:
+		s := strings.TrimSpace(v)
+		if s == "" {
+			return nil
+		}
+		if err := json.Unmarshal([]byte(s), &current); err != nil {
+			return nil
+		}
+	case map[string]any:
+		current = v
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(b, &current); err != nil {
+			return nil
+		}
+	}
+
+	remainder := col[idx:]
+	for len(remainder) > 0 {
+		var op string
+		if strings.HasPrefix(remainder, "->>") {
+			op = "->>"
+			remainder = remainder[3:]
+		} else if strings.HasPrefix(remainder, "->") {
+			op = "->"
+			remainder = remainder[2:]
+		} else {
+			break
+		}
+
+		nextIdx := strings.Index(remainder, "->")
+		var keyPart string
+		if nextIdx == -1 {
+			keyPart = remainder
+			remainder = ""
+		} else {
+			keyPart = remainder[:nextIdx]
+			remainder = remainder[nextIdx:]
+		}
+
+		keyPart = strings.TrimSpace(keyPart)
+		keyPart = strings.Trim(keyPart, "'\"")
+
+		currMap, isMap := current.(map[string]any)
+		if !isMap {
+			return nil
+		}
+		current = currMap[keyPart]
+		if current == nil {
+			return nil
+		}
+		_ = op
+	}
+
+	return current
+}
+
 // Record canonicalizes one staging row. ingestedAt is the as-of time when
 // the binding has no @as_of column.
 func (c *Canonicalizer) Record(row map[string]any, ingestedAt time.Time) Record {
 	rec := Record{Attrs: map[string]any{}, Identifiers: map[string]string{}, AsOf: ingestedAt}
 
 	if col, ok := c.Binding[stagingbind.SourceKey]; ok {
-		rec.SourceKey = strings.TrimSpace(text(row[col]))
+		rec.SourceKey = strings.TrimSpace(text(extractCol(row, col)))
 	}
 	if rec.SourceKey == "" {
 		rec.add("MISSING_SOURCE_KEY", SevError, "", "the source record has no key (bind @source_key)")
 	}
 	if col, ok := c.Binding[stagingbind.AsOfKey]; ok {
-		if t, ok := asTime(row[col]); ok {
+		if t, ok := asTime(extractCol(row, col)); ok {
 			rec.AsOf = t
 		}
 	}
 
 	for key, col := range c.Binding {
+		val := extractCol(row, col)
 		if typ, ok := stagingbind.IdentifierType(key); ok {
-			if v := strings.ToUpper(strings.TrimSpace(text(row[col]))); v != "" {
+			if v := strings.ToUpper(strings.TrimSpace(text(val))); v != "" {
 				rec.Identifiers[typ] = v
 			}
 			continue
@@ -112,7 +199,7 @@ func (c *Canonicalizer) Record(row map[string]any, ingestedAt time.Time) Record 
 		if !ok {
 			continue
 		}
-		v := normalize(row[col], c.ColumnTypes[col])
+		v := normalize(val, c.ColumnTypes[col])
 		if v == nil {
 			continue
 		}

@@ -10,6 +10,13 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import CalculateIcon from '@mui/icons-material/Calculate';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import {
+  generatePixelPerfectPDF,
+  ELEMENT_TYPES,
+  type ReportElement,
+  type LayoutSettings
+} from '../../../components/reporting/reportingUtils';
 import {
   mdmScoringApi,
   type MultiVendorDisplacementRequest,
@@ -103,6 +110,133 @@ export const MultiVendorDisplacement: React.FC<MultiVendorDisplacementProps> = (
     return `${sign}$${abs.toFixed(0)}`;
   };
 
+  const handleExportPDF = () => {
+    if (!data) return;
+
+    const licenseSavings = data.combined_tco?.license_savings_total ?? 0;
+    const replacementCost = data.combined_tco?.replacement_cost_delta ?? 0;
+    const netAnnualTCO = data.combined_tco?.net_annual_tco_benefit ?? 0;
+    const sublicenseCost = data.gap_report?.estimated_gap_remediation_cost ?? 0;
+    const leverage = data.gap_report?.net_negotiation_leverage ?? 0;
+
+    const elements: ReportElement[] = [
+      {
+        id: 'header-title',
+        type: ELEMENT_TYPES.TEXTBOX,
+        section: 'reportHeader',
+        position: { x: 40, y: 40 },
+        size: { width: 500, height: 30 },
+        properties: {
+          text: 'MDM Vendor Displacement & Sublicense Analysis Tearsheet',
+          textAlign: 'left',
+          fontSize: 16,
+          fontWeight: 'bold',
+        },
+      },
+      {
+        id: 'header-subtitle',
+        type: ELEMENT_TYPES.TEXTBOX,
+        section: 'reportHeader',
+        position: { x: 40, y: 70 },
+        size: { width: 500, height: 20 },
+        properties: {
+          text: `Dropped: ${data.dropped_vendor_ids.join(', ')} | Replacement: ${data.replacement_vendor_ids.join(', ')} | Universe: ${universeSize.toLocaleString()} | Date: ${new Date().toISOString().split('T')[0]}`,
+          textAlign: 'left',
+          fontSize: 10,
+        },
+      },
+      {
+        id: 'financial-summary-table',
+        type: ELEMENT_TYPES.TABLE,
+        section: 'body',
+        position: { x: 40, y: 100 },
+        size: { width: 520, height: 80 },
+        properties: {
+          columns: ['License Savings', 'Replacement Cost', 'Est Sub-license Cost', 'Net Annual TCO Benefit', 'Negotiation Leverage'],
+          previewData: [
+            [
+              `$${Math.round(licenseSavings).toLocaleString()}`,
+              `$${Math.round(replacementCost).toLocaleString()}`,
+              `$${Math.round(sublicenseCost).toLocaleString()}`,
+              `$${Math.round(netAnnualTCO).toLocaleString()}`,
+              `${(leverage * 100).toFixed(1)}%`,
+            ],
+          ],
+        },
+      },
+      {
+        id: 'tier-compliance-table',
+        type: ELEMENT_TYPES.TABLE,
+        section: 'body',
+        position: { x: 40, y: 200 },
+        size: { width: 520, height: 100 },
+        properties: {
+          columns: ['Tier', 'Coverage Before', 'Coverage After', 'Target Threshold', 'Status'],
+          previewData: (data.tier_coverage_deltas || []).map((t) => [
+            `Tier ${t.tier}`,
+            `${(t.coverage_before * 100).toFixed(1)}%`,
+            `${(t.coverage_after * 100).toFixed(1)}%`,
+            `${(t.threshold * 100).toFixed(1)}%`,
+            t.meets_threshold ? 'Compliant' : 'Breach',
+          ]),
+        },
+      },
+    ];
+
+    if (data.residual_gaps && data.residual_gaps.length > 0) {
+      elements.push({
+        id: 'residual-gaps-table',
+        type: ELEMENT_TYPES.TABLE,
+        section: 'body',
+        position: { x: 40, y: 320 },
+        size: { width: 520, height: 150 },
+        properties: {
+          columns: ['Attribute Code', 'Tier', 'Records Lost', 'Solo Rate %'],
+          previewData: data.residual_gaps.map((g) => [
+            g.attribute_code,
+            `Tier ${g.tier}`,
+            g.records_lost.toLocaleString(),
+            `${(g.solo_rate_pct * 100).toFixed(1)}%`,
+          ]),
+        },
+      });
+    }
+
+    if (data.gap_report?.recommended_sub_licenses && data.gap_report.recommended_sub_licenses.length > 0) {
+      elements.push({
+        id: 'sublicense-proposals-table',
+        type: ELEMENT_TYPES.TABLE,
+        section: 'body',
+        position: { x: 40, y: 490 },
+        size: { width: 520, height: 150 },
+        properties: {
+          columns: ['Target Vendor', 'Attributes Covered', 'Entities Covered', 'Est. Sub-license Cost'],
+          previewData: data.gap_report.recommended_sub_licenses.map((p) => [
+            p.vendor_name || p.vendor_id,
+            (p.attributes_covered || []).join(', '),
+            p.entities_covered.toLocaleString(),
+            `$${Math.round(p.estimated_annual_cost).toLocaleString()}`,
+          ]),
+        },
+      });
+    }
+
+    const layoutSettings: LayoutSettings = {
+      pageBreakBeforeGroup: false,
+      pageBreakAfterGroup: false,
+      pageBreakBetweenRegions: false,
+      fixedPageSize: false,
+      columns: 1,
+      columnSpacing: 10,
+      headerTokens: ['CONFIDENTIAL - PROCUREMENT TEARSHEET'],
+      footerTokens: ['Generated by Uisce MDM Intelligence Platform'],
+      includeExecutionTime: true,
+      includeUserName: false,
+    };
+
+    generatePixelPerfectPDF(elements, layoutSettings);
+  };
+
   return (
     <Box sx={{ width: '100%' }} className="displacement-tearsheet">
       {/* Print-only Executive Header */}
@@ -126,11 +260,21 @@ export const MultiVendorDisplacement: React.FC<MultiVendorDisplacementProps> = (
             <Stack direction="row" spacing={1}>
               <Button
                 variant="outlined"
+                startIcon={<PictureAsPdfIcon />}
+                onClick={handleExportPDF}
+                size="small"
+                color="secondary"
+                disabled={!data || loading}
+              >
+                Export Tearsheet (PDF)
+              </Button>
+              <Button
+                variant="outlined"
                 startIcon={<PrintIcon />}
                 onClick={() => window.print()}
                 size="small"
               >
-                Export Executive Tearsheet
+                Print Browser View
               </Button>
               <Button
                 variant="contained"

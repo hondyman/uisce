@@ -118,6 +118,127 @@ func TestCanonicalRecordAttributeNamedBinding(t *testing.T) {
 	}
 }
 
+func TestExtractCol(t *testing.T) {
+	jsonBytes := []byte(`{"esg_score": 85.5, "lot_size": 100, "lei": "5493000M6T3", "details": {"callable": true}}`)
+	jsonStr := string(jsonBytes)
+	jsonMap := map[string]any{
+		"esg_score": 85.5,
+		"lot_size":  float64(100),
+		"lei":       "5493000M6T3",
+		"details":   map[string]any{"callable": true},
+	}
+
+	tests := []struct {
+		name     string
+		row      map[string]any
+		col      string
+		expected any
+	}{
+		{
+			name:     "plain column",
+			row:      map[string]any{"security_name": "Apple Inc."},
+			col:      "security_name",
+			expected: "Apple Inc.",
+		},
+		{
+			name:     "json bytes extraction",
+			row:      map[string]any{"custom_attributes": jsonBytes},
+			col:      "custom_attributes->>'esg_score'",
+			expected: 85.5,
+		},
+		{
+			name:     "json string extraction",
+			row:      map[string]any{"custom_attributes": jsonStr},
+			col:      "custom_attributes->>'lei'",
+			expected: "5493000M6T3",
+		},
+		{
+			name:     "json map extraction",
+			row:      map[string]any{"custom_attributes": jsonMap},
+			col:      "custom_attributes->>'lot_size'",
+			expected: float64(100),
+		},
+		{
+			name:     "nested json path extraction",
+			row:      map[string]any{"custom_attributes": jsonBytes},
+			col:      "custom_attributes->'details'->>'callable'",
+			expected: true,
+		},
+		{
+			name:     "missing key in json",
+			row:      map[string]any{"custom_attributes": jsonBytes},
+			col:      "custom_attributes->>'nonexistent'",
+			expected: nil,
+		},
+		{
+			name:     "missing base column",
+			row:      map[string]any{"other_col": "abc"},
+			col:      "custom_attributes->>'esg_score'",
+			expected: nil,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := extractCol(tc.row, tc.col)
+			if got != tc.expected {
+				t.Errorf("extractCol(%v, %q) = %v (%T), want %v (%T)", tc.row, tc.col, got, got, tc.expected, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCanonicalRecordJSONPathBinding(t *testing.T) {
+	c := &Canonicalizer{
+		Profile: productProfile(t),
+		Binding: map[string]string{
+			"@source_key": "sec_id",
+			"id:LEI":      "custom_attributes->>'lei'",
+			"esg_score":   "custom_attributes->>'esg_score'",
+			"lot_size":    "custom_attributes->>'lot_size'",
+			"name":        "sec_name",
+		},
+		FieldAttr: map[string]string{
+			"name":      "name",
+			"esg_score": "esg_score",
+			"lot_size":  "lot_size",
+		},
+		ColumnTypes: map[string]string{
+			"custom_attributes->>'esg_score'": "numeric",
+			"custom_attributes->>'lot_size'":  "integer",
+		},
+	}
+
+	at := time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
+	row := map[string]any{
+		"sec_id":            "SEC-001",
+		"sec_name":          "Apple Global Corp",
+		"custom_attributes": `{"esg_score": 88.5, "lot_size": 1000, "lei": "5493006M6T3X75N"}`,
+	}
+
+	rec := c.Record(row, at)
+	if !rec.Valid() {
+		t.Fatalf("record rejected: %v", rec.Issues)
+	}
+
+	if rec.SourceKey != "SEC-001" {
+		t.Errorf("source key = %v, want SEC-001", rec.SourceKey)
+	}
+	if rec.Attrs["name"] != "Apple Global Corp" {
+		t.Errorf("name = %v, want Apple Global Corp", rec.Attrs["name"])
+	}
+	if rec.Attrs["esg_score"] != 88.5 {
+		t.Errorf("esg_score = %v, want 88.5", rec.Attrs["esg_score"])
+	}
+	if rec.Attrs["lot_size"] != int64(1000) && rec.Attrs["lot_size"] != 1000.0 && rec.Attrs["lot_size"] != 1000 {
+		t.Errorf("lot_size = %v, want 1000", rec.Attrs["lot_size"])
+	}
+	if rec.Identifiers["LEI"] != "5493006M6T3X75N" {
+		t.Errorf("identifier LEI = %v, want 5493006M6T3X75N", rec.Identifiers["LEI"])
+	}
+}
+
+
 func TestNormalizeNumbers(t *testing.T) {
 	if v := normalize([]byte("3567039317.1100"), "numeric"); v != 3567039317.11 {
 		t.Errorf("numeric: %v", v)

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	jwtmiddleware "github.com/hondyman/uisce/libs/jwt-middleware"
 )
 
 // Repository defines data access for MDM scoring inputs.
@@ -77,6 +79,13 @@ func (s *Service) UpdateVendorCost(ctx context.Context, vendorID string, cost fl
 
 // GetScorecardReport generates the full executive vendor quality, entity breakdown, and displacement tearsheet.
 func (s *Service) GetScorecardReport(ctx context.Context, asOf time.Time, universeSize int, entityDomain ...string) (*VendorScorecardReport, error) {
+	tenantID := "default"
+	if claims, ok := ctx.Value(jwtmiddleware.ClaimsContextKey).(*jwtmiddleware.JWTClaims); ok && claims != nil && claims.TenantID != "" {
+		tenantID = claims.TenantID
+	} else if tid, ok := ctx.Value("tenant_id").(string); ok && tid != "" {
+		tenantID = tid
+	}
+
 	tolerances, err := s.repo.GetAttributeTolerances(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tolerances: %w", err)
@@ -414,11 +423,13 @@ func (s *Service) GetScorecardReport(ctx context.Context, asOf time.Time, univer
 
 	report := &VendorScorecardReport{
 		ScoringVersion:        "2.1",
+		TenantID:              tenantID,
 		AsOfDate:              asOf.Format("2006-01-02"),
 		UniverseSize:          universeSize,
 		TiersTracked:          3,
 		AnnualSpendTotal:      totalSpend,
 		SubstitutionMatrix:    matrix,
+		Matrix:                matrix,
 		FrontierPoints:        frontier,
 		EntityBreakdowns:      entityBreakdowns,
 		EntityDomains:         CanonicalEntityDomains,

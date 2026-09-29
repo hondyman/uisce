@@ -311,3 +311,58 @@ func TestVendorScoringNode(t *testing.T) {
 		t.Errorf("close error: %v", err)
 	}
 }
+
+func TestVendorScoringNode_GoldenValues(t *testing.T) {
+	n := Node{
+		ID:   "score_mart",
+		Type: NodeVendorScoring,
+		Config: cfg(VendorScoringConfig{
+			Entity:       "SECURITY",
+			VendorID:     "FACTSET",
+			UniverseSize: 42000,
+			RecordMart:   true,
+		}),
+	}
+	p, err := newVendorScoringProc(n, nil)
+	if err != nil {
+		t.Fatalf("failed to create vendor scoring proc: %v", err)
+	}
+	_ = p.Open(context.Background(), &RunContext{TenantID: "99e99e99-99e9-49e9-89e9-99e99e99e999"})
+
+	vProc := p.(*vendorScoringProc)
+	_, err = vProc.Process(context.Background(), []Row{
+		{Num: 10, Data: map[string]any{"entity_id": int64(5555), "CLOSING_PRICE": "152.25", "LEI": "5493006MHB84DD0ZWV18"}},
+		{Num: 11, Data: map[string]any{"id": "SEC-777", "CLOSING_PRICE": "99.10"}},
+	})
+	if err != nil {
+		t.Fatalf("process error: %v", err)
+	}
+
+	if len(vProc.goldenEntries) == 0 {
+		t.Fatalf("expected goldenEntries to be captured when RecordMart is true")
+	}
+
+	// Verify first entry has real entity_id 5555 and not hardcoded 1001
+	found5555 := false
+	for _, ge := range vProc.goldenEntries {
+		if ge.entityID == 5555 {
+			found5555 = true
+			if ge.goldenValue != "152.25" && ge.goldenValue != "5493006MHB84DD0ZWV18" {
+				t.Errorf("unexpected golden value for entity 5555: %s", ge.goldenValue)
+			}
+			if ge.vendorID != "FACTSET" {
+				t.Errorf("expected vendor FACTSET, got %s", ge.vendorID)
+			}
+		}
+		if ge.goldenValue == "SAMPLE_MASTERED" {
+			t.Errorf("sample/dummy golden value must not be produced")
+		}
+	}
+	if !found5555 {
+		t.Errorf("expected entity 5555 to be present in golden entries")
+	}
+
+	if err := vProc.Close(context.Background(), nil); err != nil {
+		t.Errorf("close error: %v", err)
+	}
+}

@@ -41,6 +41,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 		r.Post("/weight-profiles", h.HandleSaveWeightProfile)
 		r.Post("/displacement", h.HandleSimulateDisplacement)
 		r.Post("/displacement-multi", h.HandleMultiDisplacement)
+		r.Post("/displacement/multi", h.HandleMultiDisplacement)
 		r.Post("/sync-mart", h.HandleSyncMart)
 		r.Post("/run-ingest", h.HandleRunIngest)
 		r.Post("/spend", h.HandleUpdateSpend)

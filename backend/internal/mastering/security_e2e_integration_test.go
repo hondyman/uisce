@@ -88,6 +88,21 @@ func TestSecurityMasterEndToEnd(t *testing.T) {
 		t.Fatalf("execute (%s): %v", stage, err)
 	}
 
+	if os.Getenv("MASTERING_DEBUG") != "" {
+		for _, f := range []string{"SecId", "SecName", "SecTypCd", "instrument_type", "security_id", "security_name"} {
+			t.Logf("  attrField[%q] = %q", f, r.attrField[f])
+		}
+		for _, ru := range r.rules.rules {
+			t.Logf("  rule %q sev=%s fields=%v", ru.name, ru.severity, ru.fields)
+		}
+		var one string
+		if err := tx.GetContext(ctx, &one, `SELECT instrument_type FROM staging.security_data WHERE _load_run_id = $1::uuid LIMIT 1`, loadID); err != nil {
+			t.Logf("  staged instrument_type: %v", err)
+		} else {
+			t.Logf("  staged instrument_type = %q", one)
+		}
+	}
+
 	t.Logf("counts: %+v", c)
 	for _, is := range r.raised {
 		t.Logf("issue: [%s] %s %s: %s", is.Severity, is.Code, is.Attribute, is.Message)
