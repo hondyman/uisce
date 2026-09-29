@@ -10,8 +10,6 @@ import ManagementPage from "./features/fabric/pages/preaggregations/ManagementPa
 import BundleExplorer from "./components/BundleExplorer";
 import CalculationsLibraryPage from "./features/fabric/pages/CalculationsLibraryPage";
 import ProtectedRoute from "./components/ProtectedRoute";
-import CalendarPage from "./pages/CalendarPage";
-import ConflictsPage from "./pages/ConflictsPage";
 import CalculatedFieldBuilderPage from "./pages/CalculatedFieldBuilderPage";
 import IPWhitelistManagementPage from "./features/fabric/pages/IPWhitelistManagementPage";
 import DashboardPage from "./features/fabric/pages/DashboardPage";
@@ -40,8 +38,6 @@ import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
-import ComponentMarketplacePage from "./pages/marketplace/ComponentMarketplacePage";
-import Marketplace from "./pages/marketplace/Marketplace";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
@@ -305,8 +301,6 @@ function ProtectedApp() {
         <Route path="semantic-catalog" element={<ProtectedRoute><SemanticCatalogDetailPage /></ProtectedRoute>} />
         <Route path="pipelines" element={<ProtectedRoute><PipelinesPage /></ProtectedRoute>} />
         <Route path="reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-        <Route path="marketplace" element={<ProtectedRoute><Marketplace /></ProtectedRoute>} />
-        <Route path="marketplace/components" element={<ProtectedRoute><ComponentMarketplacePage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             STUDIO - Low-code tools
@@ -407,12 +401,6 @@ function ProtectedApp() {
         <Route path="core/notifications" element={<ProtectedRoute><NotificationCenterPage /></ProtectedRoute>} />
         <Route path="core/notifications/templates" element={<ProtectedRoute><NotificationTemplateEditorPage /></ProtectedRoute>} />
         <Route path="core/notifications/preferences" element={<ProtectedRoute><NotificationPreferencesPage /></ProtectedRoute>} />
-
-        {/* ═══════════════════════════════════════════════════════════════════
-            CALENDAR SYNC - Multi-provider calendar integration
-            ═══════════════════════════════════════════════════════════════════ */}
-        <Route path="calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-        <Route path="calendar/conflicts" element={<ProtectedRoute><ConflictsPage /></ProtectedRoute>} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             INTELLIGENCE - Optimization and observability

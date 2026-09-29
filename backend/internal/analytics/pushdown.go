@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 
 	"github.com/hondyman/uisce/backend/internal/models"
@@ -142,6 +143,25 @@ func CompileRuleForPushdown(rule *EvaluableRule, table, tenantID string, cols ma
 // (Layer 1). Implemented over platform.TenantDBManager.GetConnection.
 type PushdownConnResolver interface {
 	DataPlaneConn(ctx context.Context, tenantID string) (*sql.DB, error)
+}
+
+// DirectConnResolver provides a simple PushdownConnResolver returning the underlying *sql.DB.
+type DirectConnResolver struct {
+	db *sql.DB
+}
+
+func NewDirectConnResolver(db *sqlx.DB) *DirectConnResolver {
+	if db == nil {
+		return &DirectConnResolver{}
+	}
+	return &DirectConnResolver{db: db.DB}
+}
+
+func (r *DirectConnResolver) DataPlaneConn(ctx context.Context, tenantID string) (*sql.DB, error) {
+	if r.db == nil {
+		return nil, fmt.Errorf("no direct db connection configured")
+	}
+	return r.db, nil
 }
 
 type PushdownOptions struct {

@@ -77,12 +77,8 @@ func (s *ValidationRuleService) LoadRuleSnapshotAsOf(ctx context.Context, tenant
 		if !desc.IsActive {
 			continue
 		}
-		// Write-path choke point: only published rules are evaluated
-		govStatus := desc.GovernanceStatus
-		if govStatus == "" {
-			govStatus = models.ValidationRuleGovernancePublished
-		}
-		if govStatus != models.ValidationRuleGovernancePublished {
+		// Write-path choke point: only strictly published rules are evaluated
+		if desc.GovernanceStatus != models.ValidationRuleGovernancePublished {
 			continue
 		}
 

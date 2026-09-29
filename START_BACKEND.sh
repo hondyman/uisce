@@ -33,16 +33,23 @@ fi
 
 cd "$BACKEND_DIR"
 
-echo -e "${YELLOW}Deploying pre-built server binary...${NC}"
+echo -e "${YELLOW}Preparing server binary...${NC}"
 SERVER_BINARY="${HOME}/uisce-server-fixed"
-if [ ! -f "$SERVER_BINARY" ]; then
-    echo -e "${RED}❌ Server binary not found at $SERVER_BINARY${NC}"
-    echo -e "${RED}   Build on Mac: GOOS=linux GOARCH=amd64 go build -o uisce-server ./cmd/server/main.go${NC}"
-    echo -e "${RED}   Then copy to server: scp uisce-server eganpj@100.84.50.65:~/uisce-server-fixed${NC}"
-    exit 1
+if [ -f "$SERVER_BINARY" ]; then
+    # A binary built for the host (scripts/start-backends.sh always builds from
+    # source instead, so this only applies to a deliberate cross-build).
+    echo -e "${YELLOW}   using pre-built binary $SERVER_BINARY${NC}"
+    cp "$SERVER_BINARY" ./server
+    chmod +x ./server
+else
+    # No cross-built binary on this machine - build locally rather than stopping.
+    echo -e "${YELLOW}   no pre-built binary, building from source...${NC}"
+    if ! go build -o server ./cmd/server; then
+        echo -e "${RED}❌ Build failed (see above). Fix the build, or cross-build and place it at $SERVER_BINARY${NC}"
+        exit 1
+    fi
+    echo -e "${YELLOW}   built ./server${NC}"
 fi
-cp "$SERVER_BINARY" ./server
-chmod +x ./server
 
 if [ -f "$SCRIPT_DIR/scripts/infisical-bootstrap.sh" ] && command -v infisical &>/dev/null; then
     echo -e "${YELLOW}Bootstrapping secrets from Infisical...${NC}"
@@ -78,6 +85,16 @@ export TEMPORAL_HOST="${TEMPORAL_HOST:-100.84.50.65:7233}"
 export TEMPORAL_RETRY_ATTEMPTS="${TEMPORAL_RETRY_ATTEMPTS:-2}"
 export ENVIRONMENT="${ENVIRONMENT:-}"
 : "${API_TOKEN_ENCRYPTION_KEY:?API_TOKEN_ENCRYPTION_KEY not set — refusing to fall back to a value that is in git history (origin/main:de336a41af)}"
+
+# Data pipelines. Without these the server starts but logs "file sources and
+# exports are disabled" and "staging loads are disabled" (api wiring), so the
+# MDM pipeline appears to run and silently writes nothing. The staging data
+# plane is the crims database; the control plane is alpha.
+export DATAPIPELINE_ENGINE_URL="${DATAPIPELINE_ENGINE_URL:-http://100.84.50.65:8091}"
+export DATAPIPELINE_STAGING_DSN="${DATAPIPELINE_STAGING_DSN:-$(printf '%s' "$POSTGRES_DSN" | sed -E 's#/alpha([?]|$)#/crims\1#')}"
+[ -n "${DATAPIPELINE_ENGINE_TOKEN:-}" ] && echo -e "${YELLOW}   DATAPIPELINE_ENGINE_URL: $DATAPIPELINE_ENGINE_URL${NC}" \
+  && echo -e "${YELLOW}   DATAPIPELINE_ENGINE_TOKEN: set${NC}" \
+  || echo -e "${RED}⚠️  DATAPIPELINE_ENGINE_TOKEN not set — pipelines cannot reach the file engine${NC}"
 
 echo -e "${YELLOW}Starting server...${NC}"
 echo -e "${YELLOW}   POSTGRES_DSN: ${POSTGRES_DSN:0:50}...${NC}"

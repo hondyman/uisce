@@ -80,10 +80,11 @@ func TestLoadRuleSnapshot_ChokePointFiltersDraftAndReview(t *testing.T) {
 	mock.ExpectQuery(`SELECT public\.uisce_gold_copy_tenant_id\(\)::text`).
 		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow(goldID))
 
-	// Mock catalog_node query returning 1 published, 1 draft, 1 submitted_for_review
+	// Mock catalog_node query returning 1 published, 1 draft, 1 submitted_for_review, 1 legacy empty status
 	pubID := uuid.New()
 	draftID := uuid.New()
 	reviewID := uuid.New()
+	legacyEmptyID := uuid.New()
 
 	mock.ExpectQuery(`SELECT n\.id, n\.node_name, COALESCE\(n\.description, ''\) as description, n\.properties, n\.config, n\.is_active, n\.tenant_id::text AS tenant_id FROM catalog_node n`).
 		WithArgs(sqlmock.AnyArg(), "order", "", "validation", "survivorship").
@@ -112,6 +113,15 @@ func TestLoadRuleSnapshot_ChokePointFiltersDraftAndReview(t *testing.T) {
 				"",
 				[]byte(`{"bo_name":"order","severity":"BLOCK","domain":"default","governance_status":"submitted_for_review"}`),
 				[]byte(`{"rule_ast":{"type":"condition","id":"c3","field":"Qty","operator":"greater_than","value":3.0}}`),
+				true,
+				goldID,
+			).
+			AddRow(
+				legacyEmptyID,
+				"Legacy Unbackfilled Rule",
+				"",
+				[]byte(`{"bo_name":"order","severity":"BLOCK","domain":"default"}`),
+				[]byte(`{"rule_ast":{"type":"condition","id":"c4","field":"Qty","operator":"greater_than","value":4.0}}`),
 				true,
 				goldID,
 			))

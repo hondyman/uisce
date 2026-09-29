@@ -80,8 +80,9 @@ func registerWorkflows(w worker.Worker) {
 	w.RegisterWorkflow(workflows.ClientBurstReportWorkflow)
 	w.RegisterWorkflow(workflows.RuleReviewWorkflow)
 	w.RegisterWorkflow(workflows.RuleHealthCheckWorkflow)
+	w.RegisterWorkflow(workflows.ViolationAuditAnchorWorkflow)
 
-	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow")
+	log.Println("Workflows registered: HourlyRollupWorkflow, RegionHourlyRollupWorkflow, DailySLAWorkflow, MLTrainingWorkflow, TenantOnboardingWorkflow, LakehouseMaintenanceWorkflow, CustomizationIntelligenceWorkflow, TenantInstanceProvisioningWorkflowFn, ReportGenerationWorkflow, ClientBurstReportWorkflow, RuleReviewWorkflow, RuleHealthCheckWorkflow, ViolationAuditAnchorWorkflow")
 }
 
 // registerActivities registers all activity definitions
@@ -115,6 +116,9 @@ func registerActivities(w worker.Worker, db *sql.DB, controlDB *sql.DB, logger *
 
 		healthActs := activities.NewRuleHealthActivities(sqlxDB, logger)
 		w.RegisterActivity(healthActs.RunRuleHealthCheckActivity)
+
+		anchorActs := activities.NewAuditAnchorActivities(sqlxDB, logger)
+		w.RegisterActivity(anchorActs.RunAuditAnchorActivity)
 	}
 
 	// Register tenant provisioning activities

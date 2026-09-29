@@ -42,6 +42,8 @@ func main() {
 		runImport(args)
 	case "validate-bundle", "validate":
 		runValidateBundle(args)
+	case "verify-chain":
+		runVerifyChain(args)
 	case "help", "--help", "-h":
 		printUsage()
 		os.Exit(ExitSuccess)
@@ -63,6 +65,7 @@ func printUsage() {
 	fmt.Println("  diff / preview   Dry-run preview bundle diffs against a target environment")
 	fmt.Println("  import           Import rule bundle into a target environment")
 	fmt.Println("  validate-bundle  Validate and/or stamp checksum on a local bundle file")
+	fmt.Println("  verify-chain     Cryptographic Glassbox audit chain verification")
 	fmt.Println()
 	fmt.Println("Precedence Note:")
 	fmt.Println("  Command line flags and query parameters override properties in bundle files.")
@@ -467,3 +470,75 @@ func runValidateBundle(args []string) {
 	fmt.Println("Status:         VALID")
 	os.Exit(ExitSuccess)
 }
+
+func runVerifyChain(args []string) {
+	fs := flag.NewFlagSet("verify-chain", flag.ExitOnError)
+	apiURL := fs.String("api-url", getEnvOrDefault("UISCE_API_URL", "http://localhost:8080"), "Base API URL")
+	token := fs.String("token", getEnvOrDefault("UISCE_TOKEN", os.Getenv("UISCE_JWT")), "Auth token")
+	tenantID := fs.String("tenant", getEnvOrDefault("UISCE_TENANT_ID", ""), "Tenant UUID (required)")
+	fromSeq := fs.Int64("from", 1, "Starting sequence number")
+	toSeq := fs.Int64("to", 10000, "Ending sequence number")
+
+	fs.Parse(args)
+
+	if *tenantID == "" {
+		fmt.Fprintf(os.Stderr, "Error: --tenant is required\n")
+		os.Exit(ExitTransportError)
+	}
+
+	url := fmt.Sprintf("%s/api/validation-rule-nodes/verify-chain?from=%d&to=%d", strings.TrimRight(*apiURL, "/"), *fromSeq, *toSeq)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error building request: %v\n", err)
+		os.Exit(ExitTransportError)
+	}
+	if *token != "" {
+		req.Header.Set("Authorization", "Bearer "+*token)
+	}
+	req.Header.Set("X-Tenant-ID", *tenantID)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error communicating with server: %v\n", err)
+		os.Exit(ExitTransportError)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 500 || resp.StatusCode == 401 || resp.StatusCode == 403 {
+		fmt.Fprintf(os.Stderr, "Server error (HTTP %d): %s\n", resp.StatusCode, string(body))
+		os.Exit(ExitTransportError)
+	}
+
+	var result struct {
+		Valid          bool     `json:"valid"`
+		TenantID       string   `json:"tenant_id"`
+		SeqFrom        int64    `json:"seq_from"`
+		SeqTo          int64    `json:"seq_to"`
+		TotalRows      int      `json:"total_rows"`
+		AnchorsChecked int      `json:"anchors_checked"`
+		Errors         []string `json:"errors,omitempty"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		fmt.Fprintf(os.Stderr, "Error parsing server response: %v\n%s\n", err, string(body))
+		os.Exit(ExitTransportError)
+	}
+
+	fmt.Printf("Tenant:          %s\n", result.TenantID)
+	fmt.Printf("Sequence Range:  %d .. %d\n", result.SeqFrom, result.SeqTo)
+	fmt.Printf("Total Rows:      %d\n", result.TotalRows)
+	fmt.Printf("Anchors Checked: %d\n", result.AnchorsChecked)
+
+	if !result.Valid {
+		fmt.Printf("Chain Status:    TAMPERED / INVALID (exit 1)\n")
+		for _, e := range result.Errors {
+			fmt.Fprintf(os.Stderr, "  - %s\n", e)
+		}
+		os.Exit(ExitValidationError)
+	}
+
+	fmt.Printf("Chain Status:    VALID & VERIFIED (exit 0)\n")
+	os.Exit(ExitSuccess)
+}
+

@@ -1,7 +1,7 @@
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **uisce** (394313 symbols, 571697 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **uisce** (395465 symbols, 577262 relationships, 300 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 
@@ -19,35 +19,6 @@ This project is indexed by GitNexus as **uisce** (394313 symbols, 571697 relatio
 - NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
 - NEVER rename symbols with find-and-replace — use `rename` which understands the call graph.
 - NEVER commit changes without running `detect_changes()` to check affected scope.
-- NEVER create a new rule/validation table, schema, or engine. The validation engine is
-  centralized and is the only place validation policy lives. Extend the existing store rather
-  than adding a parallel one. See "Validation engine — single store" below.
-
-## Validation engine — single store
-
-Validation is centralized. MDM/business-object rules live in `catalog_node` under a
-`validation_rule/{tenant}/{rule_key}` qualified path, with the rule body in
-`config->'rule_ast'` (a `vm.RuleNode` AST) and the metadata in `properties`
-(`ValidationRuleProperties` in `backend/internal/models/validation_rule_types.go`:
-`bo_name`, `severity` BLOCK|WARN, `timing`, `category`, `governance_status`, `domain`,
-`binding_ids`). Consumers read them through
-`analytics.ValidationRuleService.ListByBO` — see `backend/internal/mastering/rules.go`.
-
-Two things that look like other rule stores but are not:
-
-- `public.validation_rules` — BP/trade rules (targets `trade`, `semantic_term`), read by
-  `backend/internal/handlers/validation_rules_list.go` and the BP designer handlers. A
-  different domain from the MDM rules, not a competing copy of them.
-- `public.catalog_node` rows of `qualified_path` prefix `validation_rule/` — this IS the
-  MDM rule store.
-
-The database has ~80 further `*rule*` tables that are all zero-row (verified 2026-09-29).
-They are dead schema, not alternative stores. Do not treat any of them as authoritative and
-do not add to them. Consolidating them is tracked in `docs/unified-rule-engine-handoff.md`
-("Rulefabric consolidation"); contribute there rather than starting a parallel effort.
-
-When investigating a rule that "looks missing", check `catalog_node` first — querying
-`public.validation_rules` will return nothing and is a false negative.
 
 ## Resources
 

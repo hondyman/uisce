@@ -46,7 +46,6 @@ import {
   ManageAccounts as ManageAccountsIcon,
   AutoFixHigh as AutoFixHighIcon,
   AutoAwesome as AIIcon,
-  Store as StoreIcon,
   Storage as StorageIcon,
   PlayCircleOutline as PlayCircleOutlineIcon,
   SupervisorAccount as SupervisorAccountIcon,
@@ -54,7 +53,6 @@ import {
   Speed as SpeedIcon,
   AccountTree as AccountTreeIcon,
   Layers as LayersIcon,
-  Event as EventIcon,
   Extension as ExtensionIcon
 } from '@mui/icons-material';
 import {
@@ -109,7 +107,7 @@ interface NavigationMenu {
 
 interface CategoryConfig {
   label: string;
-  key: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar';
+  key: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity';
   icon: React.ReactNode;
   defaultPath: string; // Navigate here when category is selected
   color: {
@@ -279,8 +277,6 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
           { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
-          { label: 'Marketplace', path: '/marketplace', icon: <StoreIcon />, description: 'Components library' },
-          { label: 'UI Components', path: '/marketplace/components', icon: <CodeIcon />, description: 'Component marketplace' },
         ]
       },
       {
@@ -492,32 +488,6 @@ const categoryConfigs: CategoryConfig[] = [
         ]
       }
     ]
-  },
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CALENDAR - Calendar synchronization and management
-  // ═══════════════════════════════════════════════════════════════════════════
-  {
-    label: 'Calendar',
-    key: 'calendar',
-    icon: <EventIcon />,
-    defaultPath: '/calendar',
-    color: {
-      primary: '#009688',
-      light: '#E0F2F1',
-      dark: '#00796B',
-      background: 'rgba(0, 150, 136, 0.08)'
-    },
-    menus: [
-      {
-        label: 'Management',
-        icon: <EventIcon />,
-        items: [
-          { label: 'Calendar Dashboard', path: '/calendar', icon: <EventIcon />, description: 'View events and sync status' },
-          { label: 'Sync Conflicts', path: '/calendar/conflicts', icon: <WarningIcon />, description: 'Resolve synchronization conflicts' },
-        ]
-      }
-    ]
   }
 ];
 
@@ -675,7 +645,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
-  const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar' | null>('tenants');
+  const [selectedCategory, setSelectedCategory] = useState<'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | null>('tenants');
   // Nav Mode preference: 'dropdown' or 'cards'
   const [navMode, setNavMode] = useState<'dropdown' | 'cards'>(() => {
     return (localStorage.getItem('app-nav-mode-preference') as 'dropdown' | 'cards') || 'dropdown';
@@ -699,7 +669,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const currentCategory = selectedCategory ? filteredCategoryConfigs.find(c => c.key === selectedCategory) : null;
 
   // Handle category selection from dropdown - navigate to default page
-  const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity' | 'calendar') => {
+  const handleCategorySelect = (categoryKey: 'tenants' | 'catalog' | 'weave' | 'studio' | 'workflow' | 'intelligence' | 'entity') => {
     setSelectedCategory(categoryKey);
     setCategoryMenuAnchorEl(null);
 

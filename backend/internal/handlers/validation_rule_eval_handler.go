@@ -5,11 +5,31 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	"github.com/hondyman/uisce/backend/internal/logging"
+	"golang.org/x/time/rate"
 )
+
+var (
+	pushdownSemaphore = make(chan struct{}, 10) // max 10 concurrent pushdowns cluster-wide
+	batchLimiterMu    sync.Mutex
+	batchLimiters     = make(map[string]*rate.Limiter)
+)
+
+func getBatchLimiter(tenantID string) *rate.Limiter {
+	batchLimiterMu.Lock()
+	defer batchLimiterMu.Unlock()
+	lim, ok := batchLimiters[tenantID]
+	if !ok {
+		lim = rate.NewLimiter(rate.Limit(60.0/60.0), 60) // 60 batch requests per minute
+		batchLimiters[tenantID] = lim
+	}
+	return lim
+}
 
 func parseUUIDOrNil(s string) uuid.UUID {
 	id, err := uuid.Parse(s)
@@ -39,6 +59,17 @@ type EvaluateBatchRequest struct {
 	Domain  string           `json:"domain,omitempty"`
 	Timing  string           `json:"timing,omitempty"`
 	Records []map[string]any `json:"records"`
+}
+
+// EvaluatePushdownRequest specifies parameters for pushdown evaluation.
+type EvaluatePushdownRequest struct {
+	BOName        string    `json:"bo_name"`
+	Table         string    `json:"table"`
+	PKColumn      string    `json:"pk_column"`
+	Domain        string    `json:"domain,omitempty"`
+	Timing        string    `json:"timing,omitempty"`
+	MaxDetailRows int       `json:"max_detail_rows,omitempty"`
+	AsOf          time.Time `json:"as_of,omitempty"`
 }
 
 func (h *ValidationRuleHandler) handleEvaluateRecord(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +145,12 @@ func (h *ValidationRuleHandler) handleEvaluateBatch(w http.ResponseWriter, r *ht
 		tenantID = parseUUIDOrNil(tStr)
 	}
 
+	// Rate limiting: max 60 batch evaluation requests per minute per tenant
+	if !getBatchLimiter(tenantID.String()).Allow() {
+		http.Error(w, "rate limit exceeded: max 60 batch evaluation requests per minute per tenant", http.StatusTooManyRequests)
+		return
+	}
+
 	var req EvaluateBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
@@ -153,6 +190,76 @@ func (h *ValidationRuleHandler) handleEvaluateBatch(w http.ResponseWriter, r *ht
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(batchRes)
+}
+
+func (h *ValidationRuleHandler) handleEvaluatePushdown(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		tStr := r.URL.Query().Get("tenant_id")
+		if tStr == "" {
+			tStr = r.Header.Get("X-Tenant-ID")
+		}
+		if tStr == "" {
+			tStr = "00000000-0000-0000-0000-000000000000"
+		}
+		tenantID = parseUUIDOrNil(tStr)
+	}
+
+	// Concurrency quota guard: max 10 concurrent pushdowns cluster-wide
+	select {
+	case pushdownSemaphore <- struct{}{}:
+		defer func() { <-pushdownSemaphore }()
+	default:
+		http.Error(w, "pushdown capacity exceeded: max concurrent pushdown operations running (try again shortly)", http.StatusTooManyRequests)
+		return
+	}
+
+	var req EvaluatePushdownRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.BOName == "" {
+		http.Error(w, "bo_name is required", http.StatusBadRequest)
+		return
+	}
+	if req.Table == "" {
+		http.Error(w, "table is required", http.StatusBadRequest)
+		return
+	}
+	if req.PKColumn == "" {
+		req.PKColumn = "id"
+	}
+	if req.MaxDetailRows <= 0 {
+		req.MaxDetailRows = 100
+	}
+
+	if h.svc == nil {
+		http.Error(w, "validation rule service not configured", http.StatusInternalServerError)
+		return
+	}
+
+	snap, err := h.svc.LoadRuleSnapshotAsOf(r.Context(), tenantID.String(), req.BOName, req.Domain, req.Timing, req.AsOf)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("evaluate-pushdown: load snapshot failed: %v", err)
+		http.Error(w, "load rule snapshot failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	connRes := analytics.NewDirectConnResolver(h.db)
+	opts := analytics.PushdownOptions{
+		MaxDetailRows: req.MaxDetailRows,
+	}
+
+	res, err := h.svc.RunPushdown(r.Context(), connRes, snap, req.Table, req.PKColumn, opts)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("evaluate-pushdown: pushdown execution failed: %v", err)
+		http.Error(w, "pushdown execution failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 func (h *ValidationRuleHandler) handleLoadSnapshot(w http.ResponseWriter, r *http.Request) {

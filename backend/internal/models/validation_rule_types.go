@@ -129,11 +129,14 @@ type ValidationRuleDescriptor struct {
 }
 
 // ParseValidationRuleProperties unmarshals ValidationRuleProperties from
-// catalog_node.properties.
+// catalog_node.properties, normalizing legacy status aliases.
 func ParseValidationRuleProperties(raw json.RawMessage) (*ValidationRuleProperties, error) {
 	var props ValidationRuleProperties
 	if err := json.Unmarshal(raw, &props); err != nil {
 		return nil, err
+	}
+	if props.GovernanceStatus == "review" {
+		props.GovernanceStatus = ValidationRuleGovernanceSubmittedForReview
 	}
 	return &props, nil
 }

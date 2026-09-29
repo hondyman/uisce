@@ -164,3 +164,15 @@ func TestEvaluateBatchHandler(t *testing.T) {
 		t.Fatalf("unexpected records alignment: %+v", batchRes.Records)
 	}
 }
+
+func TestEvaluatePushdownHandler_MissingParams(t *testing.T) {
+	h := &ValidationRuleHandler{}
+	rec := httptest.NewRecorder()
+	h.handleEvaluatePushdown(rec, postJSON(t, "/evaluate-pushdown", map[string]any{
+		"bo_name": "",
+	}))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for empty bo_name, got %d", rec.Code)
+	}
+}
+
