@@ -204,10 +204,13 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
       body = (
         <Section title="Search">
           <SelectField label="Sets variable" value={props.variable as string} options={vars} onChange={(v) => setProps({ variable: v })} />
-          <SelectField label="Style" value={(props.variant as 'search') ?? 'search'}
-            options={[{ value: 'search', label: 'Search' }, { value: 'plain', label: 'Text' }, { value: 'title', label: 'Title (a name)' }, { value: 'date', label: 'Date' }]}
-            onChange={(v) => setProps({ variant: v === 'search' ? undefined : v })} />
-          {text('label', 'Label')}{text('placeholder', 'Placeholder')}
+          {text('label', 'Label')}
+          {text('placeholder', 'Placeholder')}
+          <SelectField label="Variant" value={(props.variant as string) ?? 'search'}
+            options={[{ value: 'search', label: 'Search input' }, { value: 'typeahead', label: 'Typeahead / Autocomplete' }, { value: 'plain', label: 'Plain input' }, { value: 'title', label: 'Title style' }, { value: 'date', label: 'Date' }]}
+            onChange={(v) => setProps({ variant: v as never })} />
+          <TextField size="small" label="Options from query path (typeahead)" value={props.optionsFrom as string ?? ''} onChange={(e) => setProps({ optionsFrom: e.target.value || undefined })} />
+          <TextField size="small" label="Options field in rows (typeahead)" value={props.optionsField as string ?? ''} onChange={(e) => setProps({ optionsField: e.target.value || undefined })} />
           <TextField size="small" type="number" label="Debounce (ms)" value={props.debounceMs ?? 300} onChange={(e) => setProps({ debounceMs: Number(e.target.value) })} />
         </Section>
       );
@@ -236,6 +239,22 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             {text('emptyText', 'When empty')}
             <SwitchField label="Show progress while refetching" checked={!!p.progressOnFetch} onChange={(v) => setProps({ progressOnFetch: v })} />
           </Section>
+          <Section title="Filtering & Search">
+            <SwitchField label="Enable built-in table search toolbar" checked={!!p.enableSearch} onChange={(v) => setProps({ enableSearch: v || undefined })} />
+            {p.enableSearch && (
+              <>
+                <SelectField label="Search style" value={p.searchVariant ?? 'typeahead'}
+                  options={[{ value: 'typeahead', label: 'Typeahead / Autocomplete' }, { value: 'text', label: 'Standard text input' }]}
+                  onChange={(v) => setProps({ searchVariant: v as never })} />
+                <TextField size="small" label="Placeholder" value={typeof p.searchPlaceholder === 'string' ? p.searchPlaceholder : ''} onChange={(e) => setProps({ searchPlaceholder: e.target.value || undefined })} />
+                <TextField size="small" label="Typeahead option field in rows (e.g. attribute_code, vendor_name)" value={p.searchOptionsField ?? ''} onChange={(e) => setProps({ searchOptionsField: e.target.value || undefined })} />
+                <TextField size="small" type="number" label="Search width (px)" value={typeof p.searchWidth === 'number' ? p.searchWidth : 400} onChange={(e) => setProps({ searchWidth: e.target.value ? Number(e.target.value) : undefined })} />
+              </>
+            )}
+            <SelectField label="Sync with page search variable (optional)" value={p.searchVariable ?? ''} options={[{ value: '', label: '(None / Standalone)' }, ...vars]} onChange={(v) => setProps({ searchVariable: v || undefined })} />
+            <TextField size="small" label="Search fields (comma-separated, empty = all)" value={(p.searchFields ?? []).join(', ')} onChange={(e) => setProps({ searchFields: e.target.value ? e.target.value.split(',').map((s) => s.trim()).filter(Boolean) : undefined })} />
+            <JsonField label="Variable filters { rowField: varName }" value={p.filters ?? null} minRows={2} onChange={(v) => setProps({ filters: v || undefined })} />
+          </Section>
           <Section title="Columns">
             <ListEditor items={p.columns ?? []} onChange={(v) => setProps({ columns: v })} addLabel="Add column"
               create={() => ({ id: `col_${Math.random().toString(36).slice(2, 6)}`, header: '', field: '' })}
@@ -253,6 +272,36 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
       );
       break;
     }
+    case 'FacetFilter':
+      body = (
+        <>
+          <Section title="Facet Filter">
+            <SelectField label="Target variable" value={props.variable as string} options={vars} onChange={(v) => setProps({ variable: v })} />
+            {text('label', 'Label')}{text('allLabel', 'All options label')}
+            <SelectField label="Count from query" value={props.query as string ?? ''} options={[{ value: '', label: '(None)' }, ...queries]} onChange={(v) => setProps({ query: v || undefined })} />
+            <TextField size="small" label="Rows path in query" value={props.rowsPath as string ?? ''} onChange={(e) => setProps({ rowsPath: e.target.value || undefined })} />
+            <TextField size="small" label="Facet field in row" value={props.facetField as string ?? ''} onChange={(e) => setProps({ facetField: e.target.value || undefined })} />
+          </Section>
+          <Section title="Facet Options">
+            <JsonField label="Options [{ value, label, color }]" value={props.options ?? []} minRows={3} onChange={(v) => setProps({ options: v || [] })} />
+            <JsonField label="Color map { value: color }" value={props.colorMap ?? null} minRows={2} onChange={(v) => setProps({ colorMap: v || undefined })} />
+          </Section>
+        </>
+      );
+      break;
+    case 'ProgressBar':
+      body = (
+        <Section title="Progress Bar">
+          <SelectField label="Message variable" value={props.variable as string ?? ''} options={[{ value: '', label: '(None)' }, ...vars]} onChange={(v) => setProps({ variable: v || undefined })} />
+          {text('label', 'Static label / template')}
+          <SwitchField label="Show pulsing signal" checked={props.showSignal !== false} onChange={(v) => setProps({ showSignal: v })} />
+          <SelectField label="Color" value={(props.color as string) ?? 'primary'}
+            options={['primary', 'secondary', 'success', 'warning', 'info'].map((c) => ({ value: c, label: c }))}
+            onChange={(v) => setProps({ color: v as never })} />
+          <TextField size="small" type="number" label="Progress (0-100, blank = indeterminate)" value={props.progress ?? ''} onChange={(e) => setProps({ progress: e.target.value ? Number(e.target.value) : undefined })} />
+        </Section>
+      );
+      break;
     case 'AlertBanner':
       body = (
         <Section title="Alert">

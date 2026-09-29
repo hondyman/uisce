@@ -4,20 +4,131 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 // PostgresRepository implements Repository backed by PostgreSQL (and fallback demo generation).
 type PostgresRepository struct {
 	db          *sql.DB
 	starrocksDB *sql.DB
+	costMu      sync.RWMutex
+	vendorCosts map[string]float64
+	domainCosts map[string]map[string]float64
+	shadowMu    sync.RWMutex
+	shadowLogs  []ShadowRunLogEntry
 }
 
 // NewPostgresRepository creates a new Postgres-backed repository.
 func NewPostgresRepository(db *sql.DB) *PostgresRepository {
-	return &PostgresRepository{db: db}
+	repo := &PostgresRepository{
+		db: db,
+		vendorCosts: map[string]float64{
+			"BBG": 2140000,
+			"RFT": 1180000,
+			"FDS": 720000,
+			"ICE": 540000,
+			"SPG": 610000,
+		},
+		domainCosts: map[string]map[string]float64{
+			"BBG": {"pricing": 900000, "security": 640000, "ratings": 250000, "benchmarks": 200000, "party": 150000},
+			"RFT": {"party": 400000, "security": 350000, "pricing": 250000, "benchmarks": 100000, "ratings": 80000},
+			"FDS": {"benchmarks": 300000, "security": 200000, "party": 120000, "pricing": 60000, "ratings": 40000},
+			"ICE": {"pricing": 280000, "security": 160000, "ratings": 40000, "benchmarks": 30000, "party": 30000},
+			"SPG": {"ratings": 320000, "benchmarks": 180000, "party": 60000, "security": 30000, "pricing": 20000},
+		},
+	}
+	return repo
+}
+
+// GetVendorCosts returns a snapshot of configured annual spends per vendor.
+func (r *PostgresRepository) GetVendorCosts(ctx context.Context) (map[string]float64, error) {
+	r.costMu.RLock()
+	defer r.costMu.RUnlock()
+	res := make(map[string]float64, len(r.vendorCosts))
+	for k, v := range r.vendorCosts {
+		res[k] = v
+	}
+	return res, nil
+}
+
+// GetVendorDomainCosts returns domain-level spend allocations per vendor.
+func (r *PostgresRepository) GetVendorDomainCosts(ctx context.Context) (map[string]map[string]float64, error) {
+	r.costMu.RLock()
+	defer r.costMu.RUnlock()
+	res := make(map[string]map[string]float64, len(r.domainCosts))
+	for vID, dMap := range r.domainCosts {
+		sub := make(map[string]float64, len(dMap))
+		for d, cost := range dMap {
+			sub[d] = cost
+		}
+		res[vID] = sub
+	}
+	return res, nil
+}
+
+// SetVendorCost updates annual spend for a vendor either overall or for a specific entity domain.
+func (r *PostgresRepository) SetVendorCost(ctx context.Context, vendorID string, cost float64, entityDomain string) error {
+	r.costMu.Lock()
+	defer r.costMu.Unlock()
+
+	if cost < 0 {
+		cost = 0
+	}
+
+	if entityDomain != "" {
+		if r.domainCosts == nil {
+			r.domainCosts = make(map[string]map[string]float64)
+		}
+		if r.domainCosts[vendorID] == nil {
+			r.domainCosts[vendorID] = make(map[string]float64)
+		}
+		r.domainCosts[vendorID][entityDomain] = cost
+
+		// Recalculate total vendor cost as sum of domains
+		var total float64
+		for _, c := range r.domainCosts[vendorID] {
+			total += c
+		}
+		r.vendorCosts[vendorID] = total
+	} else {
+		// Update overall vendor cost
+		oldTotal := r.vendorCosts[vendorID]
+		r.vendorCosts[vendorID] = cost
+
+		// Proportionally scale domain costs if oldTotal > 0
+		if dMap, exists := r.domainCosts[vendorID]; exists && oldTotal > 0 {
+			ratio := cost / oldTotal
+			for d, c := range dMap {
+				dMap[d] = c * ratio
+			}
+		}
+	}
+
+	// Persist to Postgres if table exists
+	if r.db != nil {
+		_, _ = r.db.ExecContext(ctx, `
+			CREATE TABLE IF NOT EXISTS mdm_eval.vendor_spend (
+				vendor_id VARCHAR(32) NOT NULL,
+				entity_domain VARCHAR(64) NOT NULL DEFAULT '',
+				annual_cost NUMERIC(15,2) NOT NULL,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				PRIMARY KEY (vendor_id, entity_domain)
+			)
+		`)
+		_, _ = r.db.ExecContext(ctx, `
+			INSERT INTO mdm_eval.vendor_spend (vendor_id, entity_domain, annual_cost, updated_at)
+			VALUES ($1, $2, $3, NOW())
+			ON CONFLICT (vendor_id, entity_domain) DO UPDATE
+			SET annual_cost = EXCLUDED.annual_cost, updated_at = NOW()
+		`, vendorID, entityDomain, cost)
+	}
+
+	return nil
 }
 
 // SetStarRocksDB sets the StarRocks connection for hot OLAP mart syncing.
@@ -60,6 +171,63 @@ func (r *PostgresRepository) SyncToStarRocks(ctx context.Context, asOf time.Time
 		)
 		if err != nil {
 			return fmt.Errorf("starrocks exec error for %s/%s: %w", s.AttributeCode, s.VendorID, err)
+		}
+	}
+	return nil
+}
+
+// SyncMultiDimensionalScorecardToStarRocks persists multi-dimensional vendor scorecards with weight profile provenance to StarRocks.
+func (r *PostgresRepository) SyncMultiDimensionalScorecardToStarRocks(
+	ctx context.Context,
+	asOf time.Time,
+	tenantID string,
+	weightProfileID int64,
+	entityDomain string,
+	profiles []VendorDimensionProfile,
+) error {
+	if r.starrocksDB == nil {
+		return nil
+	}
+	asOfDate := asOf.Format("2006-01-02")
+	query := `
+		INSERT INTO mdm_analytics.vendor_scorecard_multi_dimensional (
+			tenant_id, as_of_date, vendor_id, entity_domain, weight_profile_id,
+			sufficiency_rate, coverage_rate, solo_rate, sla_compliance_rate,
+			avg_delivery_lag_mins, stability_score, revision_rate, revisions_count,
+			steward_friction_cost, rights_score, composite_quality_score,
+			annual_spend, cost_per_quality_point, is_on_frontier
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	stmt, err := r.starrocksDB.PrepareContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("starrocks multi-dim prepare error: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, p := range profiles {
+		_, err := stmt.ExecContext(ctx,
+			tenantID,
+			asOfDate,
+			p.VendorID,
+			entityDomain,
+			weightProfileID,
+			p.Components.Sufficiency,
+			p.Components.Coverage,
+			0.0,
+			p.Components.SLA,
+			int(p.AvgDeliveryLagMins),
+			p.Components.Stability,
+			p.RevisionRatePct/100.0,
+			p.TotalRevisions,
+			p.FrictionCost,
+			p.RightsScore,
+			p.CompositeQuality,
+			p.AnnualSpend,
+			p.CostPerQualityPoint,
+			false,
+		)
+		if err != nil {
+			return fmt.Errorf("starrocks multi-dim exec error for %s: %w", p.VendorID, err)
 		}
 	}
 	return nil
@@ -311,3 +479,678 @@ func generateBaselineOverrides(from time.Time) []ValueOverrideRecord {
 		},
 	}
 }
+
+// GetScoringSettings retrieves tenant-level scoring settings, or defaults.
+func (r *PostgresRepository) GetScoringSettings(ctx context.Context) (*ScoringSettings, error) {
+	if r.db != nil {
+		query := `
+			SELECT tenant_id, hourly_labor_rate, stability_decay_k, friction_budget, cold_start_days,
+			       watermark_hot_days, watermark_warm_days, updated_at
+			FROM mdm_eval.scoring_settings
+			LIMIT 1
+		`
+		var s ScoringSettings
+		err := r.db.QueryRowContext(ctx, query).Scan(
+			&s.TenantID, &s.HourlyLaborRate, &s.StabilityDecayK, &s.FrictionBudget, &s.ColdStartDays,
+			&s.WatermarkHotDays, &s.WatermarkWarmDays, &s.UpdatedAt,
+		)
+		if err == nil {
+			if s.WatermarkHotDays <= 0 {
+				s.WatermarkHotDays = 30
+			}
+			if s.WatermarkWarmDays <= 0 {
+				s.WatermarkWarmDays = 365
+			}
+			return &s, nil
+		}
+	}
+	return &ScoringSettings{
+		TenantID:          uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+		HourlyLaborRate:   150.00,
+		StabilityDecayK:   50.00,
+		FrictionBudget:    100000.00,
+		ColdStartDays:     30,
+		WatermarkHotDays:  30,
+		WatermarkWarmDays: 365,
+		UpdatedAt:         time.Now(),
+	}, nil
+}
+
+// GetActiveWeightProfile fetches the currently active weight profile.
+func (r *PostgresRepository) GetActiveWeightProfile(ctx context.Context) (*WeightProfile, error) {
+	if r.db != nil {
+		query := `
+			SELECT profile_id, tenant_id, profile_name, is_active,
+			       weight_suff, weight_cov, weight_sla, weight_stab, weight_oer, weight_lic,
+			       created_by, change_reason, created_at
+			FROM mdm_eval.scoring_weight_profiles
+			WHERE is_active = TRUE
+			ORDER BY profile_id DESC
+			LIMIT 1
+		`
+		var p WeightProfile
+		err := r.db.QueryRowContext(ctx, query).Scan(
+			&p.ProfileID, &p.TenantID, &p.ProfileName, &p.IsActive,
+			&p.WeightSuff, &p.WeightCov, &p.WeightSLA, &p.WeightStab, &p.WeightOER, &p.WeightLic,
+			&p.CreatedBy, &p.ChangeReason, &p.CreatedAt,
+		)
+		if err == nil {
+			return &p, nil
+		}
+	}
+	return &WeightProfile{
+		ProfileID:    1,
+		TenantID:     uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+		ProfileName:  "Balanced Institutional Standard",
+		IsActive:     true,
+		WeightSuff:   0.300,
+		WeightCov:    0.200,
+		WeightSLA:    0.150,
+		WeightStab:   0.150,
+		WeightOER:    0.100,
+		WeightLic:    0.100,
+		CreatedBy:    "default_seed",
+		ChangeReason: "Initial default weight configuration",
+		CreatedAt:    time.Now(),
+	}, nil
+}
+
+// GetWeightProfiles lists all registered weight profiles.
+func (r *PostgresRepository) GetWeightProfiles(ctx context.Context) ([]WeightProfile, error) {
+	if r.db != nil {
+		query := `
+			SELECT profile_id, tenant_id, profile_name, is_active,
+			       weight_suff, weight_cov, weight_sla, weight_stab, weight_oer, weight_lic,
+			       created_by, change_reason, created_at
+			FROM mdm_eval.scoring_weight_profiles
+			ORDER BY profile_id DESC
+		`
+		rows, err := r.db.QueryContext(ctx, query)
+		if err == nil {
+			defer rows.Close()
+			var list []WeightProfile
+			for rows.Next() {
+				var p WeightProfile
+				if err := rows.Scan(
+					&p.ProfileID, &p.TenantID, &p.ProfileName, &p.IsActive,
+					&p.WeightSuff, &p.WeightCov, &p.WeightSLA, &p.WeightStab, &p.WeightOER, &p.WeightLic,
+					&p.CreatedBy, &p.ChangeReason, &p.CreatedAt,
+				); err == nil {
+					list = append(list, p)
+				}
+			}
+			if len(list) > 0 {
+				return list, nil
+			}
+		}
+	}
+	active, _ := r.GetActiveWeightProfile(ctx)
+	return []WeightProfile{*active}, nil
+}
+
+// SaveWeightProfile persists a new weight profile and optionally sets it as active.
+func (r *PostgresRepository) SaveWeightProfile(ctx context.Context, profile WeightProfile) (*WeightProfile, error) {
+	if r.db == nil {
+		profile.ProfileID = time.Now().UnixNano()
+		profile.CreatedAt = time.Now()
+		return &profile, nil
+	}
+
+	if profile.TenantID == uuid.Nil {
+		profile.TenantID = uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	}
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	if profile.IsActive {
+		_, _ = tx.ExecContext(ctx, `
+			UPDATE mdm_eval.scoring_weight_profiles
+			SET is_active = FALSE
+			WHERE tenant_id = $1
+		`, profile.TenantID)
+	}
+
+	query := `
+		INSERT INTO mdm_eval.scoring_weight_profiles (
+			tenant_id, profile_name, is_active,
+			weight_suff, weight_cov, weight_sla, weight_stab, weight_oer, weight_lic,
+			created_by, change_reason, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+		RETURNING profile_id, created_at
+	`
+	err = tx.QueryRowContext(ctx, query,
+		profile.TenantID, profile.ProfileName, profile.IsActive,
+		profile.WeightSuff, profile.WeightCov, profile.WeightSLA, profile.WeightStab, profile.WeightOER, profile.WeightLic,
+		profile.CreatedBy, profile.ChangeReason,
+	).Scan(&profile.ProfileID, &profile.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// GetVendorFeedLogs retrieves feed arrival telemetry logs.
+func (r *PostgresRepository) GetVendorFeedLogs(ctx context.Context, asOf time.Time, windowDays int) ([]VendorFeedLog, error) {
+	if r.db != nil {
+		query := `
+			SELECT log_id, tenant_id, vendor_id, entity_domain, feed_name, as_of_date,
+			       arrival_ts, sla_cutoff_ts, delivery_lag_mins, sla_breached, records_received, created_at
+			FROM mdm_eval.vendor_feed_log
+			WHERE as_of_date <= $1 AND as_of_date >= $2
+			LIMIT 1000
+		`
+		fromDate := asOf.AddDate(0, 0, -windowDays)
+		rows, err := r.db.QueryContext(ctx, query, asOf, fromDate)
+		if err == nil {
+			defer rows.Close()
+			var logs []VendorFeedLog
+			for rows.Next() {
+				var l VendorFeedLog
+				if err := rows.Scan(
+					&l.LogID, &l.TenantID, &l.VendorID, &l.EntityDomain, &l.FeedName, &l.AsOfDate,
+					&l.ArrivalTS, &l.SLACutoffTS, &l.DeliveryLagMins, &l.SLABreached, &l.RecordsReceived, &l.CreatedAt,
+				); err == nil {
+					logs = append(logs, l)
+				}
+			}
+			if len(logs) > 0 {
+				return logs, nil
+			}
+		}
+	}
+	return generateBaselineFeedLogs(asOf, windowDays), nil
+}
+
+// GetVendorRevisions retrieves vendor-initiated revision logs.
+func (r *PostgresRepository) GetVendorRevisions(ctx context.Context, asOf time.Time, windowDays int) ([]VendorRevisionLog, error) {
+	if r.db != nil {
+		query := `
+			SELECT revision_id, tenant_id, vendor_id, entity_id, attribute_code, entity_domain,
+			       as_of_date, original_value, revised_value, pct_change, hours_to_revision, revision_ts
+			FROM mdm_eval.vendor_revision_log
+			WHERE as_of_date <= $1 AND as_of_date >= $2
+			LIMIT 1000
+		`
+		fromDate := asOf.AddDate(0, 0, -windowDays)
+		rows, err := r.db.QueryContext(ctx, query, asOf, fromDate)
+		if err == nil {
+			defer rows.Close()
+			var revs []VendorRevisionLog
+			for rows.Next() {
+				var rev VendorRevisionLog
+				var pct sql.NullFloat64
+				if err := rows.Scan(
+					&rev.RevisionID, &rev.TenantID, &rev.VendorID, &rev.EntityID, &rev.AttributeCode, &rev.EntityDomain,
+					&rev.AsOfDate, &rev.OriginalValue, &rev.RevisedValue, &pct, &rev.HoursToRevision, &rev.RevisionTS,
+				); err == nil {
+					rev.PctChange = pct.Float64
+					revs = append(revs, rev)
+				}
+			}
+			if len(revs) > 0 {
+				return revs, nil
+			}
+		}
+	}
+	return generateBaselineRevisions(asOf, windowDays), nil
+}
+
+// GetVendorFrictions retrieves operational friction and steward time tracking.
+func (r *PostgresRepository) GetVendorFrictions(ctx context.Context, asOf time.Time) ([]VendorOperationalFriction, error) {
+	if r.db != nil {
+		query := `
+			SELECT metric_id, tenant_id, vendor_id, as_of_date,
+			       defect_tickets_count, investigation_hours, avg_mttr_hours, contract_sla_credits,
+			       calculated_friction_cost, updated_at
+			FROM mdm_eval.vendor_operational_friction
+			WHERE as_of_date <= $1
+			ORDER BY as_of_date DESC
+			LIMIT 100
+		`
+		rows, err := r.db.QueryContext(ctx, query, asOf)
+		if err == nil {
+			defer rows.Close()
+			var list []VendorOperationalFriction
+			for rows.Next() {
+				var f VendorOperationalFriction
+				if err := rows.Scan(
+					&f.MetricID, &f.TenantID, &f.VendorID, &f.AsOfDate,
+					&f.DefectTicketsCount, &f.InvestigationHours, &f.AvgMTTRHours, &f.ContractSLACredits,
+					&f.CalculatedFrictionCost, &f.UpdatedAt,
+				); err == nil {
+					list = append(list, f)
+				}
+			}
+			if len(list) > 0 {
+				return list, nil
+			}
+		}
+	}
+	return generateBaselineFrictions(asOf), nil
+}
+
+// GetVendorContractRights retrieves contract rights matrices for vendors.
+func (r *PostgresRepository) GetVendorContractRights(ctx context.Context) ([]VendorContractRights, error) {
+	if r.db != nil {
+		query := `
+			SELECT contract_id, tenant_id, vendor_id,
+			       derived_data_rights, client_redistribution, external_web_rights,
+			       unbundled_api_access, cancellation_notice_days,
+			       contract_start_date, contract_end_date, composite_rights_score, updated_at
+			FROM mdm_eval.vendor_contract_rights
+		`
+		rows, err := r.db.QueryContext(ctx, query)
+		if err == nil {
+			defer rows.Close()
+			var list []VendorContractRights
+			for rows.Next() {
+				var cr VendorContractRights
+				if err := rows.Scan(
+					&cr.ContractID, &cr.TenantID, &cr.VendorID,
+					&cr.DerivedDataRights, &cr.ClientRedistribution, &cr.ExternalWebRights,
+					&cr.UnbundledAPIAccess, &cr.CancellationNoticeDays,
+					&cr.ContractStartDate, &cr.ContractEndDate, &cr.CompositeRightsScore, &cr.UpdatedAt,
+				); err == nil {
+					list = append(list, cr)
+				}
+			}
+			if len(list) > 0 {
+				return list, nil
+			}
+		}
+	}
+	return generateBaselineContractRights(), nil
+}
+
+func generateBaselineFeedLogs(asOf time.Time, windowDays int) []VendorFeedLog {
+	var logs []VendorFeedLog
+	vendors := []string{"BBG", "RFT", "FDS", "ICE", "SPG"}
+	domains := []string{"pricing", "security", "ratings", "benchmarks", "party"}
+
+	if windowDays <= 0 {
+		windowDays = 30
+	}
+
+	logID := int64(1)
+	for d := 0; d < windowDays; d++ {
+		curDate := asOf.AddDate(0, 0, -d)
+		for _, v := range vendors {
+			for _, dom := range domains {
+				lag := 12
+				breached := false
+				if v == "ICE" && dom == "pricing" && d%10 == 0 {
+					lag = 35
+					breached = true
+				} else if v == "SPG" && d%7 == 0 {
+					lag = 40
+					breached = true
+				} else if v == "RFT" && d%15 == 0 {
+					lag = 25
+					breached = true
+				} else if v == "BBG" && d == 2 {
+					lag = 22
+					breached = true
+				}
+
+				logs = append(logs, VendorFeedLog{
+					LogID:           logID,
+					TenantID:        uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+					VendorID:        v,
+					EntityDomain:    dom,
+					FeedName:        fmt.Sprintf("%s_%s_EOD", v, strings.ToUpper(dom)),
+					AsOfDate:        curDate,
+					ArrivalTS:       curDate.Add(time.Duration(21*60+lag) * time.Minute),
+					SLACutoffTS:     curDate.Add(21*time.Hour + 20*time.Minute),
+					DeliveryLagMins: lag,
+					SLABreached:     breached,
+					RecordsReceived: 42000,
+					CreatedAt:       curDate,
+				})
+				logID++
+			}
+		}
+	}
+	return logs
+}
+
+func generateBaselineRevisions(asOf time.Time, windowDays int) []VendorRevisionLog {
+	var revs []VendorRevisionLog
+	vendors := []string{"BBG", "RFT", "FDS", "ICE", "SPG"}
+	revCounts := map[string]int{"BBG": 2, "RFT": 6, "FDS": 3, "ICE": 8, "SPG": 12}
+
+	revID := int64(1)
+	for _, v := range vendors {
+		count := revCounts[v]
+		for i := 0; i < count; i++ {
+			revs = append(revs, VendorRevisionLog{
+				RevisionID:      revID,
+				TenantID:        uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+				VendorID:        v,
+				EntityID:        int64(100 + i*15),
+				AttributeCode:   "CLOSING_PRICE",
+				EntityDomain:    "pricing",
+				AsOfDate:        asOf.AddDate(0, 0, -i*2),
+				OriginalValue:   "102.50",
+				RevisedValue:    "102.40",
+				PctChange:       -0.097,
+				HoursToRevision: 2.5,
+				RevisionTS:      asOf.AddDate(0, 0, -i*2).Add(2 * time.Hour),
+			})
+			revID++
+		}
+	}
+	return revs
+}
+
+func generateBaselineFrictions(asOf time.Time) []VendorOperationalFriction {
+	return []VendorOperationalFriction{
+		{
+			MetricID:               1,
+			TenantID:               uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+			VendorID:               "BBG",
+			AsOfDate:               asOf,
+			DefectTicketsCount:     4,
+			InvestigationHours:     15.0,
+			AvgMTTRHours:           3.2,
+			ContractSLACredits:     0.0,
+			CalculatedFrictionCost: 2250.0,
+		},
+		{
+			MetricID:               2,
+			TenantID:               uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+			VendorID:               "RFT",
+			AsOfDate:               asOf,
+			DefectTicketsCount:     11,
+			InvestigationHours:     35.0,
+			AvgMTTRHours:           5.4,
+			ContractSLACredits:     500.0,
+			CalculatedFrictionCost: 4750.0,
+		},
+		{
+			MetricID:               3,
+			TenantID:               uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+			VendorID:               "FDS",
+			AsOfDate:               asOf,
+			DefectTicketsCount:     6,
+			InvestigationHours:     20.0,
+			AvgMTTRHours:           3.8,
+			ContractSLACredits:     0.0,
+			CalculatedFrictionCost: 3000.0,
+		},
+		{
+			MetricID:               4,
+			TenantID:               uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+			VendorID:               "ICE",
+			AsOfDate:               asOf,
+			DefectTicketsCount:     14,
+			InvestigationHours:     40.0,
+			AvgMTTRHours:           7.1,
+			ContractSLACredits:     1000.0,
+			CalculatedFrictionCost: 5000.0,
+		},
+		{
+			MetricID:               5,
+			TenantID:               uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999"),
+			VendorID:               "SPG",
+			AsOfDate:               asOf,
+			DefectTicketsCount:     19,
+			InvestigationHours:     55.0,
+			AvgMTTRHours:           8.5,
+			ContractSLACredits:     1500.0,
+			CalculatedFrictionCost: 6750.0,
+		},
+	}
+}
+
+func generateBaselineContractRights() []VendorContractRights {
+	now := time.Now()
+	end := now.AddDate(1, 0, 0)
+	tenantID := uuid.MustParse("99e99e99-99e9-49e9-89e9-99e99e99e999")
+	return []VendorContractRights{
+		{
+			ContractID:             1,
+			TenantID:               tenantID,
+			VendorID:               "BBG",
+			DerivedDataRights:      85,
+			ClientRedistribution:   70,
+			ExternalWebRights:      50,
+			UnbundledAPIAccess:     false,
+			CancellationNoticeDays: 90,
+			ContractStartDate:      now,
+			ContractEndDate:        end,
+			CompositeRightsScore:   69.25,
+		},
+		{
+			ContractID:             2,
+			TenantID:               tenantID,
+			VendorID:               "RFT",
+			DerivedDataRights:      90,
+			ClientRedistribution:   80,
+			ExternalWebRights:      65,
+			UnbundledAPIAccess:     true,
+			CancellationNoticeDays: 60,
+			ContractStartDate:      now,
+			ContractEndDate:        end,
+			CompositeRightsScore:   83.25,
+		},
+		{
+			ContractID:             3,
+			TenantID:               tenantID,
+			VendorID:               "FDS",
+			DerivedDataRights:      80,
+			ClientRedistribution:   75,
+			ExternalWebRights:      60,
+			UnbundledAPIAccess:     true,
+			CancellationNoticeDays: 60,
+			ContractStartDate:      now,
+			ContractEndDate:        end,
+			CompositeRightsScore:   77.75,
+		},
+		{
+			ContractID:             4,
+			TenantID:               tenantID,
+			VendorID:               "ICE",
+			DerivedDataRights:      85,
+			ClientRedistribution:   85,
+			ExternalWebRights:      70,
+			UnbundledAPIAccess:     true,
+			CancellationNoticeDays: 30,
+			ContractStartDate:      now,
+			ContractEndDate:        end,
+			CompositeRightsScore:   86.50,
+		},
+		{
+			ContractID:             5,
+			TenantID:               tenantID,
+			VendorID:               "SPG",
+			DerivedDataRights:      70,
+			ClientRedistribution:   60,
+			ExternalWebRights:      40,
+			UnbundledAPIAccess:     true,
+			CancellationNoticeDays: 90,
+			ContractStartDate:      now,
+			ContractEndDate:        end,
+			CompositeRightsScore:   64.50,
+		},
+	}
+}
+
+// LogShadowRun records an executed shadow evaluation run into mdm_eval.shadow_run_log.
+func (r *PostgresRepository) LogShadowRun(ctx context.Context, entry ShadowRunLogEntry) error {
+	if entry.TenantID == "" {
+		entry.TenantID = "default"
+	}
+	if entry.ExecutedAt.IsZero() {
+		entry.ExecutedAt = time.Now()
+	}
+	if entry.Status == "" {
+		entry.Status = "COMPLETED"
+	}
+	if entry.SolverStrategy == "" {
+		entry.SolverStrategy = "BITMASK_BRANCH_AND_BOUND"
+	}
+	if entry.MetadataJSON == "" {
+		entry.MetadataJSON = "{}"
+	}
+
+	if r.db != nil {
+		query := `
+			INSERT INTO mdm_eval.shadow_run_log (
+				tenant_id, executed_at, candidate_vendor_ids, dropped_vendor_ids, replacement_vendor_ids,
+				universe_size, t1_concordance_delta, t2_concordance_delta, t3_concordance_delta,
+				gross_annual_savings, net_tco_benefit, payback_months, solver_latency_ms,
+				solver_strategy, solver_partial, status, metadata
+			) VALUES (
+				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb
+			) RETURNING run_id
+		`
+		var runID int64
+		err := r.db.QueryRowContext(ctx, query,
+			entry.TenantID,
+			entry.ExecutedAt,
+			pq.Array(entry.CandidateVendorIDs),
+			pq.Array(entry.DroppedVendorIDs),
+			pq.Array(entry.ReplacementVendorIDs),
+			entry.UniverseSize,
+			entry.T1ConcordanceDelta,
+			entry.T2ConcordanceDelta,
+			entry.T3ConcordanceDelta,
+			entry.GrossAnnualSavings,
+			entry.NetTCOBenefit,
+			entry.PaybackMonths,
+			entry.SolverLatencyMs,
+			entry.SolverStrategy,
+			entry.SolverPartial,
+			entry.Status,
+			entry.MetadataJSON,
+		).Scan(&runID)
+		if err == nil {
+			entry.RunID = runID
+		}
+	}
+
+	r.shadowMu.Lock()
+	r.shadowLogs = append([]ShadowRunLogEntry{entry}, r.shadowLogs...)
+	if len(r.shadowLogs) > 100 {
+		r.shadowLogs = r.shadowLogs[:100]
+	}
+	r.shadowMu.Unlock()
+
+	return nil
+}
+
+// GetShadowRuns retrieves recent shadow runs for audit and trend comparator.
+func (r *PostgresRepository) GetShadowRuns(ctx context.Context, tenantID string, limit int) ([]ShadowRunLogEntry, error) {
+	if limit <= 0 {
+		limit = 30
+	}
+	if tenantID == "" {
+		tenantID = "default"
+	}
+
+	if r.db != nil {
+		query := `
+			SELECT run_id, tenant_id, executed_at, candidate_vendor_ids, dropped_vendor_ids, replacement_vendor_ids,
+			       universe_size, t1_concordance_delta, t2_concordance_delta, t3_concordance_delta,
+			       gross_annual_savings, net_tco_benefit, payback_months, solver_latency_ms,
+			       solver_strategy, solver_partial, status, metadata
+			FROM mdm_eval.shadow_run_log
+			WHERE tenant_id = $1 OR tenant_id = 'default'
+			ORDER BY executed_at DESC
+			LIMIT $2
+		`
+		rows, err := r.db.QueryContext(ctx, query, tenantID, limit)
+		if err == nil {
+			defer rows.Close()
+			var entries []ShadowRunLogEntry
+			for rows.Next() {
+				var e ShadowRunLogEntry
+				var cand, drop, repl []string
+				var meta sql.NullString
+				if err := rows.Scan(
+					&e.RunID, &e.TenantID, &e.ExecutedAt,
+					pq.Array(&cand), pq.Array(&drop), pq.Array(&repl),
+					&e.UniverseSize, &e.T1ConcordanceDelta, &e.T2ConcordanceDelta, &e.T3ConcordanceDelta,
+					&e.GrossAnnualSavings, &e.NetTCOBenefit, &e.PaybackMonths, &e.SolverLatencyMs,
+					&e.SolverStrategy, &e.SolverPartial, &e.Status, &meta,
+				); err == nil {
+					e.CandidateVendorIDs = cand
+					e.DroppedVendorIDs = drop
+					e.ReplacementVendorIDs = repl
+					e.MetadataJSON = meta.String
+					entries = append(entries, e)
+				}
+			}
+			if len(entries) > 0 {
+				return entries, nil
+			}
+		}
+	}
+
+	r.shadowMu.RLock()
+	defer r.shadowMu.RUnlock()
+	if len(r.shadowLogs) > 0 {
+		res := make([]ShadowRunLogEntry, 0, len(r.shadowLogs))
+		for _, l := range r.shadowLogs {
+			if l.TenantID == tenantID || l.TenantID == "default" || tenantID == "default" {
+				res = append(res, l)
+				if len(res) >= limit {
+					break
+				}
+			}
+		}
+		if len(res) > 0 {
+			return res, nil
+		}
+	}
+
+	// Generate baseline recent run history if database is clean
+	now := time.Now()
+	return []ShadowRunLogEntry{
+		{
+			RunID:                1,
+			TenantID:             tenantID,
+			ExecutedAt:           now.Add(-2 * time.Hour),
+			CandidateVendorIDs:   []string{"BBG", "RFT", "FDS", "ICE", "SPG"},
+			DroppedVendorIDs:     []string{"BBG", "FDS"},
+			ReplacementVendorIDs: []string{"ICE"},
+			UniverseSize:         42000,
+			T1ConcordanceDelta:   -0.002,
+			T2ConcordanceDelta:   -0.007,
+			T3ConcordanceDelta:   -0.045,
+			GrossAnnualSavings:   2860000,
+			NetTCOBenefit:        1500000,
+			PaybackMonths:        5.2,
+			SolverLatencyMs:      15.2,
+			SolverStrategy:       "BITMASK_BRANCH_AND_BOUND",
+			Status:               "COMPLETED",
+		},
+		{
+			RunID:                2,
+			TenantID:             tenantID,
+			ExecutedAt:           now.Add(-26 * time.Hour),
+			CandidateVendorIDs:   []string{"BBG", "RFT", "FDS", "ICE", "SPG"},
+			DroppedVendorIDs:     []string{"FDS"},
+			ReplacementVendorIDs: []string{"SPG"},
+			UniverseSize:         42000,
+			T1ConcordanceDelta:   0.000,
+			T2ConcordanceDelta:   -0.003,
+			T3ConcordanceDelta:   -0.015,
+			GrossAnnualSavings:   720000,
+			NetTCOBenefit:        480000,
+			PaybackMonths:        3.1,
+			SolverLatencyMs:      14.8,
+			SolverStrategy:       "BITMASK_BRANCH_AND_BOUND",
+			Status:               "COMPLETED",
+		},
+	}, nil
+}
+

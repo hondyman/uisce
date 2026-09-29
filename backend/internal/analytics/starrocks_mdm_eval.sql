@@ -48,3 +48,38 @@ DISTRIBUTED BY HASH(attribute_code, vendor_id) BUCKETS 16
 PROPERTIES (
     "replication_num" = "1"
 );
+
+-- 5. Multi-Dimensional Scorecard Analytical Mart (Primary Key Table with Weight Profile Provenance)
+CREATE TABLE IF NOT EXISTS mdm_analytics.vendor_scorecard_multi_dimensional (
+    tenant_id               VARCHAR(36) NOT NULL,
+    as_of_date              DATE NOT NULL,
+    vendor_id               VARCHAR(32) NOT NULL,
+    entity_domain           VARCHAR(32) NOT NULL,
+    weight_profile_id       BIGINT NOT NULL,
+    sufficiency_rate        DOUBLE,
+    coverage_rate           DOUBLE,
+    solo_rate               DOUBLE,
+    sla_compliance_rate     DOUBLE,
+    avg_delivery_lag_mins   INT,
+    stability_score         DOUBLE,
+    revision_rate           DOUBLE,
+    revisions_count         INT,
+    steward_friction_cost   DOUBLE,
+    rights_score            DOUBLE,
+    composite_quality_score DOUBLE,
+    annual_spend            DOUBLE,
+    cost_per_quality_point  DOUBLE,
+    is_on_frontier          BOOLEAN
+)
+ENGINE = OLAP
+PRIMARY KEY (tenant_id, as_of_date, vendor_id, entity_domain, weight_profile_id)
+PARTITION BY RANGE(as_of_date) (
+    PARTITION p2026_q1 VALUES [('2026-01-01'), ('2026-04-01')),
+    PARTITION p2026_q2 VALUES [('2026-04-01'), ('2026-07-01')),
+    PARTITION p2026_q3 VALUES [('2026-07-01'), ('2026-10-01')),
+    PARTITION p2026_q4 VALUES [('2026-10-01'), ('2027-01-01'))
+)
+DISTRIBUTED BY HASH(tenant_id, vendor_id) BUCKETS 8
+PROPERTIES (
+    "replication_num" = "1"
+);

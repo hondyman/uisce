@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
+  Alert, Autocomplete, Box, Button, Chip, CircularProgress, Collapse, IconButton, InputAdornment, LinearProgress, MenuItem, Paper, Stack, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, TextField, ToggleButton, ToggleButtonGroup, Tooltip, Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import SearchIcon from '@mui/icons-material/Search';
+import ClearIcon from '@mui/icons-material/Clear';
 import { CatalogErrorAlert } from '../../../features/message-catalog/parts';
 import { getDomainComponent } from '../../../studio-core/components/registry';
 import type { ComponentDefinition } from '../../../types/pageStudio';
@@ -23,7 +24,7 @@ export type { CanvasProps } from './canvas';
 export type { ChatProps } from './chat';
 
 /** Component types rendered by this module (the page application widgets). */
-export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock', 'Canvas', 'Chat'] as const;
+export const APP_WIDGET_TYPES = ['PageHeader', 'VariableSelect', 'SearchInput', 'ActionButton', 'DataGrid', 'AlertBanner', 'DomainComponent', 'KeyValue', 'Timeline', 'Form', 'TextBlock', 'Canvas', 'Chat', 'FacetFilter', 'ProgressBar'] as const;
 export type AppWidgetType = typeof APP_WIDGET_TYPES[number];
 export const isAppWidget = (type: string): type is AppWidgetType => (APP_WIDGET_TYPES as readonly string[]).includes(type);
 
@@ -42,6 +43,8 @@ export const APP_WIDGET_DEFAULTS: Record<AppWidgetType, Record<string, unknown>>
   TextBlock: { text: 'Section title', variant: 'subtitle2' },
   Canvas: DEFAULT_CANVAS_PROPS as unknown as Record<string, unknown>,
   Chat: DEFAULT_CHAT_PROPS as unknown as Record<string, unknown>,
+  FacetFilter: { variable: '', label: 'Filter', allLabel: 'All', options: [] },
+  ProgressBar: { variable: '', label: 'Processing...', showSignal: true },
 };
 
 // --- Props per widget (component.props) ------------------------------------
@@ -63,12 +66,38 @@ export interface VariableSelectProps {
   variant?: 'select' | 'toggle';
 }
 export interface SearchInputProps {
-  variable: string; placeholder?: TextSpec; debounceMs?: number; maxWidth?: number;
-  /** search (default, with an icon), plain (a labelled text field) or title (a large borderless name, e.g. a pipeline's). */
-  variant?: 'search' | 'plain' | 'title' | 'date';
+  variable: string;
+  placeholder?: TextSpec;
+  debounceMs?: number;
+  maxWidth?: number;
+  /** search (default, with an icon), plain (a labelled text field), title, date (a date filter), or typeahead (autocomplete with suggestions). */
+  variant?: 'search' | 'plain' | 'title' | 'date' | 'typeahead';
   label?: TextSpec;
   /** After the value is committed (e.g. mark the page unsaved), with {{value}}. */
   onChange?: Action[];
+  /** Static options or path to dynamic items array (e.g. 'queries.scorecard.data.substitution_matrix') */
+  optionsFrom?: string;
+  /** If optionsFrom is an array of objects, the field to pull options from (e.g. 'attribute_code') */
+  optionsField?: string;
+  options?: { value: string; label?: TextSpec }[];
+}
+export interface FacetFilterProps {
+  variable: string;
+  label?: TextSpec;
+  allLabel?: TextSpec;
+  query?: string;
+  rowsPath?: string;
+  facetField?: string;
+  options?: { value: string; label: TextSpec; color?: ChipColor }[];
+  colorMap?: Record<string, ChipColor>;
+}
+export interface ProgressBarProps {
+  variable?: string;
+  label?: TextSpec;
+  progress?: number;
+  showSignal?: boolean;
+  color?: 'primary' | 'secondary' | 'success' | 'warning' | 'info';
+  height?: number;
 }
 export interface ActionButtonProps {
   label: TextSpec;
@@ -108,6 +137,22 @@ export interface DataGridProps {
   dynamicColumns?: { from: Binding; idField?: string; header: TextSpec; valuePath?: string; cell: CellSpec; insertAt?: number; minWidth?: number };
   /** Freeze the first column while scrolling sideways (wide matrices). */
   stickyFirstColumn?: boolean;
+  /** Client-side search: page variable name to match against row fields */
+  searchVariable?: string;
+  /** Limit search to these fields (default: all string/number fields) */
+  searchFields?: string[];
+  /** Client-side filters: map of rowField -> variableName (e.g. { vendor_id: 'vendor_filter', tier: 'tier_filter' }) */
+  filters?: Record<string, string>;
+  /** Enable built-in table search toolbar directly above the table */
+  enableSearch?: boolean;
+  /** Search variant: 'typeahead' (MUI Autocomplete) or 'text' (standard TextField) */
+  searchVariant?: 'typeahead' | 'text';
+  /** Placeholder for built-in table search */
+  searchPlaceholder?: TextSpec;
+  /** Field to extract typeahead options from rows (e.g. attribute_code, vendor_name) */
+  searchOptionsField?: string;
+  /** Max width of the search toolbar input (default: 400) */
+  searchWidth?: number | string;
 }
 export interface AlertBannerProps {
   severity?: Binding;
@@ -205,6 +250,29 @@ function SearchInput({ p, scope }: { p: SearchInputProps; scope: Scope }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, p.variable, p.debounceMs, setVariable]);
   const label = p.label ? text(p.label, scope) : undefined;
+
+  const typeaheadOptions = useMemo<string[]>(() => {
+    if (p.variant !== 'typeahead') return [];
+    if (Array.isArray(p.options) && p.options.length > 0) {
+      return p.options.map((o) => o.value);
+    }
+    if (p.optionsFrom) {
+      const source = getPath(scope, p.optionsFrom);
+      if (Array.isArray(source)) {
+        const seen = new Set<string>();
+        for (const item of source) {
+          if (!item) continue;
+          const val = p.optionsField && typeof item === 'object'
+            ? String((item as Record<string, unknown>)[p.optionsField] ?? '').trim()
+            : String(item).trim();
+          if (val) seen.add(val);
+        }
+        return Array.from(seen).sort();
+      }
+    }
+    return [];
+  }, [p.variant, p.options, p.optionsFrom, p.optionsField, scope]);
+
   if (p.variant === 'date') {
     // A date filter: committed as picked (YYYY-MM-DD).
     return (
@@ -218,10 +286,169 @@ function SearchInput({ p, scope }: { p: SearchInputProps; scope: Scope }) {
         inputProps={{ 'aria-label': label ?? p.variable, style: { fontSize: 20, fontWeight: 600 } }} sx={{ minWidth: 220, flex: '1 1 260px', maxWidth: p.maxWidth ?? 480 }} />
     );
   }
+
+  if (p.variant === 'typeahead') {
+    return (
+      <Autocomplete
+        freeSolo
+        size="small"
+        sx={{ flex: 1, maxWidth: p.maxWidth ?? 420, minWidth: 220 }}
+        options={typeaheadOptions}
+        value={draft}
+        onInputChange={(_event, newInputValue) => {
+          setDraft(newInputValue);
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label={label}
+            placeholder={p.placeholder ? text(p.placeholder, scope) : undefined}
+            InputProps={{
+              ...params.InputProps,
+              startAdornment: (
+                <>
+                  <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>
+                  {params.InputProps.startAdornment}
+                </>
+              ),
+            }}
+          />
+        )}
+      />
+    );
+  }
+
   return (
     <TextField size="small" sx={{ flex: 1, maxWidth: p.maxWidth ?? 420 }} label={label} placeholder={p.placeholder ? text(p.placeholder, scope) : undefined} value={draft}
       onChange={(e) => setDraft(e.target.value)}
       InputProps={p.variant === 'plain' ? undefined : { startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }} />
+  );
+}
+
+function FacetFilter({ p, scope }: { p: FacetFilterProps; scope: Scope }) {
+  const { setVariable } = useAppRuntime();
+  const currentVal = String(getPath(scope, `vars.${p.variable}`) ?? '');
+
+  // Calculate item counts if query and facetField are given
+  const counts = useMemo<Record<string, number>>(() => {
+    if (!p.query || !p.facetField) return {};
+    const q = getPath(scope, `queries.${p.query}`) as QueryState | undefined;
+    const raw = p.rowsPath ? getPath(q?.data, p.rowsPath) : q?.data;
+    if (!Array.isArray(raw)) return {};
+    const res: Record<string, number> = {};
+    for (const item of raw) {
+      if (item && typeof item === 'object') {
+        const val = String((item as Record<string, unknown>)[p.facetField] ?? '');
+        if (val) {
+          res[val] = (res[val] || 0) + 1;
+        }
+      }
+    }
+    return res;
+  }, [p.query, p.rowsPath, p.facetField, scope]);
+
+  const totalCount = useMemo(() => {
+    return Object.values(counts).reduce((sum, n) => sum + n, 0);
+  }, [counts]);
+
+  const allLabelText = p.allLabel ? text(p.allLabel, scope) : 'All';
+
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+      {p.label && <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600, mr: 0.5 }}>{text(p.label, scope)}:</Typography>}
+      <Chip
+        size="small"
+        label={totalCount > 0 ? `${allLabelText} (${totalCount})` : allLabelText}
+        variant={currentVal === '' ? 'filled' : 'outlined'}
+        color={currentVal === '' ? 'primary' : 'default'}
+        onClick={() => setVariable(p.variable, '')}
+        sx={{ cursor: 'pointer', fontWeight: currentVal === '' ? 600 : 400 }}
+      />
+      {(p.options ?? []).map((opt) => {
+        const selected = currentVal.toLowerCase() === opt.value.toLowerCase();
+        const cnt = counts[opt.value];
+        const lbl = text(opt.label, scope);
+        const labelWithCount = cnt !== undefined ? `${lbl} (${cnt})` : lbl;
+        const color = opt.color ?? (p.colorMap?.[opt.value] as ChipColor) ?? 'default';
+
+        return (
+          <Chip
+            key={opt.value}
+            size="small"
+            label={labelWithCount}
+            variant={selected ? 'filled' : 'outlined'}
+            color={selected ? (color !== 'default' ? color : 'primary') : 'default'}
+            onClick={() => setVariable(p.variable, selected ? '' : opt.value)}
+            sx={{ cursor: 'pointer', fontWeight: selected ? 600 : 400 }}
+          />
+        );
+      })}
+    </Box>
+  );
+}
+
+function ProgressBarWidget({ p, scope }: { p: ProgressBarProps; scope: Scope }) {
+  const rawMsg = p.variable ? getPath(scope, `vars.${p.variable}`) : null;
+  const msg = rawMsg !== undefined && rawMsg !== null && String(rawMsg).trim() !== ''
+    ? String(rawMsg)
+    : p.label ? text(p.label, scope) : '';
+
+  if (!msg && p.progress === undefined) {
+    return null;
+  }
+
+  const isDeterminate = typeof p.progress === 'number' && !isNaN(p.progress);
+  const color = p.color ?? 'primary';
+
+  return (
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 1.5,
+        bgcolor: 'action.hover',
+        borderColor: `${color}.light`,
+        borderRadius: 1.5,
+        position: 'relative',
+        overflow: 'hidden',
+        width: '100%',
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, gap: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {p.showSignal && (
+            <Box
+              sx={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                bgcolor: `${color}.main`,
+                boxShadow: (theme) => `0 0 0 3px ${theme.palette[color]?.light || '#90caf9'}55`,
+                animation: 'studioPulse 1.5s infinite ease-in-out',
+                '@keyframes studioPulse': {
+                  '0%': { transform: 'scale(0.95)', opacity: 0.7 },
+                  '50%': { transform: 'scale(1.2)', opacity: 1 },
+                  '100%': { transform: 'scale(0.95)', opacity: 0.7 },
+                },
+              }}
+            />
+          )}
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            {msg}
+          </Typography>
+        </Box>
+        {isDeterminate && (
+          <Typography variant="caption" sx={{ fontWeight: 700, color: `${color}.main` }}>
+            {Math.round(p.progress!)}%
+          </Typography>
+        )}
+      </Box>
+      <LinearProgress
+        variant={isDeterminate ? 'determinate' : 'indeterminate'}
+        value={isDeterminate ? p.progress : undefined}
+        color={color}
+        sx={{ height: p.height ?? 6, borderRadius: 3 }}
+      />
+    </Paper>
   );
 }
 
@@ -385,10 +612,83 @@ function GridRow({ row, index, p, scope, cols }: { row: unknown; index: number; 
 }
 
 function DataGrid({ p, scope }: { p: DataGridProps; scope: Scope }) {
+  const { setVariable } = useAppRuntime();
+  const [localSearch, setLocalSearch] = useState('');
+
   const q = getPath(scope, `queries.${p.query}`) as QueryState | undefined;
   const data = q?.data;
   const rowsRaw = p.rowsPath ? getPath(data, p.rowsPath) : data;
-  const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+  let rows = Array.isArray(rowsRaw) ? rowsRaw : [];
+
+  // Effective search string (bound variable or internal local state)
+  const boundSearch = p.searchVariable ? String(getPath(scope, `vars.${p.searchVariable}`) ?? '') : null;
+  const currentSearch = boundSearch !== null ? boundSearch : localSearch;
+
+  const handleSearchChange = (val: string) => {
+    if (p.searchVariable) {
+      setVariable(p.searchVariable, val);
+    } else {
+      setLocalSearch(val);
+    }
+  };
+
+  // Typeahead options computed dynamically from rows
+  const typeaheadOptions = useMemo<string[]>(() => {
+    if (!Array.isArray(rowsRaw)) return [];
+    const seen = new Set<string>();
+    for (const row of rowsRaw) {
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      if (p.searchOptionsField && r[p.searchOptionsField] !== undefined) {
+        const val = String(r[p.searchOptionsField]).trim();
+        if (val) seen.add(val);
+      } else if (p.searchFields && p.searchFields.length > 0) {
+        for (const f of p.searchFields) {
+          const val = String(r[f] ?? '').trim();
+          if (val) seen.add(val);
+        }
+      } else {
+        for (const val of Object.values(r)) {
+          if (typeof val === 'string' && val.length > 0 && val.length < 50) {
+            seen.add(val.trim());
+          }
+        }
+      }
+    }
+    return Array.from(seen).sort();
+  }, [rowsRaw, p.searchOptionsField, p.searchFields]);
+
+  // Client-side search filtering
+  const searchStr = currentSearch.trim().toLowerCase();
+  if (searchStr) {
+    rows = rows.filter((row: unknown) => {
+      if (!row || typeof row !== 'object') return false;
+      const r = row as Record<string, unknown>;
+      if (p.searchFields && p.searchFields.length > 0) {
+        return p.searchFields.some((f) => String(r[f] ?? '').toLowerCase().includes(searchStr));
+      }
+      return Object.values(r).some((val) =>
+        typeof val === 'string' || typeof val === 'number' ? String(val).toLowerCase().includes(searchStr) : false
+      );
+    });
+  }
+
+  // Client-side variable filter mapping (e.g. { vendor_id: 'vendor_filter', tier: 'tier_filter' })
+  if (p.filters) {
+    for (const [rowField, varName] of Object.entries(p.filters)) {
+      const filterVal = getPath(scope, `vars.${varName}`);
+      if (filterVal !== undefined && filterVal !== null && String(filterVal).trim() !== '') {
+        const strVal = String(filterVal).toLowerCase();
+        rows = rows.filter((row: unknown) => {
+          if (!row || typeof row !== 'object') return false;
+          const val = (row as Record<string, unknown>)[rowField];
+          if (val === undefined || val === null) return false;
+          return String(val).toLowerCase() === strVal;
+        });
+      }
+    }
+  }
+
   // Column visibility is page-level (e.g. an actions column only for open items); some columns come from data.
   const cols = useGridColumns(p, scope);
   const busy = q ? (p.progressOnFetch ? q.isFetching : q.isLoading) : false;
@@ -399,6 +699,64 @@ function DataGrid({ p, scope }: { p: DataGridProps; scope: Scope }) {
       {!!q?.error && <Box sx={{ mb: 1 }}><CatalogErrorAlert error={q.error} /></Box>}
       {!q && <Alert severity="info">Choose a query for this grid.</Alert>}
       <TableContainer component={Paper} variant="outlined" sx={p.maxHeight ? { maxHeight: p.maxHeight } : undefined}>
+        {p.enableSearch && (
+          <Box sx={{ p: 1.25, px: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, maxWidth: p.searchWidth ?? 400 }}>
+              {p.searchVariant === 'text' ? (
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder={p.searchPlaceholder ? text(p.searchPlaceholder, scope) : 'Search table...'}
+                  value={currentSearch}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon fontSize="small" />
+                      </InputAdornment>
+                    ),
+                    endAdornment: currentSearch ? (
+                      <InputAdornment position="end">
+                        <IconButton size="small" onClick={() => handleSearchChange('')} aria-label="Clear search">
+                          <ClearIcon fontSize="small" />
+                        </IconButton>
+                      </InputAdornment>
+                    ) : undefined,
+                  }}
+                />
+              ) : (
+                <Autocomplete
+                  freeSolo
+                  size="small"
+                  fullWidth
+                  options={typeaheadOptions}
+                  value={currentSearch}
+                  onInputChange={(_event, newInputValue) => {
+                    handleSearchChange(newInputValue);
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      placeholder={p.searchPlaceholder ? text(p.searchPlaceholder, scope) : 'Typeahead filter table...'}
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: (
+                          <>
+                            <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>
+                            {params.InputProps.startAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              )}
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>
+              Showing {rows.length} {rows.length === 1 ? 'row' : 'rows'}
+            </Typography>
+          </Box>
+        )}
         <Table size="small" stickyHeader={!!p.maxHeight}>
           <TableHead>
             <TableRow>
@@ -410,9 +768,26 @@ function DataGrid({ p, scope }: { p: DataGridProps; scope: Scope }) {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rows.map((row, i) => (
-              <GridRow key={String(getPath(row, p.rowKey ?? 'id') ?? i)} row={row} index={i} p={p} scope={scope} cols={cols} />
-            ))}
+            {(() => {
+              const seen = new Set<string>();
+              return rows.map((row, i) => {
+                let k: string;
+                if (p.rowKey && p.rowKey.includes(',')) {
+                  k = p.rowKey
+                    .split(',')
+                    .map((f) => String(getPath(row, f.trim()) ?? ''))
+                    .join('::');
+                } else {
+                  const raw = getPath(row, p.rowKey ?? 'id') ?? getPath(row, 'key');
+                  k = raw !== undefined && raw !== null ? String(raw) : String(i);
+                }
+                if (!k || seen.has(k)) {
+                  k = `${k || 'row'}__${i}`;
+                }
+                seen.add(k);
+                return <GridRow key={k} row={row} index={i} p={p} scope={scope} cols={cols} />;
+              });
+            })()}
             {q && !q.isLoading && !q.error && rows.length === 0 && (
               <TableRow><TableCell colSpan={span}>
                 <Typography color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>{text(p.emptyText ?? 'studioApp.empty', scope)}</Typography>
@@ -475,6 +850,8 @@ export function AppWidget({ component }: { component: ComponentDefinition }) {
     case 'TextBlock': return <TextBlockView p={p} scope={scope} />;
     case 'Canvas': return <Canvas p={p} scope={scope} />;
     case 'Chat': return <Chat p={p} scope={scope} />;
+    case 'FacetFilter': return <FacetFilter p={p} scope={scope} />;
+    case 'ProgressBar': return <ProgressBarWidget p={p} scope={scope} />;
     default: return null;
   }
 }
