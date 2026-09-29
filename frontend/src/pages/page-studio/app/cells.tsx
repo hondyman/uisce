@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Box, Button, Chip, IconButton, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Chip, IconButton, Stack, Switch, TextField, Tooltip, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { fmt } from '../../../features/schedules/api';
 import type { CellBody, CellSpec, ChipColor, RowButton, TextSpec } from './appModel';
@@ -41,6 +41,22 @@ function RowButtonView({ b, scope }: { b: RowButton; scope: Scope }) {
     <Button size="small" variant={b.variant ?? 'text'} color={b.color ?? 'primary'} disabled={mode === 'design'} onClick={click}>
       {text(b.label, scope)}
     </Button>
+  );
+}
+
+/** A row's on/off switch: runs its actions with the new {{value}}; waits while they run. */
+function ToggleCell({ spec, scope }: { spec: Extract<CellBody, { kind: 'toggle' }>; scope: Scope }) {
+  const { runActions, mode } = useAppRuntime();
+  const [busy, setBusy] = React.useState(false);
+  const on = !!resolve(spec.value, scope);
+  const label = spec.label ? text(spec.label, scope) : undefined;
+  const change = async (value: boolean) => {
+    setBusy(true);
+    try { await runActions(spec.onChange, { ...scope, value }); } finally { setBusy(false); }
+  };
+  return (
+    <Switch checked={on} disabled={busy || mode === 'design'} onClick={(e) => e.stopPropagation()}
+      onChange={(e) => void change(e.target.checked)} slotProps={{ input: { 'aria-label': label } }} />
   );
 }
 
@@ -213,6 +229,8 @@ function CellBodyView({ spec, scope }: { spec: CellBody; scope: Scope }) {
       );
     case 'input':
       return <InputCell spec={spec} scope={scope} />;
+    case 'toggle':
+      return <ToggleCell spec={spec} scope={scope} />;
     default:
       return null;
   }

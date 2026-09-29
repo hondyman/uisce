@@ -1,5 +1,6 @@
 import type { ComponentDefinition, CorePageDefinition, PageLayout, PageTab } from '../../../../types/pageStudio';
 import type { Action, CellSpec, ColumnDef, ConditionNode } from '../appModel';
+import { scheduleEditor } from './schedules';
 
 /**
  * Data pipelines and the pipeline editor as Page Studio pages (they replaced
@@ -196,11 +197,9 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
     onClose: [set('assistantOpen', false)],
   }, { style: { flex: '0 0 380px' }, visibleWhen: cond('vars.assistantOpen', 'is_true') });
 
-  // --- the schedule (the shared schedule editor, a domain component for now) ------------
-  w('schedule', 'DomainComponent', {
-    component: 'schedules.TargetSchedule', inputs: { kind: 'data_pipeline', ref: ID, name: '{{vars.name}}', open: '{{vars.scheduleOpen}}' },
-    events: { close: [set('scheduleOpen', false)] },
-  }, { style: fit });
+  // --- the schedule: the studio schedule editor, fixed to this pipeline ------------------
+  const sched = scheduleEditor({ open: 'scheduleOpen', fixed: { kind: 'data_pipeline', ref: ID, name: '{{vars.name}}' } });
+  Object.assign(components, sched.components);
 
   // --- problems, preview, runs ------------------------------------------------------
   w('problems', 'DataGrid', {
@@ -259,7 +258,8 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
   const tabs: PageTab[] = [{
     id: 'editor', label: 'Editor',
     layout: layout('root', {
-      root: { type: 'Column', children: ['toolbar', 'main', 'schedule'], style: { ...nowrap, height: 'calc(100vh - 64px)' } },
+      root: { type: 'Column', children: ['toolbar', 'main', 'sched_dialog'], style: { ...nowrap, height: 'calc(100vh - 64px)' } },
+      ...sched.nodes,
       toolbar: {
         type: 'Row', children: ['back', 'name', 'unsaved', 'status', 'actions'],
         style: { alignItems: 'center', gap: '8px', padding: '8px 16px', borderBottom: '1px solid rgba(128,128,128,0.3)' },
@@ -321,7 +321,7 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
         { name: 'openRun', description: 'The run shown in detail' },
         { name: 'assistantOpen', default: false },
         { name: 'assistantChat', default: [], description: 'The conversation with the assistant' },
-        { name: 'scheduleOpen', default: false },
+        ...sched.variables,
       ],
       queries: [
         { id: 'load', operation: 'dataPipelines.load', params: { id: ID } },
@@ -346,6 +346,7 @@ function editorPage(): Omit<CorePageDefinition, 'id' | 'createdAt' | 'updatedAt'
         },
         { id: 'runDetail', operation: 'dataPipelines.runDetail', params: { run: '{{vars.openRun}}', spec: '{{vars.spec}}' }, enabledWhen: cond('vars.openRun', 'is_not_empty') },
         { id: 'schedule', operation: 'schedules.forTarget', params: { kind: 'data_pipeline', ref: ID } },
+        ...sched.queries,
       ],
     },
   };

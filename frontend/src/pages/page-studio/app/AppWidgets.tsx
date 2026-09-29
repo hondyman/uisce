@@ -65,7 +65,7 @@ export interface VariableSelectProps {
 export interface SearchInputProps {
   variable: string; placeholder?: TextSpec; debounceMs?: number; maxWidth?: number;
   /** search (default, with an icon), plain (a labelled text field) or title (a large borderless name, e.g. a pipeline's). */
-  variant?: 'search' | 'plain' | 'title';
+  variant?: 'search' | 'plain' | 'title' | 'date';
   label?: TextSpec;
   /** After the value is committed (e.g. mark the page unsaved), with {{value}}. */
   onChange?: Action[];
@@ -98,7 +98,8 @@ export interface DataGridProps {
    * Expandable detail under a row (the values that competed for an attribute):
    * a nested table over `rows` (resolved with {{row}}), shown for rows where `when` holds.
    */
-  rowDetail?: { rows: Binding; columns: ColumnDef[]; text?: TextSpec; when?: ConditionNode; emptyText?: TextSpec };
+  /** An expandable detail under a row: text (in an alert when severity is set) and/or a nested table of rows. */
+  rowDetail?: { rows?: Binding; columns?: ColumnDef[]; text?: TextSpec; severity?: 'error' | 'warning' | 'info'; when?: ConditionNode; emptyText?: TextSpec };
   /**
    * Columns generated from data (one per source): for each entry of `from`
    * ({{col}}), a column headed `header` whose cell sees {{col}} and {{value}} =
@@ -204,6 +205,13 @@ function SearchInput({ p, scope }: { p: SearchInputProps; scope: Scope }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, p.variable, p.debounceMs, setVariable]);
   const label = p.label ? text(p.label, scope) : undefined;
+  if (p.variant === 'date') {
+    // A date filter: committed as picked (YYYY-MM-DD).
+    return (
+      <TextField size="small" type="date" label={label} value={committed} InputLabelProps={{ shrink: true }}
+        onChange={(e) => { sent.current = e.target.value; setDraft(e.target.value); setVariable(p.variable, e.target.value); if (p.onChange?.length) void runActions(p.onChange, { value: e.target.value }); }} />
+    );
+  }
   if (p.variant === 'title') {
     return (
       <TextField variant="standard" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={p.placeholder ? text(p.placeholder, scope) : undefined}
@@ -312,9 +320,14 @@ function RowDetail({ p, rowScope, span }: { p: DataGridProps; rowScope: Scope; s
   const raw = resolve(d.rows, rowScope);
   const rows = Array.isArray(raw) ? raw : [];
   const cols = useVisibleColumns(d.columns ?? [], rowScope);
+  const body = d.text ? text(d.text, rowScope) : '';
   return (
     <Box sx={{ py: 1.5 }}>
-      {d.text && <Typography variant="body2" sx={{ mb: 1 }}>{text(d.text, rowScope)}</Typography>}
+      {body && (d.severity
+        ? <Alert severity={d.severity} sx={{ mb: d.rows !== undefined ? 1 : 0, whiteSpace: 'pre-line' }}>{body}</Alert>
+        : <Typography variant="body2" sx={{ mb: d.rows !== undefined ? 1 : 0, whiteSpace: 'pre-line' }}>{body}</Typography>)}
+      {/* Text-only detail (a failed run's reason) has no table. */}
+      {d.rows !== undefined && (
       <Table size="small">
         <TableHead>
           <TableRow>{cols.map((c) => <TableCell key={c.id} align={c.align}>{c.header ? text(c.header, rowScope) : ''}</TableCell>)}</TableRow>
@@ -332,6 +345,7 @@ function RowDetail({ p, rowScope, span }: { p: DataGridProps; rowScope: Scope; s
           )}
         </TableBody>
       </Table>
+      )}
     </Box>
   );
 }
