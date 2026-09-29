@@ -25,6 +25,7 @@ import { useEntityRelationships } from './hooks/useEntityRelationships';
 import { CoreIcon, CustomIcon } from '../../components/common/CoreCustomIcons';
 import BulkGenerateProgressModal from './components/BulkGenerateProgressModal';
 import { useJobPolling, JobStatus } from './hooks/useJobPolling';
+import { chunkIds } from '../../utils/chunkIds';
 
 // ─────────────────────────────────────────────
 // Theme tokens
@@ -48,6 +49,10 @@ const C = {
   orange: '#FB923C',
   green: '#4ADE80',
 };
+
+// Backend previewCap: the most column_ids one preview-semantic-terms request
+// accepts. Keep in step with previewCap in backend/internal/api/service.go.
+const PREVIEW_CHUNK_SIZE = 2000;
 
 const TYPE_COLOR: Record<string, string> = {
   uuid: C.purple,
@@ -695,19 +700,31 @@ export default function GlossaryExplorer() {
   // Requests server-side name suggestions for the listed columns. The list first shows naive
   // client-side PascalCase placeholders; Create stays disabled until this settles, and a failure is
   // surfaced (with Retry) instead of silently leaving the placeholders in place.
+  // The preview endpoint caps column_ids at 2000 per request (backend
+  // previewCap). A datasource can hold far more columns than that, so the list
+  // is sent in chunks and the suggestions merged; the wizard stays usable at
+  // any size instead of failing outright.
   const runPreview = useCallback((cols: any[]) => {
     const reqId = ++previewReqId.current;
     setGenPreviewStatus('loading');
     setGenPreviewError(null);
-    apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
-      `/api/glossary/preview-semantic-terms`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ column_ids: cols.map((c: any) => c.id) }),
-      }
-    ).then(r => {
+
+    const ids = cols.map((c: any) => c.id);
+    const chunks = chunkIds(ids, PREVIEW_CHUNK_SIZE);
+
+    Promise.all(
+      chunks.map(chunk =>
+        apiClient<{ suggestions: Array<{ column_id: string; semantic_name: string; source: string }> }>(
+          `/api/glossary/preview-semantic-terms`,
+          {
+            method: 'POST',
+            body: JSON.stringify({ column_ids: chunk }),
+          }
+        ).then(r => r.suggestions ?? [])
+      )
+    ).then(parts => {
       if (reqId !== previewReqId.current) return; // modal closed or superseded by a newer request
-      const byId = new Map((r.suggestions ?? []).map(s => [s.column_id, s]));
+      const byId = new Map(parts.flat().map(s => [s.column_id, s]));
       setGenColumns(prev => prev.map(c => {
         if (dirtyColumns.current.has(c.id)) return { ...c, resolved: true };
         const sugg = byId.get(c.id);
