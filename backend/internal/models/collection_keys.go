@@ -23,3 +23,35 @@ func CollectionKeysForBO(boKey string) []string {
 		return nil
 	}
 }
+
+// IsKnownContextField reports whether f is a known related-row context key.
+func IsKnownContextField(f string) bool {
+	return knownTransientContextFields[f]
+}
+
+var knownTransientContextFields = map[string]bool{
+	"sibling_qty_sum":             true,
+	"routed_qty":                  true,
+	"executed_qty":                true,
+	"allocation_target_qty_sum":   true,
+	"account_status":              true,
+	"account_is_discretionary":    true,
+	"placement_routed_sum":        true,
+	"duplicate_order_count":       true,
+	"order_target_qty":            true,
+	"sibling_routed_sum":          true,
+	"broker_status":               true,
+	"placement_created_at":        true,
+	"order_side":                  true,
+	"order_limit_price":           true,
+	"duplicate_broker_exec_count": true,
+	"alloc_fill_sum":              true,
+	"parent_exec_qty":             true,
+	"parent_exec_price":           true,
+	"parent_order_id":             true,
+	"alloc_order_id":              true,
+	"sibling_alloc_sum":           true,
+	"causality_ok":                true,
+	"same_order_ok":               true,
+}
+

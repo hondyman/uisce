@@ -915,7 +915,7 @@ func unresolvedFieldRefs(node vm.RuleNode, data map[string]interface{}) []string
 		if strings.Contains(f, ".") {
 			continue // nested paths are HierarchyResolver's concern, not this check's
 		}
-		if knownTransientContextFields[f] {
+		if models.IsKnownContextField(f) {
 			continue
 		}
 		if _, ok := data[f]; !ok {

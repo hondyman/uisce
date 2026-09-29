@@ -27,15 +27,14 @@ type ValidationRuleProperties struct {
 	// ListByBO's descriptorFromNode - the service defaults new writes to
 	// it explicitly rather than leaving new rows blank too, so "domain"
 	// is unambiguous for anything written from this point forward.
-	Domain string `json:"domain,omitempty"`
-	// BindingIDs scopes the rule to specific bindings of the BO
-	// (business_object_binding.bo_binding_id). Empty means the rule applies to every
-	// binding, which is what every rule written before this field existed
-	// means, so they are unchanged. The rule's field references stay
-	// semantic terms either way; scoping only decides whether the rule runs
-	// for a write that arrived through a given binding.
+	Domain     string   `json:"domain,omitempty"`
 	BindingIDs []string `json:"binding_ids,omitempty"`
+	RuleKey    string   `json:"rule_key,omitempty"` // stable portable key; fallback is node_name
 }
+
+// BoRuleKey returns the stable rule key from properties.
+func (p ValidationRuleProperties) BoRuleKey() string { return p.RuleKey }
+
 
 const (
 	ValidationRuleSeverityBlock = "BLOCK"
