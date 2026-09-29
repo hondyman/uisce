@@ -16,48 +16,51 @@ DECLARE
           "label": "Vendor Market Data Feed",
           "position": {"x": 60, "y": 140},
           "config": {
-            "uri": "file://market_data/vendor_daily.csv",
+            "uri": "file://uploads/bbg_security_20260927.txt",
             "format": "csv",
+            "delimiter": "|",
             "has_header": true,
             "columns": [
-              {"name": "security_id", "type": "string"},
-              {"name": "primary_identifier", "type": "string"},
-              {"name": "isin", "type": "string"},
-              {"name": "ticker", "type": "string"},
-              {"name": "security_name", "type": "string"},
-              {"name": "closing_price", "type": "decimal"},
-              {"name": "composite_rating", "type": "string"},
-              {"name": "country_of_risk", "type": "string"},
-              {"name": "sanctions_flag", "type": "string"},
-              {"name": "lei", "type": "string"},
-              {"name": "gics_sector", "type": "string"},
-              {"name": "market_cap", "type": "decimal"},
-              {"name": "vendor_id", "type": "string"}
+              {"name": "ID_BB_GLOBAL", "type": "string"},
+              {"name": "ID_BB_UNIQUE", "type": "string"},
+              {"name": "TICKER", "type": "string"},
+              {"name": "EXCH_CODE", "type": "string"},
+              {"name": "ID_ISIN", "type": "string"},
+              {"name": "ID_CUSIP", "type": "string"},
+              {"name": "ID_SEDOL1", "type": "string"},
+              {"name": "NAME", "type": "string"},
+              {"name": "SECURITY_DES", "type": "string"},
+              {"name": "SECURITY_TYP", "type": "string"},
+              {"name": "ASSET_CLASS", "type": "string"},
+              {"name": "CRNCY", "type": "string"},
+              {"name": "CNTRY_OF_DOMICILE", "type": "string"},
+              {"name": "CNTRY_OF_RISK", "type": "string"},
+              {"name": "GICS_SECTOR_NAME", "type": "string"},
+              {"name": "GICS_INDUSTRY_NAME", "type": "string"},
+              {"name": "ISSUE_DT", "type": "string"},
+              {"name": "MATURITY", "type": "string"},
+              {"name": "FIRST_TRADE_DT", "type": "string"},
+              {"name": "MIC_PRIMARY", "type": "string"},
+              {"name": "MARKET_STATUS", "type": "string"}
             ]
-          }
-        },
-        {
-          "id": "rules",
-          "type": "rule_check",
-          "label": "Centralized Validation Rules",
-          "position": {"x": 280, "y": 140},
-          "config": {
-            "rule_ids": ["b2222222-2222-4222-8222-222222222202"]
           }
         },
         {
           "id": "map",
           "type": "map",
           "label": "Attribute Normalization",
-          "position": {"x": 480, "y": 140},
+          "position": {"x": 280, "y": 140},
           "config": {
             "keep_unmapped": true,
             "fields": [
+              {"from": "security_id", "to": "SecId"},
               {"from": "security_id", "to": "security_id"},
+              {"from": "security_name", "to": "SecName"},
+              {"from": "security_name", "to": "security_name"},
+              {"from": "vendor_id", "to": "SecTypCd"},
               {"from": "primary_identifier", "to": "primary_identifier"},
               {"from": "isin", "to": "isin"},
               {"from": "ticker", "to": "ticker"},
-              {"from": "security_name", "to": "security_name"},
               {"from": "closing_price", "to": "closing_price", "transform": "to_number"},
               {"from": "composite_rating", "to": "composite_rating", "transform": "upper"},
               {"from": "country_of_risk", "to": "country_of_risk", "transform": "upper"},
@@ -65,6 +68,16 @@ DECLARE
               {"from": "lei", "to": "lei", "transform": "trim"},
               {"from": "gics_sector", "to": "gics_sector"}
             ]
+          }
+        },
+        {
+          "id": "rules",
+          "type": "rule_check",
+          "label": "Centralized Validation Rules",
+          "position": {"x": 480, "y": 140},
+          "config": {
+            "bo_key": "security",
+            "rule_ids": ["7c88ad55-34d9-45db-b0b1-fb1e70cf9a44"]
           }
         },
         {
@@ -86,7 +99,20 @@ DECLARE
           "config": {
             "table": "staging.security_data",
             "source_cd": "BLOOMBERG",
-            "domain": "SECURITY"
+            "domain": "SECURITY",
+            "columns": {
+              "figi": "figi",
+              "isin": "isin",
+              "cusip": "cusip",
+              "sedol": "sedol",
+              "status": "status",
+              "ticker": "ticker",
+              "currency": "currency",
+              "asset_class": "asset_class",
+              "security_id": "security_id",
+              "security_name": "security_name",
+              "primary_identifier": "primary_identifier"
+            }
           }
         },
         {
@@ -113,12 +139,12 @@ DECLARE
         }
       ],
       "edges": [
-        {"from": "src", "to": "rules"},
-        {"from": "rules", "to": "map"},
-        {"from": "map", "to": "ice"},
-        {"from": "map", "to": "stg"},
+        {"from": "src", "to": "map"},
+        {"from": "map", "to": "rules"},
+        {"from": "rules", "to": "ice"},
+        {"from": "rules", "to": "stg"},
         {"from": "stg", "to": "mstr"},
-        {"from": "map", "to": "score"}
+        {"from": "rules", "to": "score"}
       ]
     }'::jsonb;
 BEGIN
