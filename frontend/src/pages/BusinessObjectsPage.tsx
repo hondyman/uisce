@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
   Dialog,
@@ -127,8 +127,16 @@ export default function BusinessObjectsPage() {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingObject, setEditingObject] = useState<BusinessObject | null>(null);
   
-  // Wizard State
-  const [wizardOpen, setWizardOpen] = useState(false);
+  // Wizard State (?new=1, e.g. from the /business-objects/new redirect, opens it)
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [wizardOpen, setWizardOpen] = useState(() => searchParams.get('new') === '1');
+  useEffect(() => {
+    if (searchParams.has('new')) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('new');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [aiModalOpen, setAiModalOpen] = useState(false);
 
 
