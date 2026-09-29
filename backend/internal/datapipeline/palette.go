@@ -39,6 +39,7 @@ func Palette(d Deps) []NodeType {
 		{NodeStagingSink, "Load staging table", "destination", "Bulk-load rows into a staging table, tracked as a load run (re-running the same run is safe).", staging, stagingWhy},
 		{NodeMaster, "Master the load", "destination", "After the staging load commits, master it: match to golden records, survive, publish. Follows a staging load.", master, masterWhy},
 		{NodeIcebergSink, "Export to Iceberg Lakehouse", "destination", "Write rows to an Apache Iceberg table as Parquet in object storage (MinIO/S3).", files, filesWhy},
+		{NodeVendorScoring, "Vendor quality scoring", "destination", "Score vendor quality, sufficiency rate, format compliance, and displacement readiness against the golden master.", true, ""},
 		{NodeFileSink, "Export a file", "destination", "Write the rows to a CSV, JSON or Parquet file.", files, filesWhy},
 	}
 }

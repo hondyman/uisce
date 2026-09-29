@@ -80,6 +80,7 @@ func (h *DataPipelineHandler) RegisterRoutes(r chi.Router) {
 		r.Put("/{id}", h.update)
 		r.Delete("/{id}", h.delete)
 		r.Post("/{id}/runs", h.startRun)
+		r.Post("/{id}/run", h.startRun)
 		r.Get("/{id}/runs", h.listRuns)
 		r.Get("/{id}/schedule", h.getSchedule)
 		r.Put("/{id}/schedule", h.putSchedule)
