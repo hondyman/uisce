@@ -78,6 +78,34 @@ const operations: OperationDef[] = [
       return mdmScoringApi.displacement(vendorId);
     },
   },
+  {
+    id: 'mdmScoring.syncMart',
+    domain: 'mdm_scoring',
+    kind: 'mutation',
+    label: 'Sync StarRocks Hot Mart',
+    description: 'Flushes vendor substitution rollups to StarRocks mdm_analytics table.',
+    params: [
+      { name: 'as_of', type: 'string', required: false },
+    ],
+    run: async (params) => {
+      const asOf = params.as_of ? String(params.as_of) : undefined;
+      return mdmScoringApi.syncMart(asOf);
+    },
+  },
+  {
+    id: 'mdmScoring.runPipeline',
+    domain: 'mdm_scoring',
+    kind: 'mutation',
+    label: 'Run Ingest & Scoring Pipeline',
+    description: 'Executes the full-cycle Data Pipeline: Iceberg export + Staging load + Mastering + Vendor scoring.',
+    params: [
+      { name: 'pipeline_id', type: 'string', required: false },
+    ],
+    run: async (params) => {
+      const pid = params.pipeline_id ? String(params.pipeline_id) : undefined;
+      return mdmScoringApi.runPipeline(pid);
+    },
+  },
 ];
 
 registerOperations(operations);

@@ -90,4 +90,8 @@ export const mdmScoringApi = {
       dropped_vendor_id: droppedVendorId,
       vendor_hierarchy: hierarchy,
     })),
+  syncMart: (asOf?: string) =>
+    apiClient<{ status: string; records_synced: number }>(`${BASE}/sync-mart${asOf ? `?as_of=${asOf}` : ''}`, { method: 'POST' }),
+  runPipeline: (pipelineId?: string) =>
+    apiClient<{ run_id: string; status: string }>(`/api/data-pipelines/${pipelineId || 'a11c0001-0001-4000-8000-000000000099'}/run`, { method: 'POST' }),
 };

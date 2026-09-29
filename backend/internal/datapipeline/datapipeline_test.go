@@ -277,3 +277,37 @@ func TestRuleCheckNode(t *testing.T) {
 		t.Error("empty rule list must be invalid")
 	}
 }
+
+func TestVendorScoringNode(t *testing.T) {
+	n := Node{
+		ID:   "score",
+		Type: NodeVendorScoring,
+		Config: cfg(VendorScoringConfig{
+			Entity:       "SECURITY",
+			VendorID:     "BLOOMBERG",
+			UniverseSize: 42000,
+		}),
+	}
+	p, err := newVendorScoringProc(n, nil)
+	if err != nil {
+		t.Fatalf("failed to create vendor scoring proc: %v", err)
+	}
+	_ = p.Open(context.Background(), &RunContext{TenantID: "t1"})
+
+	res, err := p.Process(context.Background(), []Row{
+		{Num: 1, Data: map[string]any{"LEI": "5493006MHB84DD0ZWV18", "CLOSING_PRICE": "100.50"}},
+		{Num: 2, Data: map[string]any{"LEI": "", "CLOSING_PRICE": "200.10"}},
+	})
+	if err != nil {
+		t.Fatalf("process error: %v", err)
+	}
+	if len(res.Out) != 2 {
+		t.Errorf("expected 2 output rows, got %d", len(res.Out))
+	}
+	if len(res.Warnings) != 1 {
+		t.Errorf("expected 1 warning for empty LEI, got %d", len(res.Warnings))
+	}
+	if err := p.Close(context.Background(), nil); err != nil {
+		t.Errorf("close error: %v", err)
+	}
+}

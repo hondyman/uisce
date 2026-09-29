@@ -11,12 +11,58 @@ import (
 
 // PostgresRepository implements Repository backed by PostgreSQL (and fallback demo generation).
 type PostgresRepository struct {
-	db *sql.DB
+	db          *sql.DB
+	starrocksDB *sql.DB
 }
 
 // NewPostgresRepository creates a new Postgres-backed repository.
 func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
+}
+
+// SetStarRocksDB sets the StarRocks connection for hot OLAP mart syncing.
+func (r *PostgresRepository) SetStarRocksDB(srDB *sql.DB) {
+	r.starrocksDB = srDB
+}
+
+// SyncToStarRocks persists substitution score rollups to the StarRocks primary key table.
+func (r *PostgresRepository) SyncToStarRocks(ctx context.Context, asOf time.Time, scores []SubstitutionScore) error {
+	if r.starrocksDB == nil {
+		return nil
+	}
+	asOfDate := asOf.Format("2006-01-02")
+	query := `
+		INSERT INTO mdm_analytics.vendor_substitution_daily (
+			as_of_date, attribute_code, vendor_id, tier,
+			in_scope_entities, valid_matches, valid_differs,
+			absent_count, invalid_count, solo_count, golden_wins
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+	stmt, err := r.starrocksDB.PrepareContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("starrocks prepare error: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, s := range scores {
+		differs := s.AvailableCount - s.ValidMatchCount
+		if differs < 0 {
+			differs = 0
+		}
+		absent := s.InScope - s.AvailableCount
+		if absent < 0 {
+			absent = 0
+		}
+		_, err := stmt.ExecContext(ctx,
+			asOfDate, s.AttributeCode, s.VendorID, s.Tier,
+			s.InScope, s.ValidMatchCount, differs,
+			absent, 0, s.SoloRecordsCount, int(s.ContributionSharePct),
+		)
+		if err != nil {
+			return fmt.Errorf("starrocks exec error for %s/%s: %w", s.AttributeCode, s.VendorID, err)
+		}
+	}
+	return nil
 }
 
 // DefaultTolerances returns the canonical 16 Tier 1-3 attribute tolerance rules.
