@@ -66,7 +66,17 @@ func compileConditionSQL(c RuleCondition, resolve ColumnResolver, b *ParamBinder
 	case "is_not_null":
 		return fmt.Sprintf("(%s IS NOT NULL)", col), nil
 	case "between":
-		inner := fmt.Sprintf("%s BETWEEN %s AND %s", col, b.Bind(c.Value), b.Bind(c.SecondValue))
+		var low, high any
+		if c.SecondValue != nil {
+			low = c.Value
+			high = c.SecondValue
+		} else if bounds, ok := c.Value.([]any); ok && len(bounds) == 2 {
+			low = bounds[0]
+			high = bounds[1]
+		} else {
+			return "", fmt.Errorf("sql pushdown: 'between' requires two bounds, got %v", c.Value)
+		}
+		inner := fmt.Sprintf("%s BETWEEN %s AND %s", col, b.Bind(low), b.Bind(high))
 		return fmt.Sprintf("COALESCE((%s), FALSE)", inner), nil
 	case "in":
 		vals, ok := c.Value.([]any)

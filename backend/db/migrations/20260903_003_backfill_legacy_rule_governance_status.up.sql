@@ -11,6 +11,7 @@ SET properties = jsonb_set(
     '"published"'
 )
 WHERE node_type_id = (SELECT id FROM catalog_node_type WHERE catalog_type_name = 'validation_rule')
+  AND is_active = true
   AND (
       (properties->>'governance_status') IS NULL
       OR (properties->>'governance_status') = ''
