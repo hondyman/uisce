@@ -19,12 +19,13 @@ interface SaveWorkbookModalProps {
 }
 
 export default function SaveWorkbookModal({ tabs, onClose, onSaved }: SaveWorkbookModalProps) {
+  const notification = useNotification();
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
   const handleSave = async () => {
     if (!name) {
-      const notification = useNotification();
       notification.error('Workbook name is required.');
       return;
     }
@@ -41,12 +42,10 @@ export default function SaveWorkbookModal({ tabs, onClose, onSaved }: SaveWorkbo
 
     try {
       const savedWorkbook = await createWorkbook({ name, description, tabs: workbookTabs });
-      const notification = useNotification();
       notification.success(`Workbook "${savedWorkbook.name}" saved!`);
       onSaved(savedWorkbook.id);
       onClose();
     } catch (error) {
-      const notification = useNotification();
       notification.error(`Failed to save workbook: ${(error as Error).message}`);
     }
   };
