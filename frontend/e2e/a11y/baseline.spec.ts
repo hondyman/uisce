@@ -104,7 +104,6 @@ const APP_ROUTES = [
   'core/semantic-terms',
   'core/sla-dashboard',
   'core/uisce-builder',
-  'core/validation',
   'core/validation-rules',
   'core/workflow-designer',
   'crypto/portfolio',

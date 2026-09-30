@@ -276,7 +276,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <CheckCircleIcon />,
         items: [
           { label: 'Flow Builder', path: '/core/flow-builder', icon: <TimelineIcon />, description: 'Visual pipeline builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Run Validations', path: '/core/validation', icon: <CheckCircleIcon />, description: 'Execute validations' },
         ]
       },
       {

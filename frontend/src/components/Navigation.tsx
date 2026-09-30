@@ -49,8 +49,6 @@ const GOVERNANCE_MENU: MenuGroup = {
   id: 'governance',
   label: 'Governance',
   items: [
-
-    { id: 'validation-run', label: 'Run Validations', description: 'Execute validations and view results.', to: '/core/validation' },
     { id: 'regulator', label: 'Regulator Portal', description: 'Compliance and audit dashboard.', to: '/core/regulator-portal' },
     { id: 'audit', label: 'Audit Explorer', description: 'Unified audit record chain.', to: '/core/audit-explorer' },
     { id: 'access-explanation', label: 'Access Explanation', description: 'Explain why access was granted or denied.', to: '/access-explanation' },
