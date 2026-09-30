@@ -144,15 +144,16 @@ VALUES ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000
 ON CONFLICT (tenant_id, datasource_id) DO NOTHING;
 
 -- Insert basic node types
+-- id and tenant_id are both uuid; the tenant is the default tenant created above.
 INSERT INTO public.catalog_node_type (id, tenant_id, catalog_type_name, description, config) VALUES
-('schema_type', 'default', 'schema', 'Database Schema', '{"description": "Represents a database schema"}'),
-('table_type', 'default', 'table', 'Database Table', '{"description": "Represents a database table"}'),
-('column_type', 'default', 'column', 'Database Column', '{"description": "Represents a database column"}'),
-('semantic_model_type', 'default', 'semantic_model', 'Semantic Model', '{"description": "Represents a semantic model/cube"}'),
-('semantic_column_type', 'default', 'semantic_column', 'Semantic Column', '{"description": "Represents a measure or dimension"}'),
-('semantic_view_type', 'default', 'semantic_view', 'Semantic View', '{"description": "Represents a semantic view"}'),
-('business_term_type', 'default', 'business_term', 'Business Term', '{"description": "Represents a business term or concept"}'),
-('semantic_term_type', 'default', 'semantic_term', 'Semantic Term', '{"description": "Represents a semantic term"}')
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'schema', 'Database Schema', '{"description": "Represents a database schema"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'table', 'Database Table', '{"description": "Represents a database table"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'column', 'Database Column', '{"description": "Represents a database column"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'semantic_model', 'Semantic Model', '{"description": "Represents a semantic model/cube"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'semantic_column', 'Semantic Column', '{"description": "Represents a measure or dimension"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'semantic_view', 'Semantic View', '{"description": "Represents a semantic view"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'business_term', 'Business Term', '{"description": "Represents a business term or concept"}'),
+(gen_random_uuid(), '00000000-0000-0000-0000-000000000001', 'semantic_term', 'Semantic Term', '{"description": "Represents a semantic term"}')
 ON CONFLICT (tenant_id, catalog_type_name) DO NOTHING;
 
 -- Update semantic_model_type with property schema definitions
@@ -167,21 +168,33 @@ SET properties = '[
   {"name": "overridden_properties", "title": "Overridden Term Properties", "data_type": "jsonb", "order": 7, "required": false, "description": "Override properties for inherited semantic terms"},
   {"name": "model_calculations", "title": "Model-Specific Calculations", "data_type": "jsonb", "order": 8, "required": false, "description": "Complex calculations combining semantic terms"}
 ]'::jsonb
-WHERE catalog_type_name = 'semantic_model' AND tenant_id = 'default';
+WHERE catalog_type_name = 'semantic_model' AND tenant_id = '00000000-0000-0000-0000-000000000001';
 
 -- Insert basic edge types
-INSERT INTO public.catalog_edge_types (id, tenant_id, edge_type_name, description, source_node_type_id, target_node_type_id) VALUES
-('foreign_key_edge', 'default', 'foreign_key', 'Foreign Key Relationship', 'column_type', 'column_type'),
-('has_semantic_edge', 'default', 'has_semantic', 'Has Semantic Mapping', 'business_term_type', 'semantic_model_type'),
-('mapped_to_edge', 'default', 'mapped_to', 'Mapped To', 'semantic_column_type', 'column_type'),
-('member_of_edge', 'default', 'member_of', 'Member Of', 'semantic_column_type', 'business_term_type'),
-('joins_edge', 'default', 'joins', 'Joins With', 'semantic_model_type', 'semantic_model_type'),
-('references_edge', 'default', 'references', 'References', 'semantic_model_type', 'semantic_model_type'),
-('extends_edge', 'default', 'extends', 'Extends', 'semantic_model_type', 'semantic_model_type'),
-('parent_of_edge', 'default', 'parent_of', 'Parent Of', 'business_term_type', 'business_term_type'),
-('3be9d6ae-1598-4628-a3dd-b606921a9193', 'default', 'business_term_mapping', 'Business Term to Semantic Term Mapping', 'business_term_type', 'semantic_term_type'),
-('semantic_model_extends_edge', 'default', 'semantic_model_extends', 'Semantic Model Extends', 'semantic_model_type', 'semantic_model_type'),
-('semantic_model_links_to_edge', 'default', 'semantic_model_links_to', 'Semantic Model Links To Semantic Term', 'semantic_model_type', 'semantic_term_type')
+-- id and tenant_id are uuid, and source/target_node_type_id are uuid FKs into
+-- catalog_node_type, so the node types are resolved by catalog_type_name rather
+-- than by the string ids this script used to write into those columns.
+INSERT INTO public.catalog_edge_types (id, tenant_id, edge_type_name, description, source_node_type_id, target_node_type_id)
+SELECT gen_random_uuid(), t.id, v.edge_type_name, v.description, src.id, tgt.id
+FROM (VALUES
+  ('foreign_key',             'Foreign Key Relationship',                 'column',          'column'),
+  ('has_semantic',            'Has Semantic Mapping',                    'business_term',   'semantic_model'),
+  ('mapped_to',               'Mapped To',                               'semantic_column', 'column'),
+  ('member_of',               'Member Of',                               'semantic_column', 'business_term'),
+  ('joins',                   'Joins With',                              'semantic_model',  'semantic_model'),
+  ('references',              'References',                              'semantic_model',  'semantic_model'),
+  ('extends',                 'Extends',                                 'semantic_model',  'semantic_model'),
+  ('parent_of',               'Parent Of',                               'business_term',   'business_term'),
+  ('business_term_mapping',   'Business Term to Semantic Term Mapping', 'business_term',   'semantic_term'),
+  ('semantic_model_extends',  'Semantic Model Extends',                  'semantic_model',  'semantic_model'),
+  ('semantic_model_links_to', 'Semantic Model Links To Semantic Term',   'semantic_model',  'semantic_term')
+) AS v(edge_type_name, description, source_name, target_name)
+JOIN public.tenants t
+  ON t.id = '00000000-0000-0000-0000-000000000001'
+JOIN public.catalog_node_type src
+  ON src.tenant_id = t.id AND src.catalog_type_name = v.source_name
+JOIN public.catalog_node_type tgt
+  ON tgt.tenant_id = t.id AND tgt.catalog_type_name = v.target_name
 ON CONFLICT (tenant_id, edge_type_name) DO NOTHING;
 
 -- Create views used by the catalog/semantic layer
@@ -247,7 +260,17 @@ FROM public.catalog_node cn
 JOIN public.catalog_node_type cnt ON cn.node_type_id = cnt.id
 WHERE cnt.catalog_type_name = 'semantic_column';
 
--- Grant read permissions to the application database role
+-- Grant read permissions to the application database role.
+-- The role is provisioned here (idempotently) because this script is the only
+-- thing that references it, and on a fresh CI Postgres it does not exist yet --
+-- the GRANTs below failed with 'role "semlayer_user" does not exist'.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'semlayer_user') THEN
+    CREATE ROLE semlayer_user LOGIN;
+  END IF;
+END
+$$;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO semlayer_user;
 GRANT USAGE ON SCHEMA public TO semlayer_user;
 
