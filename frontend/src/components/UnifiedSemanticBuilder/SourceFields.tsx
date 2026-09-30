@@ -15,10 +15,13 @@ interface Props {
 }
 
 const SourceFields: React.FC<Props> = ({ formData, setFormData, disabledSourceTable, semanticModel }) => {
-  // tenant datasource scope for typeahead
-  const tenant = (() => {
-    try { return useTenant(); } catch { return { tenant: null, product: null, datasource: null } as any; }
-  })();
+  // tenant datasource scope for typeahead.
+  // Was `try { return useTenant(); } catch { return { tenant: null, ... } }`. useTenant
+  // does not touch the router — it resolves through AccessContext and throws only when
+  // no AccessProvider is mounted, which is a deliberate, loud failure (see useTenant).
+  // Catching it here silently downgraded that error to a null tenant, so it is now
+  // called unconditionally and the failure stays loud.
+  const tenant = useTenant();
 
   // Pre-populate source table if disabledSourceTable is provided and not already set
   useEffect(() => {
