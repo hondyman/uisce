@@ -181,6 +181,234 @@ function reorderWithinContainer(
   return updateWidgetByPath(canvas, containerPath, () => ({ ...container, children: reordered }));
 }
 
+const selectedSx = (isSelected: boolean) => ({
+  border: isSelected ? '2px solid #00D4FF' : '1px solid',
+  borderColor: isSelected ? '#00D4FF' : 'rgba(255,255,255,0.12)',
+  bgcolor: isSelected ? 'rgba(0,212,255,0.04)' : undefined,
+  boxShadow: isSelected ? '0 0 0 1px rgba(0,212,255,0.2)' : undefined,
+});
+
+interface SortableWidgetProps {
+  widget: CanvasWidget;
+  widgetPath: number[];
+  isSelected: boolean;
+  onRemove: () => void;
+  onSelectWidget: (path: number[]) => void;
+  onResize: (path: number[], newSpan: number) => void;
+}
+
+/**
+ * A single sortable leaf widget.
+ *
+ * This used to be a `renderSortableWidget` helper inside PageStudioCanvas,
+ * which called useSortable directly. A hook inside a render helper made
+ * PageStudioCanvas's own hook count vary with the shape of the widget tree:
+ * one call per leaf, recursing through containers, and skipped entirely for
+ * the children of a collapsed container. Adding, removing, or collapsing a
+ * widget therefore changed the hook count between renders and threw
+ * "Rendered fewer hooks than expected".
+ *
+ * Giving each sortable widget its own component boundary makes the hook count
+ * inside PageStudioCanvas constant, and the per-widget state (including the
+ * drag transform) properly per-instance.
+ *
+ * Container widgets deliberately still do not own a useSortable call, so each
+ * node in the tree - container or leaf - continues to behave exactly as before.
+ */
+const SortableWidget: React.FC<SortableWidgetProps> = ({
+  widget,
+  widgetPath,
+  isSelected,
+  onRemove,
+  onSelectWidget,
+  onResize,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: widget.id });
+
+  const span = getGridSpan(widget);
+  const spanLg = span.lg;
+
+  const dragStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    zIndex: isDragging ? 9999 : 1,
+  };
+
+  const paperSx = {
+    ...selectedSx(isSelected),
+    cursor: 'grab',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
+    '&:hover .resize-handle': { opacity: 1 },
+  };
+
+  const resizeHandle = (
+    <Box
+      className="resize-handle"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      sx={{
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: 8,
+        cursor: 'ew-resize',
+        opacity: 0,
+        bgcolor: '#00D4FF',
+        borderRadius: '0 2px 2px 0',
+        transition: 'opacity 0.15s',
+        zIndex: 1,
+        '&:hover': { bgcolor: '#00B4E6' },
+      }}
+    />
+  );
+
+  const deleteButton = (
+    <IconButton size="small" onClick={(e) => { e.stopPropagation(); onRemove(); }} aria-label="remove">
+      <DeleteOutlineIcon fontSize="inherit" />
+    </IconButton>
+  );
+
+  const widgetContent = (
+    <Box ref={setNodeRef} style={dragStyle}>
+      <ResizableBox
+        width={200}
+        height={0}
+        axis="x"
+        resizeHandles={['e']}
+        onResize={(_e, _d, delta) => {
+          const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
+          onResize(widgetPath, newSpan);
+        }}
+        minConstraints={[60, 0]}
+        maxConstraints={[600, 0]}
+        enable={{ right: true, left: false, top: false, bottom: false }}
+      >
+        <Paper
+          variant="outlined"
+          onClick={() => onSelectWidget(widgetPath)}
+          sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
+        >
+          <Stack sx={{ minWidth: 0, flex: 1 }} direction="row" alignItems="center" gap={0.5}>
+            <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
+              <DragIndicatorIcon fontSize="small" />
+            </Box>
+            <Typography variant="caption" fontWeight={700} noWrap>{(widget as FieldWidget).label}</Typography>
+            <CoreFieldBadge isCore={(widget as FieldWidget).isCore} size={12} />
+            {controlPreview(widget as FieldWidget)}
+          </Stack>
+          <Stack direction="row">
+            {deleteButton}
+            {isSelected && resizeHandle}
+          </Stack>
+        </Paper>
+      </ResizableBox>
+    </Box>
+  );
+
+  if (widget.type === 'field') {
+    return (
+      <Grid size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
+        {widgetContent}
+      </Grid>
+    );
+  }
+
+  if (widget.type === 'relatedObject') {
+    return (
+      <Grid size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
+        <ResizableBox
+          width={200}
+          height={0}
+          axis="x"
+          resizeHandles={['e']}
+          onResize={(_e, _d, delta) => {
+            const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
+            onResize(widgetPath, newSpan);
+          }}
+          minConstraints={[60, 0]}
+          maxConstraints={[600, 0]}
+          enable={{ right: true, left: false, top: false, bottom: false }}
+        >
+          <Paper
+            variant="outlined"
+            onClick={() => onSelectWidget(widgetPath)}
+            sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
+          >
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
+                <DragIndicatorIcon fontSize="small" />
+              </Box>
+              <LinkIcon fontSize="small" />
+              <Typography variant="body2" fontWeight={700}>{(widget as any).title}</Typography>
+              <CoreFieldBadge isCore={false} size={12} />
+              <Typography variant="caption" color="text.secondary">
+                {(widget as any).cardinality} → {(widget as any).targetBoKey}
+              </Typography>
+            </Stack>
+            <Stack direction="row">
+              {deleteButton}
+              {isSelected && resizeHandle}
+            </Stack>
+          </Paper>
+        </ResizableBox>
+      </Grid>
+    );
+  }
+
+  if (widget.type === 'grid' || widget.type === 'chart' || widget.type === 'kpi') {
+    return (
+      <Grid size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
+        <ResizableBox
+          width={200}
+          height={0}
+          axis="x"
+          resizeHandles={['e']}
+          onResize={(_e, _d, delta) => {
+            const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
+            onResize(widgetPath, newSpan);
+          }}
+          minConstraints={[60, 0]}
+          maxConstraints={[600, 0]}
+          enable={{ right: true, left: false, top: false, bottom: false }}
+        >
+          <Paper
+            variant="outlined"
+            onClick={() => onSelectWidget(widgetPath)}
+            sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
+          >
+            <Stack direction="row" alignItems="center" gap={1}>
+              <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
+                <DragIndicatorIcon fontSize="small" />
+              </Box>
+              {containerIcon(widget.type)}
+              <Typography variant="body2" fontWeight={700}>{(widget as any).title}</Typography>
+              <CoreFieldBadge isCore={true} size={12} />
+              <Typography variant="caption" color="text.secondary">
+                {(widget as any).boKey ? `bound to ${(widget as any).boKey}` : 'not yet bound'}
+              </Typography>
+            </Stack>
+            <Stack direction="row">
+              {deleteButton}
+              {isSelected && resizeHandle}
+            </Stack>
+          </Paper>
+        </ResizableBox>
+      </Grid>
+    );
+  }
+
+  return null;
+};
+
 export const PageStudioCanvas: React.FC<PageStudioCanvasProps> = ({
   canvas,
   onChange,
@@ -228,13 +456,6 @@ export const PageStudioCanvas: React.FC<PageStudioCanvasProps> = ({
     return a.every((v, i) => v === b[i]);
   };
 
-  const selectedSx = (isSelected: boolean) => ({
-    border: isSelected ? '2px solid #00D4FF' : '1px solid',
-    borderColor: isSelected ? '#00D4FF' : 'rgba(255,255,255,0.12)',
-    bgcolor: isSelected ? 'rgba(0,212,255,0.04)' : undefined,
-    boxShadow: isSelected ? '0 0 0 1px rgba(0,212,255,0.2)' : undefined,
-  });
-
   const remove = (path: number[]) => () => onChange(removeItem(canvas, path));
 
   const handleWidgetResize = (path: number[], newSpan: number) => {
@@ -245,194 +466,19 @@ export const PageStudioCanvas: React.FC<PageStudioCanvasProps> = ({
     onChange(next);
   };
 
-  const renderSortableWidget = (widget: CanvasWidget, widgetPath: number[]): React.ReactNode => {
-    const {
-      attributes,
-      listeners,
-      setNodeRef,
-      transform,
-      transition,
-      isDragging,
-    } = useSortable({ id: widget.id });
-
-    const isSelected = pathMatches(selectedWidgetPath, widgetPath);
-    const span = getGridSpan(widget);
-    const spanLg = span.lg;
-    const removeHandler = remove(widgetPath);
-
-    const dragStyle = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-      opacity: isDragging ? 0.4 : 1,
-      zIndex: isDragging ? 9999 : 1,
-    };
-
-    const paperSx = {
-      ...selectedSx(isSelected),
-      cursor: 'grab',
-      transition: 'border-color 0.15s, box-shadow 0.15s',
-      '&:hover .resize-handle': { opacity: 1 },
-    };
-
-    const resizeHandle = (
-      <Box
-        className="resize-handle"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
-        sx={{
-          position: 'absolute',
-          right: 0,
-          top: 0,
-          bottom: 0,
-          width: 8,
-          cursor: 'ew-resize',
-          opacity: 0,
-          bgcolor: '#00D4FF',
-          borderRadius: '0 2px 2px 0',
-          transition: 'opacity 0.15s',
-          zIndex: 1,
-          '&:hover': { bgcolor: '#00B4E6' },
-        }}
-      />
-    );
-
-    const deleteButton = (
-      <IconButton size="small" onClick={(e) => { e.stopPropagation(); removeHandler(); }} aria-label="remove">
-        <DeleteOutlineIcon fontSize="inherit" />
-      </IconButton>
-    );
-
-    const widgetContent = (
-      <Box ref={setNodeRef} style={dragStyle}>
-        <ResizableBox
-          width={200}
-          height={0}
-          axis="x"
-          resizeHandles={['e']}
-          onResize={(_e, _d, delta) => {
-            const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
-            handleWidgetResize(widgetPath, newSpan);
-          }}
-          minConstraints={[60, 0]}
-          maxConstraints={[600, 0]}
-          enable={{ right: true, left: false, top: false, bottom: false }}
-        >
-          <Paper
-            variant="outlined"
-            onClick={() => onSelectWidget(widgetPath)}
-            sx={{ p: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
-          >
-            <Stack sx={{ minWidth: 0, flex: 1 }} direction="row" alignItems="center" gap={0.5}>
-              <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
-                <DragIndicatorIcon fontSize="small" />
-              </Box>
-              <Typography variant="caption" fontWeight={700} noWrap>{(widget as FieldWidget).label}</Typography>
-              <CoreFieldBadge isCore={(widget as FieldWidget).isCore} size={12} />
-              {controlPreview(widget as FieldWidget)}
-            </Stack>
-            <Stack direction="row">
-              {deleteButton}
-              {isSelected && resizeHandle}
-            </Stack>
-          </Paper>
-        </ResizableBox>
-      </Box>
-    );
-
-    if (widget.type === 'field') {
-      return (
-        <Grid key={widget.id} size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
-          {widgetContent}
-        </Grid>
-      );
-    }
-
-    if (widget.type === 'relatedObject') {
-      return (
-        <Grid key={widget.id} size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
-          <ResizableBox
-            width={200}
-            height={0}
-            axis="x"
-            resizeHandles={['e']}
-            onResize={(_e, _d, delta) => {
-              const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
-              handleWidgetResize(widgetPath, newSpan);
-            }}
-            minConstraints={[60, 0]}
-            maxConstraints={[600, 0]}
-            enable={{ right: true, left: false, top: false, bottom: false }}
-          >
-            <Paper
-              variant="outlined"
-              onClick={() => onSelectWidget(widgetPath)}
-              sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
-            >
-              <Stack direction="row" alignItems="center" gap={1}>
-                <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
-                  <DragIndicatorIcon fontSize="small" />
-                </Box>
-                <LinkIcon fontSize="small" />
-                <Typography variant="body2" fontWeight={700}>{(widget as any).title}</Typography>
-                <CoreFieldBadge isCore={false} size={12} />
-                <Typography variant="caption" color="text.secondary">
-                  {(widget as any).cardinality} → {(widget as any).targetBoKey}
-                </Typography>
-              </Stack>
-              <Stack direction="row">
-                {deleteButton}
-                {isSelected && resizeHandle}
-              </Stack>
-            </Paper>
-          </ResizableBox>
-        </Grid>
-      );
-    }
-
-    if (widget.type === 'grid' || widget.type === 'chart' || widget.type === 'kpi') {
-      return (
-        <Grid key={widget.id} size={{ xs: span.xs, md: span.md, lg: spanLg }} sx={{ position: 'relative' }}>
-          <ResizableBox
-            width={200}
-            height={0}
-            axis="x"
-            resizeHandles={['e']}
-            onResize={(_e, _d, delta) => {
-              const newSpan = Math.max(1, Math.min(12, spanLg + Math.round(delta.width / 20)));
-              handleWidgetResize(widgetPath, newSpan);
-            }}
-            minConstraints={[60, 0]}
-            maxConstraints={[600, 0]}
-            enable={{ right: true, left: false, top: false, bottom: false }}
-          >
-            <Paper
-              variant="outlined"
-              onClick={() => onSelectWidget(widgetPath)}
-              sx={{ p: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, ...paperSx }}
-            >
-              <Stack direction="row" alignItems="center" gap={1}>
-                <Box {...attributes} {...listeners} sx={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: '#64748B', flexShrink: 0 }}>
-                  <DragIndicatorIcon fontSize="small" />
-                </Box>
-                {containerIcon(widget.type)}
-                <Typography variant="body2" fontWeight={700}>{(widget as any).title}</Typography>
-                <CoreFieldBadge isCore={true} size={12} />
-                <Typography variant="caption" color="text.secondary">
-                  {(widget as any).boKey ? `bound to ${(widget as any).boKey}` : 'not yet bound'}
-                </Typography>
-              </Stack>
-              <Stack direction="row">
-                {deleteButton}
-                {isSelected && resizeHandle}
-              </Stack>
-            </Paper>
-          </ResizableBox>
-        </Grid>
-      );
-    }
-
-    return null;
-  };
+  // key={widget.id} - stable identity per widget, so reordering moves nodes
+  // instead of remounting them. It must never be the array index.
+  const renderSortableWidget = (widget: CanvasWidget, widgetPath: number[]): React.ReactNode => (
+    <SortableWidget
+      key={widget.id}
+      widget={widget}
+      widgetPath={widgetPath}
+      isSelected={pathMatches(selectedWidgetPath, widgetPath)}
+      onRemove={remove(widgetPath)}
+      onSelectWidget={onSelectWidget}
+      onResize={handleWidgetResize}
+    />
+  );
 
   const renderContainer = (widget: CanvasWidget, widgetPath: number[]): React.ReactNode => {
     const isSelected = pathMatches(selectedWidgetPath, widgetPath);
