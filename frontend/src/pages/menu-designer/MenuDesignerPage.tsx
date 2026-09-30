@@ -13,6 +13,7 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolder';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import DescriptionIcon from '@mui/icons-material/Description';
 import LaunchIcon from '@mui/icons-material/Launch';
+import LockIcon from '@mui/icons-material/Lock';
 import { useNavigate } from 'react-router-dom';
 import { NavigationMenuApi, NavigationMenuNode, NavigationMenuUpsert } from '../../api/navigationMenu';
 import { PageStudioApi, PageStudioPage } from '../../api/pageStudio';
@@ -49,6 +50,7 @@ const MenuDesignerPage: React.FC = () => {
   const [formNodeKey, setFormNodeKey] = useState('');
   const [formNodeKeyTouched, setFormNodeKeyTouched] = useState(false);
   const [formTargetPageKey, setFormTargetPageKey] = useState('');
+  const [formEntitlement, setFormEntitlement] = useState('BASE_USER');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<NavigationMenuNode | null>(null);
@@ -92,6 +94,7 @@ const MenuDesignerPage: React.FC = () => {
     setFormNodeKey('');
     setFormNodeKeyTouched(false);
     setFormTargetPageKey('');
+    setFormEntitlement('BASE_USER');
     setSaveError(null);
   };
 
@@ -101,6 +104,7 @@ const MenuDesignerPage: React.FC = () => {
     setFormNodeKey(node.nodeKey);
     setFormNodeKeyTouched(true);
     setFormTargetPageKey(node.targetPageKey || '');
+    setFormEntitlement(node.requiredEntitlement || 'BASE_USER');
     setSaveError(null);
   };
 
@@ -127,7 +131,7 @@ const MenuDesignerPage: React.FC = () => {
       label: formLabel.trim(),
       targetPageKey: formTargetPageKey || null,
       displayOrder: editState.node?.displayOrder ?? 0,
-      requiredEntitlement: editState.node?.requiredEntitlement || 'BASE_USER',
+      requiredEntitlement: formEntitlement || 'BASE_USER',
     };
     try {
       if (editState.mode === 'create') {
@@ -210,6 +214,11 @@ const MenuDesignerPage: React.FC = () => {
                 </Tooltip>
               </>
             )}
+            {node.requiredEntitlement && node.requiredEntitlement !== 'BASE_USER' && !node.inherited && (
+              <Tooltip title={`Requires: ${node.requiredEntitlement}`}>
+                <LockIcon fontSize="small" color="warning" />
+              </Tooltip>
+            )}
           </Stack>
         }
       >
@@ -288,6 +297,13 @@ const MenuDesignerPage: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
+            <TextField
+              label="Required entitlement"
+              value={formEntitlement}
+              onChange={(e) => setFormEntitlement(e.target.value)}
+              helperText="ABAC capability required, e.g. 'BASE_USER' or 'menu:platform'"
+              fullWidth
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

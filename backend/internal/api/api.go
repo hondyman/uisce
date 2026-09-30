@@ -1633,6 +1633,10 @@ func SetupRouter(db *sql.DB, dynatraceManager interface{}, perf ProfilerService,
 		// Navigation menu
 		navigationMenuHandler.RegisterRoutes(r)
 
+		// ABAC capability map (frontend menu authorization)
+		capsHandler := NewCapabilitiesHandler(sqlxDB)
+		capsHandler.RegisterRoutes(r)
+
 		// Calc terms as catalog nodes (unified rule engine, calc side)
 		calcTermHandler.RegisterRoutes(r)
 
