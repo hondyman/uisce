@@ -32,3 +32,6 @@ CREATE INDEX IF NOT EXISTS idx_bp_workflow_run_tenant_status
 
 CREATE INDEX IF NOT EXISTS idx_bp_workflow_run_tenant_process 
     ON public.bp_workflow_run (tenant_id, process_id, started_at DESC);
+
+GRANT ALL PRIVILEGES ON TABLE public.bp_workflow_run TO postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.bp_workflow_run TO app_user;

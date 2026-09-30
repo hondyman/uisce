@@ -158,6 +158,11 @@ func TestLiveApplyPendingMigrations(t *testing.T) {
 	defer db.Close()
 
 	ctx := context.Background()
+	migration004, err := os.ReadFile("../../db/migrations/20261130_004_create_bp_workflow_run.up.sql")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(migration004))
+	require.NoError(t, err, "Migration 20261130_004 should apply cleanly to alpha")
+
 	migration006, err := os.ReadFile("../../db/migrations/20261130_006_finalize_mdm_and_workflow_extensions.up.sql")
 	require.NoError(t, err)
 	_, err = db.ExecContext(ctx, string(migration006))

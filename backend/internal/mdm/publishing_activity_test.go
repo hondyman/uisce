@@ -42,29 +42,57 @@ func TestGoldenPublishingActivity_PublishGoldenRecordsActivity(t *testing.T) {
 		},
 	}
 
-	req := PublishGoldenRecordsRequest{
-		TenantID:   tenantID,
-		EntityType: "ACCOUNT",
-		BatchID:    batchID,
-		Topic:      "oms.account.gold",
-		Records:    records,
-	}
+	t.Run("EngineModeNew emits events to topic", func(t *testing.T) {
+		req := PublishGoldenRecordsRequest{
+			TenantID:   tenantID,
+			EntityType: "ACCOUNT",
+			BatchID:    batchID,
+			Topic:      "oms.account.gold",
+			EngineMode: EngineModeNew,
+			Records:    records,
+		}
 
-	res, err := activity.PublishGoldenRecordsActivity(ctx, req)
-	require.NoError(t, err)
-	require.NotNil(t, res)
+		res, err := activity.PublishGoldenRecordsActivity(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
 
-	assert.Equal(t, 2, res.TotalPublished)
-	assert.Equal(t, "oms.account.gold", res.Topic)
-	require.Len(t, res.EventIDs, 2)
-	assert.Contains(t, res.EventIDs[0], "gold.11111111-1111-1111-1111-111111111111.ACCOUNT.ACC-001.")
-	assert.Contains(t, res.EventIDs[1], "gold.11111111-1111-1111-1111-111111111111.ACCOUNT.ACC-002.")
+		assert.False(t, res.Gated)
+		assert.Equal(t, 2, res.TotalPublished)
+		assert.Equal(t, "oms.account.gold", res.Topic)
+		require.Len(t, res.EventIDs, 2)
+		assert.Contains(t, res.EventIDs[0], "gold.11111111-1111-1111-1111-111111111111.ACCOUNT.ACC-001.")
+		assert.Contains(t, res.EventIDs[1], "gold.11111111-1111-1111-1111-111111111111.ACCOUNT.ACC-002.")
 
-	// Verify events emitted to publisher
-	require.Len(t, mockPub.Events, 2)
-	assert.Equal(t, batchID.String(), mockPub.Events[0].BatchID)
-	assert.Equal(t, "ACC-001", mockPub.Events[0].EntityKey)
-	assert.Equal(t, "Apex Prime Custody", mockPub.Events[0].Payload["account_name"])
+		// Verify events emitted to publisher
+		require.Len(t, mockPub.Events, 2)
+		assert.Equal(t, batchID.String(), mockPub.Events[0].BatchID)
+		assert.Equal(t, "ACC-001", mockPub.Events[0].EntityKey)
+		assert.Equal(t, "Apex Prime Custody", mockPub.Events[0].Payload["account_name"])
+	})
+
+	t.Run("EngineModeShadow gates live emission and returns review artifact", func(t *testing.T) {
+		shadowPub := &InMemoryEventPublisher{}
+		shadowActivity := NewGoldenPublishingActivity(shadowPub)
+
+		req := PublishGoldenRecordsRequest{
+			TenantID:   tenantID,
+			EntityType: "ACCOUNT",
+			BatchID:    batchID,
+			Topic:      "oms.account.gold",
+			EngineMode: EngineModeShadow,
+			Records:    records,
+		}
+
+		res, err := shadowActivity.PublishGoldenRecordsActivity(ctx, req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+
+		assert.True(t, res.Gated)
+		assert.Equal(t, 0, res.TotalPublished)
+		assert.Contains(t, res.GatedReason, "shadow")
+		require.Len(t, res.EventIDs, 2, "Event IDs should still be calculated for review artifact")
+		assert.Empty(t, shadowPub.Events, "Zero events emitted to broker in shadow mode")
+	})
 
 	// Assert deterministic deduplication: Same payload produces identical event ID
 	hash1, _ := ComputePayloadHash(records[0].Payload)

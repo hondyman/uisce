@@ -2,6 +2,7 @@ package mdm
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -89,8 +90,9 @@ func TestLiveAccountPipeline_ShadowMode_EndToEnd(t *testing.T) {
 	survActivity := NewBatchSurvivorshipActivity(db, resolver)
 	pubActivity := NewGoldenPublishingActivity(nil)
 	legacyEngine := NewSurvivorshipEngine()
+	runTracker := NewDBRunTracker(db)
 
-	runner := NewAccountPipelineRunner(db, resolver, survActivity, pubActivity, legacyEngine)
+	runner := NewAccountPipelineRunner(db, resolver, survActivity, pubActivity, legacyEngine, runTracker)
 
 	now := time.Now().UTC()
 	stagedSources := []SourcePayload{
@@ -122,4 +124,16 @@ func TestLiveAccountPipeline_ShadowMode_EndToEnd(t *testing.T) {
 	assert.Equal(t, 1, result.TotalMaterialized)
 	require.NotNil(t, result.ShadowSummary)
 	assert.True(t, result.ShadowSummary.IsParityClean, "Shadow mode should achieve clean parity between engines")
+
+	// Assert bp_workflow_run record was created with COMPLETED status
+	runID := fmt.Sprintf("run-mdm-account-%s", batchID)
+	var runStatus string
+	var outputPayload []byte
+	err = db.QueryRowContext(ctx, "SELECT status, output_payload FROM public.bp_workflow_run WHERE run_id = $1", runID).Scan(&runStatus, &outputPayload)
+	require.NoError(t, err)
+	assert.Equal(t, "COMPLETED", runStatus)
+	assert.NotEmpty(t, outputPayload)
+
+	// Clean up test run row
+	_, _ = db.ExecContext(ctx, "DELETE FROM public.bp_workflow_run WHERE run_id = $1", runID)
 }

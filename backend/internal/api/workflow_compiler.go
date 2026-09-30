@@ -38,16 +38,23 @@ func (h *WorkflowCompilerHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/bp", func(r chi.Router) {
 		r.Post("/compile", h.HandleCompile)
 		r.Post("/execute", h.HandleExecute)
+		r.Post("/workflows/{id}/compile", h.HandleCompile)
+		r.Post("/workflows/{id}/execute", h.HandleExecute)
 	})
 }
 
 // HandleCompile compiles, extends, and publishes a workflow process definition
-// POST /api/bp/compile
+// POST /api/bp/compile or POST /api/bp/workflows/{id}/compile
 func (h *WorkflowCompilerHandler) HandleCompile(w http.ResponseWriter, r *http.Request) {
 	var req bp.CompileProcessRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf(`{"error":"invalid request payload: %s"}`, err.Error()), http.StatusBadRequest)
 		return
+	}
+
+	// Support /workflows/{id}/compile URL parameter pattern
+	if req.ProcessID == "" {
+		req.ProcessID = chi.URLParam(r, "id")
 	}
 
 	// Resolve tenant ID from JWT claims or request header
@@ -120,12 +127,15 @@ type ExecuteWorkflowRequest struct {
 }
 
 // HandleExecute runs pre-flight RLS validation and dispatches workflow execution
-// POST /api/bp/execute
+// POST /api/bp/execute or POST /api/bp/workflows/{id}/execute
 func (h *WorkflowCompilerHandler) HandleExecute(w http.ResponseWriter, r *http.Request) {
 	var req ExecuteWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf(`{"error":"invalid request payload: %s"}`, err.Error()), http.StatusBadRequest)
-		return
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	}
+
+	if req.ProcessID == "" {
+		req.ProcessID = chi.URLParam(r, "id")
 	}
 
 	tenantID := req.TenantID

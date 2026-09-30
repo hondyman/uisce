@@ -17,11 +17,12 @@ type GoldenPublishRecord struct {
 
 // PublishGoldenRecordsRequest is the activity input
 type PublishGoldenRecordsRequest struct {
-	TenantID   string                `json:"tenant_id"`
-	EntityType string                `json:"entity_type"`
-	BatchID    uuid.UUID             `json:"batch_id"`
-	Topic      string                `json:"topic"`
-	Records    []GoldenPublishRecord `json:"records"`
+	TenantID   string                 `json:"tenant_id"`
+	EntityType string                 `json:"entity_type"`
+	BatchID    uuid.UUID              `json:"batch_id"`
+	Topic      string                 `json:"topic"`
+	EngineMode SurvivorshipEngineMode `json:"engine_mode"` // 'legacy', 'shadow', 'new'
+	Records    []GoldenPublishRecord  `json:"records"`
 }
 
 // GoldenRecordEvent represents a formatted event payload sent to the publish topic
@@ -38,9 +39,11 @@ type GoldenRecordEvent struct {
 
 // PublishGoldenRecordsResult is the activity output summary
 type PublishGoldenRecordsResult struct {
-	TotalPublished int      `json:"total_published"`
-	EventIDs       []string `json:"event_ids"`
-	Topic          string   `json:"topic"`
+	TotalPublished int       `json:"total_published"`
+	Gated          bool      `json:"gated"`
+	GatedReason    string    `json:"gated_reason,omitempty"`
+	EventIDs       []string  `json:"event_ids"`
+	Topic          string    `json:"topic"`
 	EmittedAt      time.Time `json:"emitted_at"`
 }
 
@@ -72,7 +75,9 @@ func NewGoldenPublishingActivity(publisher GoldenEventPublisher) *GoldenPublishi
 	return &GoldenPublishingActivity{publisher: publisher}
 }
 
-// PublishGoldenRecordsActivity formats and emits deduplicated golden record events for the batch
+// PublishGoldenRecordsActivity formats and emits deduplicated golden record events for the batch.
+// GATING: When engine_mode is 'shadow' or 'legacy', publishing to the live topic is skipped
+// and recorded as a no-op review artifact.
 func (a *GoldenPublishingActivity) PublishGoldenRecordsActivity(
 	ctx context.Context,
 	req PublishGoldenRecordsRequest,
@@ -90,6 +95,18 @@ func (a *GoldenPublishingActivity) PublishGoldenRecordsActivity(
 		Topic:     topic,
 		EmittedAt: time.Now().UTC(),
 		EventIDs:  make([]string, 0, len(req.Records)),
+	}
+
+	// Gate publishing in non-new engine modes
+	if req.EngineMode != EngineModeNew {
+		result.Gated = true
+		result.GatedReason = fmt.Sprintf("Publishing is gated in %s engine mode; live topic emission skipped for review", req.EngineMode)
+		for _, rec := range req.Records {
+			hash, _ := ComputePayloadHash(rec.Payload)
+			eventID := fmt.Sprintf("gold.%s.%s.%s.%s", req.TenantID, req.EntityType, rec.EntityKey, hash)
+			result.EventIDs = append(result.EventIDs, eventID)
+		}
+		return result, nil
 	}
 
 	for _, rec := range req.Records {
