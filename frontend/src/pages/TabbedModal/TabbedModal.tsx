@@ -152,6 +152,8 @@ const nodeTypes = {
 };
 
 const TabbedModal: React.FC<TabbedModalProps> = ({ datasourceId, tenantId = 'default', onClose, isModal = true }) => {
+  const notification = useNotification();
+
   console.log('🚀 TabbedModal mounted with:', { datasourceId, tenantId, isModal, hasOnClose: !!onClose });
   
   
@@ -808,7 +810,6 @@ const semanticEdgesFromGraphQL = rawEdges || [];
       setIsExportViewVisible(false);
     } catch (error) {
       devError('Export failed:', error);
-      const notification = useNotification();
       notification.error('Export failed. Please check developer logs for details and try again.');
     } finally {
       setIsExporting(false);

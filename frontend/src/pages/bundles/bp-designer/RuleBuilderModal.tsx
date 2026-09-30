@@ -21,6 +21,8 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({
   onSave,
   onCancel,
 }) => {
+  const notification = useNotification();
+
   const [selectedObject, setSelectedObject] = useState<BusinessObject | null>(objects[0] || null);
   const [selectedField, setSelectedField] = useState<BusinessObjectField | null>(
     selectedObject?.fields[0] || null
@@ -50,7 +52,6 @@ export const RuleBuilderModal: React.FC<RuleBuilderModalProps> = ({
   };
 
   const handleSave = () => {
-    const notification = useNotification();
     if (!selectedObject || !selectedField || !selectedOperator) {
       notification.error('Please select object, field, and operator');
       return;

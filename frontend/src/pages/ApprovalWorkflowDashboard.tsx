@@ -34,6 +34,9 @@ interface SeedingResult {
 }
 
 export const ApprovalWorkflowDashboard: React.FC = () => {
+  const confirm = useConfirm();
+  const notification = useNotification();
+
   const [activeTab, setActiveTab] = useState<'workflows' | 'seeding' | 'config'>('workflows');
   const [workflows, setWorkflows] = useState<ApprovalWorkflow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -187,8 +190,6 @@ export const ApprovalWorkflowDashboard: React.FC = () => {
   };
 
   const handleClearSeed = async () => {
-    const confirm = useConfirm();
-    const notification = useNotification();
     if (!(await confirm({ title: 'Clear seed', description: 'Are you sure? This will delete all seeded rules.' }))) return;
 
     setSeeding(true);

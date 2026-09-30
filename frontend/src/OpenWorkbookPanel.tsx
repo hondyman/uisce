@@ -9,6 +9,8 @@ interface OpenWorkbookPanelProps {
 }
 
 export default function OpenWorkbookPanel({ onOpen }: OpenWorkbookPanelProps) {
+  const notification = useNotification();
+
   const [workbooks, setWorkbooks] = useState<Workbook[]>([]);
 
   const fetchWorkbooks = useCallback(() => {
@@ -24,7 +26,6 @@ export default function OpenWorkbookPanel({ onOpen }: OpenWorkbookPanelProps) {
       const fullWorkbook = await getWorkbook(id);
       onOpen(fullWorkbook);
     } catch (error) {
-      const notification = useNotification();
       notification.error(`Failed to open workbook: ${(error as Error).message}`);
     }
   };
