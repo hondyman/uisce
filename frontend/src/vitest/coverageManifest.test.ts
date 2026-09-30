@@ -15,8 +15,9 @@
  * RUNNING FILE COUNT, and the difference is exactly the work this track is doing.
  * When RUNNING FILE COUNT catches up to WIDEN_TARGET, widening is done by definition.
  *
- * The numbers below are the BASELINE (post hotfix 16c1615bd, post RootProviders
- * extraction b0a0a626e). Wave A is the first deliberate bump.
+ * Counters are pinned against `8f0c7e633` (post-rebase counter baseline; the
+ * original `5ef08e96e` was rewritten when the campaign rebased onto main after
+ * the lockfile regen + hotfix PRs landed).
  */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, statSync } from 'fs';
@@ -30,32 +31,28 @@ const FRONTEND_ROOT = join(__dirname, '..', '..');
 const INCLUDE_PATTERNS = ['src/vitest/**/*.test.ts', 'src/vitest/**/*.test.tsx'] as const;
 
 /**
- * Mirrors the documented legacy exclude list in vitest.config.ts — 7 files the
- * real config skips with the reason "pre-workstation unmaintained legacy tests".
- * Adding or removing entries here is part of widening and must be deliberate.
+ * Documented legacy excludes from vitest.config.ts. Wave A removed all 7 — they
+ * are no longer excluded by the real config, so this array is empty. Kept here
+ * as the widening-target denominator and to prevent a future wave from quietly
+ * re-excluding a file the campaign unblocked.
  */
-const DOCUMENTED_LEGACY_EXCLUDES = [
-  'src/vitest/components/pagestudio/PageStudioCanvas.test.tsx',
-  'src/vitest/components/pagestudio/pageStudioTabsMigration.test.ts',
-  'src/vitest/components/common/UnifiedBOPickerModalMultiSubtype.test.tsx',
-  'src/vitest/components/rules/RuleDiffViewer.test.tsx',
-  'src/vitest/BusinessObjectDetailsPage.test.tsx',
-  'src/vitest/utils/dedupeFields.test.ts',
-  'src/vitest/components/business-objects/BusinessObjectBindingWizard.test.tsx',
-] as const;
+const DOCUMENTED_LEGACY_EXCLUDES: readonly string[] = [];
 
 /**
  * Damage-include widened target: every `*.test.{ts,tsx}` under `src/`, minus the
  * documented excludes above. Recomputed at the end of the widening track; until
  * then it is just a number the proposal commits to and the widening has to reach.
  */
-const WIDEN_TARGET = 164 - DOCUMENTED_LEGACY_EXCLUDES.length; // 164 from the damage run, 7 documented excludes
+const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wave A unblocked all 7)
 
 /**
- * Baseline executed test count, measured against the merged tree at commit b0a0a626e.
- * Bump on every wave that adds/removes assertions. The comment names the wave.
+ * Executed test count. Pinned against `8f0c7e633`.
+ *   - pre-wave-A: 309 (305 baseline + coverageManifest.test 4)
+ *   - wave A:     +23 (the 7 newly-enabled files contain 23 it/test invocations
+ *                 total — 10 currently pass cleanly, 13 still fail and are part of
+ *                 waves B/F's backlog, NOT part of wave A's "7 that go green" claim)
  */
-const EXECUTED_TEST_BASELINE = 309; // b0a0a626e (305) + coverageManifest.test (4) — pre-wave-A
+const EXECUTED_TEST_BASELINE = 332; // 8f0c7e633 (309) + wave A (+23)
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -120,24 +117,24 @@ function matchGlob(rel: string, pattern: string): boolean {
 describe('test suite inclusion counter', () => {
   it('currently-running file count matches the baseline (bump per wave)', () => {
     // Self-counting: this file is one of the files matching the include, so the
-    // baseline number INCLUDES it. Subtract the 7 documented legacy excludes, which
-    // vitest skips but our glob matches.
+    // baseline number INCLUDES it. After wave A unblocks the 7 documented legacy
+    // excludes, the running count is the full include match with zero subtractions.
     const files = globFiles(['src'], [...INCLUDE_PATTERNS]);
     const running = files.length - DOCUMENTED_LEGACY_EXCLUDES.length;
-    expect(running).toBe(66);
+    expect(running).toBe(73);
   });
 
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(309);
+    expect(EXECUTED_TEST_BASELINE).toBe(332);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
-    expect(WIDEN_TARGET).toBeGreaterThan(66);
+    expect(WIDEN_TARGET).toBeGreaterThan(73);
   });
 
-  it('every documented exclude actually exists on disk', () => {
+  it('every documented exclude actually exists on disk (vacuous when empty)', () => {
     for (const ex of DOCUMENTED_LEGACY_EXCLUDES) {
       expect(statSync(join(FRONTEND_ROOT, ex)).isFile(), `${ex} missing`).toBe(true);
     }
