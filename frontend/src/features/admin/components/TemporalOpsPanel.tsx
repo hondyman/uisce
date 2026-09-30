@@ -160,7 +160,7 @@ const TemporalOpsPanel: React.FC = () => {
         <DialogTitle>Confirm {pendingAction}</DialogTitle>
         <DialogContent>
           <Typography>Type "CONFIRM" to proceed with the {pendingAction} action on workflow <strong>{workflowId}</strong>.</Typography>
-          <TextField autoFocus margin="dense" id="confirm" label="Type CONFIRM" fullWidth variant="standard" onKeyDown={(e) => {
+          <TextField margin="dense" id="confirm" label="Type CONFIRM" fullWidth variant="standard" onKeyDown={(e) => {
             const target = e.target as HTMLInputElement;
             if (e.key === 'Enter' && target.value === 'CONFIRM') performPending();
           }} />

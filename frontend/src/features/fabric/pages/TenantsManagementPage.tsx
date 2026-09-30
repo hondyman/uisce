@@ -983,7 +983,6 @@ const TenantsManagementPage: React.FC = () => {
               variant="outlined"
               size="small"
               required
-              autoFocus
             />
             <TextField
               fullWidth

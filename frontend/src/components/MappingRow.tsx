@@ -119,7 +119,7 @@ export function MappingRow({ mapping, idx, ...props }: MappingRowProps) {
                         if (typeof value === 'string') setLocalSearchTerm(value);
                         else { props.selectSemanticTerm(value, uniqueId); setLocalSearchTerm(value.term_name || ''); }
                       }}
-                      renderInput={(params) => (<TextField {...params} placeholder="Search semantic terms..." className="search-input" onKeyDown={async (e) => { if (e.key === 'Enter') await props.confirmEditing(uniqueId, localSearchTerm); if (e.key === 'Escape') props.cancelEditing(uniqueId); }} autoFocus />)}
+                      renderInput={(params) => (<TextField {...params} placeholder="Search semantic terms..." className="search-input" onKeyDown={async (e) => { if (e.key === 'Enter') await props.confirmEditing(uniqueId, localSearchTerm); if (e.key === 'Escape') props.cancelEditing(uniqueId); }} />)}
                     />
                     {localSearchTerm.length >= 2 && !mapping.edge_exists && (!localResults || localResults.length === 0) && (
                       <Box sx={{ mt: 1 }}><Button onClick={async () => await props.handleCreateAndSelectTerm(uniqueId, localSearchTerm)} variant="outlined" size="small" fullWidth className="create-new-btn">➕ Create New: "{localSearchTerm.toUpperCase()}"</Button></Box>

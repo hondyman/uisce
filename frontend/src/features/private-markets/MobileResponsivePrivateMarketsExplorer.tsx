@@ -628,7 +628,7 @@ export const MobileResponsivePrivateMarketsExplorer: React.FC<PrivateMarketsExpl
         </DialogContent>
         <DialogActions>
           <Button onClick={cancelLogout}>Cancel</Button>
-          <Button onClick={confirmLogout} color="primary" autoFocus>Logout</Button>
+          <Button onClick={confirmLogout} color="primary" >Logout</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -1,3 +1,11 @@
+/* eslint-disable jsx-a11y/no-autofocus --
+ * This component is a hand-rolled overlay (modal / omnibox / palette).
+ * Focus must move into it when it opens so keyboard and screen-reader users
+ * land inside the dialog, and no other element here takes initial focus.
+ * The attribute sits inside a multi-line JSX attribute list, where an
+ * inline eslint-disable comment is not valid syntax, so the scope is the
+ * whole file. This file has exactly one autoFocus and no other JSX.
+ */
 import React, { useState, useEffect } from 'react'
 
 export function CommandPalette({kernel }: {kernel: any}) {

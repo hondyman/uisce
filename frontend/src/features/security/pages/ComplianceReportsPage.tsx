@@ -162,7 +162,6 @@ export const ComplianceReportsPage: React.FC = () => {
                             value={newReportTitle}
                             onChange={(e) => setNewReportTitle(e.target.value)}
                             placeholder="e.g. Q1 2026 Audit"
-                            autoFocus
                         />
                         <TextField
                             select

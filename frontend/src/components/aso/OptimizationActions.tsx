@@ -428,7 +428,6 @@ const RejectDialog: React.FC<RejectDialogProps> = ({
         Please provide a reason for rejecting this optimization.
       </Typography>
       <TextField
-        autoFocus
         label="Rejection Reason"
         fullWidth
         multiline
