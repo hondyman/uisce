@@ -29,6 +29,7 @@ import { ThemeProvider as CustomThemeProvider, useTheme } from './contexts/Theme
 import { useNotification } from './hooks/useNotification';
 import NotificationService from './services/NotificationService';
 import DevProxyWarning from './components/DevProxyWarning';
+import { RouterCapabilityProvider } from './components/RouteBlocker/RouterCapabilityContext';
 
 export const ColorModeContext = React.createContext({ toggleColorMode: () => {} });
 
@@ -73,6 +74,9 @@ function AppWithTheme() {
           <ThemeProvider theme={theme}>
             <QueryClientProvider client={queryClient}>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                {/* Must stay directly inside the Router: this is the only place that calls
+                    router-dependent hooks (useNavigate/useLocation via useExtensionsService). */}
+                <RouterCapabilityProvider>
                 <AuthProvider>
                   <ImpersonationProvider>
                     <AccessProvider>
@@ -93,7 +97,8 @@ function AppWithTheme() {
                       </SnackbarProvider>
                     </AccessProvider>
                   </ImpersonationProvider>
-                </AuthProvider>
+                  </AuthProvider>
+                </RouterCapabilityProvider>
               </BrowserRouter>
             </QueryClientProvider>
           </ThemeProvider>

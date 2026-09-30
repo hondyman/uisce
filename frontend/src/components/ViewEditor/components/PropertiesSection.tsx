@@ -29,8 +29,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 import { ExtendsOption } from '../hooks/useAvailableSources';
 import { useAvailableSources, AvailableSource } from '../hooks/useAvailableSources';
-import { useRouteBlocker } from '../../RouteBlocker/RouteBlocker';
-import useBlockableNavigate from '../../RouteBlocker/useBlockableNavigate';
+import { useRouterCapability } from '../../RouteBlocker/RouterCapabilityContext';
 import { ViewComponentsPanel } from './ViewComponentsPanel';
 import ViewTypeahead from '../../common/ViewTypeahead';
 import CubeTypeahead from '../../common/CubeTypeahead'; // Re-added missing import for CubeTypeahead
@@ -143,19 +142,11 @@ export const PropertiesSection: React.FC<PropertiesSectionProps> = ({
   // Route-change modal state
   const [navAttempt, setNavAttempt] = useState<{ pathname?: string; action?: any } | null>(null);
   const [showNavPrompt, setShowNavPrompt] = useState(false);
-  let navigate: any = null;
-  try {
-    navigate = useBlockableNavigate();
-  } catch (e) {
-    navigate = null;
-  }
-  // Acquire route blocker instance at top-level so we don't call hooks inside effects
-  let routeBlocker: any = null;
-  try {
-    routeBlocker = useRouteBlocker();
-  } catch (e) {
-    routeBlocker = null;
-  }
+  // Router-dependent hooks are read from RouterCapabilityContext rather than called
+  // here inside try/catch: a hook inside a try is a conditional hook call, so the hook
+  // count used to depend on whether a Router was mounted. Outside a Router this yields
+  // the same values the old catch blocks produced (navigate null, pass-through blocker).
+  const { navigate, blocker: routeBlocker } = useRouterCapability();
   // Modal state for info/edit
   const [editorOpen, setEditorOpen] = useState(false);
   const [editorItem, setEditorItem] = useState<any>(null);
