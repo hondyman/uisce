@@ -74,31 +74,31 @@ function AppWithTheme() {
           <ThemeProvider theme={theme}>
             <QueryClientProvider client={queryClient}>
               <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-                {/* Must stay directly inside the Router: this is the only place that calls
-                    router-dependent hooks (useNavigate/useLocation via useExtensionsService). */}
-                <RouterCapabilityProvider>
                 <AuthProvider>
-                  <ImpersonationProvider>
-                    <AccessProvider>
-                      <SnackbarProvider maxSnack={3}>
-                        {/* Set the global notification service using notistack */}
-                        <NotificationSetter />
-                        <ConfirmProvider>
-                          <TenantProvider>
-                            <MetadataProvider>
-                              {/* Dev proxy check: warns if Vite proxy is likely misconfigured for local host dev */}
-                              <DevProxyWarning />
-                              <I18nextProvider i18n={i18n}>
-                                <App />
-                              </I18nextProvider>
-                            </MetadataProvider>
-                          </TenantProvider>
-                        </ConfirmProvider>
-                      </SnackbarProvider>
-                    </AccessProvider>
-                  </ImpersonationProvider>
-                  </AuthProvider>
-                </RouterCapabilityProvider>
+                  {/* Must stay directly inside Router & AuthProvider: calls router-dependent
+                      hooks and auth-dependent services (useExtensionsService -> useAuthFetch). */}
+                  <RouterCapabilityProvider>
+                    <ImpersonationProvider>
+                      <AccessProvider>
+                        <SnackbarProvider maxSnack={3}>
+                          {/* Set the global notification service using notistack */}
+                          <NotificationSetter />
+                          <ConfirmProvider>
+                            <TenantProvider>
+                              <MetadataProvider>
+                                {/* Dev proxy check: warns if Vite proxy is likely misconfigured for local host dev */}
+                                <DevProxyWarning />
+                                <I18nextProvider i18n={i18n}>
+                                  <App />
+                                </I18nextProvider>
+                              </MetadataProvider>
+                            </TenantProvider>
+                          </ConfirmProvider>
+                        </SnackbarProvider>
+                      </AccessProvider>
+                    </ImpersonationProvider>
+                  </RouterCapabilityProvider>
+                </AuthProvider>
               </BrowserRouter>
             </QueryClientProvider>
           </ThemeProvider>
