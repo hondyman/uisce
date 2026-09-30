@@ -1,6 +1,14 @@
 // React import removed (unused)
 import { render, screen, fireEvent } from '@testing-library/react';
+import { vi } from 'vitest';
 import EnhancedTileForm from '../EnhancedTileForm';
+
+// EXPLICIT STUB: useTenant is stubbed, so this file is evidence about EnhancedTileForm's
+// rendering only — not about the tenant context contract. See fixtures/tenantContextStub.
+vi.mock('../../../contexts/TenantContext', async () => {
+  const { tenantContextMockFactory } = await import('../../../vitest/fixtures/tenantContextStub');
+  return tenantContextMockFactory();
+});
 
 const baseProps = {
   element: { name: 'test', title: 'Test', sql: '', mappings: {}, joins: [] },

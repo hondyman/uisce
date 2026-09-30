@@ -1,7 +1,17 @@
 // React import removed (unused)
 import { render, screen, waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
 import SemanticModelOverview from '../SemanticModelOverview';
 import { TenantProvider } from '../../../contexts/TenantContext';
+
+// EXPLICIT STUB: useTenant is stubbed, so this file is evidence about
+// SemanticModelOverview's rendering only — not about the tenant context contract.
+// See fixtures/tenantContextStub. The mock supplies a pass-through TenantProvider, so
+// the existing wrappers below keep working untouched.
+vi.mock('../../../contexts/TenantContext', async () => {
+  const { tenantContextMockFactory } = await import('../../../vitest/fixtures/tenantContextStub');
+  return tenantContextMockFactory();
+});
 
 const baseModel = {
   id: 'mdl1',
