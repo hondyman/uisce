@@ -268,6 +268,27 @@ func TestLiveBPProcessDefinition_RLS_Enforcement(t *testing.T) {
 	assert.Contains(t, err.Error(), "row-level security policy")
 }
 
+func TestLiveWorkerRuleResolver_RLS_Regression(t *testing.T) {
+	db := getLivePostgresDB(t)
+	defer db.Close()
+
+	ctx := context.Background()
+	testTenantID := uuid.New()
+
+	// Set database session role to app_user (non-superuser with RLS active)
+	// Clear any session-level GUC to simulate un-initialized worker pool connection
+	_, err := db.ExecContext(ctx, "SET ROLE app_user; SET app.current_tenant = '';")
+	require.NoError(t, err)
+
+	// Test RuleResolver under un-initialized worker connection
+	resolver := NewRuleResolver(db)
+	rules, err := resolver.ResolveEntityRules(ctx, testTenantID, "ACCOUNT")
+	require.NoError(t, err, "RuleResolver must resolve rules under non-superuser app_user without pre-set GUC")
+	assert.NotEmpty(t, rules, "Rules must be returned via internal SET LOCAL scoping")
+}
+
+
+
 
 
 

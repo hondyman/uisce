@@ -3,6 +3,9 @@ package workflows
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
 )
 
 // Activities holds the legacy workflow activities
@@ -16,7 +19,42 @@ func NewActivities(db *sql.DB) *Activities {
 }
 
 func (a *Activities) LoadBPStepsActivity(ctx context.Context, processID, tenantID string) ([]BPStep, error) {
-	return nil, nil
+	if a.db == nil {
+		return nil, nil
+	}
+	tx, err := a.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin load steps tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	if tenantID != "" {
+		_, err = tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", tenantID))
+		if err != nil {
+			return nil, fmt.Errorf("set rls context in load steps: %w", err)
+		}
+	}
+
+	var stepsJSON []byte
+	err = tx.QueryRowContext(ctx, `
+		SELECT steps_json FROM public.bp_process_definition
+		WHERE process_id = $1
+		ORDER BY version DESC LIMIT 1
+	`, processID).Scan(&stepsJSON)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query bp steps: %w", err)
+	}
+
+	var steps []BPStep
+	if len(stepsJSON) > 0 {
+		if err := json.Unmarshal(stepsJSON, &steps); err != nil {
+			return nil, fmt.Errorf("unmarshal bp steps: %w", err)
+		}
+	}
+	return steps, nil
 }
 
 func (a *Activities) DataEntryActivity(ctx context.Context, step BPStep, eventData map[string]interface{}) (map[string]interface{}, error) {

@@ -73,9 +73,9 @@ func (r *RuleResolver) ResolveEntityRules(ctx context.Context, tenantID uuid.UUI
 		return nil, errors.New("entity_type is required")
 	}
 
-	// 1. Identify Core Tenant ID
+	// 1. Identify Core Tenant ID via SECURITY DEFINER function to bypass tenants table RLS
 	var coreTenantID uuid.UUID
-	coreQuery := `SELECT id FROM public.tenants WHERE gold_copy = true LIMIT 1`
+	coreQuery := `SELECT public.get_core_tenant_id()`
 	err := r.db.QueryRowContext(ctx, coreQuery).Scan(&coreTenantID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("lookup core tenant: %w", err)
@@ -87,7 +87,18 @@ func (r *RuleResolver) ResolveEntityRules(ctx context.Context, tenantID uuid.UUI
 		return r.resolveCoreRulesOnly(ctx, coreTenantID, entityType)
 	}
 
-	// 2. Query rules for both the requesting client tenant and the core tenant
+	// 2. Query rules for both the requesting client tenant and the core tenant within tenant-scoped tx
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin rule resolution tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", tenantID))
+	if err != nil {
+		return nil, fmt.Errorf("set rls context: %w", err)
+	}
+
 	query := `
 		SELECT 
 			r.id,
@@ -110,7 +121,20 @@ func (r *RuleResolver) ResolveEntityRules(ctx context.Context, tenantID uuid.UUI
 	var rows []rawRuleRow
 	err = dbx.SelectContext(ctx, &rows, query, entityType, tenantID, coreTenantID)
 	if err != nil {
-		return nil, fmt.Errorf("query survivorship rules: %w", err)
+		// Fallback query via transaction directly
+		rows = nil
+		qRows, qErr := tx.QueryContext(ctx, query, entityType, tenantID, coreTenantID)
+		if qErr != nil {
+			return nil, fmt.Errorf("query survivorship rules: %w", qErr)
+		}
+		defer qRows.Close()
+		for qRows.Next() {
+			var r rawRuleRow
+			if sErr := qRows.Scan(&r.ID, &r.TenantID, &r.EntityType, &r.SemanticTermID, &r.AttributeName, &r.Strategy, &r.PriorityOrder, &r.MaxStaleSeconds, &r.IsActive); sErr != nil {
+				return nil, fmt.Errorf("scan rule row: %w", sErr)
+			}
+			rows = append(rows, r)
+		}
 	}
 
 	// 3. Separate tenant delta rules from core baseline rules
@@ -164,6 +188,17 @@ func (r *RuleResolver) ResolveEntityRules(ctx context.Context, tenantID uuid.UUI
 
 // resolveCoreRulesOnly handles the short-circuit when requesting tenant is Core
 func (r *RuleResolver) resolveCoreRulesOnly(ctx context.Context, coreTenantID uuid.UUID, entityType string) (map[string]ResolvedFieldRule, error) {
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("begin core rule resolution tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", coreTenantID))
+	if err != nil {
+		return nil, fmt.Errorf("set rls context: %w", err)
+	}
+
 	query := `
 		SELECT 
 			r.id,
@@ -183,7 +218,22 @@ func (r *RuleResolver) resolveCoreRulesOnly(ctx context.Context, coreTenantID uu
 	`
 	dbx := sqlx.NewDb(r.db, "postgres")
 	var rows []rawRuleRow
-	err := dbx.SelectContext(ctx, &rows, query, entityType, coreTenantID)
+	err = dbx.SelectContext(ctx, &rows, query, entityType, coreTenantID)
+	if err != nil {
+		rows = nil
+		qRows, qErr := tx.QueryContext(ctx, query, entityType, coreTenantID)
+		if qErr != nil {
+			return nil, fmt.Errorf("query core survivorship rules: %w", qErr)
+		}
+		defer qRows.Close()
+		for qRows.Next() {
+			var r rawRuleRow
+			if sErr := qRows.Scan(&r.ID, &r.TenantID, &r.EntityType, &r.SemanticTermID, &r.AttributeName, &r.Strategy, &r.PriorityOrder, &r.MaxStaleSeconds, &r.IsActive); sErr != nil {
+				return nil, fmt.Errorf("scan core rule row: %w", sErr)
+			}
+			rows = append(rows, r)
+		}
+	}
 	if err != nil {
 		return nil, fmt.Errorf("query core survivorship rules: %w", err)
 	}

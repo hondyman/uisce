@@ -28,8 +28,13 @@ func TestRuleResolver_ResolveEntityRules(t *testing.T) {
 
 	t.Run("per-attribute merge with core fallback and tenant override", func(t *testing.T) {
 		// Mock core tenant lookup
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true LIMIT 1`).
+		mock.ExpectQuery(`SELECT public\.get_core_tenant_id\(\)`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(coreTenantID))
+
+		// Mock transaction begin and SET LOCAL app.current_tenant
+		mock.ExpectBegin()
+		mock.ExpectExec(`SET LOCAL app\.current_tenant = '11111111-1111-1111-1111-111111111111'`).
+			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		// Mock rules query
 		ruleCols := []string{
@@ -48,6 +53,8 @@ func TestRuleResolver_ResolveEntityRules(t *testing.T) {
 		mock.ExpectQuery(`SELECT (.+) FROM public\.semantic_survivorship_rules r`).
 			WithArgs("ACCOUNT", clientTenantID, coreTenantID).
 			WillReturnRows(rows)
+
+		mock.ExpectRollback()
 
 		rules, err := resolver.ResolveEntityRules(ctx, clientTenantID, "ACCOUNT")
 		require.NoError(t, err)
@@ -76,8 +83,12 @@ func TestRuleResolver_ResolveEntityRules(t *testing.T) {
 	})
 
 	t.Run("core tenant self-resolution short-circuits", func(t *testing.T) {
-		mock.ExpectQuery(`SELECT id FROM public\.tenants WHERE gold_copy = true LIMIT 1`).
+		mock.ExpectQuery(`SELECT public\.get_core_tenant_id\(\)`).
 			WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(coreTenantID))
+
+		mock.ExpectBegin()
+		mock.ExpectExec(`SET LOCAL app\.current_tenant = '00000000-0000-0000-0000-000000000001'`).
+			WillReturnResult(sqlmock.NewResult(0, 0))
 
 		rows := sqlmock.NewRows([]string{
 			"id", "tenant_id", "entity_type", "semantic_term_id",
@@ -87,6 +98,8 @@ func TestRuleResolver_ResolveEntityRules(t *testing.T) {
 		mock.ExpectQuery(`SELECT (.+) FROM public\.semantic_survivorship_rules r (.+) WHERE r\.entity_type = \$1 AND r\.is_active = true AND r\.tenant_id = \$2`).
 			WithArgs("ACCOUNT", coreTenantID).
 			WillReturnRows(rows)
+
+		mock.ExpectRollback()
 
 		rules, err := resolver.ResolveEntityRules(ctx, coreTenantID, "ACCOUNT")
 		require.NoError(t, err)

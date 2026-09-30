@@ -88,8 +88,19 @@ func (a *BatchSurvivorshipActivity) ResolveAndPinBatchRulesActivity(
 		return nil, fmt.Errorf("failed to marshal rules json: %w", err)
 	}
 
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin pin rules tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", tenantID))
+	if err != nil {
+		return nil, fmt.Errorf("set rls context: %w", err)
+	}
+
 	var snapshotID uuid.UUID
-	err = a.db.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 		INSERT INTO public.mdm_batch_rule_snapshot (
 			batch_id, tenant_id, entity_type, as_of, pinned_rules_json
 		) VALUES ($1, $2, $3, $4, $5)
@@ -99,6 +110,10 @@ func (a *BatchSurvivorshipActivity) ResolveAndPinBatchRulesActivity(
 	`, batchID, tenantID, entityType, cutoff.UTC(), rulesJSON).Scan(&snapshotID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to pin batch rules: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit pin rules tx: %w", err)
 	}
 
 	return &BatchRuleSnapshotResult{
@@ -206,6 +221,11 @@ func (a *BatchSurvivorshipActivity) RunBatchSurvivorshipActivity(
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback() //nolint:errcheck
+
+	_, err = tx.ExecContext(ctx, fmt.Sprintf("SET LOCAL app.current_tenant = '%s'", req.TenantID))
+	if err != nil {
+		return nil, fmt.Errorf("failed to set rls context in tx: %w", err)
+	}
 
 	rows, err := tx.QueryContext(ctx, renderedUpsert.SQL, renderedUpsert.Args...)
 	if err != nil {
