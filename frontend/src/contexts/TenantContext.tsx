@@ -2,7 +2,14 @@ import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { Tenant, Product, DataSource } from '../types';
 import { useAccess, useAccessOptional } from './AccessContext';
 
-interface TenantContextType {
+/**
+ * Public shape of the tenant context. Exported so test fixtures (e.g.
+ * `vitest/fixtures/tenantContextStub.ts`) can compile-time-check their stub
+ * shape against the real module's return type with a bidirectional exactness
+ * comparison. Without this export, fixtures would have to fall back on `as any`,
+ * which is assignable to every type and therefore detects nothing.
+ */
+export interface TenantContextType {
   tenant: Tenant | null;
   product: Product | null;
   datasource: DataSource | null;

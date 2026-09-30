@@ -9,10 +9,12 @@
  *    `...actual` is what guarantees the constants come from the real source rather
  *    than a hand-maintained mirror.
  *
- * 2. SHAPE: the stub's default context shape (`emptyTenantContext`) is typechecked at
- *    compile time against `StubTenantContext` via the `_shapeCheck` const. If the real
- *    module's `TenantContextType` gains or loses fields, the typecheck fails here
- *    rather than at a per-test site where the assertion silently misses the drift.
+ * 2. SHAPE: the stub's default context shape is typechecked at compile time against
+ *    the real module's `TenantContextType`. The guard itself lives in the fixture
+ *    module (`tenantContextStub.ts`) so it is evaluated wherever the fixture is
+ *    imported, not just here; the tail of this file re-asserts it so that deleting
+ *    or weakening the fixture's guard breaks THIS file too. It is bidirectional, so
+ *    it catches a field added, a field removed, and a field whose type changed.
  *
  * Discrimination: change a constant value in the real module (e.g., rename
  * `TENANT_STORAGE_KEYS.TENANT`), and the identity test goes red. Add a field to
@@ -20,9 +22,13 @@
  * the field or add it to the default.
  */
 import { describe, it, expect } from 'vitest';
-import { applyTenantContextStub, emptyTenantContext, stubTenantContext } from './tenantContextStub';
+import { applyTenantContextStub, emptyTenantContext } from './tenantContextStub';
+import type {
+  ApplyTenantStubOverrides,
+  TenantContextShapeIsExact,
+  DefaultIsCompleteIsExact,
+} from './tenantContextStub';
 import * as actualModule from '../../contexts/TenantContext';
-import type { TenantContextType } from '../../contexts/TenantContext';
 
 describe('applyTenantContextStub', () => {
   it('preserves TENANT_STORAGE_KEYS identity from the real module', async () => {
@@ -55,9 +61,12 @@ describe('applyTenantContextStub', () => {
   });
 
   it('honours overrides to the stub context', async () => {
+    // The override fields are cast as the real types because the test only cares
+    // about identity (the stub returns the override verbatim), not the full
+    // real-world shape of Tenant/DataSource.
     const stub = await applyTenantContextStub(async () => actualModule as any, {
-      tenant: { id: 't-1', name: 'Test Tenant' },
-      datasource: { id: 'd-1' },
+      tenant: { id: 't-1', name: 'Test Tenant' } as any,
+      datasource: { id: 'd-1' } as any,
       isSelected: true,
     });
     const ctx = (stub.useTenant as () => any)();
@@ -81,7 +90,7 @@ describe('applyTenantContextStub', () => {
     // Even with __noProvider: true, the literal overrides object passed in should not
     // retain the __noProvider key as a tenant-shaped field. The factory destructures
     // it out before passing to stubTenantContext.
-    const overrides = { __noProvider: true, tenant: { id: 't-1' } };
+    const overrides: ApplyTenantStubOverrides = { __noProvider: true, tenant: { id: 't-1' } as any };
     const stub = await applyTenantContextStub(async () => actualModule as any, overrides);
     // The override shape goes through __noProvider branch (throws), so we can't read
     // back the context. But we CAN verify the destructuring by reading the source:
@@ -95,15 +104,25 @@ describe('applyTenantContextStub', () => {
 });
 
 /**
- * Compile-time shape guard.
+ * Compile-time shape guard — see the full rationale in `tenantContextStub.ts`, where
+ * the guard actually lives.
  *
- * If `StubTenantContext` drifts from the real `TenantContextType` (the type the real
- * `useTenant` returns), this assignment fails to compile. Vitest picks up the
- * tsconfig via the loader, so this is a typecheck, not a runtime assertion.
+ * It is defined in the FIXTURE MODULE, not here, so that TypeScript evaluates it at
+ * every import site rather than only in this one test file. The two assertions below
+ * are what keep that true from this side: they re-state the guard as a value-level
+ * dependency of this suite, so if the fixture's guard is deleted or weakened, THIS
+ * file stops compiling rather than silently going quiet.
  *
- * Discrimination: add a field to `StubTenantContext` and watch this line go red
- * because the real module's type would not include the new field.
+ * Discrimination (verified — see the PR body):
+ *   - add `__drift: string` to `StubTenantContext`  -> TS2322 in the fixture
+ *   - remove `isSelected` from `TenantContextType`  -> TS2322 in the fixture
+ *   - widen `isSelected` to `boolean | undefined`   -> TS2322 in the fixture
+ *   - revert any of the three                       -> clean
  */
+type GuardedShapeIsExact = TenantContextShapeIsExact & DefaultIsCompleteIsExact;
+
+// Fails to compile if the fixture's guard ever stops resolving to literal `true`.
+const _guardHolds: GuardedShapeIsExact = true;
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const _shapeCheck: Pick<TenantContextType, keyof TenantContextType> = emptyTenantContext as any;
-void _shapeCheck;
+void _guardHolds;
+

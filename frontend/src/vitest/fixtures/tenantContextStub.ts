@@ -41,15 +41,30 @@
  * mirrors the `useAccess` guard against the vacuous-green class.
  */
 
-// `TenantProviderProps` is imported from the real module's type so the compile-time
-// shape check below catches field drift between the stub and the real module.
+import type { Tenant, Product, DataSource } from '../../types';
+import type { TenantContextType } from '../../contexts/TenantContext';
+
+/**
+ * The pass-through `TenantProvider` this module installs. It is NOT the real provider
+ * (the real one calls `useAccess`, the seam under test), so its props type is declared
+ * locally and structurally — it only has to accept and pass through `children`. The
+ * compile-time shape guard below deliberately does NOT compare this against the real
+ * module's props type, because the two are intentionally different implementations.
+ */
 type TenantProviderPropsShape = { children?: unknown };
 
+/**
+ * Mirror of `TenantContextType` from the real module. The field types use the real
+ * `Tenant` / `Product` / `DataSource` shapes (rather than `unknown`) so the compile-time
+ * shape guard at the bottom of this file is a real check. Tests can still override the
+ * value fields with their own shapes via the `Partial<StubTenantContext>` argument; the
+ * typecheck guards the SHAPE, not the value identity.
+ */
 export interface StubTenantContext {
-  tenant: unknown | null;
-  product: unknown | null;
-  datasource: { id?: string } | null;
-  setSelection: (...args: unknown[]) => void;
+  tenant: Tenant | null;
+  product: Product | null;
+  datasource: DataSource | null;
+  setSelection: (tenant: Tenant, product: Product, datasource: DataSource) => void;
   clearSelection: () => void;
   isSelected: boolean;
 }
@@ -130,3 +145,77 @@ export const applyTenantContextStub = async (
     TenantProvider: ({ children }: TenantProviderPropsShape) => children,
   };
 };
+
+/**
+ * ============================================================================
+ * COMPILE-TIME SHAPE GUARD — exact, bidirectional, no escape hatch
+ * ============================================================================
+ *
+ * This guard lives HERE, in the fixture module, rather than in a test file. That
+ * placement is the point: TypeScript checks this module as soon as anything imports
+ * it, so every consumer of the stub is covered, not just whichever test happens to
+ * assert on the shape. A guard in one test file would be a property of that file.
+ *
+ * WHY NOT THE OBVIOUS THREE (all three were tried and all three are decorative):
+ *
+ *   1. `const c: TenantContextType = emptyTenantContext as any`
+ *      `as any` is assignable to every type. This line can never fail. It is a
+ *      comment with type syntax, and it is exactly what this guard replaces.
+ *
+ *   2. `const c: TenantContextType = emptyTenantContext`
+ *      Directional — catches fields MISSING from the stub, but not fields EXTRA
+ *      on it. A stub carrying a field the real module does not have still passes,
+ *      which is the drift that actually bites: a test sets `canAccess` on the stub,
+ *      the component reads it, the component ships, the real context has no such
+ *      field, and production silently reads `undefined`.
+ *
+ *   3. `const c = {...emptyTenantContext} satisfies TenantContextType`
+ *      The excess-property check only fires on a FRESH object literal. The spread
+ *      produces a fresh literal, so this one is closer — but `satisfies` is still
+ *      one-directional, and it would not catch the stub TYPE drifting away from the
+ *      real type, only the default VALUE drifting away from the real type.
+ *
+ * `Exact<A, B>` below compares in BOTH directions, so it fails on a field added,
+ * a field removed, and a field whose type changed. It is a pure type-level
+ * computation: `true` is assignable to it only when the two types are mutually
+ * assignable, so any drift makes the `const` below a TS2322.
+ *
+ * Discrimination — verified by deliberately perturbing each side and confirming
+ * `npx tsc --noEmit` fails, then reverting (see PR #241 for the transcripts):
+ *
+ *   - add `__drift: string` to `StubTenantContext`   -> TS2322 here (extra field)
+ *   - remove `isSelected` from `TenantContextType`   -> TS2322 here (missing field)
+ *   - widen `isSelected` to `boolean | undefined`    -> TS2322 here (type change)
+ *   - revert any of the three                        -> clean
+ *
+ * The two types are compared structurally. `Exact` is written with the `[T]`
+ * tuple wrapper so the conditional distributes nothing and `never`/`any` edge
+ * cases cannot silently produce `true`.
+ */
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+
+/**
+ * `true` only when `StubTenantContext` and the real `TenantContextType` are mutually
+ * assignable — i.e. identical in every field name and field type, in both directions.
+ */
+export type TenantContextShapeIsExact = Exact<StubTenantContext, TenantContextType>;
+
+/**
+ * The assertion. Deliberately NOT `as any`, NOT `as unknown as`, NOT a `void` of a
+ * cast value: the cast forms are what made the previous guard decorative. This is a
+ * plain annotated assignment, so a `false` from `Exact` is a hard compile error
+ * pointing at this exact line.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _shapeIsExact: TenantContextShapeIsExact = true;
+
+/**
+ * The default value is checked against the STUB type (not the real type) so that a
+ * missing key in `emptyTenantContext` is also a compile error. A stub type that
+ * declares `isSelected` but a default object that forgets it is still drift — the
+ * test would render with `undefined` and report green.
+ */
+type DefaultIsComplete = Exact<StubTenantContext, typeof emptyTenantContext>;
+export type DefaultIsCompleteIsExact = DefaultIsComplete;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const _defaultIsComplete: DefaultIsComplete = true;
