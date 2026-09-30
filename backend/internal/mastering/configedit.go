@@ -26,6 +26,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
+
+	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 )
 
 // Configuration kinds.
@@ -454,6 +456,7 @@ func (e *Engine) ProposeConfig(ctx context.Context, a Actor, in ConfigProposal) 
 		return nil, err
 	}
 	ch.Mine = true
+	e.StartConfigChangeWorkflow(ctx, a.TenantID, &ch, a.UserID, a.Name)
 	return &ch, nil
 }
 
@@ -550,6 +553,25 @@ func (e *Engine) DecideConfig(ctx context.Context, a Actor, id, decision, commen
 		return nil, err
 	}
 	out.Mine = out.RequestedBy == a.UserID
+	switch decision {
+	case "approve":
+		e.SignalConfigChangeWorkflow(ctx, a.TenantID, id, workflows.SignalMDMApprove, workflows.MDMApprovalSignalPayload{
+			ApproverID:   a.UserID,
+			ApproverName: a.Name,
+			Comment:      comment,
+		})
+	case "reject":
+		e.SignalConfigChangeWorkflow(ctx, a.TenantID, id, workflows.SignalMDMReject, workflows.MDMRejectionSignalPayload{
+			RejecterID:   a.UserID,
+			RejecterName: a.Name,
+			Reason:       comment,
+		})
+	case "withdraw":
+		e.SignalConfigChangeWorkflow(ctx, a.TenantID, id, workflows.SignalMDMWithdraw, workflows.MDMWithdrawSignalPayload{
+			ProposerID: a.UserID,
+			Reason:     comment,
+		})
+	}
 	return &out, nil
 }
 

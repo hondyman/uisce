@@ -12,6 +12,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 )
 
 // Policy is how an entity's golden values may be overridden: with the
@@ -270,6 +272,9 @@ func (e *Engine) ProposeOverride(ctx context.Context, tenantID, entity, goldenID
 		out, err = e.proposeOverride(ctx, tx, cfg, pol, tenantID, entity, goldenID, in, actorID, actorName)
 		return err
 	})
+	if err == nil && out != nil && out.Status == "PENDING" {
+		e.StartOverrideWorkflow(ctx, tenantID, entity, out, actorID, actorName)
+	}
 	return out, err
 }
 
@@ -354,6 +359,21 @@ func (e *Engine) DecideOverride(ctx context.Context, tenantID, entity, id string
 		out, err = e.decideOverride(ctx, tx, cfg, tenantID, entity, id, approve, comment, actorID, actorName)
 		return err
 	})
+	if err == nil && out != nil {
+		if approve {
+			e.SignalOverrideWorkflow(ctx, tenantID, entity, id, workflows.SignalMDMApprove, workflows.MDMApprovalSignalPayload{
+				ApproverID:   actorID,
+				ApproverName: actorName,
+				Comment:      comment,
+			})
+		} else {
+			e.SignalOverrideWorkflow(ctx, tenantID, entity, id, workflows.SignalMDMReject, workflows.MDMRejectionSignalPayload{
+				RejecterID:   actorID,
+				RejecterName: actorName,
+				Reason:       comment,
+			})
+		}
+	}
 	return out, err
 }
 
@@ -436,6 +456,11 @@ func (e *Engine) WithdrawOverride(ctx context.Context, tenantID, entity, id, act
 		out, err = getOverride(ctx, tx, p, inst, id, actorID)
 		return err
 	})
+	if err == nil && out != nil {
+		e.SignalOverrideWorkflow(ctx, tenantID, entity, id, workflows.SignalMDMWithdraw, workflows.MDMWithdrawSignalPayload{
+			ProposerID: actorID,
+		})
+	}
 	return out, err
 }
 

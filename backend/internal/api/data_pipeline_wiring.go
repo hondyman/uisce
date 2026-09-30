@@ -65,7 +65,13 @@ func (s *Server) registerDataPipelineRoutes(r chi.Router, sqlxDB *sqlx.DB, bo *B
 	// Entity mastering (canonicalize -> match -> survive -> publish) over
 	// the same data plane, reading staging through these bindings.
 	platform := mastering.PlatformCatalog{DB: sqlxDB}
-	engine := &mastering.Engine{Rules: analytics.NewValidationRuleService(sqlxDB), Bindings: bindings, Fields: platform, GoldCopy: platform.GoldCopyTenant}
+	engine := &mastering.Engine{
+		Rules:          analytics.NewValidationRuleService(sqlxDB),
+		Bindings:       bindings,
+		Fields:         platform,
+		GoldCopy:       platform.GoldCopyTenant,
+		TemporalClient: s.TemporalClient,
+	}
 	if deps.StagingDB != nil {
 		engine.Data = sqlx.NewDb(deps.StagingDB, "postgres")
 	}

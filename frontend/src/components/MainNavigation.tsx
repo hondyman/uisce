@@ -180,7 +180,6 @@ const categoryConfigs: CategoryConfig[] = [
           { label: 'Fabric Settings', path: '/fabric/settings', icon: <SettingsIcon />, description: 'Platform settings' },
           { label: 'Message Catalog', path: '/admin/message-catalog', icon: <TranslateIcon />, description: 'Error & message text, all languages' },
           { label: 'LLM Config', path: '/admin/llm', icon: <AutoFixHighIcon />, description: 'AI model configuration' },
-          { label: 'Seeding', path: '/admin/seeding', icon: <SystemUpdateAltIcon />, description: 'Rule seeding' },
           { label: 'Temporal Ops', path: '/admin/temporal-ops', icon: <PlayCircleOutlineIcon />, description: 'Workflow engine' },
         ]
       }
@@ -326,7 +325,6 @@ const categoryConfigs: CategoryConfig[] = [
         icon: <BuildIcon />,
         items: [
           { label: 'Page Designer', path: '/page-studio', icon: <BuildIcon />, description: 'Visual UI builder', badge: { label: 'New', color: 'success' } },
-          { label: 'Custom Components', path: '/fabric/custom-components', icon: <BuildIcon />, description: 'Reusable components' },
         ]
       },
       {
@@ -335,7 +333,6 @@ const categoryConfigs: CategoryConfig[] = [
         items: [
           { label: 'Process Designer', path: '/client-portal/workflow-studio', icon: <AccountTreeIcon />, description: 'Workflow builder' },
           { label: 'Business Rules', path: '/client-portal/rules-editor', icon: <PolicyIcon />, description: 'Rule editor' },
-          { label: 'Workflow Designer', path: '/core/workflow-designer', icon: <TimelineIcon />, description: 'Legacy designer' },
         ]
       }
     ]

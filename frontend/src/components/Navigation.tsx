@@ -65,7 +65,7 @@ const WORKFLOWS_MENU: MenuGroup = {
   items: [
     { id: 'inbox', label: 'Approval Inbox', description: 'Manage pending approvals.', to: '/core/approval-inbox' },
     { id: 'dashboard', label: 'Workflows Dashboard', description: 'Monitor approval workflows.', to: '/core/approval-workflows' },
-    { id: 'designer', label: 'Workflow Designer', description: 'Visual process designer.', to: '/core/workflow-designer' },
+    { id: 'designer', label: 'Process Designer', description: 'Visual process designer.', to: '/client-portal/workflow-studio' },
     { id: 'process-catalog', label: 'Process Catalog', description: 'Versioned process definitions.', to: '/core/process-catalog' },
     { id: 'sla', label: 'SLA Dashboard', description: 'Monitor service level agreements.', to: '/core/sla-dashboard' },
     { id: 'notifications', label: 'Notification Center', description: 'System alerts and notifications.', to: '/core/notifications' },
@@ -105,10 +105,8 @@ const SETTINGS_MENU: MenuGroup = {
     { id: 'roles', label: 'Role Management', description: 'Assign permissions to roles.', to: '/fabric/roles' },
     { id: 'llm', label: 'LLM Configuration', description: 'Configure AI model providers.', to: '/admin/llm' },
     { id: 'temporal', label: 'Temporal Ops', description: 'Monitor workflow executions.', to: '/admin/temporal-ops' },
-    { id: 'seeding', label: 'Data Seeding', description: 'Seed database with initial data.', to: '/admin/seeding' },
     { id: 'node-types', label: 'Node Types', description: 'Configure glossary node types.', to: '/core/node-types' },
     { id: 'dynamic-ui', label: 'Dynamic UI Generator', description: 'Generate forms from definitions.', to: '/dynamic-ui' },
-    { id: 'custom-components', label: 'Custom Components', description: 'Manage custom UI components.', to: '/fabric/custom-components' },
   ]
 };
 

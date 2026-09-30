@@ -64,6 +64,13 @@ func (e *Engine) DecideCandidate(ctx context.Context, tenantID, entity, id strin
 		res, err = e.decide(ctx, tx, cfg, pol, tenantID, entity, id, d, actorID, actorName)
 		return err
 	})
+	if err == nil && res != nil && res.Status == "PENDING_APPROVAL" && res.MergeRequest != "" {
+		need := 1
+		if pol != nil {
+			need = pol.required("")
+		}
+		e.StartMergeWorkflow(ctx, tenantID, entity, res.MergeRequest, id, d.Keep, actorID, actorName, need)
+	}
 	return res, err
 }
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
+	temporalclient "go.temporal.io/sdk/client"
 
 	"github.com/hondyman/uisce/backend/internal/stagingbind"
 )
@@ -31,12 +32,13 @@ type FieldMapper interface {
 
 // Engine runs mastering. Data is the tenant's data plane (crims).
 type Engine struct {
-	Data     *sqlx.DB
-	Rules    RuleLister
-	Bindings BindingSource
-	Fields   FieldMapper
-	GoldCopy func(ctx context.Context) (string, error)
-	Now      func() time.Time
+	Data           *sqlx.DB
+	Rules          RuleLister
+	Bindings       BindingSource
+	Fields         FieldMapper
+	GoldCopy       func(ctx context.Context) (string, error)
+	Now            func() time.Time
+	TemporalClient temporalclient.Client
 }
 
 // RunRequest starts a run over one staging load.

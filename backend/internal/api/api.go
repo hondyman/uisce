@@ -3686,9 +3686,6 @@ func (s *Server) registerMetadataRoutes(r chi.Router, boHandler *BusinessObjectH
 	r.Post("/models/regenerate", s.postTriggerModelRegeneration)
 	r.Get("/models/version", s.getModelVersion)
 
-	// Custom Components endpoints
-	s.registerCustomComponentRoutes(r)
-
 	// Business Components (Business Objects)
 	boHandler.RegisterRoutes(r)
 	if s.QueryBuilderHandler != nil {

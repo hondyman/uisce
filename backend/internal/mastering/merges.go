@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/hondyman/uisce/backend/internal/temporal/workflows"
 )
 
 // requestMerge records a steward's merge as a request awaiting approval
@@ -53,6 +55,21 @@ func (e *Engine) DecideMerge(ctx context.Context, tenantID, entity, requestID st
 		res, err = e.decideMerge(ctx, tx, cfg, tenantID, entity, requestID, approve, comment, actorID, actorName)
 		return err
 	})
+	if err == nil && res != nil {
+		if approve {
+			e.SignalMergeWorkflow(ctx, tenantID, entity, requestID, workflows.SignalMDMApprove, workflows.MDMApprovalSignalPayload{
+				ApproverID:   actorID,
+				ApproverName: actorName,
+				Comment:      comment,
+			})
+		} else {
+			e.SignalMergeWorkflow(ctx, tenantID, entity, requestID, workflows.SignalMDMReject, workflows.MDMRejectionSignalPayload{
+				RejecterID:   actorID,
+				RejecterName: actorName,
+				Reason:       comment,
+			})
+		}
+	}
 	return res, err
 }
 
@@ -133,7 +150,7 @@ func (e *Engine) WithdrawMerge(ctx context.Context, tenantID, entity, requestID,
 	if err != nil {
 		return err
 	}
-	return e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
+	err = e.inTenant(ctx, tenantID, func(tx *sqlx.Tx) error {
 		res, err := tx.ExecContext(ctx, `UPDATE mdm.golden_merge_request SET status = 'WITHDRAWN', decided_at = now()
 			WHERE id::text = $1 AND entity_cd = $2 AND status = 'PENDING' AND requested_by = $3`, requestID, p.EntityCd, actorID)
 		if err != nil {
@@ -144,4 +161,10 @@ func (e *Engine) WithdrawMerge(ctx context.Context, tenantID, entity, requestID,
 		}
 		return nil
 	})
+	if err == nil {
+		e.SignalMergeWorkflow(ctx, tenantID, entity, requestID, workflows.SignalMDMWithdraw, workflows.MDMWithdrawSignalPayload{
+			ProposerID: actorID,
+		})
+	}
+	return err
 }

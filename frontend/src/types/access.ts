@@ -120,7 +120,6 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/admin/support': { minScope: 'global', minAccess: 'platform_operator' },
 
   '/admin/temporal-ops': { minScope: 'global', minAccess: 'platform_operator' },
-  '/admin/seeding': { minScope: 'global', minAccess: 'platform_operator' },
   '/admin/related-objects': { minScope: 'global', minAccess: 'platform_operator' },
 
   // Tenant-level features (no datasource needed, just tenant selected)
@@ -134,7 +133,6 @@ export const FEATURE_REQUIREMENTS: Record<string, FeatureRequirement> = {
   '/fabric/bundles': { minScope: 'instance', minAccess: 'tenant_user' },
   '/fabric/roles': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/fabric/calculations': { minScope: 'instance', minAccess: 'tenant_user' },
-  '/fabric/custom-components': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/policy-management': { minScope: 'instance', minAccess: 'tenant_admin' },
   '/api-catalog': { minScope: 'instance', minAccess: 'tenant_user' },
   '/views': { minScope: 'instance', minAccess: 'tenant_user' },

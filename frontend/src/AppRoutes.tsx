@@ -37,13 +37,11 @@ import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
-import CustomComponentPage from "./pages/CustomComponentPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
 import UisceBuilder from "./features/uisce-builder/UisceBuilder";
 import { InvestmentValidationPage } from "./pages/InvestmentValidationPage";
 import ApprovalWorkflowDashboard from "./pages/ApprovalWorkflowDashboard";
-import { WorkflowDesignerPage } from "./features/workflow/pages/WorkflowDesignerPage";
 import { DynamicDataProductPage } from "./pages/DynamicDataProductPage";
 
 import { NotificationCenterPage } from "./features/workflow/pages/NotificationCenterPage";
@@ -55,7 +53,6 @@ import { ProcessCatalogPage } from "./features/workflow/pages/ProcessCatalogPage
 import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
-import SeedingPage from "./features/admin/pages/SeedingPage";
 import QueryLibrary from "./features/query-builder/pages/QueryLibrary";
 import SavedQueryEditor from "./features/query-builder/pages/SavedQueryEditor";
 import SqlStudioPage from "./pages/analytical/SqlStudioPage";
@@ -238,7 +235,6 @@ function ProtectedApp() {
         <Route path="audit" element={<ProtectedRoute><AuditExplorer tenantId="default" tenantName="Default" /></ProtectedRoute>} />
         <Route path="admin/llm" element={<ProtectedRoute><LLMConfigPage /></ProtectedRoute>} />
         <Route path="admin/message-catalog" element={<ProtectedRoute><MessageCatalogPage /></ProtectedRoute>} />
-        <Route path="admin/seeding" element={<ProtectedRoute><SeedingPage /></ProtectedRoute>} />
         <Route path="admin/temporal-ops" element={<ProtectedRoute><TemporalOpsPage /></ProtectedRoute>} />
         <Route path="fabric/tenants" element={<ProtectedRoute><TenantsManagementPage /></ProtectedRoute>} />
         <Route path="security/*" element={<ProtectedRoute><SecurityRoutes /></ProtectedRoute>} />
@@ -378,8 +374,7 @@ function ProtectedApp() {
         <Route path="app/data-product/:pageKey" element={<ProtectedRoute><DynamicDataProductPage /></ProtectedRoute>} />
         <Route path="client-portal/workflow-studio" element={<ProtectedRoute><WorkflowStudioPage /></ProtectedRoute>} />
         <Route path="client-portal/rules-editor" element={<ProtectedRoute><BusinessRuleEditorPage /></ProtectedRoute>} />
-        <Route path="fabric/custom-components" element={<ProtectedRoute><CustomComponentPage /></ProtectedRoute>} />
-        <Route path="core/workflow-designer" element={<ProtectedRoute><WorkflowDesignerPage /></ProtectedRoute>} />
+        <Route path="core/workflow-designer" element={<Navigate to={`/${locale}/client-portal/workflow-studio`} replace />} />
 
         {/* ═══════════════════════════════════════════════════════════════════
             OPERATIONS - Scheduling and workflows
