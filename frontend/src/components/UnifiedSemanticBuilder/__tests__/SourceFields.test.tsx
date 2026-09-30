@@ -9,9 +9,11 @@ import SourceFields from '../SourceFields';
 // rendering only — not about the tenant context contract. See fixtures/tenantContextStub.
 // The mock also supplies a pass-through TenantProvider, so the existing wrapper below
 // keeps working untouched.
-vi.mock('../../../contexts/TenantContext', async () => {
-  const { tenantContextMockFactory } = await import('../../../vitest/fixtures/tenantContextStub');
-  return tenantContextMockFactory();
+// vi.mock factories are hoisted above imports, so the fixture is pulled in dynamically
+// rather than referenced as a binding.
+vi.mock('../../../contexts/TenantContext', async (importOriginal) => {
+  const { applyTenantContextStub } = await import('../../../vitest/fixtures/tenantContextStub');
+  return applyTenantContextStub(importOriginal);
 });
 
 // The ApolloProvider wrapper this test used to carry was removed: @apollo/client is not a
