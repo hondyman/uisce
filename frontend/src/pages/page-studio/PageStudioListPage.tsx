@@ -532,7 +532,6 @@ const PageStudioListPage: React.FC = () => {
         <DialogTitle>Rename page</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             fullWidth
             label="Page name"
             value={renameDraft}

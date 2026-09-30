@@ -1712,7 +1712,6 @@ const BusinessObjectQueryBuilder: React.FC = () => {
               fullWidth
               value={savedQueryName}
               onChange={(e) => setSavedQueryName(e.target.value)}
-              autoFocus
             />
             <TextField
               label="Description"

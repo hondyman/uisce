@@ -72,7 +72,6 @@ const CRUDTest: React.FC = () => {
         <DialogTitle>Create/Edit Term</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             fullWidth
             label="Term Name"
             value={termName}

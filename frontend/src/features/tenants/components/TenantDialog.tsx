@@ -46,7 +46,6 @@ export const TenantDialog: React.FC<TenantDialogProps> = ({ open, tenant, onClos
       <DialogContent>
         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <TextField
-            autoFocus
             required
             label="Tenant Display Name"
             value={displayName}

@@ -261,7 +261,6 @@ const MenuDesignerPage: React.FC = () => {
               label="Label"
               value={formLabel}
               onChange={(e) => handleLabelChange(e.target.value)}
-              autoFocus
               fullWidth
             />
             <TextField

@@ -102,7 +102,6 @@ export const CalculatedFieldModal: React.FC<CalculatedFieldModalProps> = ({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Profit Margin %, Net Asset Ratio"
-            autoFocus
           />
 
           <FormControl size="small" fullWidth>

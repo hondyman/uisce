@@ -401,7 +401,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
       <Dialog open={createLookupOpen} onClose={() => setCreateLookupOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>New Lookup</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Name" fullWidth value={createLookupForm.name} onChange={(e) => setCreateLookupForm((s) => ({ ...s, name: e.target.value }))} />
+          <TextField margin="dense" label="Name" fullWidth value={createLookupForm.name} onChange={(e) => setCreateLookupForm((s) => ({ ...s, name: e.target.value }))} />
           <TextField margin="dense" label="Description" fullWidth value={createLookupForm.description} onChange={(e) => setCreateLookupForm((s) => ({ ...s, description: e.target.value }))} />
           {lookupFormError && <FormHelperText error>{lookupFormError}</FormHelperText>}
         </DialogContent>
@@ -414,7 +414,7 @@ export default function LookupsManagementTab({ tenantId, instanceFilter }: { ten
       <Dialog open={!!editLookup} onClose={() => setEditLookup(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Lookup</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Name" fullWidth value={editLookup?.name || ''} onChange={(e) => setEditLookup((prev) => prev ? ({ ...prev, name: e.target.value }) : prev)} />
+          <TextField margin="dense" label="Name" fullWidth value={editLookup?.name || ''} onChange={(e) => setEditLookup((prev) => prev ? ({ ...prev, name: e.target.value }) : prev)} />
           <TextField margin="dense" label="Description" fullWidth value={editLookup?.description || ''} onChange={(e) => setEditLookup((prev) => prev ? ({ ...prev, description: e.target.value }) : prev)} />
           {lookupFormError && <FormHelperText error>{lookupFormError}</FormHelperText>}
         </DialogContent>
@@ -758,7 +758,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
       <Dialog open={createValueOpen} onClose={() => setCreateValueOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>New Lookup Value</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Value" fullWidth value={createValueForm.value} onChange={(e) => setCreateValueForm((s) => ({ ...s, value: e.target.value }))} />
+          <TextField margin="dense" label="Value" fullWidth value={createValueForm.value} onChange={(e) => setCreateValueForm((s) => ({ ...s, value: e.target.value }))} />
           <TextField margin="dense" label="Label" fullWidth value={createValueForm.label} onChange={(e) => setCreateValueForm((s) => ({ ...s, label: e.target.value }))} />
           <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel id="parent-select-label">Parent</InputLabel>
@@ -785,7 +785,7 @@ function LookupValuesPanel({ tenantId, lookupId, onRequestDelete }: { tenantId: 
       <Dialog open={!!editValue} onClose={() => setEditValue(null)} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Lookup Value</DialogTitle>
         <DialogContent>
-          <TextField autoFocus margin="dense" label="Value" fullWidth value={editValue?.value || ''} onChange={(e) => setEditValue((s) => s ? ({ ...s, value: e.target.value }) : s)} />
+          <TextField margin="dense" label="Value" fullWidth value={editValue?.value || ''} onChange={(e) => setEditValue((s) => s ? ({ ...s, value: e.target.value }) : s)} />
           <TextField margin="dense" label="Label" fullWidth value={editValue?.label || ''} onChange={(e) => setEditValue((s) => s ? ({ ...s, label: e.target.value }) : s)} />
           <FormControl fullWidth sx={{ mt: 1 }}>
             <InputLabel id="parent-select-label">Parent</InputLabel>

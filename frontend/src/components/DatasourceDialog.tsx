@@ -116,7 +116,6 @@ export const DatasourceDialog: React.FC<DatasourceDialogProps> = ({
           {error && <Alert severity="error">{error}</Alert>}
           
           <TextField
-            autoFocus
             required
             margin="dense"
             id="source_name"

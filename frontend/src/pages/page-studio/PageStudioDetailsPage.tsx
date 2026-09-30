@@ -129,7 +129,6 @@ const PageStudioDetailsPage: React.FC = () => {
           {editingName ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <TextField
-                autoFocus
                 size="small"
                 variant="standard"
                 value={nameDraft}

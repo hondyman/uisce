@@ -16,6 +16,7 @@ export const StreamingBindingPanel: React.FC = () => {
   });
 
   // Generate a live preview of the Flink SQL the compiler will create
+  // eslint-disable-next-line no-restricted-syntax -- display-only preview of the Flink SQL the backend compiler emits; rendered in a <pre> and never executed in the browser
   const generatePreviewSQL = () => {
     return `SELECT window_start, window_end, \n  JSON_VALUE(payload, '$.trade_amount') AS trade_amount\nFROM TABLE(\n  ${config.windowType}(TABLE ${config.topicName}, DESCRIPTOR(proctime), INTERVAL '${config.windowInterval}')\n)\nWHERE JSON_VALUE(payload, '$.tenant_id') = '<INJECTED_AT_RUNTIME>'\nGROUP BY window_start, window_end, trade_amount`;
   };
@@ -95,6 +96,7 @@ export const StreamingBindingPanel: React.FC = () => {
             </span>
           </div>
           <pre className="text-green-400 font-mono text-xs overflow-x-auto flex-1 mt-2">
+            {/* eslint-disable-next-line no-restricted-syntax -- display-only preview of the Flink SQL the backend compiler emits; rendered in a <pre> and never executed in the browser */}
             {generatePreviewSQL()}
           </pre>
           <div className="mt-4 pt-3 border-t border-gray-700 text-xs text-gray-500">

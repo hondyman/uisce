@@ -62,7 +62,6 @@ export function SubtypeDialog({
             onChange={(e) => onDisplayNameChange(e.target.value)}
             helperText="Human-readable name for this subtype"
             variant="outlined"
-            autoFocus
           />
           <TextField
             fullWidth

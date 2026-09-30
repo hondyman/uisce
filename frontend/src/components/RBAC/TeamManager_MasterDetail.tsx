@@ -837,7 +837,6 @@ export const TeamManagerMasterDetail: React.FC<TeamManagerProps> = ({ tenant, da
         <DialogContent sx={{ px: 3, py: 2 }}>
           <Stack spacing={2.5}>
             <TextField
-              autoFocus
               label="Team Key"
               placeholder="e.g., na_sales_team"
               fullWidth

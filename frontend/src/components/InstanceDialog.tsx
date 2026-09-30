@@ -77,7 +77,6 @@ export const InstanceDialog: React.FC<InstanceDialogProps> = ({ open, instance, 
       <DialogContent>
         <Box component="form" sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           <TextField
-            autoFocus
             required
             name="display_name"
             label="Instance Display Name"
