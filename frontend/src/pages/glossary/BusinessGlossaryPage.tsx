@@ -261,6 +261,14 @@ import { useQueryClient } from '@tanstack/react-query';
       setSnackbar({ ...snackbar, open: false });
     };
 
+    // Find the display name of the currently scoped tenant.
+    // Must be declared before the `hasScopeTenant` guard below: the guard returns
+    // early, so a hook placed after it would change hook count between renders.
+    const scopeTenantDisplay = useMemo(() => {
+      const t = accessibleTenants.find((t: any) => t.id === scopeTenantId);
+      return t ? (t.display_name || t.name || scopeTenantId) : (tenant?.display_name || tenant?.name || scopeTenantId);
+    }, [accessibleTenants, scopeTenantId, tenant]);
+
     if (!hasScopeTenant) {
       return (
         <Box sx={{ p: 4 }}>
@@ -272,12 +280,6 @@ import { useQueryClient } from '@tanstack/react-query';
         </Box>
       );
     }
-
-    // Find the display name of the currently scoped tenant
-    const scopeTenantDisplay = useMemo(() => {
-      const t = accessibleTenants.find((t: any) => t.id === scopeTenantId);
-      return t ? (t.display_name || t.name || scopeTenantId) : (tenant?.display_name || tenant?.name || scopeTenantId);
-    }, [accessibleTenants, scopeTenantId, tenant]);
 
     return (
       <Box

@@ -24,14 +24,6 @@ const ViewDetailsPage: React.FC = () => {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
-  if (!identifier) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <div>View identifier is required</div>
-      </Box>
-    );
-  }
-
   // Determine if the identifier is a UUID or a name
   const isIdUUID = isUUID(identifier);
   const viewId = isIdUUID ? identifier : undefined;
@@ -142,6 +134,17 @@ const ViewDetailsPage: React.FC = () => {
     return () => { mounted = false; };
   // we intentionally include navigate, tenantId, datasourceId
   }, [identifier, isIdUUID, navigate, tenantId, datasourceId]);
+
+  // Declared after the effect on purpose: this guard is an early return, so a hook
+  // placed below it would make the hook count depend on the route param. The effect
+  // above already self-guards (`if (!identifier) return;`), so nothing runs without one.
+  if (!identifier) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <div>View identifier is required</div>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
