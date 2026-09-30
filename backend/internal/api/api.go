@@ -3624,6 +3624,12 @@ func (s *Server) registerProcessRoutes(r chi.Router, db *sql.DB, sqlxDB *sqlx.DB
 	})
 	processTemplateHandler.RegisterRoutes(r)
 
+	// Workflow Extension Compiler & Runtime
+	workflowCompilerHandler := NewWorkflowCompilerHandler(db, handlers.SecurityContextDeps{
+		Resolver: s.DatasourceResolver,
+	})
+	workflowCompilerHandler.RegisterRoutes(r)
+
 	r.Post("/bp/start-execution", StartBPExecution)
 }
 
