@@ -5,9 +5,11 @@ import EnhancedTileForm from '../EnhancedTileForm';
 
 // EXPLICIT STUB: useTenant is stubbed, so this file is evidence about EnhancedTileForm's
 // rendering only — not about the tenant context contract. See fixtures/tenantContextStub.
-vi.mock('../../../contexts/TenantContext', async () => {
-  const { tenantContextMockFactory } = await import('../../../vitest/fixtures/tenantContextStub');
-  return tenantContextMockFactory();
+// vi.mock factories are hoisted above imports, so the fixture is pulled in dynamically
+// rather than referenced as a binding.
+vi.mock('../../../contexts/TenantContext', async (importOriginal) => {
+  const { applyTenantContextStub } = await import('../../../vitest/fixtures/tenantContextStub');
+  return applyTenantContextStub(importOriginal);
 });
 
 const baseProps = {
