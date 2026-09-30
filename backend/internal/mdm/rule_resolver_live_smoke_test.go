@@ -168,6 +168,22 @@ func TestLiveApplyPendingMigrations(t *testing.T) {
 	_, err = db.ExecContext(ctx, string(migration007))
 	require.NoError(t, err, "Migration 20261130_007 should apply cleanly to alpha")
 
+	migration008, err := os.ReadFile("../../db/migrations/20261130_008_create_bp_trigger_subscriptions.up.sql")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, string(migration008))
+	require.NoError(t, err, "Migration 20261130_008 should apply cleanly to alpha")
+
+	// Verify bp_trigger_subscriptions table exists
+	var trigTableExists bool
+	err = db.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables 
+			WHERE table_name = 'bp_trigger_subscriptions'
+		)
+	`).Scan(&trigTableExists)
+	require.NoError(t, err)
+	assert.True(t, trigTableExists, "bp_trigger_subscriptions table must exist")
+
 	// Verify columns exist on bp_process_definition
 	var colCount int
 	err = db.QueryRowContext(ctx, `

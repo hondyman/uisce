@@ -34,7 +34,11 @@ func ExtractTenantFromContext(ctx context.Context) (uuid.UUID, error) {
 func SetRLSContext(ctx context.Context, tx interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 }, tenantID string) error {
-	_, err := tx.ExecContext(ctx, "SELECT set_config('uisce.current_tenant', $1, true)", tenantID)
+	_, err := tx.ExecContext(ctx, `
+		SELECT set_config('app.current_tenant', $1, true),
+		       set_config('app.current_tenant_id', $1, true),
+		       set_config('uisce.current_tenant', $1, true)
+	`, tenantID)
 	return err
 }
 
