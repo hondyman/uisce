@@ -104,13 +104,14 @@ const TenantsManagementPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { tenant: scopedTenant } = useTenant();
 
-  // Block direct URL access for users without any organization entitlement.
-  // They wouldn't see the menu link, but they could still type the URL.
-  if (!organization.isVisible) {
-    return <Navigate to="/" replace />;
-  }
-
   useEffect(() => {
+    // Direct URL access is blocked for users without organization entitlement, and that
+    // check is an early return below. This effect sits above the return so the hook
+    // count is stable, which means it now mounts even for users who get redirected —
+    // so it must skip its own work, otherwise it would fire one IP-whitelist request per
+    // tenant for someone who never sees this page.
+    if (!organization.isVisible) return;
+
     const loadTenants = async () => {
       setLoading(true);
       try {
@@ -178,7 +179,7 @@ const TenantsManagementPage: React.FC = () => {
       }
     };
     loadTenants();
-  }, [accessibleTenants, scope, scopedTenant]);
+  }, [accessibleTenants, scope, scopedTenant, organization.isVisible]);
 
   const filteredTenants = useMemo(() => {
     let filtered = tenants;
@@ -371,6 +372,17 @@ const TenantsManagementPage: React.FC = () => {
       setCreateSubmitting(false);
     }
   }, [canWriteOrganization, createName, createCode, createRegion, notification, resetCreateDialog]);
+
+  // Block direct URL access for users without any organization entitlement.
+  // They wouldn't see the menu link, but they could still type the URL.
+  //
+  // Declared below every hook on purpose: an early return above a hook makes the hook
+  // count depend on `organization.isVisible`, which throws "Rendered fewer hooks than
+  // expected" when entitlement resolves. The load effect above self-guards, so nothing
+  // is fetched for a user who lands here without entitlement.
+  if (!organization.isVisible) {
+    return <Navigate to="/" replace />;
+  }
 
   const getStatusColor = (status: string): 'success' | 'error' | 'default' => {
     switch (status) {
