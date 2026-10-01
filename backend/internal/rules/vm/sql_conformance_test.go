@@ -13,11 +13,11 @@ import (
 )
 
 type ConformanceCase struct {
-	Name          string          `json:"name"`
-	RuleAST       json.RawMessage `json:"rule_ast"`
-	Input         map[string]any  `json:"input"`
-	ExpectedValid *bool           `json:"expected_valid,omitempty"`
-	ExpectedError bool            `json:"expected_error,omitempty"`
+	ID          string                 `json:"id"`
+	Description string                 `json:"description"`
+	AST         json.RawMessage        `json:"ast"`
+	Data        map[string]interface{} `json:"data"`
+	Expected    bool                   `json:"expected"`
 }
 
 // TestSQLConformanceParity runs conformance_cases.json through CompileToSQL
@@ -46,37 +46,40 @@ func TestSQLConformanceParity(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var suite struct {
-		Cases []ConformanceCase `json:"cases"`
-	}
-	if err := json.Unmarshal(raw, &suite); err != nil {
+	var cases []ConformanceCase
+	if err := json.Unmarshal(raw, &cases); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, tc := range suite.Cases {
+	for _, tc := range cases {
 		tc := tc
-		t.Run(tc.Name, func(t *testing.T) {
-			if tc.ExpectedError {
-				t.Skip("error cases are compile-time in SQL (capability matrix)")
-			}
+		t.Run(tc.ID, func(t *testing.T) {
 			var node RuleNode
-			if err := json.Unmarshal(tc.RuleAST, &node); err != nil {
+			if err := json.Unmarshal(tc.AST, &node); err != nil {
 				t.Fatalf("fixture unparseable: %v", err)
 			}
 
-			// Build a temp table from the case's input keys (missing key -> NULL col).
-			cols := make([]string, 0, len(tc.Input))
-			for k, v := range tc.Input {
+			// Collect all fields from both AST and Data
+			colTypes := make(map[string]string)
+			for _, f := range FieldRefs(node) {
+				colTypes[f] = "text"
+			}
+			for k, v := range tc.Data {
 				switch v.(type) {
 				case string:
-					cols = append(cols, fmt.Sprintf(`"%s" text`, k))
+					colTypes[k] = "text"
 				default:
-					cols = append(cols, fmt.Sprintf(`"%s" numeric`, k))
+					colTypes[k] = "numeric"
 				}
+			}
+
+			cols := make([]string, 0, len(colTypes))
+			for k, typ := range colTypes {
+				cols = append(cols, fmt.Sprintf(`"%s" %s`, k, typ))
 			}
 			sort.Strings(cols)
 
-			tblName := fmt.Sprintf("cf_%d", os.Getpid())
+			tblName := fmt.Sprintf("cf_%d_%s", os.Getpid(), strings.ReplaceAll(tc.ID, "-", "_"))
 			_, _ = db.Exec(fmt.Sprintf(`DROP TABLE IF EXISTS %s`, tblName))
 			// tenant_id is always present (Layer 2); input fields may be absent.
 			ddl := fmt.Sprintf(`CREATE TEMP TABLE %s (tenant_id text%s)`, tblName, func() string {
@@ -94,7 +97,7 @@ func TestSQLConformanceParity(t *testing.T) {
 
 			names, ph, args := []string{"tenant_id"}, []string{"$1"}, []any{"t"}
 			i := 1
-			for k, v := range tc.Input {
+			for k, v := range tc.Data {
 				i++
 				names = append(names, fmt.Sprintf(`"%s"`, k))
 				ph = append(ph, fmt.Sprintf("$%d", i))
@@ -126,8 +129,8 @@ func TestSQLConformanceParity(t *testing.T) {
 				t.Fatalf("execute: %v (sql=%s)", err, passSQL)
 			}
 			gotValid := passCount == 1
-			if gotValid != *tc.ExpectedValid {
-				t.Fatalf("SQL engine disagrees with fixture: got valid=%v, want %v (sql=%s)", gotValid, *tc.ExpectedValid, passSQL)
+			if gotValid != tc.Expected {
+				t.Fatalf("SQL engine disagrees with fixture: got valid=%v, want %v (sql=%s)", gotValid, tc.Expected, passSQL)
 			}
 		})
 	}

@@ -67,10 +67,7 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		// Multi-Surface Evaluation APIs (Phase 2)
 		r.Post("/evaluate-record", h.handleEvaluateRecord)
 		r.Post("/evaluate-batch", h.handleEvaluateBatch)
-		r.Post("/evaluate/record", h.handleEvaluateRecord)
-		r.Post("/evaluate/batch", h.handleEvaluateBatch)
 		r.Post("/evaluate-pushdown", h.handleEvaluatePushdown)
-		r.Post("/evaluate/pushdown", h.handleEvaluatePushdown)
 		r.Get("/evaluate/snapshot", h.handleLoadSnapshot)
 		r.Post("/evaluate/snapshot", h.handleLoadSnapshot)
 
