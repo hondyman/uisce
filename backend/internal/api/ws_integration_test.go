@@ -32,7 +32,10 @@ func TestWebSocketEndToEndProfiler(t *testing.T) {
 	jobID := generateJobID()
 	job := &ProfileJob{ID: jobID, Status: "pending", CreatedAt: time.Now(), Req: ProfileRequest{Schema: "public", Tables: []string{"table1"}}}
 	srv.ProfileJobs.Store(jobID, job)
-	go srv.runProfile(jobID)
+	// The job is started AFTER the websocket is attached (below). Starting it
+	// here raced the client: against an unreachable/empty source the profile
+	// finishes in microseconds, so the client attached after the "progress"
+	// message and saw only "completed" (failed ~97% of runs).
 
 	// Request a ws token
 	tokenReq := map[string]interface{}{"jobId": jobID, "purpose": "profiler", "ttl_seconds": 60}
@@ -67,6 +70,9 @@ func TestWebSocketEndToEndProfiler(t *testing.T) {
 		t.Fatalf("failed to dial websocket: %v", err)
 	}
 	defer conn.Close()
+
+	// Now that the client is attached, run the job so no message can be missed.
+	go srv.runProfile(jobID)
 
 	// Read messages until we receive completed
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
