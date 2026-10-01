@@ -73,6 +73,9 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
 }) => {
   const overlay = usePresentationOverlay(component.id);
   const { setRecord, setEditingField } = usePresentationRuntime();
+  // Hooks must run before any early return below (rules-of-hooks).
+  const appRuntime = useAppRuntime();
+  const setVariable = appRuntime?.setVariable;
   const styled = (children: React.ReactNode) => (
     <Box sx={{ ...(component.style as React.CSSProperties | undefined), ...overlay?.style } as React.CSSProperties}>{children}</Box>
   );
@@ -139,9 +142,6 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
   if (component.type === 'Tile') {
     return styled(<TileWidget component={component} />);
   }
-
-  const appRuntime = useAppRuntime();
-  const setVariable = appRuntime?.setVariable;
 
   if (component.type === 'KpiTile' || component.type === 'KPITile') {
     const kpiConfig = (component.props?.config || component.props) as any;
