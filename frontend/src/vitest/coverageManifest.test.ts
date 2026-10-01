@@ -59,7 +59,7 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 103; // f011c23d1; was 76 at dc1ccc07c, drifted to 103 via #232 and other PRs that never bumped it
+const RUNNING_FILE_BASELINE = 101; // 76 at dc1ccc07c, 103 at f011c23d1 (drift via #232 etc.), then -2: empty RuleDiffViewer stub + orphan UnifiedBOPickerModal test
 const EXECUTED_TEST_BASELINE = 553; // measured on f011c23d1 with `vitest --reporter=json` (539 passed + 14 failed; was 340 at dc1ccc07c)
 
 function globFiles(roots: string[], patterns: string[]): string[] {
