@@ -95,7 +95,6 @@ export const InvestmentValidationPage: React.FC = () => {
 
   const runValidation = async () => {
     if (!engine || !selectedAccount) {
-      const notification = useNotification();
       notification.error('Please select an account');
       return;
     }
@@ -142,7 +141,6 @@ export const InvestmentValidationPage: React.FC = () => {
       await loadHistory();
     } catch (error) {
       console.error('Validation execution failed:', error);
-      const notification = useNotification();
       notification.error('Validation execution failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
     } finally {
       setValidating(false);

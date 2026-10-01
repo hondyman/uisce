@@ -1,6 +1,6 @@
 import React, { createContext, useContext, ReactNode, useMemo } from 'react';
 import { Tenant, Product, DataSource } from '../types';
-import { useAccess } from './AccessContext';
+import { useAccess, useAccessOptional } from './AccessContext';
 
 interface TenantContextType {
   tenant: Tenant | null;
@@ -55,22 +55,35 @@ export const TenantProvider: React.FC<TenantProviderProps> = ({ children }) => {
 };
 
 export const useTenant = (): TenantContextType => {
+  // Both contexts are read unconditionally, at the top level, so the hook count no
+  // longer depends on whether a provider is mounted. `useAccess` was previously
+  // wrapped in `try { useAccess() } catch`, and the tenant early-return sat above
+  // it, so provider presence changing between renders was a live hook-count crash
+  // ("Rendered fewer hooks than expected") and could cross state between mismatched
+  // hook instances.
   const context = useContext(TenantContext);
+  const access = useAccessOptional();
+
   if (context !== undefined) {
     return context;
   }
-  // If outside TenantProvider but inside AccessProvider, fall back directly to useAccess
-  try {
-    const access = useAccess();
-    return {
-      tenant: access.currentTenant,
-      product: access.currentProduct,
-      datasource: access.currentDatasource,
-      setSelection: access.setSelection,
-      clearSelection: access.clearScope,
-      isSelected: access.isSelected,
-    };
-  } catch (_) {
+
+  // Outside TenantProvider but inside AccessProvider, fall back directly to the
+  // access context.
+  //
+  // The failure is deliberately still loud, and still carries this message:
+  // `useAccessOptional` returns `undefined` (the context default) when no
+  // AccessProvider is mounted. This is NOT a silent-default fallback — a caller
+  // cannot observe a missing provider here.
+  if (access === undefined) {
     throw new Error('useTenant must be used within an AccessProvider or TenantProvider');
   }
+  return {
+    tenant: access.currentTenant,
+    product: access.currentProduct,
+    datasource: access.currentDatasource,
+    setSelection: access.setSelection,
+    clearSelection: access.clearScope,
+    isSelected: access.isSelected,
+  };
 };

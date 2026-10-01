@@ -413,7 +413,7 @@ export function useComplianceStatus(
 /**
  * Get critical events in the last N hours (for real-time dashboard)
  */
-export function useCriticalEventsRealtime(tenantIds: string[], hoursBack = 1) {
+export function useCriticalEventsRealtime(tenantIds: string[], hoursBack = 1, enabled = true) {
   const query = gql`
     query CriticalEventsRealtime(
       $tenantIds: [String!]!
@@ -441,6 +441,9 @@ export function useCriticalEventsRealtime(tenantIds: string[], hoursBack = 1) {
         tenantIds,
         hoursBack,
       }),
+    // Callers must invoke this hook unconditionally (Rules of Hooks). `enabled`
+    // lets them switch the polling on and off without skipping the call.
+    enabled,
     staleTime: 10000, // 10 seconds (real-time)
     refetchInterval: 10000, // Poll every 10 seconds
   });
@@ -602,9 +605,11 @@ export function useAuditDashboard(
     severities: ['CRITICAL', 'HIGH'],
   });
   const complianceQuery = useComplianceStatus(tenantIds, dateRange.from, dateRange.to);
-  const realtimeQuery = options.enableRealtime
-    ? useCriticalEventsRealtime(tenantIds, 1)
-    : null;
+  // Called unconditionally: skipping the call when realtime is off changed the
+  // hook count between renders. The public `realtime` value stays nullable so
+  // existing consumers are unaffected.
+  const realtimeQueryLive = useCriticalEventsRealtime(tenantIds, 1, options.enableRealtime);
+  const realtimeQuery = options.enableRealtime ? realtimeQueryLive : null;
 
   return {
     stats: eventsQuery,

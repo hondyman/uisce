@@ -61,7 +61,6 @@ export default function SavedQueriesPanel({ onOpen, views }: SavedQueriesPanelPr
       const fullQuery = await getSavedQuery(id);
       onOpen(fullQuery);
     } catch (error) {
-      const notification = useNotification();
       notification.error(`Failed to open query: ${(error as Error).message}`);
     }
   };
@@ -72,8 +71,6 @@ export default function SavedQueriesPanel({ onOpen, views }: SavedQueriesPanelPr
   };
 
   const handleDelete = async (id: string) => {
-    const confirm = useConfirm();
-    const notification = useNotification();
     if (await confirm({ title: 'Delete saved query', description: 'Are you sure you want to delete this query? This cannot be undone.' })) {
       try {
         await deleteQuery(id);

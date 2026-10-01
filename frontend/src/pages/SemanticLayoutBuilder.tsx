@@ -717,7 +717,6 @@ const SemanticLayoutBuilder: React.FC = () => {
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(exportConfig());
-                  const notification = useNotification();
                   notification.success('Copied to clipboard!');
                 }}
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg transition"

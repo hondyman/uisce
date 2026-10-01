@@ -625,6 +625,7 @@ const FiltersTab: React.FC<{
 
 // Main Component
 export const CustomComponentManager: React.FC = () => {
+  const notification = useNotification();
   const { tenant, datasource } = useTenant();
   const { 
     components, 
@@ -925,7 +926,6 @@ loadChartData();`;
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(generateCodeExample(component));
-                      const notification = useNotification();
                       notification.success('Code copied to clipboard!');
                     }}
                     className={styles.copyBtn}

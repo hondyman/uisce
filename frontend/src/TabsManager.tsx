@@ -27,6 +27,8 @@ const createNewTab = (title: string): TabState => ({
 });
 
 export default function TabsManager() {
+  const notification = useNotification();
+
   const [tabs, setTabs] = useState<TabState[]>(() => [createNewTab('Tab 1')]);
   const [activeId, setActiveId] = useState<string | null>(tabs[0]?.id || null);
   const [views, setViews] = useState<ViewMeta[]>([]);
@@ -52,7 +54,6 @@ export default function TabsManager() {
     // Allow saved queries to reference views by id or by name
   const viewForQuery = views.find(v => getViewIdentifier(v) === q.view_name || v.name === q.view_name);
     if (!viewForQuery) {
-      const notification = useNotification();
       notification.error(`Could not open saved query: View '${q.view_name}' not found.`);
       return;
     }

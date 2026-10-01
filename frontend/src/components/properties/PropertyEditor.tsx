@@ -58,6 +58,35 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ property, value, onChan
     }
   }, [lookupId, tenant?.id, lookupValues, property.name, cascadeFrom, parentId]);
 
+  // Lookup display helpers.
+  // Hoisted above the checkbox / options / lookup early returns below: a hook below
+  // an early return makes the hook count depend on `property.input_type`, so editing
+  // a property from one input_type to another throws "Rendered more hooks than
+  // expected". Both are pure derivations of props/state already in scope, and both
+  // are only read inside the lookup branch.
+  const displayValues = React.useMemo(() => {
+    if (!lookupValues) return [];
+    // If this is a cascading field, its values MUST have a parent_id that matches the selected parent.
+    if (cascadeFrom && parentId) {
+      return lookupValues.filter((lv: any) => lv.parent_id === parentId);
+    }
+    // Otherwise, show only top-level values (where parent_id is null/undefined)
+    return lookupValues.filter((lv: any) => !lv.parent_id);
+  }, [lookupValues, cascadeFrom, parentId]);
+
+  // Create a map from ID to name for displaying selected values
+  const lookupNameMap = React.useMemo(() => {
+    const map = new Map<string, string>();
+    if (displayValues && displayValues.length > 0) {
+      displayValues.forEach((lv: any) => {
+        if (lv.id && lv.name) {
+          map.set(String(lv.id), lv.name);
+        }
+      });
+    }
+    return map;
+  }, [displayValues]);
+
   // Boolean
   if (property.input_type === 'checkbox') {
     return (
@@ -98,31 +127,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({ property, value, onChan
   if ((property as any).input_type === 'lookup' || (property as any).input_type === 'Lookup') {
     // When cascading, disable if parent value not selected
     const isDisabled = cascadeFrom && !parentId;
-    
-    // Filter to show only top-level values (no parent) unless we're in a cascading context
-    const displayValues = React.useMemo(() => {
-      if (!lookupValues) return [];
-      // If this is a cascading field, its values MUST have a parent_id that matches the selected parent.
-      if (cascadeFrom && parentId) {
-        return lookupValues.filter((lv: any) => lv.parent_id === parentId);
-      }
-      // Otherwise, show only top-level values (where parent_id is null/undefined)
-      return lookupValues.filter((lv: any) => !lv.parent_id);
-    }, [lookupValues, cascadeFrom, parentId]);
-    
-    // Create a map from ID to name for displaying selected values
-    const lookupNameMap = React.useMemo(() => {
-      const map = new Map<string, string>();
-      if (displayValues && displayValues.length > 0) {
-        displayValues.forEach((lv: any) => {
-          if (lv.id && lv.name) {
-            map.set(String(lv.id), lv.name);
-          }
-        });
-      }
-      return map;
-    }, [displayValues]);
-    
+
     return (
       <FormControl fullWidth key={key} margin="normal" disabled={isDisabled}>
         <InputLabel>{label}</InputLabel>

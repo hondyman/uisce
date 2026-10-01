@@ -132,6 +132,9 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
 
   const isLoading = businessLoading || semanticLoading || edgesLoading;
 
+  // Must be called before the `isLoading` early return so the hook count is stable.
+  const { t } = useTranslation();
+
   if (isLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -143,7 +146,6 @@ export default function GlossaryFlowView({ focus = 'business' }: Props) {
   // Determine left/right lists based on focus
   const leftList = focus === 'business' ? businessTerms : semanticTerms;
   const rightList = focus === 'business' ? semanticTerms : businessTerms;
-  const { t } = useTranslation();
   const leftLabel = focus === 'business' ? `${t('tab.business_terms', 'Business Terms')} (${businessTerms?.length || 0})` : `${t('tab.semantic_terms', 'Semantic Terms')} (${semanticTerms?.length || 0})`;
   const rightLabel = focus === 'business' ? `${t('tab.semantic_terms', 'Semantic Terms')} (${semanticTerms?.length || 0})` : `${t('tab.business_terms', 'Business Terms')} (${businessTerms?.length || 0})`;
 
