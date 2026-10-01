@@ -504,11 +504,90 @@ func TestHandleExecuteSavedQuery_TokenAuth(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+rawToken)
 	req.Header.Set("X-Datasource-Id", "ds-1")
 	rec := httptest.NewRecorder()
-
 	r.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestSavedQueryExecute_InOperator_ParameterizedAndNarrowing(t *testing.T) {
+	sq := &SavedQuery{
+		ID:   "sq-200",
+		BOID: "bo-trade",
+		State: SavedQueryState{
+			Dimensions: []SavedQueryDimension{{TermNodeID: "term-desk", Alias: "desk"}},
+			Measures:   []SavedQueryMeasure{{TermNodeID: "term-notional", Alias: "notional"}},
+			Filters: []SavedQueryFilter{
+				{TermNodeID: "term-status", Operator: "eq", Value: "SETTLED"},
+			},
+		},
+	}
+
+	// 1. Validator accepts "in" operator with slice of strings or interfaces
+	runtimeFilters := []RuntimeFilter{
+		{
+			TermNodeID: "term-desk",
+			Operator:   "in",
+			Value:      []string{"NY", "LON", "HK"},
+			BOID:       "bo-trade",
+		},
+	}
+	err := validateRuntimeFilters(runtimeFilters, sq)
+	require.NoError(t, err, "validator must accept 'in' operator with string slice")
+
+	// 2. Composing narrowing-only filter list: base filters (1) + runtime filter (1) = 2 filters AND-composed
+	baseFilters, err := resolveParams(sq.State, nil)
+	require.NoError(t, err)
+	require.Len(t, baseFilters, 1)
+
+	allFilters := make([]boresolver.FilterDef, 0, len(baseFilters)+len(runtimeFilters))
+	allFilters = append(allFilters, baseFilters...)
+	for _, rf := range runtimeFilters {
+		allFilters = append(allFilters, boresolver.FilterDef{
+			TermNodeID: rf.TermNodeID,
+			Operator:   rf.Operator,
+			Value:      rf.Value,
+			BOID:       rf.BOID,
+		})
+	}
+	require.Len(t, allFilters, 2)
+	assert.Equal(t, "eq", allFilters[0].Operator)
+	assert.Equal(t, "in", allFilters[1].Operator)
+
+	// 3. Compile SQL predicate using boresolver and verify parameterization as flattened placeholders ($1, $2, $3)
+	gen := &boresolver.BOSQLGenerator{Dialect: boresolver.PostgresDialect{}}
+	genCtx := &boresolver.GenerationContext{}
+
+	clause := boresolver.FilterClause{
+		FieldID:  "term-desk",
+		Operator: "in",
+		Value:    []interface{}{"NY", "LON", "HK"},
+	}
+	sqlFrag, err := boresolver.CompileFilterPredicate(gen, genCtx, "t0.desk", clause)
+	require.NoError(t, err)
+
+	// Assert flattened placeholders ($1, $2, $3) — NEVER concatenated string literals
+	assert.Equal(t, "t0.desk IN ($1, $2, $3)", sqlFrag)
+	require.Len(t, genCtx.Args, 3)
+	assert.Equal(t, "NY", genCtx.Args[0])
+	assert.Equal(t, "LON", genCtx.Args[1])
+	assert.Equal(t, "HK", genCtx.Args[2])
+
+	// 4. Adversarial check: attempt SQL injection via array item in IN operator
+	advGenCtx := &boresolver.GenerationContext{}
+	injectionPayload := "') OR '1'='1' --"
+	advClause := boresolver.FilterClause{
+		FieldID:  "term-desk",
+		Operator: "in",
+		Value:    []interface{}{"NY", injectionPayload},
+	}
+	advSQLFrag, err := boresolver.CompileFilterPredicate(gen, advGenCtx, "t0.desk", advClause)
+	require.NoError(t, err)
+
+	// SQL fragment must remain strictly parameterized as ($1, $2)
+	assert.Equal(t, "t0.desk IN ($1, $2)", advSQLFrag)
+	require.Len(t, advGenCtx.Args, 2)
+	assert.Equal(t, injectionPayload, advGenCtx.Args[1], "payload must remain isolated in bound parameter args, never injected into SQL text")
 }
 
 
