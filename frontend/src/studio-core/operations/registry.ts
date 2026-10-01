@@ -39,6 +39,13 @@ export interface OperationDef {
   run: (params: Record<string, unknown>, ctx?: OperationContext) => Promise<unknown>;
   /** Query only: row fields, for the column editor. */
   fields?: OperationField[];
+  /**
+   * Query only: where the rows are when the result is an envelope ({rows, ...}),
+   * and what each row carries. Absent: the result is the list and `fields` describe its rows.
+   * A generator reads these to build a list and a form without being told.
+   */
+  rowsPath?: string;
+  rowFields?: OperationField[];
   /** Mutation only: cache prefixes to refresh after success (default: [domain]). */
   invalidates?: string[][];
 }
