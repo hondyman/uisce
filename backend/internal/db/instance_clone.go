@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/jmoiron/sqlx"
 )
@@ -228,7 +229,9 @@ func CloneGoldCopyInstance(
 			VALUES 
 				($1, $2, $3, $4, false, $5, $6, $7, $8, NOW(), NOW())
 		`, newDatasourceID, newProductID, gd.AlphaDatasourceID, gd.SourceName,
-			newConnectionID, targetInstanceID, gd.ID, gd.Config)
+			// The gold copy's credentials (inline, or its secret_path) never
+			// travel to another tenant; the clone gets its own later.
+			newConnectionID, targetInstanceID, gd.ID, dscreds.StripForClone(gd.Config))
 		if err != nil {
 			return nil, fmt.Errorf("failed to clone datasource %s: %w", gd.ID, err)
 		}
@@ -581,6 +584,10 @@ func sanitizeConnectionMetadata(metadata []byte) ([]byte, error) {
 	delete(metaMap, "auth_type")
 	delete(metaMap, "api_key")
 	delete(metaMap, "base_url")
+	// Never copy the gold copy's credentials (auth.basic.password,
+	// private_key, secret_path, ...) into another tenant's connection.
+	dscreds.StripInlineSecrets(metaMap)
+	delete(metaMap, dscreds.RefKey)
 
 	return json.Marshal(metaMap)
 }

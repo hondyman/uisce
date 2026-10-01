@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
 	dbpkg "github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/events"
 	"github.com/hondyman/uisce/backend/internal/lineage"
 	"github.com/hondyman/uisce/backend/internal/logging"
@@ -140,14 +141,23 @@ func (s *BusinessObjectService) recordsDBStrict(ctx context.Context, boID string
 		return cached.(*sqlx.DB), nil
 	}
 
-	var connectionDetails string
-	if err := s.db.GetContext(ctx, &connectionDetails, `
-		SELECT config::text FROM public.tenant_product_datasource WHERE id = $1::uuid
-	`, backendID); err != nil || connectionDetails == "" {
+	var backend struct {
+		Config   string `db:"config"`
+		TenantID string `db:"tenant_id"`
+	}
+	if err := s.db.GetContext(ctx, &backend, `
+		SELECT COALESCE(config::text, '') AS config, COALESCE(tenant_id::text, '') AS tenant_id
+		FROM public.tenant_product_datasource WHERE id = $1::uuid
+	`, backendID); err != nil || backend.Config == "" {
 		return nil, fmt.Errorf("business object %s is bound to datasource %s, which has no connection configuration", boID, backendID)
 	}
 
-	targetDB, err := connectToDatabaseFromDetails(ctx, connectionDetails)
+	connectionDetails, err := datasourceCreds().Hydrate(ctx, dscreds.KindDatasource, backend.TenantID, backendID, []byte(backend.Config))
+	if err != nil {
+		return nil, fmt.Errorf("business object %s: cannot resolve credentials for its datasource %s: %w", boID, backendID, err)
+	}
+
+	targetDB, err := connectToDatabaseFromDetails(ctx, string(connectionDetails))
 	if err != nil {
 		return nil, fmt.Errorf("business object %s: cannot connect to its datasource %s: %w", boID, backendID, err)
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/db"
+	"github.com/hondyman/uisce/backend/internal/dscreds"
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/models"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -40,8 +41,13 @@ func (s *ScannerService) ScanDatasource(datasourceID string) error {
 		return fmt.Errorf("failed to get datasource: %w", err)
 	}
 
+	config, err := dscreds.Default().Hydrate(context.Background(), dscreds.KindDatasource, datasource.TenantID.String(), datasource.ID.String(), datasource.Config)
+	if err != nil {
+		return fmt.Errorf("failed to resolve datasource credentials: %w", err)
+	}
+
 	var dbConfig db.DBConfig
-	if err := json.Unmarshal(datasource.Config, &dbConfig); err != nil {
+	if err := json.Unmarshal(config, &dbConfig); err != nil {
 		return fmt.Errorf("failed to unmarshal db config: %w", err)
 	}
 
