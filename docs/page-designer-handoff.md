@@ -33,13 +33,15 @@ not built by this workstream.
 
 ADR 0001 phase 1 (authoring confidence) progress:
 
-- **Done:** page checker (#232), binding picker (#246).
-- **Next:** point-and-click condition builder with validation; structured
-  editors for what is still JSON (row buttons, action forms, map specs,
-  generated columns, canvas categories); live query status on widgets in
-  design mode.
-- Then phases 2-5 in the ADR (generate from an operation, fragments, charts,
-  grids at scale, version history, and so on).
+- **Done (Phase 1):** page checker (#232), binding picker (#246), condition
+  builder (#249), structured form editors (#250), live query status (#251).
+- **Done (Phase 2, partly):** generate from operations, fragment format /
+  resolver / storage / usage, bundles, templates gallery. Decisions and a
+  status table are in `docs/adr/0001-page-designer-world-class-roadmap.md`.
+- **Next (Phase 2):** fragment picker in the designer, adoption preflight and
+  endpoints for core fragments, then server-side paging (decided in the ADR).
+- Then phases 3-5 in the ADR (charts, grids at scale, version history, and so
+  on).
 
 ## How a page works (the model)
 
@@ -182,4 +184,5 @@ Writing to alpha needs the owner's explicit go-ahead each time.
    on the canvas.
 4. Extend `checkPage`: validate operation param names (unknown params), rows
    paths against operation `fields`, contextual roots per setting.
-5. ADR phase 2: generate a page from an operation; make fragments first-class.
+5. ADR phase 2: the remaining items are in the status table in the ADR
+   (fragment picker, adoption preflight, server-side paging).
