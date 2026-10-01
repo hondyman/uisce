@@ -316,4 +316,34 @@ describe('GridLayoutRenderer - 4-Tile Report Batch Loading & Interaction', () =>
 
     expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ i: 'kpi-1', w: 6 }));
   });
+
+  it('triggers onRefresh polling when refreshInterval >= 60 and document is visible', () => {
+    vi.useFakeTimers();
+    const onRefresh = vi.fn();
+    const config: KpiTileConfig = {
+      measureAlias: 'revenue',
+      format: { type: 'currency' },
+      refreshInterval: 60, // 60s
+    };
+
+    render(
+      <KpiTileWidget
+        title="Live KPI"
+        config={config}
+        data={{ rows: [{ revenue: 100 }] }}
+        onRefresh={onRefresh}
+      />
+    );
+
+    // Fast-forward 60s
+    vi.advanceTimersByTime(60000);
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+
+    // Fast-forward another 60s
+    vi.advanceTimersByTime(60000);
+    expect(onRefresh).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
 });
+

@@ -232,6 +232,38 @@ func ScanSavedQueryUsage(ctx context.Context, db *sqlx.DB, queryID string, isCor
 		}
 	}
 
+	// 4. Scan active scheduled jobs referencing this query
+	type schedJobRow struct {
+		ID       string `db:"id"`
+		Name     string `db:"name"`
+		TenantID string `db:"tenant_id"`
+	}
+	schedQuery := `SELECT id::text, name, tenant_id::text
+	               FROM public.schedules
+	               WHERE deleted_at IS NULL AND (
+	                   target = $1 OR target = 'query:' || $1 OR target = '/saved-queries/' || $1
+	                   OR payload::text LIKE '%' || $1 || '%'
+	               )`
+	var schedArgs []interface{}
+	schedArgs = append(schedArgs, queryID)
+	if !isCore && tenantID != "" {
+		schedQuery += ` AND tenant_id::text = $2`
+		schedArgs = append(schedArgs, tenantID)
+	}
+
+	var schedRows []schedJobRow
+	if err := db.SelectContext(ctx, &schedRows, schedQuery, schedArgs...); err == nil {
+		for _, s := range schedRows {
+			refs = append(refs, SavedQueryReference{
+				Type:     "scheduled_job",
+				ID:       s.ID,
+				Name:     s.Name,
+				Location: "schedules.target",
+				TenantID: s.TenantID,
+			})
+		}
+	}
+
 	return SavedQueryUsageReport{
 		InUse:      len(refs) > 0,
 		References: refs,

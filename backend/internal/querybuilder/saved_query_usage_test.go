@@ -195,6 +195,11 @@ func TestSavedQueryUsage_HandlerEndpoints(t *testing.T) {
 			WithArgs(queryID, tenantID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "query_state"}))
 
+		// Mock schedules scan
+		mock.ExpectQuery(`SELECT id::text, name, tenant_id::text FROM public\.schedules WHERE deleted_at IS NULL AND .* AND tenant_id::text = \$2`).
+			WithArgs(queryID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "tenant_id"}))
+
 		req := makeReq("GET", "/api/explorer/saved-queries/"+queryID+"/usage", nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -238,6 +243,11 @@ func TestSavedQueryUsage_HandlerEndpoints(t *testing.T) {
 			WithArgs(queryID, tenantID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "query_state"}))
 
+		// Mock schedules scan
+		mock.ExpectQuery(`SELECT id::text, name, tenant_id::text FROM public\.schedules WHERE deleted_at IS NULL AND .* AND tenant_id::text = \$2`).
+			WithArgs(queryID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "tenant_id"}))
+
 		req := makeReq("DELETE", "/api/explorer/saved-queries/"+queryID, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -277,6 +287,11 @@ func TestSavedQueryUsage_HandlerEndpoints(t *testing.T) {
 		mock.ExpectQuery(`SELECT id, name, query_state FROM data_explorer\.saved_query WHERE id != \$1 AND archived_at IS NULL AND tenant_id = \$2`).
 			WithArgs(queryID, tenantID).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "query_state"}))
+
+		// Mock schedules scan (no matches)
+		mock.ExpectQuery(`SELECT id::text, name, tenant_id::text FROM public\.schedules WHERE deleted_at IS NULL AND .* AND tenant_id::text = \$2`).
+			WithArgs(queryID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "tenant_id"}))
 
 		// Mock soft-delete UPDATE
 		mock.ExpectExec(`UPDATE data_explorer\.saved_query SET archived_at = NOW\(\), status = 'archived', updated_at = NOW\(\) WHERE id = \$1 AND tenant_id = \$2`).
@@ -504,6 +519,11 @@ func TestSavedQueryUsage_HandlerEndpoints(t *testing.T) {
 				AddRow("client-tenant-a", 3).
 				AddRow("client-tenant-b", 1))
 
+		// Schedules scan
+		mock.ExpectQuery(`SELECT id::text, name, tenant_id::text FROM public\.schedules WHERE deleted_at IS NULL AND .*`).
+			WithArgs(coreID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "tenant_id"}))
+
 		req := makeReq("DELETE", "/api/explorer/saved-queries/"+coreID, nil)
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
@@ -514,5 +534,60 @@ func TestSavedQueryUsage_HandlerEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Conflict", conflictResp["error"])
 		assert.Equal(t, true, conflictResp["inUse"])
+	})
+
+	t.Run("DELETE returns 409 when query has active scheduled_job reference in schedules", func(t *testing.T) {
+		_, router, mock, makeReq := setupUsageTestEnv(t, tenantID, userID)
+		targetID := "66666666-6666-6666-6666-666666666666"
+
+		// Mock loadOwned
+		mock.ExpectQuery(`SELECT .* FROM data_explorer\.saved_query WHERE id = \$1 AND tenant_id = \$2 AND \(visibility = 'shared' OR user_id = \$3\)`).
+			WithArgs(targetID, tenantID, userID).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "user_id", "name", "description", "source_id", "binding_id", "related_bo_ids",
+				"chart_type", "query_state", "tags", "folder_id", "is_favorite", "visibility", "is_core",
+				"status", "archived_at", "created_by", "created_at", "updated_at",
+			}).AddRow(
+				targetID, tenantID, userID, "Scheduled Metric Query", "Desc", "bo-1", nil, nil,
+				"bar", []byte(`{}`), nil, nil, false, "shared", false,
+				"active", nil, userID, time.Now(), time.Now(),
+			))
+
+		// Page scan: no pages
+		mock.ExpectQuery(`SELECT id, tenant_id, name, slug, status, version, .* FROM page_definitions WHERE tenant_id = \$1`).
+			WithArgs(tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{
+				"id", "tenant_id", "name", "slug", "status", "version", "app_model", "layout", "components", "data_sources",
+			}))
+
+		// Query scan: no other queries
+		mock.ExpectQuery(`SELECT id, name, query_state FROM data_explorer\.saved_query WHERE id != \$1 AND archived_at IS NULL AND tenant_id = \$2`).
+			WithArgs(targetID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "query_state"}))
+
+		// Scheduled job scan: active schedule found!
+		mock.ExpectQuery(`SELECT id::text, name, tenant_id::text FROM public\.schedules WHERE deleted_at IS NULL AND .* AND tenant_id::text = \$2`).
+			WithArgs(targetID, tenantID).
+			WillReturnRows(sqlmock.NewRows([]string{"id", "name", "tenant_id"}).
+				AddRow("sched-daily-report-001", "Daily Executive Email Dispatch", tenantID))
+
+		req := makeReq("DELETE", "/api/explorer/saved-queries/"+targetID, nil)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		var conflictResp map[string]interface{}
+		err := json.Unmarshal(rec.Body.Bytes(), &conflictResp)
+		require.NoError(t, err)
+		assert.Equal(t, "Conflict", conflictResp["error"])
+		assert.Equal(t, true, conflictResp["inUse"])
+
+		refs, ok := conflictResp["references"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, refs, 1)
+		firstRef := refs[0].(map[string]interface{})
+		assert.Equal(t, "scheduled_job", firstRef["type"])
+		assert.Equal(t, "sched-daily-report-001", firstRef["id"])
+		assert.Equal(t, "Daily Executive Email Dispatch", firstRef["name"])
 	})
 }

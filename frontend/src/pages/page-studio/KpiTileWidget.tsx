@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { Box, Card, Typography, Stack, Tooltip, Chip } from '@mui/material';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
@@ -16,6 +16,7 @@ export interface KpiTileWidgetProps {
   };
   mode?: 'design' | 'preview';
   onEmitCrossFilter?: (termNodeId: string, value: unknown) => void;
+  onRefresh?: () => void;
 }
 
 export function formatMetricValue(val: number | null | undefined, format: KpiTileConfig['format']): string {
@@ -103,9 +104,24 @@ export const KpiTileWidget: React.FC<KpiTileWidgetProps> = ({
   data,
   mode = 'preview',
   onEmitCrossFilter,
+  onRefresh,
 }) => {
   const rows = data?.rows || [];
   const measureAlias = config.measureAlias;
+
+  // Live polling at >=60s with document visibility state check
+  useEffect(() => {
+    if (!config.refreshInterval || config.refreshInterval < 60 || !onRefresh) {
+      return;
+    }
+    const intervalMs = config.refreshInterval * 1000;
+    const intervalId = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') {
+        onRefresh();
+      }
+    }, intervalMs);
+    return () => clearInterval(intervalId);
+  }, [config.refreshInterval, onRefresh]);
 
   // Designer warning check: comparison enabled without trend dimension for period comparison
   const missingTrendDimensionWarning = useMemo(() => {
