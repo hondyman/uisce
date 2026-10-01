@@ -132,7 +132,7 @@ export const AuditorPortalPage: React.FC = () => {
               <BusinessIcon sx={{ mr: 1, fontSize: 18 }} /> Client External Auditor
             </ToggleButton>
             <ToggleButton value="internal">
-              <ShieldIcon sx={{ mr: 1, fontSize: 18 }} /> Uisce Internal Auditor
+              <ShieldIcon sx={{ mr: 1, fontSize: 18 }} /> Ivy Internal Auditor
             </ToggleButton>
           </ToggleButtonGroup>
 

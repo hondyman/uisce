@@ -40,10 +40,6 @@ jobs:
         working-directory: frontend
         run: npm ci --legacy-peer-deps
 
-      - name: TypeScript Ratchet Check
-        working-directory: frontend
-        run: node scripts/ts-ratchet.mjs
-
       - name: Frontend Vitest Unit Test Suites
         working-directory: frontend
         run: npx vitest run
@@ -59,6 +55,13 @@ jobs:
       - name: Run Multi-Screen Playwright Smoke Test
         working-directory: frontend
         run: npm run test:multiscreen
+
+      # Runs last and unconditionally so a ratchet failure can no longer mask
+      # vitest (and coverageManifest) signal; the job still fails if it fails.
+      - name: TypeScript Ratchet Check
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: node scripts/ts-ratchet.mjs
 
   desktop-go-pure:
     name: Desktop Pure-Go Manager Unit Tests (Ubuntu)

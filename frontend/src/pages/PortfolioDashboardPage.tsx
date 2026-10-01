@@ -183,7 +183,6 @@ export const PortfolioDashboardPage: React.FC = () => {
   };
 
   const handleDeletePortfolio = async (portfolioId: string) => {
-    const confirm = useConfirm();
     if (!(await confirm({ title: 'Delete portfolio', description: 'Are you sure you want to delete this portfolio?' }))) return;
 
     setRefreshing(true);

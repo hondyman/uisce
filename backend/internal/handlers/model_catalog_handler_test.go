@@ -9,7 +9,18 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+type mockModelCatalogDatasourceResolver struct{}
+
+func (m *mockModelCatalogDatasourceResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		TenantID:       "11111111-1111-1111-1111-111111111111",
+		DatasourceID:   datasourceID,
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
 
 // TestDeleteModelCoreCascade verifies that deleting a core model queries for associated
 // custom models and performs deletes in a transaction (customs then core).
@@ -21,10 +32,10 @@ func TestDeleteModelCoreCascade(t *testing.T) {
 	defer dbSQL.Close()
 
 	db := dbSQL
-	h := NewModelCatalogHandler(db, SecurityContextDeps{})
+	h := NewModelCatalogHandler(db, SecurityContextDeps{Resolver: &mockModelCatalogDatasourceResolver{}})
 
 	// Prepare input IDs
-	tenantID := uuid.New()
+	tenantID := uuid.MustParse("11111111-1111-1111-1111-111111111111")
 	dsID := uuid.New()
 	coreID := uuid.New()
 	coreModelKey := "orders"
@@ -52,11 +63,19 @@ func TestDeleteModelCoreCascade(t *testing.T) {
 	// Build request to match registered route and query param usage
 	// Handler registers DELETE /models/{model_id} and reads tenant_id and datasource_id from query string
 	req := httptest.NewRequest("DELETE", "/models/"+coreID.String()+"?tenant_id="+tenantID.String()+"&datasource_id="+dsID.String(), nil)
+	req.Header.Set("X-Tenant-Datasource-ID", dsID.String())
+	req.Header.Set("X-Tenant-ID", tenantID.String())
+	req.Header.Set("X-Region", "us-east-1")
 
 	// Set chi route param for model_id so chi.URLParam works for model_id
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("model_id", coreID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:    "test-user",
+		TenantIDs: []string{tenantID.String()},
+		Roles:     []string{"admin"},
+	}))
 
 	// Use ResponseRecorder
 	rr := httptest.NewRecorder()

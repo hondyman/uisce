@@ -446,7 +446,7 @@ func runValidateBundle(args []string) {
 			os.Exit(ExitTransportError)
 		}
 		if err := os.WriteFile(*filePath, outData, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing stamped bundle: %v\n", *filePath, err)
+			fmt.Fprintf(os.Stderr, "Error writing stamped bundle to %s: %v\n", *filePath, err)
 			os.Exit(ExitTransportError)
 		}
 		fmt.Printf("Successfully stamped checksum: %s\n", computedSum)

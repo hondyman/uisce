@@ -101,7 +101,6 @@ const BusinessProcessList: React.FC = () => {
   };
 
   const handleDeleteProcess = async (processId: string) => {
-    const confirm = useConfirm();
     if (!(await confirm({ title: 'Archive process', description: 'Are you sure you want to archive this business process?' }))) {
       return;
     }

@@ -524,7 +524,6 @@ const ModelCatalogSidebar: React.FC<ModelCatalogSidebarProps> = ({
                     <div className="inline-rename">
                       <input
                         className="inline-rename-input"
-                        autoFocus
                         aria-label="Model name"
                         placeholder="Model name"
                         value={inlineNameValue}

@@ -21,6 +21,9 @@ import SavedQueryWidget, { SavedQueryParamBinding } from './SavedQueryWidget';
 import FormFieldsDesigner, { type FieldLayoutEntry, type FieldOverrideEntry, isFormLikeWidget } from './FormFieldsDesigner';
 import { TableDesignPlaceholder, ChartDesignPlaceholder } from './WidgetDesignPlaceholder';
 import { AppWidget, VisibleWhen, isAppWidget } from './app/AppWidgets';
+import KpiTileWidget from './KpiTileWidget';
+import SlicerWidget from './SlicerWidget';
+import { useAppRuntime } from './app/AppRuntime';
 
 /** Table widget's configurable row-click behavior (component.props.rowClickAction), set via PropertiesPanel. */
 export type RowClickAction = 'select' | 'navigate' | 'openModal' | 'openDrawer';
@@ -70,6 +73,9 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
 }) => {
   const overlay = usePresentationOverlay(component.id);
   const { setRecord, setEditingField } = usePresentationRuntime();
+  // Hooks must run before any early return below (rules-of-hooks).
+  const appRuntime = useAppRuntime();
+  const setVariable = appRuntime?.setVariable;
   const styled = (children: React.ReactNode) => (
     <Box sx={{ ...(component.style as React.CSSProperties | undefined), ...overlay?.style } as React.CSSProperties}>{children}</Box>
   );
@@ -135,6 +141,37 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
 
   if (component.type === 'Tile') {
     return styled(<TileWidget component={component} />);
+  }
+
+  if (component.type === 'KpiTile' || component.type === 'KPITile') {
+    const kpiConfig = (component.props?.config || component.props) as any;
+    return styled(
+      <KpiTileWidget
+        id={component.id}
+        title={component.label}
+        config={kpiConfig}
+        mode={mode}
+      />
+    );
+  }
+
+  if (
+    component.type === 'SlicerTile' ||
+    (component.type === 'Slicer' &&
+      (((component.props?.config as any)?.termNodeId) ||
+        (component.props as any)?.termNodeId ||
+        (component.props as any)?.display))
+  ) {
+    const slicerConfig = (component.props?.config || component.props) as any;
+    return styled(
+      <SlicerWidget
+        id={component.id}
+        title={component.label}
+        config={slicerConfig}
+        mode={mode}
+        onUpdatePageVar={setVariable}
+      />
+    );
   }
 
   if (isFormLikeWidget(component.type)) {
@@ -307,10 +344,13 @@ const PageComponentRendererInner: React.FC<PageComponentRendererProps> = ({
       <Box>
         <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>{component.label || 'Saved Query'}</Typography>
         <SavedQueryWidget
+          widgetId={component.id}
           savedQueryId={component.props.savedQueryId as string}
           widgetType={widgetType as 'slicer' | 'chart' | 'gauge'}
           paramBindings={component.props.savedQueryParams as Record<string, SavedQueryParamBinding> | undefined}
           style={widgetStyle}
+          crossFilterConfig={component.props.crossFilterConfig as any}
+          drillThroughTargets={component.props.drillThroughTargets as any}
         />
       </Box>
     );

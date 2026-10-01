@@ -364,7 +364,6 @@ const FieldAutocomplete: React.FC<FieldAutocompleteProps> = ({
                 aria-label="Search fields"
                 size="small"
                 fullWidth
-                autoFocus
                 InputProps={{ startAdornment: <Search size={16} style={{ marginRight: 8, color: 'var(--mui-palette-text-disabled)', flexShrink: 0 }} /> }}
               />
               {pathSegments.length > 0 && (

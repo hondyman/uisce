@@ -51,3 +51,23 @@ if (!(globalThis as any).__realFetch && (globalThis as any).fetch) {
 ;(globalThis as any).fetch = vi.fn(defaultFetch)
 
 export { vi }
+
+// Polyfill window.matchMedia for jsdom — MUI and Mantine both call it during render, so
+// any test mounting a real component tree throws "window.matchMedia is not a function".
+// Installed globally so the gap is fixed once here rather than repeated per test file.
+if (typeof window !== 'undefined' && typeof window.matchMedia !== 'function') {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    configurable: true,
+    value: (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  })
+}

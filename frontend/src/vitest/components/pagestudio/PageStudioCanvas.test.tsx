@@ -33,22 +33,20 @@ describe('PageStudioCanvas', () => {
     expect((next[0] as any).fieldKey).toBe('sponsor_id');
   });
 
-  it('moves and removes a field widget via inline controls', () => {
+  // Reordering is drag-and-drop (dnd-kit) now, not "move down" buttons, so it is
+  // not exercised here; only the inline remove control is unit-testable in jsdom.
+  it('removes a field widget via the inline remove control', () => {
     let canvas: CanvasWidget[] = [];
     canvas = addFieldToContainer(canvas, null, { ...field, name: 'a', technicalName: 'a', label: 'A' });
     canvas = addFieldToContainer(canvas, null, { ...field, name: 'b', technicalName: 'b', label: 'B' });
 
     const onChange = vi.fn();
-    const { rerender } = render(<PageStudioCanvas canvas={canvas} onChange={onChange} />);
+    render(<PageStudioCanvas canvas={canvas} onChange={onChange} />);
 
-    fireEvent.click(screen.getAllByLabelText('move down')[0]);
-    let next = onChange.mock.calls[0][0] as CanvasWidget[];
-    expect((next[0] as any).fieldKey).toBe('b');
-
-    rerender(<PageStudioCanvas canvas={next} onChange={onChange} />);
     fireEvent.click(screen.getAllByLabelText('remove')[0]);
-    next = onChange.mock.calls[1][0] as CanvasWidget[];
+    const next = onChange.mock.calls[0][0] as CanvasWidget[];
     expect(next).toHaveLength(1);
+    expect((next[0] as any).fieldKey).toBe('b');
   });
 
   it('delegates a relatedobject drop to onAddRelatedObject instead of mutating the canvas directly', () => {

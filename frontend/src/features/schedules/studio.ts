@@ -128,6 +128,11 @@ const operations: OperationDef[] = [
     description: 'Every schedule, filtered in the browser over what each row shows (name, target, calendar, timing - in the viewer\'s language). rows: name, updated_text, kind_label, when_text, enabled.',
     params: [{ name: 'q', type: 'string' }, { name: 'kind', type: 'string' }, { name: 'state', type: 'string', description: 'active or paused' }],
     fields: [{ name: 'rows', type: 'array' }, { name: 'filtered', type: 'boolean' }, { name: 'empty_text' }],
+    rowsPath: 'rows',
+    rowFields: [
+      { name: 'id' }, { name: 'name', label: 'Name' }, { name: 'kind_label', label: 'Runs' }, { name: 'when_text', label: 'When' },
+      { name: 'enabled', label: 'Enabled', type: 'boolean' }, { name: 'updated_text', label: 'Updated' },
+    ],
     run: async (p) => {
       const all = (await schedulesApi.list()).schedules;
       const q = s(p, 'q'); const kind = s(p, 'kind'); const state = s(p, 'state');

@@ -1809,7 +1809,6 @@ export const ReportLibrary: React.FC = () => {
             </Typography>
           ) : (
             <TextField
-              autoFocus
               margin="dense"
               label="Folder Name"
               fullWidth

@@ -343,7 +343,6 @@ const TermForm: React.FC<TermFormProps> = ({
             helperText={errors.node_name}
             margin="normal"
             required
-            autoFocus
           />
 
           <TextField

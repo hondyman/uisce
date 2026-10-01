@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Box, Typography, Paper, Tabs, Tab, Button, Grid, IconButton, Tooltip, Divider, TextField, Snackbar, Alert, ToggleButton, ToggleButtonGroup, FormControlLabel, Switch } from '@mui/material';
 import { DndContext, PointerSensor, useSensor, useSensors, closestCenter, pointerWithin, rectIntersection, type CollisionDetection } from '@dnd-kit/core';
@@ -37,6 +37,8 @@ import PageArtboard from './PageArtboard';
 import PageBody from './PageBody';
 import { AppRuntimeProvider } from './app/AppRuntime';
 import AppModelPanel from './app/AppModelPanel';
+import { checkPage } from './app/pageChecker';
+import { PageCheckButton, PageCheckDialog } from './app/PageCheckDialog';
 import { CANVAS_SIZES, canvasWidthPx, type CanvasSizeId } from './canvasSizes';
 
 interface PageEditorProps {
@@ -239,11 +241,21 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const custom = draft.customization;
     const canSave = !inheritedCore || (!!draft.canCustomize && custom?.mode !== 'cloned');
 
+    // The page checker runs as the page is edited; errors block publishing.
+    const issues = useMemo(() => checkPage(draft), [draft]);
+    const [checkOpen, setCheckOpen] = useState(false);
+    const [publishBlocked, setPublishBlocked] = useState(false);
+
     // Status only (no new version); unsaved layout edits stay in the draft.
     const handleTogglePublish = async () => {
         if (!draft.id) return;
         try {
             const next = draft.status === 'published' ? 'draft' : 'published';
+            if (next === 'published' && issues.some((i) => i.severity === 'error')) {
+                setPublishBlocked(true);
+                setCheckOpen(true);
+                return;
+            }
             const updated = await PageStudioApi.setStatus(draft.id, next);
             setDraft((prev) => ({ ...prev, status: updated.status }));
             setSaveNotice({ severity: 'success', message: next === 'published' ? 'Published' : 'Unpublished - back to draft' });
@@ -324,6 +336,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                         <Button variant="contained" color="secondary" startIcon={<EditIcon />} size="small" onClick={() => setViewMode('design')}>Back to Design</Button>
                     )}
                     <Divider orientation="vertical" flexItem sx={{ mx: 1 }} />
+                    <PageCheckButton issues={issues} onClick={() => { setPublishBlocked(false); setCheckOpen(true); }} />
+                    <PageCheckDialog open={checkOpen} issues={issues} blockedPublish={publishBlocked} onClose={() => setCheckOpen(false)}
+                        onPick={(id) => { setSelectedId(id); setViewMode('design'); }} />
                     {draft.id && !inheritedCore && draft.editable !== false && (
                         <Button size="small" variant="outlined" color={draft.status === 'published' ? 'inherit' : 'success'} onClick={handleTogglePublish}>
                             {draft.status === 'published' ? 'Unpublish' : 'Publish'}
@@ -497,6 +512,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                                 tenantId={draft.tenantId || 'default'}
                                 selectedId={selectedId}
                                 onSelect={setSelectedId}
+                                app={draft.app}
                             />
                         </Box>
                         <LayoutCanvas
@@ -509,6 +525,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             tenantId={draft.tenantId || 'default'}
                             selectedId={selectedId}
                             onSelect={setSelectedId}
+                            app={draft.app}
                         />
                         </PageBody>
                     </PageArtboard>

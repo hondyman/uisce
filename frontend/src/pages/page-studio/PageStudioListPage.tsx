@@ -35,6 +35,9 @@ import { generatePageDraft, type BOOption } from './generatePageDraft';
 import type { GeneratedPageKind } from '../../api/pageStudio';
 import { NavigationMenuApi, NavigationMenuNode } from '../../api/navigationMenu';
 import { PAGE_BLUEPRINTS, type PageBlueprint } from './app/blueprints';
+import { GenerateFromOperationsDialog } from './app/GenerateFromOperationsDialog';
+import { handOverGeneratedDraft } from './app/generatedDraft';
+import { SaveAsTemplateDialog, TemplateGalleryDialog } from './app/TemplateDialogs';
 
 const NO_SECTION = '__none__';
 
@@ -172,6 +175,9 @@ const PageStudioListPage: React.FC = () => {
   // Blueprints: complete pages built from the page model, opened as an
   // unsaved draft; saving creates the page.
   const [blueprintAnchor, setBlueprintAnchor] = useState<HTMLElement | null>(null);
+  const [opsOpen, setOpsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [templateSource, setTemplateSource] = useState<CorePageDefinition | null>(null);
   const handleBlueprint = (bp: PageBlueprint) => {
     setBlueprintAnchor(null);
     navigate(`new?blueprint=${bp.id}`);
@@ -305,6 +311,12 @@ const PageStudioListPage: React.FC = () => {
           <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={openAiDialog}>
             Generate with AI
           </Button>
+          <Button variant="outlined" onClick={() => setGalleryOpen(true)}>
+            From template
+          </Button>
+          <Button variant="outlined" onClick={() => setOpsOpen(true)}>
+            From operations
+          </Button>
           <Button variant="outlined" onClick={(e) => setBlueprintAnchor(e.currentTarget)}>
             From blueprint
           </Button>
@@ -316,6 +328,11 @@ const PageStudioListPage: React.FC = () => {
               </MenuItem>
             ))}
           </Menu>
+          <TemplateGalleryDialog open={galleryOpen} onClose={() => setGalleryOpen(false)}
+            onChosen={(draft) => { setGalleryOpen(false); handOverGeneratedDraft(draft); navigate('new?generated=1'); }} />
+          <SaveAsTemplateDialog page={templateSource} onClose={() => setTemplateSource(null)} onSaved={() => setTemplateSource(null)} />
+          <GenerateFromOperationsDialog open={opsOpen} onClose={() => setOpsOpen(false)}
+            onGenerated={(draft) => { setOpsOpen(false); handOverGeneratedDraft(draft); navigate('new?generated=1'); }} />
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('new')}>
             New Page
           </Button>
@@ -503,6 +520,9 @@ const PageStudioListPage: React.FC = () => {
           <MenuItem key="clone" onClick={() => handleClone(menuAnchor!.page)}>
             <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplicate
           </MenuItem>,
+          <MenuItem key="template" onClick={() => { const p = menuAnchor!.page; closeMenu(); setTemplateSource(p); }}>
+            <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Save as template…
+          </MenuItem>,
           <MenuItem key="delete" onClick={() => { setDeleteTarget(menuAnchor!.page); closeMenu(); }} sx={{ color: 'error.main' }}>
             <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
           </MenuItem>,
@@ -532,7 +552,6 @@ const PageStudioListPage: React.FC = () => {
         <DialogTitle>Rename page</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             fullWidth
             label="Page name"
             value={renameDraft}

@@ -35,13 +35,11 @@ jobs:
       - name: Start dev server
         working-directory: frontend
         run: npm run dev &
-        env:
-          PORT: 3000
 
       - name: Wait for dev server
         run: |
           for i in {1..30}; do
-            if curl -sf http://localhost:3000 > /dev/null 2>&1; then
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
               echo "Dev server ready"
               break
             fi
@@ -50,13 +48,13 @@ jobs:
 
       - name: Run locale-matrix smoke tests
         working-directory: frontend
-        run: npx playwright test e2e/a11y/locale-matrix.spec.ts --reporter=line
+        run: npx playwright test --config=playwright.a11y.config.ts locale-matrix.spec.ts
         env:
           E2E_JWT: ${{ secrets.E2E_JWT }}
 
       - name: Run a11y baseline crawl
         working-directory: frontend
-        run: npx playwright test e2e/a11y/baseline.spec.ts --reporter=line
+        run: npx playwright test --config=playwright.a11y.config.ts baseline.spec.ts
 
       - name: Aggregate baseline
         working-directory: frontend

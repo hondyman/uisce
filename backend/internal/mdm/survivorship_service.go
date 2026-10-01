@@ -89,7 +89,8 @@ func (e *SurvivorshipEngine) resolveField(
 ) any {
 	validSources := make([]SourcePayload, 0, len(sources))
 	for _, src := range sources {
-		if _, exists := src.Data[field]; !exists {
+		val, exists := src.Data[field]
+		if !exists || val == nil {
 			continue
 		}
 		if rule.MaxStaleSeconds > 0 && !src.Timestamp.IsZero() {

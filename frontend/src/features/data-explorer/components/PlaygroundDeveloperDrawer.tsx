@@ -62,6 +62,7 @@ export const PlaygroundDeveloperDrawer: React.FC<PlaygroundDeveloperDrawerProps>
   const [snippetLang, setSnippetLang] = useState<'typescript' | 'python' | 'curl' | 'graphql'>('typescript');
   const [copied, setCopied] = useState(false);
 
+  // eslint-disable-next-line no-restricted-syntax -- renders the display-only preview from generateDialectSQL; the text is only shown and copied to the clipboard
   const sqlCode = source ? generateDialectSQL(source, state, dialect) : '-- Select a Business Object';
   const snippetCode = source ? generateCodeSnippet(source, state, snippetLang) : '// Select a Business Object';
 
