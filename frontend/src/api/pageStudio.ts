@@ -64,6 +64,32 @@ export interface CoreComparison {
   coreUpdates: CoreChangeGroup[];
 }
 
+/** A template as the gallery lists it (no bundle). */
+export interface PageTemplateSummary {
+  id: string;
+  slug: string;
+  version: number;
+  name: string;
+  description: string;
+  category: string;
+  isCore: boolean;
+  createdAt: string;
+}
+
+/** What bringing a template in would do (or did) to the tenant's fragments. */
+export interface TemplateImportPlan {
+  create: { slug: string; version: number }[];
+  reuse: { fragment: string; version: number }[];
+  conflicts: string[];
+}
+
+export interface InstantiatedTemplate {
+  plan: TemplateImportPlan;
+  /** A fresh draft page document, for the ordinary page API to save. */
+  page: Partial<CorePageDefinition>;
+  applied: boolean;
+}
+
 export const PageStudioApi = {
   listPages: async (_env?: string): Promise<PageStudioPage[]> => {
     return apiClient<PageStudioPage[]>(`${PAGE_STUDIO_BASE}/pages`);
@@ -195,6 +221,31 @@ export const PageStudioApi = {
     return apiClient<GeneratedPageSpec>(`${PAGE_STUDIO_BASE}/generate`, {
       method: 'POST',
       body: JSON.stringify({ boId, boKey, boName, description, pageKind }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  // -- Templates gallery ---------------------------------------------------------------
+
+  listTemplates: async (category?: string): Promise<PageTemplateSummary[]> => {
+    const q = category ? `?category=${encodeURIComponent(category)}` : '';
+    return apiClient<PageTemplateSummary[]>(`${PAGE_STUDIO_BASE}/templates${q}`);
+  },
+
+  /** Save a page as the next version of a template. */
+  publishTemplate: async (req: { slug: string; name: string; description: string; category: string; pageId: string }): Promise<PageTemplateSummary> => {
+    return apiClient<PageTemplateSummary>(`${PAGE_STUDIO_BASE}/templates`, {
+      method: 'POST',
+      body: JSON.stringify(req),
+      headers: { 'Content-Type': 'application/json' },
+    });
+  },
+
+  /** Bring a template's fragments in and get a fresh draft page. dryRun only plans. */
+  instantiateTemplate: async (slug: string, version: number, req: { name: string; slug: string }, dryRun = false): Promise<InstantiatedTemplate> => {
+    return apiClient<InstantiatedTemplate>(`${PAGE_STUDIO_BASE}/templates/${encodeURIComponent(slug)}/versions/${version}/instantiate${dryRun ? '?dryRun=true' : ''}`, {
+      method: 'POST',
+      body: JSON.stringify(req),
       headers: { 'Content-Type': 'application/json' },
     });
   },
