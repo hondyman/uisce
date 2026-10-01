@@ -189,3 +189,24 @@ func EvaluateMVWatermarkStaleness(mvRefreshedAt time.Time, boWatermarkTimestamp 
 	}
 	return mvRefreshedAt.Before(boWatermarkTimestamp)
 }
+
+// EvaluateStaleMVAction decides whether to serve the stale MV result with a warning flag or force raw table fallback.
+func EvaluateStaleMVAction(isStale bool, policy string) (action string) {
+	if !isStale {
+		return "serve_fresh"
+	}
+	if strings.ToLower(strings.TrimSpace(policy)) == "force_raw_fallback" {
+		return "fallback_raw"
+	}
+	return "serve_with_stale_flag"
+}
+
+// ResolveColdTierRoute resolves the federated StarRocks external catalog query target for Iceberg tables.
+func ResolveColdTierRoute(metric MetricDefinition) (catalogTable string, routeTier string) {
+	routeTier = "cold"
+	target := fmt.Sprintf("lakekeeper_catalog.oms.iceberg_%s", sanitizeIdentifier(metric.BOID))
+	if metric.MaterializationConfig.TargetTable != nil && *metric.MaterializationConfig.TargetTable != "" {
+		target = *metric.MaterializationConfig.TargetTable
+	}
+	return target, routeTier
+}

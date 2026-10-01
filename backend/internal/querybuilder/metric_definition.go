@@ -55,6 +55,7 @@ type MaterializationConfig struct {
 	PartitionGrain               *string `json:"partitionGrain,omitempty"`
 	WatermarkBOID                *string `json:"watermarkBoId,omitempty"`
 	IcebergSnapshotRetentionDays *int    `json:"icebergSnapshotRetentionDays,omitempty"`
+	StalePolicy                  string  `json:"stalePolicy,omitempty"` // "serve_with_flag" (default/dashboards) | "force_raw_fallback" (compliance)
 }
 
 // MetricExpression defines the computation rules for a metric.

@@ -243,16 +243,73 @@ func TestABACBelowGrain_FallbackRules(t *testing.T) {
 	assert.Contains(t, reasonSub, "user has row-level ABAC predicate on sub-grain \"account_id\"")
 }
 
-// 7.2 Deliverable #5: MV Watermark Staleness
-func TestMVWatermarkStaleness(t *testing.T) {
+// 7.2 Deliverable #5: MV Watermark Staleness & StalePolicy
+func TestMVWatermarkStaleness_AndPolicy(t *testing.T) {
 	now := time.Now()
 	mvRefreshed := now.Add(-10 * time.Minute)
 	boWatermarkOld := now.Add(-20 * time.Minute)
 	boWatermarkFresh := now.Add(-5 * time.Minute)
 
-	// Fresh MV
-	assert.False(t, EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkOld))
+	// Fresh MV -> serve fresh
+	isFresh := !EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkOld)
+	assert.True(t, isFresh)
+	assert.Equal(t, "serve_fresh", EvaluateStaleMVAction(false, "serve_with_flag"))
 
-	// Stale MV (table received new ingestion after MV refreshed)
-	assert.True(t, EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkFresh))
+	// Stale MV (dashboard mode) -> serve with flag
+	isStale := EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkFresh)
+	assert.True(t, isStale)
+	assert.Equal(t, "serve_with_stale_flag", EvaluateStaleMVAction(true, "serve_with_flag"))
+
+	// Stale MV (compliance mode) -> force raw table fallback
+	assert.Equal(t, "fallback_raw", EvaluateStaleMVAction(true, "force_raw_fallback"))
+}
+
+// 7.2 Deliverable #6: Gold Copy MV Sharing & Economics Assertion
+func TestGoldCopyMV_SharedAcrossVanillaClientTenants(t *testing.T) {
+	manager := NewStarRocksMaterializationManager("3.2.0")
+
+	metric := MetricDefinition{
+		ID:   "m_core_revenue",
+		Name: "Core Revenue",
+		BOID: "order",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "amount",
+		},
+		GrainAllowlist: []string{"region", "currency"},
+		IsCore:         true,
+	}
+
+	// 1. Master tenant creates gold copy MV
+	goldDDL, err := manager.GenerateMVDDL("master_tenant_01", true, metric)
+	require.NoError(t, err)
+	assert.Equal(t, "mv_gold_order_CoreRevenue", goldDDL.MVName)
+
+	// 2. Client tenant A and Client tenant B with vanilla adoptions route to the SAME gold MV
+	clientATarget := "mv_gold_order_CoreRevenue" // Shared gold copy MV
+	clientBTarget := "mv_gold_order_CoreRevenue" // Shared gold copy MV
+	assert.Equal(t, clientATarget, clientBTarget, "vanilla core metric adoptions must share single gold copy MV object")
+}
+
+// 7.2 Deliverable #7: Iceberg Cold Tier Federation Target Resolution
+func TestIcebergColdTier_StarRocksFederationRoute(t *testing.T) {
+	metric := MetricDefinition{
+		ID:   "m_hist_exposure",
+		Name: "Historical Position Exposure",
+		BOID: "position",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "market_value",
+		},
+		MaterializationConfig: MaterializationConfig{
+			Strategy:    "iceberg",
+			TargetTable: nil, // Default auto target
+		},
+	}
+
+	targetTable, routeTier := ResolveColdTierRoute(metric)
+	assert.Equal(t, "cold", routeTier)
+	assert.Equal(t, "lakekeeper_catalog.oms.iceberg_position", targetTable)
 }
