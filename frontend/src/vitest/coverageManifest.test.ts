@@ -53,8 +53,13 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                 waves B/F's backlog, NOT part of wave A's "7 that go green" claim)
  *   - wave G:     +1  (ProfessionalSearchInput.accessibility.test.tsx, 1 it/test,
  *                 relocated under src/vitest/ and hang-fixed via advanceTimersByTimeAsync)
+ *   - wave B proof: +7 (EnhancedTileForm.accessibility.test.tsx, 1 it/test, relocated
+ *                   from src/components/UnifiedSemanticBuilder/__tests__/ to
+ *                   src/vitest/components/common/ as the proof-of-scale file;
+ *                   AND tenantContextStub.identity.test.ts, 6 tests, the
+ *                   identity + shape guard for the fixture extensions)
  */
-const EXECUTED_TEST_BASELINE = 333; // 8f0c7e633 (309) + wave A (+23) + wave G (+1)
+const EXECUTED_TEST_BASELINE = 340; // 8f0c7e633 (309) + wave A (+23) + wave G (+1) + wave B proof (+7)
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -120,22 +125,23 @@ describe('test suite inclusion counter', () => {
   it('currently-running file count matches the baseline (bump per wave)', () => {
     // Self-counting: this file is one of the files matching the include, so the
     // baseline number INCLUDES it. After wave A unblocked the 7 documented legacy
-    // excludes and wave G relocated ProfessionalSearchInput.accessibility.test.tsx
-    // under src/vitest/, the running count is the full include match with zero
-    // subtractions plus 1.
+    // excludes, wave G relocated ProfessionalSearchInput.accessibility.test.tsx,
+    // and wave B proof added EnhancedTileForm.accessibility.test.tsx (relocated)
+    // plus tenantContextStub.identity.test.ts (new identity guard), the running
+    // count is the full include match with zero subtractions.
     const files = globFiles(['src'], [...INCLUDE_PATTERNS]);
     const running = files.length - DOCUMENTED_LEGACY_EXCLUDES.length;
-    expect(running).toBe(74);
+    expect(running).toBe(76);
   });
 
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(333);
+    expect(EXECUTED_TEST_BASELINE).toBe(340);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
-    expect(WIDEN_TARGET).toBeGreaterThan(74);
+    expect(WIDEN_TARGET).toBeGreaterThan(76);
   });
 
   it('every documented exclude actually exists on disk (vacuous when empty)', () => {
