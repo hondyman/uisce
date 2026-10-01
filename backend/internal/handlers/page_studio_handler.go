@@ -155,6 +155,7 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 	})
 	h.registerFragmentRoutes(r)
 	h.registerBundleRoutes(r)
+	h.registerTemplateRoutes(r)
 	r.Post("/page-studio/generate", h.generate)
 }
 
