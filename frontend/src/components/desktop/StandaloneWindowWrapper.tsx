@@ -36,7 +36,7 @@ export const StandaloneWindowWrapper: React.FC<StandaloneWindowWrapperProps> = (
   // Set OS window and document title for standalone/detached view
   useEffect(() => {
     if (title) {
-      document.title = `${title} — Uisce`;
+      document.title = `${title} — Ivy`;
     }
   }, [title]);
 

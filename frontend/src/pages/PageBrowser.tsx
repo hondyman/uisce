@@ -22,9 +22,14 @@ import { PresentationProvider } from './page-studio/PresentationRuntime';
 // The consumer-facing side of the Menu Designer: a persistent nav tree
 // (same data the designer edits) next to whichever page is selected,
 // rendered read-only against live data via the same PageComponentRenderer
-// the Page Studio editor's canvas uses. No access-control enforcement yet
-// (requiredEntitlement exists on each node but is intentionally not
-// checked here) - the user asked for browse-by-menu now, security later.
+// the Page Studio editor's canvas uses.
+//
+// Access control: MainNavigation is now the enforcing surface — it consumes
+// this same navigation_menu_nodes tree and hides any node whose
+// required_entitlement (a target_profile_key) the caller's server-resolved
+// profile does not match. This component still renders the tree it is given
+// without re-checking, so it must be reached through an already-filtered
+// entry point; direct navigation to a page slug is not gated here.
 
 // Runtime shapes actually stored in page_definitions.layout/components -
 interface RuntimeLayoutNode {

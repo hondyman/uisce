@@ -75,7 +75,7 @@ describe('source hierarchy page', () => {
     const own = (await screen.findByText('FACTSET')).closest('tr') as HTMLElement;
     const core = screen.getByText('REFINITIV').closest('tr') as HTMLElement;
     expect(within(own).getByText('Yours')).toBeTruthy();
-    expect(within(own).getByText('Change pending')).toBeTruthy();
+    expect(await within(own).findByText('Change pending')).toBeTruthy();
     expect(within(own).getByRole('button', { name: 'Propose change' })).toBeTruthy();
     expect(within(core).getByText('Core')).toBeTruthy();
     expect(within(core).queryByRole('button', { name: 'Propose change' })).toBeNull();

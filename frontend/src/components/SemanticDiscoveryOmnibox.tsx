@@ -117,7 +117,7 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
           <input
             type="text"
             autoFocus
-            placeholder="Ask Uisce AI... (e.g., 'Show open pricing breaks for Fund Alpha and run Monte Carlo VaR')"
+            placeholder="Ask Ivy AI... (e.g., 'Show open pricing breaks for Fund Alpha and run Monte Carlo VaR')"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none w-full font-medium"

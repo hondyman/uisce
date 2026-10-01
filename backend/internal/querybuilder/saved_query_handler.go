@@ -67,24 +67,31 @@ type SavedQueryState struct {
 // SavedQuery is one row of data_explorer.saved_query, with QueryState
 // decoded for JSON responses instead of the raw jsonb bytes.
 type SavedQuery struct {
-	ID           string          `json:"id"`
-	TenantID     string          `json:"tenantId"`
-	UserID       string          `json:"userId"`
-	Name         string          `json:"name"`
-	Description  string          `json:"description"`
-	BOID         string          `json:"boId"`
-	BindingID    string          `json:"bindingId"`
-	RelatedBOIDs []string        `json:"relatedBoIds"`
-	ChartType    string          `json:"chartType"`
-	State        SavedQueryState `json:"state"`
-	Tags         []string        `json:"tags"`
-	FolderID     string          `json:"folderId,omitempty"`
-	IsFavorite   bool            `json:"isFavorite"`
-	Visibility   string          `json:"visibility"`
-	IsCore       bool            `json:"isCore"`
-	CreatedBy    string          `json:"createdBy,omitempty"`
-	CreatedAt    time.Time       `json:"createdAt"`
-	UpdatedAt    time.Time       `json:"updatedAt"`
+	ID            string              `json:"id"`
+	TenantID      string              `json:"tenantId"`
+	UserID        string              `json:"userId"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description"`
+	BOID          string              `json:"boId"`
+	BindingID     string              `json:"bindingId"`
+	RelatedBOIDs  []string            `json:"relatedBoIds"`
+	ChartType     string              `json:"chartType"`
+	State         SavedQueryState     `json:"state"`
+	Tags          []string            `json:"tags"`
+	FolderID      string              `json:"folderId,omitempty"`
+	IsFavorite    bool                `json:"isFavorite"`
+	Visibility    string              `json:"visibility"`
+	IsCore        bool                `json:"isCore"`
+	Status        string              `json:"status,omitempty"` // active | deprecated | archived
+	ArchivedAt    *time.Time          `json:"archivedAt,omitempty"`
+	CreatedBy     string              `json:"createdBy,omitempty"`
+	CreatedAt     time.Time           `json:"createdAt"`
+	UpdatedAt     time.Time           `json:"updatedAt"`
+	CoreStatus    string              `json:"coreStatus,omitempty"` // core | vanilla | extended | upgrade_available | cloned | custom
+	Customization *QueryCustomization `json:"customization,omitempty"`
+	Editable      bool                `json:"editable"`
+	CanCustomize  bool                `json:"canCustomize"`
+	ClonedFrom    *QueryCloneSource   `json:"clonedFrom,omitempty"`
 }
 
 type savedQueryRow struct {
@@ -103,13 +110,15 @@ type savedQueryRow struct {
 	IsFavorite   bool           `db:"is_favorite"`
 	Visibility   string         `db:"visibility"`
 	IsCore       bool           `db:"is_core"`
+	Status       string         `db:"status"`
+	ArchivedAt   *time.Time     `db:"archived_at"`
 	CreatedBy    sql.NullString `db:"created_by"`
 	CreatedAt    time.Time      `db:"created_at"`
 	UpdatedAt    time.Time      `db:"updated_at"`
 }
 
 const savedQuerySelectCols = `id, tenant_id, user_id, name, description, source_id, binding_id, related_bo_ids,
-	chart_type, query_state, tags, folder_id, is_favorite, visibility, is_core, created_by, created_at, updated_at`
+	chart_type, query_state, tags, folder_id, is_favorite, visibility, is_core, COALESCE(status, 'active') AS status, archived_at, created_by, created_at, updated_at`
 
 func (r savedQueryRow) toSavedQuery() SavedQuery {
 	var state SavedQueryState
@@ -130,9 +139,14 @@ func (r savedQueryRow) toSavedQuery() SavedQuery {
 		IsFavorite:   r.IsFavorite,
 		Visibility:   r.Visibility,
 		IsCore:       r.IsCore,
+		Status:       r.Status,
+		ArchivedAt:   r.ArchivedAt,
 		CreatedBy:    r.CreatedBy.String,
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
+		Editable:     true,
+		CanCustomize: false,
+		CoreStatus:   "custom",
 	}
 }
 
@@ -177,9 +191,10 @@ func (h *SavedQueryHandler) writeError(w http.ResponseWriter, err error, status 
 }
 
 // HandleListSavedQueries handles GET /api/explorer/saved-queries?boId=...
-// Scoped to the caller's tenant; boId narrows to queries built against one
-// Business Object - the shape a Page Studio Chart/Slicer/KPI widget's
-// "use a saved query" picker needs.
+// HandleListSavedQueries handles GET /api/explorer/saved-queries?boId=...
+// Returns the caller's tenant queries plus active core queries from the
+// master tenant, decorated with core adoption status (vanilla, extended,
+// upgrade_available, cloned).
 func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *http.Request) {
 	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	if err != nil {
@@ -189,13 +204,14 @@ func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *htt
 
 	boID := r.URL.Query().Get("boId")
 	folderID := r.URL.Query().Get("folderId")
-	// Visibility: a caller sees their own private queries plus every
-	// 'shared' query in the tenant (report-builder's is_public/is_personal
-	// pattern, collapsed to one flag - see the visibility-model decision
-	// in this feature's planning).
+	gold := h.goldCopyID(r.Context())
+	isMaster := gold != "" && gold == secCtx.TenantID
+	canCust := h.canCustomize(r, secCtx.TenantID)
+
+	// 1. Fetch tenant-owned queries
 	query := `SELECT ` + savedQuerySelectCols + `
 	          FROM data_explorer.saved_query
-	          WHERE tenant_id = $1 AND (visibility = 'shared' OR user_id = $2)`
+	          WHERE tenant_id = $1 AND (visibility = 'shared' OR user_id = $2) AND archived_at IS NULL`
 	args := []interface{}{secCtx.TenantID, secCtx.UserID}
 	if boID != "" {
 		args = append(args, boID)
@@ -212,10 +228,57 @@ func (h *SavedQueryHandler) HandleListSavedQueries(w http.ResponseWriter, r *htt
 		h.writeError(w, fmt.Errorf("failed to list saved queries: %w", err), http.StatusInternalServerError)
 		return
 	}
+
 	out := make([]SavedQuery, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.toSavedQuery())
+		sq := r.toSavedQuery()
+		if sq.IsCore && isMaster {
+			sq.CoreStatus = "core"
+			sq.Editable = true
+			sq.CanCustomize = false
+		}
+		out = append(out, sq)
 	}
+
+	// 2. If not the master tenant, also read-through core queries from master tenant
+	if !isMaster && gold != "" {
+		adoptionsMap, _ := h.adoptions(r.Context(), secCtx.TenantID)
+		coreQuery := `SELECT ` + savedQuerySelectCols + `
+		              FROM data_explorer.saved_query
+		              WHERE tenant_id = $1 AND is_core = true AND archived_at IS NULL`
+		coreArgs := []interface{}{gold}
+		if boID != "" {
+			coreArgs = append(coreArgs, boID)
+			coreQuery += fmt.Sprintf(" AND source_id = $%d", len(coreArgs))
+		}
+		coreQuery += " ORDER BY name ASC"
+
+		var coreRows []savedQueryRow
+		if err := h.db.Select(&coreRows, coreQuery, coreArgs...); err == nil {
+			for _, cr := range coreRows {
+				csq := cr.toSavedQuery()
+				adopt, hasAdopt := adoptionsMap[csq.ID]
+				var adoptPtr *queryAdoption
+				if hasAdopt {
+					adoptPtr = &adopt
+				}
+
+				// If adopted as cloned, suppress the core entry because the clone already appears in the tenant list
+				if adoptPtr != nil && adoptPtr.Mode == "cloned" {
+					continue
+				}
+
+				// If deactivated in this tenant, skip
+				if adoptPtr != nil && !adoptPtr.Active {
+					continue
+				}
+
+				presentCoreQuery(&csq, adoptPtr, false, canCust)
+				out = append(out, csq)
+			}
+		}
+	}
+
 	h.writeJSON(w, http.StatusOK, map[string]interface{}{"savedQueries": out})
 }
 
@@ -285,46 +348,62 @@ func (h *SavedQueryHandler) HandleCreateSavedQuery(w http.ResponseWriter, r *htt
 	h.writeJSON(w, http.StatusCreated, row.toSavedQuery())
 }
 
-func (h *SavedQueryHandler) loadOwned(w http.ResponseWriter, r *http.Request) (*savedQueryRow, string, bool) {
-	secCtx, _, err := handlers.SecurityContextFromRequest(r, "", "", h.deps)
+func (h *SavedQueryHandler) loadOwned(w http.ResponseWriter, r *http.Request) (*SavedQuery, string, bool) {
+	secCtx, ctx, err := h.resolveAuth(r)
 	if err != nil {
 		h.writeError(w, err, http.StatusBadRequest)
 		return nil, "", false
 	}
+	*r = *r.WithContext(ctx)
 	id := chi.URLParam(r, "id")
 	var row savedQueryRow
 	err = h.db.Get(&row, `SELECT `+savedQuerySelectCols+`
 	                      FROM data_explorer.saved_query
 	                      WHERE id = $1 AND tenant_id = $2 AND (visibility = 'shared' OR user_id = $3)`,
 		id, secCtx.TenantID, secCtx.UserID)
-	if err != nil {
-		h.writeError(w, fmt.Errorf("saved query not found: %w", err), http.StatusNotFound)
-		return nil, "", false
+	if err == nil {
+		sq := row.toSavedQuery()
+		return &sq, secCtx.TenantID, true
 	}
-	return &row, secCtx.TenantID, true
+
+	// If not found in tenant's own queries, check if it's a core query from master tenant
+	gold := h.goldCopyID(r.Context())
+	if gold != "" && gold != secCtx.TenantID {
+		var coreRow savedQueryRow
+		err = h.db.Get(&coreRow, `SELECT `+savedQuerySelectCols+`
+		                          FROM data_explorer.saved_query
+		                          WHERE id = $1 AND is_core = true AND tenant_id = $2`,
+			id, gold)
+		if err == nil {
+			sq := coreRow.toSavedQuery()
+			a, _ := h.adoption(r.Context(), secCtx.TenantID, sq.ID)
+			canCust := h.canCustomize(r, secCtx.TenantID)
+			presentCoreQuery(&sq, a, false, canCust)
+			return &sq, secCtx.TenantID, true
+		}
+	}
+
+	h.writeError(w, fmt.Errorf("saved query not found: %w", err), http.StatusNotFound)
+	return nil, "", false
 }
 
 // HandleGetSavedQuery handles GET /api/explorer/saved-queries/{id}.
 func (h *SavedQueryHandler) HandleGetSavedQuery(w http.ResponseWriter, r *http.Request) {
-	row, _, ok := h.loadOwned(w, r)
+	sq, _, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
-	h.writeJSON(w, http.StatusOK, row.toSavedQuery())
+	h.writeJSON(w, http.StatusOK, sq)
 }
 
 // HandleUpdateSavedQuery handles PUT /api/explorer/saved-queries/{id}.
-//
-// The primary Business Object and its binding are locked at creation time
-// (by design - "the primary BO and binding are static and cannot be
-// changed" once a query exists, same as a report template's data source).
-// Any boId/bindingId the request body carries is silently ignored rather
-// than rejected, so a client that round-trips the full SavedQuery it just
-// fetched (harmless) doesn't get a 400 for echoing back the same values.
-// RelatedBOIDs, by contrast, is exactly what's meant to stay editable.
 func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *http.Request) {
-	row, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
+		return
+	}
+	if sq.IsCore && !h.isGoldCopy(r.Context(), tenantID) {
+		h.writeError(w, errors.New("cannot update core query directly; use /extend to customize"), http.StatusForbidden)
 		return
 	}
 	var req savedQueryCreateRequest
@@ -333,10 +412,10 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 		return
 	}
 	if req.Name == "" {
-		req.Name = row.Name
+		req.Name = sq.Name
 	}
 	if req.ChartType == "" {
-		req.ChartType = row.ChartType
+		req.ChartType = sq.ChartType
 	}
 	stateBytes, err := json.Marshal(req.State)
 	if err != nil {
@@ -355,7 +434,7 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 		WHERE id = $8 AND tenant_id = $9
 		RETURNING `+savedQuerySelectCols+`
 	`, req.Name, req.Description, req.ChartType, stateBytes, pq.Array(req.Tags),
-		pq.Array(req.RelatedBOIDs), folderID, row.ID, tenantID).StructScan(&out)
+		pq.Array(req.RelatedBOIDs), folderID, sq.ID, tenantID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to update saved query: %w", err), http.StatusInternalServerError)
 		return
@@ -363,12 +442,9 @@ func (h *SavedQueryHandler) HandleUpdateSavedQuery(w http.ResponseWriter, r *htt
 	h.writeJSON(w, http.StatusOK, out.toSavedQuery())
 }
 
-// HandleSetFavorite handles PUT /api/explorer/saved-queries/{id}/favorite,
-// body {"isFavorite": true|false}. Favoriting is per-user, not per-query
-// visibility, so it's a separate small mutation rather than folded into
-// the general update (which a 'shared' query's non-owner can't call).
+// HandleSetFavorite handles PUT /api/explorer/saved-queries/{id}/favorite.
 func (h *SavedQueryHandler) HandleSetFavorite(w http.ResponseWriter, r *http.Request) {
-	row, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
@@ -384,7 +460,7 @@ func (h *SavedQueryHandler) HandleSetFavorite(w http.ResponseWriter, r *http.Req
 		UPDATE data_explorer.saved_query SET is_favorite = $1, updated_at = NOW()
 		WHERE id = $2 AND tenant_id = $3
 		RETURNING `+savedQuerySelectCols+`
-	`, req.IsFavorite, row.ID, tenantID).StructScan(&out)
+	`, req.IsFavorite, sq.ID, tenantID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to update favorite: %w", err), http.StatusInternalServerError)
 		return
@@ -393,40 +469,96 @@ func (h *SavedQueryHandler) HandleSetFavorite(w http.ResponseWriter, r *http.Req
 }
 
 // HandleDeleteSavedQuery handles DELETE /api/explorer/saved-queries/{id}.
+// Enforces:
+// 1. Core query protection (403 for non-gold-copy tenants)
+// 2. Server-side usage scan before delete (409 Conflict with usage report if referenced)
+// 3. Core query adoption block (409 Conflict if adoption rows exist; recommends deprecation)
+// 4. Soft-delete via archived_at timestamp and status = 'archived'
 func (h *SavedQueryHandler) HandleDeleteSavedQuery(w http.ResponseWriter, r *http.Request) {
-	_, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
-	id := chi.URLParam(r, "id")
-	if _, err := h.db.Exec(`DELETE FROM data_explorer.saved_query WHERE id = $1 AND tenant_id = $2`, id, tenantID); err != nil {
+	secCtx, _, _ := handlers.SecurityContextFromRequest(r, "", "", h.deps)
+
+	// 1. Core query protection: client tenants cannot delete core query
+	if sq.IsCore && !h.isGoldCopy(r.Context(), secCtx.TenantID) {
+		h.writeError(w, errors.New("cannot delete core query: core queries are managed by master tenant"), http.StatusForbidden)
+		return
+	}
+
+	// 2. Server-side usage scan across pages, other queries, and core adoptions
+	report, err := ScanSavedQueryUsage(r.Context(), h.db, sq.ID, sq.IsCore, secCtx.TenantID)
+	if err != nil {
+		h.writeError(w, fmt.Errorf("failed to check query references: %w", err), http.StatusInternalServerError)
+		return
+	}
+
+	if report.InUse {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":      "Conflict",
+			"message":    "Cannot delete saved query: query is currently referenced",
+			"inUse":      true,
+			"references": report.References,
+		})
+		return
+	}
+
+	// 3. Soft-delete the query (sets archived_at and status = 'archived')
+	_, err = h.db.ExecContext(r.Context(), `
+		UPDATE data_explorer.saved_query
+		SET archived_at = NOW(), status = 'archived', updated_at = NOW()
+		WHERE id = $1 AND tenant_id = $2
+	`, sq.ID, tenantID)
+	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to delete saved query: %w", err), http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // HandleCloneSavedQuery handles POST /api/explorer/saved-queries/{id}/clone.
 func (h *SavedQueryHandler) HandleCloneSavedQuery(w http.ResponseWriter, r *http.Request) {
-	row, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
 	secCtx, _, _ := handlers.SecurityContextFromRequest(r, "", "", h.deps)
 	newID := uuid.NewString()
+	stateBytes, _ := json.Marshal(sq.State)
+
 	var out savedQueryRow
 	err := h.db.QueryRowx(`
 		INSERT INTO data_explorer.saved_query
-			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, created_by)
-		SELECT $1, $2, $3, name || ' (copy)', description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, folder_id, $3
-		FROM data_explorer.saved_query WHERE id = $4 AND tenant_id = $2
+			(id, tenant_id, user_id, name, description, source_kind, source_id, binding_id, related_bo_ids, chart_type, query_state, tags, is_core, created_by)
+		VALUES ($1, $2, $3, $4, $5, 'business_object', $6, $7, $8, $9, $10, $11, false, $3)
 		RETURNING `+savedQuerySelectCols+`
-	`, newID, tenantID, secCtx.UserID, row.ID).StructScan(&out)
+	`, newID, tenantID, secCtx.UserID, sq.Name+" (copy)", sq.Description, sq.BOID, sq.BindingID, pq.Array(sq.RelatedBOIDs), sq.ChartType, stateBytes, pq.Array(sq.Tags)).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to clone saved query: %w", err), http.StatusInternalServerError)
 		return
 	}
-	h.writeJSON(w, http.StatusCreated, out.toSavedQuery())
+
+	cloned := out.toSavedQuery()
+	if sq.IsCore {
+		cloned.ClonedFrom = &QueryCloneSource{
+			QueryID: sq.ID,
+			Name:    sq.Name,
+			Version: 1,
+		}
+		// Record adoption mode = 'cloned'
+		_, _ = h.db.ExecContext(r.Context(), `
+			INSERT INTO core_object_adoption (tenant_id, object_type, core_object_id, active, mode, base_version, clone_object_id, updated_at, updated_by)
+			VALUES ($1, $2, $3, true, 'cloned', 1, $4, NOW(), $5)
+			ON CONFLICT (tenant_id, object_type, core_object_id) DO UPDATE SET
+				mode = 'cloned', clone_object_id = EXCLUDED.clone_object_id, updated_at = NOW(), updated_by = EXCLUDED.updated_by
+		`, tenantID, coreQueryObjectType, sq.ID, newID, secCtx.UserID)
+	}
+
+	h.writeJSON(w, http.StatusCreated, cloned)
 }
 
 // resolveParams merges request query-string values into the saved query's
@@ -480,7 +612,7 @@ func resolveParams(state SavedQueryState, values map[string][]string) ([]boresol
 // session JWT or an X-API-Key header, both handled transparently by
 // AuthContextMiddleware) and get back real rows, not a stored sample.
 func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Request) {
-	row, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
@@ -489,7 +621,6 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		h.writeError(w, err, http.StatusBadRequest)
 		return
 	}
-	sq := row.toSavedQuery()
 
 	filters, err := resolveParams(sq.State, r.URL.Query())
 	if err != nil {
@@ -502,7 +633,7 @@ func (h *SavedQueryHandler) HandleGetPreview(w http.ResponseWriter, r *http.Requ
 		fmt.Sscanf(l, "%d", &limit)
 	}
 
-	qd := savedQueryDef(sq, tenantID, filters, limit)
+	qd := savedQueryDef(*sq, tenantID, filters, limit)
 
 	db := h.executor.QueryDB(secCtx.DatasourceID)
 	if db == nil {
@@ -540,7 +671,7 @@ func (h *SavedQueryHandler) HandleGetDuplicates(w http.ResponseWriter, r *http.R
 // row via loadOwned's `visibility = 'shared'` branch, so row.UserID is
 // checked explicitly rather than relying on that alone.
 func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Request) {
-	row, tenantID, ok := h.loadOwned(w, r)
+	sq, tenantID, ok := h.loadOwned(w, r)
 	if !ok {
 		return
 	}
@@ -549,7 +680,7 @@ func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Requ
 		h.writeError(w, err, http.StatusBadRequest)
 		return
 	}
-	if row.UserID != secCtx.UserID {
+	if sq.UserID != secCtx.UserID {
 		h.writeError(w, errors.New("only the owner can change sharing"), http.StatusForbidden)
 		return
 	}
@@ -569,7 +700,7 @@ func (h *SavedQueryHandler) HandleShareQuery(w http.ResponseWriter, r *http.Requ
 		UPDATE data_explorer.saved_query SET visibility = $1, updated_at = NOW()
 		WHERE id = $2 AND tenant_id = $3
 		RETURNING `+savedQuerySelectCols+`
-	`, req.Visibility, row.ID, tenantID).StructScan(&out)
+	`, req.Visibility, sq.ID, tenantID).StructScan(&out)
 	if err != nil {
 		h.writeError(w, fmt.Errorf("failed to update visibility: %w", err), http.StatusInternalServerError)
 		return

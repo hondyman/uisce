@@ -56,85 +56,79 @@ import { AuditExplorerPage } from "./features/workflow/pages/AuditExplorerPage";
 import AuditExplorer from "./components/audit/AuditExplorer";
 import TemporalOpsPage from "./features/admin/pages/TemporalOpsPage";
 import SeedingPage from "./features/admin/pages/SeedingPage";
-import QueryLibrary from "./features/query-builder/pages/QueryLibrary";
-import SavedQueryEditor from "./features/query-builder/pages/SavedQueryEditor";
-import SqlStudioPage from "./pages/analytical/SqlStudioPage";
-import SemanticCatalogDetailPage from "./pages/analytical/SemanticCatalogDetailPage";
-import PipelinesPage from "./pages/analytical/PipelinesPage";
-import ReportsPage from "./pages/analytical/ReportsPage";
+const QueryLibrary = React.lazy(() => import("./features/query-builder/pages/QueryLibrary"));
+const SavedQueryEditor = React.lazy(() => import("./features/query-builder/pages/SavedQueryEditor"));
+const SqlStudioPage = React.lazy(() => import("./pages/analytical/SqlStudioPage"));
+const SemanticCatalogDetailPage = React.lazy(() => import("./pages/analytical/SemanticCatalogDetailPage"));
+const PipelinesPage = React.lazy(() => import("./pages/analytical/PipelinesPage"));
+const ReportsPage = React.lazy(() => import("./pages/analytical/ReportsPage"));
 // Metrics Console imports
-import MetricsConsolePage from "./pages/MetricsConsolePage";
-import MetricDetailPage from "./pages/MetricDetailPage";
-import MetricCreatePage from "./pages/MetricCreatePage";
-import MetricEditPage from "./pages/MetricEditPage";
-import MetricCalcConsole from "./pages/metrics/MetricCalcConsole";
-import SemanticEnrichmentWizard from "./pages/SemanticEnrichment/SemanticEnrichmentWizard";
-import NLQPage from "./pages/nlq/NLQPage";
-import LLMConfigPage from "./pages/admin/LLMConfigPage";
-import MessageCatalogPage from "./features/message-catalog/MessageCatalogPage";
+const MetricsConsolePage = React.lazy(() => import("./pages/MetricsConsolePage"));
+const MetricDetailPage = React.lazy(() => import("./pages/MetricDetailPage"));
+const MetricCreatePage = React.lazy(() => import("./pages/MetricCreatePage"));
+const MetricEditPage = React.lazy(() => import("./pages/MetricEditPage"));
+const MetricCalcConsole = React.lazy(() => import("./pages/metrics/MetricCalcConsole"));
+const SemanticEnrichmentWizard = React.lazy(() => import("./pages/SemanticEnrichment/SemanticEnrichmentWizard"));
+const NLQPage = React.lazy(() => import("./pages/nlq/NLQPage"));
+const LLMConfigPage = React.lazy(() => import("./pages/admin/LLMConfigPage"));
+const MessageCatalogPage = React.lazy(() => import("./features/message-catalog/MessageCatalogPage"));
 
-import { Feed } from "./features/feed/components/Feed";
-import { ApprovalInboxPage } from "./features/wealth/pages/ApprovalInboxPage";
-import { GenUIApprovalInboxPage } from "./features/workflow/pages/GenUIApprovalInboxPage";
-import { GenUIProposalDemoPage } from "./features/workflow/pages/GenUIProposalDemoPage";
-import GenUIChatPage from "./pages/GenUIChatPage";
-import { FactorAnalysisPage } from "./features/analytics/pages/FactorAnalysisPage";
-import AdvisorDashboard from "./pages/AdvisorDashboard";
-import DirectIndexingPage from "./pages/investment/DirectIndexingPage";
-import ValuesProfileEditor from "./pages/investment/ValuesProfileEditor";
+const Feed = React.lazy(() => import("./features/feed/components/Feed").then(m => ({ default: m.Feed })));
+const ApprovalInboxPage = React.lazy(() => import("./features/wealth/pages/ApprovalInboxPage").then(m => ({ default: m.ApprovalInboxPage })));
+const GenUIApprovalInboxPage = React.lazy(() => import("./features/workflow/pages/GenUIApprovalInboxPage").then(m => ({ default: m.GenUIApprovalInboxPage })));
+const GenUIProposalDemoPage = React.lazy(() => import("./features/workflow/pages/GenUIProposalDemoPage").then(m => ({ default: m.GenUIProposalDemoPage })));
+const GenUIChatPage = React.lazy(() => import("./pages/GenUIChatPage"));
+const FactorAnalysisPage = React.lazy(() => import("./features/analytics/pages/FactorAnalysisPage").then(m => ({ default: m.FactorAnalysisPage })));
+const AdvisorDashboard = React.lazy(() => import("./pages/AdvisorDashboard"));
+const DirectIndexingPage = React.lazy(() => import("./pages/investment/DirectIndexingPage"));
+const ValuesProfileEditor = React.lazy(() => import("./pages/investment/ValuesProfileEditor"));
 // Crypto Platform
-import CryptoDashboard from "./features/crypto/CryptoDashboard";
-import CryptoPortfolioCenter from "./features/crypto/CryptoPortfolioCenter";
+const CryptoDashboard = React.lazy(() => import("./features/crypto/CryptoDashboard"));
+const CryptoPortfolioCenter = React.lazy(() => import("./features/crypto/CryptoPortfolioCenter"));
 // Secrets Management
-import {
-  SecretsConfigPage,
-  SecretsAuditPage,
-  SecretsMonitoringPage,
-} from "./features/secrets";
+const SecretsConfigPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsConfigPage })));
+const SecretsAuditPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsAuditPage })));
+const SecretsMonitoringPage = React.lazy(() => import("./features/secrets").then(m => ({ default: m.SecretsMonitoringPage })));
 // Reporting
-import { WorldClassReportBuilder } from "./features/reporting/components/SelfServiceReportBuilder";
+const WorldClassReportBuilder = React.lazy(() => import("./features/reporting/components/SelfServiceReportBuilder").then(m => ({ default: m.WorldClassReportBuilder })));
 
 // BP Framework Console
-import BPConsolePage from "./features/bp-console/pages/BPConsolePage";
-import { ReportLibrary } from "./features/reporting/components/ReportLibrary";
-import ReportBuilderPage from "./pages/ReportBuilderPage";
-import { DataExplorer } from './components/reporting/DataExplorer';
-import { SemanticModelManager } from './features/semantic/components/SemanticModelManager';
+const BPConsolePage = React.lazy(() => import("./features/bp-console/pages/BPConsolePage"));
+const ReportLibrary = React.lazy(() => import("./features/reporting/components/ReportLibrary").then(m => ({ default: m.ReportLibrary })));
+const ReportBuilderPage = React.lazy(() => import("./pages/ReportBuilderPage"));
+const DataExplorer = React.lazy(() => import('./components/reporting/DataExplorer').then(m => ({ default: m.DataExplorer })));
+const SemanticModelManager = React.lazy(() => import('./features/semantic/components/SemanticModelManager').then(m => ({ default: m.SemanticModelManager })));
 
-
-
-import EntityManagerPage from "./features/admin/pages/EntityManagerPage";
-import EntityDetailsPage from "./pages/EntityDetailsPage";
-import BusinessObjectsPage from "./pages/BusinessObjectsPage";
-import BusinessObjectDetailsPage from "./pages/BusinessObjectDetailsPage";
-import SemanticHealthDashboard from "./pages/SemanticHealthDashboard";
-import SchemaExplorerPage from "./features/schema-explorer/pages/SchemaExplorer";
-import PageRuntimeRenderer from "./pages/PageRuntimeRenderer";
-import WorkflowStudioPage from "./pages/WorkflowStudioPage";
-import BusinessRuleEditorPage from "./pages/BusinessRuleEditorPage";
-import { SecurityRoutes } from "./features/security/routes";
+const EntityManagerPage = React.lazy(() => import("./features/admin/pages/EntityManagerPage"));
+const EntityDetailsPage = React.lazy(() => import("./pages/EntityDetailsPage"));
+const BusinessObjectsPage = React.lazy(() => import("./pages/BusinessObjectsPage"));
+const BusinessObjectDetailsPage = React.lazy(() => import("./pages/BusinessObjectDetailsPage"));
+const SemanticHealthDashboard = React.lazy(() => import("./pages/SemanticHealthDashboard"));
+const SchemaExplorerPage = React.lazy(() => import("./features/schema-explorer/pages/SchemaExplorer"));
+const PageRuntimeRenderer = React.lazy(() => import("./pages/PageRuntimeRenderer"));
+const WorkflowStudioPage = React.lazy(() => import("./pages/WorkflowStudioPage"));
+const BusinessRuleEditorPage = React.lazy(() => import("./pages/BusinessRuleEditorPage"));
+const SecurityRoutes = React.lazy(() => import("./features/security/routes").then(m => ({ default: m.SecurityRoutes })));
 
 
 // RBAC Management Pages
-import RoleManagerPage from "./features/admin/pages/RoleManagerPage";
-import { UserManagementPage } from "./features/admin/pages/UserManagementPage";
-import UserRoleAssignmentPage from "./features/admin/pages/UserRoleAssignmentPage";
-import TenantUserAssignmentPage from "./features/admin/pages/TenantUserAssignmentPage";
-import DelegationManagerPage from "./features/admin/pages/DelegationManagerPage";
-import FieldPermissionEditorPage from "./features/admin/pages/FieldPermissionEditorPage";
+const RoleManagerPage = React.lazy(() => import("./features/admin/pages/RoleManagerPage"));
+const UserManagementPage = React.lazy(() => import("./features/admin/pages/UserManagementPage").then(m => ({ default: m.UserManagementPage })));
+const UserRoleAssignmentPage = React.lazy(() => import("./features/admin/pages/UserRoleAssignmentPage"));
+const TenantUserAssignmentPage = React.lazy(() => import("./features/admin/pages/TenantUserAssignmentPage"));
+const DelegationManagerPage = React.lazy(() => import("./features/admin/pages/DelegationManagerPage"));
+const FieldPermissionEditorPage = React.lazy(() => import("./features/admin/pages/FieldPermissionEditorPage"));
 
 // Self-Service Studio — Phase D (Security & Access Mesh spec PART 5)
-import {
-  ProfilesDashboard,
-  ProfileCustomizer,
-  EntitlementMatrix,
-} from "./admin-v2";
+const ProfilesDashboard = React.lazy(() => import("./admin-v2").then(m => ({ default: m.ProfilesDashboard })));
+const ProfileCustomizer = React.lazy(() => import("./admin-v2").then(m => ({ default: m.ProfileCustomizer })));
+const EntitlementMatrix = React.lazy(() => import("./admin-v2").then(m => ({ default: m.EntitlementMatrix })));
 
-import TeamManagerPage from "./features/admin/pages/TeamManagerPage";
+const TeamManagerPage = React.lazy(() => import("./features/admin/pages/TeamManagerPage"));
 
 // ASO Pages
-import { OptimizationCenter } from "./pages/OptimizationCenter";
-import { ASOOptimizationDetail } from "./components/aso/ASOOptimizationDetail";
+const OptimizationCenter = React.lazy(() => import("./pages/OptimizationCenter").then(m => ({ default: m.OptimizationCenter })));
+const ASOOptimizationDetail = React.lazy(() => import("./components/aso/ASOOptimizationDetail").then(m => ({ default: m.ASOOptimizationDetail })));
 
 // Profile-key → ProfileCustomizer route wrapper. Pulls the URL param
 // out of react-router so the component doesn't need its own router hook.
@@ -149,17 +143,17 @@ const EntitlementMatrixRoute: React.FC = () => {
   const { profileKey } = useParams<{ profileKey: string }>();
   return <EntitlementMatrix profileKey={profileKey || ""} isCustom={!profileKey?.startsWith("platform_")} />;
 };
-import ObservabilityDashboard from "./pages/ObservabilityDashboard";
-import SLODashboard from "./pages/SLODashboard";
-import ChangeReviewPage from "./pages/ChangeReviewPage";
-import IncidentPage from "./pages/scheduler/IncidentPage";
-import APIStudioPage from './pages/api-studio/APIStudioPage';
-import PageStudioListPage from './pages/page-studio/PageStudioListPage';
-import PageStudioDetailsPage from './pages/page-studio/PageStudioDetailsPage';
-import MenuDesignerPage from './pages/menu-designer/MenuDesignerPage';
-import { StandaloneWindowWrapper } from './components/desktop';
-import { UniversalWorkspaceHub } from './components/docking/UniversalWorkspaceHub';
-import RuntimePage from './pages/PageRuntimeRenderer';
+const ObservabilityDashboard = React.lazy(() => import("./pages/ObservabilityDashboard"));
+const SLODashboard = React.lazy(() => import("./pages/SLODashboard"));
+const ChangeReviewPage = React.lazy(() => import("./pages/ChangeReviewPage"));
+const IncidentPage = React.lazy(() => import("./pages/scheduler/IncidentPage"));
+const APIStudioPage = React.lazy(() => import('./pages/api-studio/APIStudioPage'));
+const PageStudioListPage = React.lazy(() => import('./pages/page-studio/PageStudioListPage'));
+const PageStudioDetailsPage = React.lazy(() => import('./pages/page-studio/PageStudioDetailsPage'));
+const MenuDesignerPage = React.lazy(() => import('./pages/menu-designer/MenuDesignerPage'));
+const StandaloneWindowWrapper = React.lazy(() => import('./components/desktop').then(m => ({ default: m.StandaloneWindowWrapper })));
+const UniversalWorkspaceHub = React.lazy(() => import('./components/docking/UniversalWorkspaceHub').then(m => ({ default: m.UniversalWorkspaceHub })));
+const RuntimePage = React.lazy(() => import('./pages/PageRuntimeRenderer'));
 
 // Code-split workstation components for standalone / detached popout routes
 const PageBrowser = React.lazy(() => import('./pages/PageBrowser'));

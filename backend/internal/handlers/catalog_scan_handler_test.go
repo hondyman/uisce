@@ -14,10 +14,33 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/hondyman/uisce/backend/internal/db"
 	"github.com/hondyman/uisce/backend/internal/metadata"
+	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/hondyman/uisce/backend/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 )
+
+type mockCatalogScanDatasourceResolver struct{}
+
+func (m *mockCatalogScanDatasourceResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		TenantID:       "11111111-1111-1111-1111-111111111111",
+		DatasourceID:   datasourceID,
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
+
+func newTestScanRequest(method, target string) *http.Request {
+	req, _ := http.NewRequest(method, target, nil)
+	req.Header.Set("X-Tenant-Datasource-ID", "22222222-2222-2222-2222-222222222222")
+	req.Header.Set("X-Tenant-ID", "11111111-1111-1111-1111-111111111111")
+	req.Header.Set("X-Region", "us-east-1")
+	return req.WithContext(security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:    "test-user",
+		TenantIDs: []string{"11111111-1111-1111-1111-111111111111"},
+		Roles:     []string{"admin"},
+	}))
+}
 
 // fakeMetadataScanner satisfies services.MetadataScanner for testing
 type fakeMetadataScanner struct{}
@@ -46,11 +69,11 @@ func TestHandleCatalogScan_AllSuccess(t *testing.T) {
 		err:     nil,
 	}
 
-	h := NewCatalogScanHandler(fake, SecurityContextDeps{})
+	h := NewCatalogScanHandler(fake, SecurityContextDeps{Resolver: &mockCatalogScanDatasourceResolver{}})
 
 	// call handler
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req := newTestScanRequest(http.MethodPost, "/api/catalog/scan")
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -72,10 +95,10 @@ func TestHandleCatalogScan_PartialFailure(t *testing.T) {
 		err: nil,
 	}
 
-	h := NewCatalogScanHandler(fake, SecurityContextDeps{})
+	h := NewCatalogScanHandler(fake, SecurityContextDeps{Resolver: &mockCatalogScanDatasourceResolver{}})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req := newTestScanRequest(http.MethodPost, "/api/catalog/scan")
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code) // Updated to expect 200
@@ -97,10 +120,10 @@ func TestHandleCatalogScan_AllFailure(t *testing.T) {
 	// handler should respond 200 (not 500) because service indicates all failed via returned error
 	// But it returns 200 even if all failed.
 	fake2 := &fakeScanService{results: fake.results, err: assert.AnError}
-	h2 := NewCatalogScanHandler(fake2, SecurityContextDeps{})
+	h2 := NewCatalogScanHandler(fake2, SecurityContextDeps{Resolver: &mockCatalogScanDatasourceResolver{}})
 
 	w2 := httptest.NewRecorder()
-	req2, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req2 := newTestScanRequest(http.MethodPost, "/api/catalog/scan")
 	h2.HandleCatalogScan(w2, req2)
 
 	assert.Equal(t, http.StatusOK, w2.Code) // Updated to expect 200
@@ -177,10 +200,10 @@ func TestHandleCatalogScan_InvokesUpsert_EndToEnd(t *testing.T) {
 		return svc.ScanSingleDatasourceForTest(ctx, ds, goldCopyNodes)
 	})
 
-	h := NewCatalogScanHandler(svc, SecurityContextDeps{})
+	h := NewCatalogScanHandler(svc, SecurityContextDeps{Resolver: &mockCatalogScanDatasourceResolver{}})
 
 	w := httptest.NewRecorder()
-	req, _ := http.NewRequest(http.MethodPost, "/api/catalog/scan", nil)
+	req := newTestScanRequest(http.MethodPost, "/api/catalog/scan")
 	h.HandleCatalogScan(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)

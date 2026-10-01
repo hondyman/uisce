@@ -120,13 +120,18 @@ export default function QueryShelves({
                 onDelete={() => toggleField(d.boId, d.termNodeId)} />
             ))}
           </ShelfRow>
-          <ShelfRow label="Measures:" color="warning.main" empty="Add a measure from the catalog">
+          <ShelfRow label="Measures:" color="warning.main" empty="Add a measure or semantic metric from the catalog">
             {measures.map((m) => (
               <Chip key={`${m.boId}:${m.termNodeId}`} size="small" color="warning" variant="outlined"
                 label={`${m.defaultAggregation && m.defaultAggregation !== 'NONE' ? `${m.defaultAggregation}(` : ''}${qualifiedFieldLabel(m.boName, m.isPrimary, m.termKey)}${m.defaultAggregation && m.defaultAggregation !== 'NONE' ? ')' : ''}`}
                 onDelete={() => toggleField(m.boId, m.termNodeId)} />
             ))}
           </ShelfRow>
+          {measures.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', pl: 1 }}>
+              💡 Tip: Raw measures are exploratory. Consider binding or promoting to a Semantic Metric for catalog governance.
+            </Typography>
+          )}
         </Stack>
       </ShelfAccordion>
 

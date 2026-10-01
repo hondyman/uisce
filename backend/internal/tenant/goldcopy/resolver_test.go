@@ -203,6 +203,9 @@ func TestResolver_IsGoldCopy(t *testing.T) {
 		t.Fatal("expected false for non-gold-copy uuid")
 	}
 
+	mock.ExpectQuery(`uisce_gold_copy_tenant_id`).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(goldID))
+
 	isGold, err = r.IsGoldCopy(uuid.MustParse(goldID))
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)

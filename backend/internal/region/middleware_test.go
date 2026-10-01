@@ -104,3 +104,52 @@ func TestRegionMiddleware_BlocksRequest_WhenHeaderMissing(t *testing.T) {
 		t.Fatalf("unexpected error message: %v", body["error"])
 	}
 }
+
+// The ABAC capability map is authorization metadata about the caller's own
+// scope, not tenant data. Requiring a region here 400'd every non-gold-copy
+// tenant before the handler ran, which made the whole menu-authorization
+// feature look dead. Regression guard: the exemption must not be removed.
+func TestRegionMiddleware_ExemptsCapabilities_NoRegionRequired(t *testing.T) {
+	r := chi.NewRouter()
+	// A provider that would reject any region, so a pass-through proves the
+	// exemption short-circuited before region validation ran.
+	r.Use(RegionValidationMiddleware(&mockRegionsProvider{allowed: []string{"eu-west"}}))
+	r.Get("/api/capabilities", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"menu:platform":false}`))
+	}))
+
+	req := httptest.NewRequest("GET", "/api/capabilities", nil)
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200 for /api/capabilities with no region header, got %d (body: %s)",
+			resp.StatusCode, w.Body.String())
+	}
+}
+
+// An even a disallowed region must not block the capability map: it is the
+// caller's own scope, so there is no cross-region data to guard.
+func TestRegionMiddleware_ExemptsCapabilities_DisallowedRegionIgnored(t *testing.T) {
+	r := chi.NewRouter()
+	r.Use(RegionValidationMiddleware(&mockRegionsProvider{allowed: []string{"us-east"}}))
+	r.Get("/api/capabilities", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"menu:platform":true}`))
+	}))
+
+	req := httptest.NewRequest("GET", "/api/capabilities", nil)
+	req.Header.Set(RegionHeader, "eu-west")
+	req.Header.Set("X-Tenant-ID", "tenant-123")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	resp := w.Result()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200 for /api/capabilities with a disallowed region, got %d (body: %s)",
+			resp.StatusCode, w.Body.String())
+	}
+}

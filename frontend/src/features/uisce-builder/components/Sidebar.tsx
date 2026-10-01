@@ -310,7 +310,7 @@ const Sidebar: React.FC<SidebarProps> = ({ categories = defaultFilterCategories 
     <Box sx={{ p: 2, height: '100%', bgcolor: 'background.default', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ mb: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 800, background: `-webkit-linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Uisce Toolkit
+            Ivy Toolkit
         </Typography>
       </Box>
 

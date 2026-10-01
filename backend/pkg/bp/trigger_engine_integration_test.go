@@ -17,6 +17,9 @@ func (m *mockInitiator) StartBPWorkflow(ctx context.Context, bpID string, data m
 }
 
 func TestTriggerEngineStartStop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	dbSQL, _, err := sqlmock.New()
 	if err != nil {
 		t.Fatalf("failed to create sqlmock: %v", err)
