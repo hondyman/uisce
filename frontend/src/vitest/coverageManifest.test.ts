@@ -59,7 +59,8 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const EXECUTED_TEST_BASELINE = 340; // 8f0c7e633 (309) + wave A (+23) + wave G (+1) + wave B proof (+7)
+const RUNNING_FILE_BASELINE = 103; // f011c23d1; was 76 at dc1ccc07c, drifted to 103 via #232 and other PRs that never bumped it
+const EXECUTED_TEST_BASELINE = 553; // measured on f011c23d1 with `vitest --reporter=json` (539 passed + 14 failed; was 340 at dc1ccc07c)
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -131,17 +132,17 @@ describe('test suite inclusion counter', () => {
     // count is the full include match with zero subtractions.
     const files = globFiles(['src'], [...INCLUDE_PATTERNS]);
     const running = files.length - DOCUMENTED_LEGACY_EXCLUDES.length;
-    expect(running).toBe(76);
+    expect(running).toBe(RUNNING_FILE_BASELINE);
   });
 
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(340);
+    expect(EXECUTED_TEST_BASELINE).toBe(553);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {
-    expect(WIDEN_TARGET).toBeGreaterThan(76);
+    expect(WIDEN_TARGET).toBeGreaterThan(RUNNING_FILE_BASELINE);
   });
 
   it('every documented exclude actually exists on disk (vacuous when empty)', () => {
