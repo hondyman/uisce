@@ -229,24 +229,30 @@ func (h *PageStudioHandler) importBundle(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	tx, err := h.db.BeginTxx(r.Context(), nil)
-	if err != nil {
-		http.Error(w, "failed to import: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback() //nolint:errcheck
-	for _, f := range plan.Create {
-		if _, err := tx.ExecContext(r.Context(), `
-			INSERT INTO page_fragments (tenant_id, slug, version, name, description, content, content_hash, is_core, created_by)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)`, tenantID, f.Slug, f.Version, f.Name, f.Description, []byte(f.Content), f.ContentHash, userOf(r)); err != nil {
-			http.Error(w, "failed to import fragment "+f.Slug+": "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	}
-	if err := tx.Commit(); err != nil {
+	if err := h.applyImportPlan(r.Context(), tenantID, userOf(r), plan); err != nil {
 		http.Error(w, "failed to import: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	resp["applied"] = true
 	writeJSON(w, http.StatusCreated, resp)
+}
+
+// applyImportPlan writes the fragments a plan creates, all or none.
+func (h *PageStudioHandler) applyImportPlan(ctx context.Context, tenantID uuid.UUID, user string, plan ImportPlan) error {
+	if len(plan.Create) == 0 {
+		return nil // everything is already here
+	}
+	tx, err := h.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	for _, f := range plan.Create {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO page_fragments (tenant_id, slug, version, name, description, content, content_hash, is_core, created_by)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, false, $8)`, tenantID, f.Slug, f.Version, f.Name, f.Description, []byte(f.Content), f.ContentHash, user); err != nil {
+			return fmt.Errorf("fragment %s: %w", f.Slug, err)
+		}
+	}
+	return tx.Commit()
 }
