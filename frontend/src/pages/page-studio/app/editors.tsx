@@ -10,6 +10,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { CorePageDefinition } from '../../../types/pageStudio';
 import { getOperation, listOperations } from '../../../studio-core/operations/registry';
 import type { Action, ConditionNode, FormSpec, TextSpec } from './appModel';
+import { BindingPicker } from './bindingPicker';
 
 type RunOperation = Extract<Action, { kind: 'runOperation' }>;
 
@@ -60,15 +61,19 @@ export function BindingField({ label, value, onChange, paths, helperText, multil
   const str = value === undefined || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
   const options = paths.map((p) => `{{${p}}}`);
   return (
-    <Autocomplete freeSolo size="small" options={options} value={str} inputValue={str}
-      onInputChange={(_, v, reason) => { if (reason !== 'reset') onChange(v); }}
-      onChange={(_, v) => onChange(typeof v === 'string' ? v : '')}
-      filterOptions={(opts, s) => {
-        // Suggest while typing inside {{ ... }}.
-        const m = /\{\{\s*([\w.]*)$/.exec(s.inputValue);
-        return m ? opts.filter((o) => o.includes(m[1])) : s.inputValue ? opts.filter((o) => o.includes(s.inputValue)) : opts;
-      }}
-      renderInput={(params) => <TextField {...params} label={label} helperText={helperText} multiline={multiline} />} />
+    <Stack direction="row" spacing={0.5} alignItems="flex-start">
+      <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 0 }} options={options} value={str} inputValue={str}
+        onInputChange={(_, v, reason) => { if (reason !== 'reset') onChange(v); }}
+        onChange={(_, v) => onChange(typeof v === 'string' ? v : '')}
+        filterOptions={(opts, s) => {
+          // Suggest while typing inside {{ ... }}.
+          const m = /\{\{\s*([\w.]*)$/.exec(s.inputValue);
+          return m ? opts.filter((o) => o.includes(m[1])) : s.inputValue ? opts.filter((o) => o.includes(s.inputValue)) : opts;
+        }}
+        renderInput={(params) => <TextField {...params} label={label} helperText={helperText} multiline={multiline} />} />
+      {/* Browse the page's live data; the pick goes in as {{path}} (after any text already there). */}
+      <BindingPicker contextPaths={paths} label={`Browse data for ${label}`} onPick={(path) => onChange(`${str}{{${path}}}`)} />
+    </Stack>
   );
 }
 
@@ -170,8 +175,11 @@ function LeafEditor({ leaf, onChange, paths }: { leaf: Leaf; onChange: (l: Leaf)
   const op = OPERATORS.find((o) => o.value === leaf.operator);
   return (
     <Stack spacing={1}>
-      <Autocomplete freeSolo size="small" options={paths} value={leaf.field} inputValue={leaf.field}
-        onInputChange={(_, v) => onChange({ ...leaf, field: v })} renderInput={(p) => <TextField {...p} label="Field (scope path)" />} />
+      <Stack direction="row" spacing={0.5} alignItems="flex-start">
+        <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 0 }} options={paths} value={leaf.field} inputValue={leaf.field}
+          onInputChange={(_, v) => onChange({ ...leaf, field: v })} renderInput={(p) => <TextField {...p} label="Field (scope path)" />} />
+        <BindingPicker contextPaths={paths} label="Browse data for the condition" onPick={(path) => onChange({ ...leaf, field: path })} />
+      </Stack>
       <Stack direction="row" spacing={1}>
         <TextField select size="small" label="Operator" value={leaf.operator} sx={{ minWidth: 140 }}
           onChange={(e) => onChange({ ...leaf, operator: e.target.value })}>

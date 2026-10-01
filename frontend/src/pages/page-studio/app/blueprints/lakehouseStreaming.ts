@@ -72,7 +72,7 @@ export function lakehouseStreamingBlueprint(): Omit<CorePageDefinition, 'id' | '
       filter_root: { type: 'Column', children: ['header_row'], style: { gap: '12px' } },
       header_row: { type: 'Row', children: ['hdr'], style: { alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
     }),
-    appModel: {
+    app: {
       chrome: 'none',
       surface: { maxWidth: 1400, padding: 3 },
       tabVariable: 'tab',
