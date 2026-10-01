@@ -120,7 +120,7 @@ describe('Canvas widget', () => {
 
     expect(screen.getByText('Read from')).toBeTruthy();
     expect(screen.getByText('Write to')).toBeTruthy();
-    expect((screen.getByRole('button', { name: 'Write records' }) as HTMLElement).getAttribute('aria-disabled')).toBe('true');
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Write records' }) as HTMLElement).getAttribute('aria-disabled')).toBe('true'));
     fireEvent.click(screen.getByRole('button', { name: 'Map fields' }));
     await waitFor(() => expect(addStep).toHaveBeenCalled());
     const args = addStep.mock.calls[0][0];

@@ -173,6 +173,9 @@ func TestListExecutionEvents_TwoStep_TenantSwitch(t *testing.T) {
 	sqlMock.ExpectExec("SELECT set_config").
 		WithArgs(execTenantID.String()).
 		WillReturnResult(sqlmock.NewResult(0, 0))
+	sqlMock.ExpectExec("SELECT set_config").
+		WithArgs(execTenantID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectQuery("SELECT id, execution_id, event, from_status, to_status, actor_id, detail, created_at").
 		WithArgs(execID, nil, nil, 1000).
 		WillReturnRows(sqlmock.NewRows([]string{
@@ -228,6 +231,9 @@ func TestListExecutionEvents_CapLimit_1000(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"tenant_id"}).AddRow(execTenantID))
 
 	sqlMock.ExpectBegin()
+	sqlMock.ExpectExec("SELECT set_config").
+		WithArgs(execTenantID.String()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
 	sqlMock.ExpectExec("SELECT set_config").
 		WithArgs(execTenantID.String()).
 		WillReturnResult(sqlmock.NewResult(0, 0))

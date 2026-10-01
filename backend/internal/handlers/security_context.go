@@ -26,7 +26,6 @@ func SecurityContextFromRequest(r *http.Request, bodyDatasourceID string, bodyRe
 	if datasourceID == "" {
 		datasourceID = strings.TrimSpace(r.Header.Get("X-Tenant-Instance-ID"))
 	}
-
 	// Try multiple header names for region
 	region := strings.TrimSpace(bodyRegion)
 	if region == "" {

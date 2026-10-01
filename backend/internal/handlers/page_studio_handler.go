@@ -152,6 +152,8 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{id}/customization", h.revertToCore)
 		r.Get("/{id}/compare", h.compare)
 		r.Post("/{id}/upgrade", h.upgrade)
+		r.Get("/{id}/export", h.exportPage)
+		r.Post("/import", h.importPage)
 	})
 	r.Post("/page-studio/generate", h.generate)
 }

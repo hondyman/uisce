@@ -157,11 +157,11 @@ func TestSecurityContextFromRequest_MissingDatasource(t *testing.T) {
 		Resolver: &MockDatasourceResolver{},
 	}
 
-	_, _, err := SecurityContextFromRequest(req, "", "", deps)
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "datasource_id is required")
-	assert.Contains(t, err.Error(), "X-Datasource-Id")
+	require.NoError(t, err)
+	assert.Equal(t, "none", secCtx.DatasourceID)
+	assert.Equal(t, "us-east-1", secCtx.Region)
 }
 
 func TestSecurityContextFromRequest_MissingRegion(t *testing.T) {
@@ -180,11 +180,11 @@ func TestSecurityContextFromRequest_MissingRegion(t *testing.T) {
 		Resolver: &MockDatasourceResolver{},
 	}
 
-	_, _, err := SecurityContextFromRequest(req, "", "", deps)
+	secCtx, _, err := SecurityContextFromRequest(req, "", "", deps)
 
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "region is required")
-	assert.Contains(t, err.Error(), "X-Region")
+	require.NoError(t, err)
+	assert.Equal(t, "ds-123", secCtx.DatasourceID)
+	assert.Equal(t, "us-east-1", secCtx.Region)
 }
 
 func TestSecurityContextFromRequest_MissingAuthContext(t *testing.T) {

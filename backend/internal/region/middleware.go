@@ -152,7 +152,9 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				strings.HasPrefix(path, "/api/lookups") ||
 				strings.HasPrefix(path, "/api/auth/") ||
 				strings.HasPrefix(path, "/api/mcp") ||
+				strings.HasPrefix(path, "/mcp") ||
 				strings.HasPrefix(path, "/api/agentic") ||
+				strings.HasPrefix(path, "/agentic") ||
 				strings.HasPrefix(path, "/api/semantic/") {
 				next.ServeHTTP(w, r)
 				return

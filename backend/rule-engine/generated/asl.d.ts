@@ -226,6 +226,19 @@ export interface AdvisorWorker {
   threshold: uint64;
 }
 
+/** AggregateRuleSpec defines cross-record tumbling window reconciliation rules.
+Kept strictly outside vm.RuleNode as it operates on multi-row aggregations during
+scheduled pushdown rather than individual record writes. */
+export interface AggregateRuleSpec {
+  Aggregate: string;
+  Comparison: string;
+  Field: string;
+  GroupBy: string[];
+  Threshold: number;
+  TimeColumn: string;
+  Window: string;
+}
+
 /** AlertsService handles business logic for alerts. */
 export interface AlertsService {
   db: any;
@@ -1556,6 +1569,14 @@ export interface ConflictDetail {
   Iceberg: any;
   Incoming: any;
   Postgres: any;
+}
+
+export interface ConformanceCase {
+  ExpectedError: boolean;
+  ExpectedValid: boolean;
+  Input: Record<string, any>;
+  Name: string;
+  RuleAST: any;
 }
 
 /** Connection represents a datasource connection from the `connections` table
@@ -3802,6 +3823,13 @@ export interface OAuthAuditService {
   db: any;
 }
 
+/** ParamBinder accumulates parameterized literals, emitting $n placeholders.
+Bind order defines parameter order — the pushdown executor binds the
+tenant ID first so it is always $1. */
+export interface ParamBinder {
+  args: any[];
+}
+
 /** ParseError reports a parse failure with a byte offset into the
 original source, so a caller (an editor's diagnostics, or an API
 error response) can point at the exact spot rather than just quoting
@@ -4085,6 +4113,23 @@ export interface PolicyService {
 export interface PolicyVersions {
   CEL: string;
   Rego: string;
+}
+
+/** PortableRuleSpec defines a single rule stripped of environment-specific UUIDs. */
+export interface PortableRuleSpec {
+  BOName: string;
+  BindingScope: string[];
+  Category: string;
+  Deleted: boolean;
+  DependsOn: string[];
+  Description: string;
+  Domain: string;
+  GovernanceStatus: string;
+  Name: string;
+  RuleAST: any;
+  RuleKey: string;
+  Severity: string;
+  Timing: string;
 }
 
 /** PortfolioAnalytics represents the analytics for a portfolio. */
@@ -4703,6 +4748,19 @@ export interface RuleAction {
   Type: string;
 }
 
+/** RuleBundle represents a portable export of validation rules.
+The canonical interchange format is JSON; YAML is a read-only convenience
+converted to JSON before any checksumming occurs. */
+export interface RuleBundle {
+  BundleVersion: string;
+  Checksum: string;
+  CreatedAt: any;
+  ExportedFrom: string;
+  Origin: string;
+  Rules: PortableRuleSpec[];
+  TenantScope: string;
+}
+
 export interface RuleChain {
   ID: string;
   Name: string;
@@ -4719,6 +4777,12 @@ export interface RuleCondition {
   SecondValue: any;
   Value: any;
   ValueType: string;
+}
+
+export interface RuleDiffSummary {
+  Action: string;
+  Changes: string[];
+  RuleKey: string;
 }
 
 /** RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with
@@ -4767,6 +4831,37 @@ export interface RuleGroup {
   Conditions: RuleNode[];
   ID: string;
   Operator: string;
+}
+
+export interface RuleImportErrorDetail {
+  Code: string;
+  Name: string;
+  Reason: string;
+  RuleKey: string;
+}
+
+/** RuleImportReport returns granular results of the import. */
+export interface RuleImportReport {
+  Created: string[];
+  DiffSummary: RuleDiffSummary[];
+  DryRun: boolean;
+  Errors: RuleImportErrorDetail[];
+  Pruned: string[];
+  Skipped: string[];
+  Success: boolean;
+  TotalRules: number;
+  Updated: string[];
+}
+
+/** RuleImportRequest specifies import options. */
+export interface RuleImportRequest {
+  Bundle: RuleBundle;
+  DryRun: boolean;
+  IdempotencyKey: string;
+  OverwritePolicy: string;
+  PreserveStatus: boolean;
+  Prune: boolean;
+  TargetTenantID: string;
 }
 
 /** RuleMetrics holds the calculated global approval/rejection rates for a rule. */
@@ -6094,6 +6189,7 @@ export interface ValidationRuleDescriptor {
   Name: string;
   Origin: string;
   RuleAST: any;
+  RuleKey: string;
   Severity: string;
   TenantID: string;
   Timing: string;
@@ -6105,13 +6201,10 @@ PreAggProperties' role for pre-aggregation nodes and term_type/
 return_type's role for calculated semantic terms - node metadata that
 isn't the AST itself. */
 export interface ValidationRuleProperties {
+  ApprovedAt: any;
+  ApprovedBy: string;
+  AuthorID: string;
   BOName: string;
-  /** BindingIDs scopes the rule to specific bindings of the BO
-(business_object_binding.bo_binding_id). Empty means the rule applies to every
-binding, which is what every rule written before this field existed
-means, so they are unchanged. The rule's field references stay
-semantic terms either way; scoping only decides whether the rule runs
-for a write that arrived through a given binding. */
   BindingIDs: string[];
   Category: string;
   /** Domain distinguishes which rule-authoring surface produced this
@@ -6125,9 +6218,17 @@ it explicitly rather than leaving new rows blank too, so "domain"
 is unambiguous for anything written from this point forward. */
   Domain: string;
   GovernanceStatus: string;
+  PublishedAt: any;
+  PublishedBy: string;
+  RejectedAt: any;
+  RejectedBy: string;
+  RejectionReason: string;
+  RuleKey: string;
   Severity: string;
+  SubmittedAt: any;
   TenantID: string;
   Timing: string;
+  Version: number;
 }
 
 export interface ValueSignalInput {
@@ -6184,6 +6285,23 @@ export interface ViewPolicyBundle {
 
 /** ViewService handles view operations */
 export interface ViewService {
+}
+
+/** ViolationRecord represents a single evaluated rule violation or rule execution error. */
+export interface ViolationRecord {
+  BOKey: string;
+  Context: Record<string, any>;
+  Fields: string[];
+  Message: string;
+  RecordID: string;
+  RuleError: boolean;
+  RuleID: string;
+  RuleKey: string;
+  RuleName: string;
+  RuleVersion: string;
+  Severity: string;
+  TenantID: string;
+  WriteBlocked: boolean;
 }
 
 /** WebSocketHub manages WebSocket connections and broadcasting with advanced error handling */

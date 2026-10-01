@@ -96,7 +96,16 @@ export interface SavedQueryParameter {
   required?: boolean;
 }
 
-export type SavedQueryChartType = 'bar' | 'line' | 'pie';
+export type SavedQueryChartType =
+  | 'bar'
+  | 'stackedBar'
+  | 'line'
+  | 'area'
+  | 'pie'
+  | 'donut'
+  | 'scatter'
+  | 'combo'
+  | 'table';
 
 export interface SavedQueryState {
   dimensions: DimensionDef[];
@@ -104,6 +113,17 @@ export interface SavedQueryState {
   filters: FilterDef[];
   parameters: SavedQueryParameter[];
   limit?: number;
+}
+
+export type CoreQueryStatus = 'core' | 'vanilla' | 'extended' | 'upgrade_available' | 'cloned' | 'custom';
+
+export interface QueryCustomization {
+  mode: 'vanilla' | 'extended' | 'cloned';
+  active: boolean;
+  coreVersion: number;
+  baseVersion?: number;
+  upgradeAvailable: boolean;
+  cloneQueryId?: string;
 }
 
 export interface SavedQuery {
@@ -127,6 +147,11 @@ export interface SavedQuery {
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
+  coreStatus?: CoreQueryStatus;
+  customization?: QueryCustomization;
+  canCustomize?: boolean;
+  editable?: boolean;
+  clonedFrom?: { queryId: string; name: string; version: number };
 }
 
 /** A folder in the saved-query library tree, mirroring report_folders. */

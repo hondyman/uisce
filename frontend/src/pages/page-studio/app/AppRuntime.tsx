@@ -7,10 +7,12 @@ import {
 import { CatalogErrorAlert } from '../../../features/message-catalog/parts';
 import { getOperation, missingParams } from '../../../studio-core/operations/registry';
 import '../../../studio-core/registerDomains';
+import { runSavedQuery } from '../../../features/query-builder/services/savedQueryApi';
 import type { Action, FormSpec, PageAppModel } from './appModel';
 import { evaluateCondition, useCondition } from './conditions';
 import { resolve, resolveAll, text, type Scope } from './bindings';
 import { FormFields, requiredFilled } from './formFields';
+import { CrossFilterBus, CrossFilterProvider } from '../../../features/query-builder/utils/crossFilterBus';
 
 export interface QueryState {
   data: unknown;
@@ -108,12 +110,36 @@ export const AppRuntimeProvider: React.FC<{
   // Debounced queries run on params that have been still for debounceMs.
   const [settled, setSettled] = useState<Record<string, string>>({});
   const resolved = queries.map((q) => {
+    if (q.kind === 'savedQuery') {
+      const live: Record<string, string | number | boolean> = {};
+      if (q.paramBindings) {
+        for (const [pName, b] of Object.entries(q.paramBindings)) {
+          if (b.mode === 'pageVar') {
+            const v = vars[b.varName];
+            if (!isEmpty(v)) live[pName] = v as string | number | boolean;
+          } else if (b.mode === 'selectionContext') {
+            const v = resolve(`{{selection.${b.field}}}`, { ...baseScope, queries: prevResults.current });
+            if (!isEmpty(v)) live[pName] = v as string | number | boolean;
+          } else if (b.mode === 'staticLiteral') {
+            if (!isEmpty(b.value)) live[pName] = b.value as string | number | boolean;
+          } else if (b.mode === 'urlParam') {
+            const v = searchParams.get(b.paramName);
+            if (!isEmpty(v)) live[pName] = v;
+          }
+        }
+      }
+      const key = JSON.stringify(live);
+      const params = q.debounceMs && settled[q.id] !== undefined && settled[q.id] !== key ? (JSON.parse(settled[q.id]) as typeof live) : live;
+      const ready = !!q.savedQueryId && (q.enabledWhen ? enabled[q.id] === true : true);
+      return { q, isSavedQuery: true, op: undefined, params, ready, key };
+    }
+
     const op = getOperation(q.operation);
     const live = resolveAll(q.params, { ...baseScope, queries: prevResults.current });
     const key = JSON.stringify(live);
     const params = q.debounceMs && settled[q.id] !== undefined && settled[q.id] !== key ? (JSON.parse(settled[q.id]) as typeof live) : live;
     const ready = !!op && missingParams(op, params).length === 0 && (q.enabledWhen ? enabled[q.id] === true : true);
-    return { q, op, params, ready, key };
+    return { q, isSavedQuery: false, op, params, ready, key };
   });
   const liveKeys = resolved.map((r) => (r.q.debounceMs ? `${r.q.id}:${r.key}` : '')).join('|');
   useEffect(() => {
@@ -128,9 +154,11 @@ export const AppRuntimeProvider: React.FC<{
   // Queries that poll while a condition holds (a run in progress).
   const [polling, setPolling] = useState<Record<string, boolean>>({});
   const results = useQueries({
-    queries: resolved.map(({ q, op, params, ready }) => ({
-      queryKey: [op?.domain ?? 'studio', 'studio', q.operation, params],
-      queryFn: () => op!.run(params),
+    queries: resolved.map(({ q, isSavedQuery, op, params, ready }) => ({
+      queryKey: isSavedQuery
+        ? ['savedQuery', q.savedQueryId, params]
+        : [op?.domain ?? 'studio', 'studio', q.operation, params],
+      queryFn: () => (isSavedQuery ? runSavedQuery(q.savedQueryId, params) : op!.run(params)),
       enabled: ready,
       refetchInterval: polling[q.id] ? (q.refetchMs ?? 2000) : false,
       // useQueries does not hand placeholderData the previous key's data, so keep it here.
@@ -139,13 +167,13 @@ export const AppRuntimeProvider: React.FC<{
   });
   const queryStates = useMemo(() => {
     const out: Record<string, QueryState> = {};
-    resolved.forEach(({ q, op }, i) => {
+    resolved.forEach(({ q, isSavedQuery, op }, i) => {
       const r = results[i];
       out[q.id] = {
         data: r?.data,
         isLoading: !!r && r.isLoading,
         isFetching: !!r && r.isFetching,
-        error: op ? r?.error : new Error(`Unknown operation ${q.operation}`),
+        error: isSavedQuery ? r?.error : op ? r?.error : new Error(`Unknown operation ${q.operation}`),
       };
     });
     return out;
@@ -282,11 +310,25 @@ export const AppRuntimeProvider: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reactKey]);
 
+  const crossFilterBus = useMemo(() => new CrossFilterBus(), []);
+
+  // If crossFilterScope is 'tab', clear filters whenever the tabVariable changes
+  const tabVar = app?.tabVariable ? vars[app.tabVariable] : undefined;
+  const prevTabVar = useRef(tabVar);
+  useEffect(() => {
+    if (app?.crossFilterScope === 'tab' && prevTabVar.current !== tabVar && prevTabVar.current !== undefined) {
+      crossFilterBus.clear();
+    }
+    prevTabVar.current = tabVar;
+  }, [tabVar, app?.crossFilterScope, crossFilterBus]);
+
   const value = useMemo(() => ({ scope, mode, setVariable, runActions }), [scope, mode, setVariable, runActions]);
 
   return (
     <AppRuntimeContext.Provider value={value}>
-      {children}
+      <CrossFilterProvider bus={crossFilterBus}>
+        {children}
+      </CrossFilterProvider>
       {pending?.kind === 'confirm' && (
         <Dialog open onClose={pending.cancel} fullWidth maxWidth="xs">
           <DialogTitle>{pending.title}</DialogTitle>

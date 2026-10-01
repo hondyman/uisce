@@ -145,18 +145,111 @@ export interface BusinessObjectDataSourceConfig {
   masterFilter?: { fkField: string };
 }
 
+export type PageLayoutKind = 'tree' | 'grid';
+
+export interface GridLayoutItem {
+  /** References ComponentDefinition.id (placed widget or tile) */
+  i: string;
+  /** 0-indexed column position (12-column grid: 0 to 11) */
+  x: number;
+  /** 0-indexed row position */
+  y: number;
+  /** Width in grid units (1 to 12) */
+  w: number;
+  /** Height in row units */
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  static?: boolean;
+}
+
+export interface PageGridLayout {
+  cols: { lg: number; md: number; sm: number };
+  items: GridLayoutItem[];
+  responsive?: Partial<Record<ResponsiveBreakpoint, GridLayoutItem[]>>;
+}
+
+export interface KpiTileConfig {
+  savedQueryId?: string;
+  queryRef?: string;
+  measureAlias: string;
+  trendDimensionAlias?: string;
+  refreshInterval?: number; // In seconds, reserved for auto-refresh
+  format: {
+    type: 'currency' | 'number' | 'percentage' | 'compact';
+    precision?: number;
+    currencySymbol?: string;
+    prefix?: string;
+    suffix?: string;
+  };
+  comparison?: {
+    enabled: boolean;
+    type: 'previous_period' | 'target_literal' | 'target_variable';
+    targetValue?: number;
+    targetVarName?: string;
+    deltaFormat: 'percentage' | 'absolute';
+    invertPolarity?: boolean;
+  };
+  sparkline?: {
+    enabled: boolean;
+    type?: 'line' | 'bar' | 'area';
+  };
+  interactionConfig?: {
+    crossFilter?: {
+      enabled: boolean;
+      mode: 'emit' | 'both';
+      termNodeId: string;
+    };
+  };
+}
+
+export interface SlicerTileConfig {
+  savedQueryId?: string;
+  queryRef?: string;
+  dimensionAlias: string;
+  termNodeId: string;
+  display: 'dropdown' | 'multiSelect' | 'list' | 'dateRange';
+  maxSelections?: number;
+  defaultSelection?: {
+    source: 'static' | 'pageVar' | 'urlParam';
+    value?: string | string[];
+    varName?: string;
+  };
+  showSearch?: boolean;
+  sortBy?: 'label' | 'count' | 'custom';
+  cascadingFrom?: string[]; // IDs of other slicers whose emitted filters apply to this slicer's member query
+  paramBinding?: { varName: string }; // required when display === 'dateRange'
+  refreshInterval?: number;
+}
+
+export interface ReportParameterItem {
+  varName: string;
+  label: string;
+  type: 'string' | 'number' | 'date' | 'boolean';
+  control: 'date' | 'text' | 'select' | 'number';
+  selectOptions?: { source: 'query'; queryId: string; dimensionAlias: string } | { source: 'static'; options: { label: string; value: any }[] };
+  required?: boolean;
+  default?: any;
+}
+
+export interface ReportParameterBarConfig {
+  enabled: boolean;
+  parameters: ReportParameterItem[];
+}
+
 /**
- * The tree of layout structure (Row/Column containers), keyed by node id.
- * `root` names the entry node. This is the actual runtime/persisted shape
- * (PageStudioPage.tsx, LayoutCanvas.tsx, PageBrowser.tsx all read/write it
- * this way, and it's what the page_studio_handler.go backend round-trips
- * as-is) - it was previously mis-declared here as a bare `LayoutNode[]`,
- * which never matched any real caller and produced a long tail of
- * spurious "Property 'nodes'/'root' does not exist" type errors.
+ * The tree or grid of layout structure.
+ * When layoutKind === 'grid', `grid` specifies the 12-column dashboard layout items.
+ * When layoutKind === 'tree' (default), `root` and `nodes` define the hierarchical Row/Column structure.
  */
 export interface PageLayout {
-  root: string;
-  nodes: Record<string, LayoutNode>;
+  layoutKind?: PageLayoutKind;
+  root?: string;
+  nodes?: Record<string, LayoutNode>;
+  grid?: PageGridLayout;
+  parameterBar?: ReportParameterBarConfig;
 }
 
 /** LayoutNode.props shape when type === 'Panel'. */

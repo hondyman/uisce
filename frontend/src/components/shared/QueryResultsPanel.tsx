@@ -178,11 +178,23 @@ export default function QueryResultsPanel({
           ) : (
             <>
               <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-                <ToggleButtonGroup size="small" exclusive value={chartType} onChange={(_, v) => v && setChartType(v)}>
-                  <ToggleButton value="bar"><BarChartIcon fontSize="small" /></ToggleButton>
-                  <ToggleButton value="line"><ShowChartIcon fontSize="small" /></ToggleButton>
-                  <ToggleButton value="pie"><PieChartIcon fontSize="small" /></ToggleButton>
-                </ToggleButtonGroup>
+                <FormControl size="small" sx={{ minWidth: 150 }}>
+                  <InputLabel>Chart Type</InputLabel>
+                  <Select
+                    value={chartType}
+                    label="Chart Type"
+                    onChange={(e) => setChartType(e.target.value as SavedQueryChartType)}
+                  >
+                    <MenuItem value="bar">Bar Chart</MenuItem>
+                    <MenuItem value="stackedBar">Stacked Bar</MenuItem>
+                    <MenuItem value="line">Line Chart</MenuItem>
+                    <MenuItem value="area">Area Chart</MenuItem>
+                    <MenuItem value="pie">Pie Chart</MenuItem>
+                    <MenuItem value="donut">Donut Chart</MenuItem>
+                    <MenuItem value="scatter">Scatter Plot</MenuItem>
+                    <MenuItem value="combo">Combo (Bar + Line)</MenuItem>
+                  </Select>
+                </FormControl>
                 <FormControl size="small" sx={{ minWidth: 160 }}>
                   <InputLabel>{chartType === 'pie' ? 'Category' : 'X axis'}</InputLabel>
                   <Select value={chartDim || resultSet.columns[0]?.name || ''} label={chartType === 'pie' ? 'Category' : 'X axis'}

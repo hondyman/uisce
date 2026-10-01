@@ -3430,11 +3430,23 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 		r.Route("/saved-queries", func(r chi.Router) {
 			r.Get("/", s.SavedQueryHandler.HandleListSavedQueries)
 			r.Post("/", s.SavedQueryHandler.HandleCreateSavedQuery)
+			r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
+			r.Post("/export", s.SavedQueryHandler.HandleExportSavedQueriesBatch)
+			r.Post("/import", s.SavedQueryHandler.HandleImportSavedQueries)
 			r.Get("/duplicates", s.SavedQueryHandler.HandleGetDuplicates)
 			r.Get("/{id}", s.SavedQueryHandler.HandleGetSavedQuery)
+			r.Get("/{id}/usage", s.SavedQueryHandler.HandleGetSavedQueryUsage)
+			r.Get("/{id}/export", s.SavedQueryHandler.HandleExportSavedQuery)
 			r.Put("/{id}", s.SavedQueryHandler.HandleUpdateSavedQuery)
+			r.Patch("/{id}", s.SavedQueryHandler.HandlePatchSavedQuery)
 			r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
+			r.Get("/{id}/schema", s.SavedQueryHandler.HandleGetSavedQuerySchema)
+			r.Post("/{id}/execute", s.SavedQueryHandler.HandleExecuteSavedQuery)
 			r.Post("/{id}/clone", s.SavedQueryHandler.HandleCloneSavedQuery)
+			r.Post("/{id}/extend", s.SavedQueryHandler.HandleExtendCoreQuery)
+			r.Get("/{id}/compare", s.SavedQueryHandler.HandleCompareCoreQuery)
+			r.Post("/{id}/upgrade", s.SavedQueryHandler.HandleUpgradeCoreQuery)
+			r.Post("/{id}/revert", s.SavedQueryHandler.HandleRevertCoreQuery)
 			r.Post("/{id}/share", s.SavedQueryHandler.HandleShareQuery)
 			r.Put("/{id}/favorite", s.SavedQueryHandler.HandleSetFavorite)
 			r.Get("/{id}/preview", s.SavedQueryHandler.HandleGetPreview)
@@ -3457,6 +3469,9 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 		} else {
 			r.Post("/execute", s.QueryHandler.HandleExecuteQuery)
 		}
+		if s.SavedQueryHandler != nil {
+			r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
+		}
 		r.Post("/compile", s.QueryHandler.HandleCompileQuery)
 		r.Post("/export", s.QueryHandler.HandleExportQuery)
 		r.Get("/history", s.QueryHandler.HandleListHistory)
@@ -3466,9 +3481,13 @@ func (s *Server) registerExplorerRoutes(r chi.Router) {
 	r.Route("/saved", func(r chi.Router) {
 		r.Get("/", s.SavedQueryHandler.HandleListSavedQueries)
 		r.Post("/", s.SavedQueryHandler.HandleCreateSavedQuery)
+		r.Post("/batch-execute", s.SavedQueryHandler.HandleBatchExecuteSavedQueries)
 		r.Get("/{id}", s.SavedQueryHandler.HandleGetSavedQuery)
+		r.Get("/{id}/usage", s.SavedQueryHandler.HandleGetSavedQueryUsage)
 		r.Put("/{id}", s.SavedQueryHandler.HandleUpdateSavedQuery)
+		r.Patch("/{id}", s.SavedQueryHandler.HandlePatchSavedQuery)
 		r.Delete("/{id}", s.SavedQueryHandler.HandleDeleteSavedQuery)
+		r.Post("/{id}/execute", s.SavedQueryHandler.HandleExecuteSavedQuery)
 	})
 
 	// Natural Language Q&A endpoint

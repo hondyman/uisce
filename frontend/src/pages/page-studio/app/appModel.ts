@@ -45,23 +45,35 @@ export interface PageVariable {
   description?: string;
 }
 
-export interface PageQuery {
+export type ParamBinding =
+  | { mode: 'pageVar'; varName: string }
+  | { mode: 'selectionContext'; field?: string }
+  | { mode: 'staticLiteral'; value: string | number | boolean | string[] | number[] }
+  | { mode: 'urlParam'; paramName: string };
+
+export interface BasePageQuery {
   id: string;
-  /** Registered operation id, e.g. mastering.golden.list. */
-  operation: string;
-  params?: Record<string, Binding>;
-  /** Only run while this holds (e.g. an entity has been chosen). Absent = always. */
   enabledWhen?: ConditionNode;
-  /** Keep showing the previous result while new params load (filters, paging). Search inputs debounce themselves. */
   keepPrevious?: boolean;
-  /** Wait until the params have been still this long (live validation as a graph is edited). */
   debounceMs?: number;
-  /** Refetch every refetchMs (default 2000) while this holds (following a run until it finishes). */
   refetchWhile?: ConditionNode;
   refetchMs?: number;
-  /** Run when the query's data changes (not on its first load), with {{data}} - react to a run finishing. */
   onChange?: Action[];
 }
+
+export interface OperationPageQuery extends BasePageQuery {
+  kind?: 'operation';
+  operation: string;
+  params?: Record<string, Binding>;
+}
+
+export interface SavedPageQuery extends BasePageQuery {
+  kind: 'savedQuery';
+  savedQueryId: string;
+  paramBindings?: Record<string, ParamBinding>;
+}
+
+export type PageQuery = OperationPageQuery | SavedPageQuery;
 
 export interface PageAppModel {
   variables?: PageVariable[];
@@ -72,6 +84,8 @@ export interface PageAppModel {
   chrome?: 'default' | 'none';
   /** Content width cap and padding, like a hand-built console's container. */
   surface?: { maxWidth?: number; padding?: number };
+  /** Scope for widget cross-filtering: 'page' (persists across tabs) or 'tab' (clears on tab switch). Defaults to 'page'. */
+  crossFilterScope?: 'page' | 'tab';
 }
 
 // ---------------------------------------------------------------------------

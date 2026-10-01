@@ -1,10 +1,12 @@
-import React from 'react';
-import { Alert, Box, Chip, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import React, { useState } from 'react';
+import { Alert, Box, Button, Chip, Paper, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import type { CorePageDefinition, PageTab } from '../../../types/pageStudio';
 import { getOperation, listOperations } from '../../../studio-core/operations/registry';
 import { listDomainComponents } from '../../../studio-core/components/registry';
 import type { PageAppModel, PageQuery, PageVariable } from './appModel';
 import { BindingField, ConditionEditor, JsonField, ListEditor, Section, SelectField, SwitchField, scopePaths } from './editors';
+import QueryBuilderModal from './QueryBuilderModal';
 
 const parseDefault = (s: string): unknown => {
   if (s === '') return undefined;
@@ -23,6 +25,21 @@ export default function AppModelPanel({ draft, setDraft }: { draft: CorePageDefi
   const paths = scopePaths(draft);
   const tabs: PageTab[] = draft.tabs ?? [];
   const setTab = (id: string, patch: Partial<PageTab>) => setDraft((prev) => ({ ...prev, tabs: (prev.tabs ?? []).map((t) => (t.id === id ? { ...t, ...patch } : t)) }));
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalEditingQuery, setModalEditingQuery] = useState<PageQuery | undefined>(undefined);
+
+  const handleSaveQuery = (savedQ: PageQuery) => {
+    const existing = app.queries ?? [];
+    const index = existing.findIndex((q) => q.id === savedQ.id || (modalEditingQuery && q.id === modalEditingQuery.id));
+    let updated: PageQuery[];
+    if (index >= 0) {
+      updated = existing.map((q, idx) => (idx === index ? savedQ : q));
+    } else {
+      updated = [...existing, savedQ];
+    }
+    setApp({ queries: updated });
+  };
 
   return (
     <Box sx={{ p: 2 }}>
@@ -52,9 +69,60 @@ export default function AppModelPanel({ draft, setDraft }: { draft: CorePageDefi
       </Section>
 
       <Section title="Queries">
-        <ListEditor<PageQuery> items={app.queries ?? []} onChange={(v) => setApp({ queries: v })} addLabel="Add query"
+        <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<AutoFixHighIcon />}
+            onClick={() => {
+              setModalEditingQuery(undefined);
+              setModalOpen(true);
+            }}
+          >
+            Visual Query Studio
+          </Button>
+        </Stack>
+        <ListEditor<PageQuery> items={app.queries ?? []} onChange={(v) => setApp({ queries: v })} addLabel="Add query (Operation)"
           create={() => ({ id: `query${(app.queries?.length ?? 0) + 1}`, operation: '' })}
           render={(q, set) => {
+            if (q.kind === 'savedQuery') {
+              return (
+                <>
+                  <TextField size="small" label="Id ({{queries.<id>.data}})" value={q.id} onChange={(e) => set({ ...q, id: e.target.value.replace(/[^\w]/g, '') })} />
+                  <Paper variant="outlined" sx={{ p: 1, bgcolor: 'action.hover' }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Saved Query ID</Typography>
+                        <Typography variant="body2" fontWeight={600}>{q.savedQueryId}</Typography>
+                      </Box>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => {
+                          setModalEditingQuery(q);
+                          setModalOpen(true);
+                        }}
+                      >
+                        Edit in Studio
+                      </Button>
+                    </Stack>
+                    {q.paramBindings && Object.keys(q.paramBindings).length > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary">Bound Parameters:</Typography>
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 0.5 }}>
+                          {Object.entries(q.paramBindings).map(([pName, b]) => (
+                            <Chip key={pName} size="small" label={`${pName}: ${b.mode === 'pageVar' ? b.varName : b.mode === 'staticLiteral' ? b.value : b.mode}`} />
+                          ))}
+                        </Stack>
+                      </Box>
+                    )}
+                  </Paper>
+                  <SwitchField label="Keep previous result while filtering" checked={!!q.keepPrevious} onChange={(x) => set({ ...q, keepPrevious: x || undefined })} />
+                  <ConditionEditor label="Run only when" value={q.enabledWhen} onChange={(v) => set({ ...q, enabledWhen: v })} paths={paths} />
+                </>
+              );
+            }
+
             const op = getOperation(q.operation);
             return (
               <>
@@ -120,6 +188,19 @@ export default function AppModelPanel({ draft, setDraft }: { draft: CorePageDefi
       <Section title="Whole model (JSON)">
         <JsonField label="app" value={draft.app ?? null} minRows={6} onChange={(v) => setDraft((prev) => ({ ...prev, app: (v || undefined) as PageAppModel | undefined }))} />
       </Section>
+
+      {modalOpen && (
+        <QueryBuilderModal
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setModalEditingQuery(undefined);
+          }}
+          onSave={handleSaveQuery}
+          initialQuery={modalEditingQuery}
+          pageVariables={app.variables ?? []}
+        />
+      )}
     </Box>
   );
 }
