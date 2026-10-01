@@ -512,6 +512,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                                 tenantId={draft.tenantId || 'default'}
                                 selectedId={selectedId}
                                 onSelect={setSelectedId}
+                                app={draft.app}
                             />
                         </Box>
                         <LayoutCanvas
@@ -524,6 +525,7 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
                             tenantId={draft.tenantId || 'default'}
                             selectedId={selectedId}
                             onSelect={setSelectedId}
+                            app={draft.app}
                         />
                         </PageBody>
                     </PageArtboard>
