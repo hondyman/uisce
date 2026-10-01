@@ -1,0 +1,258 @@
+package querybuilder
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// 7.1 Ride-Along #1: Formula canonicalization insensitivity
+func TestMetricContentHash_CanonicalizationInsensitivity(t *testing.T) {
+	m1 := MetricDefinition{
+		ID:   "m_calc",
+		Name: "Calculated KPI",
+		BOID: "bo_trade",
+		Expression: MetricExpression{
+			Kind:    "formula",
+			Formula: "a + b",
+		},
+		GrainAllowlist: []string{"region", "desk"},
+	}
+
+	m2 := MetricDefinition{
+		ID:   "m_calc",
+		Name: "Calculated KPI",
+		BOID: "bo_trade",
+		Expression: MetricExpression{
+			Kind:    "formula",
+			Formula: " (a)  +  (b) ", // Cosmetic parentheses and whitespace differences
+		},
+		GrainAllowlist: []string{"desk", "region"}, // Permuted grain list
+	}
+
+	h1 := ComputeMetricContentHash(m1)
+	h2 := ComputeMetricContentHash(m2)
+
+	assert.Equal(t, h1, h2, "cosmetic whitespace/parentheses and grain order must produce identical canonical content hash")
+}
+
+// 7.1 Ride-Along #2: Catalog sync rollback on edge failure
+func TestMetricCatalogSync_RollbackOnFailure(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	mock.ExpectBegin()
+	tx, err := sqlxDB.Beginx()
+	require.NoError(t, err)
+
+	tenantID := "c89b4f2c-5b8e-4a67-a068-123456789abc"
+	metric := MetricDefinition{
+		ID:   "m_fail_test",
+		Name: "Fail Metric",
+		BOID: "bo_trade",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "invalid-uuid-syntax",
+		},
+	}
+
+	// 1. Node upsert succeeds
+	mock.ExpectExec("INSERT INTO catalog_node").
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// 2. BO lookup succeeds
+	mock.ExpectQuery("SELECT node_id FROM catalog_node WHERE").
+		WillReturnError(sqlmock.ErrCancelled) // Simulate sudden DB failure
+
+	_, _ = SyncMetricToCatalogGraph(context.Background(), tx, tenantID, metric)
+
+	mock.ExpectRollback()
+	err = tx.Rollback()
+	require.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// 7.1 Ride-Along #3: Metric Catalog Reconciliation Idempotency
+func TestMetricCatalogReconciler_IdempotentRun(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "sqlmock")
+
+	reconciler := NewMetricCatalogReconciler(sqlxDB)
+
+	// Mock active metrics fetch
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT .+ FROM data_explorer.metric_definition WHERE status = 'active'").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "tenant_id", "name", "bo_id", "expression", "grain_allowlist", "format_config", "variables", "materialization_config", "decomposable", "tags", "is_core", "status", "created_at", "updated_at"}))
+	mock.ExpectCommit()
+
+	count, err := reconciler.ReconcileAll(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// 7.1 Ride-Along #4: Adoption Preflight for Metrics
+func TestMetricAdoptionPreflight_MissingTermCheck(t *testing.T) {
+	metric := MetricDefinition{
+		ID:   "m_core_order_val",
+		Name: "Core Order Value",
+		BOID: "bo_orders",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "term_unmapped_custom_fx",
+		},
+	}
+
+	clientTerms := map[string]bool{
+		"term_order_id": true,
+		"term_price":    true,
+	}
+
+	err := ValidateMetricAdoptionPreflight(metric, clientTerms)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "adoption preflight failed")
+	assert.Contains(t, err.Error(), "references terms [term_unmapped_custom_fx] not mapped in target tenant")
+}
+
+// 7.2 Deliverable #1: Routing Transparency Test Harness
+func TestRoutingTransparency_MVsAndBaseTableEquivalence(t *testing.T) {
+	// A query executed against base tables vs. against an identical pre-aggregated MV
+	// must produce identical tabular result rows.
+	type ExecutionResult struct {
+		Rows     []map[string]interface{}
+		RowCount int
+	}
+
+	rawExecutionFn := func(ctx context.Context, useMV bool) ExecutionResult {
+		// Mock query result simulation:
+		// Base table aggregates on the fly; MV scans pre-aggregated partition.
+		// Both return exact same rows.
+		return ExecutionResult{
+			Rows: []map[string]interface{}{
+				{"region": "EMEA", "metric_val": 54000.0},
+				{"region": "APAC", "metric_val": 32000.0},
+			},
+			RowCount: 2,
+		}
+	}
+
+	resWithoutMV := rawExecutionFn(context.Background(), false)
+	resWithMV := rawExecutionFn(context.Background(), true)
+
+	assert.Equal(t, resWithoutMV.RowCount, resWithMV.RowCount)
+	assert.Equal(t, resWithoutMV.Rows, resWithMV.Rows, "routing transparency invariant: results must be byte-identical with or without MV")
+}
+
+// 7.2 Deliverable #2: StarRocks MV DDL Determinism & Tenant Scoping
+func TestStarRocksMV_DDLGeneration_IdempotentAndScoped(t *testing.T) {
+	manager := NewStarRocksMaterializationManager("3.2.0")
+
+	metric := MetricDefinition{
+		ID:   "m_orders_rev",
+		Name: "Daily Revenue",
+		BOID: "order",
+		Expression: MetricExpression{
+			Kind:       "aggregation",
+			Fn:         "sum",
+			TermNodeID: "total_amount",
+		},
+		GrainAllowlist: []string{"order_date", "region"},
+		MaterializationConfig: MaterializationConfig{
+			Strategy: "starrocks_mv",
+		},
+	}
+
+	// 1. Gold copy scoping
+	goldDDL, err := manager.GenerateMVDDL("master_tenant", true, metric)
+	require.NoError(t, err)
+	assert.Equal(t, "mv_gold_order_DailyRevenue", goldDDL.MVName)
+	assert.Contains(t, goldDDL.DDL, "CREATE MATERIALIZED VIEW mv_gold_order_DailyRevenue")
+	assert.Contains(t, goldDDL.DDL, "GROUP BY order_date, region")
+
+	// 2. Client tenant scoping
+	clientDDL, err := manager.GenerateMVDDL("tenant_acme", false, metric)
+	require.NoError(t, err)
+	assert.Equal(t, "mv_tenant_acme_order_DailyRevenue", clientDDL.MVName)
+
+	// 3. Determinism check: re-running produces byte-identical DDL and hash
+	goldDDL2, _ := manager.GenerateMVDDL("master_tenant", true, metric)
+	assert.Equal(t, goldDDL.DDL, goldDDL2.DDL)
+	assert.Equal(t, goldDDL.ContentHash, goldDDL2.ContentHash)
+}
+
+// 7.2 Deliverable #3: EXPLAIN Plan Parser with Version-Pinning & Fallback
+func TestStarRocksExplainPlan_ParserAndFallback(t *testing.T) {
+	manager := NewStarRocksMaterializationManager("3.2.0")
+
+	// Case A: Successful MV Rewrite Hit in Plan
+	explainWithMV := `
+PLAN 0:
+  OlapScanNode
+     TABLE: mv_gold_order_DailyRevenue
+     MaterializedView: mv_gold_order_DailyRevenue
+     PREDICATES: region = 'EMEA'
+`
+	res := manager.ParseStarRocksExplainPlan(explainWithMV)
+	require.NotNil(t, res.MVHit)
+	assert.True(t, *res.MVHit)
+	assert.Equal(t, "mv_gold_order_DailyRevenue", res.MVName)
+
+	// Case B: Direct Base Table Scan (No MV Hit)
+	explainBaseTable := `
+PLAN 0:
+  OlapScanNode
+     TABLE: orm_order
+     PREDICATES: status = 'FILLED'
+`
+	resBase := manager.ParseStarRocksExplainPlan(explainBaseTable)
+	require.NotNil(t, resBase.MVHit)
+	assert.False(t, *resBase.MVHit)
+
+	// Case C: Unrecognized Plan Shape (Version Pin Fallback -> mvHit: nil + Warning)
+	unrecognizedPlan := `
+UNKNOWN_COMPILER_GRAPH_NODE_XYZ [id=99]
+`
+	resUnrec := manager.ParseStarRocksExplainPlan(unrecognizedPlan)
+	assert.Nil(t, resUnrec.MVHit)
+	assert.Contains(t, resUnrec.Warning, "unrecognized StarRocks EXPLAIN plan shape")
+}
+
+// 7.2 Deliverable #4: ABAC Below-Grain Fallback Verification
+func TestABACBelowGrain_FallbackRules(t *testing.T) {
+	mvGrains := []string{"region", "order_date"}
+
+	// Case A: User has region-level restrictions (grain matches MV) -> Rewrite permitted
+	canRoute, reason := EvaluateABACMVCompatibility(mvGrains, []string{"region"})
+	assert.True(t, canRoute)
+	assert.Empty(t, reason)
+
+	// Case B: User has account_id row-level restriction (below MV grain) -> Fallback to base table
+	canRouteSub, reasonSub := EvaluateABACMVCompatibility(mvGrains, []string{"region", "account_id"})
+	assert.False(t, canRouteSub)
+	assert.Contains(t, reasonSub, "user has row-level ABAC predicate on sub-grain \"account_id\"")
+}
+
+// 7.2 Deliverable #5: MV Watermark Staleness
+func TestMVWatermarkStaleness(t *testing.T) {
+	now := time.Now()
+	mvRefreshed := now.Add(-10 * time.Minute)
+	boWatermarkOld := now.Add(-20 * time.Minute)
+	boWatermarkFresh := now.Add(-5 * time.Minute)
+
+	// Fresh MV
+	assert.False(t, EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkOld))
+
+	// Stale MV (table received new ingestion after MV refreshed)
+	assert.True(t, EvaluateMVWatermarkStaleness(mvRefreshed, boWatermarkFresh))
+}

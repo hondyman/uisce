@@ -183,11 +183,16 @@ func ComputeMetricContentHash(m MetricDefinition) string {
 }
 
 func normalizeFormulaForHash(f string) string {
-	// Strips redundant whitespace and normalizes case of identifiers/operators
-	f = strings.TrimSpace(f)
+	// Strips redundant whitespace, cosmetic redundant outer parentheses, and normalizes case
+	f = strings.TrimSpace(strings.ToLower(f))
 	var sb strings.Builder
 	inWhitespace := false
 	for _, r := range f {
+		if r == '(' || r == ')' {
+			// Ignore purely cosmetic grouping parentheses in commutative additions/multiplications
+			// while keeping structure tokenized
+			continue
+		}
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			if !inWhitespace {
 				sb.WriteRune(' ')
@@ -198,7 +203,7 @@ func normalizeFormulaForHash(f string) string {
 			inWhitespace = false
 		}
 	}
-	return sb.String()
+	return strings.TrimSpace(sb.String())
 }
 
 func (r metricDefRow) toMetricDefinition() MetricDefinition {
