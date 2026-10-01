@@ -249,4 +249,16 @@ export const PageStudioApi = {
       headers: { 'Content-Type': 'application/json' },
     });
   },
+
+  // -- Fragments -------------------------------------------------------------------------
+
+  /** One immutable version of a fragment: its content (widgets, nodes, variables, queries, uses). */
+  getFragmentVersion: async (slug: string, version: number): Promise<{ slug: string; version: number; name: string; contentHash: string; content: Record<string, unknown> }> => {
+    return apiClient(`${PAGE_STUDIO_BASE}/fragments/${encodeURIComponent(slug)}/versions/${version}`);
+  },
+
+  /** The latest version of each fragment the tenant can see (no history). */
+  listFragments: async (): Promise<{ slug: string; version: number; name: string; description: string; isCore: boolean }[]> => {
+    return apiClient(`${PAGE_STUDIO_BASE}/fragments`);
+  },
 };
