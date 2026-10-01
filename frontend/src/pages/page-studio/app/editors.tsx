@@ -8,11 +8,11 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import type { CorePageDefinition } from '../../../types/pageStudio';
 import { getOperation, listOperations } from '../../../studio-core/operations/registry';
-import type { Action, ConditionNode, FormSpec, TextSpec } from './appModel';
+import type { Action, ConditionNode, TextSpec } from './appModel';
 import { BindingPicker } from './bindingPicker';
 import { ConditionBuilder } from './conditionBuilder';
-
-type RunOperation = Extract<Action, { kind: 'runOperation' }>;
+import { ConfirmEditor, FormSpecEditor } from './actionExtras';
+import { TextKeyParamsEditor } from './structuredEditors';
 
 /**
  * The editors every app-model surface shares: bindings with scope
@@ -80,9 +80,16 @@ export function BindingField({ label, value, onChange, paths, helperText, multil
 /** Display text: a literal, an i18n key, or a template. */
 export function TextSpecField({ label, value, onChange, paths }: { label: string; value: TextSpec | undefined; onChange: (v: TextSpec) => void; paths: string[] }) {
   if (value && typeof value === 'object') {
-    return <JsonField label={`${label} (i18n key + params)`} value={value} onChange={(v) => onChange(v as TextSpec)} />;
+    return <TextKeyParamsEditor label={label} value={value as { t: string; params?: Record<string, unknown> }} onChange={onChange} paths={paths} />;
   }
-  return <BindingField label={label} value={value} onChange={(v) => onChange(String(v ?? ''))} paths={paths} helperText="Text, an i18n key (mastering.title) or {{template}}" />;
+  const key = typeof value === 'string' && /^[a-z][A-Za-z0-9_]*(\.[A-Za-z0-9_]+)+$/.test(value);
+  return (
+    <>
+      <BindingField label={label} value={value} onChange={(v) => onChange(String(v ?? ''))} paths={paths} helperText="Text, an i18n key (mastering.title) or {{template}}" />
+      {/* A key that needs values filled in (a count, a name) becomes {t, params}. */}
+      {key && <Button size="small" sx={{ alignSelf: 'flex-start', mt: -0.5 }} onClick={() => onChange({ t: value as string, params: {} })}>Fill in values</Button>}
+    </>
+  );
 }
 
 /** Raw JSON editing for anything the structured editors do not cover yet. Commits on valid JSON. */
@@ -215,8 +222,8 @@ function ActionEditor({ a, onChange, draft, paths }: { a: Action; onChange: (a: 
       <TextSpecField label="Success message" value={a.successMessage} onChange={(v) => onChange({ ...a, successMessage: v || undefined })} paths={[...paths, 'result.message']} />
       <SelectField label="Progress into variable (optional)" value={a.progressVariable} allowEmpty="None"
         options={(draft.app?.variables ?? []).map((v) => ({ value: v.name, label: v.name }))} onChange={(v) => onChange({ ...a, progressVariable: v || undefined })} />
-      <JsonField label="Ask first: form (optional)" value={a.form ?? null} minRows={2} onChange={(v) => onChange({ ...a, form: (v || undefined) as FormSpec | undefined })} />
-      <JsonField label="Ask first: confirm (optional)" value={a.confirm ?? null} minRows={2} onChange={(v) => onChange({ ...a, confirm: (v || undefined) as RunOperation['confirm'] })} />
+      <ConfirmEditor value={a.confirm} onChange={(v) => onChange({ ...a, confirm: v })} paths={paths} />
+      <FormSpecEditor value={a.form} onChange={(v) => onChange({ ...a, form: v })} draft={draft} paths={paths} />
       <Divider textAlign="left"><Typography variant="caption">Then</Typography></Divider>
       <ActionsEditor label="On success" value={a.onSuccess} onChange={(v) => onChange({ ...a, onSuccess: v })} draft={draft} paths={[...paths, 'result']} />
     </>
