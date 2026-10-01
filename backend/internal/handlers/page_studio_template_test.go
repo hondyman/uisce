@@ -33,7 +33,7 @@ func TestTemplateDistribution_CoreRebind(t *testing.T) {
 	goldCoreQueryID := "gold-kpi-query-99"
 
 	// Template bundle distributed across environments
-	templateBundle := PageBundle{
+	templateBundle := PageExportBundle{
 		SchemaVersion: PageBundleSchemaVersion,
 		ExportedAt:    time.Now().UTC(),
 		SourceEnvironment: PageSourceEnvironment{
