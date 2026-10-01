@@ -96,6 +96,7 @@ func (h *PageStudioHandler) registerFragmentRoutes(r chi.Router) {
 		r.Get("/", h.listFragments)
 		r.Post("/", h.publishFragment)
 		r.Get("/{slug}/versions/{version}", h.getFragmentVersion)
+		r.Get("/{slug}/usage", h.fragmentUsage)
 	})
 }
 
@@ -242,4 +243,45 @@ func (h *PageStudioHandler) publishFragment(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusCreated, f)
+}
+
+// fragmentUse is one place that references a fragment.
+type fragmentUse struct {
+	Kind    string `db:"kind" json:"kind"` // "page" or "fragment"
+	Slug    string `db:"slug" json:"slug"`
+	Name    string `db:"name" json:"name"`
+	Version int    `db:"version" json:"version"` // the fragment version it pins
+}
+
+// fragmentUsage finds what references a fragment, at any version, among the
+// pages (app.fragments) and fragments (content.uses) the caller can see. It
+// is what makes "can I change or switch off this fragment?" answerable.
+func (h *PageStudioHandler) fragmentUsage(w http.ResponseWriter, r *http.Request) {
+	if _, ok := mustTenantID(r); !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+	uses, err := h.usesOfFragment(r.Context(), chi.URLParam(r, "slug"))
+	if err != nil {
+		http.Error(w, "failed to scan usage: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, http.StatusOK, uses)
+}
+
+func (h *PageStudioHandler) usesOfFragment(ctx context.Context, slug string) ([]fragmentUse, error) {
+	var uses []fragmentUse
+	err := h.db.SelectContext(ctx, &uses, `
+		SELECT 'page' AS kind, p.slug, p.name, (ref->>'version')::int AS version
+		  FROM page_definitions p, jsonb_array_elements(COALESCE(p.app_model->'fragments', '[]'::jsonb)) ref
+		 WHERE ref->>'fragment' = $1
+		UNION ALL
+		SELECT 'fragment', f.slug, f.name, (ref->>'version')::int
+		  FROM page_fragments f, jsonb_array_elements(COALESCE(f.content->'uses', '[]'::jsonb)) ref
+		 WHERE ref->>'fragment' = $1
+		ORDER BY 1, 2`, slug)
+	if uses == nil {
+		uses = []fragmentUse{}
+	}
+	return uses, err
 }

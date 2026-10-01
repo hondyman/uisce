@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -115,5 +116,19 @@ func TestPublishFragment_UsesMustExistAndNotNestDeeper(t *testing.T) {
 	mock.ExpectQuery(`FROM page_fragments WHERE slug`).WillReturnRows(fragRow("mid", 1, `{"uses":[{"fragment":"leaf","version":1}]}`, "h"))
 	if w := publish(h, false, `{"slug":"top","name":"x","content":{"uses":[{"fragment":"mid","version":1}]}}`); w.Code != http.StatusUnprocessableEntity {
 		t.Errorf("too deep: status %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestFragmentUsage_ListsPagesAndFragmentsThatPinIt(t *testing.T) {
+	h, mock := newFragHandler(t)
+	mock.ExpectQuery(`jsonb_array_elements`).WithArgs("orders-list").
+		WillReturnRows(sqlmock.NewRows([]string{"kind", "slug", "name", "version"}).AddRow("page", "orders", "Orders", 2).AddRow("fragment", "dash", "Dash", 1))
+	uses, err := h.usesOfFragment(context.Background(), "orders-list")
+	if err != nil || len(uses) != 2 || uses[0].Kind != "page" || uses[1].Version != 1 {
+		t.Fatalf("got %+v, %v", uses, err)
+	}
+	mock.ExpectQuery(`jsonb_array_elements`).WillReturnRows(sqlmock.NewRows([]string{"kind", "slug", "name", "version"}))
+	if none, _ := h.usesOfFragment(context.Background(), "x"); none == nil || len(none) != 0 {
+		t.Fatalf("an unused fragment should list as empty, got %#v", none)
 	}
 }

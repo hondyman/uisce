@@ -72,6 +72,8 @@ export interface PageAppModel {
   chrome?: 'default' | 'none';
   /** Content width cap and padding, like a hand-built console's container. */
   surface?: { maxWidth?: number; padding?: number };
+  /** Fragments this page is built from, by slug and exact version (see fragmentRefs.ts). */
+  fragments?: { fragment: string; version: number }[];
 }
 
 // ---------------------------------------------------------------------------
