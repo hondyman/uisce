@@ -133,3 +133,10 @@ func MalformedJSON() *Error { return New(SetSystem, 13) }
 func NotPermitted(what string) *Error {
 	return New(SetSystem, 10, what).WithStatus(http.StatusForbidden)
 }
+
+// DatasourceNotAvailable: the selected datasource does not exist or is not
+// one the caller's tenant may use. The caller is authenticated; the scope
+// they asked for is what is wrong.
+func DatasourceNotAvailable() *Error {
+	return New(SetSystem, 16).WithStatus(http.StatusForbidden)
+}
