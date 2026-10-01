@@ -17,6 +17,7 @@ import (
 
 	"github.com/hondyman/uisce/backend/internal/boresolver"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/hondyman/uisce/backend/internal/security"
 )
 
@@ -913,6 +914,16 @@ func (h *validationRulesHandler) handleSimulateValidationRuleWithInstance() http
 
 type sqlDBBORepository struct {
 	db *sql.DB
+}
+
+// GetCalcTermExpressions satisfies boresolver.BORepository. This repository
+// serves the validation-rules path and does not resolve calculated terms, so it
+// returns none. That fails closed: a business object that references a
+// calculated term through this repository gets the generator's "no preloaded
+// calc term config" error instead of silently wrong SQL. Business objects with
+// no calculated fields never reach this call.
+func (s *sqlDBBORepository) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	return nil, nil
 }
 
 func (s *sqlDBBORepository) GetBODefinition(boID string) (*boresolver.BODefinition, error) {

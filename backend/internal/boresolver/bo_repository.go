@@ -2,11 +2,13 @@ package boresolver
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/hondyman/uisce/backend/internal/bo"
+	"github.com/hondyman/uisce/backend/internal/rules/vm"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -134,12 +136,14 @@ func NewPostgresBORepository(db *sqlx.DB) *PostgresBORepository {
 // this environment - bo_fields is an orphaned table from an earlier BO
 // metadata system and is kept below only as a legacy fallback).
 type semanticField struct {
-	ID            string `db:"id"`
-	FieldName     string `db:"field_name"`
-	TechnicalName string `db:"technical_name"`
-	DisplayName   string `db:"display_name"`
-	DataType      string `db:"data_type"`
-	TermNodeID    string `db:"term_node_id"`
+	ID              string `db:"id"`
+	FieldName       string `db:"field_name"`
+	TechnicalName   string `db:"technical_name"`
+	DisplayName     string `db:"display_name"`
+	DataType        string `db:"data_type"`
+	TermNodeID      string `db:"term_node_id"`
+	TermType        string `db:"term_type"`
+	SensitivityTag  string `db:"sensitivity_tag"`
 }
 
 // resolveCatalogPhysicalColumn looks up a physical column for fieldName
@@ -278,13 +282,16 @@ func (r *PostgresBORepository) GetBODefinition(boID string) (*BODefinition, erro
 func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*BODefinition, error) {
 	var fields []semanticField
 	err := r.DB.Select(&fields, `
-		SELECT id, field_name, COALESCE(technical_name, '') AS technical_name,
-		       COALESCE(display_name, field_name) AS display_name,
-		       COALESCE(data_type, '') AS data_type,
-		       term_node_id::text
-		FROM public.business_object_fields
-		WHERE bo_id = $1::uuid
-		ORDER BY display_order, field_name
+		SELECT f.id, f.field_name, COALESCE(f.technical_name, '') AS technical_name,
+		       COALESCE(f.display_name, f.field_name) AS display_name,
+		       COALESCE(f.data_type, '') AS data_type,
+		       f.term_node_id::text,
+		       COALESCE(cn.properties->>'term_type', '') AS term_type,
+		       COALESCE(cn.properties->>'sensitivity_tag', '') AS sensitivity_tag
+		FROM public.business_object_fields f
+		LEFT JOIN catalog_node cn ON cn.id::text = f.term_node_id::text
+		WHERE f.bo_id = $1::uuid
+		ORDER BY f.display_order, f.field_name
 	`, boID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch business_object_fields: %w", err)
@@ -320,13 +327,15 @@ func (r *PostgresBORepository) getBODefinitionFromSemanticFields(boID string) (*
 	for _, f := range fields {
 		physicalColumn, _ := r.resolveCatalogPhysicalColumn(f.ID, drivingTable, f.FieldName, f.TechnicalName)
 		def.Fields = append(def.Fields, BOField{
-			ID:             f.ID,
-			Name:           f.FieldName,
-			DisplayName:    f.DisplayName,
+			ID:              f.ID,
+			Name:            f.FieldName,
+			DisplayName:     f.DisplayName,
 			Path:           f.FieldName,
-			SemanticTermID: f.TermNodeID,
-			PhysicalColumn: physicalColumn,
-			Type:           f.DataType,
+			SemanticTermID:  f.TermNodeID,
+			PhysicalColumn:  physicalColumn,
+			Type:            f.DataType,
+			TermType:        f.TermType,
+			SensitivityTag:  f.SensitivityTag,
 		})
 	}
 
@@ -637,4 +646,48 @@ func (r *PostgresBORepository) GetBOByTechnicalName(technicalName, tenantID, dat
 
 	// Then get the full definition
 	return r.GetBODefinition(boID)
+}
+
+// GetCalcTermExpressions batch-fetches vm.Expression ASTs for the given
+// catalog node IDs. Each node's config column stores CalcTermConfig JSON
+// with a rule_ast field containing the vm.Expression-shaped AST.
+func (r *PostgresBORepository) GetCalcTermExpressions(nodeIDs []string) (map[string]*vm.Expression, error) {
+	if len(nodeIDs) == 0 {
+		return nil, nil
+	}
+
+	rows, err := r.DB.Query(`
+		SELECT id::text, config FROM catalog_node
+		WHERE id::text = ANY($1)
+	`, nodeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("query calc term expressions: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]*vm.Expression, len(nodeIDs))
+	for rows.Next() {
+		var nodeID string
+		var configJSON []byte
+		if err := rows.Scan(&nodeID, &configJSON); err != nil {
+			return nil, fmt.Errorf("scan calc term expression: %w", err)
+		}
+
+		var config struct {
+			RuleAST json.RawMessage `json:"rule_ast"`
+		}
+		if err := json.Unmarshal(configJSON, &config); err != nil {
+			return nil, fmt.Errorf("unmarshal calc term config node %s: %w", nodeID, err)
+		}
+		if config.RuleAST == nil {
+			continue
+		}
+
+		var expr vm.Expression
+		if err := json.Unmarshal(config.RuleAST, &expr); err != nil {
+			return nil, fmt.Errorf("parse calc term AST node %s: %w", nodeID, err)
+		}
+		result[nodeID] = &expr
+	}
+	return result, rows.Err()
 }
