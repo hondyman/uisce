@@ -58,3 +58,23 @@ describe('page checker finds what would break a page', () => {
     expect(issues.find((i) => i.code === 'cannot-close')!.message).toMatch(/"stuck"/);
   });
 });
+
+describe('page checker and conditions', () => {
+  const page = (when: unknown) => ({
+    layout: { root: 'root', nodes: { root: { id: 'root', type: 'Column', children: ['t'] } } },
+    components: { t: { id: 't', type: 'TextBlock', visibleWhen: when, props: { text: 'x' } } },
+    app: { variables: [{ name: 'a' }] },
+  }) as never;
+  const bad = (when: unknown) => checkPage(page(when)).filter((i) => i.code === 'bad-condition').map((i) => `${i.severity}: ${i.message}`);
+
+  it('blocks a condition the engine cannot run or that is half built', () => {
+    expect(bad({ type: 'condition', field: 'vars.a', operator: 'sounds_like', value: 'x' })).toEqual(['error: The rule engine has no operator "sounds_like".']);
+    expect(bad({ type: 'condition', field: 'vars.a', operator: 'equals' })).toEqual(['error: "equals" needs a value.']);
+    expect(bad({ type: 'group', operator: 'OR', conditions: [{ type: 'condition', field: '', operator: 'is_true' }] })).toEqual(['error: Choose what to check.']);
+  });
+  it('passes complete conditions, including 0 and false as values', () => {
+    expect(bad({ type: 'condition', field: 'vars.a', operator: 'equals', value: 0 })).toEqual([]);
+    expect(bad({ type: 'condition', field: 'vars.a', operator: 'equals', value: false })).toEqual([]);
+    expect(bad({ type: 'condition', field: 'vars.a', operator: 'is_not_null' })).toEqual([]);
+  });
+});

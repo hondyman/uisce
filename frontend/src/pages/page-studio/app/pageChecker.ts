@@ -2,6 +2,7 @@ import i18n from '../../../i18n';
 import type { CorePageDefinition, PageLayout } from '../../../types/pageStudio';
 import { getOperation } from '../../../studio-core/operations/registry';
 import { getDomainComponent } from '../../../studio-core/components/registry';
+import { shapeProblems } from './conditionOps';
 
 /**
  * The page checker: finds what would break a page before anyone uses it -
@@ -96,7 +97,11 @@ export function checkPage(page: Pick<CorePageDefinition, 'components' | 'layout'
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const o = value as Record<string, unknown>;
     // Conditions read paths too.
-    if (o.type === 'condition' && typeof o.field === 'string') checkRef(o.field, where, componentId);
+    if (o.type === 'condition' && typeof o.field === 'string') {
+      checkRef(o.field, where, componentId);
+      // The same rules the condition builder shows: a field, an operator the engine has, the value it takes.
+      for (const p of shapeProblems(o as unknown as Parameters<typeof shapeProblems>[0])) add(p.severity, 'bad-condition', p.message, where, componentId);
+    }
     // Actions.
     if (o.kind === 'setVariable' && typeof o.name === 'string' && !variables.has(o.name)) {
       add('error', 'unknown-variable', `An action sets "${o.name}", which is not a declared variable.`, where, componentId);
