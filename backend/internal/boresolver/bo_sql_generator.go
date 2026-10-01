@@ -1245,6 +1245,11 @@ func (g *BOSQLGenerator) resolveCalcTermToSQL(expr *vm.Expression, alias string,
 		return col, nil
 	}
 
-	sql, err := vm.CompileToSQL(expr, aliasedResolver)
+	// CompileExpressionToSQL (not CompileToSQL): a calc term stores a bare
+	// vm.Expression and wants an inline SQL value expression. CompileToSQL is the
+	// parameterized rule-AST predicate compiler (RuleNode + ParamBinder). The
+	// formula comes from catalog data, not request input, and this is the same
+	// compiler GenerateDDL uses for calculated terms.
+	sql, err := vm.CompileExpressionToSQL(expr, aliasedResolver)
 	return sql, err
 }
