@@ -131,6 +131,17 @@ export const GridLayoutRenderer: React.FC<GridLayoutRendererProps> = ({
           width: '100%',
           minHeight: 400,
           p: 1,
+          '@media print': {
+            display: 'grid',
+            gridTemplateColumns: 'repeat(12, 1fr)',
+            gap: '12px',
+            p: 0,
+            colorScheme: 'light',
+            '& *': {
+              boxShadow: 'none !important',
+              breakInside: 'avoid',
+            },
+          },
         }}
       >
         {layout.items.map((item) => {
