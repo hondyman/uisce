@@ -13,6 +13,7 @@ const run = async () => ({});
 beforeAll(() => registerOperations([
   { id: 'gen.list', domain: 'gen', label: 'List', kind: 'query', params: [], run, rowsPath: 'rows', rowFields },
   { id: 'gen.flat', domain: 'gen', label: 'Flat', kind: 'query', params: [], run, fields: rowFields },
+  { id: 'gen.envelope', domain: 'gen', label: 'Envelope', kind: 'query', params: [], run, rowsPath: 'rows', fields: [{ name: 'rows', type: 'array' }, { name: 'id' }] },
   { id: 'gen.bare', domain: 'gen', label: 'Bare', kind: 'query', params: [], run },
   { id: 'gen.create', domain: 'gen', label: 'Create', kind: 'mutation', params: [], run },
   { id: 'gen.update', domain: 'gen', label: 'Update', kind: 'mutation', params: [{ name: 'id', type: 'string', required: true }], run },
@@ -73,6 +74,8 @@ describe('generateFromOperations', () => {
     expect(() => generateFromOperations({ ...full, list: 'gen.create' })).toThrow(/must be a query/);
     expect(() => generateFromOperations({ ...full, create: 'gen.list' })).toThrow(/must be a mutation/);
     expect(() => generateFromOperations({ ...full, list: 'gen.bare' })).toThrow(/does not say what its rows carry/);
+    // An envelope's `fields` describe the envelope, never its rows.
+    expect(() => generateFromOperations({ ...full, list: 'gen.envelope' })).toThrow(/does not say what its rows carry/);
     expect(() => generateFromOperations({ ...full, keyField: 'uuid' })).toThrow(/identifies a row/);
     expect(() => generateFromOperations({ ...full, id: 'a b' })).toThrow(GenerateError);
   });

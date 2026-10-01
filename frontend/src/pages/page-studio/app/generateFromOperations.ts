@@ -70,7 +70,8 @@ export function generateFromOperations(spec: GenerateSpec): PageFragment {
   const update = spec.update ? need(spec.update, 'mutation', 'update') : undefined;
   const remove = spec.remove ? need(spec.remove, 'mutation', 'delete') : undefined;
   const keyField = spec.keyField ?? 'id';
-  const fields = (list.rowsPath ? list.rowFields : list.rowFields ?? list.fields) ?? list.fields ?? [];
+  // An envelope result's `fields` describe the envelope, so rows come from rowFields; a flat list may use fields.
+  const fields = list.rowsPath ? list.rowFields ?? [] : list.rowFields ?? list.fields ?? [];
   const shown = fields.filter((f) => !(spec.hide ?? []).includes(f.name));
   if (!shown.length) throw new GenerateError(`"${spec.list}" does not say what its rows carry (rowFields or fields), so there is nothing to show.`);
   if (!fields.some((f) => f.name === keyField)) throw new GenerateError(`Its rows have no "${keyField}" field; say which field identifies a row (keyField).`);
