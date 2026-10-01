@@ -39,3 +39,45 @@ describe('resolveFragments', () => {
     expect(dup.problems.join()).toMatch(/widget "aW" is already defined/);
   });
 });
+
+import { withFragments } from '../../pages/page-studio/app/fragmentRefs';
+import { checkPage } from '../../pages/page-studio/app/pageChecker';
+
+describe('withFragments', () => {
+  const page = () => ({
+    components: { own: { id: 'own', type: 'TextBlock', props: { text: 'hi' } } },
+    layout: { root: 'top', nodes: { top: { id: 'top', type: 'Column', children: ['own', 'aRoot'] } } },
+    tabs: [] as { layout?: { root?: string; nodes?: Record<string, unknown> } }[],
+    app: { variables: [{ name: 'mine' }], queries: [] as { id: string }[], fragments: [{ fragment: 'a', version: 1 }] },
+  });
+  const { fragment } = resolveFragments([{ fragment: 'a', version: 1 }], store(['a', 1, frag('a')]));
+
+  it('makes the fragment part of the page for the runtime and the checker, without changing the page', () => {
+    const p = page();
+    const before = JSON.stringify(p);
+    const merged = withFragments(p, fragment);
+    expect(merged.problems).toEqual([]);
+    expect(Object.keys(merged.page.components!).sort()).toEqual(['aW', 'own']);
+    expect(Object.keys(merged.page.layout!.nodes!).sort()).toEqual(['aRoot', 'top']);
+    expect(merged.page.app!.variables!.map((v) => v.name)).toEqual(['mine', 'aV']);
+    expect(merged.page.app!.queries!.map((q) => q.id)).toEqual(['aQ']);
+    expect(JSON.stringify(p)).toBe(before); // saving the page never writes fragment content into it
+  });
+
+  it('turns a "layout node does not exist" error into a clean page once the fragment is applied', () => {
+    const p = page();
+    expect(checkPage(p as never).some((i) => i.code === 'missing-node')).toBe(true);
+    const merged = withFragments(p, fragment).page;
+    expect(checkPage(merged as never).filter((i) => i.code === 'missing-node')).toEqual([]);
+  });
+
+  it('is available to every tab, and names what the page already uses instead of replacing it', () => {
+    const p = page();
+    p.tabs = [{ layout: { root: 't', nodes: { t: { id: 't', type: 'Column', children: [] } } } }];
+    p.components = { ...p.components, aW: { id: 'aW', type: 'TextBlock', props: {} } } as never;
+    const merged = withFragments(p, fragment);
+    expect(Object.keys(merged.page.tabs![0].layout!.nodes!)).toContain('aRoot');
+    expect(merged.problems.join()).toMatch(/already has a widget "aW"/);
+    expect((merged.page.components as Record<string, { props: unknown }>).aW.props).toEqual({}); // the page's own, kept
+  });
+});
