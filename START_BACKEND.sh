@@ -63,6 +63,13 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     export JWT_SECRET
     export API_TOKEN_ENCRYPTION_KEY="${API_TOKEN_ENCRYPTION_KEY:-$(openssl rand -hex 32)}"
 
+    # A failed `openssl rand` inside the expansions above leaves these EMPTY
+    # without tripping `set -e`; never start with an empty signing/encryption key.
+    if [ -z "${JWT_SECRET:-}" ] || [ -z "${API_TOKEN_ENCRYPTION_KEY:-}" ]; then
+        echo -e "${RED}❌ Could not generate ephemeral secrets (is openssl installed?).${NC}"
+        exit 1
+    fi
+
     # 4. Connectivity defaults. .env may have overridden any of these above;
     #    these :="..." only fire if still unset. localhost for DATABASE_URL is
     #    a sensible fresh-clone fallback; in practice your Mac's .env points
@@ -77,7 +84,8 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
     go build -buildvcs=false -o /tmp/uisce-server-local ./cmd/server
 
     echo -e "${YELLOW}Starting server on port ${PORT} (foreground; Ctrl+C to stop)...${NC}"
-    echo -e "${YELLOW}   DATABASE_URL: ${DATABASE_URL:0:50}...${NC}"
+    # Log the DSN with any user:password redacted (a prefix slice can include it).
+    echo -e "${YELLOW}   DATABASE_URL: $(printf '%s' "$DATABASE_URL" | sed -E 's#://[^@/]*@#://***@#' | cut -c1-70)${NC}"
     echo -e "${YELLOW}   TEMPORAL_HOST: $TEMPORAL_HOST${NC}"
     exec /tmp/uisce-server-local
 fi
