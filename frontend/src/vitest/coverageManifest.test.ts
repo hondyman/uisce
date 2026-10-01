@@ -59,8 +59,8 @@ const WIDEN_TARGET = 164; // 164 from the damage run, 0 documented excludes (wav
  *                   AND tenantContextStub.identity.test.ts, 6 tests, the
  *                   identity + shape guard for the fixture extensions)
  */
-const RUNNING_FILE_BASELINE = 103; // 102 after #247, +1 for fragmentLoad.test.tsx (#261)
-const EXECUTED_TEST_BASELINE = 563; // measured with `vitest --reporter=json`: 554 after #247, +6 fragmentLoad.test.tsx, +3 added to fragmentRefs.test.ts (#261)
+const RUNNING_FILE_BASELINE = 105; // 103 after #261, +2: savedQueryApi.test.ts and SavedQueryWidget.test.tsx (query roll-up safety)
+const EXECUTED_TEST_BASELINE = 594; // measured with `vitest --reporter=json`: 563 after #261, +25 savedQueryApi.test.ts, +6 SavedQueryWidget.test.tsx
 
 function globFiles(roots: string[], patterns: string[]): string[] {
   const out: string[] = [];
@@ -138,7 +138,7 @@ describe('test suite inclusion counter', () => {
   it('executed test count matches the baseline (bump per wave)', () => {
     // Includes this file's own 4 assertions. Bump on every wave that adds/removes
     // assertions; the comment names the wave.
-    expect(EXECUTED_TEST_BASELINE).toBe(563);
+    expect(EXECUTED_TEST_BASELINE).toBe(594);
   });
 
   it('widened target is larger than the current run, so widening has work to do', () => {

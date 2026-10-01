@@ -1,0 +1,97 @@
+[
+  {
+    "report_id": "rpt-orders-lines",
+    "column_name": "line_item_amount",
+    "aggregation": "SUM",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "id", "right_table": "order_lines", "right_column": "order_id", "cardinality": "1:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-orders-lines",
+    "column_name": "allocation_qty",
+    "aggregation": "SUM",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "id", "right_table": "order_lines", "right_column": "order_id", "cardinality": "1:M" },
+        { "left_table": "order_lines", "left_column": "id", "right_table": "allocations", "right_column": "order_line_id", "cardinality": "1:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-customer-hierarchy",
+    "column_name": "warehouse_zone_name",
+    "aggregation": "",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "warehouse_id", "right_table": "warehouses", "right_column": "id", "cardinality": "M:1" },
+        { "left_table": "warehouses", "left_column": "zone_id", "right_table": "zones", "right_column": "id", "cardinality": "M:1" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-customer-hierarchy",
+    "column_name": "category_revenue_total",
+    "aggregation": "SUM",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "sku_id", "right_table": "skus", "right_column": "id", "cardinality": "M:1" },
+        { "left_table": "skus", "left_column": "category_id", "right_table": "categories", "right_column": "id", "cardinality": "1:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-customer-hierarchy",
+    "column_name": "category_max_price",
+    "aggregation": "MAX",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "sku_id", "right_table": "skus", "right_column": "id", "cardinality": "M:1" },
+        { "left_table": "skus", "left_column": "category_id", "right_table": "categories", "right_column": "id", "cardinality": "1:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-customer-hierarchy",
+    "column_name": "category_distinct_customers",
+    "aggregation": "COUNT_DISTINCT",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "sku_id", "right_table": "skus", "right_column": "id", "cardinality": "M:1" },
+        { "left_table": "skus", "left_column": "category_id", "right_table": "categories", "right_column": "id", "cardinality": "1:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-shipments-only",
+    "column_name": "shipment_carrier",
+    "aggregation": "",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "id", "right_table": "shipments", "right_column": "order_id", "cardinality": "1:1" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-legacy-tags",
+    "column_name": "tag_label",
+    "aggregation": "COUNT",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "id", "right_table": "order_tags", "right_column": "order_id", "cardinality": "M:M" }
+      ]
+    }
+  },
+  {
+    "report_id": "rpt-imported-mapping",
+    "column_name": "external_region_name",
+    "aggregation": "SUM",
+    "path": {
+      "steps": [
+        { "left_table": "orders", "left_column": "external_region_id", "right_table": "external_regions", "right_column": "id", "cardinality": "" }
+      ]
+    }
+  }
+]

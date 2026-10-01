@@ -86,10 +86,57 @@ func (s *QueryService) Preview(ctx context.Context, secCtx *security.Context, qd
 		return nil, fmt.Errorf("sql generation failed: %w", err)
 	}
 
+	// Wire-side Columns for single-BO queries. Every selected field
+	// trivially belongs to the root BO (no related-BO joins), so BOID is
+	// uniform. Aggregation stays empty — single-BO SQL is row-grain
+	// (SELECT field FROM table WHERE ... LIMIT n, with no SUM/AVG/COUNT
+	// wrap and no GROUP BY); stamping Aggregation:"sum" on row-grain
+	// output would let isAdditiveSafe vouch for linearity the SQL never
+	// performed. The empty-omitted default preserves the gate's
+	// fail-safe polarity: missing aggregation ⇒ "Needs review" on a
+	// gauge widget, which is the truthful verdict for row-grain
+	// output. (β — generator gains real aggregation support — is the
+	// fix that removes "Needs review" for genuinely-aggregated
+	// single-BO measures; not in scope here.)
+	//
+	// Column Name matches what the driver returns. The mapper's
+	// SemanticField.Label is dropped at ResolveSemanticRequest (line
+	// 839 — only the field ID survives), so the label the SQL
+	// emits is computed by BOSQLGenerator.ResolvePathWithLabel as
+	// `field.DisplayName || field.Name`. We mirror that here so
+	// applyColumnMetadata's name-match lookup lands.
+	rootDef, err := s.resolver.GetBODefinition(qd.Context.BOID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load BO definition for column wiring: %w", err)
+	}
+	fieldsByName := make(map[string]*boresolver.BOField, len(rootDef.Fields))
+	for i := range rootDef.Fields {
+		f := &rootDef.Fields[i]
+		fieldsByName[f.Name] = f
+	}
+	columns := make([]boresolver.QueryResultColumn, 0, len(semanticReq.Select))
+	for _, sf := range semanticReq.Select {
+		f, ok := fieldsByName[sf.Term]
+		if !ok {
+			continue // unresolvable terms: GenerateSQL already errored if fatal
+		}
+		wireName := f.DisplayName
+		if wireName == "" {
+			wireName = f.Name
+		}
+		columns = append(columns, boresolver.QueryResultColumn{
+			Name:        wireName,
+			Type:        "unknown", // driver-emitted type isn't known at Preview time; Execute's scanColumns fills it
+			BOID:        rootDef.ID,
+			Aggregation: strings.ToLower(sf.Aggregation),
+		})
+	}
+
 	return &boresolver.QueryPreviewResponse{
 		SQL:        sql,
 		Dialect:    dialectName(s.generator.Dialect),
 		Parameters: args,
+		Columns:    columns,
 	}, nil
 }
 
@@ -261,10 +308,35 @@ func dialectName(d boresolver.Dialect) string {
 	}
 }
 
-// applyColumnMetadata copies BOID/Cardinality from the columns the SQL
-// generator produced (by name) onto the columns the driver reports back,
-// since the driver only knows names/DB types, not which BO or join a column
-// came from.
+// applyColumnMetadata copies BOID/Cardinality/RootOwnership from the
+// columns the SQL generator produced (by name) onto the columns the
+// driver reports back, since the driver only knows names/DB types, not
+// which BO, join, or ownership a column came from. This is a field-by-
+// field copy rather than `dbColumns[i] = meta` because dbColumns[i]
+// already carries the driver's own Name/Type, which meta doesn't
+// reliably have (or could disagree on) - only the metadata fields the
+// generator is authoritative for get overwritten.
+//
+// Root cause of why this is a hand-maintained list at all: Preview and
+// Execute each build their own result and propagate metadata fields by
+// hand, independently, under names that don't tell you which one a given
+// endpoint actually uses - GET /api/explorer/saved-queries/{id}/preview
+// calls Execute, not Preview, despite the URL. Two hand-copies where
+// there should be one is exactly how RootOwnership got dropped here the
+// first time.
+//
+// Every field added to QueryResultColumn must be added here too, or it
+// silently stops at Preview and never reaches Execute's response.
+// RootOwnership missed this once already - caught by
+// TestApplyColumnMetadata_CopiesRootOwnership (that specific field) and
+// TestApplyColumnMetadata_CopiesEveryMetadataField (a reflection-based
+// completeness check that will catch the NEXT field too, not just this
+// one), not by inspection. Aggregation was added with this hand-copy
+// in place from day one (the reflection test caught it before it could
+// drift the way RootOwnership once did), and the field is the second of
+// two independent wire signals for the frontend roll-up-safety gate
+// (the first being RootOwnership - see QueryResultColumn.RootOwnership
+// for the grain-vs-linearity split).
 func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []boresolver.QueryResultColumn) {
 	if len(generated) == 0 {
 		return
@@ -277,6 +349,8 @@ func applyColumnMetadata(dbColumns []boresolver.QueryResultColumn, generated []b
 		if meta, ok := byName[dbColumns[i].Name]; ok {
 			dbColumns[i].BOID = meta.BOID
 			dbColumns[i].Cardinality = meta.Cardinality
+			dbColumns[i].RootOwnership = meta.RootOwnership
+			dbColumns[i].Aggregation = meta.Aggregation
 		}
 	}
 }

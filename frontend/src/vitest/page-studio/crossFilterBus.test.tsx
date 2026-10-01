@@ -13,7 +13,10 @@ import SavedQueryWidget from '../../pages/page-studio/SavedQueryWidget';
 import { AppRuntimeProvider, useAppRuntime } from '../../pages/page-studio/app/AppRuntime';
 import type { PageAppModel } from '../../pages/page-studio/app/appModel';
 
-vi.mock('../../features/query-builder/services/savedQueryApi', () => ({
+// Partial mock: keep the module's real pure helpers (the widget's roll-up gate
+// imports isSafeToRollUpAcrossRows / isAdditiveSafe) and stub only the network calls.
+vi.mock('../../features/query-builder/services/savedQueryApi', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/query-builder/services/savedQueryApi')>()),
   runSavedQuery: vi.fn(),
   executeSavedQuery: vi.fn(),
 }));
