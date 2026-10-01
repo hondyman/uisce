@@ -38,6 +38,7 @@ import PageBody from './PageBody';
 import { AppRuntimeProvider } from './app/AppRuntime';
 import AppModelPanel from './app/AppModelPanel';
 import { checkPage } from './app/pageChecker';
+import { useResolvedPage } from './app/fragmentLoad';
 import { PageCheckButton, PageCheckDialog } from './app/PageCheckDialog';
 import { CANVAS_SIZES, canvasWidthPx, type CanvasSizeId } from './canvasSizes';
 
@@ -242,7 +243,9 @@ const PageEditor: React.FC<PageEditorProps> = ({ page, onSave }) => {
     const canSave = !inheritedCore || (!!draft.canCustomize && custom?.mode !== 'cloned');
 
     // The page checker runs as the page is edited; errors block publishing.
-    const issues = useMemo(() => checkPage(draft), [draft]);
+    // ...against the page with its fragments applied, once they have loaded (the draft itself is untouched).
+    const withFragments = useResolvedPage(draft);
+    const issues = useMemo(() => (withFragments.pending ? [] : checkPage(withFragments.page)), [withFragments]);
     const [checkOpen, setCheckOpen] = useState(false);
     const [publishBlocked, setPublishBlocked] = useState(false);
 
