@@ -96,7 +96,7 @@ export function generateFromOperations(spec: GenerateSpec): PageFragment {
   }
   const columns: ColumnDef[] = [
     ...shown.filter((f) => f.type !== 'object').map((f) => ({ id: f.name, header: label(f), cell: cellFor(f) }) as ColumnDef),
-    { id: 'act', header: '', cell: { kind: 'actions', buttons } as CellSpec, align: 'right', nowrap: true },
+    { id: 'act', header: '', cell: { kind: 'actions', buttons } as unknown as CellSpec, align: 'right', nowrap: true },
   ];
 
   w(`${p}Header`, 'PageHeader', { title: spec.title, subtitle: spec.subtitle ?? list.description ?? '' }, { style: { flex: '1 1 320px' } });
