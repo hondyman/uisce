@@ -154,6 +154,7 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/{id}/upgrade", h.upgrade)
 	})
 	h.registerFragmentRoutes(r)
+	h.registerBundleRoutes(r)
 	r.Post("/page-studio/generate", h.generate)
 }
 
