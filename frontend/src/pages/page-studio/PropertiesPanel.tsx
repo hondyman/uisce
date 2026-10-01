@@ -865,6 +865,52 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
               })()}
             </Box>
           )}
+
+          {/* Cross-Filtering Configuration */}
+          <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', color: 'text.secondary', display: 'block', mb: 1 }}>
+              Cross-Filtering
+            </Typography>
+            <FormControlLabel
+              sx={{ display: 'block', mb: 1 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={component.props?.crossFilterConfig?.enabled !== false}
+                  onChange={(e) =>
+                    updateProps({
+                      crossFilterConfig: {
+                        ...(component.props?.crossFilterConfig || {}),
+                        enabled: e.target.checked,
+                      },
+                    })
+                  }
+                />
+              }
+              label={<Typography variant="body2">Enable Cross-Filtering</Typography>}
+            />
+            {component.props?.crossFilterConfig?.enabled !== false && (
+              <TextField
+                select
+                size="small"
+                fullWidth
+                label="Mode"
+                value={component.props?.crossFilterConfig?.mode || 'both'}
+                onChange={(e) =>
+                  updateProps({
+                    crossFilterConfig: {
+                      ...(component.props?.crossFilterConfig || {}),
+                      mode: e.target.value as 'emit' | 'receive' | 'both',
+                    },
+                  })
+                }
+              >
+                <MenuItem value="both">Both (Emit & Receive)</MenuItem>
+                <MenuItem value="emit">Emit only</MenuItem>
+                <MenuItem value="receive">Receive only</MenuItem>
+              </TextField>
+            )}
+          </Box>
         </Box>
       )}
 

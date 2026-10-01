@@ -95,7 +95,7 @@ export const AnalyticalShell: React.FC<AnalyticalShellProps> = ({ children, coll
               {!collapsed && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', whiteSpace: 'nowrap' }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', letterSpacing: '-0.02em', lineHeight: 1, color: 'var(--mui-text-primary)' }}>
-                    Ishka
+                    Ivy
                   </Typography>
                   <Typography
                     className="font-mono"

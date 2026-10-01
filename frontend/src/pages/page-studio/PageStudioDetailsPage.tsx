@@ -8,6 +8,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import PageEditor from './PageEditor';
+import { takeGeneratedDraft } from './app/generatedDraft';
 import NewPageWizard from './NewPageWizard';
 import { useTenant } from '../../contexts/TenantContext';
 
@@ -39,6 +40,9 @@ const PageStudioDetailsPage: React.FC = () => {
   // the author looks it over, then saves to create it.
   const [searchParams] = useSearchParams();
   const blueprint = id === 'new' ? PAGE_BLUEPRINTS.find((b) => b.id === searchParams.get('blueprint')) : undefined;
+  // A page generated from operations arrives the same way: an unsaved draft. It is handed over in
+  // session storage (navigation state is lost to the locale redirect) and read once.
+  const [generated] = useState<Partial<CorePageDefinition> | undefined>(() => (id === 'new' && searchParams.get('generated') ? takeGeneratedDraft() : undefined));
   const { tenant } = useTenant();
   const [page, setPage] = useState<CorePageDefinition | null>(null);
   const [loading, setLoading] = useState(id !== 'new');
@@ -49,7 +53,7 @@ const PageStudioDetailsPage: React.FC = () => {
   // A brand-new page picks its primary/related Business Objects and a
   // layout recommended for that object count before the editor opens; an
   // existing page (or one already past this dialog) skips it.
-  const [showWizard, setShowWizard] = useState(id === 'new' && !blueprint);
+  const [showWizard, setShowWizard] = useState(id === 'new' && !blueprint && !generated);
 
   // page_definitions never persists tenant_id to the client (the backend
   // hides it, json:"-" on PageDefinition.TenantID - a page's rows/queries
@@ -60,7 +64,7 @@ const PageStudioDetailsPage: React.FC = () => {
   useEffect(() => {
     if (!tenant?.id) return;
     if (id === 'new') {
-      setPage(blueprint ? { ...BLANK_PAGE, ...blueprint.build(), tenantId: tenant.id } : { ...BLANK_PAGE, tenantId: tenant.id });
+      setPage(blueprint ? { ...BLANK_PAGE, ...blueprint.build(), tenantId: tenant.id } : generated ? { ...BLANK_PAGE, ...generated, tenantId: tenant.id } : { ...BLANK_PAGE, tenantId: tenant.id });
       setLoading(false);
       return;
     }

@@ -72,6 +72,7 @@
     "dayjs": "^1.11.19",
     "diff": "^5.2.0",
     "dockview-react": "^8.3.1",
+    "dompurify": "^3.3.1",
     "echarts": "^5.6.0",
     "echarts-for-react": "^3.0.2",
     "eslint-plugin-import": "^2.32.0",

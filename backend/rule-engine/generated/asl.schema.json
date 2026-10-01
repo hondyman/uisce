@@ -523,6 +523,42 @@
       ],
       "type": "object"
     },
+    "AggregateRuleSpec": {
+      "description": "AggregateRuleSpec defines cross-record tumbling window reconciliation rules.\nKept strictly outside vm.RuleNode as it operates on multi-row aggregations during\nscheduled pushdown rather than individual record writes.",
+      "properties": {
+        "Aggregate": {
+          "type": "string"
+        },
+        "Comparison": {
+          "type": "string"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "GroupBy": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Threshold": {
+          "type": "number"
+        },
+        "TimeColumn": {
+          "type": "string"
+        },
+        "Window": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Window",
+        "Aggregate",
+        "Field",
+        "GroupBy",
+        "TimeColumn",
+        "Threshold",
+        "Comparison"
+      ],
+      "type": "object"
+    },
     "AlertsService": {
       "description": "AlertsService handles business logic for alerts.",
       "properties": {
@@ -4559,6 +4595,31 @@
         "Postgres",
         "Iceberg",
         "Incoming"
+      ],
+      "type": "object"
+    },
+    "ConformanceCase": {
+      "properties": {
+        "ExpectedError": {
+          "type": "boolean"
+        },
+        "ExpectedValid": {
+          "type": "boolean"
+        },
+        "Input": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {}
+      },
+      "required": [
+        "Name",
+        "RuleAST",
+        "Input",
+        "ExpectedValid",
+        "ExpectedError"
       ],
       "type": "object"
     },
@@ -11072,6 +11133,18 @@
       ],
       "type": "object"
     },
+    "ParamBinder": {
+      "description": "ParamBinder accumulates parameterized literals, emitting $n placeholders.\nBind order defines parameter order — the pushdown executor binds the\ntenant ID first so it is always $1.",
+      "properties": {
+        "args": {
+          "$ref": "#/definitions/any[]"
+        }
+      },
+      "required": [
+        "args"
+      ],
+      "type": "object"
+    },
     "ParseError": {
       "description": "ParseError reports a parse failure with a byte offset into the\noriginal source, so a caller (an editor's diagnostics, or an API\nerror response) can point at the exact spot rather than just quoting\na message.",
       "properties": {
@@ -11939,6 +12012,64 @@
       "required": [
         "Rego",
         "CEL"
+      ],
+      "type": "object"
+    },
+    "PortableRuleSpec": {
+      "description": "PortableRuleSpec defines a single rule stripped of environment-specific UUIDs.",
+      "properties": {
+        "BOName": {
+          "type": "string"
+        },
+        "BindingScope": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Deleted": {
+          "type": "boolean"
+        },
+        "DependsOn": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Domain": {
+          "type": "string"
+        },
+        "GovernanceStatus": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {},
+        "RuleKey": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "Timing": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "RuleKey",
+        "Name",
+        "BOName",
+        "Description",
+        "Domain",
+        "Severity",
+        "Timing",
+        "Category",
+        "GovernanceStatus",
+        "BindingScope",
+        "DependsOn",
+        "RuleAST",
+        "Deleted"
       ],
       "type": "object"
     },
@@ -13827,6 +13958,40 @@
       ],
       "type": "object"
     },
+    "RuleBundle": {
+      "description": "RuleBundle represents a portable export of validation rules.\nThe canonical interchange format is JSON; YAML is a read-only convenience\nconverted to JSON before any checksumming occurs.",
+      "properties": {
+        "BundleVersion": {
+          "type": "string"
+        },
+        "Checksum": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "ExportedFrom": {
+          "type": "string"
+        },
+        "Origin": {
+          "type": "string"
+        },
+        "Rules": {
+          "$ref": "#/definitions/PortableRuleSpec[]"
+        },
+        "TenantScope": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BundleVersion",
+        "CreatedAt",
+        "ExportedFrom",
+        "TenantScope",
+        "Origin",
+        "Checksum",
+        "Rules"
+      ],
+      "type": "object"
+    },
     "RuleChain": {
       "properties": {
         "ID": {
@@ -13885,6 +14050,25 @@
       ],
       "type": "object"
     },
+    "RuleDiffSummary": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Changes": {
+          "$ref": "#/definitions/string[]"
+        },
+        "RuleKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "RuleKey",
+        "Action",
+        "Changes"
+      ],
+      "type": "object"
+    },
     "RuleEngine": {
       "description": "RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with\natomic-pointer state swaps for multi-tenant dynamic rewarming.\n\nArchitecture: Two-Level Execution Model\n\n  Level 1 — Core (platform-wide):  coreState atomic.Pointer[EngineState]\n    Holds gold-copy rules and standard fields. Serves all tenants.\n\n  Level 2 — Custom (tenant-isolated): tenantStates sync.Map\n    Per-tenant states for custom fields and custom rules. A tenant\n    state is built by merging Core rules + Tenant rules so it is\n    fully self-contained. When Tenant A adds a custom field, only\n    Tenant A's state is rebuilt; Tenant B and Core are untouched.\n\nLifecycle:\n\n  1. NewRuleEngine → empty core state\n  2. RewarmCore(allCoreRules, version) once at platform startup\n  3. RewarmTenant(tenantID, allTenantRules, version) when a tenant\n     adds a custom field or custom rule\n  4. UpdateRule / DeleteRule for O(1) rule logic changes\n  5. Evaluate(ctx, tenantID, ruleID, version, node, input, force)\n\nConcurrency: Evaluate is lock-free. getState() resolves the correct\nstate via atomic.Pointer.Load (core) or sync.Map.Load (tenant) — both\nare wait-free reads. RewarmCore/RewarmTenant build a new state in local\nmemory and atomically swap it in.",
       "properties": {
@@ -13937,6 +14121,109 @@
         "ID",
         "Operator",
         "Conditions"
+      ],
+      "type": "object"
+    },
+    "RuleImportErrorDetail": {
+      "properties": {
+        "Code": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Reason": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Code",
+        "RuleKey",
+        "Name",
+        "Reason"
+      ],
+      "type": "object"
+    },
+    "RuleImportReport": {
+      "description": "RuleImportReport returns granular results of the import.",
+      "properties": {
+        "Created": {
+          "$ref": "#/definitions/string[]"
+        },
+        "DiffSummary": {
+          "$ref": "#/definitions/RuleDiffSummary[]"
+        },
+        "DryRun": {
+          "type": "boolean"
+        },
+        "Errors": {
+          "$ref": "#/definitions/RuleImportErrorDetail[]"
+        },
+        "Pruned": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Skipped": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Success": {
+          "type": "boolean"
+        },
+        "TotalRules": {
+          "type": "number"
+        },
+        "Updated": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "Success",
+        "DryRun",
+        "TotalRules",
+        "Created",
+        "Updated",
+        "Skipped",
+        "Pruned",
+        "Errors",
+        "DiffSummary"
+      ],
+      "type": "object"
+    },
+    "RuleImportRequest": {
+      "description": "RuleImportRequest specifies import options.",
+      "properties": {
+        "Bundle": {
+          "$ref": "#/definitions/RuleBundle"
+        },
+        "DryRun": {
+          "type": "boolean"
+        },
+        "IdempotencyKey": {
+          "type": "string"
+        },
+        "OverwritePolicy": {
+          "type": "string"
+        },
+        "PreserveStatus": {
+          "type": "boolean"
+        },
+        "Prune": {
+          "type": "boolean"
+        },
+        "TargetTenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Bundle",
+        "TargetTenantID",
+        "DryRun",
+        "OverwritePolicy",
+        "PreserveStatus",
+        "Prune",
+        "IdempotencyKey"
       ],
       "type": "object"
     },
@@ -17975,6 +18262,9 @@
           "type": "string"
         },
         "RuleAST": {},
+        "RuleKey": {
+          "type": "string"
+        },
         "Severity": {
           "type": "string"
         },
@@ -17988,6 +18278,7 @@
       },
       "required": [
         "ID",
+        "RuleKey",
         "TenantID",
         "BOName",
         "Name",
@@ -18009,12 +18300,18 @@
     "ValidationRuleProperties": {
       "description": "ValidationRuleProperties is stored in catalog_node.properties, mirroring\nPreAggProperties' role for pre-aggregation nodes and term_type/\nreturn_type's role for calculated semantic terms - node metadata that\nisn't the AST itself.",
       "properties": {
+        "ApprovedAt": {},
+        "ApprovedBy": {
+          "type": "string"
+        },
+        "AuthorID": {
+          "type": "string"
+        },
         "BOName": {
           "type": "string"
         },
         "BindingIDs": {
-          "$ref": "#/definitions/string[]",
-          "description": "BindingIDs scopes the rule to specific bindings of the BO\n(business_object_binding.bo_binding_id). Empty means the rule applies to every\nbinding, which is what every rule written before this field existed\nmeans, so they are unchanged. The rule's field references stay\nsemantic terms either way; scoping only decides whether the rule runs\nfor a write that arrived through a given binding."
+          "$ref": "#/definitions/string[]"
         },
         "Category": {
           "type": "string"
@@ -18026,14 +18323,32 @@
         "GovernanceStatus": {
           "type": "string"
         },
+        "PublishedAt": {},
+        "PublishedBy": {
+          "type": "string"
+        },
+        "RejectedAt": {},
+        "RejectedBy": {
+          "type": "string"
+        },
+        "RejectionReason": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        },
         "Severity": {
           "type": "string"
         },
+        "SubmittedAt": {},
         "TenantID": {
           "type": "string"
         },
         "Timing": {
           "type": "string"
+        },
+        "Version": {
+          "type": "number"
         }
       },
       "required": [
@@ -18044,7 +18359,18 @@
         "Category",
         "GovernanceStatus",
         "Domain",
-        "BindingIDs"
+        "BindingIDs",
+        "RuleKey",
+        "AuthorID",
+        "SubmittedAt",
+        "ApprovedBy",
+        "ApprovedAt",
+        "RejectedBy",
+        "RejectedAt",
+        "RejectionReason",
+        "PublishedBy",
+        "PublishedAt",
+        "Version"
       ],
       "type": "object"
     },
@@ -18197,6 +18523,66 @@
     "ViewService": {
       "description": "ViewService handles view operations",
       "properties": {},
+      "type": "object"
+    },
+    "ViolationRecord": {
+      "description": "ViolationRecord represents a single evaluated rule violation or rule execution error.",
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "Context": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Fields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "RecordID": {
+          "type": "string"
+        },
+        "RuleError": {
+          "type": "boolean"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "RuleVersion": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "WriteBlocked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "TenantID",
+        "RuleID",
+        "RuleKey",
+        "RuleVersion",
+        "RuleName",
+        "BOKey",
+        "Severity",
+        "RecordID",
+        "Message",
+        "Fields",
+        "Context",
+        "WriteBlocked",
+        "RuleError"
+      ],
       "type": "object"
     },
     "WebSocketHub": {

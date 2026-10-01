@@ -13,6 +13,9 @@ import (
 
 // StartPostgres starts a Postgres container and returns a *sql.DB connection and a cleanup func.
 func StartPostgres(t testing.TB) (*sql.DB, func()) {
+	if testing.Short() {
+		t.Skip("Skipping docker integration tests in short mode")
+	}
 	if os.Getenv("CI") == "true" {
 		t.Skip("Skipping docker integration tests in CI")
 	}

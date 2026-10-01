@@ -5,6 +5,8 @@ import { getOperation, listOperations } from '../../../studio-core/operations/re
 import { listDomainComponents } from '../../../studio-core/components/registry';
 import type { PageAppModel, PageQuery, PageVariable } from './appModel';
 import { BindingField, ConditionEditor, JsonField, ListEditor, Section, SelectField, SwitchField, scopePaths } from './editors';
+import { QueryStatusChip } from './queryStatus';
+import { useAppRuntime } from './AppRuntime';
 
 const parseDefault = (s: string): unknown => {
   if (s === '') return undefined;
@@ -18,6 +20,7 @@ const parseDefault = (s: string): unknown => {
  * page declares here.
  */
 export default function AppModelPanel({ draft, setDraft }: { draft: CorePageDefinition; setDraft: React.Dispatch<React.SetStateAction<CorePageDefinition>> }) {
+  const { scope } = useAppRuntime();
   const app: PageAppModel = draft.app ?? {};
   const setApp = (patch: Partial<PageAppModel>) => setDraft((prev) => ({ ...prev, app: { ...(prev.app ?? {}), ...patch } }));
   const paths = scopePaths(draft);
@@ -58,6 +61,7 @@ export default function AppModelPanel({ draft, setDraft }: { draft: CorePageDefi
             const op = getOperation(q.operation);
             return (
               <>
+                <Box><QueryStatusChip query={q} scope={scope} /></Box>
                 <TextField size="small" label="Id ({{queries.<id>.data}})" value={q.id} onChange={(e) => set({ ...q, id: e.target.value.replace(/[^\w]/g, '') })} />
                 <SelectField label="Operation" value={q.operation} options={listOperations('query').map((o) => ({ value: o.id, label: `${o.label} (${o.id})` }))}
                   onChange={(v) => set({ ...q, operation: v ?? '' })} />

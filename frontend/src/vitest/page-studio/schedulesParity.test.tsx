@@ -86,7 +86,7 @@ const HAND_BUILT = {
       "radio:external:false",
       "weekdays",
       "18:00",
-      "America/New_York",
+      "UTC",
       "",
       "radio:none:true",
       "radio:skip:false",

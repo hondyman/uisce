@@ -14,7 +14,18 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/handlers"
+	"github.com/hondyman/uisce/backend/internal/security"
 )
+
+type mockDatasourceResolver struct{}
+
+func (m *mockDatasourceResolver) Resolve(ctx context.Context, datasourceID string) (*security.ResolvedDatasource, error) {
+	return &security.ResolvedDatasource{
+		TenantID:       "11111111-1111-1111-1111-111111111111",
+		DatasourceID:   datasourceID,
+		AllowedRegions: []string{"us-east-1"},
+	}, nil
+}
 
 // We assert UpdateModel sets published_at on publish and clears it on draft by driving the HTTP handler.
 func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
@@ -24,7 +35,7 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{})
+	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{Resolver: &mockDatasourceResolver{}})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -44,10 +55,17 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, "/models/"+modelID.String()+"?tenant_id="+tenantID.String()+"&datasource_id="+datasourceID.String(), bytes.NewReader(buf))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-Datasource-ID", datasourceID.String())
+	req.Header.Set("X-Region", "us-east-1")
 	// Set chi route param for model_id
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("model_id", modelID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:    "test-user",
+		TenantIDs: []string{tenantID.String()},
+		Roles:     []string{"admin"},
+	}))
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("publish: expected 200, got %d: %s", rr.Code, rr.Body.String())
@@ -65,9 +83,16 @@ func TestUpdateModel_StatusPublishAndDraft(t *testing.T) {
 	rr2 := httptest.NewRecorder()
 	req2 := httptest.NewRequest(http.MethodPatch, "/models/"+modelID.String()+"?tenant_id="+tenantID.String()+"&datasource_id="+datasourceID.String(), bytes.NewReader(buf2))
 	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Tenant-Datasource-ID", datasourceID.String())
+	req2.Header.Set("X-Region", "us-east-1")
 	rctx2 := chi.NewRouteContext()
 	rctx2.URLParams.Add("model_id", modelID.String())
 	req2 = req2.WithContext(context.WithValue(req2.Context(), chi.RouteCtxKey, rctx2))
+	req2 = req2.WithContext(security.WithAuthInfo(req2.Context(), security.AuthInfo{
+		UserID:    "test-user",
+		TenantIDs: []string{tenantID.String()},
+		Roles:     []string{"admin"},
+	}))
 	r.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusOK {
 		t.Fatalf("draft: expected 200, got %d: %s", rr2.Code, rr2.Body.String())
@@ -86,7 +111,7 @@ func TestUpdateModel_ChecksumOnResolvedConfig(t *testing.T) {
 	}
 	defer db.Close()
 
-	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{})
+	h := handlers.NewModelCatalogHandler(db, handlers.SecurityContextDeps{Resolver: &mockDatasourceResolver{}})
 	r := chi.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -106,9 +131,16 @@ func TestUpdateModel_ChecksumOnResolvedConfig(t *testing.T) {
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPatch, "/models/"+modelID.String()+"?tenant_id="+tenantID.String()+"&datasource_id="+datasourceID.String(), bytes.NewReader(buf))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-Datasource-ID", datasourceID.String())
+	req.Header.Set("X-Region", "us-east-1")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("model_id", modelID.String())
 	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(security.WithAuthInfo(req.Context(), security.AuthInfo{
+		UserID:    "test-user",
+		TenantIDs: []string{tenantID.String()},
+		Roles:     []string{"admin"},
+	}))
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
