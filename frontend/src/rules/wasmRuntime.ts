@@ -112,7 +112,7 @@ export async function evaluateExpressionTextWasm(
 // compileExpressionTextWasm parses expression text and compiles it to
 // SQL client-side, resolving each field reference through a caller-
 // supplied {fieldPath: columnExpr} map - a live "does this pushdown?"
-// preview using the exact same vm.CompileToSQL the backend uses for real
+// preview using the exact same vm.CompileExpressionToSQL the backend uses for real
 // DDL generation.
 export async function compileExpressionTextWasm(
   text: string,
