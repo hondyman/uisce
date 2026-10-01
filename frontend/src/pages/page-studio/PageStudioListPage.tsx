@@ -35,6 +35,8 @@ import { generatePageDraft, type BOOption } from './generatePageDraft';
 import type { GeneratedPageKind } from '../../api/pageStudio';
 import { NavigationMenuApi, NavigationMenuNode } from '../../api/navigationMenu';
 import { PAGE_BLUEPRINTS, type PageBlueprint } from './app/blueprints';
+import { GenerateFromOperationsDialog } from './app/GenerateFromOperationsDialog';
+import { handOverGeneratedDraft } from './app/generatedDraft';
 
 const NO_SECTION = '__none__';
 
@@ -172,6 +174,7 @@ const PageStudioListPage: React.FC = () => {
   // Blueprints: complete pages built from the page model, opened as an
   // unsaved draft; saving creates the page.
   const [blueprintAnchor, setBlueprintAnchor] = useState<HTMLElement | null>(null);
+  const [opsOpen, setOpsOpen] = useState(false);
   const handleBlueprint = (bp: PageBlueprint) => {
     setBlueprintAnchor(null);
     navigate(`new?blueprint=${bp.id}`);
@@ -305,6 +308,9 @@ const PageStudioListPage: React.FC = () => {
           <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={openAiDialog}>
             Generate with AI
           </Button>
+          <Button variant="outlined" onClick={() => setOpsOpen(true)}>
+            From operations
+          </Button>
           <Button variant="outlined" onClick={(e) => setBlueprintAnchor(e.currentTarget)}>
             From blueprint
           </Button>
@@ -316,6 +322,8 @@ const PageStudioListPage: React.FC = () => {
               </MenuItem>
             ))}
           </Menu>
+          <GenerateFromOperationsDialog open={opsOpen} onClose={() => setOpsOpen(false)}
+            onGenerated={(draft) => { setOpsOpen(false); handOverGeneratedDraft(draft); navigate('new?generated=1'); }} />
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('new')}>
             New Page
           </Button>
