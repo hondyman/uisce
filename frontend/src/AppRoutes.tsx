@@ -37,6 +37,8 @@ import { NodeTypeDetailPage } from "./pages/catalog/NodeTypeDetailPage";
 import { EdgeTypeDetailPage } from "./pages/catalog/EdgeTypeDetailPage";
 import { AIBusinessTermSuggestionsPage } from "./pages/catalog/AIBusinessTermSuggestionsPage";
 import { BusinessTermDetailPage } from "./pages/catalog/BusinessTermDetailPage";
+import EntityPickerPage from "./features/custom-attributes/pages/EntityPickerPage";
+import WorkbenchPage from "./features/custom-attributes/pages/WorkbenchPage";
 import CustomComponentPage from "./pages/CustomComponentPage";
 import AdvancedRuleBuilderPage from "./pages/AdvancedRuleBuilderPage";
 import SystemValidationsPage from "./pages/SystemValidationsPage";
@@ -249,6 +251,8 @@ function ProtectedApp() {
         <Route path="core/domains" element={<ProtectedRoute><DomainsManagementPage /></ProtectedRoute>} />
         <Route path="schema-explorer" element={<ProtectedRoute><SchemaExplorerPage /></ProtectedRoute>} />
         <Route path="catalog/api-inventory" element={<ProtectedRoute><ApiInventoryPage /></ProtectedRoute>} />
+        <Route path="catalog/custom-fields" element={<ProtectedRoute><EntityPickerPage /></ProtectedRoute>} />
+        <Route path="catalog/custom-fields/:entityType" element={<ProtectedRoute><WorkbenchPage /></ProtectedRoute>} />
 
         <Route path="catalog/node-types" element={<ProtectedRoute><CatalogNodeTypesPage /></ProtectedRoute>} />
         <Route path="catalog/node-types/:id" element={<ProtectedRoute><NodeTypeDetailPage /></ProtectedRoute>} />
