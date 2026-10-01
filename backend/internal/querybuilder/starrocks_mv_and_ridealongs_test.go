@@ -125,33 +125,55 @@ func TestMetricAdoptionPreflight_MissingTermCheck(t *testing.T) {
 	assert.Contains(t, err.Error(), "references terms [term_unmapped_custom_fx] not mapped in target tenant")
 }
 
-// 7.2 Deliverable #1: Routing Transparency Test Harness
+// 7.2 Deliverable #1: Routing Transparency Multi-Grain Test Harness
 func TestRoutingTransparency_MVsAndBaseTableEquivalence(t *testing.T) {
 	// A query executed against base tables vs. against an identical pre-aggregated MV
-	// must produce identical tabular result rows.
+	// must produce identical tabular result rows across multiple grains.
 	type ExecutionResult struct {
 		Rows     []map[string]interface{}
 		RowCount int
 	}
 
-	rawExecutionFn := func(ctx context.Context, useMV bool) ExecutionResult {
-		// Mock query result simulation:
-		// Base table aggregates on the fly; MV scans pre-aggregated partition.
-		// Both return exact same rows.
-		return ExecutionResult{
-			Rows: []map[string]interface{}{
-				{"region": "EMEA", "metric_val": 54000.0},
-				{"region": "APAC", "metric_val": 32000.0},
-			},
-			RowCount: 2,
+	rawExecutionFn := func(ctx context.Context, grain string, useMV bool) ExecutionResult {
+		switch grain {
+		case "exact": // Exact grain: region + date
+			return ExecutionResult{
+				Rows: []map[string]interface{}{
+					{"region": "EMEA", "order_date": "2026-09-01", "metric_val": 25000.0},
+					{"region": "EMEA", "order_date": "2026-09-02", "metric_val": 29000.0},
+					{"region": "APAC", "order_date": "2026-09-01", "metric_val": 32000.0},
+				},
+				RowCount: 3,
+			}
+		case "coarser": // Coarser rollup grain: region only (StarRocks roll-up over MV)
+			return ExecutionResult{
+				Rows: []map[string]interface{}{
+					{"region": "EMEA", "metric_val": 54000.0},
+					{"region": "APAC", "metric_val": 32000.0},
+				},
+				RowCount: 2,
+			}
+		case "finer": // Finer grain than MV (e.g. account level) -> StarRocks skips MV and scans base table
+			return ExecutionResult{
+				Rows: []map[string]interface{}{
+					{"region": "EMEA", "account_id": "acc-1", "metric_val": 14000.0},
+					{"region": "EMEA", "account_id": "acc-2", "metric_val": 40000.0},
+					{"region": "APAC", "account_id": "acc-3", "metric_val": 32000.0},
+				},
+				RowCount: 3,
+			}
+		default:
+			return ExecutionResult{RowCount: 0}
 		}
 	}
 
-	resWithoutMV := rawExecutionFn(context.Background(), false)
-	resWithMV := rawExecutionFn(context.Background(), true)
+	for _, grain := range []string{"exact", "coarser", "finer"} {
+		resWithoutMV := rawExecutionFn(context.Background(), grain, false)
+		resWithMV := rawExecutionFn(context.Background(), grain, true)
 
-	assert.Equal(t, resWithoutMV.RowCount, resWithMV.RowCount)
-	assert.Equal(t, resWithoutMV.Rows, resWithMV.Rows, "routing transparency invariant: results must be byte-identical with or without MV")
+		assert.Equal(t, resWithoutMV.RowCount, resWithMV.RowCount, "row count mismatch for grain %s", grain)
+		assert.Equal(t, resWithoutMV.Rows, resWithMV.Rows, "routing transparency invariant violated for grain %s", grain)
+	}
 }
 
 // 7.2 Deliverable #2: StarRocks MV DDL Determinism & Tenant Scoping

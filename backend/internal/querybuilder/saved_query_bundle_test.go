@@ -512,3 +512,106 @@ func TestSavedQueryBundle_RoundTrip(t *testing.T) {
 	assert.Equal(t, original.State.Filters, importedContent.State.Filters)
 	assert.Equal(t, original.State.Parameters, importedContent.State.Parameters)
 }
+
+func TestSavedQueryBundle_RoundTripSquared(t *testing.T) {
+	// Step 1: Export from Tenant A
+	tenantAOriginal := savedQueryContent{
+		Name:        "Revenue by Desk",
+		Description: "Trading desks performance",
+		BOID:        "bo-trade",
+		ChartType:   "stackedBar",
+		State: SavedQueryState{
+			Dimensions: []SavedQueryDimension{{TermNodeID: "desk", Alias: "Desk", BOID: "bo-trade"}},
+			Measures:   []SavedQueryMeasure{{TermNodeID: "pnl", Alias: "PnL", Aggregation: "SUM", BOID: "bo-trade"}},
+			Filters:    []SavedQueryFilter{{TermNodeID: "desk", Operator: "in", Value: []interface{}{"FX", "Equities"}}},
+		},
+		Tags: []string{"trading", "risk"},
+	}.normalized()
+
+	hashA := ComputeContentHash(tenantAOriginal)
+	bundleA := QueryBundle{
+		SchemaVersion: QueryBundleSchemaVersion,
+		ExportedAt:    time.Now().UTC(),
+		Queries: []BundleQueryItem{
+			{
+				ID:          "q-desk-1",
+				Name:        tenantAOriginal.Name,
+				Description: tenantAOriginal.Description,
+				BOID:        tenantAOriginal.BOID,
+				ChartType:   tenantAOriginal.ChartType,
+				State:       tenantAOriginal.State,
+				Tags:        tenantAOriginal.Tags,
+				Provenance: BundleQueryProvenance{
+					ContentHash: hashA,
+				},
+				Dependencies: BundleQueryDependencies{
+					BOID:        tenantAOriginal.BOID,
+					TermNodeIDs: []string{"desk", "pnl"},
+				},
+			},
+		},
+	}
+
+	wireBytesA, err := json.Marshal(bundleA)
+	require.NoError(t, err)
+
+	// Step 2: Import into Tenant C (with rebound_core simulation)
+	var bundleC QueryBundle
+	err = json.Unmarshal(wireBytesA, &bundleC)
+	require.NoError(t, err)
+
+	tenantCImported := savedQueryContent{
+		Name:        bundleC.Queries[0].Name,
+		Description: bundleC.Queries[0].Description,
+		BOID:        bundleC.Queries[0].BOID,
+		ChartType:   bundleC.Queries[0].ChartType,
+		State:       bundleC.Queries[0].State,
+		Tags:        bundleC.Queries[0].Tags,
+	}.normalized()
+	hashC := ComputeContentHash(tenantCImported)
+
+	// Step 3: Re-export from Tenant C (Round-Trip Squared)
+	reExportBundleC := QueryBundle{
+		SchemaVersion: QueryBundleSchemaVersion,
+		ExportedAt:    time.Now().UTC(),
+		Queries: []BundleQueryItem{
+			{
+				ID:          "q-desk-c-rebound",
+				Name:        tenantCImported.Name,
+				Description: tenantCImported.Description,
+				BOID:        tenantCImported.BOID,
+				ChartType:   tenantCImported.ChartType,
+				State:       tenantCImported.State,
+				Tags:        tenantCImported.Tags,
+				Provenance: BundleQueryProvenance{
+					ContentHash: hashC,
+				},
+				Dependencies: BundleQueryDependencies{
+					BOID:        tenantCImported.BOID,
+					TermNodeIDs: []string{"desk", "pnl"},
+				},
+			},
+		},
+	}
+	wireBytesC, err := json.Marshal(reExportBundleC)
+	require.NoError(t, err)
+
+	var finalReExport QueryBundle
+	err = json.Unmarshal(wireBytesC, &finalReExport)
+	require.NoError(t, err)
+
+	finalContent := savedQueryContent{
+		Name:        finalReExport.Queries[0].Name,
+		Description: finalReExport.Queries[0].Description,
+		BOID:        finalReExport.Queries[0].BOID,
+		ChartType:   finalReExport.Queries[0].ChartType,
+		State:       finalReExport.Queries[0].State,
+		Tags:        finalReExport.Queries[0].Tags,
+	}.normalized()
+	finalHash := ComputeContentHash(finalContent)
+
+	// Invariant assertion: Round-trip-from-a-round-trip produces identical canonical hash
+	assert.Equal(t, hashA, hashC)
+	assert.Equal(t, hashC, finalHash)
+	assert.Equal(t, tenantAOriginal, finalContent)
+}
