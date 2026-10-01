@@ -172,6 +172,7 @@ export interface PageGridLayout {
 }
 
 export interface KpiTileConfig {
+  metricId?: string; // Phase 7.3: Metric definition ID (takes precedence over measureAlias)
   savedQueryId?: string;
   queryRef?: string;
   measureAlias: string;

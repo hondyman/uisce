@@ -107,7 +107,8 @@ export const KpiTileWidget: React.FC<KpiTileWidgetProps> = ({
   onRefresh,
 }) => {
   const rows = data?.rows || [];
-  const measureAlias = config.measureAlias;
+  // Resolution order: metricId -> measureAlias
+  const targetFieldKey = config.metricId || config.measureAlias;
 
   // Live polling at >=60s with document visibility state check
   useEffect(() => {
@@ -137,12 +138,14 @@ export const KpiTileWidget: React.FC<KpiTileWidgetProps> = ({
 
   // Extract primary value and historical series
   const { currentValue, delta, trendPoints } = useMemo(() => {
-    if (!rows.length || !measureAlias) {
+    if (!rows.length || !targetFieldKey) {
       return { currentValue: null, delta: null, trendPoints: [] };
     }
 
     const series = rows.map((r) => {
-      const val = Number(r[measureAlias]);
+      // Look up targetFieldKey (e.g. metricId, metric_val, or measureAlias)
+      const raw = r[targetFieldKey] !== undefined ? r[targetFieldKey] : r['metric_val'] !== undefined ? r['metric_val'] : r[config.measureAlias];
+      const val = Number(raw);
       return isNaN(val) ? 0 : val;
     });
 
@@ -169,7 +172,7 @@ export const KpiTileWidget: React.FC<KpiTileWidgetProps> = ({
     }
 
     return { currentValue: current, delta: calculatedDelta, trendPoints: series };
-  }, [rows, measureAlias, config.comparison]);
+  }, [rows, targetFieldKey, config.measureAlias, config.comparison]);
 
   const handleClick = () => {
     if (config.interactionConfig?.crossFilter?.enabled && onEmitCrossFilter) {
@@ -199,6 +202,11 @@ export const KpiTileWidget: React.FC<KpiTileWidgetProps> = ({
           <Typography variant="body2" color="text.secondary" fontWeight={500} noWrap>
             {title || config.measureAlias || 'KPI Metric'}
           </Typography>
+          {mode === 'design' && !config.metricId && (
+            <Tooltip title="Using legacy measureAlias binding. Consider binding to a Semantic Metric ID for catalog governance.">
+              <Chip size="small" variant="outlined" label="Raw Field" sx={{ height: 18, fontSize: '0.65rem' }} />
+            </Tooltip>
+          )}
           {missingTrendDimensionWarning && mode === 'design' && (
             <Tooltip title={missingTrendDimensionWarning}>
               <Chip
