@@ -25,7 +25,7 @@ vi.mock('../../../hooks/useNotification', () => ({
   }),
 }))
 
-const mockCreateBusinessObject = vi.fn()
+const mockSaveBindingWithFields = vi.fn()
 const mockFetchCatalogTables = vi.fn()
 const mockFetchSemanticTermsByTable = vi.fn()
 const mockFetchAllSemanticTerms = vi.fn()
@@ -38,7 +38,9 @@ vi.mock('../../../components/BusinessObjectManager/bindingWizard.service', async
   )
   return {
     ...actual,
-    createBusinessObject: (...args: any[]) => mockCreateBusinessObject(...args),
+    // The wizard saves via saveBindingWithFields; mocking the exported
+    // createBusinessObject would not intercept its in-module call.
+    saveBindingWithFields: (...args: any[]) => mockSaveBindingWithFields(...args),
     fetchCatalogTables: (...args: any[]) => mockFetchCatalogTables(...args),
     fetchSemanticTermsByTable: (...args: any[]) => mockFetchSemanticTermsByTable(...args),
     fetchAllSemanticTerms: (...args: any[]) => mockFetchAllSemanticTerms(...args),
@@ -73,7 +75,7 @@ describe('BusinessObjectBindingWizard', () => {
     mockFetchAllSemanticTerms.mockResolvedValue([])
     mockFetchRelatedSemanticTerms.mockResolvedValue([])
     mockFetchCalculatedSemanticTerms.mockResolvedValue([])
-    mockCreateBusinessObject.mockResolvedValue({ id: 'bo-1' })
+    mockSaveBindingWithFields.mockResolvedValue({ id: 'bo-1' })
   })
 
   it('renders the wizard and creates a business object', async () => {
@@ -104,10 +106,15 @@ describe('BusinessObjectBindingWizard', () => {
     await user.click(screen.getByRole('button', { name: /save draft/i }))
 
     await waitFor(() => {
-      expect(mockCreateBusinessObject).toHaveBeenCalled()
+      expect(mockSaveBindingWithFields).toHaveBeenCalled()
     })
 
-    expect(mockCreateBusinessObject).toHaveBeenCalledWith(
+    const [savedBo, publish] = mockSaveBindingWithFields.mock.calls[0]
+    expect(publish).toBe(false)
+    const { buildCreateBusinessObjectPayload } = await vi.importActual<
+      typeof import('../../../components/BusinessObjectManager/bindingWizard.service')
+    >('../../../components/BusinessObjectManager/bindingWizard.service')
+    expect(buildCreateBusinessObjectPayload(savedBo, publish)).toEqual(
       expect.objectContaining({
         name: 'Customer',
         driver_table_id: 'tbl-1',
