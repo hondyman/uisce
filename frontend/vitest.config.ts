@@ -2,6 +2,11 @@ import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Pin the zone so tests that read the machine's time zone (Intl default, Date
+// formatting) give the same answer on a laptop and on the UTC CI runner. Set
+// here, before vitest spawns its workers, so they inherit it.
+process.env.TZ = 'UTC'
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
