@@ -16,7 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   filterNavigationByCapabilities,
-  mapDesignerTreeToCategories,
+  flattenDesignerPages,
   type CategoryConfig,
 } from '@/components/MainNavigation';
 import type { NavigationMenuNode } from '@/api/navigationMenu';
@@ -279,7 +279,7 @@ describe('filterNavigationByCapabilities — entitlement (profile) gate', () => 
   });
 });
 
-describe('mapDesignerTreeToCategories', () => {
+describe('flattenDesignerPages', () => {
   const node = (over: Partial<NavigationMenuNode>): NavigationMenuNode => ({
     id: 'id',
     nodeKey: 'key',
@@ -289,94 +289,92 @@ describe('mapDesignerTreeToCategories', () => {
     ...over,
   });
 
-  it('returns null for an empty tree so the caller falls back to hardcoded nav', () => {
-    expect(mapDesignerTreeToCategories([])).toBeNull();
+  // Regression guard for the real bug: the navigation_menu_nodes tree is a
+  // Page Studio page tree, not a model of the platform nav. Treating its roots
+  // as top-level categories replaced the whole platform menu (Platform ->
+  // Organization -> Tenants) with two folders.
+  it('returns an empty list for an empty tree', () => {
+    expect(flattenDesignerPages([])).toEqual([]);
   });
 
-  it('maps root -> category, child -> group, grandchild -> item', () => {
+  it('skips grouping folders and surfaces only their page leaves', () => {
     const tree = [
       node({
         id: 'c1',
         label: 'Master Data',
         children: [
-          node({
-            id: 'g1',
-            label: 'Data Quality',
-            children: [
-              node({ id: 'i1', label: 'Scorecards', targetPageKey: 'scorecards' }),
-            ],
-          }),
+          node({ id: 'i1', label: 'Vendor registry', targetPageKey: 'mdm-vendors' }),
+          node({ id: 'i2', label: 'Match rules', targetPageKey: 'mdm-match-rules' }),
         ],
       }),
     ];
-    const out = mapDesignerTreeToCategories(tree);
-    expect(out).not.toBeNull();
-    expect(out![0].label).toBe('Master Data');
-    expect(out![0].menus[0].label).toBe('Data Quality');
-    expect(out![0].menus[0].items[0].label).toBe('Scorecards');
+    const out = flattenDesignerPages(tree);
+    expect(out.map((i) => i.path)).toEqual(['/pages/mdm-vendors', '/pages/mdm-match-rules']);
+    expect(out.map((i) => i.label)).toEqual(['Master Data › Vendor registry', 'Master Data › Match rules']);
   });
 
-  it('binds a leaf with a target page to /pages/<slug>', () => {
+  it('never turns a folder into a clickable item', () => {
+    const tree = [node({ id: 'c1', label: 'Orders', children: [] })];
+    expect(flattenDesignerPages(tree)).toEqual([]);
+  });
+
+  it('binds a page to /pages/<slug>', () => {
     const tree = [
-      node({
-        id: 'c1',
-        label: 'Cat',
-        children: [node({ id: 'i1', label: 'Report', targetPageKey: 'my-report' })],
-      }),
+      node({ id: 'c1', label: 'Orders', children: [node({ id: 'i1', label: 'Order List', targetPageKey: 'order-list-tl48' })] }),
     ];
-    const out = mapDesignerTreeToCategories(tree)!;
-    expect(out[0].menus[0].items[0].path).toBe('/pages/my-report');
-    expect(out[0].defaultPath).toBe('/pages/my-report');
+    expect(flattenDesignerPages(tree)[0].path).toBe('/pages/order-list-tl48');
   });
 
-  it('carries requiredEntitlement from the designer node through to the item', () => {
+  it('carries requiredEntitlement through so the profile gate can apply', () => {
     const tree = [
       node({
         id: 'c1',
-        label: 'Cat',
+        label: 'Admin',
         children: [
-          node({
-            id: 'i1',
-            label: 'AdminThing',
-            targetPageKey: 'admin-thing',
-            requiredEntitlement: 'PLATFORM_OPERATOR',
-          }),
+          node({ id: 'i1', label: 'AdminPage', targetPageKey: 'admin-page', requiredEntitlement: 'PLATFORM_OPERATOR' }),
         ],
       }),
     ];
-    const out = mapDesignerTreeToCategories(tree)!;
-    expect(out[0].menus[0].items[0].requiredEntitlement).toBe('PLATFORM_OPERATOR');
+    expect(flattenDesignerPages(tree)[0].requiredEntitlement).toBe('PLATFORM_OPERATOR');
   });
 
-  // The DB default is BASE_USER; it must not become a restrictive gate.
   it('treats a blank requiredEntitlement as ungated', () => {
     const tree = [
+      node({ id: 'c1', label: 'Open', targetPageKey: 'open', requiredEntitlement: '' }),
+    ];
+    expect(flattenDesignerPages(tree)[0].requiredEntitlement).toBeUndefined();
+  });
+
+  it('preserves the folder trail across three levels', () => {
+    const tree = [
       node({
         id: 'c1',
-        label: 'Cat',
-        requiredEntitlement: '',
-        children: [node({ id: 'i1', label: 'Open', targetPageKey: 'open', requiredEntitlement: '' })],
+        label: 'A',
+        children: [node({ id: 'g1', label: 'B', children: [node({ id: 'i1', label: 'C', targetPageKey: 'c' })] })],
       }),
     ];
-    const out = mapDesignerTreeToCategories(tree)!;
-    expect(out[0].requiredEntitlement).toBeUndefined();
-    expect(out[0].menus[0].items[0].requiredEntitlement).toBeUndefined();
+    expect(flattenDesignerPages(tree)[0].label).toBe('A › B › C');
   });
 
-  it('renders a childless root as a reachable single-item group', () => {
-    const out = mapDesignerTreeToCategories([node({ id: 'c1', label: 'Loner' })]);
-    expect(out).not.toBeNull();
-    expect(out![0].menus).toHaveLength(1);
-    expect(out![0].menus[0].label).toBe('Loner');
-  });
-
-  // A designer-created category is filtered by entitlement like any other.
-  it('feeds designer nodes through the profile gate', () => {
-    const tree = [
-      node({ id: 'c1', label: 'Ops', requiredEntitlement: 'PLATFORM_OPERATOR' }),
-    ];
-    const mapped = mapDesignerTreeToCategories(tree)!;
-    expect(filterNavigationByCapabilities(mapped, {}, false, ORG_ACCESS_VISIBLE, 'BASE_USER')).toHaveLength(0);
-    expect(filterNavigationByCapabilities(mapped, {}, false, ORG_ACCESS_VISIBLE, 'PLATFORM_OPERATOR')).toHaveLength(1);
+  // The designer item must still be subject to the same profile gate.
+  it('feeds a designer item through the profile gate', () => {
+    const cat: CategoryConfig = {
+      label: 'Build',
+      key: 'weave',
+      icon: null,
+      defaultPath: '/x',
+      color: { primary: '#000', light: '#111', dark: '#222', background: '#333' },
+      menus: [
+        {
+          label: 'Pages & APIs',
+          icon: null,
+          items: flattenDesignerPages([
+            node({ id: 'i1', label: 'Secret', targetPageKey: 'secret', requiredEntitlement: 'PLATFORM_OPERATOR' }),
+          ]),
+        },
+      ],
+    };
+    expect(filterNavigationByCapabilities([cat], {}, false, ORG_ACCESS_VISIBLE, 'BASE_USER')).toHaveLength(0);
+    expect(filterNavigationByCapabilities([cat], {}, false, ORG_ACCESS_VISIBLE, 'PLATFORM_OPERATOR')).toHaveLength(1);
   });
 });

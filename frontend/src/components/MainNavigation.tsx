@@ -559,18 +559,6 @@ interface MainNavigationProps {
   // No longer needed - ThemeToggleButton handles theme internally
 }
 
-// Per-category chrome (accent colour + default landing route) for nodes that
-// come from the Menu Designer tree. A designer-created category has no entry
-// here, so it gets a neutral theme derived from its position.
-const DESIGNER_CATEGORY_THEMES: Record<string, { primary: string; light: string; dark: string; background: string }> = {
-  Platform: { primary: '#607D8B', light: '#ECEFF1', dark: '#455A64', background: 'linear-gradient(135deg, #ECEFF1 0%, #CFD8DC 100%)' },
-  Catalog: { primary: '#1976D2', light: '#E3F2FD', dark: '#0D47A1', background: 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)' },
-  Build: { primary: '#388E3C', light: '#E8F5E9', dark: '#1B5E20', background: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)' },
-  Operations: { primary: '#F57C00', light: '#FFF3E0', dark: '#E65100', background: 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' },
-  Intelligence: { primary: '#7B1FA2', light: '#F3E5F5', dark: '#4A148C', background: 'linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%)' },
-  Consume: { primary: '#00838F', light: '#E0F7FA', dark: '#006064', background: 'linear-gradient(135deg, #E0F7FA 0%, #B2EBF2 100%)' },
-};
-
 // DB icon keys are free text set in the Menu Designer. Map the ones that have
 // an obvious equivalent to existing MUI icons and fall back to a neutral glyph
 // rather than rendering nothing.
@@ -588,77 +576,47 @@ const DESIGNER_ICON_MAP: Record<string, React.ReactNode> = {
   default: <FolderIcon />,
 };
 
-const DESIGNER_ICON_FALLBACK: React.ReactNode = <FolderIcon />;
-
-// Category keys are a fixed union; designer nodes map onto them by label so a
-// renamed label simply falls back to 'weave' rather than breaking the type.
-const DESIGNER_CATEGORY_KEYS: CategoryConfig['key'][] = [
-  'tenants', 'catalog', 'weave', 'workflow', 'intelligence', 'entity',
-];
-
 function designerIcon(key?: string | null): React.ReactNode {
-  if (!key) return DESIGNER_ICON_FALLBACK;
-  return DESIGNER_ICON_MAP[key] ?? DESIGNER_ICON_MAP[key.toLowerCase()] ?? DESIGNER_ICON_FALLBACK;
+  if (!key) return <FolderIcon />;
+  return DESIGNER_ICON_MAP[key] ?? DESIGNER_ICON_MAP[key.toLowerCase()] ?? <FolderIcon />;
 }
 
 /**
- * Convert the Menu Designer's navigation_menu_nodes tree into the same
- * CategoryConfig shape the hardcoded nav uses, so both flow through one filter
- * and one renderer.
+ * Flatten the Menu Designer's navigation_menu_nodes tree into nav items for
+ * Build -> Pages & APIs.
  *
- * Depth maps to level: root -> category, child -> menu group, grandchild ->
- * item. Nodes deeper than that are flattened into the deepest item level, since
- * the nav renders at exactly three levels.
+ * This tree is a tree of Page Studio business pages (seeded by the page
+ * migrations: Master Data, Orders, and their children), NOT a model of the
+ * platform navigation. Its roots are grouping folders; only nodes that carry a
+ * targetPageKey are reachable pages, so folders are skipped and their leaves
+ * surface directly.
  *
- * Returns null when the tree is empty or unusable, which is the signal for the
- * caller to fall back to the hardcoded configs.
+ * Grouping is preserved in the item label so "Master Data > Vendor registry"
+ * stays legible in a flat menu. required_entitlement is carried through so
+ * filterNavigationByCapabilities can drop nodes the caller's profile does not
+ * hold.
  */
-export function mapDesignerTreeToCategories(nodes: NavigationMenuNode[]): CategoryConfig[] | null {
-  const roots = (nodes ?? []).filter((n) => n && n.label);
-  if (roots.length === 0) return null;
-
-  const categories: CategoryConfig[] = [];
-  roots.forEach((root, index) => {
-    const children = root.children ?? [];
-    // A designer node with no children still deserves to appear: render it as
-    // a single-item group so the node is reachable.
-    const groups = children.length > 0 ? children : [root];
-    const theme = DESIGNER_CATEGORY_THEMES[root.label] ?? DESIGNER_CATEGORY_THEMES.Consume;
-
-    const menus: NavigationMenu[] = groups.map((group) => {
-      const leaves = group.children && group.children.length > 0 ? group.children : [group];
-      const items: NavigationItem[] = leaves.map((leaf) => ({
-        label: leaf.label,
-        // Designer leaves bind to a Page Studio page by slug; folders have none.
-        path: leaf.targetPageKey ? `/pages/${leaf.targetPageKey}` : '#',
-        icon: designerIcon(leaf.icon),
-        description: leaf.targetPageKey ? 'Page Studio page' : 'Menu group',
-        requiredEntitlement: leaf.requiredEntitlement || undefined,
-      }));
-      return {
-        label: group.label,
-        icon: designerIcon(group.icon),
-        items,
-        requiredEntitlement: group.requiredEntitlement || undefined,
-      };
-    });
-
-    const firstLeafWithTarget = menus
-      .flatMap((m) => m.items)
-      .find((i) => i.path.startsWith('/pages/'));
-
-    categories.push({
-      label: root.label,
-      key: DESIGNER_CATEGORY_KEYS[index % DESIGNER_CATEGORY_KEYS.length],
-      icon: designerIcon(root.icon),
-      defaultPath: firstLeafWithTarget?.path ?? '/',
-      color: theme,
-      menus,
-      requiredEntitlement: root.requiredEntitlement || undefined,
-    });
-  });
-
-  return categories.length > 0 ? categories : null;
+export function flattenDesignerPages(nodes: NavigationMenuNode[]): NavigationItem[] {
+  const out: NavigationItem[] = [];
+  const walk = (list: NavigationMenuNode[] | undefined, trail: string[]) => {
+    for (const node of list ?? []) {
+      if (!node || !node.label) continue;
+      if (node.targetPageKey) {
+        out.push({
+          label: trail.length > 0 ? `${trail.join(' › ')} › ${node.label}` : node.label,
+          path: `/pages/${node.targetPageKey}`,
+          icon: designerIcon(node.icon),
+          description: 'Menu Designer page',
+          requiredEntitlement: node.requiredEntitlement || undefined,
+        });
+      } else {
+        // A folder: descend, but only if it actually has children.
+        walk(node.children, [...trail, node.label]);
+      }
+    }
+  };
+  walk(nodes, []);
+  return out;
 }
 
 export const MainNavigation: React.FC<MainNavigationProps> = () => {
@@ -673,20 +631,24 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const organizationAccess = useOrganizationEntitlement();
   const { capabilities, profile: resolvedProfile } = useCapabilities();
 
-  // The Menu Designer's navigation_menu_nodes tree, which is the source of
-  // truth for this nav when present. Fetched once; on any failure or an empty
-  // result we keep the hardcoded categoryConfigs, so a backend problem can
-  // never blank the navigation.
-  const [designerCategories, setDesignerCategories] = useState<CategoryConfig[] | null>(null);
+  // The platform nav is the hardcoded categoryConfigs below. The Menu
+  // Designer's navigation_menu_nodes tree is a DIFFERENT thing: it is a tree of
+  // Page Studio business pages (Master Data, Orders, ...), seeded by the
+  // 20261118/20261129 page migrations, not a replacement for the platform nav.
+  // It is merged in as leaf items under Build -> Pages & APIs alongside the
+  // plain page list, so designer work adds pages without ever displacing the
+  // Platform / Catalog / Operations categories.
+  //
+  // required_entitlement on those nodes is enforced here: a node whose profile
+  // the caller does not hold is filtered out of the merged list.
+  const [designerPages, setDesignerPages] = useState<NavigationItem[]>([]);
   useEffect(() => {
     let cancelled = false;
     NavigationMenuApi.listTree()
-      .then((tree) => { if (!cancelled) setDesignerCategories(mapDesignerTreeToCategories(tree)); })
-      .catch(() => { if (!cancelled) setDesignerCategories(null); });
+      .then((tree) => { if (!cancelled) setDesignerPages(flattenDesignerPages(tree)); })
+      .catch(() => { if (!cancelled) setDesignerPages([]); });
     return () => { cancelled = true; };
   }, []);
-
-  const effectiveCategoryConfigs = designerCategories ?? categoryConfigs;
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
@@ -696,13 +658,13 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const baseCategoryConfigs = useMemo(
     () =>
       filterNavigationByCapabilities(
-        effectiveCategoryConfigs,
+        categoryConfigs,
         capabilities,
         isPlatformOperator,
         organizationAccess,
         resolvedProfile,
       ),
-    [effectiveCategoryConfigs, capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
+    [capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
   );
 
   // Real Page Studio pages, listed dynamically under Build -> Pages so a
@@ -720,7 +682,7 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   }, []);
 
   const filteredCategoryConfigs = useMemo(() => {
-    if (pageStudioPages.length === 0) return baseCategoryConfigs;
+    if (pageStudioPages.length === 0 && designerPages.length === 0) return baseCategoryConfigs;
     return baseCategoryConfigs.map((cat) => {
       if (cat.key !== 'weave') return cat;
       return {
@@ -733,11 +695,20 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
             icon: <DescriptionIcon />,
             description: 'Page Studio page',
           }));
-          return { ...menu, items: [...menu.items, ...pageItems] };
+          // Drop duplicates: a designer-tree node and a plain page can point at
+          // the same slug, and two identical rows in the menu look like a bug.
+          const deduped: NavigationItem[] = [];
+          const paths = new Set<string>();
+          for (const item of [...menu.items, ...pageItems, ...designerPages]) {
+            if (paths.has(item.path)) continue;
+            paths.add(item.path);
+            deduped.push(item);
+          }
+          return { ...menu, items: deduped };
         }),
       };
     });
-  }, [baseCategoryConfigs, pageStudioPages]);
+  }, [baseCategoryConfigs, pageStudioPages, designerPages]);
 
   const [categoryMenuAnchorEl, setCategoryMenuAnchorEl] = useState<null | HTMLElement>(null);
   // Default to Tenants category on initial load
