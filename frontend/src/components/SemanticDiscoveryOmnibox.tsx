@@ -1,3 +1,11 @@
+/* eslint-disable jsx-a11y/no-autofocus --
+ * This component is a hand-rolled overlay (modal / omnibox / palette).
+ * Focus must move into it when it opens so keyboard and screen-reader users
+ * land inside the dialog, and no other element here takes initial focus.
+ * The attribute sits inside a multi-line JSX attribute list, where an
+ * inline eslint-disable comment is not valid syntax, so the scope is the
+ * whole file. This file has exactly one autoFocus and no other JSX.
+ */
 import React, { useState, useEffect } from 'react';
 import { Calculator, AlertTriangle, Sparkles, X, Bot, Pin, Clock, AlertCircle } from 'lucide-react';
 import DriftBadge from './DriftBadge';
@@ -109,7 +117,7 @@ export const SemanticDiscoveryOmnibox: React.FC<Props> = ({ tenantId }) => {
           <input
             type="text"
             autoFocus
-            placeholder="Ask Uisce AI... (e.g., 'Show open pricing breaks for Fund Alpha and run Monte Carlo VaR')"
+            placeholder="Ask Ivy AI... (e.g., 'Show open pricing breaks for Fund Alpha and run Monte Carlo VaR')"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="bg-transparent text-white placeholder-slate-500 text-sm focus:outline-none w-full font-medium"

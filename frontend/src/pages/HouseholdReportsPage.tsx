@@ -39,6 +39,8 @@ interface SemanticView {
 // ============================================================================
 
 export const HouseholdReportsPage: React.FC = () => {
+  const confirm = useConfirm();
+
   // ========================================================================
   // STATE
   // ========================================================================
@@ -176,7 +178,6 @@ export const HouseholdReportsPage: React.FC = () => {
   };
 
   const handleDeleteReport = async (reportId: string) => {
-    const confirm = useConfirm();
     if (!(await confirm({ title: 'Delete report', description: 'Are you sure you want to delete this report?' }))) return;
 
     try {

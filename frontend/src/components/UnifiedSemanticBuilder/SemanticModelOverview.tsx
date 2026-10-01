@@ -5,8 +5,8 @@ import { IconDatabase, IconChartBar, IconFilter, IconEdit, IconTrash, IconChevro
 import { GitBranch as LucideGitBranch, ChevronsDown as LucideChevronsDown, ChevronsUp as LucideChevronsUp } from 'lucide-react';
 import { useGlobalSearch } from '../../contexts/GlobalSearchContext';
 import { useTenant } from '../../contexts/TenantContext';
-import { useExtensionsService } from '../../services/extensions';
 import { useToast } from '../../hooks/use-toast';
+import { useRouterCapability } from '../RouteBlocker/RouterCapabilityContext';
 import { SemanticModel } from './types';
 import { CoreOption } from './financialCalculations';
 
@@ -104,9 +104,13 @@ const SemanticModelOverview: FC<SemanticModelOverviewProps> = ({
   const [erroredMap, setErroredMap] = useState<Record<string, string[]>>({});
   const toast = useToast();
   const tenantCtx = useTenant();
-  const { validateExtension } = (() => {
-    try { return useExtensionsService(); } catch { return { validateExtension: async () => ({ issues: [] }) } as any; }
-  })();
+  // `useExtensionsService` reaches the router (useAuthFetch -> useNavigate/useLocation),
+  // so it used to be wrapped in try/catch with an inert fallback. A hook inside a try is
+  // a conditional hook call, so the hook count depended on whether a Router was mounted.
+  // RouterCapability carries the degradation instead: null validateExtension outside a
+  // Router, which is the same value the old catch returned.
+  const { validateExtension: validateExtensionCapability } = useRouterCapability();
+  const validateExtension = validateExtensionCapability ?? (async () => ({ issues: [] }));
 
   const storageKey = useMemo(() => {
     const id = (semanticModel as any)?.id || semanticModel?.name || 'default-model';

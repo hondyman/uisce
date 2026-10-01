@@ -109,7 +109,9 @@ import {
 } from '../../../components/common/CoreCustomIcons';
 import { useAccess } from '../../../contexts/AccessContext';
 import { useAuth } from '../../../contexts/AuthContext';
-import { ReportScheduleBurstingTab } from '../../../components/reporting/ReportScheduleBurstingTab';
+import ScheduleEditor from '../../schedules/ScheduleEditor';
+import ReportDeliveryParams from '../../schedules/ReportDeliveryParams';
+import { useTargetSchedule } from '../../schedules/useTargetSchedule';
 
 // ============================================================================
 // REPORT LIBRARY
@@ -369,7 +371,7 @@ export const ReportLibrary: React.FC = () => {
   const [selectedReport, setSelectedReport] = useState<SavedReport | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const reportSchedule = useTargetSchedule('report', selectedReport?.id, !!selectedReport);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [reportToDelete, setReportToDelete] = useState<SavedReport | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -1531,7 +1533,7 @@ export const ReportLibrary: React.FC = () => {
           return item;
         })()}
         <MenuItem onClick={() => {
-          setScheduleDialogOpen(true);
+          reportSchedule.openEditor();
           handleMenuClose();
         }}>
           <ListItemIcon><ScheduleIcon fontSize="small" /></ListItemIcon>
@@ -1765,31 +1767,19 @@ export const ReportLibrary: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Schedule Report Dialog (Option B: Hardened /api/v1/reports/:id/schedules) */}
-      <Dialog
-        open={scheduleDialogOpen}
-        onClose={() => setScheduleDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle sx={{ bgcolor: '#071526', color: '#F8FAFC', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          Schedule Report — {selectedReport?.name}
-        </DialogTitle>
-        <DialogContent sx={{ p: 0, bgcolor: '#071526' }}>
-          {selectedReport && (
-            <ReportScheduleBurstingTab
-              reportId={selectedReport.id}
-              reportName={selectedReport.name}
-              tenantId={currentTenant?.id}
-            />
+      {/* One scheduler: timing on Temporal Schedules; bursting/delivery in target.params */}
+      {selectedReport && reportSchedule.open && (
+        <ScheduleEditor
+          key={reportSchedule.schedule?.id ?? `report-${selectedReport.id}`}
+          open
+          schedule={reportSchedule.schedule}
+          fixedTarget={{ kind: 'report', ref: selectedReport.id, name: selectedReport.name }}
+          paramsSlot={({ params, setParams }) => (
+            <ReportDeliveryParams params={params} setParams={setParams} />
           )}
-        </DialogContent>
-        <DialogActions sx={{ bgcolor: '#071526', borderTop: '1px solid rgba(255,255,255,0.08)', px: 3, py: 1.5 }}>
-          <Button onClick={() => setScheduleDialogOpen(false)} sx={{ color: '#94A3B8' }}>
-            Close
-          </Button>
-        </DialogActions>
-      </Dialog>
+          onClose={reportSchedule.closeEditor}
+        />
+      )}
 
       {/* Folder Management Dialog (Create, Rename, Delete) */}
       <Dialog
@@ -1819,7 +1809,6 @@ export const ReportLibrary: React.FC = () => {
             </Typography>
           ) : (
             <TextField
-              autoFocus
               margin="dense"
               label="Folder Name"
               fullWidth

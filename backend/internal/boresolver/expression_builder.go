@@ -3,18 +3,16 @@ package boresolver
 import (
 	"fmt"
 	"strings"
+
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
-// This file centralizes SQL predicate/transformation compilation for the BO
-// SQL generator. It is deliberately narrow in scope: compiling a filter
-// operator + value into a parameterized SQL fragment, and applying a
-// field_bindings transformation (JSON_PATH/EXPRESSION) to a column
-// reference. It is NOT a general expression language — for boolean
-// rule/policy evaluation against already-materialized values, this codebase
-// already has that in backend/pkg/policy/cel_eval.go (CEL). This compiler's
-// job is narrower and different: producing a SQL fragment (plus bound
-// parameters) that gets pushed into a query, never raw string interpolation
-// of a caller-supplied value.
+// This file adapts filter clauses and field_bindings transformations
+// (JSON_PATH/EXPRESSION) to the BO SQL generator. Filter operator semantics
+// are the rule engine's (internal/rules/vm, CompileConditionSQL) - one
+// condition vocabulary whether the VM or the database evaluates it. This
+// file only binds parameters for the dialect and resolves field references;
+// it never interpolates a caller-supplied value into SQL.
 
 // CompiledPredicate is a SQL fragment paired with the parameter values it
 // references, in the order its placeholders appear.
@@ -37,160 +35,37 @@ func nextParam(g *BOSQLGenerator, ctx *GenerationContext, value interface{}) str
 
 // CompileFilterPredicate compiles one filter clause into a parameterized SQL
 // fragment appended to ctx.Args, given the already-resolved SQL expression
-// for the field (e.g. "t0.email"). It never interpolates filter.Value into
-// the SQL string directly.
+// for the field (e.g. "t0.email"). Operator semantics belong to the rule
+// engine (vm.CompileConditionSQL) - this only binds parameters for the
+// dialect and resolves cross-field comparisons. It never interpolates
+// filter.Value or filter.Operator into the SQL string.
 func CompileFilterPredicate(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr string, filter FilterClause) (string, error) {
-	op := strings.ToUpper(strings.TrimSpace(filter.Operator))
-	switch op {
-	case "", "EQ":
-		op = "="
-	case "NEQ":
-		op = "!="
-	case "GT":
-		op = ">"
-	case "LT":
-		op = "<"
-	case "GTE":
-		op = ">="
-	case "LTE":
-		op = "<="
-	// "NOT_IN"/"NOT_BETWEEN" (underscore form, as sent by e.g. FilterOperator
-	// values on the frontend) previously fell through every case below
-	// looking for the space form ("NOT IN"/"NOT BETWEEN") and silently
-	// emitted invalid SQL (`col NOT_IN $1` with a whole array bound as one
-	// scalar param) instead of erroring or working - normalize here once
-	// instead of teaching every downstream case both spellings.
-	case "NOT_IN":
-		op = "NOT IN"
-	case "NOT_BETWEEN":
-		op = "NOT BETWEEN"
-	}
-
-	switch op {
-	case "IS NULL", "NULL", "IS_NULL":
-		return fmt.Sprintf("%s IS NULL", sqlExpr), nil
-	case "IS NOT NULL", "NOT_NULL", "NOT NULL", "IS_NOT_NULL":
-		return fmt.Sprintf("%s IS NOT NULL", sqlExpr), nil
-	case "IS TRUE", "IS_TRUE":
-		return fmt.Sprintf("%s IS TRUE", sqlExpr), nil
-	case "IS FALSE", "IS_FALSE":
-		return fmt.Sprintf("%s IS FALSE", sqlExpr), nil
-	}
-
 	// Cross-field comparison ("shipped_date >= order_date"): the right-hand
-	// side is another resolved field's SQL expression, never a bound value.
-	if filter.ValueFieldID != "" {
+	// side is another resolved field's SQL expression, never a bound value,
+	// so only plain comparison operators are allowed. Value-less operators
+	// (IS NULL, ...) ignore it.
+	if filter.ValueFieldID != "" && !valueless(filter.Operator) {
+		sym, err := vm.ComparisonSQL(filter.Operator)
+		if err != nil {
+			return "", err
+		}
 		otherExpr, err := g.ResolvePath(ctx, filter.ValueFieldID)
 		if err != nil {
 			return "", fmt.Errorf("failed to resolve comparison field %s: %w", filter.ValueFieldID, err)
 		}
-		if op == "" {
-			op = "="
-		}
-		return fmt.Sprintf("%s %s %s", sqlExpr, op, otherExpr), nil
+		return fmt.Sprintf("%s %s %s", sqlExpr, sym, otherExpr), nil
 	}
-
-	if op == "BETWEEN" || op == "NOT BETWEEN" || op == "NOT_BETWEEN" {
-		bounds, ok := filter.Value.([]interface{})
-		if !ok || len(bounds) != 2 {
-			return "", fmt.Errorf("BETWEEN requires a two-element value array [low, high]")
-		}
-		lowTok := nextParam(g, ctx, bounds[0])
-		highTok := nextParam(g, ctx, bounds[1])
-		verb := "BETWEEN"
-		if op != "BETWEEN" {
-			verb = "NOT BETWEEN"
-		}
-		return fmt.Sprintf("%s %s %s AND %s", sqlExpr, verb, lowTok, highTok), nil
-	}
-
-	switch v := filter.Value.(type) {
-	case string:
-		switch op {
-		case "CONTAINS", "CONTAIN":
-			token := nextParam(g, ctx, "%"+v+"%")
-			return fmt.Sprintf("%s ILIKE %s", sqlExpr, token), nil
-		case "STARTS WITH", "STARTS_WITH", "START_WITH":
-			token := nextParam(g, ctx, v+"%")
-			return fmt.Sprintf("%s ILIKE %s", sqlExpr, token), nil
-		case "ENDS WITH", "ENDS_WITH", "END_WITH":
-			token := nextParam(g, ctx, "%"+v)
-			return fmt.Sprintf("%s ILIKE %s", sqlExpr, token), nil
-		case "IN", "NOT IN":
-			return compileInList(g, ctx, sqlExpr, op, splitCSV(v))
-		default:
-			if !isComparisonOperator(op) {
-				return "", fmt.Errorf("unsupported filter operator %q", filter.Operator)
-			}
-			token := nextParam(g, ctx, v)
-			return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil
-		}
-	case []interface{}:
-		if op == "" {
-			op = "IN"
-		}
-		return compileInList(g, ctx, sqlExpr, op, v)
-	case []string:
-		items := make([]interface{}, len(v))
-		for i, s := range v {
-			items[i] = s
-		}
-		return compileInList(g, ctx, sqlExpr, op, items)
-	default:
-		if !isComparisonOperator(op) {
-			return "", fmt.Errorf("unsupported filter operator %q", filter.Operator)
-		}
-		token := nextParam(g, ctx, v)
-		return fmt.Sprintf("%s %s %s", sqlExpr, op, token), nil
-	}
+	return vm.CompileConditionSQL(sqlExpr, filter.Operator, filter.Value, func(v interface{}) string {
+		return nextParam(g, ctx, v)
+	})
 }
 
-// isComparisonOperator reports whether op (already normalized/uppercased by
-// CompileFilterPredicate) is one of the plain comparison operators that
-// reach the two default branches above. Every other recognized operator
-// (IS NULL, BETWEEN, CONTAINS, IN, ...) is handled by its own explicit case
-// earlier in CompileFilterPredicate and never reaches here - so anything
-// that isn't one of these six is not a real operator this compiler knows,
-// and letting it through would interpolate the caller-supplied operator
-// string directly into the SQL text (e.g. filter.Operator = "1=1; --").
-func isComparisonOperator(op string) bool {
-	switch op {
-	case "=", "!=", ">", "<", ">=", "<=":
+func valueless(op string) bool {
+	switch vm.CanonicalOperator(op) {
+	case "is_null", "is_not_null", "is_true", "is_false":
 		return true
-	default:
-		return false
 	}
-}
-
-func splitCSV(v string) []interface{} {
-	parts := strings.Split(v, ",")
-	items := make([]interface{}, 0, len(parts))
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed != "" {
-			items = append(items, trimmed)
-		}
-	}
-	return items
-}
-
-func compileInList(g *BOSQLGenerator, ctx *GenerationContext, sqlExpr, op string, items []interface{}) (string, error) {
-	if op != "IN" && op != "NOT IN" {
-		op = "IN"
-	}
-	if len(items) == 0 {
-		// An empty IN-list is never true; NOT IN over nothing is always true.
-		// Encode without a placeholder since there's no value to bind.
-		if op == "NOT IN" {
-			return "1=1", nil
-		}
-		return "1=0", nil
-	}
-	tokens := make([]string, len(items))
-	for i, item := range items {
-		tokens[i] = nextParam(g, ctx, item)
-	}
-	return fmt.Sprintf("%s %s (%s)", sqlExpr, op, strings.Join(tokens, ", ")), nil
+	return false
 }
 
 // CompileFilterGroup recursively compiles a FilterGroup tree into a single

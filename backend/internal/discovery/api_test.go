@@ -202,6 +202,9 @@ func TestRejectCandidate(t *testing.T) {
 
 // Test: GetCandidate endpoint
 func TestGetCandidate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	handler := &DiscoveryHandler{
 		db:     setupTestDB(t),
 		logger: testLogger,
@@ -437,6 +440,9 @@ func TestCandidateResponseRationale(t *testing.T) {
 // Helper functions for tests
 
 func setupTestDB(t *testing.T) *sql.DB {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
 	dsn := "postgres://postgres:postgres@100.84.126.19:5432/alpha?sslmode=disable"
 	db, err := sql.Open("postgres", dsn)
 	if err != nil {

@@ -288,13 +288,3 @@ func PublishCompletionEvent(ctx context.Context, req ComputeRequest) error {
 
 	return nil
 }
-
-// RefreshCubePartitions calls Cube.dev API to refresh specific partitions
-func RefreshCubePartitions(ctx context.Context, req ComputeRequest) error {
-	// TODO: Implement Cube.dev API call
-	// For now, just log that refresh would happen
-	fmt.Printf("Would refresh Cube partitions for tenant=%s, metric=%s\n",
-		req.TenantID, req.MetricID)
-
-	return nil
-}

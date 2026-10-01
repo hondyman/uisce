@@ -160,10 +160,15 @@ func TestMCP_TenantMismatch_MatchNonDefaultTenant(t *testing.T) {
 	gold := uuid.MustParse("99999999-9999-4999-8999-999999999999")
 	mock.ExpectQuery("uisce_gold_copy_tenant_id").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(gold))
+	mock.ExpectBegin()
+	mock.ExpectExec("uisce\\.current_tenant").WithArgs(altTenantID).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("app\\.tenant_id").WithArgs(altTenantID).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("uisce\\.gold_tenant").WithArgs(gold.String()).WillReturnResult(sqlmock.NewResult(0, 0))
 	rows := sqlmock.NewRows([]string{"id", "name", "slug", "status"})
 	mock.ExpectQuery("FROM public.page_definitions").
 		WithArgs(uuid.MustParse(altTenantID), gold).
 		WillReturnRows(rows)
+	mock.ExpectCommit()
 
 	handler := NewMCPToolHandler(sqlxDB)
 	args := map[string]interface{}{

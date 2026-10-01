@@ -45,6 +45,9 @@ export const ReportBuilderUI: React.FC<ReportBuilderUIProps> = ({
   onDelete,
   initialConfig,
 }) => {
+  const confirm = useConfirm();
+  const notification = useNotification();
+
   const [formData, setFormData] = useState<ReportConfig>(
     initialConfig || {
       name: '',
@@ -158,8 +161,6 @@ export const ReportBuilderUI: React.FC<ReportBuilderUIProps> = ({
   };
 
   const handleDelete = () => {
-    const confirm = useConfirm();
-    const notification = useNotification();
     (async () => {
       if (formData.id && (await confirm({ title: 'Delete report config', description: 'Delete this report configuration?' }))) {
         onDelete?.(formData.id);

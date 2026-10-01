@@ -154,29 +154,6 @@ type PreAggSuggestion struct {
 	CreatedAt   time.Time `json:"created_at,omitempty"`
 }
 
-// Cube Schema types (for dynamic cube generation)
-
-type CubeSchema struct {
-	Cubes []CubeDefinition `json:"cubes"`
-}
-
-type CubeDefinition struct {
-	Name       string                   `json:"name"`
-	SQL        string                   `json:"sql"`
-	Measures   map[string]CubeMeasure   `json:"measures"`
-	Dimensions map[string]CubeDimension `json:"dimensions"`
-}
-
-type CubeMeasure struct {
-	SQL  string `json:"sql"`
-	Type string `json:"type"` // "number", "sum", "avg", etc.
-}
-
-type CubeDimension struct {
-	SQL  string `json:"sql"`
-	Type string `json:"type"` // "string", "time", "number"
-}
-
 // Helper to unmarshal PreAggProperties from catalog_node.properties
 func ParsePreAggProperties(raw json.RawMessage) (*PreAggProperties, error) {
 	var props PreAggProperties

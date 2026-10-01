@@ -1,4 +1,5 @@
 import type { SavedQueryChartType } from '../types/queryDef';
+import { buildOptionFromRegistry } from '../charts/registry';
 
 /**
  * Builds an ECharts option from a flat rows/columns result - shared between
@@ -8,30 +9,18 @@ import type { SavedQueryChartType } from '../types/queryDef';
  */
 export function buildChartOption(
   rows: Record<string, unknown>[],
-  columns: { name: string }[],
+  columns: { name: string; termNodeId?: string; alias?: string; type?: string }[],
   chartType: SavedQueryChartType,
   dimCol?: string,
-  measureCol?: string
+  measureCol?: string,
+  secondaryDimCol?: string,
+  measureCols?: string[],
+  comboTypes?: Record<string, 'bar' | 'line'>
 ) {
-  const dim = dimCol || columns[0]?.name;
-  const measure = measureCol || columns.find((c) => c.name !== dim)?.name || columns[1]?.name;
-  const categories = rows.map((r) => String(r[dim] ?? ''));
-  const values = rows.map((r) => Number(r[measure]) || 0);
-
-  if (chartType === 'pie') {
-    return {
-      tooltip: { trigger: 'item' },
-      series: [{
-        type: 'pie',
-        radius: '65%',
-        data: categories.map((c, i) => ({ name: c, value: values[i] })),
-      }],
-    };
-  }
-  return {
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: categories },
-    yAxis: { type: 'value' },
-    series: [{ type: chartType, data: values, smooth: chartType === 'line' }],
-  };
+  return buildOptionFromRegistry(
+    chartType,
+    { rows, columns },
+    { dimCol, measureCol, secondaryDimCol, measureCols, comboTypes }
+  );
 }
+

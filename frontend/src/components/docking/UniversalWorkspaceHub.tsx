@@ -288,7 +288,7 @@ export const UniversalWorkspaceHub: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    document.title = 'Uisce Multi-Monitor Workstation';
+    document.title = 'Ivy Multi-Monitor Workstation';
     const desktop = platformService.isWails();
     setIsDesktop(desktop);
 

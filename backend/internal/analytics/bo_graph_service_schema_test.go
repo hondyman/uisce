@@ -40,17 +40,17 @@ func TestResolveEffectiveFields_DeltaMerge(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT
 			id,
-			business_object_id,
-			COALESCE(field_name, name) as field_name,
-			COALESCE(semantic_term_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
-			COALESCE(field_role, type, 'DIMENSION') as field_role,
+			bo_id as business_object_id,
+			field_name,
+			COALESCE(term_node_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
+			COALESCE(field_role, 'DIMENSION') as field_role,
 			COALESCE(binding_requirement, CASE WHEN is_required THEN 'REQUIRED' ELSE 'OPTIONAL' END) as binding_requirement,
-			COALESCE(binding_status, 'RESOLVED') as binding_status,
-			parent_field_id,
-			eligibility_source,
-			is_inherited_override
-		FROM public.bo_fields
-		WHERE business_object_id = $1 AND tenant_id = $2;`,
+			'RESOLVED' as binding_status,
+			NULL::uuid as parent_field_id,
+			COALESCE(eligibility_source, 'DIRECT') as eligibility_source,
+			false as is_inherited_override
+		FROM public.business_object_fields
+		WHERE bo_id = $1 AND tenant_id = $2;`,
 	)).WithArgs(parentBOID, uuid.MustParse(testutil.GoldCopyTenantID(t))).WillReturnRows(
 		sqlmock.NewRows([]string{
 			"id", "business_object_id", "field_name", "semantic_term_id",
@@ -67,17 +67,17 @@ func TestResolveEffectiveFields_DeltaMerge(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT
 			id,
-			business_object_id,
-			COALESCE(field_name, name) as field_name,
-			COALESCE(semantic_term_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
-			COALESCE(field_role, type, 'DIMENSION') as field_role,
+			bo_id as business_object_id,
+			field_name,
+			COALESCE(term_node_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
+			COALESCE(field_role, 'DIMENSION') as field_role,
 			COALESCE(binding_requirement, CASE WHEN is_required THEN 'REQUIRED' ELSE 'OPTIONAL' END) as binding_requirement,
-			COALESCE(binding_status, 'RESOLVED') as binding_status,
-			parent_field_id,
-			eligibility_source,
-			is_inherited_override
-		FROM public.bo_fields
-		WHERE business_object_id = $1 AND tenant_id = $2;`,
+			'RESOLVED' as binding_status,
+			NULL::uuid as parent_field_id,
+			COALESCE(eligibility_source, 'DIRECT') as eligibility_source,
+			false as is_inherited_override
+		FROM public.business_object_fields
+		WHERE bo_id = $1 AND tenant_id = $2;`,
 	)).WithArgs(childBOID, tenantID).WillReturnRows(
 		sqlmock.NewRows([]string{
 			"id", "business_object_id", "field_name", "semantic_term_id",
@@ -140,17 +140,17 @@ func TestResolveEffectiveFields_DirectOnly(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(
 		`SELECT
 			id,
-			business_object_id,
-			COALESCE(field_name, name) as field_name,
-			COALESCE(semantic_term_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
-			COALESCE(field_role, type, 'DIMENSION') as field_role,
+			bo_id as business_object_id,
+			field_name,
+			COALESCE(term_node_id, '00000000-0000-0000-0000-000000000000')::uuid as semantic_term_id,
+			COALESCE(field_role, 'DIMENSION') as field_role,
 			COALESCE(binding_requirement, CASE WHEN is_required THEN 'REQUIRED' ELSE 'OPTIONAL' END) as binding_requirement,
-			COALESCE(binding_status, 'RESOLVED') as binding_status,
-			parent_field_id,
-			eligibility_source,
-			is_inherited_override
-		FROM public.bo_fields
-		WHERE business_object_id = $1 AND tenant_id = $2;`,
+			'RESOLVED' as binding_status,
+			NULL::uuid as parent_field_id,
+			COALESCE(eligibility_source, 'DIRECT') as eligibility_source,
+			false as is_inherited_override
+		FROM public.business_object_fields
+		WHERE bo_id = $1 AND tenant_id = $2;`,
 	)).WithArgs(boID, tenantID).WillReturnRows(
 		sqlmock.NewRows([]string{
 			"id", "business_object_id", "field_name", "semantic_term_id",

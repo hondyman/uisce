@@ -96,11 +96,11 @@ func TestGenerateTermsAsyncDispatch(t *testing.T) {
 	// Poll for completion
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	var finalJob Job
+	var finalJob *Job
 	for {
 		job, found := store.Get(tenantID, resp.JobID)
 		if found && (job.Status == JobStatusCompleted || job.Status == JobStatusFailed) {
-			finalJob = job
+			finalJob = &job
 			break
 		}
 		if ctx.Err() != nil {

@@ -4,7 +4,7 @@ import {
   Box, Typography, TextField, InputAdornment, Button, Card, CardActionArea, CardContent,
   Chip, Stack, CircularProgress, Alert, Grid, IconButton, Tooltip, Menu, MenuItem, Dialog,
   DialogTitle, DialogContent, DialogActions, Select, MenuItem as SelectMenuItem, InputLabel, FormControl,
-  FormControlLabel, Switch,
+  FormControlLabel, Switch, ToggleButton, ToggleButtonGroup, Divider,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import AddIcon from '@mui/icons-material/Add';
@@ -17,6 +17,16 @@ import EditIcon from '@mui/icons-material/Edit';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
+import RestoreIcon from '@mui/icons-material/Restore';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
+import PublishIcon from '@mui/icons-material/Publish';
+import UnpublishedIcon from '@mui/icons-material/Unpublished';
+import CoreCompareDialog from './CoreCompareDialog';
+import PlaceOnMenuDialog from './PlaceOnMenuDialog';
+import MenuOpenIcon from '@mui/icons-material/MenuOpen';
+import { routesForSlug } from './studioRoutes';
 import { PageStudioApi } from '../../api/pageStudio';
 import type { CorePageDefinition } from '../../types/pageStudio';
 import { useTenant } from '../../contexts/TenantContext';
@@ -24,6 +34,12 @@ import { apiClient } from '../../utils/apiClient';
 import { generatePageDraft, type BOOption } from './generatePageDraft';
 import type { GeneratedPageKind } from '../../api/pageStudio';
 import { NavigationMenuApi, NavigationMenuNode } from '../../api/navigationMenu';
+import { PAGE_BLUEPRINTS, type PageBlueprint } from './app/blueprints';
+import { GenerateFromOperationsDialog } from './app/GenerateFromOperationsDialog';
+import { handOverGeneratedDraft } from './app/generatedDraft';
+import { SaveAsTemplateDialog, TemplateGalleryDialog } from './app/TemplateDialogs';
+
+const NO_SECTION = '__none__';
 
 const flattenMenuNodes = (nodes: NavigationMenuNode[], depth = 0): { node: NavigationMenuNode; depth: number }[] =>
   nodes.flatMap((node) => [{ node, depth }, ...flattenMenuNodes(node.children || [], depth + 1)]);
@@ -50,6 +66,13 @@ const PageStudioListPage: React.FC = () => {
   const [renameTarget, setRenameTarget] = useState<CorePageDefinition | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [renaming, setRenaming] = useState(false);
+  const [scope, setScope] = useState<'all' | 'core' | 'custom'>('all');
+  // Menu section (top-level menu entry) filter; NO_SECTION = not on the menu.
+  const [section, setSection] = useState('');
+  const [placeTarget, setPlaceTarget] = useState<CorePageDefinition | null>(null);
+  const [compareTarget, setCompareTarget] = useState<CorePageDefinition | null>(null);
+  const [confirm, setConfirm] = useState<{ title: string; body: string; label: string; run: () => Promise<void> } | null>(null);
+  const [confirming, setConfirming] = useState(false);
 
   const [aiOpen, setAiOpen] = useState(false);
   const [aiBOs, setAiBOs] = useState<BOOption[]>([]);
@@ -130,15 +153,35 @@ const PageStudioListPage: React.FC = () => {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return pages;
-    return pages.filter((p) =>
+    const scoped = pages
+      .filter((p) => scope === 'all' || (scope === 'core') === !!p.isCore)
+      .filter((p) => !section || (section === NO_SECTION
+        ? !(p.menuPlacements?.length)
+        : (p.menuPlacements ?? []).some((m) => m.path[0] === section)));
+    if (!q) return scoped;
+    return scoped.filter((p) =>
       p.name.toLowerCase().includes(q) ||
       p.slug.toLowerCase().includes(q) ||
       (p.description || '').toLowerCase().includes(q)
     );
-  }, [pages, search]);
+  }, [pages, search, scope, section]);
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(pages.flatMap((p) => (p.menuPlacements ?? []).map((m) => m.path[0])))).sort(),
+    [pages],
+  );
 
   const closeMenu = () => setMenuAnchor(null);
+
+  // Blueprints: complete pages built from the page model, opened as an
+  // unsaved draft; saving creates the page.
+  const [blueprintAnchor, setBlueprintAnchor] = useState<HTMLElement | null>(null);
+  const [opsOpen, setOpsOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [templateSource, setTemplateSource] = useState<CorePageDefinition | null>(null);
+  const handleBlueprint = (bp: PageBlueprint) => {
+    setBlueprintAnchor(null);
+    navigate(`new?blueprint=${bp.id}`);
+  };
 
   const handleClone = async (page: CorePageDefinition) => {
     closeMenu();
@@ -150,6 +193,80 @@ const PageStudioListPage: React.FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to clone page');
     } finally {
       setCloning(false);
+    }
+  };
+
+  // ── Core page lifecycle (tenant side) ───────────────────────────────────
+  // A tenant chooses per core page: switch it off, use it as shipped,
+  // extend it (customizations carried across upgrades), or clone it (no
+  // upgrades). The core page itself is never written.
+  const inherited = (p: CorePageDefinition) => !!p.isCore && !!p.customization;
+  const replacePage = (updated: CorePageDefinition) =>
+    setPages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+
+  const runCoreAction = async (run: () => Promise<void>, failure: string) => {
+    closeMenu();
+    try {
+      await run();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : failure);
+    }
+  };
+
+  const togglePublished = (page: CorePageDefinition) =>
+    runCoreAction(async () => {
+      const updated = await PageStudioApi.setStatus(page.id, page.status === 'published' ? 'draft' : 'published');
+      setPages((prev) => prev.map((p) => (p.id === updated.id ? { ...p, status: updated.status, updatedAt: updated.updatedAt } : p)));
+    }, 'Failed to change publish status');
+
+  const toggleActive = (page: CorePageDefinition) =>
+    runCoreAction(async () => {
+      replacePage(await PageStudioApi.setCoreActive(page.id, !page.customization?.active));
+    }, 'Failed to change activation');
+
+  const askCloneCore = (page: CorePageDefinition) => {
+    closeMenu();
+    setConfirm({
+      title: `Clone "${page.name}"?`,
+      body:
+        'Your environment gets its own copy of this page at the same address, replacing the core page. ' +
+        'Clones are not upgraded: future core versions will not reach it, and it will not be compared with the core.' +
+        (page.customization?.mode === 'extended' ? ' Your current customizations are copied into the clone.' : ''),
+      label: 'Clone',
+      run: async () => {
+        const clone = await PageStudioApi.cloneCore(page.id);
+        navigate(clone.id);
+      },
+    });
+  };
+
+  const askRevert = (page: CorePageDefinition) => {
+    closeMenu();
+    const cloned = page.customization?.mode === 'cloned';
+    setConfirm({
+      title: `Revert "${page.name}" to core?`,
+      body: cloned
+        ? 'Your clone of this page is deleted and the core page is used as shipped, switched on. This cannot be undone.'
+        : 'All your customizations of this page are removed and the core page is used as shipped, switched on. To drop only some, use Compare with core instead.',
+      label: cloned ? 'Delete clone and revert' : 'Remove customizations',
+      run: async () => {
+        await PageStudioApi.revertToCore(page.id);
+        load();
+      },
+    });
+  };
+
+  const runConfirm = async () => {
+    if (!confirm) return;
+    setConfirming(true);
+    try {
+      await confirm.run();
+      setConfirm(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Action failed');
+      setConfirm(null);
+    } finally {
+      setConfirming(false);
     }
   };
 
@@ -194,20 +311,56 @@ const PageStudioListPage: React.FC = () => {
           <Button variant="outlined" startIcon={<AutoAwesomeIcon />} onClick={openAiDialog}>
             Generate with AI
           </Button>
+          <Button variant="outlined" onClick={() => setGalleryOpen(true)}>
+            From template
+          </Button>
+          <Button variant="outlined" onClick={() => setOpsOpen(true)}>
+            From operations
+          </Button>
+          <Button variant="outlined" onClick={(e) => setBlueprintAnchor(e.currentTarget)}>
+            From blueprint
+          </Button>
+          <Menu anchorEl={blueprintAnchor} open={!!blueprintAnchor} onClose={() => setBlueprintAnchor(null)}>
+            {PAGE_BLUEPRINTS.map((bp) => (
+              <MenuItem key={bp.id} onClick={() => handleBlueprint(bp)} sx={{ display: 'block', maxWidth: 360, whiteSpace: 'normal' }}>
+                <Typography variant="body2" fontWeight={600}>{bp.name}</Typography>
+                <Typography variant="caption" color="text.secondary">{bp.description}</Typography>
+              </MenuItem>
+            ))}
+          </Menu>
+          <TemplateGalleryDialog open={galleryOpen} onClose={() => setGalleryOpen(false)}
+            onChosen={(draft) => { setGalleryOpen(false); handOverGeneratedDraft(draft); navigate('new?generated=1'); }} />
+          <SaveAsTemplateDialog page={templateSource} onClose={() => setTemplateSource(null)} onSaved={() => setTemplateSource(null)} />
+          <GenerateFromOperationsDialog open={opsOpen} onClose={() => setOpsOpen(false)}
+            onGenerated={(draft) => { setOpsOpen(false); handOverGeneratedDraft(draft); navigate('new?generated=1'); }} />
           <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('new')}>
             New Page
           </Button>
         </Stack>
       </Stack>
 
-      <TextField
-        fullWidth
-        placeholder="Search pages by name, slug, or description…"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        sx={{ mb: 3 }}
-        InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-      />
+      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          placeholder="Search pages by name, slug, or description…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+        />
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="ps-section">Menu section</InputLabel>
+          <Select labelId="ps-section" label="Menu section" value={section} onChange={(e) => setSection(e.target.value as string)}>
+            <SelectMenuItem value="">All sections</SelectMenuItem>
+            {sectionOptions.map((s) => <SelectMenuItem key={s} value={s}>{s}</SelectMenuItem>)}
+            <SelectMenuItem value={NO_SECTION}>Not on the menu</SelectMenuItem>
+          </Select>
+        </FormControl>
+        <ToggleButtonGroup exclusive size="small" value={scope} onChange={(_, v) => v && setScope(v)}>
+          <ToggleButton value="all" sx={{ textTransform: 'none', px: 2 }}>All</ToggleButton>
+          <ToggleButton value="core" sx={{ textTransform: 'none', px: 2 }}>Core</ToggleButton>
+          <ToggleButton value="custom" sx={{ textTransform: 'none', px: 2 }}>Custom</ToggleButton>
+        </ToggleButtonGroup>
+      </Stack>
 
       {loading && <Box sx={{ display: 'flex', justifyContent: 'center', p: 6 }}><CircularProgress /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
@@ -233,7 +386,7 @@ const PageStudioListPage: React.FC = () => {
               <CardActionArea onClick={() => navigate(page.id)} sx={{ height: '100%', p: 0.5 }}>
                 <CardContent>
                   <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, pr: 3 }}>
-                    <Tooltip title={page.isCore ? 'Core page (gold-copy, inherited read-only)' : 'Custom page'}>
+                    <Tooltip title={page.isCore ? 'Core page (gold copy)' : page.clonedFrom ? 'Clone of a core page' : 'Custom page'}>
                       {page.isCore ? <VerifiedIcon color="primary" fontSize="small" /> : <PersonIcon color="action" fontSize="small" />}
                     </Tooltip>
                     <DescriptionIcon color="disabled" fontSize="small" />
@@ -247,7 +400,7 @@ const PageStudioListPage: React.FC = () => {
                       {page.description}
                     </Typography>
                   )}
-                  <Stack direction="row" spacing={1}>
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
                     <Chip
                       size="small"
                       label={page.status === 'published' ? 'Published' : 'Draft'}
@@ -255,6 +408,42 @@ const PageStudioListPage: React.FC = () => {
                       variant={page.status === 'published' ? 'filled' : 'outlined'}
                     />
                     <Chip size="small" label={`v${page.version ?? 1}`} variant="outlined" />
+                    {page.customization && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color={page.customization.mode === 'extended' ? 'secondary' : 'default'}
+                        label={{ vanilla: 'Vanilla', extended: `Extended · v${page.customization.baseVersion}`, cloned: 'Cloned' }[page.customization.mode]}
+                      />
+                    )}
+                    {page.customization && !page.customization.active && <Chip size="small" color="error" variant="outlined" label="Inactive" />}
+                    {page.customization?.upgradeAvailable && (
+                      <Chip
+                        size="small"
+                        color="warning"
+                        label={`Upgrade v${page.customization.baseVersion} → v${page.customization.coreVersion}`}
+                        onClick={(e) => { e.stopPropagation(); setCompareTarget(page); }}
+                      />
+                    )}
+                    {page.clonedFrom && (
+                      <Tooltip title="An independent copy - core upgrades do not reach it.">
+                        <Chip size="small" variant="outlined" label={`Clone of core v${page.clonedFrom.version}`} />
+                      </Tooltip>
+                    )}
+                  </Stack>
+                  {/* Where the page lives: menu entries and app routes it serves. */}
+                  <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+                    {(page.menuPlacements ?? []).map((m) => (
+                      <Tooltip key={m.nodeId} title={m.inherited ? 'Menu entry from the gold copy' : 'Menu entry'}>
+                        <Chip size="small" variant="outlined" color="info" icon={<MenuOpenIcon />} label={m.path.join(' › ')} />
+                      </Tooltip>
+                    ))}
+                    {!(page.menuPlacements?.length) && <Chip size="small" variant="outlined" label="Not on the menu" />}
+                    {routesForSlug(page.slug).map((r) => (
+                      <Tooltip key={r} title="Served at this app route">
+                        <Chip size="small" variant="outlined" label={r} sx={{ fontFamily: 'monospace' }} />
+                      </Tooltip>
+                    ))}
                   </Stack>
                 </CardContent>
               </CardActionArea>
@@ -264,25 +453,105 @@ const PageStudioListPage: React.FC = () => {
       </Grid>
 
       <Menu anchorEl={menuAnchor?.el} open={!!menuAnchor} onClose={closeMenu}>
-        <MenuItem onClick={() => { const p = menuAnchor!.page; closeMenu(); navigate(p.id); }}>
-          <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
-        </MenuItem>
-        <MenuItem onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
-          <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
-        </MenuItem>
-        <MenuItem onClick={() => handleClone(menuAnchor!.page)}>
-          <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Clone
-        </MenuItem>
-        <MenuItem onClick={() => { setDeleteTarget(menuAnchor!.page); closeMenu(); }} sx={{ color: 'error.main' }}>
-          <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
-        </MenuItem>
+        {menuAnchor && inherited(menuAnchor.page) ? (() => {
+          const p = menuAnchor.page;
+          const c = p.customization!;
+          const items = [
+            <MenuItem key="open" onClick={() => { closeMenu(); navigate(p.id); }}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} /> {p.canCustomize && c.mode !== 'cloned' ? (c.mode === 'extended' ? 'Edit customization' : 'Extend') : 'Open'}
+            </MenuItem>,
+            <MenuItem key="place" onClick={() => { closeMenu(); setPlaceTarget(p); }}>
+              <MenuOpenIcon fontSize="small" sx={{ mr: 1 }} /> Place on menu…
+            </MenuItem>,
+          ];
+          if (!p.canCustomize) return items;
+          if (c.mode === 'extended') {
+            items.push(
+              <MenuItem key="compare" onClick={() => { closeMenu(); setCompareTarget(p); }}>
+                <CompareArrowsIcon fontSize="small" sx={{ mr: 1 }} /> {c.upgradeAvailable ? `Review upgrade to v${c.coreVersion}` : 'Compare with core'}
+              </MenuItem>,
+            );
+          }
+          if (c.mode === 'cloned' && c.clonePageId) {
+            items.push(
+              <MenuItem key="clone-open" onClick={() => { closeMenu(); navigate(c.clonePageId!); }}>
+                <EditIcon fontSize="small" sx={{ mr: 1 }} /> Open my clone
+              </MenuItem>,
+            );
+          }
+          items.push(
+            <MenuItem key="active" onClick={() => toggleActive(p)}>
+              <PowerSettingsNewIcon fontSize="small" sx={{ mr: 1 }} /> {c.active ? 'Switch off in my environment' : 'Switch on'}
+            </MenuItem>,
+          );
+          if (c.mode !== 'cloned') {
+            items.push(
+              <MenuItem key="clone" onClick={() => askCloneCore(p)}>
+                <CallSplitIcon fontSize="small" sx={{ mr: 1 }} /> Clone (no upgrades)
+              </MenuItem>,
+            );
+          }
+          if (c.mode !== 'vanilla') {
+            items.push(
+              <Divider key="d" />,
+              <MenuItem key="revert" onClick={() => askRevert(p)} sx={{ color: 'error.main' }}>
+                <RestoreIcon fontSize="small" sx={{ mr: 1 }} /> Revert to core
+              </MenuItem>,
+            );
+          }
+          return items;
+        })() : [
+          <MenuItem key="edit" onClick={() => { const p = menuAnchor!.page; closeMenu(); navigate(p.id); }}>
+            <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+          </MenuItem>,
+          ...(menuAnchor?.page.editable !== false ? [
+            <MenuItem key="publish" onClick={() => togglePublished(menuAnchor!.page)}>
+              {menuAnchor?.page.status === 'published'
+                ? <><UnpublishedIcon fontSize="small" sx={{ mr: 1 }} /> Unpublish</>
+                : <><PublishIcon fontSize="small" sx={{ mr: 1 }} /> Publish</>}
+            </MenuItem>,
+          ] : []),
+          <MenuItem key="place" onClick={() => { const p = menuAnchor!.page; closeMenu(); setPlaceTarget(p); }}>
+            <MenuOpenIcon fontSize="small" sx={{ mr: 1 }} /> Place on menu…
+          </MenuItem>,
+          <MenuItem key="rename" onClick={() => { const p = menuAnchor!.page; setRenameDraft(p.name); setRenameTarget(p); closeMenu(); }}>
+            <DriveFileRenameOutlineIcon fontSize="small" sx={{ mr: 1 }} /> Rename
+          </MenuItem>,
+          <MenuItem key="clone" onClick={() => handleClone(menuAnchor!.page)}>
+            <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Duplicate
+          </MenuItem>,
+          <MenuItem key="template" onClick={() => { const p = menuAnchor!.page; closeMenu(); setTemplateSource(p); }}>
+            <ContentCopyIcon fontSize="small" sx={{ mr: 1 }} /> Save as template…
+          </MenuItem>,
+          <MenuItem key="delete" onClick={() => { setDeleteTarget(menuAnchor!.page); closeMenu(); }} sx={{ color: 'error.main' }}>
+            <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
+          </MenuItem>,
+        ]}
       </Menu>
+
+      <PlaceOnMenuDialog page={placeTarget} onClose={() => setPlaceTarget(null)} onChanged={load} />
+      <CoreCompareDialog
+        page={compareTarget}
+        onClose={() => setCompareTarget(null)}
+        onChanged={(p) => { replacePage(p); load(); }}
+      />
+      <Dialog open={!!confirm} onClose={() => !confirming && setConfirm(null)} maxWidth="sm">
+        <DialogTitle>{confirm?.title}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">{confirm?.body}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)} disabled={confirming}>Cancel</Button>
+          <Button variant="contained" color="warning" onClick={runConfirm} disabled={confirming}>
+            {confirming ? 'Working…' : confirm?.label}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!renameTarget} onClose={() => !renaming && setRenameTarget(null)}>
         <DialogTitle>Rename page</DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
             fullWidth
             label="Page name"
             value={renameDraft}

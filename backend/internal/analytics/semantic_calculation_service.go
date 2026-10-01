@@ -630,9 +630,7 @@ func (s *SemanticCalculationService) ExecuteCalculationWithContext(calc Financia
 	}()
 	// Routing logic based on engine
 	engine := calc.GetEngine()
-	if engine == "cube" {
-		return s.executeCubeCalculation(calc, mapping)
-	} else if engine == "spark" {
+	if engine == "spark" {
 		return s.executeSparkCalculation(calc)
 	}
 

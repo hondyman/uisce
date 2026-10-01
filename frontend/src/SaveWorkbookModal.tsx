@@ -1,3 +1,11 @@
+/* eslint-disable jsx-a11y/no-autofocus --
+ * This component is a hand-rolled overlay (modal / omnibox / palette).
+ * Focus must move into it when it opens so keyboard and screen-reader users
+ * land inside the dialog, and no other element here takes initial focus.
+ * The attribute sits inside a multi-line JSX attribute list, where an
+ * inline eslint-disable comment is not valid syntax, so the scope is the
+ * whole file. This file has exactly one autoFocus and no other JSX.
+ */
 import { useState } from 'react';
 import { useNotification } from './hooks/useNotification';
 import { createWorkbook } from './api';
@@ -11,12 +19,13 @@ interface SaveWorkbookModalProps {
 }
 
 export default function SaveWorkbookModal({ tabs, onClose, onSaved }: SaveWorkbookModalProps) {
+  const notification = useNotification();
+
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
 
   const handleSave = async () => {
     if (!name) {
-      const notification = useNotification();
       notification.error('Workbook name is required.');
       return;
     }
@@ -33,12 +42,10 @@ export default function SaveWorkbookModal({ tabs, onClose, onSaved }: SaveWorkbo
 
     try {
       const savedWorkbook = await createWorkbook({ name, description, tabs: workbookTabs });
-      const notification = useNotification();
       notification.success(`Workbook "${savedWorkbook.name}" saved!`);
       onSaved(savedWorkbook.id);
       onClose();
     } catch (error) {
-      const notification = useNotification();
       notification.error(`Failed to save workbook: ${(error as Error).message}`);
     }
   };

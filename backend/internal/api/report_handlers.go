@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -698,179 +697,40 @@ type createScheduleHTTPBody struct {
 }
 
 // ListSchedulesForTemplate handles GET /api/v1/reports/{id}/schedules.
+// Slice 4: legacy table dropped; use GET /api/schedules?kind=report&ref={id}.
 func (h *ReportHandler) ListSchedulesForTemplate(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, _, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	tmplIDStr := chi.URLParam(r, "id")
-	tmplID, err := uuid.Parse(tmplIDStr)
-	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
-		return
-	}
-
-	schedules, err := h.service.ListSchedulesForTemplate(r.Context(), tenantID, userID, tmplID)
-	if err != nil {
-		if errors.Is(err, reports.ErrNotFound) {
-			http.Error(w, "Report template not found", http.StatusNotFound)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(schedules)
+	writeLegacyScheduleGone(w)
 }
 
 // CreateScheduleForTemplate handles POST /api/v1/reports/{id}/schedules.
 func (h *ReportHandler) CreateScheduleForTemplate(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, _, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	tmplIDStr := chi.URLParam(r, "id")
-	tmplID, err := uuid.Parse(tmplIDStr)
-	if err != nil {
-		http.Error(w, "Invalid template ID", http.StatusBadRequest)
-		return
-	}
-
-	var body createScheduleHTTPBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "Invalid request body: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if body.ScheduleName == "" {
-		http.Error(w, "schedule_name is required", http.StatusBadRequest)
-		return
-	}
-	if body.CronExpression == "" {
-		http.Error(w, "cron_expression is required", http.StatusBadRequest)
-		return
-	}
-
-	sched, err := h.service.CreateSchedule(r.Context(), tenantID, userID, reports.CreateScheduleInput{
-		TemplateID:          tmplID,
-		ScheduleName:        body.ScheduleName,
-		CronExpression:      body.CronExpression,
-		Region:              body.Region,
-		CalendarID:          body.CalendarID,
-		StartOfDayTime:      body.StartOfDayTime,
-		UnscheduledBehavior: body.UnscheduledBehavior,
-		BusinessDayOffset:   body.BusinessDayOffset,
-		BurstDimension:      body.BurstDimension,
-		ExportFormat:        body.ExportFormat,
-		NotifyInApp:         body.NotifyInApp,
-		NotifyEmail:         body.NotifyEmail,
-	})
-	if err != nil {
-		if errors.Is(err, reports.ErrNotFound) {
-			http.Error(w, "Report template not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, reports.ErrConflict) {
-			http.Error(w, "Schedule name already exists for this report template", http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(sched)
+	writeLegacyScheduleGone(w)
 }
 
 // DeleteSchedule handles DELETE /api/v1/reports/{id}/schedules/{sid}.
 func (h *ReportHandler) DeleteSchedule(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	sidStr := chi.URLParam(r, "sid")
-	sid, err := uuid.Parse(sidStr)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
-		return
-	}
-
-	if err := h.service.DeleteSchedule(r.Context(), tenantID, userID, isAdmin, sid); err != nil {
-		if errors.Is(err, reports.ErrNotFound) {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, reports.ErrForbidden) {
-			http.Error(w, "Forbidden: only schedule owner or tenant admin can delete schedule", http.StatusForbidden)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	writeLegacyScheduleGone(w)
 }
 
 // TriggerScheduleRun handles POST /api/v1/reports/{id}/schedules/{sid}/run.
-// Dispatches report execution asynchronously via the injected executor and returns HTTP 202 Accepted.
 func (h *ReportHandler) TriggerScheduleRun(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	sidStr := chi.URLParam(r, "sid")
-	sid, err := uuid.Parse(sidStr)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
-		return
-	}
-
-	res, err := h.service.TriggerScheduleRun(r.Context(), tenantID, userID, isAdmin, sid, h.executor)
-	if err != nil {
-		var dispatchErr *reports.DispatchError
-		if errors.As(err, &dispatchErr) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(map[string]interface{}{
-				"execution_id": dispatchErr.ExecutionID,
-				"error":        dispatchErr.Err.Error(),
-			})
-			return
-		}
-		if errors.Is(err, reports.ErrNotFound) {
-			http.Error(w, "Schedule not found", http.StatusNotFound)
-			return
-		}
-		if errors.Is(err, reports.ErrForbidden) {
-			http.Error(w, "Forbidden: only schedule owner or tenant admin can trigger schedule", http.StatusForbidden)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// 202 Accepted payload: truthful async execution status
-	responseBody := map[string]interface{}{
-		"status":       "pending",
-		"execution_id": res.ExecutionID,
-	}
-	// workflow_id is only populated if non-empty; never an empty string
-	workflowID := fmt.Sprintf("report-exec-%s", res.ExecutionID)
-	responseBody["workflow_id"] = workflowID
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(responseBody)
+	writeLegacyScheduleGone(w)
 }
 
 // GetExecution handles GET /api/v1/reports/executions/{id}.
@@ -1125,70 +985,9 @@ func (h *ReportHandler) ListExecutionEvents(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *ReportHandler) ListScheduleExecutions(w http.ResponseWriter, r *http.Request) {
-	tenantID, userID, isAdmin, err := h.resolveAuthContext(r)
-	if err != nil {
+	if _, _, _, err := h.resolveAuthContext(r); err != nil {
 		http.Error(w, err.Error(), http.StatusUnauthorized)
 		return
 	}
-
-	scheduleIDStr := chi.URLParam(r, "sid")
-	scheduleID, err := uuid.Parse(scheduleIDStr)
-	if err != nil {
-		http.Error(w, "Invalid schedule ID", http.StatusBadRequest)
-		return
-	}
-
-	cursorStr := r.URL.Query().Get("cursor")
-	var cursor *reports.Cursor
-	if cursorStr != "" {
-		c, err := reports.DecodeCursor(cursorStr)
-		if err != nil {
-			http.Error(w, "Invalid cursor", http.StatusBadRequest)
-			return
-		}
-		cursor = &c
-	}
-
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if _, parseErr := strconv.Atoi(l); parseErr == nil {
-			limit, _ = strconv.Atoi(l)
-		}
-	}
-
-	execs, err := h.executionRepo.ListScheduleExecutions(r.Context(), scheduleID, tenantID, userID, isAdmin, cursor, limit)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	items := make([]map[string]interface{}, 0, len(execs))
-	for _, e := range execs {
-		item := map[string]interface{}{
-			"id": e.ID, "tenant_id": e.TenantID, "template_id": e.TemplateID,
-			"status": e.Status, "created_at": e.CreatedAt,
-		}
-		if e.ScheduleID != nil {
-			item["schedule_id"] = e.ScheduleID
-		}
-		if e.OutputURL.Valid && e.OutputURL.String != "" {
-			item["output_url"] = e.OutputURL.String
-		}
-		if e.ErrorMessage.Valid && e.ErrorMessage.String != "" {
-			item["error_message"] = e.ErrorMessage.String
-		}
-		items = append(items, item)
-	}
-
-	resp := map[string]interface{}{"items": items}
-	if len(execs) == limit {
-		lastExec := execs[len(execs)-1]
-		ec := reports.Cursor{CreatedAt: lastExec.CreatedAt, ID: lastExec.ID}
-		enc, _ := reports.EncodeCursor(ec)
-		resp["next_cursor"] = enc
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	writeLegacyScheduleGone(w)
 }

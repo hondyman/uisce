@@ -103,6 +103,11 @@ type SemanticTermView struct {
 	Role               string `json:"role"`
 	BindingStatus      string `json:"bindingStatus"`
 	DefaultAggregation string `json:"defaultAggregation,omitempty"`
+	// TermType is "calculated" for calc-term catalog nodes (vm.Expression
+	// backed), empty for physical-column terms. The frontend uses this to
+	// avoid auto-populating aggregation for calc terms — their compiled
+	// expression defines any aggregation internally.
+	TermType string `json:"termType,omitempty"`
 	// DrillPath lists the term node ids of successive drill-down levels
 	// configured once on this field's semantic term (catalog_node.properties
 	// ->'drill_path') and inherited by every BO field bound to that term —

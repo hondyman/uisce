@@ -103,7 +103,7 @@ export const UisceAICommandCenter: React.FC = () => {
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
           <Typography variant="h4" fontWeight={800} sx={{ color: '#F8FAFC' }}>
-            Uisce AI Command Center
+            Ivy AI Command Center
           </Typography>
           <Typography variant="body2" sx={{ color: '#94A3B8' }}>
             Global Anonymized AI Flywheel, Behavioral Anomalies & Industry Benchmarks

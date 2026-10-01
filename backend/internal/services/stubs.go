@@ -227,10 +227,6 @@ func NewSimpleFIBOMatcher() interface{} {
 	return nil
 }
 
-func NewCubeSyncService(db interface{}, path string) interface{} {
-	return nil
-}
-
 func NewPolicyService() platform.PolicyService {
 	// Use the platform implementation for policy evaluation in tests so
 	// behavior (allow/deny and attribute checks) matches production expectations.

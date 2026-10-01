@@ -28,29 +28,42 @@ func NewGovernanceHandler(govSvc *scheduler.GovernanceService, auditSvc *schedul
 	}
 }
 
-// RegisterRoutes registers governance routes
+// RegisterRoutes registers governance routes.
+// Slice 5 follow-up: S2 governance HTTP is retired with the satellite tables.
+// Maker–checker for schedules lives on the one scheduler / shared governance later.
 func (h *GovernanceHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/api/scheduler/governance", func(r chi.Router) {
-		// ChangeSets
-		r.Get("/changesets", h.ListChangeSets)
-		r.Post("/changesets", h.CreateChangeSet)
-		r.Get("/changesets/{id}", h.GetChangeSet)
-		r.Post("/changesets/{id}/approve", h.ApproveChangeSet)
-		r.Post("/changesets/{id}/reject", h.RejectChangeSet)
-		r.Post("/changesets/{id}/apply", h.ApplyChangeSet)
-		r.Post("/changesets/{id}/rollback", h.RollbackChangeSet)
+		r.Get("/changesets", h.retiredGovernance)
+		r.Post("/changesets", h.retiredGovernance)
+		r.Get("/changesets/{id}", h.retiredGovernance)
+		r.Post("/changesets/{id}/approve", h.retiredGovernance)
+		r.Post("/changesets/{id}/reject", h.retiredGovernance)
+		r.Post("/changesets/{id}/apply", h.retiredGovernance)
+		r.Post("/changesets/{id}/rollback", h.retiredGovernance)
 
-		// Policies
-		r.Get("/policies", h.ListPolicies)
-		r.Post("/policies", h.CreatePolicy)
-		r.Get("/policies/{id}", h.GetPolicy)
-		r.Patch("/policies/{id}", h.UpdatePolicy)
-		r.Delete("/policies/{id}", h.DeletePolicy)
+		r.Get("/policies", h.retiredGovernance)
+		r.Post("/policies", h.retiredGovernance)
+		r.Get("/policies/{id}", h.retiredGovernance)
+		r.Patch("/policies/{id}", h.retiredGovernance)
+		r.Delete("/policies/{id}", h.retiredGovernance)
 
-		// Audit
-		r.Get("/audit", h.GetAuditHistory)
-		r.Get("/audit/entity/{type}/{id}", h.GetEntityTimeline)
-		r.Get("/audit/stats", h.GetAuditStats)
+		r.Get("/audit", h.retiredGovernance)
+		r.Get("/audit/entity/{type}/{id}", h.retiredGovernance)
+		r.Get("/audit/stats", h.retiredGovernance)
+	})
+}
+
+func (h *GovernanceHandler) retiredGovernance(w http.ResponseWriter, r *http.Request) {
+	if _, _, err := handlers.SecurityContextFromRequest(r, "", "", h.securityDeps); err != nil {
+		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Link", "</api/schedules>; rel=\"successor-version\"")
+	w.WriteHeader(http.StatusGone)
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"error":   "scheduler_governance_retired",
+		"message": "Scheduler Intelligence governance is closed. Use /api/schedules for timetable schedules (including workflow and job_dag).",
 	})
 }
 

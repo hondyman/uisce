@@ -324,7 +324,9 @@ func (s *Service) ListSchedules(ctx context.Context, tenantID, datasourceID uuid
 	return s.repo.ListSchedules(ctx, tenantID, datasourceID)
 }
 
-// ProcessDueSchedules processes schedules that are due
+// ProcessDueSchedules processes schedules that are due.
+// Slice 4: no caller remains — report firing belongs on internal/schedule + Temporal.
+// Kept as dead code until the legacy report_schedules table is dropped.
 func (s *Service) ProcessDueSchedules(ctx context.Context) error {
 	schedules, err := s.repo.GetDueSchedules(ctx)
 	if err != nil {

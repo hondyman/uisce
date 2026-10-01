@@ -20,6 +20,10 @@ import type { SavedQuery } from '../../features/query-builder/types/queryDef';
 import { apiClient } from '../../utils/apiClient';
 import { newPresentationRule, collectPresentationTargets } from './presentationEvents';
 import { RuleCard } from './PresentationEventsPanel';
+import AppWidgetInspector from './app/AppWidgetInspector';
+import { isAppWidget } from './app/AppWidgets';
+import ContainerInspector from './app/ContainerInspector';
+import { isContainerType } from './app/containers';
 
 interface PropertiesPanelProps {
   selectedId: string | null;
@@ -219,6 +223,14 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
         <Typography variant="body2" color="text.secondary">Unknown selection</Typography>
       </Paper>
     );
+  }
+
+  if (layoutNode && layout && isContainerType(layoutNode.type)) {
+    return <ContainerInspector node={layoutNode} layout={layout} onLayoutChange={onLayoutChange} draft={draft} />;
+  }
+
+  if (component && isAppWidget(component.type)) {
+    return <AppWidgetInspector component={component} draft={draft} setDraft={setDraft} />;
   }
 
   const style = (layoutNode?.style || component?.style || {}) as Record<string, string>;
@@ -853,6 +865,52 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedId, onSelectC
               })()}
             </Box>
           )}
+
+          {/* Cross-Filtering Configuration */}
+          <Box sx={{ mt: 2, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="caption" fontWeight={700} sx={{ textTransform: 'uppercase', color: 'text.secondary', display: 'block', mb: 1 }}>
+              Cross-Filtering
+            </Typography>
+            <FormControlLabel
+              sx={{ display: 'block', mb: 1 }}
+              control={
+                <Switch
+                  size="small"
+                  checked={component.props?.crossFilterConfig?.enabled !== false}
+                  onChange={(e) =>
+                    updateProps({
+                      crossFilterConfig: {
+                        ...(component.props?.crossFilterConfig || {}),
+                        enabled: e.target.checked,
+                      },
+                    })
+                  }
+                />
+              }
+              label={<Typography variant="body2">Enable Cross-Filtering</Typography>}
+            />
+            {component.props?.crossFilterConfig?.enabled !== false && (
+              <TextField
+                select
+                size="small"
+                fullWidth
+                label="Mode"
+                value={component.props?.crossFilterConfig?.mode || 'both'}
+                onChange={(e) =>
+                  updateProps({
+                    crossFilterConfig: {
+                      ...(component.props?.crossFilterConfig || {}),
+                      mode: e.target.value as 'emit' | 'receive' | 'both',
+                    },
+                  })
+                }
+              >
+                <MenuItem value="both">Both (Emit & Receive)</MenuItem>
+                <MenuItem value="emit">Emit only</MenuItem>
+                <MenuItem value="receive">Receive only</MenuItem>
+              </TextField>
+            )}
+          </Box>
         </Box>
       )}
 

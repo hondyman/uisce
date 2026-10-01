@@ -122,8 +122,6 @@ spec:
               value: "http://semantic-engine:8081"
             - name: GOVERNANCE_ENGINE_URL
               value: "http://governance-engine:8082"
-            - name: CUBE_API_URL
-              value: "http://cube-api:4000"
               
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}

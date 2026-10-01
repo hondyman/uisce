@@ -1,6 +1,15 @@
 import React from 'react';
 import { Box, Typography, Card, CardActionArea, Grid } from '@mui/material';
 import { useDraggable } from '@dnd-kit/core';
+import DrawerIcon from '@mui/icons-material/VerticalSplit';
+import DialogIcon from '@mui/icons-material/WebAsset';
+import TabsIcon from '@mui/icons-material/Tab';
+import KeyValueIcon from '@mui/icons-material/ListAlt';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import FormWidgetIcon from '@mui/icons-material/EditNote';
+import TextBlockIcon from '@mui/icons-material/Notes';
+import CanvasIcon from '@mui/icons-material/AccountTree';
+import ChatIcon from '@mui/icons-material/Forum';
 import {
     TableChart as TableIcon,
     ShowChart as ChartIcon,
@@ -13,6 +22,13 @@ import {
     Link as LinkIcon,
     ViewSidebar as PanelIcon,
     Dashboard as TileIcon,
+    ViewHeadline as HeaderIcon,
+    ArrowDropDownCircle as SelectIcon,
+    Search as SearchIcon,
+    TouchApp as ActionIcon,
+    GridOn as GridIcon,
+    Campaign as AlertIcon,
+    Extension as DomainIcon,
 } from '@mui/icons-material';
 
 /**
@@ -42,6 +58,11 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'Row', icon: <LayoutIcon />, group: 'Layout' },
     { type: 'Column', icon: <LayoutIcon />, group: 'Layout' },
     { type: 'Panel', icon: <PanelIcon />, group: 'Layout' },
+    // Containers with page state (app/containers.tsx): overlays opened by a
+    // condition, and tabs inside a region (a drawer's own tabs).
+    { type: 'Drawer', icon: <DrawerIcon />, group: 'Layout' },
+    { type: 'Dialog', icon: <DialogIcon />, group: 'Layout' },
+    { type: 'TabSet', icon: <TabsIcon />, group: 'Layout' },
     { type: 'Text', icon: <TextIcon />, group: 'Data' },
     { type: 'Table', icon: <TableIcon />, group: 'Data' },
     { type: 'LineChart', icon: <ChartIcon />, group: 'Data' },
@@ -52,6 +73,21 @@ const COMPONENT_TYPES: WidgetDefinition[] = [
     { type: 'FixCommand', icon: <ButtonIcon />, group: 'Filters & Actions' },
     { type: 'Hyperlink', icon: <LinkIcon />, group: 'Filters & Actions' },
     { type: 'Tile', icon: <TileIcon />, group: 'Filters & Actions' },
+    // Page application widgets (app/AppWidgets.tsx): driven by the page's
+    // variables, registered-operation queries and actions - see the App tab.
+    { type: 'PageHeader', icon: <HeaderIcon />, group: 'App' },
+    { type: 'VariableSelect', icon: <SelectIcon />, group: 'App' },
+    { type: 'SearchInput', icon: <SearchIcon />, group: 'App' },
+    { type: 'ActionButton', icon: <ActionIcon />, group: 'App' },
+    { type: 'DataGrid', icon: <GridIcon />, group: 'App' },
+    { type: 'AlertBanner', icon: <AlertIcon />, group: 'App' },
+    { type: 'DomainComponent', icon: <DomainIcon />, group: 'App' },
+    { type: 'KeyValue', icon: <KeyValueIcon />, group: 'App' },
+    { type: 'Timeline', icon: <TimelineIcon />, group: 'App' },
+    { type: 'Form', icon: <FormWidgetIcon />, group: 'App' },
+    { type: 'TextBlock', icon: <TextBlockIcon />, group: 'App' },
+    { type: 'Canvas', icon: <CanvasIcon />, group: 'App' },
+    { type: 'Chat', icon: <ChatIcon />, group: 'App' },
     // Report Studio only — band types. Not shown in Page Studio's palette
     // (filtered below) and not rendered by PageComponentRenderer; they
     // become live once Phase 3 builds ReportCanvas/ReportBandDesigner.
@@ -69,15 +105,17 @@ const GROUP_LABELS: Record<string, string> = {
     Layout: 'Layout',
     Data: 'Data Displays',
     'Filters & Actions': 'Filters & Actions',
+    App: 'App (state, operations, actions)',
     'Report Bands': 'Report Bands',
 };
 const GROUP_COLORS: Record<string, string> = {
     Layout: 'primary.main',
     Data: 'secondary.main',
     'Filters & Actions': 'warning.main',
+    App: 'success.main',
     'Report Bands': 'info.main',
 };
-const GROUP_ORDER = ['Layout', 'Data', 'Filters & Actions', 'Report Bands'];
+const GROUP_ORDER = ['Layout', 'Data', 'Filters & Actions', 'App', 'Report Bands'];
 
 /** Page Studio's palette guard: report-only widgets never appear here, full stop. */
 const PAGE_STUDIO_COMPONENT_TYPES = COMPONENT_TYPES.filter((c) => (c.availableIn ?? ['page']).includes('page'));

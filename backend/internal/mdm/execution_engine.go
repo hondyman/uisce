@@ -2,15 +2,15 @@ package mdm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/hondyman/uisce/backend/internal/analytics"
-	"github.com/tetratelabs/wazero"
-	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
+	vm "github.com/hondyman/uisce/backend/internal/rules/vm"
 )
 
 // ExecutionTrace represents the trace of a calculation execution
@@ -23,31 +23,26 @@ type ExecutionTrace struct {
 	Error        string                    `json:"error,omitempty"`
 }
 
-// ExecutionEngine handles recursive semantic term resolution and execution
+// calcGraph is the slice of the semantic graph the engine reads: a term and
+// its calc_depends_on_* edges. *analytics.SemanticGraphService satisfies it.
+type calcGraph interface {
+	GetNodeByID(nodeID uuid.UUID) (*analytics.SemanticNode, error)
+	GetOutgoingEdges(nodeID uuid.UUID) ([]analytics.SemanticEdge, error)
+}
+
+// ExecutionEngine resolves a calculation term's dependencies recursively and
+// evaluates it with the platform's single rule engine, internal/rules/vm.
 type ExecutionEngine struct {
-	graphService *analytics.SemanticGraphService
-	wasmRuntime  wazero.Runtime
-	moduleCache  sync.Map // Map[string]wazero.CompiledModule
+	graphService calcGraph
 	monitor      *analytics.ExecutionMonitorService
 }
 
 // NewExecutionEngine creates a new execution engine
 func NewExecutionEngine(ctx context.Context, graphService *analytics.SemanticGraphService, monitor *analytics.ExecutionMonitorService) (*ExecutionEngine, error) {
-	r := wazero.NewRuntime(ctx)
-
-	// Add WASI to the runtime
-	wasi_snapshot_preview1.MustInstantiate(ctx, r)
-
 	return &ExecutionEngine{
 		graphService: graphService,
-		wasmRuntime:  r,
 		monitor:      monitor,
 	}, nil
-}
-
-// Close closes the runtime
-func (e *ExecutionEngine) Close(ctx context.Context) error {
-	return e.wasmRuntime.Close(ctx)
 }
 
 // ExecuteCalculation resolves dependencies and executes a calculation term
@@ -141,32 +136,8 @@ func (e *ExecutionEngine) ExecuteCalculation(ctx context.Context, termID uuid.UU
 
 	trace.Inputs = inputs
 
-	// 3. Execution logic based on node properties
-	engine, _ := node.Properties["engine"].(string)
-	expression, _ := node.Properties["expression"].(string)
-
-	var result interface{}
-	switch engine {
-	case "wasm":
-		result, err = e.executeWASM(ctx, expression, inputs)
-	case "mock":
-		// Simple mock engine for testing: if expression is "sum", sum inputs
-		if expression == "sum" {
-			var sum float64
-			for _, v := range inputs {
-				if f, ok := v.(float64); ok {
-					sum += f
-				}
-			}
-			result = sum
-		} else {
-			result = 0.0
-		}
-	default:
-		// Fallback to mock for now if not specified
-		result = 0.0
-	}
-
+	// 3. Evaluate with internal/rules/vm
+	result, err := evaluateTerm(node, inputs)
 	if err != nil {
 		trace.Error = err.Error()
 		return nil, trace, err
@@ -176,26 +147,88 @@ func (e *ExecutionEngine) ExecuteCalculation(ctx context.Context, termID uuid.UU
 	return result, trace, nil
 }
 
-// executeWASM pseudo-implementation for demo
-// In a real scenario, 'expression' would be a key to a WASM module or the bytecode itself
-func (e *ExecutionEngine) executeWASM(ctx context.Context, expression string, inputs map[string]interface{}) (interface{}, error) {
-	// For this prototype, we'll treat the 'expression' as a simple JS-like formula
-	// that we map to a "built-in" WASM module or a placeholder.
-	// In a full implementation, we would load the WASM binary associated with the term.
-
-	// Example placeholder logic:
-	if strings.Contains(expression, "sum") {
-		var sum float64
-		for _, v := range inputs {
-			switch val := v.(type) {
-			case float64:
-				sum += val
-			case int:
-				sum += float64(val)
-			}
-		}
-		return sum, nil
+// evaluateTerm computes a calculation term with internal/rules/vm, the same
+// engine and function library calc terms use everywhere else
+// (analytics.CalcTermService, SQL pushdown, the browser WASM build). The
+// expression comes from, in order: config.rule_ast (an Expression AST - the
+// calc-term storage convention), config.expression, or the legacy
+// properties.expression. inputs are the resolved dependencies, by term name.
+//
+// There is no fallback value: a term with no evaluable expression is an
+// error, never 0 - the engine this replaces returned 0.0 for anything it
+// did not recognise.
+func evaluateTerm(node *analytics.SemanticNode, inputs map[string]interface{}) (float64, error) {
+	expr, err := termExpression(node)
+	if err != nil {
+		return 0, fmt.Errorf("term %q: %w", node.NodeName, err)
 	}
+	data := make(map[string]interface{}, len(inputs))
+	for k, v := range inputs {
+		data[k] = numericInput(v)
+	}
+	res, err := vm.NewAdvancedEvaluator().EvaluateNumeric(vm.RuleNode{Type: vm.NodeTypeExpression, Expression: expr}, data)
+	if err != nil {
+		return 0, fmt.Errorf("term %q: %w", node.NodeName, err)
+	}
+	return res, nil
+}
 
-	return nil, fmt.Errorf("WASM engine: expression not implemented: %s", expression)
+func termExpression(node *analytics.SemanticNode) (*vm.Expression, error) {
+	if raw, ok := node.Config["rule_ast"]; ok && raw != nil {
+		b, err := json.Marshal(raw)
+		if err != nil {
+			return nil, fmt.Errorf("rule_ast: %w", err)
+		}
+		var expr vm.Expression
+		if err := json.Unmarshal(b, &expr); err == nil && expr.Root != nil {
+			return &expr, nil
+		}
+		var rn vm.RuleNode
+		if err := json.Unmarshal(b, &rn); err == nil && rn.Type == vm.NodeTypeExpression && rn.Expression != nil {
+			return rn.Expression, nil
+		}
+		return nil, fmt.Errorf("rule_ast is not an expression")
+	}
+	src, _ := node.Config["expression"].(string)
+	if strings.TrimSpace(src) == "" {
+		src, _ = node.Properties["expression"].(string)
+	}
+	src = stripAssignment(src)
+	if strings.TrimSpace(src) == "" {
+		return nil, fmt.Errorf("no expression (config.rule_ast, config.expression or properties.expression) and no value supplied in the calculation context")
+	}
+	return vm.ParseExpression(src)
+}
+
+// stripAssignment drops a legacy "NAME = " prefix ("NAV = sum(PositionValue)"),
+// which the vm expression grammar does not accept. "==" is left alone.
+func stripAssignment(src string) string {
+	i := strings.Index(src, "=")
+	if i <= 0 || (i+1 < len(src) && src[i+1] == '=') {
+		return src
+	}
+	name := strings.TrimSpace(src[:i])
+	for j, r := range name {
+		if !(r == '_' || unicode.IsLetter(r) || (j > 0 && unicode.IsDigit(r))) {
+			return src
+		}
+	}
+	if name == "" {
+		return src
+	}
+	return strings.TrimSpace(src[i+1:])
+}
+
+func numericInput(v interface{}) interface{} {
+	switch n := v.(type) {
+	case int:
+		return float64(n)
+	case int32:
+		return float64(n)
+	case int64:
+		return float64(n)
+	case float32:
+		return float64(n)
+	}
+	return v
 }

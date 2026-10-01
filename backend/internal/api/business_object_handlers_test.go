@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,7 @@ type fakeService struct {
 	parent                  *models.BusinessObjectDefinition
 	list                    []*models.BusinessObjectDefinition
 	ListBusinessObjectsFunc func(ctx context.Context, secCtx *security.Context) ([]*models.BusinessObjectDefinition, error)
+	writeErr                error // returned by CreateBORecord/UpdateBORecord when set
 }
 
 func (f *fakeService) GetBusinessObject(ctx context.Context, secCtx *security.Context, boKey string) (*models.BusinessObjectDefinition, error) {
@@ -60,6 +62,9 @@ func (f *fakeService) QueryBORecords(ctx context.Context, secCtx *security.Conte
 }
 
 func (f *fakeService) CreateBORecord(ctx context.Context, secCtx *security.Context, boIDOrKey string, req models.BOCrudRecordRequest, userID string) (map[string]interface{}, error) {
+	if f.writeErr != nil {
+		return nil, f.writeErr
+	}
 	return map[string]interface{}{"id": "1"}, nil
 }
 
@@ -199,4 +204,27 @@ func TestListBusinessObjects_UsesNewDatasourceHeader(t *testing.T) {
 
 	require.Equal(t, 200, w.Result().StatusCode)
 	require.Equal(t, "ds-123", captured)
+}
+
+// Both BO record APIs report a rule-engine rejection identically: 422 with
+// the blocking rule names (the /bo/{boKey}/records side is covered in
+// bo_write_enforcement_test.go).
+func TestCreateBORecord_RuleRejectionIs422(t *testing.T) {
+	f := &fakeService{writeErr: &catalogmeta.RuleRejectionError{Rules: []string{"Filled Quantity Within Bounds"}}}
+	h := httpapi.NewBusinessObjectHandler(f, &mockResolver{}, nil)
+	r := chi.NewRouter()
+	h.RegisterRoutes(r)
+
+	req := httptest.NewRequest("POST", "/business-objects/order/data", strings.NewReader(`{"record":{"filled_qty":-1}}`))
+	req = withValidHeaders(req, "ten", "ds1")
+	req = withAuth(req, "ten")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, 422, w.Result().StatusCode, w.Body.String())
+	var body struct {
+		Rules []string `json:"rules"`
+	}
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&body))
+	require.Equal(t, []string{"Filled Quantity Within Bounds"}, body.Rules)
 }

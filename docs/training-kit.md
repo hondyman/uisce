@@ -482,3 +482,18 @@ Learn to troubleshoot access issues and resolve common problems independently.
 - **Q&A Sessions**: Fridays 3-4 PM
 
 Remember: Most issues can be resolved through self-service tools. When contacting support, include request IDs, error messages, and steps you've already tried.
+
+---
+
+## 5. MDM Source Scoring & Vendor Displacement Training Module
+
+For data procurement leads, portfolio managers, and enterprise data stewards:
+- **Full Guide**: [`docs/mdm_source_scoring/USER_TRAINING_GUIDE.md`](file:///Users/eganpj/GitHub/uisce/docs/mdm_source_scoring/USER_TRAINING_GUIDE.md)
+- **Live Application**: [`/en/pages/mdm-source-scoring?tab=training`](http://localhost:5173/en/pages/mdm-source-scoring?tab=training)
+- **Key Modules**:
+  1. *Tripartite Lakehouse Pipeline*: Apache Iceberg → Validation Engine → Staging DB → MDM Mastering → StarRocks Hot Mart.
+  2. *Empirical Scoring Metrics*: Substitution Rate (SR), Coverage %, Solo Rate (Holdout Risk), and Override Endorsement Rate (OER).
+  3. *Value for Money Efficient Frontier*: Composite Quality Index vs. Annual Spend ($) and Pareto-optimal vendor envelope.
+  4. *Entity Domain Breakdown*: Performance across Security Master, Evaluated Pricing, Credit Ratings, Benchmarks & Sectors, and Party/Legal Entity.
+  5. *Vendor Displacement Simulator*: Scenario modeling for vendor removal, "Now NULL" sole-source loss, and first-year net financial benefit.
+

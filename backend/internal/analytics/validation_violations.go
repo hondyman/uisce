@@ -9,30 +9,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
 )
 
 // ViolationRecord is one failed rule evaluation, ready to persist.
-// RuleError distinguishes "the rule ran and found a real violation" from
-// "the rule couldn't run at all" (unresolvable field reference,
-// malformed rule_ast) - see shadow_evaluation.go's ruleViolation for why
-// this can never be a silent skip.
-type ViolationRecord struct {
-	TenantID     string
-	RuleID       string
-	RuleName     string
-	BOKey        string
-	Severity     string
-	RecordID     string
-	Message      string
-	Context      map[string]interface{}
-	WriteBlocked bool
-	RuleError    bool
-}
+type ViolationRecord = models.ViolationRecord
 
 // PersistViolation writes v to validation_rule_violations. Deliberately
 // takes db (not a transaction) - callers persist violations after
@@ -43,11 +30,21 @@ func PersistViolation(ctx context.Context, db *sqlx.DB, v ViolationRecord) error
 	if err != nil {
 		return fmt.Errorf("marshal violation context: %w", err)
 	}
+
+	ruleVer := 1
+	if v.RuleVersion != "" {
+		if parsed, err := strconv.Atoi(v.RuleVersion); err == nil && parsed > 0 {
+			ruleVer = parsed
+		}
+	}
+
+	recHash := ComputeRecordHash(v, ctxJSON)
+
 	_, err = db.ExecContext(ctx, `
 		INSERT INTO validation_rule_violations
-			(id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, rule_error, created_at)
-		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
-	`, v.TenantID, v.RuleID, v.RuleName, v.BOKey, v.Severity, v.RecordID, v.Message, ctxJSON, v.WriteBlocked, v.RuleError)
+			(id, tenant_id, rule_id, rule_name, bo_key, severity, record_id, message, context, write_blocked, rule_error, rule_version, record_hash, created_at)
+		VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, now())
+	`, v.TenantID, v.RuleID, v.RuleName, v.BOKey, v.Severity, v.RecordID, v.Message, ctxJSON, v.WriteBlocked, v.RuleError, ruleVer, recHash)
 	return err
 }
 

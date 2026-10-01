@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNotification } from './hooks/useNotification';
 
 const PolicyForm = ({ policy, onSave, onClose }) => {
+  const notification = useNotification();
+
   const [formData, setFormData] = useState({
     name: '',
     rules: '{}',
@@ -39,7 +41,6 @@ const PolicyForm = ({ policy, onSave, onClose }) => {
       const rulesObject = JSON.parse(formData.rules);
       onSave({ ...formData, rules: rulesObject });
     } catch (error) {
-      const notification = useNotification();
       notification.error('Invalid JSON in rules field.');
     }
   };

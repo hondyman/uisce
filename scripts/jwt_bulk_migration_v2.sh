@@ -13,7 +13,7 @@ echo "Starting JWT bulk migration v2..."
 echo "Target: Replace all r.Header.Get(\"X-Tenant-ID\") with JWT claims"
 
 # Find all Go files (exclude test files and vendor)
-GO_FILES=$(find backend internal mdm-service calendar-service -name "*.go" -type f | grep -v test | grep -v vendor | sort)
+GO_FILES=$(find backend internal calendar-service -name "*.go" -type f | grep -v test | grep -v vendor | sort)
 
 PROCESSED=0
 UPDATED=0
@@ -67,6 +67,6 @@ echo "Files processed: $PROCESSED"
 echo "Files updated: $UPDATED"
 echo ""
 echo "Next steps:"
-echo "1. Review changes: git diff backend/ internal/ mdm-service/ calendar-service/"
+echo "1. Review changes: git diff backend/ internal/ calendar-service/"
 echo "2. Run: cd backend && go mod tidy && go build ./..."
 echo "3. Check for compilation errors and fix manually as needed"

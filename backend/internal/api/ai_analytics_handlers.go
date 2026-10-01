@@ -173,22 +173,3 @@ func (s *Server) handleRunEval(w http.ResponseWriter, r *http.Request) {
 		"status": "completed",
 	})
 }
-
-func (s *Server) handleCubeSync(w http.ResponseWriter, r *http.Request) {
-	// Parse tenant ID from request (simplifying for now)
-	var req struct {
-		TenantID string `json:"tenant_id"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.CubeSyncService.SyncSchema(r.Context(), req.TenantID); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to sync schema: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
-}

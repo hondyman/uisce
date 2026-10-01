@@ -484,6 +484,17 @@ export const useAccess = (): AccessContextType => {
   return context;
 };
 
+/**
+ * Non-throwing accessor: returns `undefined` when no AccessProvider is mounted.
+ *
+ * `undefined` is already the context's default, so it doubles as the "no provider"
+ * sentinel. Exists for callers that must invoke the hook unconditionally at the top
+ * level (a `try { useAccess() } catch` around it is a conditional hook call, which is
+ * a real hook-count crash) but still need to raise their own, more specific error.
+ * Prefer this over changing `useAccess`, which deliberately throws for all callers.
+ */
+export const useAccessOptional = (): AccessContextType | undefined => useContext(AccessContext);
+
 // Legacy hook - wraps useAccess for backward compatibility
 export const useTenantCompat = () => {
   const access = useAccess();

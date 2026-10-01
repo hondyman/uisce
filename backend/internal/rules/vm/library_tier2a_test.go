@@ -185,7 +185,7 @@ func TestTier2aStats_SQLPushdown(t *testing.T) {
 		{"MEDIAN", callExpr("MEDIAN", fieldRef("x")), "PERCENTILE_CONT(x, 0.5)"},
 	}
 	for _, c := range cases {
-		got, err := CompileToSQL(c.expr, resolve)
+		got, err := CompileExpressionToSQL(c.expr, resolve)
 		if err != nil {
 			t.Fatalf("%s: %v", c.name, err)
 		}

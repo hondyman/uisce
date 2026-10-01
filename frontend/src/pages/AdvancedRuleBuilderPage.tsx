@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box, Container, Typography, Paper, Button, TextField,
-  MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip,
-  Divider, CircularProgress, Breadcrumbs, Link as MuiLink,
-  ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails,
-  Avatar, Tooltip, IconButton,
+  Box, Container, Typography, Paper, Button, TextField, MenuItem, Select, InputLabel, FormControl, Stack, Alert, Chip, Divider, CircularProgress, Breadcrumbs, Link as MuiLink, ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails, Avatar, Tooltip, IconButton,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
@@ -28,6 +24,7 @@ import {
   ExpressionParseError,
 } from '../rules/wasmRuntime';
 import { registerUisceExpressionLanguage, UISCE_EXPRESSION_LANGUAGE, setAslFields } from '../rules/aslMonacoRegistry';
+import { toRuleNode } from '../rules/ruleAst';
 import apiClient from '../utils/apiClient';
 
 // Small section-header pattern shared by every card on this page - an
@@ -63,30 +60,6 @@ const SEVERITY_META: Record<string, { color: 'error' | 'warning'; icon: React.Re
   BLOCK: { color: 'error', icon: <BlockIcon fontSize="small" /> },
   WARN: { color: 'warning', icon: <WarningAmberIcon fontSize="small" /> },
 };
-
-// Converts the editor's ConditionNode shape into the wire format
-// internal/rules/vm.RuleNode.UnmarshalJSON expects (flat "type" +
-// sibling fields, not nested under a "Condition"/"Group" key - see
-// backend/internal/rules/vm/ast.go). Structural discrimination
-// ("conditions" in node) rather than trusting node.type, since Condition
-// nodes from the builder don't always set an explicit type.
-function toRuleNode(node: ConditionNode): unknown {
-  if ('conditions' in node) {
-    return {
-      type: 'group',
-      id: node.id,
-      operator: node.operator,
-      conditions: node.conditions.map(toRuleNode),
-    };
-  }
-  return {
-    type: 'condition',
-    id: node.id,
-    field: node.fieldPath || node.field,
-    operator: node.operator,
-    value: node.value,
-  };
-}
 
 // The builder's operator vocabulary (e.g. "greater_equal") doesn't match
 // every wire-format operator token rules can be saved with (e.g. ">=",
@@ -737,10 +710,29 @@ const AdvancedRuleBuilderPage: React.FC = () => {
               <MenuItem value="validation">validation</MenuItem>
               <MenuItem value="mdm">mdm</MenuItem>
               <MenuItem value="compliance">compliance</MenuItem>
+              <MenuItem value="survivorship">survivorship (MDM selection)</MenuItem>
             </Select>
           </FormControl>
           <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} size="small" sx={{ minWidth: 160 }} disabled={mode === 'expression'} />
         </Stack>
+
+        {domain === 'survivorship' && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              A survivorship (selection) rule decides whether one source's value may be chosen for a golden record.
+              It is never run on records; attach it to an attribute's survivorship rule. It reads:
+            </Typography>
+            <Typography variant="body2" component="div" sx={{ fontFamily: 'monospace', fontSize: 12 }}>
+              value, source, source_key, age_hours, stale, rank - this candidate<br />
+              peers.value, peers.source, peers.age_hours, peers.stale, peers.rank - the other sources (use COUNT, MEDIAN, AVG, MIN, MAX, STDEV_P, PERCENTILE)<br />
+              all.* - every source; previous, has_previous - the current golden value; record.* - this source's record
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Example: <code>ABS(value - MEDIAN(peers.value)) &lt;= 0.2 * MEDIAN(peers.value)</code> - within 20% of the other sources' median
+              (set the survivorship rule's minimum peers to 2).
+            </Typography>
+          </Alert>
+        )}
 
         {mode === 'structured' && (
           <Button

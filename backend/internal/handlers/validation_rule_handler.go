@@ -12,6 +12,7 @@ import (
 	"github.com/hondyman/uisce/backend/internal/logging"
 	"github.com/hondyman/uisce/backend/internal/models"
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/sdk/client"
 )
 
 // ValidationRuleHandler exposes CRUD + evaluation for validation-rule
@@ -20,12 +21,26 @@ import (
 // Mirrors PreAggregationHandler's shape: both are catalog_node-backed
 // domain objects with the same CRUD/DDL-or-evaluate pattern.
 type ValidationRuleHandler struct {
-	svc *analytics.ValidationRuleService
-	db  *sqlx.DB
+	svc            *analytics.ValidationRuleService
+	porter         RulePorter
+	evaluator      EvalService
+	db             *sqlx.DB
+	temporalClient client.Client
 }
 
-func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB) *ValidationRuleHandler {
-	return &ValidationRuleHandler{svc: svc, db: db}
+func NewValidationRuleHandler(svc *analytics.ValidationRuleService, db *sqlx.DB, porter ...RulePorter) *ValidationRuleHandler {
+	var p RulePorter
+	if len(porter) > 0 && porter[0] != nil {
+		p = porter[0]
+	} else if db != nil {
+		p = analytics.NewValidationRulePorter(db)
+	}
+	return &ValidationRuleHandler{svc: svc, evaluator: svc, db: db, porter: p}
+}
+
+func (h *ValidationRuleHandler) WithTemporalClient(tc client.Client) *ValidationRuleHandler {
+	h.temporalClient = tc
+	return h
 }
 
 // RegisterRoutes adds the validation-rule-node routes to the given
@@ -42,6 +57,30 @@ func (h *ValidationRuleHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/bo-fields", h.handleListSemanticFields)
 		r.Get("/health", h.handleGetHealth)
 		r.Patch("/{id}/active", h.handleSetActive)
+
+		// Rule Portability endpoints (Phase 1)
+		r.Get("/export", h.handleExportRules)
+		r.Post("/import", h.handleImportRules)
+		r.Post("/import/preview", h.handlePreviewImport)
+		r.Post("/preflight", h.handlePreviewImport)
+
+		// Multi-Surface Evaluation APIs (Phase 2)
+		r.Post("/evaluate-record", h.handleEvaluateRecord)
+		r.Post("/evaluate-batch", h.handleEvaluateBatch)
+		r.Post("/evaluate/record", h.handleEvaluateRecord)
+		r.Post("/evaluate/batch", h.handleEvaluateBatch)
+		r.Post("/evaluate-pushdown", h.handleEvaluatePushdown)
+		r.Post("/evaluate/pushdown", h.handleEvaluatePushdown)
+		r.Get("/evaluate/snapshot", h.handleLoadSnapshot)
+		r.Post("/evaluate/snapshot", h.handleLoadSnapshot)
+
+		// Four-Eyes Governance endpoints (Phase 4)
+		r.Post("/{id}/submit-review", h.handleSubmitReview)
+		r.Post("/{id}/approve", h.handleApproveRule)
+		r.Post("/{id}/reject", h.handleRejectRule)
+
+		// Glassbox Audit Chain endpoints (Phase 5)
+		r.Get("/verify-chain", h.handleVerifyChain)
 	})
 }
 
@@ -251,3 +290,37 @@ func (h *ValidationRuleHandler) handleEvaluate(w http.ResponseWriter, r *http.Re
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]bool{"result": result})
 }
+
+// handleVerifyChain verifies the integrity of a violation hash chain slice.
+func (h *ValidationRuleHandler) handleVerifyChain(w http.ResponseWriter, r *http.Request) {
+	tenantID, ok := mustTenantID(r)
+	if !ok {
+		http.Error(w, "tenant_id is required", http.StatusUnauthorized)
+		return
+	}
+
+	seqFrom, _ := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
+	if seqFrom <= 0 {
+		seqFrom = 1
+	}
+	seqTo, _ := strconv.ParseInt(r.URL.Query().Get("to"), 10, 64)
+	if seqTo <= 0 {
+		seqTo = seqFrom + 10000
+	}
+
+	res, err := analytics.VerifyAuditChain(r.Context(), h.db, tenantID.String(), seqFrom, seqTo)
+	if err != nil {
+		logging.GetLogger().Sugar().Errorf("verify-chain failed for tenant %s: %v", tenantID, err)
+		http.Error(w, "verify-chain failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if !res.Valid {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
+	json.NewEncoder(w).Encode(res)
+}
+

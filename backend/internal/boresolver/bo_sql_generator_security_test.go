@@ -119,15 +119,12 @@ func TestTenantScoping_CombinesWithExistingFilters(t *testing.T) {
 	require.NoError(t, err)
 
 	where := extractWhere(sql)
-	// Positional indices ($1, $2) are an implementation detail of the
-	// filter-then-tenant compilation order in GenerateSQL. If param
-	// ordering changes, update these indices — the invariant is that
-	// BOTH values are bound, not which slot each occupies.
+	// Filter values are bound parameters too, so the tenant predicate still
+	// leads the WHERE but binds the second placeholder.
 	assert.True(t, strings.HasPrefix(where, "t0.tenant_id = $2"))
 	assert.Contains(t, where, " AND ")
 	assert.Contains(t, sql, "t0.total_amount > $1")
-	require.Len(t, args, 2)
-	assert.Equal(t, "tenant-alpha", args[1])
+	require.Equal(t, []interface{}{100, "tenant-alpha"}, args)
 }
 
 func TestTenantScoping_NoTenantID_NoScoping(t *testing.T) {

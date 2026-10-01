@@ -39,16 +39,27 @@ func DynamicBPWorkflow(ctx workflow.Context, input BPWorkflowInput) error {
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
+	// Record start in bp_workflow_run
+	info := workflow.GetInfo(ctx)
+	runID := info.WorkflowExecution.RunID
+	workflowID := info.WorkflowExecution.ID
+	_ = workflow.ExecuteActivity(ctx, (*Activities).RecordWorkflowRunStartActivity,
+		runID, workflowID, input.TenantID, input.ProcessID, input.ProcessID,
+		"event", input.TriggerName, input.Entity, input.EntityID,
+	).Get(ctx, nil)
+
 	// Step 1: Load BP definition and steps from database
 	var steps []BPStep
 	err := workflow.ExecuteActivity(ctx, (*Activities).LoadBPStepsActivity, input.ProcessID, input.TenantID).Get(ctx, &steps)
 	if err != nil {
 		logger.Error("Failed to load BP steps", "Error", err)
+		_ = workflow.ExecuteActivity(ctx, (*Activities).RecordWorkflowRunTerminalActivity, runID, "FAILED", err.Error()).Get(ctx, nil)
 		return fmt.Errorf("load BP steps failed: %w", err)
 	}
 
 	if len(steps) == 0 {
 		logger.Warn("No steps found for process", "ProcessID", input.ProcessID)
+		_ = workflow.ExecuteActivity(ctx, (*Activities).RecordWorkflowRunTerminalActivity, runID, "COMPLETED", "").Get(ctx, nil)
 		return nil
 	}
 
@@ -137,6 +148,7 @@ func DynamicBPWorkflow(ctx workflow.Context, input BPWorkflowInput) error {
 		cancel()
 	}
 
+	_ = workflow.ExecuteActivity(ctx, (*Activities).RecordWorkflowRunTerminalActivity, runID, "COMPLETED", "").Get(ctx, nil)
 	logger.Info("🎉 DynamicBPWorkflow completed successfully", "ProcessID", input.ProcessID)
 	return nil
 }

@@ -35,12 +35,12 @@ func (e *ErrUnsupportedFunction) Error() string {
 	return fmt.Sprintf("no SQL pushdown registered for function %q", e.Name)
 }
 
-// CompileToSQL walks a rule/calc Expression AST and emits an equivalent SQL
+// CompileExpressionToSQL walks a rule/calc Expression AST and emits an equivalent SQL
 // expression, resolving each FieldRef via resolveColumn. It supports the
 // same binary operators as the VM compiler (vm_compiler.go's compileExprNode)
 // plus FuncCall nodes for functions with a DialectStarRocks entry in
 // library.go's Library.
-func CompileToSQL(expr *Expression, resolveColumn ColumnResolver) (string, error) {
+func CompileExpressionToSQL(expr *Expression, resolveColumn ColumnResolver) (string, error) {
 	if expr == nil || expr.Root == nil {
 		return "", fmt.Errorf("nil expression")
 	}

@@ -49,26 +49,3 @@ func (g *BIConnectorManifestGenerator) GenerateTableauDataSourcesManifest(host s
 %s  </connection>
 </datasource>`, dbName, host, port, boName, boName, colsXML.String())
 }
-
-// GenerateCubeDevSchema generates Cube.js semantic model definitions dynamically
-func (g *BIConnectorManifestGenerator) GenerateCubeDevSchema(boName string, dimensions []string, measures []string) string {
-	var dimsJS strings.Builder
-	for _, d := range dimensions {
-		dimsJS.WriteString(fmt.Sprintf("    %s: {\n      sql: `%s`,\n      type: `string`\n    },\n", d, d))
-	}
-
-	var measJS strings.Builder
-	for _, m := range measures {
-		measJS.WriteString(fmt.Sprintf("    total_%s: {\n      sql: `%s`,\n      type: `sum`\n    },\n", m, m))
-	}
-
-	return fmt.Sprintf(`cube('%s', {
-  sql: 'SELECT * FROM "%s"',
-
-  measures: {
-%s  },
-
-  dimensions: {
-%s  }
-});`, boName, boName, measJS.String(), dimsJS.String())
-}

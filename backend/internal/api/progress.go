@@ -63,6 +63,13 @@ func (p *Progress) Increment() {
 	p.mu.Unlock()
 }
 
+// IncrementN advances the done counter by n (the number of items in a group).
+func (p *Progress) IncrementN(n int) {
+	p.mu.Lock()
+	p.done += n
+	p.mu.Unlock()
+}
+
 func (p *Progress) IncrementFailed() {
 	p.mu.Lock()
 	p.done++

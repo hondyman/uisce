@@ -115,7 +115,6 @@ export const WorkbookPropertiesDialog: React.FC<WorkbookPropertiesDialogProps> =
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Executive Risk & PnL Ledger"
-            autoFocus
           />
 
           <TextField

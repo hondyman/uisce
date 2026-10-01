@@ -95,3 +95,27 @@ placeholder secret (`CHANGE_ME_BEFORE_PROD_…`). For production:
 | `409 Conflict` | Realm already exists but with different settings — script handles this via PUT, but only if the auth succeeds. |
 | Frontend still says "Client not found" | Browser cached the old realm; hard refresh, and confirm `VITE_OIDC_ISSUER` ends with `/realms/uisce`. |
 | `groups` claim missing from ID token | The user has no group membership; assign them a group in the Admin UI. |
+## Admin password rotation
+
+`rotate-admin-password.sh` rotates the master-realm admin password with
+Infisical as its only home, so a rotation can never leave the new password
+known to Keycloak alone (which is how the admin login was lost after the
+2026-09-13 Infisical rotation).
+
+It proves the stored login, saves the new password to Infisical
+(`KEYCLOAK_ADMIN_PASS_PENDING`) *before* changing Keycloak, verifies it,
+then promotes it to `KEYCLOAK_ADMIN_PASS` (Infisical keeps the previous
+version). Any failure leaves a working login; exit codes say which case.
+Passwords never appear on a command line or in output.
+
+Set up once:
+1. Store the admin login at the restricted Infisical path `/platform-admin`:
+   `KEYCLOAK_ADMIN` (username) and `KEYCLOAK_ADMIN_PASS`.
+2. Create an Infisical machine identity with read/write on `/platform-admin`
+   only, for the host that runs the rotation.
+
+Run: `./rotate-admin-password.sh --check` (prove the login),
+`--dry-run`, or with no flag to rotate. Schedule it monthly from cron,
+launchd or the enterprise scheduler with `INFISICAL_TOKEN` set, and alert on
+a non-zero exit. Tests: `test/rotate-admin-password.test.sh` (fake Keycloak
+and Infisical; never touches a real server).

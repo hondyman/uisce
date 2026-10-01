@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -19,18 +21,23 @@ import (
 )
 
 type BOCRUDHandler struct {
-	db      *sqlx.DB
-	trigger *TriggerEngine
+	db       *sqlx.DB
+	trigger  *TriggerEngine
+	enforcer boWriteEnforcer
+	catalog  *msgcat.Catalog // renders every error this handler answers
 }
 
-func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine) *BOCRUDHandler {
-	return &BOCRUDHandler{db: db, trigger: trigger}
+// NewBOCRUDHandler wires the /bo/{boKey}/records API. enforcer is required:
+// with a nil enforcer every write is refused (503) rather than bypassing
+// the rule engine.
+func NewBOCRUDHandler(db *sqlx.DB, trigger *TriggerEngine, enforcer boWriteEnforcer) *BOCRUDHandler {
+	return &BOCRUDHandler{db: db, trigger: trigger, enforcer: enforcer}
 }
 
 // resolveWritableColumns returns the set of real column names for drivingTable,
 // used to allowlist client-supplied JSON keys before they are interpolated into
 // SQL as identifiers (column names can't be bind-parameterized).
-func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable string) (map[string]bool, error) {
+func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, db *sqlx.DB, drivingTable string) (map[string]bool, error) {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -38,7 +45,7 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 		table = drivingTable[idx+1:]
 	}
 	var cols []string
-	err := h.db.SelectContext(ctx, &cols, `
+	err := db.SelectContext(ctx, &cols, `
 		SELECT column_name FROM information_schema.columns
 		WHERE table_schema = $1 AND table_name = $2;
 	`, schema, table)
@@ -64,7 +71,7 @@ func (h *BOCRUDHandler) resolveWritableColumns(ctx context.Context, drivingTable
 // ("column tenant_id does not exist"), not a security gap closed. Mirrors
 // boresolver.PostgresBORepository.TableHasColumn's reasoning, via a plain
 // information_schema lookup since this handler has no BORepository.
-func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, drivingTable, column string) bool {
+func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, db *sqlx.DB, drivingTable, column string) bool {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -72,7 +79,7 @@ func (h *BOCRUDHandler) tableHasColumn(ctx context.Context, drivingTable, column
 		table = drivingTable[idx+1:]
 	}
 	var exists bool
-	err := h.db.GetContext(ctx, &exists, `
+	err := db.GetContext(ctx, &exists, `
 		SELECT EXISTS (
 			SELECT 1 FROM information_schema.columns
 			WHERE table_schema = $1 AND table_name = $2 AND column_name = $3
@@ -110,6 +117,7 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 	r.Route("/bo", func(r chi.Router) {
 		r.Get("/{boKey}/records", h.HandleListBORecords)
 		r.Post("/{boKey}/records", h.HandleCreateBORecord)
+		r.Post("/{boKey}/records/bulk", h.HandleBulkBORecords)
 		r.Get("/{boKey}/records/{recordId}", h.HandleGetBORecord)
 		r.Put("/{boKey}/records/{recordId}", h.HandleUpdateBORecord)
 		r.Delete("/{boKey}/records/{recordId}", h.HandleDeleteBORecord)
@@ -125,9 +133,37 @@ func (h *BOCRUDHandler) RegisterRoutes(r chi.Router) {
 type boBindingMetadata struct {
 	DrivingTable string `db:"driving_table"`
 	KeyColumn    string `db:"key_column"`
+	// RecordsDB is the database the BO's records live in (its bound
+	// datasource); every record-table read and write goes there.
+	RecordsDB *sqlx.DB `db:"-"`
 }
 
+// boRecordsLocator resolves where a BO's records live
+// (metadata.BusinessObjectService.RecordsDB).
+type boRecordsLocator interface {
+	RecordsDB(ctx context.Context, tenantID, boKeyOrID string) (*sqlx.DB, error)
+}
+
+// resolveBOMetadata resolves the BO's driving table and the database its
+// records live in. A BO whose datasource cannot be resolved is refused -
+// its records are never read from or written to another database.
 func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
+	m, err := h.resolveBOContract(ctx, boKey, tenantID)
+	if err != nil {
+		return nil, boNotFound(boKey).Wrap(err)
+	}
+	m.RecordsDB = h.db
+	if loc, ok := h.enforcer.(boRecordsLocator); ok {
+		db, err := loc.RecordsDB(ctx, tenantID.String(), boKey)
+		if err != nil {
+			return nil, boRecordsUnavailable(boKey).Wrap(err)
+		}
+		m.RecordsDB = db
+	}
+	return m, nil
+}
+
+func (h *BOCRUDHandler) resolveBOContract(ctx context.Context, boKey string, tenantID uuid.UUID) (*boBindingMetadata, error) {
 	var boMeta boBindingMetadata
 
 	// 1. Try public.business_objects + business_object_binding.
@@ -220,7 +256,7 @@ func (h *BOCRUDHandler) resolveBOMetadata(ctx context.Context, boKey string, ten
 // (business_objects.sti_discriminator_column is always "subtype_code" for compound
 // "{root}/{subtypeCode}" bo_key rows, e.g. "oms.account/sma"). Returns ("", false) for BOs
 // without subtypes so callers can skip subtype scoping entirely (no behavior change).
-func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingTable string) (string, bool) {
+func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, db *sqlx.DB, drivingTable string) (string, bool) {
 	schema := "public"
 	table := drivingTable
 	if idx := strings.Index(drivingTable, "."); idx >= 0 {
@@ -234,7 +270,7 @@ func (h *BOCRUDHandler) resolveDiscriminatorColumn(ctx context.Context, drivingT
 			WHERE table_schema = $1 AND table_name = $2 AND column_name = 'subtype_code'
 		);
 	`
-	if err := h.db.GetContext(ctx, &exists, checkQuery, schema, table); err == nil && exists {
+	if err := db.GetContext(ctx, &exists, checkQuery, schema, table); err == nil && exists {
 		return "subtype_code", true
 	}
 	return "", false
@@ -297,40 +333,36 @@ func extractTenantUUIDFromRequest(r *http.Request) (uuid.UUID, error) {
 func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
 	recordID := chi.URLParam(r, "recordId")
 
 	if boKey == "" || recordID == "" {
-		http.Error(w, "boKey and recordId are required", http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.New(msgcat.SetSystem, 9, "boKey, recordId"))
 		return
 	}
 
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
-	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("resolving table schema: %w", err))
 		return
 	}
 
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	setClauses := make([]string, 0)
 	var args []interface{}
 	var whereClause string
@@ -351,7 +383,7 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 			continue
 		}
 		if !writableCols[fieldKey] {
-			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
+			h.fail(w, r, tenantID, boUnknownField(fieldKey))
 			return
 		}
 		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", fieldKey, argIdx))
@@ -360,12 +392,12 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 	}
 
 	if len(setClauses) == 0 {
-		http.Error(w, "no writable attributes provided", http.StatusBadRequest)
+		h.fail(w, r, tenantID, boNoFields())
 		return
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			// Defends against updating a record that doesn't belong to this subtype.
 			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
@@ -380,26 +412,11 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 		RETURNING *;
 	`, boMeta.DrivingTable, strings.Join(setClauses, ", "), whereClause)
 
-	rows, err := h.db.QueryxContext(r.Context(), updateSQL, args...)
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), boKey, updateSQL, args)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("database mutation error: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, writeError(err))
 		return
 	}
-	defer rows.Close()
-
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping updated record: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else {
-		http.Error(w, "record not found or tenant access violation (Rule 7)", http.StatusNotFound)
-		return
-	}
-
-	// Clean byte arrays or UUIDs for JSON serialization
-	cleanScanResult(result)
 
 	h.emitBORowEvent("row_update", tenantID, boKey, recordID, result)
 
@@ -411,89 +428,49 @@ func (h *BOCRUDHandler) HandleUpdateBORecord(w http.ResponseWriter, r *http.Requ
 func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
 
 	var payload map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.MalformedJSON().Wrap(err))
 		return
 	}
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
 	subtype := r.URL.Query().Get("subtype")
 	if subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			// Force the discriminator value server-side, overriding whatever the client sent.
 			payload[col] = subtype
 		}
 	}
 
-	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.DrivingTable)
+	writableCols, err := h.resolveWritableColumns(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving table schema: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("resolving table schema: %w", err))
 		return
 	}
 
-	var columns []string
-	var placeholders []string
-	var args []interface{}
-	argIdx := 1
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
-		columns = []string{"tenant_id"}
-		placeholders = []string{"$1"}
-		args = []interface{}{tenantID}
-		argIdx = 2
-	}
-
-	for fieldKey, val := range payload {
-		lower := strings.ToLower(fieldKey)
-		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
-			continue
-		}
-		if !writableCols[fieldKey] {
-			http.Error(w, fmt.Sprintf("unknown attribute '%s'", fieldKey), http.StatusBadRequest)
-			return
-		}
-		columns = append(columns, fieldKey)
-		placeholders = append(placeholders, fmt.Sprintf("$%d", argIdx))
-		args = append(args, val)
-		argIdx++
-	}
-
-	insertSQL := fmt.Sprintf(`
-		INSERT INTO %s (%s)
-		VALUES (%s)
-		RETURNING *;
-	`, boMeta.DrivingTable, strings.Join(columns, ", "), strings.Join(placeholders, ", "))
-
-	rows, err := h.db.QueryxContext(r.Context(), insertSQL, args...)
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
+	insertSQL, args, err := buildBOInsert(boMeta.DrivingTable, tenantID, tenantScoped, writableCols, payload)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed creating record: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, err)
 		return
 	}
-	defer rows.Close()
 
-	result := make(map[string]interface{})
-	if rows.Next() {
-		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping created record", http.StatusInternalServerError)
-			return
-		}
+	result, err := h.enforcedWrite(r.Context(), tenantID.String(), boKey, insertSQL, args)
+	if err != nil {
+		h.fail(w, r, tenantID, writeError(err))
+		return
 	}
-
-	cleanScanResult(result)
 
 	newRecordID := fmt.Sprintf("%v", result[boMeta.KeyColumn])
 	h.emitBORowEvent("row_insert", tenantID, boKey, newRecordID, result)
@@ -503,15 +480,53 @@ func (h *BOCRUDHandler) HandleCreateBORecord(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(result)
 }
 
+// buildBOInsert builds the INSERT ... RETURNING * for one record. tenant_id
+// is forced server-side (never taken from the payload) when the table is
+// tenant-scoped, audit timestamps are ignored, and every other key must be
+// a real column (identifiers can't be bind-parameterized, so the allowlist
+// is what makes interpolating them safe).
+func buildBOInsert(table string, tenantID uuid.UUID, tenantScoped bool, writable map[string]bool, payload map[string]interface{}) (string, []interface{}, error) {
+	var columns, placeholders []string
+	var args []interface{}
+	if tenantScoped {
+		columns, placeholders, args = []string{"tenant_id"}, []string{"$1"}, []interface{}{tenantID}
+	}
+	for _, fieldKey := range sortedKeys(payload) { // deterministic SQL for logs and tests
+		lower := strings.ToLower(fieldKey)
+		if lower == "tenant_id" || lower == "created_at" || lower == "updated_at" {
+			continue
+		}
+		if !writable[fieldKey] {
+			return "", nil, boUnknownField(fieldKey)
+		}
+		columns = append(columns, fieldKey)
+		args = append(args, payload[fieldKey])
+		placeholders = append(placeholders, fmt.Sprintf("$%d", len(args)))
+	}
+	if len(columns) == 0 {
+		return "", nil, boNoFields()
+	}
+	return fmt.Sprintf(`
+		INSERT INTO %s (%s)
+		VALUES (%s)
+		RETURNING *;
+	`, table, strings.Join(columns, ", "), strings.Join(placeholders, ", ")), args, nil
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // HandleGetBORecord hydrates a single record by ID
 func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -519,11 +534,11 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
-	tenantScoped := h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id")
+	tenantScoped := h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id")
 	var args []interface{}
 	var whereClause string
 	argIdx := 2
@@ -538,7 +553,7 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			whereClause += fmt.Sprintf(" AND %s = $%d", col, argIdx)
 			args = append(args, subtype)
 		}
@@ -550,9 +565,9 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 		LIMIT 1;
 	`, boMeta.DrivingTable, whereClause)
 
-	rows, err := h.db.QueryxContext(r.Context(), selectSQL, args...)
+	rows, err := boMeta.RecordsDB.QueryxContext(r.Context(), selectSQL, args...)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed querying record: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("querying record: %w", err))
 		return
 	}
 	defer rows.Close()
@@ -560,11 +575,11 @@ func (h *BOCRUDHandler) HandleGetBORecord(w http.ResponseWriter, r *http.Request
 	result := make(map[string]interface{})
 	if rows.Next() {
 		if err := rows.MapScan(result); err != nil {
-			http.Error(w, "failed mapping record", http.StatusInternalServerError)
+			h.fail(w, r, tenantID, fmt.Errorf("mapping record: %w", err))
 			return
 		}
 	} else {
-		http.Error(w, "record not found", http.StatusNotFound)
+		h.fail(w, r, tenantID, boRecordNotFound(boKey))
 		return
 	}
 
@@ -635,16 +650,12 @@ type boSchemaField struct {
 func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
 	if boKey == "" {
-		http.Error(w, "boKey is required", http.StatusBadRequest)
+		h.fail(w, r, tenantID, msgcat.New(msgcat.SetSystem, 9, "boKey"))
 		return
 	}
 
@@ -652,7 +663,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 	// shapes; the frontend passes whichever it has on hand).
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
@@ -666,7 +677,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 		ORDER BY CASE WHEN tenant_id = $2 THEN 0 ELSE 1 END
 		LIMIT 1
 	`, boKey, tenantID); err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO id: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, boNotFound(boKey).Wrap(err))
 		return
 	}
 
@@ -698,7 +709,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 		WHERE bo_id = $1 AND tenant_id = $2
 		ORDER BY display_order NULLS LAST, created_at NULLS LAST, field_name
 	`, boID, tenantID); err != nil {
-		http.Error(w, fmt.Sprintf("failed loading BO fields: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("loading BO fields: %w", err))
 		return
 	}
 
@@ -761,7 +772,7 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 	colTypes := map[string]string{}
 	if schemaName != "" && tableName != "" {
 		var ctRows []colTypeRow
-		if err := h.db.SelectContext(r.Context(), &ctRows, `
+		if err := boMeta.RecordsDB.SelectContext(r.Context(), &ctRows, `
 			SELECT column_name, data_type FROM information_schema.columns
 			WHERE table_schema = $1 AND table_name = $2
 		`, schemaName, tableName); err == nil {
@@ -796,11 +807,14 @@ func (h *BOCRUDHandler) HandleGetBOSchema(w http.ResponseWriter, r *http.Request
 			display = humanizeIdent(f.FieldName)
 		}
 		out.Fields = append(out.Fields, boSchemaField{
-			ID:             f.ID,
-			Name:           f.FieldName,
-			DisplayName:    display,
-			Type:           normalizeFormType(colType),
-			Required:       f.IsRequired || f.BindingReq == "REQUIRED",
+			ID:          f.ID,
+			Name:        f.FieldName,
+			DisplayName: display,
+			Type:        normalizeFormType(colType),
+			// is_required is whether a value may be empty (and is what writes
+			// enforce); binding_requirement is whether a storage tier must map
+			// the field, which is not a form's concern.
+			Required:       f.IsRequired,
 			PhysicalColumn: physical,
 		})
 	}
@@ -955,18 +969,14 @@ func splitQualifiedTable(qt string) (string, string) {
 func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
@@ -987,7 +997,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	whereClauses := []string{}
 	args := []interface{}{}
 	argIdx := 1
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+	if h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id") {
 		whereClauses = append(whereClauses, fmt.Sprintf("tenant_id = $%d", argIdx))
 		args = append(args, tenantID)
 		argIdx++
@@ -1001,7 +1011,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	}
 
 	if subtype := r.URL.Query().Get("subtype"); subtype != "" {
-		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.DrivingTable); ok {
+		if col, ok := h.resolveDiscriminatorColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable); ok {
 			whereClauses = append(whereClauses, fmt.Sprintf("%s = $%d", col, argIdx))
 			args = append(args, subtype)
 			argIdx++
@@ -1020,9 +1030,9 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 	`, boMeta.DrivingTable, whereSQL, boMeta.KeyColumn, argIdx, argIdx+1)
 	args = append(args, limit, offset)
 
-	rows, err := h.db.QueryxContext(r.Context(), query, args...)
+	rows, err := boMeta.RecordsDB.QueryxContext(r.Context(), query, args...)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed listing records: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("listing records: %w", err))
 		return
 	}
 	defer rows.Close()
@@ -1049,11 +1059,7 @@ func (h *BOCRUDHandler) HandleListBORecords(w http.ResponseWriter, r *http.Reque
 func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")
@@ -1061,28 +1067,28 @@ func (h *BOCRUDHandler) HandleDeleteBORecord(w http.ResponseWriter, r *http.Requ
 
 	boMeta, err := h.resolveBOMetadata(r.Context(), boKey, tenantID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed resolving BO contract: %v", err), http.StatusNotFound)
+		h.fail(w, r, tenantID, err)
 		return
 	}
 
 	var deleteSQL string
 	var execArgs []interface{}
-	if h.tableHasColumn(r.Context(), boMeta.DrivingTable, "tenant_id") {
+	if h.tableHasColumn(r.Context(), boMeta.RecordsDB, boMeta.DrivingTable, "tenant_id") {
 		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE tenant_id = $1 AND %s = $2`, boMeta.DrivingTable, boMeta.KeyColumn)
 		execArgs = []interface{}{tenantID, recordID}
 	} else {
 		deleteSQL = fmt.Sprintf(`DELETE FROM %s WHERE %s = $1`, boMeta.DrivingTable, boMeta.KeyColumn)
 		execArgs = []interface{}{recordID}
 	}
-	res, err := h.db.ExecContext(r.Context(), deleteSQL, execArgs...)
+	res, err := boMeta.RecordsDB.ExecContext(r.Context(), deleteSQL, execArgs...)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("failed deleting record: %v", err), http.StatusInternalServerError)
+		h.fail(w, r, tenantID, fmt.Errorf("deleting record: %w", err))
 		return
 	}
 
 	rows, _ := res.RowsAffected()
 	if rows == 0 {
-		http.Error(w, "record not found or unauthorized", http.StatusNotFound)
+		h.fail(w, r, tenantID, boRecordNotFound(boKey))
 		return
 	}
 
@@ -1112,11 +1118,7 @@ type TopologyRelationship struct {
 func (h *BOCRUDHandler) HandleGetBOTopologySummary(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := extractTenantUUIDFromRequest(r)
 	if err != nil {
-		status := http.StatusUnauthorized
-		if te, ok := err.(*tenantResolutionError); ok {
-			status = te.status
-		}
-		http.Error(w, err.Error(), status)
+		h.fail(w, r, uuid.Nil, tenantError(err))
 		return
 	}
 	boKey := chi.URLParam(r, "boKey")

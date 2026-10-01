@@ -16,7 +16,9 @@ import path from 'path'
 // reads it (semantic-rules surface), and `GRAPHQL_HOST` keeps its env hook
 // because /v1/graphql is a placeholder that returns 503 on the unified
 // binary and is not user-visible.
-const PLATFORM_BACKEND_HOST = 'http://localhost:8080';
+// Overridable so a second backend (e.g. a feature branch on another port) can be
+// run beside the default one.
+const PLATFORM_BACKEND_HOST = process.env.VITE_PLATFORM_BACKEND_HOST || 'http://localhost:8080';
 const BACKEND_HOST = process.env.VITE_BACKEND_HOST || process.env.BACKEND_HOST || PLATFORM_BACKEND_HOST;
 const GRAPHQL_HOST = process.env.VITE_GRAPHQL_HOST || process.env.GRAPHQL_HOST || PLATFORM_BACKEND_HOST;
 

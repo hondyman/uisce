@@ -39,7 +39,7 @@ func BPWorkflow(ctx workflow.Context, wfCtx WorkflowContext) error {
 	for _, step := range loadRes.Steps {
 		logger.Info("Processing Step", "Seq", step.Seq, "Key", step.StepKey, "Type", step.Type)
 
-		// 3a. Delay (Starlark)
+		// 3a. Delay (rule-engine duration expression)
 		if step.DelayExpr != "" {
 			var delay time.Duration
 			delayKey := fmt.Sprintf("delay-%s", step.StepKey)
@@ -77,7 +77,7 @@ func BPWorkflow(ctx workflow.Context, wfCtx WorkflowContext) error {
 			}
 		}
 
-		// 3d. Condition (Starlark)
+		// 3d. Condition (rule-engine expression)
 		if step.ConditionExpr != "" {
 			var condResult bool
 			err := workflow.ExecuteActivity(ctx, "EvaluateConditionActivity", ConditionEvalInput{

@@ -52,7 +52,7 @@ const AuthPage: React.FC = () => {
             <UisceLogo variant="mark" size="lg" animated />
           </div>
           <h1 className="text-4xl font-bold auth-gradient-text mb-3">Welcome Back</h1>
-          <p className="text-lg" style={{ color: '#F5F0E8', opacity: 0.7 }}>Sign in to your Uisce account</p>
+          <p className="text-lg" style={{ color: '#F5F0E8', opacity: 0.7 }}>Sign in to your Ivy account</p>
         </div>
 
         {/* Error Message */}

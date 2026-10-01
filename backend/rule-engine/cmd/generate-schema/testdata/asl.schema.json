@@ -523,6 +523,42 @@
       ],
       "type": "object"
     },
+    "AggregateRuleSpec": {
+      "description": "AggregateRuleSpec defines cross-record tumbling window reconciliation rules.\nKept strictly outside vm.RuleNode as it operates on multi-row aggregations during\nscheduled pushdown rather than individual record writes.",
+      "properties": {
+        "Aggregate": {
+          "type": "string"
+        },
+        "Comparison": {
+          "type": "string"
+        },
+        "Field": {
+          "type": "string"
+        },
+        "GroupBy": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Threshold": {
+          "type": "number"
+        },
+        "TimeColumn": {
+          "type": "string"
+        },
+        "Window": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Window",
+        "Aggregate",
+        "Field",
+        "GroupBy",
+        "TimeColumn",
+        "Threshold",
+        "Comparison"
+      ],
+      "type": "object"
+    },
     "AlertsService": {
       "description": "AlertsService handles business logic for alerts.",
       "properties": {
@@ -869,34 +905,6 @@
         "OperationType",
         "TotalItems",
         "Message"
-      ],
-      "type": "object"
-    },
-    "AsyncValidatorImpl": {
-      "description": "AsyncValidatorImpl implements AsyncValidator",
-      "properties": {
-        "db": {},
-        "eventChan": {},
-        "mu": {},
-        "resultWriter": {},
-        "results": {
-          "$ref": "#/definitions/Record\u003cstring, ValidationTaskResult\u003e"
-        },
-        "taskWriter": {
-          "description": "Kafka writers for tasks and results"
-        },
-        "tasks": {
-          "$ref": "#/definitions/Record\u003cstring, ValidationTask\u003e"
-        }
-      },
-      "required": [
-        "db",
-        "taskWriter",
-        "resultWriter",
-        "mu",
-        "tasks",
-        "results",
-        "eventChan"
       ],
       "type": "object"
     },
@@ -2350,104 +2358,6 @@
         "TopGroupBys",
         "TopMeasures",
         "TopFilters"
-      ],
-      "type": "object"
-    },
-    "BPValidationCoordinatorImpl": {
-      "description": "BPValidationCoordinatorImpl implements BPValidationCoordinator",
-      "properties": {
-        "asyncValidator": {
-          "$ref": "#/definitions/AsyncValidator"
-        },
-        "db": {},
-        "eventChannels": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "results": {
-          "$ref": "#/definitions/Record\u003cstring, BPValidationResponse\u003e"
-        },
-        "ruleEngine": {
-          "$ref": "#/definitions/ValidationRuleEngine"
-        },
-        "writer": {}
-      },
-      "required": [
-        "db",
-        "ruleEngine",
-        "asyncValidator",
-        "writer",
-        "results",
-        "eventChannels"
-      ],
-      "type": "object"
-    },
-    "BPValidationRequest": {
-      "description": "BPValidationRequest represents a BP validation request",
-      "properties": {
-        "BPName": {
-          "type": "string"
-        },
-        "ContextID": {
-          "type": "string"
-        },
-        "FormData": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "ReturnSync": {
-          "type": "boolean"
-        },
-        "StepName": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "UserID": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "TenantID",
-        "BPName",
-        "StepName",
-        "FormData",
-        "UserID",
-        "ContextID",
-        "ReturnSync"
-      ],
-      "type": "object"
-    },
-    "BPValidationResponse": {
-      "description": "BPValidationResponse holds validation outcome",
-      "properties": {
-        "ActionsToTake": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Details": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "Errors": {
-          "$ref": "#/definitions/string[]"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "Passed": {
-          "type": "boolean"
-        },
-        "Timestamp": {},
-        "Warnings": {
-          "$ref": "#/definitions/string[]"
-        }
-      },
-      "required": [
-        "ID",
-        "Passed",
-        "Errors",
-        "Warnings",
-        "ActionsToTake",
-        "Details",
-        "Timestamp"
       ],
       "type": "object"
     },
@@ -4268,25 +4178,6 @@
       ],
       "type": "object"
     },
-    "ColumnInfo": {
-      "properties": {
-        "Label": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "Type",
-        "Label"
-      ],
-      "type": "object"
-    },
     "ColumnMask": {
       "description": "ColumnMask represents field-level masking for a semantic term.",
       "properties": {
@@ -4554,74 +4445,6 @@
       ],
       "type": "object"
     },
-    "ComplexCondition": {
-      "description": "ComplexCondition supports AND/OR logic for multi-field validation",
-      "properties": {
-        "And": {
-          "$ref": "#/definitions/RuleCondition[]"
-        },
-        "Not": {
-          "$ref": "#/definitions/RuleCondition"
-        },
-        "Or": {
-          "$ref": "#/definitions/RuleCondition[]"
-        }
-      },
-      "required": [
-        "And",
-        "Or",
-        "Not"
-      ],
-      "type": "object"
-    },
-    "ComplianceBreachRecord": {
-      "description": "ComplianceBreachRecord defines internal struct for breaching inserts",
-      "properties": {
-        "BreachID": {},
-        "Deviation": {
-          "type": "number"
-        },
-        "EvaluationID": {},
-        "Message": {
-          "type": "string"
-        },
-        "MetricValue": {
-          "type": "number"
-        },
-        "PortfolioID": {},
-        "RuleID": {
-          "type": "string"
-        },
-        "Severity": {
-          "type": "string"
-        },
-        "Status": {
-          "type": "string"
-        },
-        "TenantID": {},
-        "ThresholdValue": {
-          "type": "number"
-        },
-        "ValuationDate": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "BreachID",
-        "EvaluationID",
-        "RuleID",
-        "PortfolioID",
-        "ValuationDate",
-        "Severity",
-        "MetricValue",
-        "ThresholdValue",
-        "Deviation",
-        "Message",
-        "Status",
-        "TenantID"
-      ],
-      "type": "object"
-    },
     "ComplianceReport": {
       "description": "ComplianceReport represents a compliance report",
       "properties": {
@@ -4702,22 +4525,6 @@
       ],
       "type": "object"
     },
-    "ComplianceService": {
-      "description": "ComplianceService orchestrates compliance evaluation ETL",
-      "properties": {
-        "audit": {},
-        "db": {},
-        "tenantID": {},
-        "wasm": {}
-      },
-      "required": [
-        "db",
-        "wasm",
-        "audit",
-        "tenantID"
-      ],
-      "type": "object"
-    },
     "ConcentrationMetrics": {
       "description": "ConcentrationMetrics represents portfolio concentration metrics.",
       "properties": {
@@ -4788,6 +4595,31 @@
         "Postgres",
         "Iceberg",
         "Incoming"
+      ],
+      "type": "object"
+    },
+    "ConformanceCase": {
+      "properties": {
+        "ExpectedError": {
+          "type": "boolean"
+        },
+        "ExpectedValid": {
+          "type": "boolean"
+        },
+        "Input": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {}
+      },
+      "required": [
+        "Name",
+        "RuleAST",
+        "Input",
+        "ExpectedValid",
+        "ExpectedError"
       ],
       "type": "object"
     },
@@ -5179,47 +5011,6 @@
       ],
       "type": "object"
     },
-    "CoreCompiler": {
-      "properties": {
-        "cache": {
-          "$ref": "#/definitions/CoreFnCache"
-        },
-        "predeclared": {}
-      },
-      "required": [
-        "cache",
-        "predeclared"
-      ],
-      "type": "object"
-    },
-    "CoreFnCache": {
-      "properties": {
-        "m": {
-          "$ref": "#/definitions/Record\u003cCoreFnKey, any\u003e"
-        },
-        "mu": {}
-      },
-      "required": [
-        "mu",
-        "m"
-      ],
-      "type": "object"
-    },
-    "CoreFnKey": {
-      "properties": {
-        "CoreRuleID": {
-          "type": "string"
-        },
-        "Version": {
-          "type": "number"
-        }
-      },
-      "required": [
-        "CoreRuleID",
-        "Version"
-      ],
-      "type": "object"
-    },
     "CoreValidationRule": {
       "description": "CoreValidationRule represents a compiled core rule",
       "properties": {
@@ -5524,46 +5315,6 @@
       ],
       "type": "object"
     },
-    "CubeDefinition": {
-      "description": "CubeDefinition represents a single Cube",
-      "properties": {
-        "DataSource": {
-          "type": "string"
-        },
-        "Dimensions": {
-          "$ref": "#/definitions/CubeDimension[]"
-        },
-        "Joins": {
-          "$ref": "#/definitions/CubeJoin[]"
-        },
-        "Measures": {
-          "$ref": "#/definitions/CubeMeasure[]"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "PreAggregations": {
-          "$ref": "#/definitions/CubePreAggregation[]"
-        },
-        "SQL": {
-          "type": "string"
-        },
-        "SQLTable": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "SQL",
-        "SQLTable",
-        "DataSource",
-        "Dimensions",
-        "Measures",
-        "Joins",
-        "PreAggregations"
-      ],
-      "type": "object"
-    },
     "CubeDiff": {
       "properties": {
         "Changes": {
@@ -5580,201 +5331,6 @@
         "Name",
         "Status",
         "Changes"
-      ],
-      "type": "object"
-    },
-    "CubeDimension": {
-      "description": "CubeDimension represents a dimension in a Cube",
-      "properties": {
-        "Description": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "PrimaryKey": {
-          "type": "boolean"
-        },
-        "SQL": {
-          "type": "string"
-        },
-        "Title": {
-          "type": "string"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "SQL",
-        "Type",
-        "Title",
-        "Description",
-        "PrimaryKey"
-      ],
-      "type": "object"
-    },
-    "CubeGenerator": {
-      "description": "CubeGenerator generates Cube.dev schema files from semantic terms",
-      "properties": {
-        "CueEngine": {
-          "$ref": "#/definitions/CueEngine"
-        },
-        "DB": {},
-        "Repo": {
-          "$ref": "#/definitions/SemanticTermRepository"
-        }
-      },
-      "required": [
-        "Repo",
-        "CueEngine",
-        "DB"
-      ],
-      "type": "object"
-    },
-    "CubeJoin": {
-      "description": "CubeJoin represents a join relationship",
-      "properties": {
-        "Name": {
-          "type": "string"
-        },
-        "Relationship": {
-          "type": "string"
-        },
-        "SQL": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "SQL",
-        "Relationship"
-      ],
-      "type": "object"
-    },
-    "CubeMeasure": {
-      "description": "CubeMeasure represents a measure in a Cube",
-      "properties": {
-        "Description": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "SQL": {
-          "type": "string"
-        },
-        "Title": {
-          "type": "string"
-        },
-        "Type": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "SQL",
-        "Type",
-        "Title",
-        "Description"
-      ],
-      "type": "object"
-    },
-    "CubeModel": {
-      "description": "CubeModel represents a complete Cube.dev model file",
-      "properties": {
-        "Cubes": {
-          "$ref": "#/definitions/CubeDefinition[]"
-        }
-      },
-      "required": [
-        "Cubes"
-      ],
-      "type": "object"
-    },
-    "CubePreAggregation": {
-      "description": "CubePreAggregation represents a pre-aggregation configuration",
-      "properties": {
-        "Dimensions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Granularity": {
-          "type": "string"
-        },
-        "Measures": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "Measures",
-        "Dimensions",
-        "Granularity"
-      ],
-      "type": "object"
-    },
-    "CubeSchema": {
-      "properties": {
-        "Cubes": {
-          "$ref": "#/definitions/CubeDefinition[]"
-        }
-      },
-      "required": [
-        "Cubes"
-      ],
-      "type": "object"
-    },
-    "CueEngine": {
-      "description": "CueEngine provides CUE-based expression evaluation",
-      "properties": {
-        "logger": {},
-        "mu": {}
-      },
-      "required": [
-        "logger",
-        "mu"
-      ],
-      "type": "object"
-    },
-    "CueSchemaGenerator": {
-      "description": "CueSchemaGenerator generates and caches CUE schemas from DB metadata",
-      "properties": {
-        "cache": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "db": {},
-        "logger": {},
-        "mu": {}
-      },
-      "required": [
-        "db",
-        "logger",
-        "cache",
-        "mu"
-      ],
-      "type": "object"
-    },
-    "CueValidationResult": {
-      "description": "CueValidationResult represents the result of a usage of Cue for validation",
-      "properties": {
-        "IsValid": {
-          "type": "boolean"
-        },
-        "Message": {
-          "type": "string"
-        },
-        "Severity": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "IsValid",
-        "Message",
-        "Severity"
       ],
       "type": "object"
     },
@@ -6157,30 +5713,6 @@
       ],
       "type": "object"
     },
-    "DataSource": {
-      "enum": [
-        "ignite",
-        "postgres",
-        "starrocks"
-      ],
-      "type": "string"
-    },
-    "DataSourceRouter": {
-      "description": "DataSourceRouter routes queries to optimal data source",
-      "properties": {
-        "igniteDB": {},
-        "logger": {},
-        "postgresDB": {},
-        "starrocksDB": {}
-      },
-      "required": [
-        "igniteDB",
-        "starrocksDB",
-        "postgresDB",
-        "logger"
-      ],
-      "type": "object"
-    },
     "Database": {
       "description": "Database represents a single database in the hierarchy.",
       "properties": {
@@ -6264,6 +5796,34 @@
       },
       "required": [
         "db"
+      ],
+      "type": "object"
+    },
+    "DevTokenInput": {
+      "description": "DevTokenInput is the claim shape AuthContextMiddleware reads from a\nvalidated JWT. MintDevToken is the only approved forge helper for\nbackend tests and cmd/devjwt — it builds this map and signs via\nSignToken (JWTManager). Knowing JWT_SECRET plus this helper is an\nauth-bypass kit; keep forge use in development/local/test only.",
+      "properties": {
+        "Email": {
+          "type": "string"
+        },
+        "Roles": {
+          "$ref": "#/definitions/string[]"
+        },
+        "TTL": {
+          "description": "TTL defaults to 1 hour when zero or negative."
+        },
+        "TenantIDs": {
+          "$ref": "#/definitions/string[]"
+        },
+        "UserID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "UserID",
+        "Email",
+        "TenantIDs",
+        "Roles",
+        "TTL"
       ],
       "type": "object"
     },
@@ -8207,16 +7767,6 @@
         "Enums",
         "MapInput",
         "FastRecord"
-      ],
-      "type": "object"
-    },
-    "FolderService": {
-      "description": "FolderService provides methods for managing folders.",
-      "properties": {
-        "db": {}
-      },
-      "required": [
-        "db"
       ],
       "type": "object"
     },
@@ -10874,15 +10424,6 @@
       "properties": {},
       "type": "object"
     },
-    "MockSampleEntityRepository": {
-      "properties": {
-        "": {}
-      },
-      "required": [
-        ""
-      ],
-      "type": "object"
-    },
     "MockScenarioRepository": {
       "properties": {
         "": {}
@@ -10953,19 +10494,6 @@
         "override"
       ],
       "type": "string"
-    },
-    "ModuleLoader": {
-      "description": "ModuleLoader implements starlark.Thread.Load for whitelisted modules.",
-      "properties": {
-        "Allowed": {
-          "$ref": "#/definitions/Record\u003cstring, string\u003e",
-          "description": "Allowed maps module name -\u003e source code"
-        }
-      },
-      "required": [
-        "Allowed"
-      ],
-      "type": "object"
     },
     "MonteCarloSnapshot": {
       "description": "MonteCarloSnapshot contains simulation parameters for reproducibility.",
@@ -11605,58 +11133,15 @@
       ],
       "type": "object"
     },
-    "OkRule": {
-      "description": "OkRule represents an ok-style Starlark rule.\n\nScript must set a global `ok = \u003cbool\u003e` and may set `message = \u003cstring\u003e`.",
+    "ParamBinder": {
+      "description": "ParamBinder accumulates parameterized literals, emitting $n placeholders.\nBind order defines parameter order — the pushdown executor binds the\ntenant ID first so it is always $1.",
       "properties": {
-        "ID": {
-          "type": "string"
-        },
-        "Script": {
-          "type": "string"
+        "args": {
+          "$ref": "#/definitions/any[]"
         }
       },
       "required": [
-        "ID",
-        "Script"
-      ],
-      "type": "object"
-    },
-    "OkRuleMeta": {
-      "description": "OkRuleMeta is lightweight execution metadata used to optimize BO-scale runs.",
-      "properties": {
-        "Cost": {
-          "description": "Cost is a relative cost score (lower runs earlier).",
-          "type": "number"
-        },
-        "FailureLikelihood": {
-          "description": "FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost).",
-          "type": "number"
-        },
-        "RequiredFieldPaths": {
-          "$ref": "#/definitions/string[]",
-          "description": "RequiredFieldPaths are dot-paths that must be present in the input record for this rule.\nExample: \"account.account_type\" or \"page.aum\"."
-        }
-      },
-      "required": [
-        "Cost",
-        "FailureLikelihood",
-        "RequiredFieldPaths"
-      ],
-      "type": "object"
-    },
-    "OkRuleWithMeta": {
-      "description": "OkRuleWithMeta bundles a rule with its execution metadata.",
-      "properties": {
-        "": {
-          "$ref": "#/definitions/OkRule"
-        },
-        "Meta": {
-          "$ref": "#/definitions/OkRuleMeta"
-        }
-      },
-      "required": [
-        "",
-        "Meta"
+        "args"
       ],
       "type": "object"
     },
@@ -11673,18 +11158,6 @@
       "required": [
         "Message",
         "Pos"
-      ],
-      "type": "object"
-    },
-    "PathResolver": {
-      "description": "PathResolver resolves dot-notation paths (e.g. \"Manager.Location.Country\")\nby traversing the relationship graph via iterative lookups.",
-      "properties": {
-        "provider": {
-          "$ref": "#/definitions/InstanceProvider"
-        }
-      },
-      "required": [
-        "provider"
       ],
       "type": "object"
     },
@@ -12542,21 +12015,61 @@
       ],
       "type": "object"
     },
-    "Portfolio": {
-      "description": "Portfolio basic struct",
+    "PortableRuleSpec": {
+      "description": "PortableRuleSpec defines a single rule stripped of environment-specific UUIDs.",
       "properties": {
-        "AUM": {
-          "type": "number"
+        "BOName": {
+          "type": "string"
         },
-        "ID": {},
-        "Strategy": {
+        "BindingScope": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Category": {
+          "type": "string"
+        },
+        "Deleted": {
+          "type": "boolean"
+        },
+        "DependsOn": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Description": {
+          "type": "string"
+        },
+        "Domain": {
+          "type": "string"
+        },
+        "GovernanceStatus": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "RuleAST": {},
+        "RuleKey": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "Timing": {
           "type": "string"
         }
       },
       "required": [
-        "ID",
-        "AUM",
-        "Strategy"
+        "RuleKey",
+        "Name",
+        "BOName",
+        "Description",
+        "Domain",
+        "Severity",
+        "Timing",
+        "Category",
+        "GovernanceStatus",
+        "BindingScope",
+        "DependsOn",
+        "RuleAST",
+        "Deleted"
       ],
       "type": "object"
     },
@@ -12806,18 +12319,6 @@
       },
       "required": [
         "db"
-      ],
-      "type": "object"
-    },
-    "PostgresSchedulerService": {
-      "description": "PostgresSchedulerService implements SchedulerService",
-      "properties": {
-        "cron": {},
-        "db": {}
-      },
-      "required": [
-        "db",
-        "cron"
       ],
       "type": "object"
     },
@@ -13647,101 +13148,6 @@
       ],
       "type": "object"
     },
-    "QueryFilter": {
-      "properties": {
-        "Dimension": {
-          "type": "string"
-        },
-        "Operator": {
-          "type": "string"
-        },
-        "Values": {
-          "$ref": "#/definitions/any[]"
-        }
-      },
-      "required": [
-        "Dimension",
-        "Operator",
-        "Values"
-      ],
-      "type": "object"
-    },
-    "QueryRequest": {
-      "description": "QueryRequest represents a query request",
-      "properties": {
-        "Cube": {
-          "type": "string"
-        },
-        "Dimensions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Filters": {
-          "$ref": "#/definitions/QueryFilter[]"
-        },
-        "ForceSource": {
-          "$ref": "#/definitions/DataSource"
-        },
-        "Measures": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Parameters": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "RealTimeOnly": {
-          "type": "boolean"
-        },
-        "SQL": {
-          "type": "string"
-        },
-        "TimeRange": {
-          "$ref": "#/definitions/TimeRange"
-        }
-      },
-      "required": [
-        "SQL",
-        "Cube",
-        "Measures",
-        "Dimensions",
-        "Filters",
-        "TimeRange",
-        "ForceSource",
-        "RealTimeOnly",
-        "Parameters"
-      ],
-      "type": "object"
-    },
-    "QueryResult": {
-      "description": "QueryResult represents query results",
-      "properties": {
-        "CacheHit": {
-          "type": "boolean"
-        },
-        "Columns": {
-          "$ref": "#/definitions/ColumnInfo[]"
-        },
-        "Data": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
-        },
-        "QueryTime": {
-          "type": "number"
-        },
-        "RowCount": {
-          "type": "number"
-        },
-        "Source": {
-          "$ref": "#/definitions/DataSource"
-        }
-      },
-      "required": [
-        "Data",
-        "Columns",
-        "RowCount",
-        "Source",
-        "QueryTime",
-        "CacheHit"
-      ],
-      "type": "object"
-    },
     "QueryService": {
       "description": "QueryService handles query operations",
       "properties": {},
@@ -13825,14 +13231,6 @@
         "PreAggHit"
       ],
       "type": "object"
-    },
-    "QueryType": {
-      "enum": [
-        "analytics",
-        "historical",
-        "realtime"
-      ],
-      "type": "string"
     },
     "QueueStats": {
       "description": "QueueStats provides statistics about the job queue",
@@ -13931,34 +13329,6 @@
       ],
       "type": "object"
     },
-    "ReadableError": {
-      "description": "ReadableError represents a structured, human-readable validation error",
-      "properties": {
-        "Field": {
-          "type": "string"
-        },
-        "Fix": {
-          "type": "string"
-        },
-        "Message": {
-          "type": "string"
-        },
-        "Severity": {
-          "type": "string"
-        },
-        "Why": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Field",
-        "Message",
-        "Fix",
-        "Why",
-        "Severity"
-      ],
-      "type": "object"
-    },
     "ReadinessStatus": {
       "description": "ReadinessStatus represents the readiness check response",
       "properties": {
@@ -14042,20 +13412,6 @@
         "TargetBusinessObject",
         "JoinExpression",
         "Cardinality"
-      ],
-      "type": "object"
-    },
-    "ReportDefinitionBuilder": {
-      "description": "ReportDefinitionBuilder helps build reports",
-      "properties": {
-        "logger": {},
-        "router": {
-          "$ref": "#/definitions/DataSourceRouter"
-        }
-      },
-      "required": [
-        "router",
-        "logger"
       ],
       "type": "object"
     },
@@ -14219,22 +13575,6 @@
         "TrackingError",
         "ValueAtRisk",
         "ExpectedShortfall"
-      ],
-      "type": "object"
-    },
-    "RiskService": {
-      "description": "RiskService orchestrates risk computation ETL",
-      "properties": {
-        "audit": {},
-        "db": {},
-        "tenantID": {},
-        "wasm": {}
-      },
-      "required": [
-        "db",
-        "wasm",
-        "audit",
-        "tenantID"
       ],
       "type": "object"
     },
@@ -14618,6 +13958,40 @@
       ],
       "type": "object"
     },
+    "RuleBundle": {
+      "description": "RuleBundle represents a portable export of validation rules.\nThe canonical interchange format is JSON; YAML is a read-only convenience\nconverted to JSON before any checksumming occurs.",
+      "properties": {
+        "BundleVersion": {
+          "type": "string"
+        },
+        "Checksum": {
+          "type": "string"
+        },
+        "CreatedAt": {},
+        "ExportedFrom": {
+          "type": "string"
+        },
+        "Origin": {
+          "type": "string"
+        },
+        "Rules": {
+          "$ref": "#/definitions/PortableRuleSpec[]"
+        },
+        "TenantScope": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "BundleVersion",
+        "CreatedAt",
+        "ExportedFrom",
+        "TenantScope",
+        "Origin",
+        "Checksum",
+        "Rules"
+      ],
+      "type": "object"
+    },
     "RuleChain": {
       "properties": {
         "ID": {
@@ -14646,20 +14020,52 @@
       "type": "object"
     },
     "RuleCondition": {
-      "description": "RuleCondition represents a single validation condition",
       "properties": {
         "Field": {
+          "type": "string"
+        },
+        "FieldPath": {
+          "type": "string"
+        },
+        "ID": {
           "type": "string"
         },
         "Operator": {
           "type": "string"
         },
-        "Value": {}
+        "SecondValue": {},
+        "Value": {},
+        "ValueType": {
+          "type": "string"
+        }
       },
       "required": [
+        "ID",
         "Field",
+        "FieldPath",
         "Operator",
-        "Value"
+        "Value",
+        "ValueType",
+        "SecondValue"
+      ],
+      "type": "object"
+    },
+    "RuleDiffSummary": {
+      "properties": {
+        "Action": {
+          "type": "string"
+        },
+        "Changes": {
+          "$ref": "#/definitions/string[]"
+        },
+        "RuleKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "RuleKey",
+        "Action",
+        "Changes"
       ],
       "type": "object"
     },
@@ -14670,7 +14076,6 @@
         "driftHealer": {
           "$ref": "#/definitions/DriftHealerInterface"
         },
-        "env": {},
         "metrics": {
           "$ref": "#/definitions/EngineMetrics"
         },
@@ -14688,7 +14093,6 @@
         "vm": {}
       },
       "required": [
-        "env",
         "repo",
         "coreState",
         "tenantStates",
@@ -14698,36 +14102,6 @@
         "rewarmGroup",
         "profiler",
         "driftHealer"
-      ],
-      "type": "object"
-    },
-    "RuleEvaluationResult": {
-      "description": "RuleEvaluationResult holds the outcome of rule evaluation",
-      "properties": {
-        "ActionToTake": {
-          "type": "string"
-        },
-        "Details": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "ErrorMessage": {
-          "type": "string"
-        },
-        "EvaluationTime": {},
-        "Passed": {
-          "type": "boolean"
-        },
-        "RuleID": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "RuleID",
-        "Passed",
-        "ErrorMessage",
-        "ActionToTake",
-        "EvaluationTime",
-        "Details"
       ],
       "type": "object"
     },
@@ -14747,6 +14121,109 @@
         "ID",
         "Operator",
         "Conditions"
+      ],
+      "type": "object"
+    },
+    "RuleImportErrorDetail": {
+      "properties": {
+        "Code": {
+          "type": "string"
+        },
+        "Name": {
+          "type": "string"
+        },
+        "Reason": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Code",
+        "RuleKey",
+        "Name",
+        "Reason"
+      ],
+      "type": "object"
+    },
+    "RuleImportReport": {
+      "description": "RuleImportReport returns granular results of the import.",
+      "properties": {
+        "Created": {
+          "$ref": "#/definitions/string[]"
+        },
+        "DiffSummary": {
+          "$ref": "#/definitions/RuleDiffSummary[]"
+        },
+        "DryRun": {
+          "type": "boolean"
+        },
+        "Errors": {
+          "$ref": "#/definitions/RuleImportErrorDetail[]"
+        },
+        "Pruned": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Skipped": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Success": {
+          "type": "boolean"
+        },
+        "TotalRules": {
+          "type": "number"
+        },
+        "Updated": {
+          "$ref": "#/definitions/string[]"
+        }
+      },
+      "required": [
+        "Success",
+        "DryRun",
+        "TotalRules",
+        "Created",
+        "Updated",
+        "Skipped",
+        "Pruned",
+        "Errors",
+        "DiffSummary"
+      ],
+      "type": "object"
+    },
+    "RuleImportRequest": {
+      "description": "RuleImportRequest specifies import options.",
+      "properties": {
+        "Bundle": {
+          "$ref": "#/definitions/RuleBundle"
+        },
+        "DryRun": {
+          "type": "boolean"
+        },
+        "IdempotencyKey": {
+          "type": "string"
+        },
+        "OverwritePolicy": {
+          "type": "string"
+        },
+        "PreserveStatus": {
+          "type": "boolean"
+        },
+        "Prune": {
+          "type": "boolean"
+        },
+        "TargetTenantID": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Bundle",
+        "TargetTenantID",
+        "DryRun",
+        "OverwritePolicy",
+        "PreserveStatus",
+        "Prune",
+        "IdempotencyKey"
       ],
       "type": "object"
     },
@@ -15029,26 +14506,6 @@
       ],
       "type": "object"
     },
-    "RuleTemplate": {
-      "description": "RuleTemplate provides common validation scenarios",
-      "properties": {
-        "Condition": {
-          "$ref": "#/definitions/ComplexCondition"
-        },
-        "Error": {
-          "type": "string"
-        },
-        "Name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Name",
-        "Condition",
-        "Error"
-      ],
-      "type": "object"
-    },
     "RuleTestRun": {
       "description": "RuleTestRun represents an execution of a rule (scenario or standard) against a sample",
       "properties": {
@@ -15327,25 +14784,6 @@
       ],
       "type": "object"
     },
-    "ScenarioRunner": {
-      "properties": {
-        "engine": {
-          "$ref": "#/definitions/RuleEngine"
-        },
-        "repo": {
-          "$ref": "#/definitions/ScenarioRepository"
-        },
-        "sampleRepo": {
-          "$ref": "#/definitions/SampleEntityRepository"
-        }
-      },
-      "required": [
-        "repo",
-        "sampleRepo",
-        "engine"
-      ],
-      "type": "object"
-    },
     "ScenarioService": {
       "properties": {
         "repo": {
@@ -15354,115 +14792,6 @@
       },
       "required": [
         "repo"
-      ],
-      "type": "object"
-    },
-    "ScheduleStatus": {
-      "enum": [
-        "active",
-        "completed",
-        "disabled",
-        "failed",
-        "paused"
-      ],
-      "type": "string"
-    },
-    "ScheduleType": {
-      "enum": [
-        "daily",
-        "monthly",
-        "once",
-        "weekly"
-      ],
-      "type": "string"
-    },
-    "ScheduledJob": {
-      "description": "ScheduledJob represents a scheduled job",
-      "properties": {
-        "CreatedAt": {},
-        "CreatedBy": {},
-        "CronExpression": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "EndTime": {},
-        "FailureCount": {
-          "type": "number"
-        },
-        "ID": {},
-        "IsActive": {
-          "type": "boolean"
-        },
-        "JobTemplate": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "LastRunAt": {},
-        "MaxRetries": {
-          "type": "number"
-        },
-        "MaxRunDuration": {
-          "type": "number"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "NextRunAt": {},
-        "OperationType": {
-          "type": "string"
-        },
-        "Priority": {
-          "type": "number"
-        },
-        "RetryOnFailure": {
-          "type": "boolean"
-        },
-        "RunCount": {
-          "type": "number"
-        },
-        "ScheduleType": {
-          "$ref": "#/definitions/ScheduleType"
-        },
-        "StartTime": {},
-        "Status": {
-          "$ref": "#/definitions/ScheduleStatus"
-        },
-        "SuccessCount": {
-          "type": "number"
-        },
-        "TenantID": {},
-        "Timezone": {
-          "type": "string"
-        },
-        "UpdatedAt": {}
-      },
-      "required": [
-        "ID",
-        "TenantID",
-        "OperationType",
-        "JobTemplate",
-        "ScheduleType",
-        "StartTime",
-        "EndTime",
-        "CronExpression",
-        "Timezone",
-        "MaxRunDuration",
-        "RetryOnFailure",
-        "MaxRetries",
-        "Status",
-        "IsActive",
-        "LastRunAt",
-        "NextRunAt",
-        "RunCount",
-        "SuccessCount",
-        "FailureCount",
-        "Name",
-        "Description",
-        "Priority",
-        "CreatedBy",
-        "CreatedAt",
-        "UpdatedAt"
       ],
       "type": "object"
     },
@@ -15908,68 +15237,6 @@
       ],
       "type": "object"
     },
-    "SelfServiceReport": {
-      "description": "SelfServiceReport represents a user-created report",
-      "properties": {
-        "ChartType": {
-          "type": "string"
-        },
-        "CreatedAt": {},
-        "CreatedBy": {
-          "type": "string"
-        },
-        "Cube": {
-          "type": "string"
-        },
-        "Description": {
-          "type": "string"
-        },
-        "Dimensions": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Filters": {
-          "$ref": "#/definitions/QueryFilter[]"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "IsPublic": {
-          "type": "boolean"
-        },
-        "Limit": {
-          "type": "number"
-        },
-        "Measures": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Name": {
-          "type": "string"
-        },
-        "Settings": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "SortBy": {
-          "$ref": "#/definitions/SortSpec[]"
-        }
-      },
-      "required": [
-        "ID",
-        "Name",
-        "Description",
-        "Cube",
-        "Measures",
-        "Dimensions",
-        "Filters",
-        "SortBy",
-        "Limit",
-        "ChartType",
-        "Settings",
-        "CreatedBy",
-        "CreatedAt",
-        "IsPublic"
-      ],
-      "type": "object"
-    },
     "SemanticAssistant": {
       "properties": {
         "llmProvider": {}
@@ -16317,30 +15584,6 @@
       ],
       "type": "object"
     },
-    "SimulationResult": {
-      "description": "SimulationResult captures the output of a CUE simulation",
-      "properties": {
-        "Errors": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Messages": {
-          "$ref": "#/definitions/ReadableError[]"
-        },
-        "ResultData": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "Success": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "Success",
-        "ResultData",
-        "Errors",
-        "Messages"
-      ],
-      "type": "object"
-    },
     "SnapshotRefs": {
       "description": "SnapshotRefs contains references to data snapshots used.",
       "properties": {
@@ -16372,21 +15615,6 @@
       },
       "required": [
         "db"
-      ],
-      "type": "object"
-    },
-    "SortSpec": {
-      "properties": {
-        "Direction": {
-          "type": "string"
-        },
-        "Field": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "Field",
-        "Direction"
       ],
       "type": "object"
     },
@@ -16455,46 +15683,6 @@
         "bTop",
         "sTop",
         "fTop"
-      ],
-      "type": "object"
-    },
-    "StarlarkEngine": {
-      "description": "StarlarkEngine provides Workday-style expression evaluation",
-      "properties": {
-        "cache": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "cacheMu": {},
-        "logger": {},
-        "maxSteps": {
-          "$ref": "#/definitions/uint64"
-        }
-      },
-      "required": [
-        "logger",
-        "cache",
-        "cacheMu",
-        "maxSteps"
-      ],
-      "type": "object"
-    },
-    "StarlarkValidationResult": {
-      "description": "StarlarkValidationResult represents the result of a validation expression",
-      "properties": {
-        "IsValid": {
-          "type": "boolean"
-        },
-        "Message": {
-          "type": "string"
-        },
-        "Severity": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "IsValid",
-        "Message",
-        "Severity"
       ],
       "type": "object"
     },
@@ -17234,27 +16422,6 @@
       ],
       "type": "object"
     },
-    "TenantCompiler": {
-      "properties": {
-        "coreCompiler": {
-          "$ref": "#/definitions/CoreCompiler"
-        },
-        "coreRepo": {
-          "$ref": "#/definitions/CoreRuleRepository"
-        },
-        "predeclared": {},
-        "tenantCache": {
-          "$ref": "#/definitions/TenantFnCache"
-        }
-      },
-      "required": [
-        "coreCompiler",
-        "tenantCache",
-        "predeclared",
-        "coreRepo"
-      ],
-      "type": "object"
-    },
     "TenantConfigService": {
       "description": "TenantConfigService manages per-tenant QoS configurations",
       "properties": {
@@ -17302,38 +16469,6 @@
         "Plan",
         "MaxRequests",
         "WindowSeconds"
-      ],
-      "type": "object"
-    },
-    "TenantFnCache": {
-      "properties": {
-        "m": {
-          "$ref": "#/definitions/Record\u003cTenantFnKey, any\u003e"
-        },
-        "mu": {}
-      },
-      "required": [
-        "mu",
-        "m"
-      ],
-      "type": "object"
-    },
-    "TenantFnKey": {
-      "properties": {
-        "CoreVer": {
-          "type": "number"
-        },
-        "RuleID": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "TenantID",
-        "RuleID",
-        "CoreVer"
       ],
       "type": "object"
     },
@@ -17568,21 +16703,6 @@
         "Removed",
         "Changed",
         "Conflicts"
-      ],
-      "type": "object"
-    },
-    "TimeRange": {
-      "properties": {
-        "End": {},
-        "Granularity": {
-          "type": "string"
-        },
-        "Start": {}
-      },
-      "required": [
-        "Start",
-        "End",
-        "Granularity"
       ],
       "type": "object"
     },
@@ -18353,6 +17473,18 @@
       ],
       "type": "object"
     },
+    "UnsupportedOperatorError": {
+      "description": "UnsupportedOperatorError is returned for an operator that has no SQL\npushdown (unknown, or evaluable only by the VM, e.g. length_equals).",
+      "properties": {
+        "Operator": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "Operator"
+      ],
+      "type": "object"
+    },
     "UpdateBusinessObjectRequest": {
       "description": "UpdateBusinessObjectRequest represents a request to update a BO",
       "properties": {
@@ -18805,10 +17937,18 @@
         "BOName": {
           "type": "string"
         },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]",
+          "description": "BindingIDs optionally scopes the rule to specific bindings of the BO;\nsee ValidationRuleProperties.BindingIDs. Each must be a binding of\nBOName in this tenant."
+        },
         "Category": {
           "type": "string"
         },
         "Description": {
+          "type": "string"
+        },
+        "Domain": {
+          "description": "Domain: \"mdm\" or \"compliance\" for the rulefabric-consolidation\ndomain values; empty defaults to ValidationRuleDomainDefault\n(\"validation\") in the service layer.",
           "type": "string"
         },
         "Name": {
@@ -18833,7 +17973,9 @@
         "Severity",
         "Timing",
         "Category",
-        "RuleAST"
+        "Domain",
+        "RuleAST",
+        "BindingIDs"
       ],
       "type": "object"
     },
@@ -19049,36 +18191,6 @@
       ],
       "type": "object"
     },
-    "ValidationEvent": {
-      "description": "ValidationEvent is emitted when validation completes",
-      "properties": {
-        "EntityID": {
-          "type": "string"
-        },
-        "EntityType": {
-          "type": "string"
-        },
-        "Result": {
-          "$ref": "#/definitions/ValidationTaskResult"
-        },
-        "Status": {
-          "type": "string"
-        },
-        "TaskID": {
-          "type": "string"
-        },
-        "Timestamp": {}
-      },
-      "required": [
-        "TaskID",
-        "EntityID",
-        "EntityType",
-        "Status",
-        "Result",
-        "Timestamp"
-      ],
-      "type": "object"
-    },
     "ValidationReport": {
       "description": "ValidationReport holds validation results.",
       "properties": {
@@ -19107,22 +18219,6 @@
       ],
       "type": "object"
     },
-    "ValidationResponse": {
-      "description": "ValidationResponse is the struct returned by success() and fail()",
-      "properties": {
-        "Message": {
-          "type": "string"
-        },
-        "Pass": {
-          "type": "boolean"
-        }
-      },
-      "required": [
-        "Pass",
-        "Message"
-      ],
-      "type": "object"
-    },
     "ValidationRuleConfig": {
       "description": "ValidationRuleConfig is stored in catalog_node.config. RuleAST is a\nvm.RuleNode-shaped json.RawMessage (internal/rules/vm) - kept as\njson.RawMessage here rather than a typed vm.RuleNode so this package\ndoesn't need to import internal/rules/vm (models is a low-level,\nwidely-imported package; the AST is parsed by whoever evaluates it).",
       "properties": {
@@ -19133,61 +18229,14 @@
       ],
       "type": "object"
     },
-    "ValidationRuleDefinition": {
-      "description": "ValidationRuleDefinition represents a complete validation rule",
-      "properties": {
-        "ActionOnFailure": {
-          "type": "string"
-        },
-        "ActionOnSuccess": {
-          "type": "string"
-        },
-        "BPName": {
-          "type": "string"
-        },
-        "ConditionJSON": {},
-        "CreatedAt": {},
-        "Enabled": {
-          "type": "boolean"
-        },
-        "ErrorMessage": {
-          "type": "string"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "Priority": {
-          "type": "number"
-        },
-        "StepName": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
-        },
-        "UpdatedAt": {}
-      },
-      "required": [
-        "ID",
-        "TenantID",
-        "BPName",
-        "StepName",
-        "ConditionJSON",
-        "ActionOnSuccess",
-        "ActionOnFailure",
-        "ErrorMessage",
-        "Priority",
-        "Enabled",
-        "CreatedAt",
-        "UpdatedAt"
-      ],
-      "type": "object"
-    },
     "ValidationRuleDescriptor": {
       "description": "ValidationRuleDescriptor is the API response shape.",
       "properties": {
         "BOName": {
           "type": "string"
+        },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]"
         },
         "Category": {
           "type": "string"
@@ -19196,14 +18245,26 @@
         "Description": {
           "type": "string"
         },
+        "Domain": {
+          "type": "string"
+        },
         "GovernanceStatus": {
           "type": "string"
         },
         "ID": {},
+        "IsActive": {
+          "type": "boolean"
+        },
         "Name": {
           "type": "string"
         },
+        "Origin": {
+          "type": "string"
+        },
         "RuleAST": {},
+        "RuleKey": {
+          "type": "string"
+        },
         "Severity": {
           "type": "string"
         },
@@ -19217,6 +18278,7 @@
       },
       "required": [
         "ID",
+        "RuleKey",
         "TenantID",
         "BOName",
         "Name",
@@ -19224,49 +18286,69 @@
         "Severity",
         "Timing",
         "Category",
+        "Domain",
+        "BindingIDs",
+        "Origin",
         "RuleAST",
         "GovernanceStatus",
+        "IsActive",
         "CreatedAt",
         "UpdatedAt"
-      ],
-      "type": "object"
-    },
-    "ValidationRuleEngineImpl": {
-      "description": "ValidationRuleEngineImpl implements ValidationRuleEngine",
-      "properties": {
-        "db": {},
-        "operators": {
-          "description": "operators delegates actual comparison semantics to RuleFabric's\nOperatorRegistry (backend/internal/rulefabric) so this engine and\nRuleFabric's tree-based rules share one implementation of what \"=\",\n\"\u003e\", \"contains\", etc. mean, instead of maintaining two independently\nbug-prone copies."
-        },
-        "resolver": {}
-      },
-      "required": [
-        "db",
-        "resolver",
-        "operators"
       ],
       "type": "object"
     },
     "ValidationRuleProperties": {
       "description": "ValidationRuleProperties is stored in catalog_node.properties, mirroring\nPreAggProperties' role for pre-aggregation nodes and term_type/\nreturn_type's role for calculated semantic terms - node metadata that\nisn't the AST itself.",
       "properties": {
+        "ApprovedAt": {},
+        "ApprovedBy": {
+          "type": "string"
+        },
+        "AuthorID": {
+          "type": "string"
+        },
         "BOName": {
           "type": "string"
         },
+        "BindingIDs": {
+          "$ref": "#/definitions/string[]"
+        },
         "Category": {
+          "type": "string"
+        },
+        "Domain": {
+          "description": "Domain distinguishes which rule-authoring surface produced this\nrule - \"validation\" (the original BO-scoped surface), \"mdm\", or\n\"compliance\" (the domain values the rulefabric consolidation adds;\nsee docs/unified-rule-engine-handoff.md, \"Rulefabric consolidation\").\nEmpty/omitted (every rule written before this field existed) is\nread as ValidationRuleDomainDefault (\"validation\") by GetByID/\nListByBO's descriptorFromNode - the service defaults new writes to\nit explicitly rather than leaving new rows blank too, so \"domain\"\nis unambiguous for anything written from this point forward.",
           "type": "string"
         },
         "GovernanceStatus": {
           "type": "string"
         },
+        "PublishedAt": {},
+        "PublishedBy": {
+          "type": "string"
+        },
+        "RejectedAt": {},
+        "RejectedBy": {
+          "type": "string"
+        },
+        "RejectionReason": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        },
         "Severity": {
           "type": "string"
         },
+        "SubmittedAt": {},
         "TenantID": {
           "type": "string"
         },
         "Timing": {
           "type": "string"
+        },
+        "Version": {
+          "type": "number"
         }
       },
       "required": [
@@ -19275,85 +18357,20 @@
         "Severity",
         "Timing",
         "Category",
-        "GovernanceStatus"
-      ],
-      "type": "object"
-    },
-    "ValidationTask": {
-      "description": "ValidationTask represents a single validation job",
-      "properties": {
-        "CreatedAt": {},
-        "EntityData": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e"
-        },
-        "EntityID": {
-          "type": "string"
-        },
-        "EntityType": {
-          "type": "string"
-        },
-        "ID": {
-          "type": "string"
-        },
-        "Priority": {
-          "type": "number"
-        },
-        "Retries": {
-          "type": "number"
-        },
-        "RuleIDs": {
-          "$ref": "#/definitions/string[]"
-        },
-        "Status": {
-          "type": "string"
-        },
-        "TenantID": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "ID",
-        "EntityID",
-        "EntityType",
-        "TenantID",
-        "EntityData",
-        "RuleIDs",
-        "CreatedAt",
-        "Status",
-        "Priority",
-        "Retries"
-      ],
-      "type": "object"
-    },
-    "ValidationTaskResult": {
-      "description": "ValidationTaskResult holds the outcome of a validation task",
-      "properties": {
-        "Duration": {},
-        "Errors": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
-        },
-        "ProcessedAt": {},
-        "Status": {
-          "type": "string"
-        },
-        "Summary": {
-          "type": "string"
-        },
-        "TaskID": {
-          "type": "string"
-        },
-        "Warnings": {
-          "$ref": "#/definitions/Record\u003cstring, any\u003e[]"
-        }
-      },
-      "required": [
-        "TaskID",
-        "Status",
-        "Errors",
-        "Warnings",
-        "Summary",
-        "ProcessedAt",
-        "Duration"
+        "GovernanceStatus",
+        "Domain",
+        "BindingIDs",
+        "RuleKey",
+        "AuthorID",
+        "SubmittedAt",
+        "ApprovedBy",
+        "ApprovedAt",
+        "RejectedBy",
+        "RejectedAt",
+        "RejectionReason",
+        "PublishedBy",
+        "PublishedAt",
+        "Version"
       ],
       "type": "object"
     },
@@ -19506,6 +18523,66 @@
     "ViewService": {
       "description": "ViewService handles view operations",
       "properties": {},
+      "type": "object"
+    },
+    "ViolationRecord": {
+      "description": "ViolationRecord represents a single evaluated rule violation or rule execution error.",
+      "properties": {
+        "BOKey": {
+          "type": "string"
+        },
+        "Context": {
+          "$ref": "#/definitions/Record\u003cstring, any\u003e"
+        },
+        "Fields": {
+          "$ref": "#/definitions/string[]"
+        },
+        "Message": {
+          "type": "string"
+        },
+        "RecordID": {
+          "type": "string"
+        },
+        "RuleError": {
+          "type": "boolean"
+        },
+        "RuleID": {
+          "type": "string"
+        },
+        "RuleKey": {
+          "type": "string"
+        },
+        "RuleName": {
+          "type": "string"
+        },
+        "RuleVersion": {
+          "type": "string"
+        },
+        "Severity": {
+          "type": "string"
+        },
+        "TenantID": {
+          "type": "string"
+        },
+        "WriteBlocked": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "TenantID",
+        "RuleID",
+        "RuleKey",
+        "RuleVersion",
+        "RuleName",
+        "BOKey",
+        "Severity",
+        "RecordID",
+        "Message",
+        "Fields",
+        "Context",
+        "WriteBlocked",
+        "RuleError"
+      ],
       "type": "object"
     },
     "WebSocketHub": {
@@ -20068,55 +19145,6 @@
       },
       "required": [
         "db"
-      ],
-      "type": "object"
-    },
-    "starlarkBundleSpan": {
-      "properties": {
-        "span": {},
-        "start": {}
-      },
-      "required": [
-        "span",
-        "start"
-      ],
-      "type": "object"
-    },
-    "starlarkRuleMetricChildren": {
-      "properties": {
-        "duration": {},
-        "lastError": {},
-        "lastRun": {}
-      },
-      "required": [
-        "duration",
-        "lastRun",
-        "lastError"
-      ],
-      "type": "object"
-    },
-    "starlarkRuleSpan": {
-      "properties": {
-        "ctxUsed": {},
-        "ended": {
-          "type": "boolean"
-        },
-        "mode": {
-          "type": "string"
-        },
-        "ruleID": {
-          "type": "string"
-        },
-        "span": {},
-        "start": {}
-      },
-      "required": [
-        "span",
-        "start",
-        "ruleID",
-        "mode",
-        "ended",
-        "ctxUsed"
       ],
       "type": "object"
     },

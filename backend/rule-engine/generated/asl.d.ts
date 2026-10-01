@@ -6,8 +6,6 @@ export type BindingRequirement = BACKEND_SPECIFIC | OPTIONAL | REQUIRED;
 
 export type CommandStatus = failed | pending | success;
 
-export type DataSource = ignite | postgres | starrocks;
-
 export type Dialect = starrocks;
 
 export type ExportFormat = csv | json | parquet;
@@ -26,17 +24,11 @@ export type ModelType = core | custom | override;
 
 export type PreAggStatus = active | disabled | draft | error;
 
-export type QueryType = analytics | historical | realtime;
-
 export type RoleScope = Environment | Global | Tenant;
 
 export type RoleStatus = Active | Draft | Retired | Suspended;
 
 export type RoleType = Business | System | Technical;
-
-export type ScheduleStatus = active | completed | disabled | failed | paused;
-
-export type ScheduleType = daily | monthly | once | weekly;
 
 export type ScriptState = certified | deprecated | draft | published;
 
@@ -234,6 +226,19 @@ export interface AdvisorWorker {
   threshold: uint64;
 }
 
+/** AggregateRuleSpec defines cross-record tumbling window reconciliation rules.
+Kept strictly outside vm.RuleNode as it operates on multi-row aggregations during
+scheduled pushdown rather than individual record writes. */
+export interface AggregateRuleSpec {
+  Aggregate: string;
+  Comparison: string;
+  Field: string;
+  GroupBy: string[];
+  Threshold: number;
+  TimeColumn: string;
+  Window: string;
+}
+
 /** AlertsService handles business logic for alerts. */
 export interface AlertsService {
   db: any;
@@ -348,18 +353,6 @@ export interface AsyncJobResponse {
   Status: JobStatus;
   StatusURL: string;
   TotalItems: number;
-}
-
-/** AsyncValidatorImpl implements AsyncValidator */
-export interface AsyncValidatorImpl {
-  db: any;
-  eventChan: any;
-  mu: any;
-  resultWriter: any;
-  results: Record<string, ValidationTaskResult>;
-  /** Kafka writers for tasks and results */
-  taskWriter: any;
-  tasks: Record<string, ValidationTask>;
 }
 
 /** AttributeCondition captures a single attribute-based requirement in a policy expression. */
@@ -811,38 +804,6 @@ export interface BOWorkloadProfile {
   TopGroupBys: GroupByProfile[];
   TopMeasures: MeasureProfile[];
   TotalQueries: number;
-}
-
-/** BPValidationCoordinatorImpl implements BPValidationCoordinator */
-export interface BPValidationCoordinatorImpl {
-  asyncValidator: AsyncValidator;
-  db: any;
-  eventChannels: Record<string, any>;
-  results: Record<string, BPValidationResponse>;
-  ruleEngine: ValidationRuleEngine;
-  writer: any;
-}
-
-/** BPValidationRequest represents a BP validation request */
-export interface BPValidationRequest {
-  BPName: string;
-  ContextID: string;
-  FormData: Record<string, any>;
-  ReturnSync: boolean;
-  StepName: string;
-  TenantID: string;
-  UserID: string;
-}
-
-/** BPValidationResponse holds validation outcome */
-export interface BPValidationResponse {
-  ActionsToTake: string[];
-  Details: Record<string, any>;
-  Errors: string[];
-  ID: string;
-  Passed: boolean;
-  Timestamp: any;
-  Warnings: string[];
 }
 
 /** BackgroundJobQueue manages per-tenant background job queues */
@@ -1457,12 +1418,6 @@ export interface Column {
   Type: string;
 }
 
-export interface ColumnInfo {
-  Label: string;
-  Name: string;
-  Type: string;
-}
-
 /** ColumnMask represents field-level masking for a semantic term. */
 export interface ColumnMask {
   MaskType: string;
@@ -1563,29 +1518,6 @@ export interface CompiledProgram {
   StrConsts: string[];
 }
 
-/** ComplexCondition supports AND/OR logic for multi-field validation */
-export interface ComplexCondition {
-  And: RuleCondition[];
-  Not: RuleCondition;
-  Or: RuleCondition[];
-}
-
-/** ComplianceBreachRecord defines internal struct for breaching inserts */
-export interface ComplianceBreachRecord {
-  BreachID: any;
-  Deviation: number;
-  EvaluationID: any;
-  Message: string;
-  MetricValue: number;
-  PortfolioID: any;
-  RuleID: string;
-  Severity: string;
-  Status: string;
-  TenantID: any;
-  ThresholdValue: number;
-  ValuationDate: string;
-}
-
 /** ComplianceReport represents a compliance report */
 export interface ComplianceReport {
   GeneratedAt: any;
@@ -1613,14 +1545,6 @@ export interface ComplianceRule {
   UpdatedAt: any;
 }
 
-/** ComplianceService orchestrates compliance evaluation ETL */
-export interface ComplianceService {
-  audit: any;
-  db: any;
-  tenantID: any;
-  wasm: any;
-}
-
 /** ConcentrationMetrics represents portfolio concentration metrics. */
 export interface ConcentrationMetrics {
   GiniCoefficient: number;
@@ -1645,6 +1569,14 @@ export interface ConflictDetail {
   Iceberg: any;
   Incoming: any;
   Postgres: any;
+}
+
+export interface ConformanceCase {
+  ExpectedError: boolean;
+  ExpectedValid: boolean;
+  Input: Record<string, any>;
+  Name: string;
+  RuleAST: any;
 }
 
 /** Connection represents a datasource connection from the `connections` table
@@ -1783,21 +1715,6 @@ export interface ConversationalTurn {
   UserMessage: string;
 }
 
-export interface CoreCompiler {
-  cache: CoreFnCache;
-  predeclared: any;
-}
-
-export interface CoreFnCache {
-  m: Record<CoreFnKey, any>;
-  mu: any;
-}
-
-export interface CoreFnKey {
-  CoreRuleID: string;
-  Version: number;
-}
-
 /** CoreValidationRule represents a compiled core rule */
 export interface CoreValidationRule {
   ConditionSrc: string;
@@ -1898,93 +1815,10 @@ export interface CryptoTaxService {
   db: any;
 }
 
-/** CubeDefinition represents a single Cube */
-export interface CubeDefinition {
-  DataSource: string;
-  Dimensions: CubeDimension[];
-  Joins: CubeJoin[];
-  Measures: CubeMeasure[];
-  Name: string;
-  PreAggregations: CubePreAggregation[];
-  SQL: string;
-  SQLTable: string;
-}
-
 export interface CubeDiff {
   Changes: Change[];
   Name: string;
   Status: string;
-}
-
-/** CubeDimension represents a dimension in a Cube */
-export interface CubeDimension {
-  Description: string;
-  Name: string;
-  PrimaryKey: boolean;
-  SQL: string;
-  Title: string;
-  Type: string;
-}
-
-/** CubeGenerator generates Cube.dev schema files from semantic terms */
-export interface CubeGenerator {
-  CueEngine: CueEngine;
-  DB: any;
-  Repo: SemanticTermRepository;
-}
-
-/** CubeJoin represents a join relationship */
-export interface CubeJoin {
-  Name: string;
-  Relationship: string;
-  SQL: string;
-}
-
-/** CubeMeasure represents a measure in a Cube */
-export interface CubeMeasure {
-  Description: string;
-  Name: string;
-  SQL: string;
-  Title: string;
-  Type: string;
-}
-
-/** CubeModel represents a complete Cube.dev model file */
-export interface CubeModel {
-  Cubes: CubeDefinition[];
-}
-
-/** CubePreAggregation represents a pre-aggregation configuration */
-export interface CubePreAggregation {
-  Dimensions: string[];
-  Granularity: string;
-  Measures: string[];
-  Name: string;
-}
-
-export interface CubeSchema {
-  Cubes: CubeDefinition[];
-}
-
-/** CueEngine provides CUE-based expression evaluation */
-export interface CueEngine {
-  logger: any;
-  mu: any;
-}
-
-/** CueSchemaGenerator generates and caches CUE schemas from DB metadata */
-export interface CueSchemaGenerator {
-  cache: Record<string, any>;
-  db: any;
-  logger: any;
-  mu: any;
-}
-
-/** CueValidationResult represents the result of a usage of Cue for validation */
-export interface CueValidationResult {
-  IsValid: boolean;
-  Message: string;
-  Severity: string;
 }
 
 /** DAXContext holds execution context for DAX functions */
@@ -2111,14 +1945,6 @@ export interface DataQualityService {
   db: any;
 }
 
-/** DataSourceRouter routes queries to optimal data source */
-export interface DataSourceRouter {
-  igniteDB: any;
-  logger: any;
-  postgresDB: any;
-  starrocksDB: any;
-}
-
 /** Database represents a single database in the hierarchy. */
 export interface Database {
   Name: string;
@@ -2147,6 +1973,20 @@ export interface DatabaseHierarchy {
 /** DeFiIntegrationService handles DeFi protocol position tracking */
 export interface DeFiIntegrationService {
   db: any;
+}
+
+/** DevTokenInput is the claim shape AuthContextMiddleware reads from a
+validated JWT. MintDevToken is the only approved forge helper for
+backend tests and cmd/devjwt — it builds this map and signs via
+SignToken (JWTManager). Knowing JWT_SECRET plus this helper is an
+auth-bypass kit; keep forge use in development/local/test only. */
+export interface DevTokenInput {
+  Email: string;
+  Roles: string[];
+  /** TTL defaults to 1 hour when zero or negative. */
+  TTL: any;
+  TenantIDs: string[];
+  UserID: string;
 }
 
 /** DiffReport - matches the schema structure for upgrade artifacts */
@@ -3748,10 +3588,6 @@ future test files can reuse it without duplicating the type. */
 export interface MockRuleRepository {
 }
 
-export interface MockSampleEntityRepository {
-  : any;
-}
-
 export interface MockScenarioRepository {
   : any;
 }
@@ -3776,12 +3612,6 @@ export interface ModelRuleMetrics {
   RejectionRate: number;
   RuleID: string;
   Total: number;
-}
-
-/** ModuleLoader implements starlark.Thread.Load for whitelisted modules. */
-export interface ModuleLoader {
-  /** Allowed maps module name -> source code */
-  Allowed: Record<string, string>;
 }
 
 /** MonteCarloSnapshot contains simulation parameters for reproducibility. */
@@ -3993,29 +3823,11 @@ export interface OAuthAuditService {
   db: any;
 }
 
-/** OkRule represents an ok-style Starlark rule.
-
-Script must set a global `ok = <bool>` and may set `message = <string>`. */
-export interface OkRule {
-  ID: string;
-  Script: string;
-}
-
-/** OkRuleMeta is lightweight execution metadata used to optimize BO-scale runs. */
-export interface OkRuleMeta {
-  /** Cost is a relative cost score (lower runs earlier). */
-  Cost: number;
-  /** FailureLikelihood is a relative likelihood in [0,1] (higher runs earlier within same Cost). */
-  FailureLikelihood: number;
-  /** RequiredFieldPaths are dot-paths that must be present in the input record for this rule.
-Example: "account.account_type" or "page.aum". */
-  RequiredFieldPaths: string[];
-}
-
-/** OkRuleWithMeta bundles a rule with its execution metadata. */
-export interface OkRuleWithMeta {
-  : OkRule;
-  Meta: OkRuleMeta;
+/** ParamBinder accumulates parameterized literals, emitting $n placeholders.
+Bind order defines parameter order — the pushdown executor binds the
+tenant ID first so it is always $1. */
+export interface ParamBinder {
+  args: any[];
 }
 
 /** ParseError reports a parse failure with a byte offset into the
@@ -4025,12 +3837,6 @@ a message. */
 export interface ParseError {
   Message: string;
   Pos: number;
-}
-
-/** PathResolver resolves dot-notation paths (e.g. "Manager.Location.Country")
-by traversing the relationship graph via iterative lookups. */
-export interface PathResolver {
-  provider: InstanceProvider;
 }
 
 export interface PeerComparisonResponse {
@@ -4309,11 +4115,21 @@ export interface PolicyVersions {
   Rego: string;
 }
 
-/** Portfolio basic struct */
-export interface Portfolio {
-  AUM: number;
-  ID: any;
-  Strategy: string;
+/** PortableRuleSpec defines a single rule stripped of environment-specific UUIDs. */
+export interface PortableRuleSpec {
+  BOName: string;
+  BindingScope: string[];
+  Category: string;
+  Deleted: boolean;
+  DependsOn: string[];
+  Description: string;
+  Domain: string;
+  GovernanceStatus: string;
+  Name: string;
+  RuleAST: any;
+  RuleKey: string;
+  Severity: string;
+  Timing: string;
 }
 
 /** PortfolioAnalytics represents the analytics for a portfolio. */
@@ -4391,12 +4207,6 @@ export interface PostgresExportService {
 
 /** PostgresJobQueue is a PostgreSQL-backed implementation of JobQueue */
 export interface PostgresJobQueue {
-  db: any;
-}
-
-/** PostgresSchedulerService implements SchedulerService */
-export interface PostgresSchedulerService {
-  cron: any;
   db: any;
 }
 
@@ -4674,35 +4484,6 @@ Simplified sliding window or fixed window reset */
   usageMu: any;
 }
 
-export interface QueryFilter {
-  Dimension: string;
-  Operator: string;
-  Values: any[];
-}
-
-/** QueryRequest represents a query request */
-export interface QueryRequest {
-  Cube: string;
-  Dimensions: string[];
-  Filters: QueryFilter[];
-  ForceSource: DataSource;
-  Measures: string[];
-  Parameters: Record<string, any>;
-  RealTimeOnly: boolean;
-  SQL: string;
-  TimeRange: TimeRange;
-}
-
-/** QueryResult represents query results */
-export interface QueryResult {
-  CacheHit: boolean;
-  Columns: ColumnInfo[];
-  Data: Record<string, any>[];
-  QueryTime: number;
-  RowCount: number;
-  Source: DataSource;
-}
-
 /** QueryService handles query operations */
 export interface QueryService {
 }
@@ -4765,15 +4546,6 @@ export interface ReactFlowNode {
   Type: string;
 }
 
-/** ReadableError represents a structured, human-readable validation error */
-export interface ReadableError {
-  Field: string;
-  Fix: string;
-  Message: string;
-  Severity: string;
-  Why: string;
-}
-
 /** ReadinessStatus represents the readiness check response */
 export interface ReadinessStatus {
   Checks: string[];
@@ -4806,12 +4578,6 @@ export interface Relationship {
   Cardinality: string;
   JoinExpression: string;
   TargetBusinessObject: string;
-}
-
-/** ReportDefinitionBuilder helps build reports */
-export interface ReportDefinitionBuilder {
-  logger: any;
-  router: DataSourceRouter;
 }
 
 /** ResolutionResult represents the output of a semantic resolution */
@@ -4864,14 +4630,6 @@ export interface RiskMetrics {
   TrackingError: number;
   ValueAtRisk: number;
   Volatility: number;
-}
-
-/** RiskService orchestrates risk computation ETL */
-export interface RiskService {
-  audit: any;
-  db: any;
-  tenantID: any;
-  wasm: any;
 }
 
 /** Role encapsulates the governance, membership, and permission metadata for a security role. */
@@ -4990,6 +4748,19 @@ export interface RuleAction {
   Type: string;
 }
 
+/** RuleBundle represents a portable export of validation rules.
+The canonical interchange format is JSON; YAML is a read-only convenience
+converted to JSON before any checksumming occurs. */
+export interface RuleBundle {
+  BundleVersion: string;
+  Checksum: string;
+  CreatedAt: any;
+  ExportedFrom: string;
+  Origin: string;
+  Rules: PortableRuleSpec[];
+  TenantScope: string;
+}
+
 export interface RuleChain {
   ID: string;
   Name: string;
@@ -4998,11 +4769,20 @@ export interface RuleChain {
   StopOnFirst: Severity;
 }
 
-/** RuleCondition represents a single validation condition */
 export interface RuleCondition {
   Field: string;
+  FieldPath: string;
+  ID: string;
   Operator: string;
+  SecondValue: any;
   Value: any;
+  ValueType: string;
+}
+
+export interface RuleDiffSummary {
+  Action: string;
+  Changes: string[];
+  RuleKey: string;
 }
 
 /** RuleEngine evaluates RuleNode ASTs via the VM-backed fast path with
@@ -5035,7 +4815,6 @@ memory and atomically swap it in. */
 export interface RuleEngine {
   coreState: any;
   driftHealer: DriftHealerInterface;
-  env: any;
   metrics: EngineMetrics;
   profiler: LatencyProfiler;
   recursive: any;
@@ -5048,20 +4827,41 @@ If a tenant has no custom state, evaluation falls back to coreState. */
   vm: any;
 }
 
-/** RuleEvaluationResult holds the outcome of rule evaluation */
-export interface RuleEvaluationResult {
-  ActionToTake: string;
-  Details: Record<string, any>;
-  ErrorMessage: string;
-  EvaluationTime: any;
-  Passed: boolean;
-  RuleID: string;
-}
-
 export interface RuleGroup {
   Conditions: RuleNode[];
   ID: string;
   Operator: string;
+}
+
+export interface RuleImportErrorDetail {
+  Code: string;
+  Name: string;
+  Reason: string;
+  RuleKey: string;
+}
+
+/** RuleImportReport returns granular results of the import. */
+export interface RuleImportReport {
+  Created: string[];
+  DiffSummary: RuleDiffSummary[];
+  DryRun: boolean;
+  Errors: RuleImportErrorDetail[];
+  Pruned: string[];
+  Skipped: string[];
+  Success: boolean;
+  TotalRules: number;
+  Updated: string[];
+}
+
+/** RuleImportRequest specifies import options. */
+export interface RuleImportRequest {
+  Bundle: RuleBundle;
+  DryRun: boolean;
+  IdempotencyKey: string;
+  OverwritePolicy: string;
+  PreserveStatus: boolean;
+  Prune: boolean;
+  TargetTenantID: string;
 }
 
 /** RuleMetrics holds the calculated global approval/rejection rates for a rule. */
@@ -5150,13 +4950,6 @@ export interface RuleSchema {
   Fields: any[];
   Locale: string;
   Terms: any[];
-}
-
-/** RuleTemplate provides common validation scenarios */
-export interface RuleTemplate {
-  Condition: ComplexCondition;
-  Error: string;
-  Name: string;
 }
 
 /** RuleTestRun represents an execution of a rule (scenario or standard) against a sample */
@@ -5253,43 +5046,8 @@ export interface ScanResult {
   Success: boolean;
 }
 
-export interface ScenarioRunner {
-  engine: RuleEngine;
-  repo: ScenarioRepository;
-  sampleRepo: SampleEntityRepository;
-}
-
 export interface ScenarioService {
   repo: ScenarioRepository;
-}
-
-/** ScheduledJob represents a scheduled job */
-export interface ScheduledJob {
-  CreatedAt: any;
-  CreatedBy: any;
-  CronExpression: string;
-  Description: string;
-  EndTime: any;
-  FailureCount: number;
-  ID: any;
-  IsActive: boolean;
-  JobTemplate: Record<string, any>;
-  LastRunAt: any;
-  MaxRetries: number;
-  MaxRunDuration: number;
-  Name: string;
-  NextRunAt: any;
-  OperationType: string;
-  Priority: number;
-  RetryOnFailure: boolean;
-  RunCount: number;
-  ScheduleType: ScheduleType;
-  StartTime: any;
-  Status: ScheduleStatus;
-  SuccessCount: number;
-  TenantID: any;
-  Timezone: string;
-  UpdatedAt: any;
 }
 
 /** Schema represents a schema within a database. */
@@ -5438,24 +5196,6 @@ export interface SecurityPosition {
   Weight: number;
 }
 
-/** SelfServiceReport represents a user-created report */
-export interface SelfServiceReport {
-  ChartType: string;
-  CreatedAt: any;
-  CreatedBy: string;
-  Cube: string;
-  Description: string;
-  Dimensions: string[];
-  Filters: QueryFilter[];
-  ID: string;
-  IsPublic: boolean;
-  Limit: number;
-  Measures: string[];
-  Name: string;
-  Settings: Record<string, any>;
-  SortBy: SortSpec[];
-}
-
 export interface SemanticAssistant {
   llmProvider: any;
 }
@@ -5567,14 +5307,6 @@ export interface ShadowRunResult {
   Totals: any;
 }
 
-/** SimulationResult captures the output of a CUE simulation */
-export interface SimulationResult {
-  Errors: string[];
-  Messages: ReadableError[];
-  ResultData: Record<string, any>;
-  Success: boolean;
-}
-
 /** SnapshotRefs contains references to data snapshots used. */
 export interface SnapshotRefs {
   FactorUniverse: string;
@@ -5586,11 +5318,6 @@ export interface SnapshotRefs {
 /** SnapshotService provides methods for managing dashboard snapshots. */
 export interface SnapshotService {
   db: any;
-}
-
-export interface SortSpec {
-  Direction: string;
-  Field: string;
 }
 
 /** SourceReference provides detailed information about a source used in the answer. */
@@ -5615,21 +5342,6 @@ export interface Stack {
   nums: int64[];
   sTop: uint8;
   strs: string[];
-}
-
-/** StarlarkEngine provides Workday-style expression evaluation */
-export interface StarlarkEngine {
-  cache: Record<string, any>;
-  cacheMu: any;
-  logger: any;
-  maxSteps: uint64;
-}
-
-/** StarlarkValidationResult represents the result of a validation expression */
-export interface StarlarkValidationResult {
-  IsValid: boolean;
-  Message: string;
-  Severity: string;
 }
 
 /** StewardReview represents steward review sessions */
@@ -5862,13 +5574,6 @@ export interface Tenant {
   WindowSeconds: number;
 }
 
-export interface TenantCompiler {
-  coreCompiler: CoreCompiler;
-  coreRepo: CoreRuleRepository;
-  predeclared: any;
-  tenantCache: TenantFnCache;
-}
-
 /** TenantConfigService manages per-tenant QoS configurations */
 export interface TenantConfigService {
   configs: Record<string, TenantQoSConfig>;
@@ -5885,17 +5590,6 @@ export interface TenantCreateRequest {
   Plan: string;
   Region: string;
   WindowSeconds: number;
-}
-
-export interface TenantFnCache {
-  m: Record<TenantFnKey, any>;
-  mu: any;
-}
-
-export interface TenantFnKey {
-  CoreVer: number;
-  RuleID: string;
-  TenantID: string;
 }
 
 /** TenantMetrics tracks performance metrics per tenant */
@@ -5978,12 +5672,6 @@ export interface ThreeWayDiff {
   Changed: Record<string, FieldChange>;
   Conflicts: Record<string, ConflictDetail>;
   Removed: Record<string, any>;
-}
-
-export interface TimeRange {
-  End: any;
-  Granularity: string;
-  Start: any;
 }
 
 /** TokenBucket implements token bucket algorithm for rate limiting */
@@ -6233,6 +5921,12 @@ export interface UisceSemanticAST {
   Version: string;
 }
 
+/** UnsupportedOperatorError is returned for an operator that has no SQL
+pushdown (unknown, or evaluable only by the VM, e.g. length_equals). */
+export interface UnsupportedOperatorError {
+  Operator: string;
+}
+
 /** UpdateBusinessObjectRequest represents a request to update a BO */
 export interface UpdateBusinessObjectRequest {
   Category: string;
@@ -6376,6 +6070,10 @@ export interface UpsertPreAggRequest {
 updating a validation rule. */
 export interface UpsertValidationRuleRequest {
   BOName: string;
+  /** BindingIDs optionally scopes the rule to specific bindings of the BO;
+see ValidationRuleProperties.BindingIDs. Each must be a binding of
+BOName in this tenant. */
+  BindingIDs: string[];
   Category: string;
   Description: string;
   /** Domain: "mdm" or "compliance" for the rulefabric-consolidation
@@ -6459,16 +6157,6 @@ export interface ValidationError {
   Message: string;
 }
 
-/** ValidationEvent is emitted when validation completes */
-export interface ValidationEvent {
-  EntityID: string;
-  EntityType: string;
-  Result: ValidationTaskResult;
-  Status: string;
-  TaskID: string;
-  Timestamp: any;
-}
-
 /** ValidationReport holds validation results. */
 export interface ValidationReport {
   ExtensionHealth: string[];
@@ -6476,12 +6164,6 @@ export interface ValidationReport {
   GraphErrors: string[];
   OverallStatus: string;
   StructuralErrors: string[];
-}
-
-/** ValidationResponse is the struct returned by success() and fail() */
-export interface ValidationResponse {
-  Message: string;
-  Pass: boolean;
 }
 
 /** ValidationRuleConfig is stored in catalog_node.config. RuleAST is a
@@ -6493,49 +6175,25 @@ export interface ValidationRuleConfig {
   RuleAST: any;
 }
 
-/** ValidationRuleDefinition represents a complete validation rule */
-export interface ValidationRuleDefinition {
-  ActionOnFailure: string;
-  ActionOnSuccess: string;
-  BPName: string;
-  ConditionJSON: any;
-  CreatedAt: any;
-  Enabled: boolean;
-  ErrorMessage: string;
-  ID: string;
-  Priority: number;
-  StepName: string;
-  TenantID: string;
-  UpdatedAt: any;
-}
-
 /** ValidationRuleDescriptor is the API response shape. */
 export interface ValidationRuleDescriptor {
   BOName: string;
+  BindingIDs: string[];
   Category: string;
   CreatedAt: any;
   Description: string;
   Domain: string;
   GovernanceStatus: string;
   ID: any;
+  IsActive: boolean;
   Name: string;
+  Origin: string;
   RuleAST: any;
+  RuleKey: string;
   Severity: string;
   TenantID: string;
   Timing: string;
   UpdatedAt: any;
-}
-
-/** ValidationRuleEngineImpl implements ValidationRuleEngine */
-export interface ValidationRuleEngineImpl {
-  db: any;
-  /** operators delegates actual comparison semantics to RuleFabric's
-OperatorRegistry (backend/internal/rulefabric) so this engine and
-RuleFabric's tree-based rules share one implementation of what "=",
-">", "contains", etc. mean, instead of maintaining two independently
-bug-prone copies. */
-  operators: any;
-  resolver: any;
 }
 
 /** ValidationRuleProperties is stored in catalog_node.properties, mirroring
@@ -6543,7 +6201,11 @@ PreAggProperties' role for pre-aggregation nodes and term_type/
 return_type's role for calculated semantic terms - node metadata that
 isn't the AST itself. */
 export interface ValidationRuleProperties {
+  ApprovedAt: any;
+  ApprovedBy: string;
+  AuthorID: string;
   BOName: string;
+  BindingIDs: string[];
   Category: string;
   /** Domain distinguishes which rule-authoring surface produced this
 rule - "validation" (the original BO-scoped surface), "mdm", or
@@ -6556,34 +6218,17 @@ it explicitly rather than leaving new rows blank too, so "domain"
 is unambiguous for anything written from this point forward. */
   Domain: string;
   GovernanceStatus: string;
+  PublishedAt: any;
+  PublishedBy: string;
+  RejectedAt: any;
+  RejectedBy: string;
+  RejectionReason: string;
+  RuleKey: string;
   Severity: string;
+  SubmittedAt: any;
   TenantID: string;
   Timing: string;
-}
-
-/** ValidationTask represents a single validation job */
-export interface ValidationTask {
-  CreatedAt: any;
-  EntityData: Record<string, any>;
-  EntityID: string;
-  EntityType: string;
-  ID: string;
-  Priority: number;
-  Retries: number;
-  RuleIDs: string[];
-  Status: string;
-  TenantID: string;
-}
-
-/** ValidationTaskResult holds the outcome of a validation task */
-export interface ValidationTaskResult {
-  Duration: any;
-  Errors: Record<string, any>[];
-  ProcessedAt: any;
-  Status: string;
-  Summary: string;
-  TaskID: string;
-  Warnings: Record<string, any>[];
+  Version: number;
 }
 
 export interface ValueSignalInput {
@@ -6640,6 +6285,23 @@ export interface ViewPolicyBundle {
 
 /** ViewService handles view operations */
 export interface ViewService {
+}
+
+/** ViolationRecord represents a single evaluated rule violation or rule execution error. */
+export interface ViolationRecord {
+  BOKey: string;
+  Context: Record<string, any>;
+  Fields: string[];
+  Message: string;
+  RecordID: string;
+  RuleError: boolean;
+  RuleID: string;
+  RuleKey: string;
+  RuleName: string;
+  RuleVersion: string;
+  Severity: string;
+  TenantID: string;
+  WriteBlocked: boolean;
 }
 
 /** WebSocketHub manages WebSocket connections and broadcasting with advanced error handling */
@@ -6860,26 +6522,6 @@ export interface sqlAccessPolicyRepository {
 
 export interface sqlRoleRepository {
   db: any;
-}
-
-export interface starlarkBundleSpan {
-  span: any;
-  start: any;
-}
-
-export interface starlarkRuleMetricChildren {
-  duration: any;
-  lastError: any;
-  lastRun: any;
-}
-
-export interface starlarkRuleSpan {
-  ctxUsed: any;
-  ended: boolean;
-  mode: string;
-  ruleID: string;
-  span: any;
-  start: any;
 }
 
 export interface token {

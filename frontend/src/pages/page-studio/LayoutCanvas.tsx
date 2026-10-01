@@ -1,10 +1,17 @@
 import React from 'react';
-import { Box, Paper, Typography, IconButton } from '@mui/material';
+import { Box, Chip, Paper, Stack, Tab, Tabs, Typography, IconButton } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import { useDroppable, useDndMonitor, type DragEndEvent } from '@dnd-kit/core';
-import { PageLayout, ComponentDefinition, DataSourceDefinition, PanelNodeProps, BusinessObjectDataSourceConfig } from '../../types/pageStudio';
+import { PageLayout, ComponentDefinition, DataSourceDefinition, PanelNodeProps, BusinessObjectDataSourceConfig, LayoutNode } from '../../types/pageStudio';
 import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
+import { APP_WIDGET_DEFAULTS, isAppWidget } from './app/AppWidgets';
+import { WidgetQueryStatus } from './app/queryStatus';
+import type { PageAppModel } from './app/appModel';
+import { DEFAULT_CONTAINER_PROPS, isContainerType } from './app/containers';
+import { useAppRuntime } from './app/AppRuntime';
+import { text as textSpec } from './app/bindings';
+import type { ConditionNode, OverlayNodeProps, TabSetNodeProps } from './app/appModel';
 import type { FieldDragPayload } from './DataBindingsPanel';
 import type { FieldLayoutEntry } from './FormFieldsDesigner';
 import type { RelatedObjectDragPayload } from '../../studio-core/binding/boRelationships';
@@ -31,6 +38,8 @@ interface LayoutCanvasProps {
     tenantId: string;
     selectedId: string | null;
     onSelect: (id: string | null) => void;
+    /** The page's app model, so each widget can show what its queries are doing. */
+    app?: PageAppModel;
 }
 
 /** Drop target wrapping a Row/Column so related-BO chips and palette tiles
@@ -74,6 +83,50 @@ const ContainerSlot: React.FC<{
     );
 };
 
+/** "vars.goldenId is not empty" - a condition read aloud for the canvas. */
+function conditionText(c?: ConditionNode): string {
+    if (!c) return 'never (set "Open when")';
+    if (c.type === 'group') return c.conditions.map(conditionText).join(` ${c.operator.toLowerCase()} `);
+    return `${c.field} ${c.operator.replace(/_/g, ' ')}${c.value !== undefined ? ` ${JSON.stringify(c.value)}` : ''}`;
+}
+
+/** A Drawer or Dialog on the design canvas: a framed region, always shown, so its content can be edited in place. */
+const DesignOverlay: React.FC<{ type: string; props?: Record<string, unknown>; selected: boolean; onSelect: () => void; children: React.ReactNode }> = ({ type, props, selected, onSelect, children }) => {
+    const { scope } = useAppRuntime();
+    const p = (props ?? {}) as OverlayNodeProps;
+    return (
+        <Paper variant="outlined" onClick={(e) => { e.stopPropagation(); onSelect(); }}
+            sx={{ p: 1.5, flex: '1 1 100%', borderStyle: 'dashed', borderColor: selected ? 'primary.main' : 'secondary.main', borderWidth: selected ? 2 : 1, bgcolor: 'action.hover' }}>
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5 }}>
+                <Chip size="small" color="secondary" label={type} />
+                <Typography variant="subtitle2" fontWeight={700} noWrap>{textSpec(p.title, scope) || '(no title)'}</Typography>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ flex: 1 }}>opens when {conditionText(p.openWhen)}</Typography>
+                {(p.buttons?.length ?? 0) > 0 && <Chip size="small" variant="outlined" label={`${p.buttons!.length} button${p.buttons!.length === 1 ? '' : 's'}`} />}
+            </Stack>
+            {children}
+        </Paper>
+    );
+};
+
+/** A TabSet on the design canvas: its tabs switch which body is being edited. */
+const DesignTabSet: React.FC<{ props?: Record<string, unknown>; childIds: string[]; selected: boolean; onSelect: () => void; renderChild: (id: string) => React.ReactNode }> = ({ props, childIds, selected, onSelect, renderChild }) => {
+    const { scope } = useAppRuntime();
+    const p = (props ?? {}) as TabSetNodeProps;
+    const tabs = p.tabs ?? [];
+    const [active, setActive] = React.useState(0);
+    const idx = Math.min(active, Math.max(childIds.length - 1, 0));
+    return (
+        <Box onClick={(e) => { e.stopPropagation(); onSelect(); }}
+            sx={{ flex: '1 1 100%', outline: selected ? '2px solid' : '1px dashed', outlineColor: selected ? 'primary.main' : 'rgba(0,0,0,0.12)', outlineOffset: 2, position: 'relative' }}>
+            <Typography variant="caption" sx={{ position: 'absolute', top: -14, left: 0, px: 0.5, color: 'text.secondary', fontSize: 10 }}>TabSet</Typography>
+            <Tabs value={idx} onChange={(_, v) => setActive(v)} variant="scrollable" sx={{ mb: 1.5, borderBottom: 1, borderColor: 'divider' }}>
+                {childIds.map((id, i) => <Tab key={id} value={i} label={textSpec(tabs[i]?.label, scope) || `Tab ${i + 1}`} />)}
+            </Tabs>
+            {childIds[idx] ? renderChild(childIds[idx]) : <Typography variant="caption" color="text.secondary">No tabs</Typography>}
+        </Box>
+    );
+};
+
 /**
  * One placed widget - a field-drop target when its type accepts one. Hoisted
  * to module scope (not defined inside LayoutCanvas) so its useDroppable
@@ -91,7 +144,8 @@ const ComponentBlock: React.FC<{
     onUpdateFieldLayout: (compId: string, fieldName: string, entry: Partial<FieldLayoutEntry>) => void;
     onReorderFields: (compId: string, orderedFieldNames: string[]) => void;
     onUnhideField: (compId: string, fieldName: string) => void;
-}> = ({ comp, selectedId, dataSources, tenantId, onSelect, onDelete, onUpdateFieldLayout, onReorderFields, onUnhideField }) => {
+    app?: PageAppModel;
+}> = ({ comp, selectedId, dataSources, tenantId, onSelect, onDelete, onUpdateFieldLayout, onReorderFields, onUnhideField, app }) => {
     const acceptsField = FIELD_DROP_TYPES.includes(comp.type);
     const { setNodeRef, isOver } = useDroppable({ id: `comp:${comp.id}`, data: { kind: 'component-target' }, disabled: !acceptsField });
     const fieldPrefix = `${comp.id}${FIELD_SELECTION_SEP}`;
@@ -113,12 +167,14 @@ const ComponentBlock: React.FC<{
                 // width/height style takes effect and the resize handle has
                 // room to shrink/grow it independently of the row/column -
                 // `flex: 1` would just snap it back to fill its container.
-                flex: comp.style?.resize ? '0 0 auto' : 1,
+                flex: comp.style?.flex ?? (comp.style?.resize ? '0 0 auto' : 1),
                 minWidth: 0,
                 bgcolor: 'transparent',
                 '&:hover .widget-chrome': { opacity: 1 },
             }}
         >
+            {/* What this widget's queries are doing right now: rows, loading, error, or waiting and why. */}
+            <WidgetQueryStatus comp={comp} app={app} />
             <Box
                 className="widget-chrome"
                 sx={{
@@ -163,7 +219,7 @@ const ComponentBlock: React.FC<{
  * ITS OWN layout tree, so the two canvases never step on each other's drops.
  */
 const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
-    layout, onLayoutChange, components, onComponentsChange, dataSources, onDataSourcesChange, tenantId, selectedId, onSelect,
+    layout, onLayoutChange, components, onComponentsChange, dataSources, onDataSourcesChange, tenantId, selectedId, onSelect, app,
 }) => {
     const handleFieldDrop = (payload: FieldDragPayload, comp: ComponentDefinition) => {
         const isMeasure = payload.role === 'MEASURE' || payload.role === 'CALCULATED';
@@ -203,18 +259,31 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
     const handleDrop = (componentType: string, parentId: string) => {
         const newId = `${componentType.toLowerCase()}_${Math.random().toString(36).substr(2, 5)}`;
 
-        if (['Row', 'Column', 'Panel'].includes(componentType)) {
+        if (['Row', 'Column', 'Panel'].includes(componentType) || isContainerType(componentType)) {
             onLayoutChange((prev) => {
-                const newNode = componentType === 'Panel'
-                    ? { id: newId, type: 'Panel' as const, children: [], props: { ...DEFAULT_PANEL_PROPS } as Record<string, unknown> }
-                    : { id: newId, type: componentType as 'Row' | 'Column', children: [] };
-                const nodes = { ...prev.nodes, [newId]: newNode };
+                const extra: Record<string, LayoutNode> = {};
+                let newNode: LayoutNode;
+                if (componentType === 'Panel') {
+                    newNode = { id: newId, type: 'Panel', children: [], props: { ...DEFAULT_PANEL_PROPS } as Record<string, unknown> };
+                } else if (isContainerType(componentType)) {
+                    const props = structuredClone(DEFAULT_CONTAINER_PROPS[componentType]);
+                    // A tab set starts with one empty body (a Column) per tab.
+                    const bodies = componentType === 'TabSet'
+                        ? ((props.tabs as { id: string }[]) ?? []).map((t) => `${newId}_${t.id}`)
+                        : [];
+                    for (const b of bodies) extra[b] = { id: b, type: 'Column', children: [] };
+                    newNode = { id: newId, type: componentType as LayoutNode['type'], children: bodies, props };
+                } else {
+                    newNode = { id: newId, type: componentType as 'Row' | 'Column', children: [] };
+                }
+                const nodes = { ...prev.nodes, ...extra, [newId]: newNode };
                 const parent = nodes[parentId];
                 nodes[parentId] = { ...parent, children: [...(parent.children || []), newId] };
                 return { ...prev, nodes };
             });
         } else {
-            onComponentsChange((prev) => ({ ...prev, [newId]: { id: newId, type: componentType, props: {} } }));
+            const props = isAppWidget(componentType) ? structuredClone(APP_WIDGET_DEFAULTS[componentType]) : {};
+            onComponentsChange((prev) => ({ ...prev, [newId]: { id: newId, type: componentType, props } }));
             onLayoutChange((prev) => {
                 const parent = prev.nodes[parentId];
                 return { ...prev, nodes: { ...prev.nodes, [parentId]: { ...parent, children: [...(parent.children || []), newId] } } };
@@ -399,10 +468,18 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                         onUpdateFieldLayout={handleUpdateFieldLayout}
                         onReorderFields={handleReorderFields}
                         onUnhideField={handleUnhideField}
+                        app={app}
                     />
                 );
             }
             return null;
+        }
+
+        if (node.type === 'TabSet') {
+            return (
+                <DesignTabSet key={nodeId} props={node.props} childIds={node.children || []} selected={selectedId === nodeId}
+                    onSelect={() => onSelect(nodeId)} renderChild={renderNode} />
+            );
         }
 
         const body = (
@@ -422,6 +499,13 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
         if (node.type === 'Panel') {
             const panelProps = { ...DEFAULT_PANEL_PROPS, ...(node.props as Partial<PanelNodeProps> | undefined) };
             return <Box key={nodeId}><PanelRegion {...panelProps}>{body}</PanelRegion></Box>;
+        }
+        if (node.type === 'Drawer' || node.type === 'Dialog') {
+            return (
+                <DesignOverlay key={nodeId} type={node.type} props={node.props} selected={selectedId === nodeId} onSelect={() => onSelect(nodeId)}>
+                    {body}
+                </DesignOverlay>
+            );
         }
         return body;
     };

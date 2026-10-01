@@ -1,3 +1,5 @@
+import type { ConditionNode, PageAppModel } from '../pages/page-studio/app/appModel';
+
 /**
  * ZERO-PAGE WINDOW: no page definitions persist durably today. The frontend
  * (src/api/pageStudio.ts) calls `/api/page-studio`, but that route has no
@@ -21,8 +23,10 @@ export interface ComponentDefinition {
   category?: string;
   /** Widget instance config (data binding, text content, expression source, etc). */
   props?: Record<string, unknown>;
-  /** Free-form CSS-ish style overrides applied to the widget's wrapper (font, color, spacing). */
+  /** Free-form CSS-ish style overrides applied to the widget's wrapper (font, color, spacing). `flex` also sizes it within its row. */
   style?: Record<string, string>;
+  /** Show only while this holds (rule-engine condition over the page scope - see app/appModel.ts). Dimmed, not hidden, in design. */
+  visibleWhen?: ConditionNode;
 }
 
 /**
@@ -70,7 +74,12 @@ export interface LayoutNode {
    * region (see PanelNodeProps below, read out of `props`) - used for
    * things like a filters/detail rail next to a page's main content.
    */
-  type: 'Row' | 'Column' | 'Panel';
+  /**
+   * Row/Column stack children; Panel is a collapsible side rail; Drawer and
+   * Dialog are overlays opened by a condition (app/containers.tsx); TabSet
+   * shows one child per tab (children[i] is tab i's content).
+   */
+  type: 'Row' | 'Column' | 'Panel' | 'Drawer' | 'Dialog' | 'TabSet';
   /** Unused by plain Row/Column containers; reserved for a future componentId-backed layout node kind. */
   componentId?: string;
   /** Row/Column: unused today. Panel: see PanelNodeProps. */
@@ -136,18 +145,112 @@ export interface BusinessObjectDataSourceConfig {
   masterFilter?: { fkField: string };
 }
 
+export type PageLayoutKind = 'tree' | 'grid';
+
+export interface GridLayoutItem {
+  /** References ComponentDefinition.id (placed widget or tile) */
+  i: string;
+  /** 0-indexed column position (12-column grid: 0 to 11) */
+  x: number;
+  /** 0-indexed row position */
+  y: number;
+  /** Width in grid units (1 to 12) */
+  w: number;
+  /** Height in row units */
+  h: number;
+  minW?: number;
+  minH?: number;
+  maxW?: number;
+  maxH?: number;
+  static?: boolean;
+}
+
+export interface PageGridLayout {
+  cols: { lg: number; md: number; sm: number };
+  items: GridLayoutItem[];
+  responsive?: Partial<Record<ResponsiveBreakpoint, GridLayoutItem[]>>;
+}
+
+export interface KpiTileConfig {
+  metricId?: string; // Phase 7.3: Metric definition ID (takes precedence over measureAlias)
+  savedQueryId?: string;
+  queryRef?: string;
+  measureAlias: string;
+  trendDimensionAlias?: string;
+  refreshInterval?: number; // In seconds, reserved for auto-refresh
+  format: {
+    type: 'currency' | 'number' | 'percentage' | 'compact';
+    precision?: number;
+    currencySymbol?: string;
+    prefix?: string;
+    suffix?: string;
+  };
+  comparison?: {
+    enabled: boolean;
+    type: 'previous_period' | 'target_literal' | 'target_variable';
+    targetValue?: number;
+    targetVarName?: string;
+    deltaFormat: 'percentage' | 'absolute';
+    invertPolarity?: boolean;
+  };
+  sparkline?: {
+    enabled: boolean;
+    type?: 'line' | 'bar' | 'area';
+  };
+  interactionConfig?: {
+    crossFilter?: {
+      enabled: boolean;
+      mode: 'emit' | 'both';
+      termNodeId: string;
+    };
+  };
+}
+
+export interface SlicerTileConfig {
+  savedQueryId?: string;
+  queryRef?: string;
+  dimensionAlias: string;
+  termNodeId: string;
+  display: 'dropdown' | 'multiSelect' | 'list' | 'dateRange';
+  maxSelections?: number;
+  defaultSelection?: {
+    source: 'static' | 'pageVar' | 'urlParam';
+    value?: string | string[];
+    varName?: string;
+  };
+  showSearch?: boolean;
+  sortBy?: 'label' | 'count' | 'custom';
+  cascadingFrom?: string[]; // IDs of other slicers whose emitted filters apply to this slicer's member query
+  paramBinding?: { varName: string }; // required when display === 'dateRange'
+  refreshInterval?: number;
+}
+
+export interface ReportParameterItem {
+  varName: string;
+  label: string;
+  type: 'string' | 'number' | 'date' | 'boolean';
+  control: 'date' | 'text' | 'select' | 'number';
+  selectOptions?: { source: 'query'; queryId: string; dimensionAlias: string } | { source: 'static'; options: { label: string; value: any }[] };
+  required?: boolean;
+  default?: any;
+}
+
+export interface ReportParameterBarConfig {
+  enabled: boolean;
+  parameters: ReportParameterItem[];
+}
+
 /**
- * The tree of layout structure (Row/Column containers), keyed by node id.
- * `root` names the entry node. This is the actual runtime/persisted shape
- * (PageStudioPage.tsx, LayoutCanvas.tsx, PageBrowser.tsx all read/write it
- * this way, and it's what the page_studio_handler.go backend round-trips
- * as-is) - it was previously mis-declared here as a bare `LayoutNode[]`,
- * which never matched any real caller and produced a long tail of
- * spurious "Property 'nodes'/'root' does not exist" type errors.
+ * The tree or grid of layout structure.
+ * When layoutKind === 'grid', `grid` specifies the 12-column dashboard layout items.
+ * When layoutKind === 'tree' (default), `root` and `nodes` define the hierarchical Row/Column structure.
  */
 export interface PageLayout {
-  root: string;
-  nodes: Record<string, LayoutNode>;
+  layoutKind?: PageLayoutKind;
+  root?: string;
+  nodes?: Record<string, LayoutNode>;
+  grid?: PageGridLayout;
+  parameterBar?: ReportParameterBarConfig;
 }
 
 /** LayoutNode.props shape when type === 'Panel'. */
@@ -171,6 +274,10 @@ export interface PageTab {
   id: string;
   label: string;
   layout: PageLayout;
+  /** A count shown on the tab (hidden at 0), e.g. {{queries.openExceptions.data.length}}. */
+  badge?: string;
+  /** Show the tab only while this holds (e.g. no duplicate review for time series). */
+  visibleWhen?: ConditionNode;
 }
 
 /** PeopleSoft-style page events that only change presentation. */
@@ -218,6 +325,24 @@ export interface PresentationRule {
   actions: PresentationAction[];
 }
 
+/**
+ * A tenant's choice for one core (gold-copy) page
+ * (backend/internal/handlers/page_studio_core.go):
+ * - vanilla: used as the gold copy ships it
+ * - extended: customized; customizations are compared with the core version
+ *   they were made on and carried forward (or dropped) on upgrade
+ * - cloned: replaced by an independent tenant copy; no upgrades
+ * `active: false` switches the core page off in this tenant (any extension is kept).
+ */
+export interface CorePageCustomization {
+  mode: 'vanilla' | 'extended' | 'cloned';
+  active: boolean;
+  coreVersion: number;
+  baseVersion?: number;
+  upgradeAvailable: boolean;
+  clonePageId?: string;
+}
+
 export interface CorePageDefinition {
   id: string;
   name: string;
@@ -259,7 +384,20 @@ export interface CorePageDefinition {
   isCore?: boolean;
   /** False when this is an inherited gold-copy page the current tenant cannot mutate. */
   editable?: boolean;
+  /** On a core page seen from a tenant: how this tenant uses it (see CorePageCustomization). */
+  customization?: CorePageCustomization;
+  /** The caller may extend, clone or switch this core page off in their environment. */
+  canCustomize?: boolean;
+  /** Set on a tenant page that is a clone of a core page (no upgrade path). */
+  clonedFrom?: { pageId: string; name: string; version: number };
+  /** Menu entries that open this page, top of the menu down (list responses only). */
+  menuPlacements?: { nodeId: string; path: string[]; inherited?: boolean }[];
   status?: 'draft' | 'published';
+  /**
+   * The page's application model: variables, governed queries, tab state,
+   * chrome. Absent on plain BO pages, which behave exactly as before.
+   */
+  app?: PageAppModel;
   /** list | detail | master-detail | dashboard — authoring intent, not a layout id. */
   pageKind?: 'list' | 'detail' | 'master-detail' | 'dashboard';
   createdAt: string;

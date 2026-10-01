@@ -312,9 +312,12 @@ func (s *ValidationRuleService) ListByBO(ctx context.Context, tenantID, boName, 
 		WHERE nt.catalog_type_name = 'validation_rule'
 		  AND n.tenant_id = ANY($1::uuid[])
 		  AND n.properties->>'bo_name' = $2
-		  AND ($3 = '' OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
+		  -- No domain: the record rules (every domain but survivorship, whose
+		  -- selection rules judge candidate values, not records - asked for by name).
+		  AND (($3 = '' AND COALESCE(NULLIF(n.properties->>'domain', ''), $4) <> $5)
+		       OR COALESCE(NULLIF(n.properties->>'domain', ''), $4) = $3)
 		ORDER BY n.node_name
-	`, pq.Array(visibleTenants(tenantID, gold)), boName, domain, models.ValidationRuleDomainDefault)
+	`, pq.Array(visibleTenants(tenantID, gold)), boName, domain, models.ValidationRuleDomainDefault, models.ValidationRuleDomainSurvivorship)
 	if err != nil {
 		return nil, err
 	}
@@ -354,8 +357,13 @@ func descriptorFromNode(id uuid.UUID, name, description string, propsRaw, cfgRaw
 	if domain == "" {
 		domain = models.ValidationRuleDomainDefault
 	}
+	ruleKey := props.RuleKey
+	if ruleKey == "" {
+		ruleKey = name
+	}
 	return &models.ValidationRuleDescriptor{
 		ID:               id,
+		RuleKey:          ruleKey,
 		TenantID:         props.TenantID,
 		BOName:           props.BOName,
 		Name:             name,
