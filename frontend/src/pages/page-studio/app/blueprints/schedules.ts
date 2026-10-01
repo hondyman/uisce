@@ -1,5 +1,6 @@
 import type { ComponentDefinition, CorePageDefinition, PageLayout, PageTab } from '../../../../types/pageStudio';
-import type { Action, CellSpec, ColumnDef, ConditionNode, FormFieldSpec, PageQuery, PageVariable } from '../appModel';
+import type { Action, CellSpec, ColumnDef, ConditionNode, FormFieldSpec } from '../appModel';
+import type { PageFragment } from '../fragment';
 
 /**
  * The Schedules console (formerly the hand-built SchedulesPage) and the
@@ -20,7 +21,7 @@ const col = (id: string, header: string, cell: CellSpec | CellSpec[], more: Part
 const fit = { flex: '0 0 auto' };
 
 type NodeSpec = { type: 'Row' | 'Column' | 'Dialog'; children: string[]; style?: Record<string, string>; props?: Record<string, unknown> };
-export type Fragment = { components: Record<string, ComponentDefinition>; nodes: Record<string, NodeSpec>; variables: PageVariable[]; queries: PageQuery[] };
+export type Fragment = PageFragment;
 
 /**
  * The schedule editor dialog. Opens while vars.<open> holds; edits the
