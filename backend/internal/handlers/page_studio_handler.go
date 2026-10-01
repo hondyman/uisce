@@ -153,6 +153,7 @@ func (h *PageStudioHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/{id}/compare", h.compare)
 		r.Post("/{id}/upgrade", h.upgrade)
 	})
+	h.registerFragmentRoutes(r)
 	r.Post("/page-studio/generate", h.generate)
 }
 
