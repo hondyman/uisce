@@ -6,6 +6,10 @@ import { getDomainComponent, listDomainComponents } from '../../../studio-core/c
 import type { CellSpec, ColumnDef, ConditionNode, TextSpec } from './appModel';
 import type { AppWidgetType, CanvasProps, ChatProps, DataGridProps, DomainComponentProps, FormWidgetProps, KeyValueProps, TimelineProps } from './AppWidgets';
 import { FieldsEditor } from './fieldsEditor';
+import {
+  CanvasCategoriesEditor, CaptionEditor, ChipSpecEditor, ColorMapEditor, OptionListEditor, PaletteGroupsEditor, RowButtonsEditor,
+  StringMapEditor, TextListEditor, WordsField,
+} from './structuredEditors';
 import { PAGE_ICONS } from './icons';
 import {
   ActionsEditor, BindingField, ConditionEditor, JsonField, ListEditor, Section, SelectField, SwitchField, TextSpecField, scopePaths,
@@ -18,8 +22,6 @@ const CELL_KINDS: { value: CellSpec['kind']; label: string }[] = [
   { value: 'link', label: 'Link button' }, { value: 'actions', label: 'Row buttons' }, { value: 'input', label: 'Inline input' },
   { value: 'list', label: 'List of values' }, { value: 'toggle', label: 'On/off switch' },
 ];
-
-const COLORS = ['default', 'primary', 'secondary', 'success', 'warning', 'error', 'info'];
 
 /** One cell's structured fields; anything richer (colour maps, buttons) edits as JSON beside it. */
 function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange: (c: CellSpec) => void; paths: string[]; draft: CorePageDefinition }) {
@@ -54,13 +56,13 @@ function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange
         <TextField key="lk" size="small" label="Label i18n prefix" value={cell.labelKey ?? ''} onChange={(e) => set({ labelKey: e.target.value || undefined })} helperText="e.g. mastering.goldenStatus." />,
         bind('colorBy', 'Colour by (default: value)'), bind('tooltip', 'Tooltip'), bind('caption', 'Caption after'),
         <SelectField key="v" label="Variant" value={cell.variant} options={[{ value: 'filled', label: 'Filled' }, { value: 'outlined', label: 'Outlined' }]} onChange={(v) => set({ variant: v })} />,
-        <JsonField key="cm" label={`Colour map (value → ${COLORS.join('|')}; * = otherwise)`} value={cell.colorMap ?? {}} minRows={2} onChange={(v) => set({ colorMap: v })} />);
+        <ColorMapEditor key="cm" label="Colours (by value)" value={cell.colorMap} onChange={(v) => set({ colorMap: v })} />);
       break;
     case 'chips':
       fields.push(bind('value', 'Value (object of counts, or list)'),
         <TextField key="lk" size="small" label="Label i18n prefix" value={cell.labelKey ?? ''} onChange={(e) => set({ labelKey: e.target.value || undefined })} />,
-        <JsonField key="k" label="Keys, in order (optional)" value={cell.keys ?? null} minRows={1} onChange={(v) => set({ keys: v || undefined })} />,
-        <JsonField key="cm" label="Colour map" value={cell.colorMap ?? {}} minRows={2} onChange={(v) => set({ colorMap: v })} />);
+        <WordsField key="k" label="Show these keys, in this order (optional)" value={cell.keys} onChange={(v) => set({ keys: v })} />,
+        <ColorMapEditor key="cm" label="Colours (by key)" value={cell.colorMap} onChange={(v) => set({ colorMap: v })} />);
       break;
     case 'link':
       fields.push(<TextSpecField key="l" label="Label" value={cell.label} onChange={(v) => set({ label: v })} paths={paths} />, bind('after', 'Text after'),
@@ -71,11 +73,11 @@ function CellEditor({ cell, onChange, paths, draft }: { cell: CellSpec; onChange
       <TextSpecField key="p" label="Placeholder" value={cell.placeholder} onChange={(v) => set({ placeholder: v })} paths={paths} />); break;
     case 'toggle':
       fields.push(bind('value', 'On when'), <TextSpecField key="l" label="Label (for screen readers)" value={cell.label} onChange={(v) => set({ label: v })} paths={paths} />,
-        <JsonField key="o" label="On change ({{row}}, {{value}}) - actions" value={cell.onChange ?? []} minRows={3} onChange={(v) => set({ onChange: v ?? [] })} />);
+        <ActionsEditor key="o" label="On change ({{row}}, {{value}} = the new state)" value={cell.onChange} onChange={(v) => set({ onChange: v ?? [] })} draft={draft} paths={[...paths, 'value']} />);
       break;
     case 'actions':
-      fields.push(<JsonField key="b" label="Buttons [{label, icon, variant, color, visibleWhen, onClick}]" value={cell.buttons} onChange={(v) => set({ buttons: v })} minRows={6} />,
-        <JsonField key="c" label="Caption {text, visibleWhen} (optional)" value={cell.caption ?? null} minRows={2} onChange={(v) => set({ caption: v || undefined })} />);
+      fields.push(<RowButtonsEditor key="b" value={cell.buttons} onChange={(v) => set({ buttons: v })} draft={draft} paths={paths} />,
+        <CaptionEditor key="c" value={cell.caption} onChange={(v) => set({ caption: v })} paths={paths} />);
       break;
   }
   return (
@@ -121,6 +123,64 @@ function ColumnEditor({ col, onChange, paths, draft }: { col: ColumnDef; onChang
         </Stack>
       </AccordionDetails>
     </Accordion>
+  );
+}
+
+type DynamicColumns = NonNullable<DataGridProps['dynamicColumns']>;
+type RowDetail = NonNullable<DataGridProps['rowDetail']>;
+
+/** Columns made from data: one per entry of a list (a column per source), each cell reading {{col}} and {{value}}. */
+function DynamicColumnsEditor({ value, onChange, paths, draft }: { value: DynamicColumns | undefined; onChange: (v: DynamicColumns | undefined) => void; paths: string[]; draft: CorePageDefinition }) {
+  const colPaths = [...paths, 'col', 'value'];
+  return (
+    <Box>
+      <SwitchField label="Generate columns from data" checked={!!value}
+        onChange={(on) => onChange(on ? { from: '', header: '{{col.code}}', idField: 'code', cell: { kind: 'text', value: '{{value}}' } } : undefined)} />
+      {value && (
+        <Stack spacing={1.25} sx={{ mt: 1 }}>
+          <BindingField label="One column per entry of (a list)" value={value.from} onChange={(v) => onChange({ ...value, from: v })} paths={paths} helperText="e.g. {{queries.golden.data.sources}}" />
+          <TextField size="small" label="Field that names each column" value={value.idField ?? ''} onChange={(e) => onChange({ ...value, idField: e.target.value || undefined })} helperText="{{col.<field>}}" />
+          <TextSpecField label="Header" value={value.header} onChange={(v) => onChange({ ...value, header: v })} paths={[...paths, 'col']} />
+          <TextField size="small" label="Row field holding each column's value" value={value.valuePath ?? ''} onChange={(e) => onChange({ ...value, valuePath: e.target.value || undefined })}
+            helperText="A row's value for a column is row.<this field>.<column name>" />
+          <Stack direction="row" spacing={1}>
+            <TextField size="small" type="number" label="Insert after column #" value={value.insertAt ?? ''} onChange={(e) => onChange({ ...value, insertAt: e.target.value === '' ? undefined : Number(e.target.value) })} />
+            <TextField size="small" type="number" label="Min width (px)" value={value.minWidth ?? ''} onChange={(e) => onChange({ ...value, minWidth: e.target.value ? Number(e.target.value) : undefined })} />
+          </Stack>
+          <Typography variant="caption" color="text.secondary">Each cell ({'{{col}}'}, {'{{value}}'})</Typography>
+          <CellEditor cell={value.cell} onChange={(c) => onChange({ ...value, cell: c })} paths={colPaths} draft={draft} />
+        </Stack>
+      )}
+    </Box>
+  );
+}
+
+/** What opens under a row: some text (optionally as an alert) and/or a nested table of rows. */
+function RowDetailEditor({ value, onChange, paths, draft }: { value: RowDetail | undefined; onChange: (v: RowDetail | undefined) => void; paths: string[]; draft: CorePageDefinition }) {
+  const nested = value?.rows !== undefined;
+  const detailPaths = [...paths, 'parent'];
+  return (
+    <Box>
+      <SwitchField label="An expandable detail under each row" checked={!!value} onChange={(on) => onChange(on ? { text: '' } : undefined)} />
+      {value && (
+        <Stack spacing={1.25} sx={{ mt: 1 }}>
+          <ConditionEditor label="Has a detail when (row)" value={value.when} onChange={(v) => onChange({ ...value, when: v })} paths={paths} />
+          <TextSpecField label="Text" value={value.text} onChange={(v) => onChange({ ...value, text: v || undefined })} paths={paths} />
+          <SelectField label="Show the text as" value={value.severity} allowEmpty="Plain text" options={['error', 'warning', 'info'].map((x) => ({ value: x as 'error', label: `${x} alert` }))} onChange={(v) => onChange({ ...value, severity: v })} />
+          <SwitchField label="A nested table of rows" checked={nested} onChange={(on) => onChange(on ? { ...value, rows: '{{row.items}}', columns: [] } : { ...value, rows: undefined, columns: undefined, emptyText: undefined })} />
+          {nested && (
+            <>
+              <BindingField label="Rows (a list)" value={value.rows} onChange={(v) => onChange({ ...value, rows: v })} paths={paths} />
+              <TextSpecField label="When there are none" value={value.emptyText} onChange={(v) => onChange({ ...value, emptyText: v || undefined })} paths={paths} />
+              <Typography variant="caption" color="text.secondary">Columns ({'{{row}}'} = the detail row, {'{{parent}}'} = the grid row)</Typography>
+              <ListEditor items={value.columns ?? []} onChange={(v) => onChange({ ...value, columns: v })} addLabel="Add column"
+                create={(): ColumnDef => ({ id: `col_${Math.random().toString(36).slice(2, 6)}`, header: '', field: '' })}
+                render={(col, set) => <ColumnEditor col={col} onChange={set} paths={detailPaths} draft={draft} />} />
+            </>
+          )}
+        </Stack>
+      )}
+    </Box>
   );
 }
 
@@ -253,7 +313,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             )}
             <SelectField label="Sync with page search variable (optional)" value={p.searchVariable ?? ''} options={[{ value: '', label: '(None / Standalone)' }, ...vars]} onChange={(v) => setProps({ searchVariable: v || undefined })} />
             <TextField size="small" label="Search fields (comma-separated, empty = all)" value={(p.searchFields ?? []).join(', ')} onChange={(e) => setProps({ searchFields: e.target.value ? e.target.value.split(',').map((s) => s.trim()).filter(Boolean) : undefined })} />
-            <JsonField label="Variable filters { rowField: varName }" value={p.filters ?? null} minRows={2} onChange={(v) => setProps({ filters: v || undefined })} />
+            <StringMapEditor label="Filter rows by page variables" value={p.filters as Record<string, string> | undefined} onChange={(v) => setProps({ filters: v })}
+              keyLabel="Row field" valueLabel="Variable" valueOptions={vars} keyHelp="Only rows where the field equals the variable show" addLabel="Add filter" />
           </Section>
           <Section title="Columns">
             <ListEditor items={p.columns ?? []} onChange={(v) => setProps({ columns: v })} addLabel="Add column"
@@ -263,10 +324,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
           <Section title="Behaviour">{actions('onRowClick', 'On row click ({{row}})', rowPaths)}</Section>
           <Section title="Wide and nested">
             <SwitchField label="Freeze the first column" checked={!!p.stickyFirstColumn} onChange={(v) => setProps({ stickyFirstColumn: v || undefined })} />
-            <JsonField label="Columns from data {from, idField, header, valuePath, cell, insertAt} ({{col}}, {{value}})" value={p.dynamicColumns ?? null} minRows={4}
-              onChange={(v) => setProps({ dynamicColumns: v || undefined })} />
-            <JsonField label="Row detail {rows, columns, text, when} - an expandable nested table ({{row}} = detail row, {{parent}})" value={p.rowDetail ?? null} minRows={4}
-              onChange={(v) => setProps({ rowDetail: v || undefined })} />
+            <DynamicColumnsEditor value={p.dynamicColumns} onChange={(v) => setProps({ dynamicColumns: v })} paths={rowPaths} draft={draft} />
+            <RowDetailEditor value={p.rowDetail} onChange={(v) => setProps({ rowDetail: v })} paths={rowPaths} draft={draft} />
           </Section>
         </>
       );
@@ -283,8 +342,8 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             <TextField size="small" label="Facet field in row" value={props.facetField as string ?? ''} onChange={(e) => setProps({ facetField: e.target.value || undefined })} />
           </Section>
           <Section title="Facet Options">
-            <JsonField label="Options [{ value, label, color }]" value={props.options ?? []} minRows={3} onChange={(v) => setProps({ options: v || [] })} />
-            <JsonField label="Color map { value: color }" value={props.colorMap ?? null} minRows={2} onChange={(v) => setProps({ colorMap: v || undefined })} />
+            <OptionListEditor value={props.options as never} onChange={(v) => setProps({ options: v })} paths={paths} withColor />
+            <ColorMapEditor value={props.colorMap as Record<string, string> | undefined} onChange={(v) => setProps({ colorMap: v })} />
           </Section>
         </>
       );
@@ -306,9 +365,10 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
       body = (
         <Section title="Alert">
           <BindingField label="Severity (or a value to map)" value={props.severity} onChange={(v) => setProps({ severity: v })} paths={paths} />
-          <JsonField label="Severity map (value → success|info|warning|error)" value={props.severityMap ?? null} minRows={2} onChange={(v) => setProps({ severityMap: v || undefined })} />
+          <StringMapEditor label="Severity by value" value={props.severityMap as Record<string, string> | undefined} onChange={(v) => setProps({ severityMap: v })}
+            keyLabel="When the value is" valueLabel="Show as" valueOptions={['success', 'info', 'warning', 'error'].map((x) => ({ value: x, label: x }))} keyHelp="Use * for any other value" addLabel="Add severity" />
           {text('text', 'Text')}{text('detail', 'Detail')}
-          <JsonField label="Chips {value, labelKey, colorMap} (optional)" value={props.chips ?? null} minRows={2} onChange={(v) => setProps({ chips: v || undefined })} />
+          <ChipSpecEditor label="Chips under the text" value={props.chips as never} onChange={(v) => setProps({ chips: v })} paths={paths} withKeys />
           {actions('onClose', 'On close (makes it closable)')}
           <SwitchField label="Action button" checked={!!props.action} onChange={(v) => setProps({ action: v ? { label: 'Action', onClick: [] } : undefined })} />
           {!!props.action && (
@@ -343,7 +403,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             {text('title', 'Title')}
             <SelectField label="Icon" value={p.icon} options={Object.keys(PAGE_ICONS).map((k) => ({ value: k, label: k }))} allowEmpty="None" onChange={(v) => setProps({ icon: v || undefined })} />
             {text('intro', 'When empty')}
-            <JsonField label="Starters (a list of texts, or a binding)" value={p.starters ?? []} minRows={3} onChange={(v) => setProps({ starters: (v ?? undefined) as ChatProps['starters'] })} />
+            <TextListEditor label="Starters (suggestions that send themselves)" value={p.starters} onChange={(v) => setProps({ starters: v as ChatProps['starters'] })} paths={paths} addLabel="Add starter" />
             {text('placeholder', 'Placeholder')}{text('busyText', 'While waiting')}
           </Section>
           <Section title="Sending">
@@ -401,7 +461,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             <BindingField label="Category" value={p.node?.category} onChange={(v) => setNode({ category: v })} paths={nodePaths} />
             <BindingField label="Problems (a message or list)" value={p.node?.errors} onChange={(v) => setNode({ errors: v || undefined })} paths={nodePaths} />
             <BindingField label="Chips [{label, color, variant}]" value={p.node?.chips} onChange={(v) => setNode({ chips: v || undefined })} paths={nodePaths} />
-            <JsonField label="Categories {name: {color, inputs, outputs}}" value={p.categories ?? {}} minRows={3} onChange={(v) => setProps({ categories: (v || undefined) as CanvasProps['categories'] })} />
+            <CanvasCategoriesEditor value={p.categories} onChange={(v) => setProps({ categories: v })} />
             <BindingField label="Extra data per node id" value={p.nodeData} onChange={(v) => setProps({ nodeData: v || undefined })} paths={paths} helperText="e.g. {{queries.issues.data.by_node}}" />
             {condition('animatedWhen', 'Edges animate when')}
           </Section>
@@ -414,7 +474,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
                   <TextField size="small" label="Rows path" value={p.palette.rowsPath ?? ''} onChange={(e) => setProps({ palette: { ...p.palette!, rowsPath: e.target.value || undefined } })} />
                   <TextField size="small" label="Group by field" value={p.palette.groupBy ?? ''} onChange={(e) => setProps({ palette: { ...p.palette!, groupBy: e.target.value || undefined } })} />
                 </Stack>
-                <JsonField label="Groups [{id, label}] (order and titles)" value={p.palette.groups ?? []} minRows={2} onChange={(v) => setProps({ palette: { ...p.palette!, groups: (v || undefined) as never } })} />
+                <PaletteGroupsEditor value={p.palette.groups} onChange={(v) => setProps({ palette: { ...p.palette!, groups: v } })} paths={paths} />
                 <TextSpecField label="Label" value={p.palette.label} onChange={(v) => setProps({ palette: { ...p.palette!, label: v } })} paths={[...paths, 'item']} />
                 <TextSpecField label="Description" value={p.palette.description} onChange={(v) => setProps({ palette: { ...p.palette!, description: v || undefined } })} paths={[...paths, 'item']} />
                 <BindingField label="Icon" value={p.palette.icon} onChange={(v) => setProps({ palette: { ...p.palette!, icon: v } })} paths={[...paths, 'item']} />
@@ -486,7 +546,7 @@ export default function AppWidgetInspector({ component, draft, setDraft }: {
             <TextSpecField label="Title" value={p.title} onChange={(v) => setProps({ title: v })} paths={rowPaths} />
             <TextSpecField label="Subtitle" value={p.subtitle} onChange={(v) => setProps({ subtitle: v || undefined })} paths={rowPaths} />
             <BindingField label="Time" value={p.time} onChange={(v) => setProps({ time: v || undefined })} paths={rowPaths} />
-            <JsonField label="Chip {value, labelKey, colorMap} (optional)" value={p.chip ?? null} minRows={2} onChange={(v) => setProps({ chip: v || undefined })} />
+            <ChipSpecEditor label="A status chip per item" value={p.chip as never} onChange={(v) => setProps({ chip: v as TimelineProps['chip'] })} paths={rowPaths} />
           </Section>
           <Section title="Behaviour">
             <ConditionEditor label="Selected when" value={p.selectedWhen} onChange={(v) => setProps({ selectedWhen: v })} paths={rowPaths} />

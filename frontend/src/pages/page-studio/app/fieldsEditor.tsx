@@ -2,7 +2,8 @@ import React from 'react';
 import { Stack, TextField } from '@mui/material';
 import type { CorePageDefinition } from '../../../types/pageStudio';
 import type { FormFieldSpec, TextSpec } from './appModel';
-import { BindingField, ConditionEditor, JsonField, ListEditor, SelectField, SwitchField, TextSpecField } from './editors';
+import { BindingField, ConditionEditor, ListEditor, SelectField, SwitchField, TextSpecField } from './editors';
+import { MapSpecEditor, OptionsFromEditor, RowFieldsEditor, WordsField } from './structuredEditors';
 
 const KINDS: { value: FormFieldSpec['kind']; label: string }[] = [
   { value: 'text', label: 'Text' }, { value: 'multiline', label: 'Long text' }, { value: 'number', label: 'Number' },
@@ -12,7 +13,7 @@ const KINDS: { value: FormFieldSpec['kind']; label: string }[] = [
 ];
 
 /** One form field: name, label, kind, options (static or from a query), conditions. */
-function FieldEditor({ f, onChange, paths, queries }: { f: FormFieldSpec; onChange: (f: FormFieldSpec) => void; paths: string[]; queries: { value: string; label: string }[] }) {
+function FieldEditor({ f, onChange, paths, queries, draft }: { f: FormFieldSpec; onChange: (f: FormFieldSpec) => void; paths: string[]; queries: { value: string; label: string }[]; draft: CorePageDefinition }) {
   const set = (patch: Partial<FormFieldSpec>) => onChange({ ...f, ...patch });
   const hasOptions = f.kind === 'select' || f.kind === 'radio' || f.kind === 'chips' || f.kind === 'map';
   return (
@@ -31,13 +32,14 @@ function FieldEditor({ f, onChange, paths, queries }: { f: FormFieldSpec; onChan
         <TextField size="small" type="number" label="Step (1 = whole numbers)" value={f.step ?? ''} onChange={(e) => set({ step: e.target.value === '' ? undefined : Number(e.target.value) })} />
       )}
       {f.kind === 'rows' && (
-        <JsonField label="Row fields [{name, label, kind: text|number}]" value={f.rowFields ?? []} minRows={3} onChange={(v) => set({ rowFields: (v || undefined) as FormFieldSpec['rowFields'] })} />
+        <>
+          <SwitchField label="Fixed rows (no add or remove)" checked={!!f.fixedRows} onChange={(v) => set({ fixedRows: v || undefined })} />
+          <TextSpecField label="Add button label" value={f.addLabel} onChange={(v) => set({ addLabel: v || undefined })} paths={paths} />
+          <RowFieldsEditor value={f.rowFields} onChange={(v) => set({ rowFields: v })} paths={paths} queries={queries} />
+        </>
       )}
-      {f.kind === 'map' && (
-        <JsonField label="Mapping (rows, groups, hints, add)" value={f.map ?? { rows: '' }} minRows={6} onChange={(v) => set({ map: (v || undefined) as FormFieldSpec['map'] })} />
-      )}
-      <TextField size="small" label="Clear when these fields change" value={(f.resetOn ?? []).join(', ')} helperText="Field names, comma separated"
-        onChange={(e) => { const v = e.target.value.split(',').map((x) => x.trim()).filter(Boolean); set({ resetOn: v.length ? v : undefined }); }} />
+      {f.kind === 'map' && <MapSpecEditor value={f.map ?? { rows: '' }} onChange={(v) => set({ map: v })} draft={draft} paths={paths} />}
+      <WordsField label="Clear when these fields change" value={f.resetOn} onChange={(v) => set({ resetOn: v })} helperText="Field names, separated by commas" />
       <BindingField label="Default" value={f.default} onChange={(v) => set({ default: v })} paths={paths} />
       {hasOptions && (
         <>
@@ -46,16 +48,7 @@ function FieldEditor({ f, onChange, paths, queries }: { f: FormFieldSpec; onChan
           )}
           <SwitchField label="Options from a query" checked={!!f.optionsFrom} onChange={(v) => set({ optionsFrom: v ? { query: queries[0]?.value ?? '' } : undefined, options: v ? undefined : f.options ?? [] })} />
           {f.optionsFrom ? (
-            <>
-              <SelectField label="Query" value={f.optionsFrom.query} options={queries} onChange={(v) => set({ optionsFrom: { ...f.optionsFrom!, query: v ?? '' } })} />
-              <TextField size="small" label="Rows path (optional)" value={f.optionsFrom.rowsPath ?? ''} onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, rowsPath: e.target.value || undefined } })} />
-              <Stack direction="row" spacing={1}>
-                <TextField size="small" label="Value field" value={f.optionsFrom.valueField ?? ''} onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, valueField: e.target.value || undefined } })} />
-                <TextField size="small" label="Label field" value={f.optionsFrom.labelField ?? ''} onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, labelField: e.target.value || undefined } })} />
-              </Stack>
-              <TextField size="small" label="Caption field (optional)" value={f.optionsFrom.captionField ?? ''} helperText="A second line under each option"
-                onChange={(e) => set({ optionsFrom: { ...f.optionsFrom!, captionField: e.target.value || undefined } })} />
-            </>
+            <OptionsFromEditor value={f.optionsFrom} onChange={(v) => set({ optionsFrom: v })} queries={queries} captions />
           ) : (
             <ListEditor items={f.options ?? []} onChange={(v) => set({ options: v })} addLabel="Add option" create={() => ({ value: '', label: '' as TextSpec })}
               render={(o, up) => (
@@ -82,6 +75,6 @@ export function FieldsEditor({ fields, onChange, draft, paths }: {
   return (
     <ListEditor items={fields} onChange={onChange} addLabel="Add field"
       create={(): FormFieldSpec => ({ name: `field${fields.length + 1}`, label: 'Field', kind: 'text' })}
-      render={(f, up) => <FieldEditor f={f} onChange={up} paths={paths} queries={queries} />} />
+      render={(f, up) => <FieldEditor f={f} onChange={up} paths={paths} queries={queries} draft={draft} />} />
   );
 }
