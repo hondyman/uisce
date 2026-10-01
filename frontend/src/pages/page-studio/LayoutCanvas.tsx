@@ -6,6 +6,8 @@ import { PageLayout, ComponentDefinition, DataSourceDefinition, PanelNodeProps, 
 import PageComponentRenderer from './PageComponentRenderer';
 import PanelRegion from './PanelRegion';
 import { APP_WIDGET_DEFAULTS, isAppWidget } from './app/AppWidgets';
+import { WidgetQueryStatus } from './app/queryStatus';
+import type { PageAppModel } from './app/appModel';
 import { DEFAULT_CONTAINER_PROPS, isContainerType } from './app/containers';
 import { useAppRuntime } from './app/AppRuntime';
 import { text as textSpec } from './app/bindings';
@@ -36,6 +38,8 @@ interface LayoutCanvasProps {
     tenantId: string;
     selectedId: string | null;
     onSelect: (id: string | null) => void;
+    /** The page's app model, so each widget can show what its queries are doing. */
+    app?: PageAppModel;
 }
 
 /** Drop target wrapping a Row/Column so related-BO chips and palette tiles
@@ -140,7 +144,8 @@ const ComponentBlock: React.FC<{
     onUpdateFieldLayout: (compId: string, fieldName: string, entry: Partial<FieldLayoutEntry>) => void;
     onReorderFields: (compId: string, orderedFieldNames: string[]) => void;
     onUnhideField: (compId: string, fieldName: string) => void;
-}> = ({ comp, selectedId, dataSources, tenantId, onSelect, onDelete, onUpdateFieldLayout, onReorderFields, onUnhideField }) => {
+    app?: PageAppModel;
+}> = ({ comp, selectedId, dataSources, tenantId, onSelect, onDelete, onUpdateFieldLayout, onReorderFields, onUnhideField, app }) => {
     const acceptsField = FIELD_DROP_TYPES.includes(comp.type);
     const { setNodeRef, isOver } = useDroppable({ id: `comp:${comp.id}`, data: { kind: 'component-target' }, disabled: !acceptsField });
     const fieldPrefix = `${comp.id}${FIELD_SELECTION_SEP}`;
@@ -168,6 +173,8 @@ const ComponentBlock: React.FC<{
                 '&:hover .widget-chrome': { opacity: 1 },
             }}
         >
+            {/* What this widget's queries are doing right now: rows, loading, error, or waiting and why. */}
+            <WidgetQueryStatus comp={comp} app={app} />
             <Box
                 className="widget-chrome"
                 sx={{
@@ -212,7 +219,7 @@ const ComponentBlock: React.FC<{
  * ITS OWN layout tree, so the two canvases never step on each other's drops.
  */
 const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
-    layout, onLayoutChange, components, onComponentsChange, dataSources, onDataSourcesChange, tenantId, selectedId, onSelect,
+    layout, onLayoutChange, components, onComponentsChange, dataSources, onDataSourcesChange, tenantId, selectedId, onSelect, app,
 }) => {
     const handleFieldDrop = (payload: FieldDragPayload, comp: ComponentDefinition) => {
         const isMeasure = payload.role === 'MEASURE' || payload.role === 'CALCULATED';
@@ -461,6 +468,7 @@ const LayoutCanvas: React.FC<LayoutCanvasProps> = ({
                         onUpdateFieldLayout={handleUpdateFieldLayout}
                         onReorderFields={handleReorderFields}
                         onUnhideField={handleUnhideField}
+                        app={app}
                     />
                 );
             }
