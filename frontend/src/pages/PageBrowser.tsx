@@ -16,6 +16,7 @@ import type { PresentationRule } from '../types/pageStudio';
 import type { ConditionNode } from './page-studio/app/appModel';
 import { useTenant } from '../contexts/TenantContext';
 import RuntimePage from './page-studio/app/RuntimePage';
+import { applyPageFragments } from './page-studio/app/fragmentLoad';
 import { SelectionProvider } from './page-studio/SelectionContext';
 import { PresentationProvider } from './page-studio/PresentationRuntime';
 
@@ -125,7 +126,8 @@ export const PageContent: React.FC<{ slug: string; recordId?: string }> = ({ slu
     setError(null);
     setMissing(false);
     PageStudioApi.getPageBySlug(slug)
-      .then((p) => { if (!cancelled) setPage(p); })
+      // A page built from fragments is shown with them applied; the saved page is not changed.
+      .then((p) => applyPageFragments(p).then((r) => { if (!cancelled) setPage(r.page); }))
       .catch((err) => {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : 'Failed to load page';

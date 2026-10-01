@@ -3,6 +3,7 @@ import type { CorePageDefinition } from '../../types/pageStudio';
 import { SelectionProvider } from './SelectionContext';
 import { PresentationProvider } from './PresentationRuntime';
 import RuntimePage from './app/RuntimePage';
+import { useResolvedPage } from './app/fragmentLoad';
 
 interface DraftPreviewProps {
   draft: CorePageDefinition;
@@ -17,7 +18,9 @@ interface DraftPreviewProps {
  * so unsaved edits show up in Preview without a save-then-reload round
  * trip. Unlike EmbeddedPageContent.tsx, which fetches a page by slug.
  */
-const DraftPreview: React.FC<DraftPreviewProps> = ({ draft, tenantId, framed }) => {
+const DraftPreview: React.FC<DraftPreviewProps> = ({ draft: unresolved, tenantId, framed }) => {
+  // The preview shows the page with the fragments it names applied; the draft itself is untouched.
+  const { page: draft } = useResolvedPage(unresolved);
   const tabs = draft.tabs && draft.tabs.length > 0
     ? draft.tabs
     : [{ id: '__default__', label: draft.name || 'Page 1', layout: draft.layout }];

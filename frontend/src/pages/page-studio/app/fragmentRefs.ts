@@ -77,3 +77,59 @@ export function resolveFragments(refs: FragmentRef[], lookup: FragmentLookup): R
   }
   return { fragment: merged, problems };
 }
+
+// -- Applying fragments to a page ---------------------------------------------------------
+
+type PageShape = {
+  components?: Record<string, unknown>;
+  layout?: { root?: string; nodes?: Record<string, unknown> };
+  tabs?: { layout?: { root?: string; nodes?: Record<string, unknown> } }[];
+  filterBar?: { root?: string; nodes?: Record<string, unknown> };
+  app?: { variables?: { name: string }[]; queries?: { id: string }[]; fragments?: FragmentRef[] };
+};
+
+/**
+ * The page as the runtime and the checker should see it: the fragments it
+ * names flattened into its widgets, layout nodes, variables and queries. The
+ * page itself is not changed (a copy is returned), so saving never writes a
+ * fragment's content into the page. A fragment's layout nodes are made
+ * available to every layout tree on the page; the page places a fragment by
+ * naming its root as a child, like any other node. Anything the page already
+ * defines under the same name is a problem, never silently replaced.
+ */
+export function withFragments<P extends PageShape>(page: P, fragments: PageFragment): { page: P; problems: string[] } {
+  const problems: string[] = [];
+  const out = structuredClone(page) as P;
+
+  out.components = { ...(out.components ?? {}) };
+  for (const [id, c] of Object.entries(fragments.components)) {
+    if (out.components[id]) problems.push(`The page already has a widget "${id}"; the fragment's was not added.`);
+    else out.components[id] = c;
+  }
+
+  const addNodes = (layout: { nodes?: Record<string, unknown> } | undefined, where: string) => {
+    if (!layout) return;
+    layout.nodes = { ...(layout.nodes ?? {}) };
+    for (const [id, n] of Object.entries(fragments.nodes)) {
+      if (layout.nodes[id]) problems.push(`The ${where} already has a layout node "${id}"; the fragment's was not added.`);
+      else layout.nodes[id] = { id, ...n };
+    }
+  };
+  addNodes(out.layout, 'page');
+  for (const t of out.tabs ?? []) addNodes(t.layout, 'tab');
+  addNodes(out.filterBar, 'filter bar');
+
+  const app = { ...(out.app ?? {}) };
+  app.variables = [...(app.variables ?? [])];
+  for (const v of fragments.variables) {
+    if (app.variables.some((x) => x.name === v.name)) problems.push(`The page already has a variable "${v.name}"; the fragment's was not added.`);
+    else app.variables.push(v);
+  }
+  app.queries = [...(app.queries ?? [])];
+  for (const q of fragments.queries) {
+    if (app.queries.some((x) => x.id === q.id)) problems.push(`The page already has a query "${q.id}"; the fragment's was not added.`);
+    else app.queries.push(q);
+  }
+  out.app = app;
+  return { page: out, problems: Array.from(new Set(problems)) };
+}
