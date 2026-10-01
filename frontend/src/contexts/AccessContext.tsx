@@ -1,7 +1,7 @@
 // frontend/src/contexts/AccessContext.tsx
 // Unified access control context - replaces fragmented TenantContext
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 import { 
   UserAccessLevel, 
   TenantAssignment, 
@@ -15,6 +15,7 @@ import { useAuth } from './AuthContext';
 import { devLog, devWarn, devError } from '../utils/devLogger';
 import { setSelectedRegion } from '../lib/region';
 import { apiFetch } from '../lib/apiClient';
+import { beginScopeRestore, markScopeRestored } from '../utils/tenantScope';
 
 // Storage keys
 export const ACCESS_STORAGE_KEYS = {
@@ -71,7 +72,15 @@ interface AccessProviderProps {
 }
 
 export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+
+  // Hold scoped API requests until the persisted scope is restored. This runs
+  // during the first render, before any child effect can fire a request.
+  const restoreArmed = useRef(false);
+  if (!restoreArmed.current) {
+    restoreArmed.current = true;
+    beginScopeRestore();
+  }
   
   const [tenantAssignments, _setTenantAssignments] = useState<TenantAssignment[]>([]);
   const [accessibleTenants, setAccessibleTenants] = useState<Tenant[]>([]);
@@ -164,6 +173,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       localStorage.removeItem('selected_product');
       localStorage.removeItem('selected_datasource');
     } catch (_) {}
+    markScopeRestored();
     devLog('Scope set to global');
   }, [accessLevel]);
 
@@ -183,6 +193,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       localStorage.removeItem('selected_product');
       localStorage.removeItem('selected_datasource');
     } catch (_) {}
+    markScopeRestored();
     devLog('Scope set to tenant:', tenant.display_name);
   }, []);
 
@@ -253,6 +264,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
       localStorage.setItem('selected_product', JSON.stringify(product));
       localStorage.setItem('selected_datasource', JSON.stringify(datasource));
     } catch (_) {}
+    markScopeRestored();
     
     // Set region from tenant
     if (tenant.region) {
@@ -271,8 +283,11 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
   useEffect(() => {
     if (!isAuthenticated) {
       setAccessibleTenants([]);
+      // Signed out: there is no scope to restore, so hold nothing.
+      if (!authLoading) markScopeRestored();
       return;
     }
+    beginScopeRestore();
 
     const fetchTenants = async () => {
       try {
@@ -300,17 +315,21 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
           );
           setAccessibleTenants(visibleList);
           devLog(`Loaded ${visibleList.length} accessible tenants`, visibleList);
+          // No tenants: nothing will be selected, so stop holding requests.
+          if (visibleList.length === 0) markScopeRestored();
         } else {
           devWarn(`Failed to fetch tenants: ${response.status} ${response.statusText}`);
+          markScopeRestored();
         }
       } catch (error) {
         devWarn('Failed to fetch tenants:', error);
         setAccessibleTenants([]);
+        markScopeRestored();
       }
     };
 
     fetchTenants();
-  }, [isAuthenticated, accessLevel]);
+  }, [isAuthenticated, authLoading, accessLevel]);
 
   // Auto-select or restore scope from accessibleTenants
   useEffect(() => {
@@ -387,6 +406,7 @@ export const AccessProvider: React.FC<AccessProviderProps> = ({ children }) => {
         localStorage.removeItem('selected_product');
         localStorage.removeItem('selected_datasource');
       } catch (_) {}
+      markScopeRestored();
     }
     devLog('Scope cleared');
   }, [accessLevel, setGlobalScope]);

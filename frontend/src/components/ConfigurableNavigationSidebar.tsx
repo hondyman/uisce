@@ -36,8 +36,10 @@ export const ConfigurableNavigationSidebar: React.FC = () => {
   const { tenant } = useTenant();
 
   useEffect(() => {
-    // Dynamic menu layout loading based on current tenant state boundaries
-    const tenantId = tenant?.id || "11111111-1111-1111-1111-111111111111";
+    // Dynamic menu layout loading based on current tenant state boundaries.
+    // No tenant selected yet: wait for one rather than guess.
+    const tenantId = tenant?.id;
+    if (!tenantId) return;
     apiFetch(`/api/v1/layout/navigation-menu?tenant_id=${tenantId}`)
       .then(res => res.json())
       .then(data => {

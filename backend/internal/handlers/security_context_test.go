@@ -2,9 +2,15 @@ package handlers
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hondyman/uisce/backend/internal/msgcat"
 	"github.com/hondyman/uisce/backend/internal/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -319,4 +325,62 @@ func TestSecurityContextFromRequest_NilResolver(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "datasource resolver not configured")
 	assert.Contains(t, err.Error(), "internal error")
+}
+
+// securityContextFailure runs SecurityContextFromRequest for a caller of
+// tenant-own and writes its mapped catalog error, returning the response.
+func securityContextFailure(t *testing.T, auth *security.AuthInfo, resolve func(context.Context, string) (*security.ResolvedDatasource, error)) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/api/schedules/", nil)
+	req.Header.Set("X-Tenant-Datasource-ID", "11111111-1111-1111-1111-111111111111")
+	req.Header.Set("X-Tenant-Region", "us-east-1")
+	if auth != nil {
+		req = req.WithContext(security.WithAuthInfo(req.Context(), *auth))
+	}
+	_, _, err := SecurityContextFromRequest(req, "", "", SecurityContextDeps{Resolver: &MockDatasourceResolver{resolveFunc: resolve}})
+	require.Error(t, err)
+	rec := httptest.NewRecorder()
+	var cat *msgcat.Catalog // no catalog wired: renders code and status only
+	cat.WriteError(rec, req, "", SecurityContextError(err))
+	return rec
+}
+
+func decodeErrorBody(t *testing.T, rec *httptest.ResponseRecorder) msgcat.ErrorBody {
+	t.Helper()
+	var body msgcat.ErrorBody
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&body))
+	return body
+}
+
+func TestSecurityContextError_UnknownDatasourceIsForbiddenNotUnauthenticated(t *testing.T) {
+	rec := securityContextFailure(t,
+		&security.AuthInfo{UserID: "u", TenantIDs: []string{"tenant-own"}},
+		func(context.Context, string) (*security.ResolvedDatasource, error) {
+			return nil, fmt.Errorf("%w: %w", security.ErrDatasourceNotAvailable, sql.ErrNoRows)
+		})
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	body := decodeErrorBody(t, rec)
+	assert.Equal(t, "1-16", body.Code)
+	assert.NotContains(t, body.Error, "no rows", "the cause is logged, never sent")
+}
+
+func TestSecurityContextError_OtherTenantsDatasourceIsForbidden(t *testing.T) {
+	rec := securityContextFailure(t,
+		&security.AuthInfo{UserID: "u", TenantIDs: []string{"tenant-own"}},
+		func(_ context.Context, id string) (*security.ResolvedDatasource, error) {
+			return &security.ResolvedDatasource{TenantID: "tenant-other", InstanceID: "i", ProductID: "p", DatasourceID: id}, nil
+		})
+	assert.Equal(t, http.StatusForbidden, rec.Code)
+	assert.Equal(t, "1-16", decodeErrorBody(t, rec).Code)
+}
+
+func TestSecurityContextError_MissingAuthIsStillUnauthenticated(t *testing.T) {
+	rec := securityContextFailure(t, nil, nil)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	assert.Equal(t, "1-3", decodeErrorBody(t, rec).Code)
+}
+
+func TestSecurityContextError_ResolverOutageIsNotDatasourceUnavailable(t *testing.T) {
+	err := SecurityContextError(errors.New("resolving datasource: connection refused"))
+	assert.Equal(t, "1-3", err.Code())
 }
