@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Autocomplete, Box, Button, Divider, IconButton, MenuItem, Paper, Stack, Switch, FormControlLabel, TextField, ToggleButton,
-  ToggleButtonGroup, Tooltip, Typography,
+  Autocomplete, Box, Button, Divider, IconButton, MenuItem, Paper, Stack, Switch, FormControlLabel, TextField, Tooltip, Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
@@ -11,6 +10,7 @@ import type { CorePageDefinition } from '../../../types/pageStudio';
 import { getOperation, listOperations } from '../../../studio-core/operations/registry';
 import type { Action, ConditionNode, FormSpec, TextSpec } from './appModel';
 import { BindingPicker } from './bindingPicker';
+import { ConditionBuilder } from './conditionBuilder';
 
 type RunOperation = Extract<Action, { kind: 'runOperation' }>;
 
@@ -145,85 +145,15 @@ export function ListEditor<T>({ items, onChange, render, create, addLabel }: {
 
 // --- Conditions (rule-engine RuleNode JSON) --------------------------------------
 
-/** Operators the rule engine implements (backend/internal/rules/vm) that make sense for page state. */
-const OPERATORS: { value: string; label: string; needsValue: boolean }[] = [
-  { value: 'equals', label: 'equals', needsValue: true },
-  { value: 'not_equals', label: 'does not equal', needsValue: true },
-  { value: 'in', label: 'is one of', needsValue: true },
-  { value: 'not_in', label: 'is not one of', needsValue: true },
-  { value: 'is_empty', label: 'is empty', needsValue: false },
-  { value: 'is_not_empty', label: 'is not empty', needsValue: false },
-  { value: 'is_true', label: 'is true', needsValue: false },
-  { value: 'is_false', label: 'is false', needsValue: false },
-  { value: 'greater_than', label: '>', needsValue: true },
-  { value: 'less_than', label: '<', needsValue: true },
-  { value: 'contains', label: 'contains', needsValue: true },
-];
-
-type Leaf = Extract<ConditionNode, { type: 'condition' }>;
-
-const parseValue = (s: string, op: string): unknown => {
-  if (op === 'in' || op === 'not_in') return s.split(',').map((x) => x.trim());
-  if (s === 'true') return true;
-  if (s === 'false') return false;
-  if (s !== '' && !Number.isNaN(Number(s))) return Number(s);
-  return s;
-};
-const showValue = (v: unknown) => (Array.isArray(v) ? v.join(', ') : v === undefined || v === null ? '' : String(v));
-
-function LeafEditor({ leaf, onChange, paths }: { leaf: Leaf; onChange: (l: Leaf) => void; paths: string[] }) {
-  const op = OPERATORS.find((o) => o.value === leaf.operator);
-  return (
-    <Stack spacing={1}>
-      <Stack direction="row" spacing={0.5} alignItems="flex-start">
-        <Autocomplete freeSolo size="small" sx={{ flex: 1, minWidth: 0 }} options={paths} value={leaf.field} inputValue={leaf.field}
-          onInputChange={(_, v) => onChange({ ...leaf, field: v })} renderInput={(p) => <TextField {...p} label="Field (scope path)" />} />
-        <BindingPicker contextPaths={paths} label="Browse data for the condition" onPick={(path) => onChange({ ...leaf, field: path })} />
-      </Stack>
-      <Stack direction="row" spacing={1}>
-        <TextField select size="small" label="Operator" value={leaf.operator} sx={{ minWidth: 140 }}
-          onChange={(e) => onChange({ ...leaf, operator: e.target.value })}>
-          {OPERATORS.map((o) => <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>)}
-        </TextField>
-        {op?.needsValue !== false && (
-          <TextField size="small" label="Value" value={showValue(leaf.value)} fullWidth
-            helperText={leaf.operator === 'in' || leaf.operator === 'not_in' ? 'Comma-separated' : undefined}
-            onChange={(e) => onChange({ ...leaf, value: parseValue(e.target.value, leaf.operator) })} />
-        )}
-      </Stack>
-    </Stack>
-  );
-}
-
 /**
- * Edits a condition as the rule engine's own RuleNode JSON: one condition,
- * or an AND/OR group of conditions. Nothing here evaluates anything.
+ * Edits a condition as a sentence: field, operator and value, nested in
+ * all/any groups (conditionBuilder.tsx). It stores the rule engine's own
+ * RuleNode JSON; nothing here evaluates anything.
  */
 export function ConditionEditor({ label, value, onChange, paths }: {
   label: string; value: ConditionNode | undefined; onChange: (v: ConditionNode | undefined) => void; paths: string[];
 }) {
-  const leaves: Leaf[] = !value ? [] : value.type === 'condition' ? [value] : value.conditions.filter((c): c is Leaf => c.type === 'condition');
-  const nested = value?.type === 'group' && value.conditions.some((c) => c.type === 'group');
-  const joiner = value?.type === 'group' ? value.operator : 'AND';
-  const emit = (ls: Leaf[], op: 'AND' | 'OR' = joiner) =>
-    onChange(ls.length === 0 ? undefined : ls.length === 1 ? ls[0] : { type: 'group', operator: op, conditions: ls });
-  if (nested) return <JsonField label={`${label} (nested groups)`} value={value} onChange={(v) => onChange(v as ConditionNode)} />;
-  return (
-    <Box>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <Typography variant="caption" color="text.secondary" sx={{ flex: 1 }}>{label}{leaves.length === 0 ? ': always' : ''}</Typography>
-        {leaves.length > 1 && (
-          <ToggleButtonGroup size="small" exclusive value={joiner} onChange={(_, v) => v && emit(leaves, v)}>
-            <ToggleButton value="AND" sx={{ py: 0 }}>all</ToggleButton>
-            <ToggleButton value="OR" sx={{ py: 0 }}>any</ToggleButton>
-          </ToggleButtonGroup>
-        )}
-      </Stack>
-      <ListEditor items={leaves} onChange={(ls) => emit(ls)} addLabel="Add condition"
-        create={(): Leaf => ({ type: 'condition', field: paths[0] ?? '', operator: 'is_not_empty' })}
-        render={(l, update) => <LeafEditor leaf={l} onChange={update} paths={paths} />} />
-    </Box>
-  );
+  return <ConditionBuilder label={label} value={value} onChange={onChange} paths={paths} />;
 }
 
 // --- Actions -----------------------------------------------------------------
