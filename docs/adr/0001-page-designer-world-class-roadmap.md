@@ -1,6 +1,6 @@
 # ADR 0001: Make Page Designer a world-class, configuration-only page builder
 
-- **Status:** Proposed
+- **Status:** Accepted. Phase 1 delivered; Phase 2 in progress (see Decisions and Phase 2 status below)
 - **Date:** 2026-09-28
 - **Deciders:** Platform / Page Studio owners
 - **Related:** `docs/page-studio-app-model.md`, `docs/core-customization.md`, the Page Designer training guide
@@ -147,11 +147,65 @@ building block or an operation.
 - Dashboards exist for mastering and the scheduler, built in the designer.
 - Every core page has version history; a rollback takes one action.
 
+## Decisions
+
+Recorded 2026-10-01, answering two of the open questions below.
+
+### Fragments are versioned like core pages, by reference
+
+- A fragment is a core-style object with immutable versions. A page or another
+  fragment **references** a fragment by slug and exact version; it is never
+  inlined. A page therefore never changes under its author, and a fragment
+  change ships as a new version.
+- A tenant adopts a core fragment through `core_object_adoption` with
+  `object_type = 'page_fragment'` (the table is already generic over
+  `object_type`; no schema change).
+- Switching off, extending or cloning a core fragment passes an **adoption
+  preflight**: it is refused while tenant pages still use it. The **usage
+  scanner** gains a `fragment` type so "what uses this?" is answerable.
+- **Bundles** carry fragments with **content-hash dependencies**, so an import
+  can tell "already have exactly this" from "have something different at the
+  same version" (a conflict, never an overwrite).
+- Fragments nest at most **two levels** (a page uses a fragment, which may use
+  one more). Anything deeper is refused when saved and when bundled.
+- **Templates are a distinct object type.** A template is copied once into a
+  new page; a fragment is referenced live. They share the bundle and identity
+  machinery (verify, plan, apply, content hash) and nothing else.
+
+### Server-side paging lives in the execution layer, with the page token in the cache key
+
+- Paging is part of how an operation executes, not a widget concern. The
+  cursor is an **opaque keyset cursor** and is **part of the cache key**, so
+  each page caches on its own and a refresh of page one never serves page two.
+- A cached page is **invalidated when the watermark advances**.
+- Tile configuration: `paging: { mode: 'server' | 'client', pageSize? }`.
+- The query status chip shows the paging state.
+- Page Studio's operations are registered in the frontend
+  (`studio-core/operations/registry.ts`) and run through the query runtime, so
+  there is no separate `/execute` layer here. The seam is the operation
+  contract (`OperationDef`) plus the runtime's query key; paging is added there.
+
+## Phase 2 status
+
+| Item | State |
+|---|---|
+| Generate from operations | Delivered. `generateFromOperations` plus "From operations" on the page list; opens an unsaved draft. Only operations that declare `rowFields` are offered (`schedules.list` so far); an envelope result without them is refused. |
+| Fragment format, resolver | Delivered. `app/fragment.ts`, `app/fragmentRefs.ts` (exact versions, depth cap 2, missing / cycle / name-clash reported). A page names its fragments in `app.fragments`. |
+| Fragment storage and API | Delivered. `page_fragments` (immutable versions, `content_hash`, gold-aware RLS); `POST/GET /page-studio/fragments`, `/{slug}/versions/{n}`, `/{slug}/usage`. |
+| Bundles | Delivered. `GET /page-studio/pages/{id}/bundle`, `POST /page-studio/bundles/import[?dryRun=true]`; format `uisce.page-bundle/1`. |
+| Templates gallery | Delivered. `page_templates`, `/page-studio/templates` (publish, list, version, instantiate); "From template" and "Save as template" in the designer. Verified end to end against alpha. |
+| Adoption preflight for fragments | Not started. There are no fragment adoption endpoints yet (switch off, extend, clone); the usage query it needs exists. |
+| Fragment picker in the designer | Not started. Pages get fragments only through templates and bundles. |
+| Server-side paging | Decided above; not started. |
+| Core fragments and core templates | Backend supports `is_core`; no tenant adoption endpoint and no seeded core content yet. |
+| Canvas ergonomics (undo/redo, copy/paste, multi-select, shortcuts) | Not started. |
+
 ## Open questions
 
-- Should fragments be versioned and inherited like core pages, or copied into
-  pages?
-- Where does server-side paging live: the operation contract, or a generic
-  paging wrapper in the runtime?
+- ~~Should fragments be versioned and inherited like core pages, or copied into
+  pages?~~ Decided: versioned, by reference (see Decisions).
+- ~~Where does server-side paging live: the operation contract, or a generic
+  paging wrapper in the runtime?~~ Decided: the execution layer, page token in
+  the cache key (see Decisions).
 - Does the core-page review reuse the mastering maker-checker service or the
   page studio's own?
