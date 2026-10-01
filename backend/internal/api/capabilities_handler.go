@@ -115,6 +115,13 @@ func (h *CapabilitiesHandler) getCapabilities(w http.ResponseWriter, r *http.Req
 		caps[row.ActionAttribute] = row.Effect == "allow"
 	}
 
+	// The response header lets the frontend enforce Menu Designer
+	// required_entitlement (a target_profile_key) without changing the body
+	// shape, which stays a flat action_attribute -> bool map. It reflects the
+	// same server-resolved profile used to scope the query above, so there is
+	// exactly one source of truth for "who is this caller".
+	w.Header().Set("X-Resolved-Profile", profileKey)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(caps)

@@ -142,10 +142,17 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				strings.HasPrefix(path, "/api/views") ||
 				strings.HasPrefix(path, "/api/users") ||
 				strings.HasPrefix(path, "/api/audit") ||
+				// ABAC capability map: authorization metadata about the caller's own
+				// scope (menu grants for the profile resolved from their verified JWT).
+				// It never reads tenant data, so requiring a region would reject every
+				// non-gold-copy tenant and silently collapse the frontend nav.
+				strings.HasPrefix(path, "/api/capabilities") ||
 				strings.HasPrefix(path, "/api/ws/token") ||
 				strings.HasPrefix(path, "/api/abbreviations") ||
 				strings.HasPrefix(path, "/api/lookups") ||
 				strings.HasPrefix(path, "/api/auth/") ||
+				strings.HasPrefix(path, "/api/mcp") ||
+				strings.HasPrefix(path, "/api/agentic") ||
 				strings.HasPrefix(path, "/api/semantic/") {
 				next.ServeHTTP(w, r)
 				return
@@ -196,7 +203,10 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 				}
 
 				if region == "" {
-					region = "us-west"
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					_ = json.NewEncoder(w).Encode(map[string]string{"error": "region is required for all semantic operations."})
+					return
 				}
 			}
 
@@ -225,8 +235,8 @@ func RegionValidationMiddleware(provider interface{}) func(http.Handler) http.Ha
 
 			if !isAllowed {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusForbidden)
-				_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("region '%s' is not allowed for tenant '%s'", region, tenantID)})
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]string{"error": fmt.Sprintf("region '%s' is not configured for tenant '%s'", region, tenantID)})
 				return
 			}
 

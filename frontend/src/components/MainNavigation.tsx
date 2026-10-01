@@ -41,6 +41,9 @@ import {
   KeyboardArrowDown as KeyboardArrowDownIcon,
   CheckCircle as CheckCircleIcon,
   Api as ApiIcon,
+  MenuBook as MenuBookIcon,
+  CreateNewFolder as CreateNewFolderIcon,
+  Folder as FolderIcon,
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   ManageAccounts as ManageAccountsIcon,
@@ -84,8 +87,9 @@ import DialogActions from '@mui/material/DialogActions';
 import { Tenant } from '../types';
 import { IvyLogo } from './brand/IvyLogo';
 import { useCapabilities } from '../hooks/useCapabilities';
+import { NavigationMenuApi, type NavigationMenuNode } from '../api/navigationMenu';
 
-interface NavigationItem {
+export interface NavigationItem {
   label: string;
   path: string;
   icon: React.ReactNode;
@@ -96,6 +100,12 @@ interface NavigationItem {
   };
   /** Backend ABAC capability required to render this item (e.g. "menu:platform"). */
   requiredCapability?: string;
+  /**
+   * target_profile_key this item is restricted to, e.g. "PLATFORM_OPERATOR".
+   * Resolved from a Menu Designer node's required_entitlement. Distinct from
+   * requiredCapability: that is a menu:* action key, this is a profile.
+   */
+  requiredEntitlement?: string;
 }
 
 interface NavigationMenu {
@@ -104,9 +114,11 @@ interface NavigationMenu {
   items: NavigationItem[];
   /** Backend ABAC capability required to render this menu group. */
   requiredCapability?: string;
+  /** Profile required to render this group; see NavigationItem.requiredEntitlement. */
+  requiredEntitlement?: string;
 }
 
-interface CategoryConfig {
+export interface CategoryConfig {
   label: string;
   key: 'tenants' | 'catalog' | 'weave' | 'workflow' | 'intelligence' | 'entity';
   icon: React.ReactNode;
@@ -120,6 +132,8 @@ interface CategoryConfig {
   menus: NavigationMenu[];
   /** Backend ABAC capability required to render this top-level category. */
   requiredCapability?: string;
+  /** Profile required to render this category; see NavigationItem.requiredEntitlement. */
+  requiredEntitlement?: string;
 }
 
 const categoryConfigs: CategoryConfig[] = [
@@ -450,7 +464,7 @@ const categoryConfigs: CategoryConfig[] = [
  * organization entitlement never see the submenu; users with read-only
  * entitlement see the submenu and the page itself enforces read-only mode.
  */
-function filterNavigationByCapabilities(
+export function filterNavigationByCapabilities(
   categories: CategoryConfig[],
   capabilities: Record<string, boolean> | undefined,
   isPlatformOperator: boolean = false,
@@ -458,7 +472,10 @@ function filterNavigationByCapabilities(
     isVisible: false,
     canRead: false,
     canWrite: false,
-  }
+  },
+  // The caller's resolved profile, used to enforce Menu Designer
+  // required_entitlement (a target_profile_key). See useResolvedProfile below.
+  resolvedProfile: string | undefined = undefined
 ): CategoryConfig[] {
   // Platform operators bypass the capability gate entirely — they are trusted
   // to see admin navigation.  This is safe because the canAccess() check in
@@ -467,6 +484,20 @@ function filterNavigationByCapabilities(
   if (isPlatformOperator) {
     return categories;
   }
+
+  // A node gated to a profile is visible only to callers resolved to that
+  // profile. BASE_USER is the default (what navigation_menu_handler.go stores
+  // when the field is blank), and an empty value means ungated.
+  //
+  // Fails closed: when the profile is still unknown (undefined) we cannot prove
+  // the caller holds it, so restricted nodes stay hidden. An unrecognized
+  // value that no IAM row can ever produce also hides the node — a typo in the
+  // Menu Designer must never authorize everyone.
+  const hasProfile = (entitlement?: string): boolean => {
+    if (!entitlement || entitlement === 'BASE_USER') return true;
+    if (!resolvedProfile) return false;
+    return entitlement === resolvedProfile;
+  };
 
   // Strip the Organization submenu for users who do not have any
   // organization entitlement.  The Platform category itself remains visible
@@ -487,15 +518,17 @@ function filterNavigationByCapabilities(
     // back to showing only menus that require no capability.  This prevents a
     // flash of unauthorized UI for non-admin users.
     return categories
-      .filter((cat) => !cat.requiredCapability)
+      .filter((cat) => !cat.requiredCapability && hasProfile(cat.requiredEntitlement))
       .map(stripOrganization)
       .map((cat) => ({
         ...cat,
         menus: cat.menus
-          .filter((menu) => !menu.requiredCapability)
+          .filter((menu) => !menu.requiredCapability && hasProfile(menu.requiredEntitlement))
           .map((menu) => ({
             ...menu,
-            items: menu.items.filter((item) => !item.requiredCapability),
+            items: menu.items.filter(
+              (item) => !item.requiredCapability && hasProfile(item.requiredEntitlement)
+            ),
           }))
           .filter((menu) => menu.items.length > 0),
       }))
@@ -505,15 +538,17 @@ function filterNavigationByCapabilities(
   const hasCap = (cap?: string) => (cap ? !!capabilities[cap] : true);
 
   return categories
-    .filter((cat) => hasCap(cat.requiredCapability))
+    .filter((cat) => hasCap(cat.requiredCapability) && hasProfile(cat.requiredEntitlement))
     .map(stripOrganization)
     .map((cat) => ({
       ...cat,
       menus: cat.menus
-        .filter((menu) => hasCap(menu.requiredCapability))
+        .filter((menu) => hasCap(menu.requiredCapability) && hasProfile(menu.requiredEntitlement))
         .map((menu) => ({
           ...menu,
-          items: menu.items.filter((item) => hasCap(item.requiredCapability)),
+          items: menu.items.filter(
+            (item) => hasCap(item.requiredCapability) && hasProfile(item.requiredEntitlement)
+          ),
         }))
         .filter((menu) => menu.items.length > 0),
     }))
@@ -522,6 +557,108 @@ function filterNavigationByCapabilities(
 
 interface MainNavigationProps {
   // No longer needed - ThemeToggleButton handles theme internally
+}
+
+// Per-category chrome (accent colour + default landing route) for nodes that
+// come from the Menu Designer tree. A designer-created category has no entry
+// here, so it gets a neutral theme derived from its position.
+const DESIGNER_CATEGORY_THEMES: Record<string, { primary: string; light: string; dark: string; background: string }> = {
+  Platform: { primary: '#607D8B', light: '#ECEFF1', dark: '#455A64', background: 'linear-gradient(135deg, #ECEFF1 0%, #CFD8DC 100%)' },
+  Catalog: { primary: '#1976D2', light: '#E3F2FD', dark: '#0D47A1', background: 'linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%)' },
+  Build: { primary: '#388E3C', light: '#E8F5E9', dark: '#1B5E20', background: 'linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%)' },
+  Operations: { primary: '#F57C00', light: '#FFF3E0', dark: '#E65100', background: 'linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%)' },
+  Intelligence: { primary: '#7B1FA2', light: '#F3E5F5', dark: '#4A148C', background: 'linear-gradient(135deg, #F3E5F5 0%, #E1BEE7 100%)' },
+  Consume: { primary: '#00838F', light: '#E0F7FA', dark: '#006064', background: 'linear-gradient(135deg, #E0F7FA 0%, #B2EBF2 100%)' },
+};
+
+// DB icon keys are free text set in the Menu Designer. Map the ones that have
+// an obvious equivalent to existing MUI icons and fall back to a neutral glyph
+// rather than rendering nothing.
+const DESIGNER_ICON_MAP: Record<string, React.ReactNode> = {
+  settings: <SettingsIcon />,
+  business: <BusinessIcon />,
+  security: <SecurityIcon />,
+  system: <SystemUpdateAltIcon />,
+  book: <MenuBookIcon />,
+  description: <DescriptionIcon />,
+  timeline: <TimelineIcon />,
+  api: <ApiIcon />,
+  build: <BuildIcon />,
+  folder: <CreateNewFolderIcon />,
+  default: <FolderIcon />,
+};
+
+const DESIGNER_ICON_FALLBACK: React.ReactNode = <FolderIcon />;
+
+// Category keys are a fixed union; designer nodes map onto them by label so a
+// renamed label simply falls back to 'weave' rather than breaking the type.
+const DESIGNER_CATEGORY_KEYS: CategoryConfig['key'][] = [
+  'tenants', 'catalog', 'weave', 'workflow', 'intelligence', 'entity',
+];
+
+function designerIcon(key?: string | null): React.ReactNode {
+  if (!key) return DESIGNER_ICON_FALLBACK;
+  return DESIGNER_ICON_MAP[key] ?? DESIGNER_ICON_MAP[key.toLowerCase()] ?? DESIGNER_ICON_FALLBACK;
+}
+
+/**
+ * Convert the Menu Designer's navigation_menu_nodes tree into the same
+ * CategoryConfig shape the hardcoded nav uses, so both flow through one filter
+ * and one renderer.
+ *
+ * Depth maps to level: root -> category, child -> menu group, grandchild ->
+ * item. Nodes deeper than that are flattened into the deepest item level, since
+ * the nav renders at exactly three levels.
+ *
+ * Returns null when the tree is empty or unusable, which is the signal for the
+ * caller to fall back to the hardcoded configs.
+ */
+export function mapDesignerTreeToCategories(nodes: NavigationMenuNode[]): CategoryConfig[] | null {
+  const roots = (nodes ?? []).filter((n) => n && n.label);
+  if (roots.length === 0) return null;
+
+  const categories: CategoryConfig[] = [];
+  roots.forEach((root, index) => {
+    const children = root.children ?? [];
+    // A designer node with no children still deserves to appear: render it as
+    // a single-item group so the node is reachable.
+    const groups = children.length > 0 ? children : [root];
+    const theme = DESIGNER_CATEGORY_THEMES[root.label] ?? DESIGNER_CATEGORY_THEMES.Consume;
+
+    const menus: NavigationMenu[] = groups.map((group) => {
+      const leaves = group.children && group.children.length > 0 ? group.children : [group];
+      const items: NavigationItem[] = leaves.map((leaf) => ({
+        label: leaf.label,
+        // Designer leaves bind to a Page Studio page by slug; folders have none.
+        path: leaf.targetPageKey ? `/pages/${leaf.targetPageKey}` : '#',
+        icon: designerIcon(leaf.icon),
+        description: leaf.targetPageKey ? 'Page Studio page' : 'Menu group',
+        requiredEntitlement: leaf.requiredEntitlement || undefined,
+      }));
+      return {
+        label: group.label,
+        icon: designerIcon(group.icon),
+        items,
+        requiredEntitlement: group.requiredEntitlement || undefined,
+      };
+    });
+
+    const firstLeafWithTarget = menus
+      .flatMap((m) => m.items)
+      .find((i) => i.path.startsWith('/pages/'));
+
+    categories.push({
+      label: root.label,
+      key: DESIGNER_CATEGORY_KEYS[index % DESIGNER_CATEGORY_KEYS.length],
+      icon: designerIcon(root.icon),
+      defaultPath: firstLeafWithTarget?.path ?? '/',
+      color: theme,
+      menus,
+      requiredEntitlement: root.requiredEntitlement || undefined,
+    });
+  });
+
+  return categories.length > 0 ? categories : null;
 }
 
 export const MainNavigation: React.FC<MainNavigationProps> = () => {
@@ -534,7 +671,22 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const scopeSummary = `${tenant?.display_name || tenant?.name || ''}${product ? ` · ${product.alpha_product?.product_name || 'Product'}` : ''}${datasource ? ` · ${datasource.source_name || 'Source'}` : ''}`;
   const { user, logout } = useAuth();
   const organizationAccess = useOrganizationEntitlement();
-  const capabilities = useCapabilities();
+  const { capabilities, profile: resolvedProfile } = useCapabilities();
+
+  // The Menu Designer's navigation_menu_nodes tree, which is the source of
+  // truth for this nav when present. Fetched once; on any failure or an empty
+  // result we keep the hardcoded categoryConfigs, so a backend problem can
+  // never blank the navigation.
+  const [designerCategories, setDesignerCategories] = useState<CategoryConfig[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    NavigationMenuApi.listTree()
+      .then((tree) => { if (!cancelled) setDesignerCategories(mapDesignerTreeToCategories(tree)); })
+      .catch(() => { if (!cancelled) setDesignerCategories(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const effectiveCategoryConfigs = designerCategories ?? categoryConfigs;
 
   // Capability-filtered navigation config.  The backend decides which menus
   // the user is allowed to see; the frontend only renders the allowed subset.
@@ -544,12 +696,13 @@ export const MainNavigation: React.FC<MainNavigationProps> = () => {
   const baseCategoryConfigs = useMemo(
     () =>
       filterNavigationByCapabilities(
-        categoryConfigs,
+        effectiveCategoryConfigs,
         capabilities,
         isPlatformOperator,
         organizationAccess,
+        resolvedProfile,
       ),
-    [capabilities, isPlatformOperator, organizationAccess],
+    [effectiveCategoryConfigs, capabilities, isPlatformOperator, organizationAccess, resolvedProfile],
   );
 
   // Real Page Studio pages, listed dynamically under Build -> Pages so a
